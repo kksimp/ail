@@ -6,39 +6,47 @@ It implements layers 1–2 of AIL's token benchmark
 It's a measurement instrument, not part of AIL
 ([ADR 0070](../../docs/decisions/0070-token-bench-tool.md)).
 
-## Setup
+## Run (one command)
 
+**macOS / Linux**, from the repository root:
 ```sh
-cd tools/tokbench
-python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python fetch_tokenizers.py                       # once; extracts tokenizer files into .cache/
+tools/tokbench/run.sh
 ```
 
-## Run
-
-```sh
-python tokbench.py corpus/r1/*.ail corpus/r1/*.rs corpus/r1/*.go
-python tokbench.py corpus/current/*.ail
+**Windows (PowerShell)**, from the repository root:
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\tokbench\run.ps1
 ```
 
-### With the current Claude tokenizer
+That's all. The first run sets everything up automatically:
+- a private Python environment in `tools/tokbench/.venv`, so nothing is
+  installed system-wide;
+- the tokenizer files, downloaded into `tools/tokbench/.cache`.
 
-The offline `claude-legacy` tokenizer is an **older** Claude tokenizer, so its
-counts don't represent current Claude models. To get real current-Claude counts,
-use Anthropic's token-counting API with your own credentials:
+Later runs skip setup. It needs Python 3.10 or newer. To choose a specific
+interpreter, set `PYTHON=/path/to/python`.
 
-```sh
-export ANTHROPIC_API_KEY=...        # or: ant auth login
-python tokbench.py --claude corpus/r1/*.ail corpus/r1/*.rs corpus/r1/*.go
-python tokbench.py --claude --model claude-sonnet-5-5 corpus/current/*.ail
-```
+Options (the same for both scripts):
 
-Token counting is not billed as model usage, but it is rate-limited. The API
-counts a whole message, so the tool subtracts the framing overhead. Results
-may be off by about one token per file.
+| Command | Does |
+|---|---|
+| `run.sh` | Measure every file under `corpus/` |
+| `run.sh FILE ...` | Measure specific files (paths relative to where you run it) |
+| `run.sh --json` | Machine-readable output |
+| `run.sh --claude` | Also count with the **current** Claude tokenizer (optional, see below) |
 
-Add `--json` for machine-readable output.
+### Optional: the current Claude tokenizer
+
+The offline `claude-legacy` column is an **older** Claude tokenizer. Current
+Claude tokenizers are only available through Anthropic's token-counting API,
+which needs an Anthropic API key (`ANTHROPIC_API_KEY`, or `ant auth login`).
+The counting calls aren't billed, but getting a key means creating an Anthropic
+developer account. This is entirely optional. All AIL syntax decisions so far
+were made with the offline tokenizers, which have agreed with each other on
+every comparison. The Anthropic SDK is installed only when you pass `--claude`.
+
+The API counts a whole message, so the tool subtracts the framing overhead.
+Results may be off by about one token per file.
 
 ## Tokenizers
 

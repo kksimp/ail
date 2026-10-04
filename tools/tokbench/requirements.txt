@@ -1,5 +1,5 @@
 # Measurement-only dependencies (ADR 0070). Not part of AIL.
+# The Anthropic SDK is installed by run.sh / run.ps1 only when --claude is used.
 tiktoken
 tokenizers
 sentencepiece
-anthropic   # only needed for --claude

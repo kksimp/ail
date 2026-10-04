@@ -52,6 +52,7 @@ def main() -> int:
     if missing:
         print("missing tokenizer files:", *sorted(missing), sep="\n  ", file=sys.stderr)
         return 1
+    (CACHE / ".complete").write_text("\n".join(PACKAGES) + "\n")
     print(f"tokenizer files ready in {CACHE}")
     return 0
 

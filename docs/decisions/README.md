@@ -76,3 +76,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0068](0068-move-parameters.md) | Ownership-taking parameters and arguments are marked `move` | Accepted | 2026-10-04 |
 | [0069](0069-unique-keyword.md) | Non-copyable types are declared `unique` | Accepted | 2026-10-04 |
 | [0070](0070-token-bench-tool.md) | Token-measurement tooling in `tools/tokbench/` (Python) | Accepted | 2026-10-04 |
+| [0071](0071-one-command-scripts.md) | Everything a person runs is a one-command, self-setting-up script per OS | Accepted | 2026-10-04 |

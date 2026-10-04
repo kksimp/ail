@@ -1,0 +1,4 @@
+# Local environments and caches never belong in the repository.
+.venv/
+__pycache__/
+.DS_Store

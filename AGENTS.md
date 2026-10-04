@@ -52,6 +52,14 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
    not be visible to the designer while they answer.
 7. Back syntax questions with **measurements** (ADR 0029) whenever possible.
 
+### Things the designer runs
+
+Never ask the designer to type multi-step or OS-specific setup commands.
+Anything they run must be a **single self-setting-up script**: `run.sh`
+for macOS and Linux, and `run.ps1` for Windows (ADR 0071). The designer works
+on macOS (Apple Silicon). Never require paid services or credentials unless
+the designer explicitly opts in.
+
 ## Documentation rules (mandatory)
 
 Documentation is a first-class deliverable. A change is **not complete** until

@@ -3,10 +3,11 @@
 Implements layers 1-2 of the AIL token benchmark (ADR 0029). This is a
 measurement instrument, not part of AIL (ADR 0070).
 
-Usage:
+Usage (normally via ./run.sh or .\run.ps1, which set everything up):
+    python tokbench.py                     # every file under corpus/
     python tokbench.py FILE [FILE ...]
-    python tokbench.py --claude FILE [FILE ...]    # add current-Claude counts via the API
-    python tokbench.py --json FILE [FILE ...]
+    python tokbench.py --claude [FILE ...] # add current-Claude counts via the API
+    python tokbench.py --json [FILE ...]
 
 Offline tokenizers need `python fetch_tokenizers.py` once first.
 
@@ -100,11 +101,17 @@ def claude_tokenizer(model):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("files", nargs="+", type=pathlib.Path)
+    ap.add_argument("files", nargs="*", type=pathlib.Path,
+                    help="files to measure (default: every file under corpus/)")
     ap.add_argument("--claude", action="store_true", help="add current-Claude counts via the API")
     ap.add_argument("--model", default=DEFAULT_CLAUDE_MODEL, help="Claude model for --claude")
     ap.add_argument("--json", action="store_true", help="print JSON instead of a table")
     args = ap.parse_args()
+
+    if not args.files:
+        args.files = sorted(p.relative_to(HERE) for p in (HERE / "corpus").rglob("*")
+                            if p.is_file() and not p.name.startswith("."))
+        os.chdir(HERE)
 
     counters = offline_tokenizers()
     if args.claude:

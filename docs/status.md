@@ -55,6 +55,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Open-source intent | D | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) |
 | Git workflow: `main` only long-lived branch | D | [0028](decisions/0028-git-workflow.md) |
 | Token measurement tool (`tools/tokbench/`) | D, implemented | [0070](decisions/0070-token-bench-tool.md) |
+| One-command scripts for everything people run | D, implemented for tokbench | [0071](decisions/0071-one-command-scripts.md) |
 
 ## Open questions
 

@@ -37,6 +37,9 @@ using the runner's own credentials.
 - Syntax ADRs from now on cite corpus files and harness output.
 - Tokenizer files and API results are not committed. The exact tokenizer
   versions are pinned in the fetch script.
+- Run through the one-command scripts `run.sh` and `run.ps1`
+  ([ADR 0071](0071-one-command-scripts.md)). The Anthropic SDK is installed
+  only when `--claude` is used.
 
 ## Rejected alternatives
 

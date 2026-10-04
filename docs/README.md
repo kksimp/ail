@@ -33,8 +33,8 @@ Design notes:
 
 Tools:
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.
-  It can use offline tokenizers, and current Claude counts through the API
-  with your own key.
+  Run `tools/tokbench/run.sh` (macOS/Linux) or `tools\tokbench\run.ps1`
+  (Windows), and it sets itself up.
 
 Contributors, human or AI, should read [AGENTS.md](../AGENTS.md) for the
 documentation rules. **A change is not complete until its documentation is.**
