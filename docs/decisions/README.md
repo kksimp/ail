@@ -57,3 +57,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0049](0049-else-for-fallback-and-early-exit.md) | `else` handles failure: fallback values and early exit | Accepted | 2026-10-04 |
 | [0050](0050-error-return-traces.md) | Automatic error return traces; optional context message | Accepted | 2026-10-04 |
 | [0051](0051-no-implicit-optional-to-error.md) | No `?` on optionals in error-returning functions | Accepted | 2026-10-04 |
+| [0052](0052-struct-declarations.md) | Structs: `struct Name` with indented `field Type` lines | Accepted | 2026-10-04 |
+| [0053](0053-enum-declarations.md) | Enums: `enum Name` with one indented variant per line | Accepted | 2026-10-04 |
+| [0054](0054-match-arm-syntax.md) | Match arms: `pattern => result` | Accepted | 2026-10-04 |
+| [0055](0055-numeric-type-names.md) | Numeric types by bit width; `int`/`float` default aliases | Accepted | 2026-10-04 |

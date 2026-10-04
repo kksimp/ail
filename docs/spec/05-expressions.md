@@ -2,8 +2,8 @@
 
 Chapter key: `expr`
 
-> **Status:** Drafted (partial). Bindings and integer arithmetic are
-> specified.
+> **Status:** Drafted (partial). Bindings, the `match` arm form, and integer
+> arithmetic are specified.
 
 ## Bindings
 
@@ -33,6 +33,22 @@ fn total(items List[Item]) i64
 > **Note:** the interaction with module-level, imported and built-in names is
 > open (OQ-028). The `for` syntax in the example is illustrative and not yet
 > decided.
+
+## Match
+
+**expr.match.1** — A `match` expression is the keyword `match`, the
+scrutinee expression, and an indented block containing one arm per line. Each
+arm is written `pattern => result`. A result consisting of several statements
+is written as an indented block following `=>`. *(ADR 0054)*
+
+```ail
+area := match s
+    Circle(r) => pi * r * r
+    Rect(w, h) => w * h
+    Empty => 0.0
+```
+
+> **Note:** pattern syntax, guards and exhaustiveness are not yet decided.
 
 ## Integer arithmetic
 

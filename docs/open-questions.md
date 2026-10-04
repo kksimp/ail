@@ -120,6 +120,16 @@ or only declared error types? How is an explicit union written? How does an
 inferred set convert to a public API's error type? How are recursion and
 generics handled during inference?
 
+## OQ-031 — Canonical spelling of the default numeric types
+[ADR 0055](decisions/0055-numeric-type-names.md) makes `int` = `i64` and
+`float` = `f64`. Canonical syntax requires the formatter to pick one spelling.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Keep whatever the author wrote; both are canonical (recommended)** | `int` signals "I don't care about width" and `i64` signals "width matters". That intent is useful to readers and AI. | Two spellings for one type. |
+| Always rewrite to `int` / `float` | One spelling. | Loses the "width matters" signal. |
+| Always rewrite to `i64` / `f64` | One spelling, and the width is always visible. | `int` becomes input-only sugar. |
+
 ---
 
 ### Not yet opened

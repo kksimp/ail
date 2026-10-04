@@ -2,9 +2,53 @@
 
 Chapter key: `type`
 
-> **Status:** Drafted (partial). Only optional types are specified. Numeric
-> types, structs, enums, collections, strings and the rest are not yet
-> designed.
+> **Status:** Drafted (partial). Specified: numeric type names, struct and
+> enum declarations, and optional types. Not yet designed: collections,
+> strings, literals, methods, and generic constraints.
+
+## Numeric types
+
+**type.num.1** — The signed integer types are `i8`, `i16`, `i32` and `i64`.
+The unsigned integer types are `u8`, `u16`, `u32` and `u64`. The
+floating-point types are `f32` and `f64`. *(ADR 0055)*
+
+**type.num.2** — `int` is an alias for `i64`, and `float` is an alias for
+`f64`. *(ADR 0055)*
+
+**type.num.3** — An integer literal with no other type constraint has type
+`int`. A floating-point literal with no other type constraint has type
+`float`. *(ADR 0055)*
+
+## Structs
+
+**type.struct.1** — A struct type is declared with the keyword `struct`, its
+name, and an indented block containing one field declaration per line.
+*(ADR 0052)*
+
+**type.struct.2** — A field declaration is written `name Type`. *(ADR 0052,
+ADR 0037)*
+
+```ail
+struct User
+    id i64
+    name str
+    email str?
+```
+
+## Enums
+
+**type.enum.1** — An enum (sum) type is declared with the keyword `enum`, its
+name, and an indented block containing one variant per line. *(ADR 0053)*
+
+**type.enum.2** — A variant either carries no data or carries a parenthesised
+list of fields, each written `name Type`. *(ADR 0053)*
+
+```ail
+enum Shape
+    Circle(r f64)
+    Rect(w f64, h f64)
+    Empty
+```
 
 ## Optional types
 
