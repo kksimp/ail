@@ -57,8 +57,9 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 Never ask the designer to type multi-step or OS-specific setup commands.
 Anything they run must be a **single self-setting-up script**: `run.sh`
 for macOS and Linux, and `run.ps1` for Windows (ADR 0071). The designer works
-on macOS (Apple Silicon). Never require paid services or credentials unless
-the designer explicitly opts in.
+on macOS (Apple Silicon) from the repository root. Give them the exact command
+to paste from there (e.g. `tools/tokbench/run.sh`). Never require paid
+services or credentials unless the designer explicitly opts in.
 
 ## Documentation rules (mandatory)
 
