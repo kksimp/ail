@@ -30,6 +30,12 @@ fn add(a i32, b i32) i32
 > **Note:** parameter grouping (`a, b i32`), function types, multiple return
 > values, and named arguments are not yet decided.
 
+## Lists of items
+
+**gram.list.1** — In argument lists, parameter lists, list literals and struct
+literals, a comma MAY follow the last element. The canonical form has one only
+when the list spans several lines. *(ADR 0118)*
+
 ## Generic arguments
 
 **gram.generic.1** — Generic type parameters and type arguments are enclosed

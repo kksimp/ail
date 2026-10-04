@@ -123,3 +123,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0115](0115-integer-division.md) | Integer division truncates toward zero *(delegated)* | Accepted | 2026-10-04 |
 | [0116](0116-core-library-basics.md) | Sizes and indexes are `int`; `len`, `push`; text forms *(delegated)* | Accepted | 2026-10-04 |
 | [0117](0117-typing-rules.md) | Typing rules for fields, assignment, `match`, loops and places *(delegated)* | Accepted | 2026-10-04 |
+| [0118](0118-trailing-commas.md) | A trailing comma is allowed in every comma-separated list *(delegated)* | Accepted | 2026-10-04 |
