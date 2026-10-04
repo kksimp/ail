@@ -33,6 +33,9 @@ Design notes:
 - [design/traits-generics-options.md](design/traits-generics-options.md):
   method declarations, trait conformance, generic constraints, and receiver
   mutation, with measurements.
+- [design/concurrency-modules-options.md](design/concurrency-modules-options.md):
+  task model, task lifetimes, module unit, visibility, and imports, with
+  measurements.
 
 Tools:
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.

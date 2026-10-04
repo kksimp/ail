@@ -1,0 +1,27 @@
+pub enum Token
+    Num(value i64)
+    Op(symbol char)
+    LParen
+    RParen
+
+pub fn tokenize(src str) List[Token] ! LexError
+    mut tokens := List[Token]()
+    mut i := 0
+    while i < src.len
+        c := src[i]
+        if c.is_space()
+            i += 1
+            continue
+        if c.is_digit()
+            start := i
+            while i < src.len and src[i].is_digit()
+                i += 1
+            tokens.push(Num(src[start..i].parse_int()?))
+            continue
+        match c
+            '(' => tokens.push(LParen)
+            ')' => tokens.push(RParen)
+            '+', '-', '*', '/' => tokens.push(Op(c))
+            _ => return LexError.Unexpected(c, i)
+        i += 1
+    tokens

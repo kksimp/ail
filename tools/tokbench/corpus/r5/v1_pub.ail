@@ -1,0 +1,10 @@
+pub struct Config
+    pub port int
+    pub host str
+    secret str
+
+pub fn Config.load(path str) Config ! ConfigError
+    ...
+
+fn parse_line(line str) Entry?
+    ...

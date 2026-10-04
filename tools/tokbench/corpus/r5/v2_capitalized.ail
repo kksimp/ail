@@ -1,0 +1,10 @@
+struct Config
+    Port int
+    Host str
+    secret str
+
+fn Config.Load(path str) Config ! ConfigError
+    ...
+
+fn parse_line(line str) Entry?
+    ...

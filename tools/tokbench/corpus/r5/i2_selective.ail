@@ -1,0 +1,6 @@
+use net.http.{get}
+use encoding.json.{decode}
+
+fn fetch(url str) Data ! FetchError
+    resp := get(url)?
+    decode(resp.body)?
