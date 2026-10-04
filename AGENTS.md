@@ -30,6 +30,8 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   Windows is tested by the designer when convenient and doesn't gate.
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
+- The AI's environment can push branches but can't delete them on GitHub.
+  After a merge, ask the designer to run `tools/prune-merged.sh`.
 - Commit with clear messages, and push when a change is complete.
 
 ## Roles
@@ -124,6 +126,7 @@ examples/                 example programs; NAME.out holds the expected output
 tools/
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
+  prune-merged.sh         deletes remote branches already merged into main (ADR 0028)
 ```
 
 ## Settled constraints (summary; the ADRs are authoritative)
