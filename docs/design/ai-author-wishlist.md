@@ -58,6 +58,17 @@ precise compiler error, saves more tokens than shorter syntax does.
 | **5.1 Capability-based package permissions**: a dependency can't touch the filesystem, network, processes or FFI unless the project grants it | AI agents add dependencies quickly. This limits the damage a malicious or careless package can do (supply-chain safety). | Design work in the module and package system. Some friction. |
 | **5.2 Unsafe code is a visible, queryable boundary** (already in the brief) | An AI and a reviewer can list every unsafe region instantly. | — |
 
+## 6. Further additions (second round of feedback, 2026-10-04)
+
+| Proposal | Why it helps | Possible cost |
+|---|---|---|
+| **6.1 Lightweight contracts**: optional `requires`/`ensures` conditions on functions, proved at compile time where possible and checked at run time otherwise | The AI can state its *intent*, and the compiler checks the code against it. Contracts are also compact, trustworthy documentation. They also give the optimizer facts (e.g. ranges that remove bounds checks). | Syntax and checker work. Must stay optional and cheap. |
+| **6.2 Built-in property-based tests**: `for all x: T, property(x)`, with automatic input generation and shrinking | One line of intent covers thousands of cases. AI-written code gets tested far more thoroughly per token. | A generator for every type (derivable). |
+| **6.3 Deterministic output everywhere**: formatter, diagnostics, reports and API answers in a stable order, byte-identical across runs | Diffs between two runs show only real changes. The AI never gets misled by reordering noise. | Discipline across every tool. |
+| **6.4 `ail explain <rule-id or diagnostic>`**: prints the spec rule, a minimal example and a typical fix | Repairing an error needs no web search and no full spec. | Small tool, built on ADR 0002. |
+| **6.5 Literal syntax for common data**: lists, maps and sets | Removes construction boilerplate in tests and configuration. | Grammar space. |
+| **6.6 No hidden global state**: anything ambient (clock, randomness, environment, filesystem) is reached through explicit capabilities | Functions are testable and predictable, and their dependencies are visible. This pairs with 5.1. | Some plumbing. Needs ergonomic defaults for `main`. |
+
 ## Topics these feed into
 
 - Core syntax / grammar: 1.2, 1.5, 3.1–3.5
@@ -65,4 +76,7 @@ precise compiler error, saves more tokens than shorter syntax does.
 - Error handling: 1.4
 - Modules / packages: 1.3, 5.1
 - AI semantic API / diagnostics: 2.4, 2.5, 4.1, 4.4, 4.5
-- Testing / docs: 4.2, 4.3, 4.6
+- Testing / docs: 4.2, 4.3, 4.6, 6.2, 6.4
+- Type system / verification: 6.1
+- Tooling: 6.3
+- Standard library / runtime: 6.6

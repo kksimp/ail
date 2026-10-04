@@ -112,12 +112,7 @@ stage? Should the brief's stage order be changed? See [roadmap.md](roadmap.md).
 **Resolved** by [ADR 0018](decisions/0018-optimizing-backend-from-start.md).
 
 ## OQ-014 — Linux runtime without libc?
-See [design/toolchain-constraints.md](design/toolchain-constraints.md).
-
-| Option | Pros | Cons |
-|---|---|---|
-| **No libc on Linux; raw syscalls (recommended)** | Full control, static binaries, and no glibc version problems. Fits ADR 0009. | Must reimplement thread creation, TLS setup, DNS resolution and locale behaviour, and handle `vDSO` (the kernel-provided time functions). FFI to C libraries then needs a libc-compatible mode. |
-| Link libc on Linux | Easier. Mixing with C libraries is easier. | Inconsistent with macOS and Windows minimal-dependency stance. glibc versioning problems. |
+**Resolved** by [ADR 0020](decisions/0020-linux-no-libc.md).
 
 ## OQ-015 — Default data layout
 **Resolved** by [ADR 0013](decisions/0013-compiler-chosen-layout.md).
@@ -140,15 +135,14 @@ See [design/toolchain-constraints.md](design/toolchain-constraints.md).
 ---
 
 ## OQ-020 — Correctness oracles for the optimising backend
-[ADR 0018](decisions/0018-optimizing-backend-from-start.md) removes the simple
-baseline backend. Proposed mitigations: differential testing against the
-interpreter (including fuzzing), IR verifiers after every pass, translation
-validation research, and per-pass or per-decision bisection.
+**Resolved** by [ADR 0019](decisions/0019-miscompilation-defence.md).
 
-| Option | Pros | Cons |
-|---|---|---|
-| **All four (recommended)** | Defence in depth against miscompilation, the costliest kind of compiler bug. | Significant test-infrastructure effort. |
-| Differential testing + IR verifiers only | Covers most bugs cheaply. | Subtle optimisation bugs can slip through. |
+## OQ-021 — How do Linux programs that call C libraries get a libc?
+[ADR 0020](decisions/0020-linux-no-libc.md) removes libc from AIL's Linux
+runtime, but C libraries expect an initialised libc (malloc, errno, TLS,
+pthreads). To be settled in the FFI topic. Candidate approaches: load libc
+only when FFI is used, with AIL threads made libc-compatible; or AIL provides
+its own libc-compatible shim.
 
 ---
 

@@ -24,3 +24,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0016](0016-optimized-and-observable-debugging.md) | Debug builds are fully optimised and fully observable | Accepted | 2026-10-04 |
 | [0017](0017-no-c-emission.md) | Never emit C as a path to native code | Accepted | 2026-10-04 |
 | [0018](0018-optimizing-backend-from-start.md) | Build an optimising native backend from the start | Accepted | 2026-10-04 |
+| [0019](0019-miscompilation-defence.md) | Four-layer defence against miscompilation | Accepted | 2026-10-04 |
+| [0020](0020-linux-no-libc.md) | Linux runtime uses raw syscalls, no libc | Accepted | 2026-10-04 |
