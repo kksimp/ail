@@ -27,6 +27,9 @@ Design notes:
   keywords).
 - [design/indentation-examples.md](design/indentation-examples.md): the same
   code in each candidate indentation style (OQ-026).
+- [design/ownership-options.md](design/ownership-options.md): value vs.
+  reference semantics, borrows, and shared identity, with examples and
+  measurements.
 
 Contributors, human or AI, should read [AGENTS.md](../AGENTS.md) for the
 documentation rules. **A change is not complete until its documentation is.**
