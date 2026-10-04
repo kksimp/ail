@@ -114,3 +114,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0106](0106-unsafe-operations.md) | The closed set of unsafe operations; raw pointers `*T` *(delegated)* | Accepted | 2026-10-04 |
 | [0107](0107-unknown-names.md) | Every name must resolve; "did you mean" suggestions *(delegated)* | Accepted | 2026-10-04 |
 | [0108](0108-call-rules-and-syntax-errors.md) | Calls: one argument per parameter, exact types; `gram.syntax.1` *(delegated)* | Accepted | 2026-10-04 |
+| [0109](0109-merge-via-pull-requests.md) | Code branches merge via GitHub PRs; GitHub deletes them on merge | Accepted | 2026-10-04 |

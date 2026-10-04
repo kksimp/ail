@@ -61,6 +61,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Delegated decisions by priority order | D | [0076](decisions/0076-delegated-decisions.md) |
 | One-command scripts for everything people run | D, implemented for tokbench | [0071](decisions/0071-one-command-scripts.md) |
 | Interim testing gate: local Linux and macOS, no hosted CI | D (interim) | [0085](decisions/0085-interim-local-testing-gate.md) |
+| Merge via pull requests; GitHub deletes branches on merge | D | [0109](decisions/0109-merge-via-pull-requests.md) |
 | Stage 2 entry criteria; Hello World milestone | D | [0086](decisions/0086-finish-core-design-before-stage-2.md) |
 | Private, pinned Rust toolchain for the bootstrap | D (takes effect in Stage 2) | [0087](decisions/0087-private-rust-toolchain.md) |
 

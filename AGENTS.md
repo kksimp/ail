@@ -25,13 +25,18 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - **Docs and spec changes:** commit directly to `main`.
 - **Code changes (Stage 2+):** use a short-lived branch. **Interim gate
   ([ADR 0085](docs/decisions/0085-interim-local-testing-gate.md)):** there's no
-  hosted CI. The AI runs the tests on Linux x86-64, and the designer runs one
-  script on macOS ARM64. Merge and **delete the branch** when both pass.
-  Windows is tested by the designer when convenient and doesn't gate.
+  hosted CI. The AI runs `./ail selftest` on Linux x86-64, and the designer
+  runs `tools/verify.sh BRANCH` on macOS ARM64. Windows is tested by the
+  designer when convenient and doesn't gate.
+- **Merging ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)):** when
+  both pass, open a pull request for the branch and merge it through GitHub.
+  GitHub deletes the branch on merge (repository setting). There's no
+  GitHub-hosted testing.
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
 - The AI's environment can push branches but can't delete them on GitHub.
-  After a merge, ask the designer to run `tools/prune-merged.sh`.
+  Deletion happens through the pull-request merge, with `tools/verify.sh`
+  pruning merged branches as a safety net.
 - Commit with clear messages, and push when a change is complete.
 
 ## Roles
