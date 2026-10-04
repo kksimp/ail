@@ -45,3 +45,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0037](0037-signature-syntax.md) | Signatures: `fn name(param Type) ReturnType`, no colons or arrows | Accepted | 2026-10-04 |
 | [0038](0038-immutable-bindings-by-default.md) | Local bindings are immutable by default | Accepted | 2026-10-04 |
 | [0039](0039-declaration-syntax.md) | Declarations: `x := v`, `mut x := v`; reassignment `x = v` | Accepted | 2026-10-04 |
+| [0040](0040-four-space-indentation.md) | Indentation unit is four spaces; no tabs in indentation | Accepted | 2026-10-04 |

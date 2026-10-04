@@ -47,6 +47,10 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
    project's goals (performance, simplicity, AI-first, safety, cross-platform).
 5. If the designer dismisses a question, **stop and wait**. Do not proceed on
    assumptions.
+6. Put code examples and comparisons **inside the question previews, or in a
+   file sent to the designer**. Text written alongside a question prompt may
+   not be visible to the designer while they answer.
+7. Back syntax questions with **measurements** (ADR 0029) whenever possible.
 
 ## Documentation rules (mandatory)
 

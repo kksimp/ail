@@ -94,15 +94,7 @@ subset"? To be decided once the type system and syntax are drafted.
 **Resolved** by [ADR 0036](decisions/0036-drag-race-c-styles.md).
 
 ## OQ-026 — Indentation unit
-Measured ([syntax-measurements-r1.md](design/syntax-measurements-r1.md#addendum-indentation-signatures-declarations)):
-2, 3 and 4 spaces cost the same on modern tokenizers. Tabs cost ~6% more on
-average (up to 13% on some tokenizers).
-
-| Option | Pros | Cons |
-|---|---|---|
-| **4 spaces (recommended)** | The clearest nesting for readers. Same token cost as 2 spaces. | Deep nesting runs wide (which also discourages it). |
-| 2 spaces | Compact width. | Nesting is harder to see. |
-| Tabs | Each reader picks their display width. | ~6% more tokens. Mixed-whitespace hazards. |
+**Resolved** by [ADR 0040](decisions/0040-four-space-indentation.md).
 
 ---
 

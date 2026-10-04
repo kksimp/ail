@@ -12,12 +12,16 @@ Chapter key: `lex`
 unit deeper than the line that opens a block begins that block. The block ends
 at the first subsequent line indented less deeply. *(ADR 0033)*
 
-**lex.block.2** — A single fixed indentation unit is used for all source text.
-*(ADR 0033; the unit is chosen in OQ-026)*
+**lex.block.2** — The indentation unit is exactly four space characters
+(U+0020). Every line's indentation MUST be a whole number of units.
+*(ADR 0033, ADR 0040)*
 
 **lex.block.3** — Indentation that is not a whole multiple of the unit, or
 that increases by more than one unit at a time, is a compile-time error.
 *(ADR 0033)*
+
+**lex.block.4** — A tab character (U+0009) MUST NOT appear in a line's
+indentation. *(ADR 0040)*
 
 > **Note:** blank lines and comment-only lines do not affect block structure.
 > The exact rule will be given with the comment syntax.
