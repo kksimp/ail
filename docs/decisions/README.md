@@ -65,3 +65,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0057](0057-variant-references.md) | Variants bare where the type is known, qualified otherwise | Accepted | 2026-10-04 |
 | [0058](0058-struct-literal-syntax.md) | Struct literals `Type(field: value)`; `name: value` for named args | Accepted | 2026-10-04 |
 | [0059](0059-default-numeric-spelling.md) | `int`/`i64` and `float`/`f64` both canonical | Accepted | 2026-10-04 |
+| [0060](0060-mutable-value-semantics.md) | AIL uses mutable value semantics | Accepted | 2026-10-04 |
+| [0061](0061-call-site-mut.md) | `mut` parameters are marked `mut` at the call site | Accepted | 2026-10-04 |
+| [0062](0062-second-class-borrows.md) | Second-class borrows; no lifetime annotations | Accepted | 2026-10-04 |
+| [0063](0063-use-site-ref.md) | Shared mutable identity via use-site `ref T` | Accepted | 2026-10-04 |

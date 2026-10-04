@@ -54,7 +54,7 @@ defined when the diagnostic format is designed.
 | 04 | [Types](04-types.md) | `type` | Drafted (partial) |
 | 05 | [Expressions and statements](05-expressions.md) | `expr` | Drafted (partial) |
 | 06 | Memory model and allocation | `mem` | Not started |
-| 07 | Ownership and lifetimes | `own` | Not started |
+| 07 | [Ownership and value semantics](07-ownership.md) | `own` | Drafted (partial) |
 | 08 | [Errors](08-errors.md) | `err` | Drafted (partial) |
 | 09 | Generics | `gen` | Not started |
 | 10 | Traits / interfaces | `trait` | Not started |

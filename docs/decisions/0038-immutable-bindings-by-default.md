@@ -41,8 +41,9 @@ syntax is set by [ADR 0039](0039-declaration-syntax.md).
   the machine-applicable fix "declare it `mut`".
 - The compiler should warn about mutable bindings that are never reassigned
   (fix: remove `mut`), so the marker stays meaningful.
-- The ownership topic must decide whether and how *values* are immutable
-  (deep immutability). That drives GC barrier elision
+- Under mutable value semantics ([ADR 0060](0060-mutable-value-semantics.md)),
+  an immutable binding holds a deeply immutable value. Only `ref` cells
+  provide shared mutation. This supports GC barrier elision
   ([performance-beyond-c.md §2.5](../design/performance-beyond-c.md#25-barrier-elision-through-immutability)).
 
 ## Rejected alternatives

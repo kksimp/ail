@@ -123,6 +123,22 @@ generics handled during inference?
 ## OQ-031 — Canonical spelling of the default numeric types
 **Resolved** by [ADR 0059](decisions/0059-default-numeric-spelling.md).
 
+## OQ-032 — Exclusivity of `mut` arguments
+Under [ADR 0060](decisions/0060-mutable-value-semantics.md), a call like
+`f(mut x, x)` or `swap(mut a[i], mut a[j])` could alias. Options: a
+compile-time error, with a dynamic check when the compiler can't prove the
+indices differ; or an implicit copy of the read-only argument. To be asked.
+
+## OQ-033 — Visibility of copy-on-write copies
+Implicit cheap copies plus a performance report that flags actual deep copies
+in hot paths, or explicit `.copy()` where the compiler can't prove sharing
+is free. To be asked.
+
+## OQ-034 — Deterministic cleanup of resources
+Files, sockets and lock guards need prompt release despite the GC. Candidates:
+non-copyable (unique) resource types with deterministic drop at last use,
+`defer`, and scoped `with` blocks. To be asked.
+
 ---
 
 ### Not yet opened
