@@ -58,7 +58,7 @@ defined when the diagnostic format is designed.
 | 08 | Errors | `err` | Not started |
 | 09 | Generics | `gen` | Not started |
 | 10 | Traits / interfaces | `trait` | Not started |
-| 11 | Concurrency | `conc` | Not started |
+| 11 | [Concurrency](11-concurrency.md) | `conc` | Drafted (partial) |
 | 12 | Modules and packages | `mod` | Not started |
 | 13 | Unsafe | `unsafe` | Not started |
 | 14 | FFI and C interoperability | `ffi` | Not started |

@@ -90,6 +90,10 @@ docs/
 - All targets are 64-bit and little-endian (ADR 0007).
 - x86-64 baseline is x86-64-v3, with runtime dispatch for higher levels (ADR 0005).
 - ARM64 baseline is ARMv8.2-A (ADR 0006).
+- x86-64 and ARM64 are developed in **strict lockstep**. Nothing lands unless
+  it works and is optimised on both (ADR 0008). All five targets gate CI (ADR 0027).
+- The memory model is abstract and weakly ordered. Safe code is data-race-free.
+  Atomics default to SeqCst (ADR 0025).
 - **Custom tooling by default.** An existing tool is acceptable only if it meets
   *every* requirement. Prefer R&D over losing a feature (ADR 0009).
 - **No LLVM or any external backend, ever.** Clang, gcc and rustc are allowed

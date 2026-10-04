@@ -2,8 +2,9 @@
 
 Chapter key: `plat`
 
-> **Status:** Drafted (partial). The target tier policy is pending
-> [ADR 0008](../decisions/0008-isa-priority-policy.md).
+> **Status:** Drafted (partial). Both ISAs are developed in strict lockstep
+> ([ADR 0008](../decisions/0008-isa-priority-policy.md)), and all five targets
+> gate CI ([ADR 0027](../decisions/0027-ci-gating-all-targets.md)).
 
 ## Targets
 

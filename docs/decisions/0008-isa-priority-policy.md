@@ -1,8 +1,9 @@
-# 0008. ISA priority policy (ARM64 vs x86-64)
+# 0008. ISA priority policy: ARM64 and x86-64 in strict lockstep
 
-- **Status:** Proposed. The designer leans toward equal priority; the guardrails are not yet confirmed.
+- **Status:** Accepted
 - **Date:** 2026-10-04
-- **Decided by:** pending
+- **Decided by:** Designer
+- **Resolves:** OQ-001 (guardrails confirmed by ADRs [0025](0025-memory-model-atomics.md) and [0026](0026-hardware-feature-acceleration.md); CI by [0027](0027-ci-gating-all-targets.md))
 - **Topic:** 24 — Cross-platform ABI strategy; 23 — Compiler architecture
 - **Spec rules:** none yet
 
@@ -51,12 +52,12 @@ not **language quality**.
 
 ## Options considered
 
-### Option A — Equal Tier 1, with ARM64 as the reference platform (recommended)
+### Option A — Equal Tier 1, with ARM64 as the reference platform (architect's recommendation)
 - **Pros:** No adoption hit. Weak-memory bugs are caught. The guardrails stop
   x86 from constraining the language. Stage milestones require parity.
 - **Cons:** The most total work. x86 codegen may lag by weeks within a stage.
 
-### Option B — Strict lockstep
+### Option B — Strict lockstep (chosen)
 - **Pros:** Perfect parity at all times, and an IR that is forced to be neutral.
 - **Cons:** The slowest iteration. x86 encoding complexity sets the pace for
   everything.
@@ -77,12 +78,35 @@ not **language quality**.
 
 ## Decision
 
-Pending. Tracked in [open-questions.md](../open-questions.md) as OQ-001 through OQ-004.
+x86-64 and ARM64 are developed in **strict lockstep**. No change merges unless
+it works on, and is optimised for, both ISAs on every OS where each applies.
+Neither ISA is "primary".
+
+## Rationale
+
+The designer prioritises guaranteed parity and an IR forced to stay neutral
+over iteration speed. The guardrails analysed above are adopted as separate
+decisions: an abstract weak memory model (ADR 0025), portable runtime
+features with optional hardware accelerators (ADR 0026), and all-target CI
+gating (ADR 0027). Together they stop x86 from constraining the language,
+while lockstep stops either ISA from lagging.
 
 ## Consequences
 
-To be written on acceptance.
+- Every backend feature (instruction selection, register allocation, ABI,
+  SIMD lowering, debug and unwind info) is designed and landed for both ISAs
+  together.
+- x86-64's encoding complexity sets the pace of backend work. That cost is
+  accepted.
+- Weak-memory bugs are still caught, because ARM64 runs in the same CI gate
+  as x86-64 (ADR 0027).
+- Performance regressions on either ISA block merges. The benchmark suite
+  runs on both.
 
 ## Rejected alternatives
 
-To be written on acceptance.
+- **Equal Tier 1 with ARM64 leading:** allows temporary drift. The designer
+  prefers no drift at all.
+- **ARM64-first, x86 by 1.0:** a long lag, and the risk of ARM assumptions in the IR.
+- **ARM64-only custom backend with x86 on LLVM:** banned by ADR 0010.
+- **ARM64 only:** fatal to adoption, and breaks first-class Windows and Linux.

@@ -24,7 +24,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 8 | Error handling | — | | |
 | 9 | Generics | — | | |
 | 10 | Traits/interfaces | — | | |
-| 11 | Concurrency | Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics) | |
+| 11 | Concurrency | D (partial) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md) | `conc.mm.1`, `conc.race.1`, `conc.atomic.*` |
 | 12 | Modules | — | | |
 | 13 | Package management | — | | |
 | 14 | FFI | — | | |
@@ -35,13 +35,13 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 19 | AST/IR architecture | — | | |
 | 20 | AI semantic API | D (timing) + Q | [0024](decisions/0024-semantic-api-from-stage-2.md) | |
 | 21 | Standard library architecture | — | | |
-| 22 | Runtime architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0020](decisions/0020-linux-no-libc.md) | |
+| 22 | Runtime architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0020](decisions/0020-linux-no-libc.md), [0026](decisions/0026-hardware-feature-acceleration.md) | |
 | 23 | Compiler architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0010](decisions/0010-no-llvm-backend.md), [0015](decisions/0015-always-whole-program-incremental.md), [0017](decisions/0017-no-c-emission.md), [0018](decisions/0018-optimizing-backend-from-start.md), [0022](decisions/0022-staged-self-hosting.md), [0023](decisions/0023-rust-bootstrap.md) | |
-| 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md) (proposed) | `plat.*` |
+| 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md), [0027](decisions/0027-ci-gating-all-targets.md) | `plat.*` |
 | 25 | Optimization strategy | D (partial) + Q | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md) | `plat.isa.*` |
 | 26 | Debugging/profiling architecture | D (partial) + Q | [0016](decisions/0016-optimized-and-observable-debugging.md), [0021](decisions/0021-debug-info-formats.md) | |
 | 27 | Build system | D (partial) + Q | [0015](decisions/0015-always-whole-program-incremental.md) (incremental cache) | |
-| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence) | |
+| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating) | |
 
 ## Project process
 
@@ -57,4 +57,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-023).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-024).

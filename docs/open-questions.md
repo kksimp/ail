@@ -9,40 +9,16 @@ IDs (`OQ-NNN`) are never reused.
 ---
 
 ## OQ-001 — ISA priority policy
-**Context:** [ADR 0008 (Proposed)](decisions/0008-isa-priority-policy.md). The
-designer leans toward equal priority but is worried x86 will hold the project
-back.
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Equal Tier 1, ARM64 as reference (recommended)** | No adoption hit. Weak-memory bugs caught. Guardrails protect the language. | Most total work. Brief x86 lag within a stage. |
-| Strict lockstep | Perfect parity. Neutral IR. | Slowest iteration. x86 sets the pace. |
-| ARM64 first, x86 by 1.0 | Fastest first custom backend. | Long x86 lag. ARM assumptions creep in. |
+**Resolved** by [ADR 0008](decisions/0008-isa-priority-policy.md) (strict lockstep).
 
 ## OQ-002 — Default atomic memory ordering
-**Context:** decides whether x86's TSO model shapes the concurrency semantics.
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Weakly-ordered abstract machine. Data-race-free safe code. Atomics default to sequential consistency (SeqCst), weaker orderings opt-in (recommended)** | Correct by default. Maps well to both ISAs (ARMv8 LDAR/STLR). Full expert control. | SeqCst stores cost a little more on x86. Defaults can hide over-synchronisation, though the perf report can flag it. |
-| Ordering always explicit | Fully transparent. | More tokens and boilerplate. Easy to choose too-weak orderings. Conflicts with "safe by default". |
-| TSO (x86-like) guaranteed | Easy x86 intuition. | Barriers everywhere on ARM. This is the "x86 holds us back" failure mode. |
+**Resolved** by [ADR 0025](decisions/0025-memory-model-atomics.md).
 
 ## OQ-003 — ISA-specific hardware features in the GC and runtime
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Portable core with optional accelerators (ARM TBI/MTE/PAC, x86 LAM/AVX-512) (recommended)** | Each ISA plays to its strengths. Neither penalises the other. | More code paths to test. Platform results differ (reported via the perf API). |
-| Design around ARM features | Fastest, most elegant ARM runtime. | Constant x86 tax. Contradicts equal priority. |
-| Lowest common denominator | One code path. | Leaves measurable performance on the table. |
+**Resolved** by [ADR 0026](decisions/0026-hardware-feature-acceleration.md).
 
 ## OQ-004 — CI merge gating
-
-| Option | Pros | Cons |
-|---|---|---|
-| **All 5 targets gate every merge (recommended)** | No platform drifts into second-class. Cheap while the compiler is small. | Slower and more costly CI. Windows ARM64 runners are scarcer. |
-| 4 gate, `windows-arm64` nightly | Faster and cheaper. | The smallest platform can break for a day and risks becoming de facto Tier 2. |
-| Only Linux (both ISAs) gates | Fastest. | macOS and Windows effectively become ports. |
+**Resolved** by [ADR 0027](decisions/0027-ci-gating-all-targets.md).
 
 ## OQ-005 — Compiler host platforms
 Which platforms must the `ail` compiler itself **run on**, as opposed to targeting?
@@ -141,6 +117,19 @@ the interpreter remains the differential-testing oracle ([ADR 0019](decisions/00
 [ADR 0022](decisions/0022-staged-self-hosting.md) requires the language features
 the backend uses to stabilise early. Which features make up the "core
 subset"? To be decided once the type system and syntax are drafted.
+
+## OQ-024 — Git workflow once code exists
+The designer asked to work directly on `main`. [ADR 0027](decisions/0027-ci-gating-all-targets.md)
+requires all five targets to pass before a change lands. Direct pushes to
+`main` can't be gated by CI.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Docs-only changes go straight to `main`; from Stage 2, code goes through short-lived branches with pull requests gated by CI (recommended)** | Keeps today's fast doc workflow while the five-target gate actually applies to code. | A PR step for code changes. |
+| Direct to `main` always, with CI after the push and fixes forward | Fastest. | `main` can be broken on any target, which defeats ADR 0027. |
+| Direct to `main` with a local pre-push check on all targets | No PRs. | One machine can't run all five targets natively, so the gate is incomplete. |
+
+*Decide before Stage 2 starts.*
 
 ---
 

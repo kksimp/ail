@@ -24,8 +24,9 @@ Linux, Windows, and macOS are all first-class.
 | Windows | ✓ | ✓ |
 | macOS | — | ✓ |
 
-All targets are 64-bit and little-endian. ISA priority policy is still
-under decision ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)).
+All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
+strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)), and all
+five targets gate CI.
 
 ## Documentation
 
