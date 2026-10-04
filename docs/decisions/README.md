@@ -26,3 +26,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0018](0018-optimizing-backend-from-start.md) | Build an optimising native backend from the start | Accepted | 2026-10-04 |
 | [0019](0019-miscompilation-defence.md) | Four-layer defence against miscompilation | Accepted | 2026-10-04 |
 | [0020](0020-linux-no-libc.md) | Linux runtime uses raw syscalls, no libc | Accepted | 2026-10-04 |
+| [0021](0021-debug-info-formats.md) | Emit AIL's own debug format plus DWARF and PDB | Accepted | 2026-10-04 |
+| [0022](0022-staged-self-hosting.md) | Staged self-hosting: backend written in AIL from the start | Accepted | 2026-10-04 |
+| [0023](0023-rust-bootstrap.md) | Bootstrap front end and interpreter written in Rust | Accepted | 2026-10-04 |
+| [0024](0024-semantic-api-from-stage-2.md) | AI semantic API starts in Stage 2 and grows each stage | Accepted | 2026-10-04 |

@@ -98,4 +98,6 @@ docs/
   still measured (ADR 0011).
 - When a constraint blocks something the designer wants, **explain the
   constraint plainly** so the designer can design around it.
+- Bootstrap front end and interpreter are in **Rust**. The optimising backend
+  is written **in AIL** (ADR 0022, ADR 0023).
 - See `docs/decisions/README.md` for the full list.

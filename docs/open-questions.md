@@ -87,23 +87,10 @@ Affects both safety and performance. Raised early because it constrains the opti
 *No recommendation yet.* This needs the type-system discussion first.
 
 ## OQ-010 — Implementation language of the bootstrap compiler
-Which language is the first AIL compiler written in, before AIL can compile
-itself? The custom-tooling policy ([ADR 0009](decisions/0009-custom-tooling-policy.md))
-governs AIL's *product*. The bootstrap compiler is scaffolding, and is thrown
-away if AIL self-hosts (OQ-011).
-
-| Option | Pros | Cons |
-|---|---|---|
-| Rust | Fast, memory-safe, strong enums and pattern matching for compilers. | Slow builds. Ownership friction in graph-heavy compiler code. |
-| Zig or C | Minimal runtime, and closest to the "own everything" ethos. | Less safety, more effort and more bugs. |
-| OCaml | Excellent for type checkers and fast to prototype in. | Far from the final self-hosted compiler. Smaller talent pool. |
-| Go | Simple, fast builds, trivial cross-compilation. | Less expressive for ASTs and IR (no sum types). |
-
-*No recommendation yet.* Depends on OQ-011.
+**Resolved** by [ADR 0023](decisions/0023-rust-bootstrap.md).
 
 ## OQ-011 — Self-hosting and roadmap order
-Should the compiler eventually be written in AIL (self-hosting), and at which
-stage? Should the brief's stage order be changed? See [roadmap.md](roadmap.md).
+**Resolved** by [ADR 0022](decisions/0022-staged-self-hosting.md) (self-hosting) and [ADR 0024](decisions/0024-semantic-api-from-stage-2.md) (semantic API timing). The remaining roadmap refinements (#2 and #4) are still open in [roadmap.md](roadmap.md).
 
 ## OQ-012 — May the compiler emit C as a temporary path to native code?
 **Resolved** by [ADR 0017](decisions/0017-no-c-emission.md).
@@ -127,10 +114,7 @@ stage? Should the brief's stage order be changed? See [roadmap.md](roadmap.md).
 **Resolved** by [ADR 0012](decisions/0012-memory-rd-tracks.md).
 
 ## OQ-019 — Debug-info formats
-| Option | Pros | Cons |
-|---|---|---|
-| **AIL's own rich format, plus DWARF and PDB emitters (recommended)** | Works with gdb, lldb, WinDbg, Visual Studio, perf and crash reporters, *and* AIL's own debugger and AI API get full information. | Three formats to maintain. |
-| Own format only | Least work. Full control. | No existing debugger, profiler or crash tool can read AIL binaries. Adoption suffers. |
+**Resolved** by [ADR 0021](decisions/0021-debug-info-formats.md).
 
 ---
 
@@ -143,6 +127,20 @@ runtime, but C libraries expect an initialised libc (malloc, errno, TLS,
 pthreads). To be settled in the FFI topic. Candidate approaches: load libc
 only when FFI is used, with AIL threads made libc-compatible; or AIL provides
 its own libc-compatible shim.
+
+## OQ-022 — Keep the Rust interpreter after self-hosting?
+After the compiler is fully AIL ([ADR 0022](decisions/0022-staged-self-hosting.md)),
+the interpreter remains the differential-testing oracle ([ADR 0019](decisions/0019-miscompilation-defence.md)).
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Keep it in Rust permanently as an independent oracle (recommended)** | Two independent implementations in different languages catch bugs that a shared codebase would hide (N-version testing). | A permanent development-time Rust dependency (not shipped). Two implementations to keep in sync with the spec. |
+| Port it to AIL | Everything is AIL. No Rust anywhere. | The oracle shares the compiler's language and tooling, so bugs in common code can hide from both. |
+
+## OQ-023 — Backend-ready core subset
+[ADR 0022](decisions/0022-staged-self-hosting.md) requires the language features
+the backend uses to stabilise early. Which features make up the "core
+subset"? To be decided once the type system and syntax are drafted.
 
 ---
 

@@ -45,8 +45,10 @@ Components AIL has to build because there's no LLVM and no external tools
 
 ## 3. The bootstrap problem
 
-Something has to compile the first AIL compiler. Options are tracked in
-OQ-010 and OQ-013. The custom-tooling policy applies to AIL's **product**.
+Something has to compile the first AIL compiler. **Resolved:** the front end
+and interpreter are written in Rust ([ADR 0023](../decisions/0023-rust-bootstrap.md)).
+The backend is written in AIL and run on the interpreter until it compiles
+itself ([ADR 0022](../decisions/0022-staged-self-hosting.md)). The custom-tooling policy applies to AIL's **product**.
 The language used to write the bootstrap compiler is a separate question,
 and that compiler is thrown away once AIL can compile itself (if
 self-hosting is chosen).
