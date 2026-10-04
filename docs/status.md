@@ -15,12 +15,12 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | # | Topic | State | ADRs | Spec |
 |---|---|---|---|---|
 | 1 | Language name | D | — (founding brief: **AIL**, by Voltare, `.ail`, `ail` CLI) | — |
-| 2 | Core syntax | D (partial) + Q | [0011](decisions/0011-ai-familiarity-not-a-constraint.md), [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md) | `lex.block.*`, `lex.stmt.*` |
+| 2 | Core syntax | D (partial) + Q | [0011](decisions/0011-ai-familiarity-not-a-constraint.md), [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md), [0037](decisions/0037-signature-syntax.md), [0039](decisions/0039-declaration-syntax.md) | `lex.block.*`, `lex.stmt.*` |
 | 3 | Grammar | D (partial) | [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md) | `lex.*` |
 | 4 | Type system | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes), [0035](decisions/0035-integer-overflow-traps.md) (overflow) | `plat.ptr.*`, `expr.arith.*` |
 | 5 | Memory model | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md), [0014](decisions/0014-compressed-managed-references.md) | `plat.endian.1`, `plat.ptr.3` |
 | 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
-| 7 | Ownership/lifetime semantics | — | | |
+| 7 | Ownership/lifetime semantics | D (bindings only) + Q | [0038](decisions/0038-immutable-bindings-by-default.md) | |
 | 8 | Error handling | — | | |
 | 9 | Generics | — | | |
 | 10 | Traits/interfaces | — | | |

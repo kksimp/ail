@@ -95,6 +95,29 @@ Three lines (declare an int, declare a string, reassign the int):
 | `let count = 0` / `var count = 0` … | 22 | 22 | 19 | 22 | 23 |
 | `let mut count = 0` … | 23 | 23 | 20 | 23 | 24 |
 
+## Addendum: visible indentation markers (designer's question)
+
+The designer asked whether spaces could be replaced with a visible character
+such as periods. The whole program (variant A) was re-indented with each marker:
+
+| Marker per level | cl100k | o200k | anthropic-legacy | tekken | spm-v1 | Mean | vs. 4 spaces |
+|---|---|---|---|---|---|---|---|
+| 4 spaces | 181 | 182 | 201 | 198 | 243 | 201.0 | — |
+| 2 spaces | 181 | 182 | 201 | 198 | 242 | 200.8 | −0.1% |
+| 1 period `.` | 175 | 176 | 225 | 195 | 239 | 202.0 | +0.5% |
+| 2 periods `..` | 183 | 184 | 227 | 198 | 250 | 208.4 | +3.7% |
+| 4 periods `....` | 193 | 184 | 237 | 208 | 250 | 214.4 | +6.7% |
+| Tab | 184 | 185 | 227 | 201 | 268 | 213.0 | +6.0% |
+| Middle dot `·` | 194 | 195 | 255 | 208 | 268 | 224.0 | +11.4% |
+| Guide `\| ` | 209 | 210 | 253 | 226 | 270 | 233.6 | +16.2% |
+
+How spaces tokenize (o200k): the line `        i += 1` (8 spaces) becomes
+`["\n", "       ", " i", " +=", " ", "1"]`. A whole run of spaces is a
+**single token**, and its last space merges with the following word. That's
+why 2, 3, 4 or 8 spaces all cost about the same. Characters are **not** all
+equal: tokenizers learned dedicated tokens for runs of spaces because they are
+extremely common in training data.
+
 ## Caveats
 
 - One program is not a corpus. These results guide the first syntax

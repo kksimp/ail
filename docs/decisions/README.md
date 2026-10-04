@@ -42,3 +42,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0034](0034-newline-terminated-statements.md) | Newlines end statements; no semicolons | Accepted | 2026-10-04 |
 | [0035](0035-integer-overflow-traps.md) | Integer overflow traps; wrapping/saturating/checked ops are explicit | Accepted | 2026-10-04 |
 | [0036](0036-drag-race-c-styles.md) | Drag races compare against both idiomatic and tuned C | Accepted | 2026-10-04 |
+| [0037](0037-signature-syntax.md) | Signatures: `fn name(param Type) ReturnType`, no colons or arrows | Accepted | 2026-10-04 |
+| [0038](0038-immutable-bindings-by-default.md) | Local bindings are immutable by default | Accepted | 2026-10-04 |
+| [0039](0039-declaration-syntax.md) | Declarations: `x := v`, `mut x := v`; reassignment `x = v` | Accepted | 2026-10-04 |
