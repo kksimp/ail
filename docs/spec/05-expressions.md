@@ -30,9 +30,10 @@ fn total(items List[Item]) i64
     sum
 ```
 
-> **Note:** the interaction with module-level, imported and built-in names is
-> open (OQ-028). The `for` syntax in the example is illustrative and not yet
-> decided.
+**expr.bind.5** — Declaring a local name equal to a visible module-level
+item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
+
+> **Note:** the `for` syntax in the example is illustrative and not yet decided.
 
 ## Match
 

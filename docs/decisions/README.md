@@ -81,3 +81,12 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0073](0073-explicit-trait-impls.md) | Explicit trait implementation: `impl Trait for Type` | Accepted | 2026-10-04 |
 | [0074](0074-inline-generic-bounds.md) | Inline generic constraints `[T Bound]`, joined with `+` | Accepted | 2026-10-04 |
 | [0075](0075-unmarked-receiver-mutation.md) | Receiver-mutating calls are not marked at the call site | Accepted | 2026-10-04 |
+| [0076](0076-delegated-decisions.md) | AI decides routine questions by priority order; serious ones escalate | Accepted | 2026-10-04 |
+| [0077](0077-operator-traits.md) | Fixed operator set implementable via standard traits *(delegated)* | Accepted | 2026-10-04 |
+| [0078](0078-trait-typed-parameters.md) | Trait as a parameter type = anonymous static generic *(delegated)* | Accepted | 2026-10-04 |
+| [0079](0079-any-dynamic-dispatch.md) | Dynamic dispatch is explicit: `any Trait` *(delegated)* | Accepted | 2026-10-04 |
+| [0080](0080-generic-compilation-strategy.md) | Compiler chooses specialisation vs sharing per generic instance *(delegated)* | Accepted | 2026-10-04 |
+| [0081](0081-default-methods.md) | Traits may provide default methods *(delegated)* | Accepted | 2026-10-04 |
+| [0082](0082-method-placement-coherence.md) | Associated functions; placement; coherence; no ambiguous calls *(delegated)* | Accepted | 2026-10-04 |
+| [0083](0083-attribute-syntax.md) | Attributes `@name(args)`, same line as the declaration *(delegated)* | Accepted | 2026-10-04 |
+| [0084](0084-no-shadowing-module-names.md) | Locals can't reuse module-level, imported or prelude names *(delegated)* | Accepted | 2026-10-04 |

@@ -1,0 +1,1 @@
+total := price.mul(qty).add(tax).sub(discount)

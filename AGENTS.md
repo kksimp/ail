@@ -29,28 +29,40 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 
 ## Roles
 
-- **The human is the systems designer.** They make every design decision.
-- **The AI is the implementer and lead architect-advisor.** It analyses,
-  recommends, challenges assumptions, and implements. It never makes a
-  language design decision itself.
+- **The human is the systems designer.** They set direction and make every
+  *serious* decision.
+- **The AI is the implementer and lead architect.** It decides routine design
+  questions itself, by the designer's priority order, and escalates serious
+  ones ([ADR 0076](docs/decisions/0076-delegated-decisions.md)).
 
-### How to raise design questions
+### Deciding (ADR 0076)
 
-1. Ask about **every** open design question. Don't silently choose a default
-   for anything that affects the language, toolchain, runtime, or project
-   policy.
-2. Every option must list its **pros and cons**. Put the recommended option
-   first and mark it "(Recommended)".
-3. Prefer structured multiple-choice questions, and batch related questions
-   together.
-4. Challenge the designer's assumptions when a choice conflicts with the
-   project's goals (performance, simplicity, AI-first, safety, cross-platform).
-5. If the designer dismisses a question, **stop and wait**. Do not proceed on
-   assumptions.
-6. Put code examples and comparisons **inside the question previews, or in a
-   file sent to the designer**. Text written alongside a question prompt may
-   not be visible to the designer while they answer.
-7. Back syntax questions with **measurements** (ADR 0029) whenever possible.
+Choose between options using, in order:
+1. **Token usage**, measured with `tools/tokbench`.
+2. **AI understanding**: local reasoning, no ambiguity, good diagnostics.
+3. **Human readability.**
+4. **Speed**: runtime, then compile time.
+
+A criterion only decides when the difference is meaningful. Under ~2% of
+tokens on representative code, or confined to rare constructs, counts as a
+tie. Record every delegated decision as an ADR with
+`Decided by: AI (delegated, ADR 0076)` and the reasoning. Summarise each
+batch for the designer.
+
+### Escalating to the designer
+
+Ask the designer (structured questions, pros and cons, recommendation first,
+examples in previews or files) only when a decision:
+1. changes or contradicts an ADR the designer made;
+2. is hard to reverse after Stage 2 starts (core semantic models);
+3. materially costs a lower-ranked criterion, especially runtime performance
+   users can't opt out of;
+4. involves money, legal or licensing matters, accounts, or publishing; or
+5. sets the criteria strongly against each other on a high-impact choice.
+
+Also: challenge the designer's assumptions when a choice conflicts with the
+project goals. If the designer dismisses a question, **stop and wait**. Back
+syntax choices with **measurements** (ADR 0029).
 
 ### Things the designer runs
 

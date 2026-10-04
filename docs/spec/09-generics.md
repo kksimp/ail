@@ -2,9 +2,9 @@
 
 Chapter key: `gen`
 
-> **Status:** Drafted (partial). Bracket syntax (`gram.generic.1`) and
-> constraints are specified. The compilation strategy, variance, and const
-> generics are not yet designed.
+> **Status:** Drafted (partial). Specified: bracket syntax (`gram.generic.1`),
+> constraints, anonymous generic parameters, and the compilation-strategy
+> freedom. Not yet designed: variance and const generics.
 
 ## Constraints
 
@@ -27,3 +27,20 @@ fn largest[T Shape](items List[T]) T
 ```
 
 > **Note:** `for` loop syntax in the example is illustrative.
+
+## Anonymous generic parameters
+
+**gen.anon.1** — A parameter whose type is written as a trait name declares an
+anonymous type parameter constrained by that trait: `fn draw(s Shape)` is
+equivalent to `fn draw[T Shape](s T)`. *(ADR 0078)*
+
+**gen.anon.2** — The canonical form uses the anonymous form when the type
+parameter would be referenced exactly once, and the named form otherwise.
+*(ADR 0078)*
+
+## Compilation
+
+**gen.impl.1** — The semantics of generic code MUST NOT depend on whether an
+instance is specialised or shares code with other instances. The
+implementation chooses per instance and MUST report its choices in the
+performance report. *(ADR 0080)*

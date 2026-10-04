@@ -1,0 +1,2 @@
+fn draw[T Shape](s T, canvas Canvas)
+    canvas.fill(s.outline())

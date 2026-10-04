@@ -1,7 +1,9 @@
 # Open questions
 
 Unresolved design questions. Each question lists its options with pros and
-cons, plus a recommendation. When a question is resolved it moves into an ADR
+cons, plus a recommendation. Since [ADR 0076](decisions/0076-delegated-decisions.md),
+routine questions are decided by the AI using the priority order (tokens, AI
+understanding, readability, speed). Serious ones go to the designer. When a question is resolved it moves into an ADR
 and its entry here is replaced by a link.
 
 IDs (`OQ-NNN`) are never reused.
@@ -97,15 +99,10 @@ subset"? To be decided once the type system and syntax are drafted.
 **Resolved** by [ADR 0040](decisions/0040-four-space-indentation.md).
 
 ## OQ-027 — Attribute and annotation syntax
-`#` is taken by comments ([ADR 0043](decisions/0043-hash-comments.md)).
-Attributes are needed for fixed layout ([ADR 0013](decisions/0013-compiler-chosen-layout.md)),
-inlining hints, FFI and tests. The natural candidate is `@name` (e.g. `@layout(c)`).
-To be asked with the declarations grammar.
+**Resolved** by [ADR 0083](decisions/0083-attribute-syntax.md).
 
 ## OQ-028 — Local names vs. module-level, imported and built-in names
-[ADR 0044](decisions/0044-no-shadowing.md) forbids local shadowing. Should a
-local binding be allowed to reuse the name of a module-level item, an import,
-or a built-in (e.g. a local `len`)? To be decided with the modules topic.
+**Resolved** by [ADR 0084](decisions/0084-no-shadowing-module-names.md).
 
 ## OQ-029 — Error and absence handling forms
 **Partly resolved:** fallbacks and early exit ([ADR 0049](decisions/0049-else-for-fallback-and-early-exit.md)),
@@ -136,12 +133,14 @@ generics handled during inference?
 **Resolved** by [ADR 0068](decisions/0068-move-parameters.md) (`move`) and [ADR 0069](decisions/0069-unique-keyword.md) (`unique`).
 
 ## OQ-036 — Method placement, associated functions, and coherence
-Following [ADR 0072](decisions/0072-dot-named-methods.md) and [ADR 0073](decisions/0073-explicit-trait-impls.md):
-(a) whether `fn Type.name(...)` without `self` declares an associated
-function (e.g. `Circle.new(1.0)`); (b) which modules may declare methods
-for a type; (c) which packages may write `impl Trait for Type` (an orphan
-or coherence rule, to prevent two conflicting implementations); (d) method
-resolution order when an inherent method and a trait method share a name.
+**Resolved** by [ADR 0082](decisions/0082-method-placement-coherence.md).
+
+## OQ-037 — Associated types vs. trait type parameters
+Should traits declare associated types (`type Item` inside `trait Iterator`;
+one per implementing type), take type parameters (`trait Iterator[Item]`), or
+both, as in Rust (`From[T]` vs. `Iterator`)? To be decided with collections
+and iteration, measured on a real corpus. *Owner: AI under ADR 0076, unless
+it proves hard to reverse.*
 
 ---
 

@@ -2,8 +2,8 @@
 
 Chapter key: `gram`
 
-> **Status:** Drafted (partial). Only function-declaration shape and generic
-> brackets are specified. The full grammar (in a machine-checkable form, per
+> **Status:** Drafted (partial). Function-declaration shape, generic brackets,
+> and attributes are specified. The full grammar (in a machine-checkable form, per
 > ADR 0002) will be written as the syntax decisions are completed.
 
 ## Function declarations
@@ -37,3 +37,17 @@ fn load(path str) Result[Map[str, User], DbError]
 
 > **Note:** square brackets also denote indexing. They are told apart by
 > whether the operand is a type or generic function, or a value (ADR 0041).
+
+## Attributes
+
+**gram.attr.1** — An attribute is written `@name` or `@name(arguments)`.
+*(ADR 0083)*
+
+**gram.attr.2** — Attributes precede the declaration they apply to, on the same
+line. The canonical formatter moves them to their own preceding line only when
+the line would otherwise exceed the line-length limit. *(ADR 0083)*
+
+```ail
+@inline fn hash(x u64) u64
+    x * 31
+```

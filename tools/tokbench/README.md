@@ -65,4 +65,5 @@ Results may be off by about one token per file.
 |---|---|
 | `corpus/r1/` | Round-1 block-style samples (A–D) plus Rust and Go references, as measured in [syntax-measurements-r1.md](../../docs/design/syntax-measurements-r1.md). They use candidate syntax from before later decisions. |
 | `corpus/r2/` | Methods, trait conformance, generic constraints, and receiver-mutation variants. See [traits-generics-options.md](../../docs/design/traits-generics-options.md). |
+| `corpus/r3/` | Operators, trait-typed parameters, dynamic dispatch, and attribute variants (ADRs 0077–0083). |
 | `corpus/current/` | Samples in the syntax decided so far (as of 2026-10-04). `tokenize.ail` also uses constructs that aren't decided yet: `while`, `char`, slicing, `+=`, `and`, methods that mutate a `mut` binding, and returning an error value. Corpus files hold no explanatory comments, because comments would distort the counts. |

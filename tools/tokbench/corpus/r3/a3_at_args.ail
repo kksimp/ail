@@ -1,0 +1,3 @@
+@layout(c)
+struct Header
+    magic u32
