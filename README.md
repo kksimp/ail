@@ -11,8 +11,26 @@ compiler that answers structured questions about your program.
 main.ail      ail build · ail run · ail test · ail fmt · ail check
 ```
 
-> **Status:** Stage 1, language specification and design. There is no compiler
-> yet. See [docs/status.md](docs/status.md).
+> **Status:** Stage 2. The bootstrap interpreter runs its first programs.
+> See [docs/status.md](docs/status.md).
+
+## Try it
+
+From the repository root on macOS or Linux:
+
+```sh
+./ail run examples/hello.ail
+```
+
+```
+fn main()
+    print("Hello, world!")
+```
+
+The first run installs a private copy of Rust inside the repository and builds
+the bootstrap ([bootstrap/README.md](bootstrap/README.md)). Nothing outside the
+repository is changed. On Windows use `.\ail.ps1 run examples\hello.ail`
+(not yet tested on Windows).
 
 ## Targets
 
