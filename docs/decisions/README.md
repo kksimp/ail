@@ -77,3 +77,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0069](0069-unique-keyword.md) | Non-copyable types are declared `unique` | Accepted | 2026-10-04 |
 | [0070](0070-token-bench-tool.md) | Token-measurement tooling in `tools/tokbench/` (Python) | Accepted | 2026-10-04 |
 | [0071](0071-one-command-scripts.md) | Everything a person runs is a one-command, self-setting-up script per OS | Accepted | 2026-10-04 |
+| [0072](0072-dot-named-methods.md) | Methods are dot-named functions: `fn Type.name(self, ...)` | Accepted | 2026-10-04 |
+| [0073](0073-explicit-trait-impls.md) | Explicit trait implementation: `impl Trait for Type` | Accepted | 2026-10-04 |
+| [0074](0074-inline-generic-bounds.md) | Inline generic constraints `[T Bound]`, joined with `+` | Accepted | 2026-10-04 |
+| [0075](0075-unmarked-receiver-mutation.md) | Receiver-mutating calls are not marked at the call site | Accepted | 2026-10-04 |

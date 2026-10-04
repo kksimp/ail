@@ -22,8 +22,8 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
 | 7 | Ownership/lifetime semantics | D (core model) + Q | [0038](decisions/0038-immutable-bindings-by-default.md), [0044](decisions/0044-no-shadowing.md), [0060](decisions/0060-mutable-value-semantics.md), [0061](decisions/0061-call-site-mut.md), [0062](decisions/0062-second-class-borrows.md), [0063](decisions/0063-use-site-ref.md), [0064](decisions/0064-exclusivity.md), [0065](decisions/0065-copy-reporting.md), [0066](decisions/0066-unique-resource-types.md), [0067](decisions/0067-ref-access.md), [0068](decisions/0068-move-parameters.md), [0069](decisions/0069-unique-keyword.md) | `expr.bind.*`, `own.*` |
 | 8 | Error handling | D (core) + Q | [0045](decisions/0045-error-model.md), [0046](decisions/0046-inferred-error-sets.md), [0047](decisions/0047-traps-end-the-task.md), [0048](decisions/0048-optional-shorthand.md), [0049](decisions/0049-else-for-fallback-and-early-exit.md), [0050](decisions/0050-error-return-traces.md), [0051](decisions/0051-no-implicit-optional-to-error.md) | `err.*`, `type.opt.*` |
-| 9 | Generics | D (syntax only) | [0041](decisions/0041-square-bracket-generics.md) | `gram.generic.1` |
-| 10 | Traits/interfaces | — | | |
+| 9 | Generics | D (syntax, constraints) + Q | [0041](decisions/0041-square-bracket-generics.md), [0074](decisions/0074-inline-generic-bounds.md) | `gram.generic.1`, `gen.*` |
+| 10 | Traits/interfaces | D (core) + Q | [0072](decisions/0072-dot-named-methods.md), [0073](decisions/0073-explicit-trait-impls.md), [0075](decisions/0075-unmarked-receiver-mutation.md) | `trait.*` |
 | 11 | Concurrency | D (partial) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md) | `conc.mm.1`, `conc.race.1`, `conc.atomic.*` |
 | 12 | Modules | — | | |
 | 13 | Package management | — | | |
@@ -59,4 +59,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-035).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-036).

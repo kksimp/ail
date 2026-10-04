@@ -135,6 +135,14 @@ generics handled during inference?
 ## OQ-035 — Parameter form that takes ownership
 **Resolved** by [ADR 0068](decisions/0068-move-parameters.md) (`move`) and [ADR 0069](decisions/0069-unique-keyword.md) (`unique`).
 
+## OQ-036 — Method placement, associated functions, and coherence
+Following [ADR 0072](decisions/0072-dot-named-methods.md) and [ADR 0073](decisions/0073-explicit-trait-impls.md):
+(a) whether `fn Type.name(...)` without `self` declares an associated
+function (e.g. `Circle.new(1.0)`); (b) which modules may declare methods
+for a type; (c) which packages may write `impl Trait for Type` (an orphan
+or coherence rule, to prevent two conflicting implementations); (d) method
+resolution order when an inherent method and a trait method share a name.
+
 ---
 
 ### Not yet opened

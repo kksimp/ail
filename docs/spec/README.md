@@ -56,8 +56,8 @@ defined when the diagnostic format is designed.
 | 06 | Memory model and allocation | `mem` | Not started |
 | 07 | [Ownership and value semantics](07-ownership.md) | `own` | Drafted (partial) |
 | 08 | [Errors](08-errors.md) | `err` | Drafted (partial) |
-| 09 | Generics | `gen` | Not started |
-| 10 | Traits / interfaces | `trait` | Not started |
+| 09 | [Generics](09-generics.md) | `gen` | Drafted (partial) |
+| 10 | [Methods and traits](10-traits.md) | `trait` | Drafted (partial) |
 | 11 | [Concurrency](11-concurrency.md) | `conc` | Drafted (partial) |
 | 12 | Modules and packages | `mod` | Not started |
 | 13 | Unsafe | `unsafe` | Not started |

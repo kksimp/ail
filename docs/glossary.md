@@ -12,8 +12,10 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Arena (scoped allocation)** | A region where many objects with a shared lifetime are allocated, then freed together in one operation. |
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
+| **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
+| **Constraint (bound)** | A trait a generic type parameter must implement, written inline as `[T Trait]` (ADR 0074). |
 | **Copy-on-write (COW)** | Values share storage until one of them is mutated, at which point that one gets its own copy. Unobservable to programs (`own.val.2`). |
 | **Drag race** | A head-to-head benchmark: the same small program in AIL, idiomatic C and tuned C, built and run automatically with identical outputs checked (ADR 0030, ADR 0036). |
 | **Error return trace** | The list of source locations an error passed through via `?`, recorded automatically and shown in error reports (ADR 0050). |
@@ -33,6 +35,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
+| **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
 | **`ref` cell** | A GC-managed shared mutable cell (`ref T`). The only way two names can observe each other's mutations (ADR 0063). |
 | **Region inference** | Compiler inference of arenas (regions) for groups of allocations with a shared lifetime. See ADR 0012. |
 | **Rule ID** | A stable identifier for a normative spec rule, formatted `<chapter>.<section>.<n>` (e.g. `plat.ptr.1`). See ADR 0002. |
@@ -46,6 +49,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Task-local heap** | A heap private to one task, collected independently with no synchronisation or write barriers. See ADR 0012. |
 | **TBI** | Top Byte Ignore (ARM64): the hardware ignores the top 8 bits of an address, so software can store tags there for free. |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
+| **Trait** | A named set of method signatures that types implement explicitly with `impl Trait for Type` (ADR 0073). |
 | **Trap** | The response to a bug (overflow, out-of-bounds access, failed assertion). It stops the current task, runs its deferred cleanup, and is reported to the parent task. In the main task it ends the program (ADR 0035, ADR 0047). |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |

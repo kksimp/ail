@@ -32,7 +32,8 @@ function. *(ADR 0061)*
 **own.param.2** — A parameter declared `mut p T` may be mutated by the
 function, and those mutations are visible in the caller's argument after the
 call. The argument MUST be a mutable place and MUST be written with a leading
-`mut` at the call site. *(ADR 0061)*
+`mut` at the call site. *(ADR 0061)* Method receivers are the exception: see
+`trait.method.3`.
 
 ```ail
 fn shift(mut p Point, dx f64)
