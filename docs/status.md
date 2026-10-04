@@ -2,8 +2,9 @@
 
 _Last updated: 2026-10-04_
 
-**Current stage:** 1 — Language specification and design.
-**Implementation:** none yet (by design; see [AGENTS.md](../AGENTS.md)).
+**Current stage:** 2 — Bootstrap front end and interpreter. The Stage 1 core
+design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
+**Implementation:** first milestone in progress, `./ail run examples/hello.ail`.
 
 ## Design topics
 

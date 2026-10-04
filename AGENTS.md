@@ -12,10 +12,11 @@ garbage-collected, memory-safe systems programming language designed so that
 humans and AI agents are both first-class programmers. Source files use `.ail`.
 The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 
-The project is in **Stage 1: language specification and design**.
-**Do not write compiler code** until the core design is finished and Stage 2
-starts ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md)).
-The first Stage 2 milestone is `./ail run examples/hello.ail` on macOS.
+The project is in **Stage 2: bootstrap front end and interpreter** (Rust,
+ADR 0023). The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
+and the remaining design topics continue alongside. The first milestone is
+`./ail run examples/hello.ail` on macOS. Every implemented behaviour must
+cite its spec rule ID in code and in diagnostics.
 
 ## Git workflow
 
@@ -117,8 +118,12 @@ docs/
   decisions/              Architecture Decision Records (ADRs), one per decision
   spec/                   normative language specification with rule IDs
   design/                 non-normative design notes, research, and constraints
+ail                       command-line entry point; sets up its private Rust toolchain (ADR 0087)
+bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (ADR 0023)
+examples/                 example programs; NAME.out holds the expected output
 tools/
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
+  verify.sh               designer's one-command test of a pending branch (ADR 0085)
 ```
 
 ## Settled constraints (summary; the ADRs are authoritative)

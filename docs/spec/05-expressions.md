@@ -35,6 +35,12 @@ item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
 
 > **Note:** the `for` syntax in the example is illustrative and not yet decided.
 
+## Names
+
+**expr.name.1** — Every name used in an expression MUST refer to a declaration
+visible at that point. Otherwise it's a compile-time error. The diagnostic
+SHOULD suggest the closest visible names. *(ADR 0107)*
+
 ## Blocks
 
 **expr.block.1** — A block is an expression. Its value is the value of its

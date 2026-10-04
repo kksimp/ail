@@ -112,3 +112,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0104](0104-c-calls-unsafe.md) | Every C call is unsafe; safe AIL wrappers | Accepted | 2026-10-04 |
 | [0105](0105-libc-only-with-c.md) | Linux links libc only when a program uses C | Accepted | 2026-10-04 |
 | [0106](0106-unsafe-operations.md) | The closed set of unsafe operations; raw pointers `*T` *(delegated)* | Accepted | 2026-10-04 |
+| [0107](0107-unknown-names.md) | Every name must resolve; "did you mean" suggestions *(delegated)* | Accepted | 2026-10-04 |
