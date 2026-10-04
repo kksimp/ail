@@ -1,0 +1,5 @@
+fn twice(x: int) -> int
+    x
+
+fn main()
+    print(twice(2))

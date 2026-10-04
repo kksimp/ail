@@ -1,0 +1,9 @@
+fn greet(name str) str
+    name
+
+fn main()
+    who := greet("AIL")
+    print(who)
+    print(42)
+    print(0xff)
+    print("tab:\tquote:\" brace:\{ smile:\u{263A}")

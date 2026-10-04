@@ -1,0 +1,81 @@
+//! End-to-end tests: run the real `ail` binary on example programs.
+//!
+//! - `examples/NAME.ail` + `NAME.out`: must run and print exactly `NAME.out`.
+//! - `bootstrap/tests/cases/NAME.ail` + `NAME.out`: same.
+//! - `bootstrap/tests/cases/NAME.ail` + `NAME.rules`: must be rejected, and
+//!   the diagnostics' spec rule IDs (in report order) must equal the file's lines.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn ail() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_ail"))
+}
+
+fn ail_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", dir.display()))
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        .collect();
+    files.sort();
+    files
+}
+
+fn check_case(path: &Path) -> Result<(), String> {
+    let out_file = path.with_extension("out");
+    let rules_file = path.with_extension("rules");
+    let name = path.display();
+    if out_file.exists() {
+        let out = ail().arg("run").arg(path).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let expected = fs::read_to_string(&out_file).unwrap();
+        if !out.status.success() {
+            return Err(format!("{name}: exit {:?}\n{}", out.status.code(), String::from_utf8_lossy(&out.stderr)));
+        }
+        if stdout != expected {
+            return Err(format!("{name}: output differs\n--- expected\n{expected}--- actual\n{stdout}"));
+        }
+        Ok(())
+    } else if rules_file.exists() {
+        let out = ail().args(["check", "--json"]).arg(path).output().unwrap();
+        if out.status.code() != Some(2) {
+            return Err(format!("{name}: expected rejection (exit 2), got {:?}", out.status.code()));
+        }
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let got: Vec<String> = stderr
+            .lines()
+            .filter_map(|l| l.split("\"rule\":\"").nth(1))
+            .map(|r| r.split('"').next().unwrap().to_string())
+            .collect();
+        let want: Vec<String> = fs::read_to_string(&rules_file).unwrap().lines().map(str::to_string).collect();
+        if got != want {
+            return Err(format!("{name}: rules differ\n  expected {want:?}\n  got      {got:?}\n{stderr}"));
+        }
+        Ok(())
+    } else {
+        Err(format!("{name}: needs a .out or .rules file"))
+    }
+}
+
+fn run_dir(dir: &Path) {
+    let failures: Vec<String> = ail_files(dir).iter().filter_map(|p| check_case(p).err()).collect();
+    assert!(failures.is_empty(), "{} case(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
+}
+
+#[test]
+fn examples() {
+    run_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples"));
+}
+
+#[test]
+fn cases() {
+    run_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases"));
+}
+
+#[test]
+fn usage_errors_exit_2() {
+    let out = ail().arg("nonsense").output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
