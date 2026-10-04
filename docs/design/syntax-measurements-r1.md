@@ -25,6 +25,9 @@
   them. Results are exact for these files.
 - **Reproduce:** [tools/tokbench](../../tools/tokbench/README.md). Its
   `--claude` flag adds current-Claude counts via the API.
+- **Reproduced (2026-10-04)** on the designer's macOS Apple Silicon machine
+  (Python 3.14) with `tools/tokbench/run.sh`. Every count matched the Linux
+  measurements exactly.
 
 ## Result 1: block structure (whole program)
 
