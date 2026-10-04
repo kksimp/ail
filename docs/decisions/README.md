@@ -54,3 +54,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0046](0046-inferred-error-sets.md) | Error sets inferred inside a package, explicit at APIs; `T ! E`, `!T` | Accepted | 2026-10-04 |
 | [0047](0047-traps-end-the-task.md) | A trap ends the current task; the parent observes it | Accepted | 2026-10-04 |
 | [0048](0048-optional-shorthand.md) | No null; optional values are `T?` | Accepted | 2026-10-04 |
+| [0049](0049-else-for-fallback-and-early-exit.md) | `else` handles failure: fallback values and early exit | Accepted | 2026-10-04 |
+| [0050](0050-error-return-traces.md) | Automatic error return traces; optional context message | Accepted | 2026-10-04 |
+| [0051](0051-no-implicit-optional-to-error.md) | No `?` on optionals in error-returning functions | Accepted | 2026-10-04 |

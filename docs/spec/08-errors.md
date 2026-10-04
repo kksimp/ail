@@ -2,10 +2,10 @@
 
 Chapter key: `err`
 
-> **Status:** Drafted (partial). The error model, error-type spelling,
-> propagation, and trap behaviour are specified. Handling forms (matching,
-> fallbacks, context) and error-type declarations are not yet designed
-> (OQ-029, OQ-030).
+> **Status:** Drafted (partial). Specified: the error model, error-type
+> spelling, propagation, `else` handling, error context, and trap behaviour.
+> Not yet designed: matching on errors, safe member access (OQ-029), and
+> error-type declarations (OQ-030).
 
 ## Model
 
@@ -50,6 +50,52 @@ enclosing function, whose error type must be able to hold `E` (or, for an
 inferred set, then includes `E`). For an expression of type `T?` inside a
 function returning an optional type, `e?` evaluates to the contained value,
 or returns absence. *(ADR 0045, ADR 0048)*
+
+**err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
+is a compile-time error unless the enclosing function's return type is an
+optional type. *(ADR 0051)*
+
+## Handling with `else`
+
+**err.else.1** — For `e` of type `T?` or `T ! E`, the declaration
+`x := e else d` binds `x` to the success value of `e`. If `e` is absent or
+failed, it binds `x` to the value of `d` instead. `d` is evaluated only in
+that case. *(ADR 0049)*
+
+**err.else.2** — The `else` part may instead be a statement, or an indented
+block, that definitely leaves the enclosing block (by `return`, `break`,
+`continue` or a trap). It is a compile-time error if an `else` block can
+complete normally without producing a value of type `T`. *(ADR 0049)*
+
+**err.else.3** — For `e` of type `T ! E`, `else name` followed by an indented
+block binds the error value to `name` within that block. *(ADR 0049)*
+
+**err.else.4** — After a declaration with an `else` part, the declared name
+holds a success value on every path that reaches the following statement.
+*(ADR 0049)*
+
+```ail
+port := env("PORT") else 8080
+user := find(id) else return NotFound
+data := read(path) else err
+    log.warn("read failed", err)
+    return Defaults
+```
+
+## Context and traces
+
+**err.ctx.1** — Each propagation by `?` MUST record its source location in
+the propagated error's return trace. *(ADR 0050)*
+
+**err.ctx.2** — `e? m`, where `m` is a string expression, behaves as `e?` and
+additionally attaches `m` to the propagated error as context. *(ADR 0050)*
+
+**err.ctx.3** — Error reports MUST present the error, every attached context
+message, and the return trace. *(ADR 0050)*
+
+```ail
+cfg := parse(text)? "parsing config file"
+```
 
 ## Traps
 
