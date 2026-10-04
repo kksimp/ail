@@ -25,6 +25,8 @@ Design notes:
 - [design/syntax-measurements-r1.md](design/syntax-measurements-r1.md): first
   real tokenizer measurements of candidate syntax (block style, signatures,
   keywords).
+- [design/indentation-examples.md](design/indentation-examples.md): the same
+  code in each candidate indentation style (OQ-026).
 
 Contributors, human or AI, should read [AGENTS.md](../AGENTS.md) for the
 documentation rules. **A change is not complete until its documentation is.**
