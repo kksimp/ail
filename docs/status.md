@@ -53,7 +53,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Custom tooling policy | D | [0009](decisions/0009-custom-tooling-policy.md) |
 | No external backend | D | [0010](decisions/0010-no-llvm-backend.md) |
 | Open-source intent | D | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) |
-| Git workflow: work on `main` | D (instruction) | — |
+| Git workflow: `main` only long-lived branch | D | [0028](decisions/0028-git-workflow.md) |
 
 ## Open questions
 

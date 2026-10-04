@@ -33,3 +33,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0025](0025-memory-model-atomics.md) | Abstract weak memory model; data-race-free safe code; SeqCst-default atomics | Accepted | 2026-10-04 |
 | [0026](0026-hardware-feature-acceleration.md) | Portable runtime core; ISA-specific features only as optional accelerators | Accepted | 2026-10-04 |
 | [0027](0027-ci-gating-all-targets.md) | All five Tier 1 targets gate every merge | Accepted | 2026-10-04 |
+| [0028](0028-git-workflow.md) | Git workflow: `main` is the only long-lived branch | Accepted | 2026-10-04 |

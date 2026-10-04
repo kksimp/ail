@@ -119,17 +119,7 @@ the backend uses to stabilise early. Which features make up the "core
 subset"? To be decided once the type system and syntax are drafted.
 
 ## OQ-024 — Git workflow once code exists
-The designer asked to work directly on `main`. [ADR 0027](decisions/0027-ci-gating-all-targets.md)
-requires all five targets to pass before a change lands. Direct pushes to
-`main` can't be gated by CI.
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Docs-only changes go straight to `main`; from Stage 2, code goes through short-lived branches with pull requests gated by CI (recommended)** | Keeps today's fast doc workflow while the five-target gate actually applies to code. | A PR step for code changes. |
-| Direct to `main` always, with CI after the push and fixes forward | Fastest. | `main` can be broken on any target, which defeats ADR 0027. |
-| Direct to `main` with a local pre-push check on all targets | No PRs. | One machine can't run all five targets natively, so the gate is incomplete. |
-
-*Decide before Stage 2 starts.*
+**Resolved** by [ADR 0028](decisions/0028-git-workflow.md).
 
 ---
 

@@ -17,8 +17,14 @@ The project is in **Stage 1: language specification and design**.
 
 ## Git workflow
 
-- Work directly on **`main`** (designer's instruction, 2026-10-04). Don't
-  create feature branches unless the designer asks for one.
+Per [ADR 0028](docs/decisions/0028-git-workflow.md):
+- **`main` is the only long-lived branch.** Always reduce back to `main`.
+- **Docs and spec changes:** commit directly to `main`.
+- **Code changes (Stage 2+):** use a short-lived branch and a PR that must
+  pass the five-target CI gate. Merge and **delete the branch** as soon as
+  it passes.
+- Keep open branches to the minimum (one per change in flight). Track every
+  branch you create and report it until it's merged and deleted.
 - Commit with clear messages, and push when a change is complete.
 
 ## Roles
