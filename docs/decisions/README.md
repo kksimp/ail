@@ -107,3 +107,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0099](0099-qualified-imports.md) | `use a.b` imports modules; qualified names only *(delegated)* | Accepted | 2026-10-04 |
 | [0100](0100-task-communication.md) | Tasks communicate by value, channels, or synchronised types *(delegated)* | Accepted | 2026-10-04 |
 | [0101](0101-single-file-programs.md) | Single `.ail` files run without a manifest *(delegated)* | Accepted | 2026-10-04 |
+| [0102](0102-unsafe-blocks.md) | `unsafe` blocks; packages opt in to unsafe | Accepted | 2026-10-04 |
+| [0103](0103-c-header-import.md) | C via header import (own parser) or manual declarations | Accepted | 2026-10-04 |
+| [0104](0104-c-calls-unsafe.md) | Every C call is unsafe; safe AIL wrappers | Accepted | 2026-10-04 |
+| [0105](0105-libc-only-with-c.md) | Linux links libc only when a program uses C | Accepted | 2026-10-04 |
+| [0106](0106-unsafe-operations.md) | The closed set of unsafe operations; raw pointers `*T` *(delegated)* | Accepted | 2026-10-04 |

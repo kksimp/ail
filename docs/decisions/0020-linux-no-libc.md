@@ -1,6 +1,6 @@
 # 0020. The Linux runtime does not use libc; it calls the kernel directly
 
-- **Status:** Accepted
+- **Status:** Accepted. Refined by [ADR 0105](0105-libc-only-with-c.md): libc is linked only when a program uses C.
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 22 — Runtime architecture; 21 — Standard library; 14 — FFI

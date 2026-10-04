@@ -27,8 +27,8 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 11 | Concurrency | D (core) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md), [0095](decisions/0095-colorless-tasks.md), [0096](decisions/0096-scope-bound-tasks.md), [0100](decisions/0100-task-communication.md) | `conc.*` |
 | 12 | Modules | D (core) | [0088](decisions/0088-entry-point-and-print.md), [0097](decisions/0097-directory-modules.md), [0098](decisions/0098-pub-visibility.md), [0099](decisions/0099-qualified-imports.md), [0101](decisions/0101-single-file-programs.md) | `mod.*` |
 | 13 | Package management | — | | |
-| 14 | FFI | — | | |
-| 15 | Unsafe semantics | — | | |
+| 14 | FFI | D (core) + Q | [0103](decisions/0103-c-header-import.md), [0104](decisions/0104-c-calls-unsafe.md), [0105](decisions/0105-libc-only-with-c.md) | `ffi.*` |
+| 15 | Unsafe semantics | D (core) + Q | [0102](decisions/0102-unsafe-blocks.md), [0106](decisions/0106-unsafe-operations.md) | `unsafe.*` |
 | 16 | Reflection | — | | |
 | 17 | Metaprogramming | — | | |
 | 18 | Compile-time execution | — | | |

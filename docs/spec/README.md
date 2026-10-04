@@ -60,8 +60,8 @@ defined when the diagnostic format is designed.
 | 10 | [Methods and traits](10-traits.md) | `trait` | Drafted (partial) |
 | 11 | [Concurrency](11-concurrency.md) | `conc` | Drafted (partial) |
 | 12 | [Modules and programs](12-modules.md) | `mod` | Drafted (partial) |
-| 13 | Unsafe | `unsafe` | Not started |
-| 14 | FFI and C interoperability | `ffi` | Not started |
+| 13 | [Unsafe](13-unsafe.md) | `unsafe` | Drafted (partial) |
+| 14 | [FFI and C interoperability](14-ffi.md) | `ffi` | Drafted (partial) |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |
 | 16 | Reflection | `refl` | Not started |
 

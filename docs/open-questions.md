@@ -75,11 +75,7 @@ point. Chapters can be added later without renumbering existing rule IDs.
 **Resolved** by [ADR 0019](decisions/0019-miscompilation-defence.md).
 
 ## OQ-021 — How do Linux programs that call C libraries get a libc?
-[ADR 0020](decisions/0020-linux-no-libc.md) removes libc from AIL's Linux
-runtime, but C libraries expect an initialised libc (malloc, errno, TLS,
-pthreads). To be settled in the FFI topic. Candidate approaches: load libc
-only when FFI is used, with AIL threads made libc-compatible; or AIL provides
-its own libc-compatible shim.
+**Resolved** by [ADR 0105](decisions/0105-libc-only-with-c.md).
 
 ## OQ-022 — Keep the Rust interpreter after self-hosting?
 **Resolved** by [ADR 0032](decisions/0032-keep-rust-interpreter-as-oracle.md).
