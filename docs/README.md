@@ -22,6 +22,9 @@ Design notes:
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
   make AIL easiest and most efficient for an AI author (proposals).
+- [design/syntax-measurements-r1.md](design/syntax-measurements-r1.md): first
+  real tokenizer measurements of candidate syntax (block style, signatures,
+  keywords).
 
 Contributors, human or AI, should read [AGENTS.md](../AGENTS.md) for the
 documentation rules. **A change is not complete until its documentation is.**
