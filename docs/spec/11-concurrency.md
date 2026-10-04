@@ -2,9 +2,9 @@
 
 Chapter key: `conc`
 
-> **Status:** Drafted (partial). Only the memory-model foundations are
-> specified so far. Tasks, threads, async, channels, the data-race-freedom
-> mechanism, and the formal model are not yet designed.
+> **Status:** Drafted (partial). Specified: memory-model foundations, the task
+> model, scope-bound tasks, and communication. Not yet designed: cancellation,
+> `select`, parallel loops, and the formal model.
 
 ## Memory model
 
@@ -41,3 +41,46 @@ acquire-release and relaxed orderings. *(ADR 0025)*
 > **Note:** an implementation SHOULD report atomic operations whose ordering
 > could be weakened without changing behaviour. It MUST NOT weaken an
 > ordering on its own initiative.
+
+## Tasks
+
+**conc.task.1** — `spawn e`, where `e` is a function call, starts a new task
+that evaluates `e` concurrently. It yields a task handle. *(ADR 0095)*
+
+**conc.task.2** — Any function may block. A blocked task is suspended without
+blocking other tasks. No function or call is marked as asynchronous.
+*(ADR 0095)*
+
+**conc.task.3** — Tasks are scheduled by the runtime onto operating-system
+threads. *(ADR 0095)*
+
+**conc.task.4** — Every task spawned within a block completes before that
+block exits. Long-lived tasks are spawned into a `TaskGroup`, which waits for
+its tasks when its owning scope exits. *(ADR 0096)*
+
+**conc.task.5** — A task handle is a unique value. Before its block ends, it
+MUST be consumed by `.wait()` or by transfer to a `TaskGroup`. Otherwise it's
+a compile-time error. *(ADR 0096)*
+
+**conc.task.6** — `h.wait()` blocks until the task completes and yields its
+result. If the task trapped, `wait()` fails with a `Trapped` error carrying
+the trap's diagnostic. *(ADR 0096, ADR 0047)*
+
+```ail
+a := spawn load_profile(1)
+b := spawn load_profile(2)
+print(a.wait()?)
+print(b.wait()?)
+```
+
+## Communication
+
+**conc.share.1** — A value passed to a spawned task, or sent between tasks, is
+observably independent in the receiving task (`own.val.1`). *(ADR 0100)*
+
+**conc.share.2** — Mutable state shared between tasks MUST be held in a
+synchronised standard-library type (e.g. `Mutex[T]`, `Atomic[T]`).
+*(ADR 0100, ADR 0063)*
+
+**conc.share.3** — `Channel[T]` is bounded. Sending blocks while it's full,
+and receiving blocks while it's empty. *(ADR 0100)*

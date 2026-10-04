@@ -24,8 +24,8 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 8 | Error handling | D (core) + Q | [0045](decisions/0045-error-model.md), [0046](decisions/0046-inferred-error-sets.md), [0047](decisions/0047-traps-end-the-task.md), [0048](decisions/0048-optional-shorthand.md), [0049](decisions/0049-else-for-fallback-and-early-exit.md), [0050](decisions/0050-error-return-traces.md), [0051](decisions/0051-no-implicit-optional-to-error.md) | `err.*`, `type.opt.*` |
 | 9 | Generics | D (core) + Q | [0041](decisions/0041-square-bracket-generics.md), [0074](decisions/0074-inline-generic-bounds.md), [0078](decisions/0078-trait-typed-parameters.md), [0080](decisions/0080-generic-compilation-strategy.md) | `gram.generic.1`, `gen.*` |
 | 10 | Traits/interfaces | D (core) + Q | [0072](decisions/0072-dot-named-methods.md), [0073](decisions/0073-explicit-trait-impls.md), [0075](decisions/0075-unmarked-receiver-mutation.md), [0077](decisions/0077-operator-traits.md), [0079](decisions/0079-any-dynamic-dispatch.md), [0081](decisions/0081-default-methods.md), [0082](decisions/0082-method-placement-coherence.md) | `trait.*` |
-| 11 | Concurrency | D (partial) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md) | `conc.mm.1`, `conc.race.1`, `conc.atomic.*` |
-| 12 | Modules | D (entry point only) + Q | [0088](decisions/0088-entry-point-and-print.md) | `mod.main.*` |
+| 11 | Concurrency | D (core) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md), [0095](decisions/0095-colorless-tasks.md), [0096](decisions/0096-scope-bound-tasks.md), [0100](decisions/0100-task-communication.md) | `conc.*` |
+| 12 | Modules | D (core) | [0088](decisions/0088-entry-point-and-print.md), [0097](decisions/0097-directory-modules.md), [0098](decisions/0098-pub-visibility.md), [0099](decisions/0099-qualified-imports.md), [0101](decisions/0101-single-file-programs.md) | `mod.*` |
 | 13 | Package management | — | | |
 | 14 | FFI | — | | |
 | 15 | Unsafe semantics | — | | |

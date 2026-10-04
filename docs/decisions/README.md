@@ -100,3 +100,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0092](0092-operators.md) | `and`/`or`/`not`; compound assignment; methods always use `()` *(delegated)* | Accepted | 2026-10-04 |
 | [0093](0093-optional-values.md) | `none`; implicit wrapping into optionals *(delegated)* | Accepted | 2026-10-04 |
 | [0094](0094-numeric-literals.md) | Numeric literal forms *(delegated)* | Accepted | 2026-10-04 |
+| [0095](0095-colorless-tasks.md) | Colorless tasks: any function may block; no async/await | Accepted | 2026-10-04 |
+| [0096](0096-scope-bound-tasks.md) | Scope-bound tasks; unique handles must be waited | Accepted | 2026-10-04 |
+| [0097](0097-directory-modules.md) | A module is a directory of `.ail` files | Accepted | 2026-10-04 |
+| [0098](0098-pub-visibility.md) | `pub` marks exported items; private by default | Accepted | 2026-10-04 |
+| [0099](0099-qualified-imports.md) | `use a.b` imports modules; qualified names only *(delegated)* | Accepted | 2026-10-04 |
+| [0100](0100-task-communication.md) | Tasks communicate by value, channels, or synchronised types *(delegated)* | Accepted | 2026-10-04 |
+| [0101](0101-single-file-programs.md) | Single `.ail` files run without a manifest *(delegated)* | Accepted | 2026-10-04 |

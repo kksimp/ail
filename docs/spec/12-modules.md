@@ -2,8 +2,47 @@
 
 Chapter key: `mod`
 
-> **Status:** Drafted (partial). Only the program entry point is specified.
-> Modules, visibility and packages are still being designed.
+> **Status:** Drafted (partial). Specified: modules, visibility, imports,
+> single-file programs, and the entry point. Not yet designed: packages,
+> manifests, and dependency resolution (build-system topic).
+
+## Modules
+
+**mod.unit.1** — All `.ail` files directly inside one directory form one
+module. Every top-level name declared in any of its files is visible in all of
+them without import. Duplicate top-level names within a module are a
+compile-time error. *(ADR 0097)*
+
+**mod.unit.2** — A module's import path is its directory path relative to the
+package root, with segments separated by `.`. *(ADR 0097)*
+
+**mod.unit.3** — A single `.ail` file given directly to `ail run` forms a
+complete program by itself. *(ADR 0101)*
+
+## Visibility
+
+**mod.vis.1** — A top-level declaration or struct field is private to its
+module unless marked `pub`. *(ADR 0098)*
+
+**mod.vis.2** — Enum variants have their enum's visibility. Trait methods have
+their trait's visibility. *(ADR 0098)*
+
+## Imports
+
+**mod.use.1** — `use a.b.c` makes module `a.b.c` available under the name `c`.
+`use a.b.c as d` makes it available as `d`. *(ADR 0099)*
+
+**mod.use.2** — Items of an imported module are referred to by qualified name
+(`c.item`). Importing individual items, and wildcard imports, are not
+supported. *(ADR 0099)*
+
+```ail
+use net.http
+
+pub fn fetch(url str) Data ! FetchError
+    resp := http.get(url)?
+    decode(resp.body)?
+```
 
 ## Program entry point
 

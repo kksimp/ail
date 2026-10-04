@@ -143,6 +143,9 @@ tools/
 - **Mutable value semantics:** values are independent, `mut` is marked at
   call sites, borrows are second-class (no lifetimes), and shared mutation
   only goes through `ref T` (ADRs 0060–0063).
+- **Concurrency:** colorless tasks (no async/await), scope-bound, with unique
+  handles that must be waited (ADRs 0095–0096). **Modules** are directories,
+  `pub` exports, and `use a.b` imports with qualified access (ADRs 0097–0099).
 - Bootstrap front end and interpreter are in **Rust**. The optimising backend
   is written **in AIL** (ADR 0022, ADR 0023).
 - See `docs/decisions/README.md` for the full list.
