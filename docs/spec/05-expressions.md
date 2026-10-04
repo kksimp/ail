@@ -41,6 +41,15 @@ item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
 visible at that point. Otherwise it's a compile-time error. The diagnostic
 SHOULD suggest the closest visible names. *(ADR 0107)*
 
+## Calls
+
+**expr.call.1** — A call MUST supply exactly one argument per parameter of the
+called function, in order. *(ADR 0108)*
+
+**expr.call.2** — Each argument's type MUST equal the corresponding parameter's
+type, or satisfy its constraint for a generic parameter. No implicit conversion
+applies, except optional wrapping (`type.opt.5`). *(ADR 0108)*
+
 ## Blocks
 
 **expr.block.1** — A block is an expression. Its value is the value of its

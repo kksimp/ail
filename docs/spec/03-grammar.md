@@ -6,6 +6,12 @@ Chapter key: `gram`
 > and attributes are specified. The full grammar (in a machine-checkable form, per
 > ADR 0002) will be written as the syntax decisions are completed.
 
+## Syntax errors
+
+**gram.syntax.1** — Source text that doesn't match the grammar is rejected. The
+diagnostic names the construct that was expected, unless a more specific rule
+applies. *(ADR 0108)*
+
 ## Function declarations
 
 **gram.fn.1** — A function declaration begins with the keyword `fn`, followed

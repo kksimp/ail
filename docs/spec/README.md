@@ -36,6 +36,9 @@ Rules for rule IDs:
    justifies it.
 4. Every rule cites the ADR(s) that justify it.
 5. Compiler diagnostics and the AI semantic API will cite rule IDs.
+6. Implementation limits (a construct the current implementation doesn't
+   support yet) use the code `bootstrap.unsupported`. That is not a rule ID. The
+   diagnostic names the spec rule of the unsupported construct.
 
 ### Examples and conformance tests
 
