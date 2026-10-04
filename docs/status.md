@@ -25,7 +25,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 9 | Generics | D (core) + Q | [0041](decisions/0041-square-bracket-generics.md), [0074](decisions/0074-inline-generic-bounds.md), [0078](decisions/0078-trait-typed-parameters.md), [0080](decisions/0080-generic-compilation-strategy.md) | `gram.generic.1`, `gen.*` |
 | 10 | Traits/interfaces | D (core) + Q | [0072](decisions/0072-dot-named-methods.md), [0073](decisions/0073-explicit-trait-impls.md), [0075](decisions/0075-unmarked-receiver-mutation.md), [0077](decisions/0077-operator-traits.md), [0079](decisions/0079-any-dynamic-dispatch.md), [0081](decisions/0081-default-methods.md), [0082](decisions/0082-method-placement-coherence.md) | `trait.*` |
 | 11 | Concurrency | D (partial) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md) | `conc.mm.1`, `conc.race.1`, `conc.atomic.*` |
-| 12 | Modules | — | | |
+| 12 | Modules | D (entry point only) + Q | [0088](decisions/0088-entry-point-and-print.md) | `mod.main.*` |
 | 13 | Package management | — | | |
 | 14 | FFI | — | | |
 | 15 | Unsafe semantics | — | | |
@@ -34,7 +34,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 18 | Compile-time execution | — | | |
 | 19 | AST/IR architecture | — | | |
 | 20 | AI semantic API | D (timing) + Q | [0024](decisions/0024-semantic-api-from-stage-2.md) | |
-| 21 | Standard library architecture | — | | |
+| 21 | Standard library architecture | D (collections, strings, print) + Q | [0088](decisions/0088-entry-point-and-print.md), [0089](decisions/0089-strings.md), [0090](decisions/0090-collections.md) | `type.str.*`, `type.coll.*` |
 | 22 | Runtime architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0020](decisions/0020-linux-no-libc.md), [0026](decisions/0026-hardware-feature-acceleration.md) | |
 | 23 | Compiler architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0010](decisions/0010-no-llvm-backend.md), [0015](decisions/0015-always-whole-program-incremental.md), [0017](decisions/0017-no-c-emission.md), [0018](decisions/0018-optimizing-backend-from-start.md), [0022](decisions/0022-staged-self-hosting.md), [0023](decisions/0023-rust-bootstrap.md) | |
 | 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md), [0027](decisions/0027-ci-gating-all-targets.md) | `plat.*` |

@@ -59,7 +59,7 @@ defined when the diagnostic format is designed.
 | 09 | [Generics](09-generics.md) | `gen` | Drafted (partial) |
 | 10 | [Methods and traits](10-traits.md) | `trait` | Drafted (partial) |
 | 11 | [Concurrency](11-concurrency.md) | `conc` | Drafted (partial) |
-| 12 | Modules and packages | `mod` | Not started |
+| 12 | [Modules and programs](12-modules.md) | `mod` | Drafted (partial) |
 | 13 | Unsafe | `unsafe` | Not started |
 | 14 | FFI and C interoperability | `ffi` | Not started |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |

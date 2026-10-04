@@ -93,3 +93,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0085](0085-interim-local-testing-gate.md) | Interim gate: local Linux (AI) and macOS (designer) runs; no hosted CI | Accepted (interim) | 2026-10-04 |
 | [0086](0086-finish-core-design-before-stage-2.md) | Finish the core design before Stage 2; Hello World is the first milestone | Accepted | 2026-10-04 |
 | [0087](0087-private-rust-toolchain.md) | Pinned Rust toolchain installed privately inside the repository | Accepted | 2026-10-04 |
+| [0088](0088-entry-point-and-print.md) | `fn main()` entry point; prelude `print` ends the line *(delegated)* | Accepted | 2026-10-04 |
+| [0089](0089-strings.md) | Strings: UTF-8, `{expr}` interpolation, no direct indexing *(delegated)* | Accepted | 2026-10-04 |
+| [0090](0090-collections.md) | `List`/`Map`/`Set` with `[...]`/`{...}` literals *(delegated)* | Accepted | 2026-10-04 |
+| [0091](0091-control-flow.md) | Expression blocks, `if`/`elif`/`else`, `for in`, `while`, ranges *(delegated)* | Accepted | 2026-10-04 |
+| [0092](0092-operators.md) | `and`/`or`/`not`; compound assignment; methods always use `()` *(delegated)* | Accepted | 2026-10-04 |
+| [0093](0093-optional-values.md) | `none`; implicit wrapping into optionals *(delegated)* | Accepted | 2026-10-04 |
+| [0094](0094-numeric-literals.md) | Numeric literal forms *(delegated)* | Accepted | 2026-10-04 |

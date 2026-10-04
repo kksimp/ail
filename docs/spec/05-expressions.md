@@ -2,8 +2,8 @@
 
 Chapter key: `expr`
 
-> **Status:** Drafted (partial). Bindings, the `match` arm form, and integer
-> arithmetic are specified.
+> **Status:** Drafted (partial). Specified: bindings, blocks, `if`, loops,
+> ranges, logical and compound operators, `match`, and integer arithmetic.
 
 ## Bindings
 
@@ -34,6 +34,50 @@ fn total(items List[Item]) i64
 item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
 
 > **Note:** the `for` syntax in the example is illustrative and not yet decided.
+
+## Blocks
+
+**expr.block.1** — A block is an expression. Its value is the value of its
+last expression, or no value if it ends in a statement. *(ADR 0091)*
+
+**expr.block.2** — A function returns the value of its body block. `return e`
+exits the function early with value `e`. *(ADR 0091)*
+
+## Conditionals and loops
+
+**expr.if.1** — `if c` is followed by an indented block, then optionally any
+number of `elif c` blocks and one `else` block. An `if` is an expression when
+it has an `else` and every branch produces a value of the same type.
+*(ADR 0091)*
+
+**expr.loop.1** — `for x in e` runs its block once per element of `e`.
+`while c` runs its block while `c` is true. *(ADR 0091)*
+
+**expr.loop.2** — `break` exits the innermost loop. `continue` starts its
+next iteration. *(ADR 0091)*
+
+**expr.loop.3** — `a..b` is the half-open range from `a` up to but excluding
+`b`. `a..=b` includes `b`. *(ADR 0091)*
+
+```ail
+kind := if n < 0
+        "negative"
+    elif n == 0
+        "zero"
+    else
+        "positive"
+```
+
+## Operators
+
+**expr.op.1** — The logical operators are `and` and `or` (both
+short-circuiting) and `not`. *(ADR 0092)*
+
+**expr.op.2** — `x op= e` for `op` in `+ - * / %` means `x = x op e`. `x`
+MUST be a mutable place. *(ADR 0092)*
+
+**expr.op.3** — Every method call is written with parentheses, including
+calls with no arguments. *(ADR 0092)*
 
 ## Match
 

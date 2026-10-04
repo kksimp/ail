@@ -2,9 +2,9 @@
 
 Chapter key: `lex`
 
-> **Status:** Drafted (partial). Block structure, statement termination and
-> comments are specified. The character set, identifiers, keywords, literals
-> and operators are not yet designed.
+> **Status:** Drafted (partial). Specified: block structure, statement
+> termination, comments, and string, character and numeric literals. Not yet
+> designed: the character set, identifiers, and the keyword list.
 
 ## Blocks
 
@@ -61,3 +61,37 @@ fn area(r f64) f64
     # pi is a library constant
     pi * r * r
 ```
+
+## String and character literals
+
+**lex.str.1** — A string literal is enclosed in double quotes. The escape
+sequences are `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\{` and `\u{hex}`. Any
+other backslash sequence is a compile-time error. *(ADR 0089)*
+
+**lex.str.2** — Within a string literal, `{expression}` interpolates the text
+form of the expression. `\{` produces a literal `{`. *(ADR 0089)*
+
+**lex.str.3** — A literal beginning with `"""` is a multi-line string. It ends
+at the next `"""`. Its lines' common leading indentation is removed.
+*(ADR 0089)*
+
+**lex.str.4** — A character literal is a single Unicode scalar value, or one
+escape sequence, in single quotes: `'a'`, `'\n'`. *(ADR 0089)*
+
+**lex.str.5** — String literals are UTF-8 encoded. *(ADR 0089)*
+
+```ail
+msg := "Hello, {name}! You have {count} new messages."
+```
+
+## Numeric literals
+
+**lex.num.1** — Integer literals are decimal, hexadecimal (`0x`), binary (`0b`)
+or octal (`0o`). An underscore may separate digits. *(ADR 0094)*
+
+**lex.num.2** — A floating-point literal contains a `.` with at least one digit
+on each side, an exponent (`e` or `E`, optionally signed), or both.
+*(ADR 0094)*
+
+**lex.num.3** — A numeric literal whose value doesn't fit its type is a
+compile-time error. *(ADR 0094)*

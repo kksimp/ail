@@ -2,9 +2,9 @@
 
 Chapter key: `type`
 
-> **Status:** Drafted (partial). Specified: numeric type names, struct and
-> enum declarations, and optional types. Not yet designed: collections,
-> strings, literals, methods, and generic constraints.
+> **Status:** Drafted (partial). Specified: numeric types, structs, enums,
+> optional types, strings and characters, and the standard collections. Not
+> yet designed: fixed-size arrays, SIMD vector types, and const generics.
 
 ## Numeric types
 
@@ -89,3 +89,37 @@ fn find(id i64) User?
 
 > **Note:** see also `plat.ptr.2` (the 64-bit size and index type) and
 > `expr.arith.*` (integer arithmetic).
+
+**type.opt.4** — `none` is the absent value of every optional type.
+*(ADR 0093)*
+
+**type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
+converts implicitly to a present optional. *(ADR 0093)*
+
+## Strings and characters
+
+**type.str.1** — `str` is the type of immutable UTF-8 text. `char` is the type
+of a single Unicode scalar value. *(ADR 0089)*
+
+**type.str.2** — `str` doesn't support the indexing operator. Byte and
+character access go through explicit views (`s.bytes`, `s.chars()`).
+*(ADR 0089)*
+
+## Collections
+
+**type.coll.1** — The standard library provides `List[T]`, `Map[K, V]` and
+`Set[T]`, all with value semantics (`own.val.1`). *(ADR 0090)*
+
+**type.coll.2** — `[a, b, ...]` is a list literal. `{k: v, ...}` is a map
+literal. `{a, b, ...}` is a set literal. *(ADR 0090)*
+
+**type.coll.3** — The empty literals `[]` and `{}` require a known expected
+type. Otherwise they are a compile-time error. *(ADR 0090)*
+
+**type.coll.4** — `xs[i]` traps if `i` is out of bounds. `xs[a..b]` yields
+the sub-list from `a` up to but excluding `b`, as a value. *(ADR 0090)*
+
+```ail
+ports := {"http": 80, "https": 443}
+primes := [2, 3, 5, 7]
+```

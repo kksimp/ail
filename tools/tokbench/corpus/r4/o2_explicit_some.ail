@@ -1,0 +1,4 @@
+fn find(id int) User?
+    if id == 0
+        return none
+    some(users[id])

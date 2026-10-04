@@ -1,0 +1,4 @@
+fn mean(xs [f64]) f64
+    sum(xs) / xs.len().float()
+fn merge(a [int], b [int]) [int]
+    a + b
