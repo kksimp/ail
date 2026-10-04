@@ -40,8 +40,8 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md), [0027](decisions/0027-ci-gating-all-targets.md) | `plat.*` |
 | 25 | Optimization strategy | D (partial) + Q | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md) | `plat.isa.*` |
 | 26 | Debugging/profiling architecture | D (partial) + Q | [0016](decisions/0016-optimized-and-observable-debugging.md), [0021](decisions/0021-debug-info-formats.md) | |
-| 27 | Build system | D (partial) + Q | [0015](decisions/0015-always-whole-program-incremental.md) (incremental cache) | |
-| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating) | |
+| 27 | Build system | D (partial) + Q | [0015](decisions/0015-always-whole-program-incremental.md) (incremental cache), [0031](decisions/0031-hosts-and-cross-compilation.md) (hosts and cross-compilation) | |
+| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating), [0029](decisions/0029-token-efficiency-benchmarks.md) and [0030](decisions/0030-performance-benchmarks.md) (benchmarks), [0032](decisions/0032-keep-rust-interpreter-as-oracle.md) (oracle) | |
 
 ## Project process
 
@@ -57,4 +57,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-024).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-025).

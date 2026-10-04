@@ -41,10 +41,10 @@ the interpreter are written in Rust.
 
 ## Consequences
 
-- Rust's own toolchain is a **development-time** dependency until self-hosting
-  completes. AIL's shipped products never include Rust-compiled code once the
-  front end has been ported (ADR 0022 step 3). Whether the interpreter stays
-  in Rust as an oracle is OQ-022.
+- Rust's own toolchain is a **development-time** dependency. AIL's shipped
+  products never include Rust-compiled code once the front end has been
+  ported (ADR 0022 step 3). The interpreter stays in Rust permanently as a
+  test oracle ([ADR 0032](0032-keep-rust-interpreter-as-oracle.md)).
 - Rust dependencies (crates) are kept to a minimum, in the spirit of ADR 0009.
   Each one needs a stated justification.
 - The bootstrap code should be written to make porting to AIL easy: plain data

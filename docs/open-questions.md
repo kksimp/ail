@@ -21,12 +21,7 @@ IDs (`OQ-NNN`) are never reused.
 **Resolved** by [ADR 0027](decisions/0027-ci-gating-all-targets.md).
 
 ## OQ-005 — Compiler host platforms
-Which platforms must the `ail` compiler itself **run on**, as opposed to targeting?
-
-| Option | Pros | Cons |
-|---|---|---|
-| **The same 5 Tier 1 targets, all able to cross-compile to all (recommended)** | Symmetric. Any developer machine can build any target. | Cross-linking to Mach-O and PE needs our own linker or bundled SDK stubs. Apple SDK licensing needs checking. |
-| Same 5 hosts, but each builds only for its own OS | Simpler linking. | Breaks "one machine builds everything" for CI and release workflows. |
+**Resolved** by [ADR 0031](decisions/0031-hosts-and-cross-compilation.md).
 
 ## OQ-006 — Spec chapter outline
 Approve, reorder, or replace the provisional chapter list in
@@ -34,21 +29,10 @@ Approve, reorder, or replace the provisional chapter list in
 point. Chapters can be added later without renumbering existing rule IDs.
 
 ## OQ-007 — Token-efficiency benchmark methodology
-How do we **measure** token efficiency (brief §4)? See
-[design/feasibility.md](design/feasibility.md).
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Fixed corpus of equivalent programs in AIL, C, Rust, Go, Python, and others, measured with several real model tokenizers, plus task-level metrics (tokens to modify or repair) (recommended)** | Honest and repeatable. Measures the whole loop, not just syntax. | Costly to build and maintain the corpus. Task metrics need a harness. |
-| Static token counts only | Cheap and quick. | Misses the biggest wins (context and repair loops). Easy to game with cryptic syntax. |
+**Resolved** by [ADR 0029](decisions/0029-token-efficiency-benchmarks.md).
 
 ## OQ-008 — Performance benchmark methodology
-How do we measure "C-class" performance (brief §1, §20)?
-
-| Option | Pros | Cons |
-|---|---|---|
-| **A suite of equivalent programs against C (clang and gcc, -O2/-O3) and Rust on all 5 targets, with per-commit regression tracking and published results (recommended)** | Honest and measurable. Catches regressions early. | Infrastructure cost. Writing "equivalent" programs takes care. |
-| Microbenchmarks only | Cheap. | Doesn't reflect real applications. Easy to over-fit. |
+**Resolved** by [ADR 0030](decisions/0030-performance-benchmarks.md) (initial scope; three-bar suite deferred).
 
 ## OQ-009 — Integer overflow semantics
 Affects both safety and performance. Raised early because it constrains the optimizer.
@@ -105,13 +89,7 @@ only when FFI is used, with AIL threads made libc-compatible; or AIL provides
 its own libc-compatible shim.
 
 ## OQ-022 — Keep the Rust interpreter after self-hosting?
-After the compiler is fully AIL ([ADR 0022](decisions/0022-staged-self-hosting.md)),
-the interpreter remains the differential-testing oracle ([ADR 0019](decisions/0019-miscompilation-defence.md)).
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Keep it in Rust permanently as an independent oracle (recommended)** | Two independent implementations in different languages catch bugs that a shared codebase would hide (N-version testing). | A permanent development-time Rust dependency (not shipped). Two implementations to keep in sync with the spec. |
-| Port it to AIL | Everything is AIL. No Rust anywhere. | The oracle shares the compiler's language and tooling, so bugs in common code can hide from both. |
+**Resolved** by [ADR 0032](decisions/0032-keep-rust-interpreter-as-oracle.md).
 
 ## OQ-023 — Backend-ready core subset
 [ADR 0022](decisions/0022-staged-self-hosting.md) requires the language features
@@ -120,6 +98,16 @@ subset"? To be decided once the type system and syntax are drafted.
 
 ## OQ-024 — Git workflow once code exists
 **Resolved** by [ADR 0028](decisions/0028-git-workflow.md).
+
+## OQ-025 — What kind of C do the drag races compare against?
+[ADR 0030](decisions/0030-performance-benchmarks.md). The coding style of the C
+side changes what the results mean.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Both versions per race: idiomatic C and tuned C (recommended)** | Shows both "beats typical C" and "gap to expert C" honestly. | Twice the C to write per race. |
+| Idiomatic C only | Cheap. Reflects what most C code looks like. | Flattering, so outsiders may dismiss the results. |
+| Expert-tuned C only | The hardest bar, and credible. | Expensive to write. Hides the everyday advantage. |
 
 ---
 
