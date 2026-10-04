@@ -19,6 +19,9 @@ floating-point types are `f32` and `f64`. *(ADR 0055)*
 `int`. A floating-point literal with no other type constraint has type
 `float`. *(ADR 0055)*
 
+**type.num.4** — `int` and `i64` are both canonical spellings, as are `float`
+and `f64`. The formatter MUST NOT rewrite one into the other. *(ADR 0059)*
+
 ## Structs
 
 **type.struct.1** — A struct type is declared with the keyword `struct`, its
@@ -35,6 +38,17 @@ struct User
     email str?
 ```
 
+**type.struct.3** — A struct value is constructed by the type name followed
+by a parenthesised, comma-separated list of `field: value` pairs.
+*(ADR 0058)*
+
+```ail
+u := User(id: 7, name: "Ada", email: none)
+```
+
+> **Note:** field shorthand, defaults, and field ordering are not yet decided.
+> The spelling of the absent optional value (`none` above) is illustrative.
+
 ## Enums
 
 **type.enum.1** — An enum (sum) type is declared with the keyword `enum`, its
@@ -49,6 +63,14 @@ enum Shape
     Rect(w f64, h f64)
     Empty
 ```
+
+**type.enum.3** — Where the expected type of an expression or pattern is a
+known enum type, its variants MAY be written without qualification
+(`Circle(r)`). Elsewhere they MUST be qualified with the enum name
+(`Shape.Circle(r)`). *(ADR 0057)*
+
+**type.enum.4** — The canonical form omits the qualification wherever
+`type.enum.3` permits it. *(ADR 0057)*
 
 ## Optional types
 

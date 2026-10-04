@@ -68,6 +68,8 @@ Interpretations made during Stage 1:
 
 - "Predictable data layouts" means **reported and controllable**, not
   "declaration order" ([ADR 0013](decisions/0013-compiler-chosen-layout.md)).
+- Canonical syntax (#7) has one documented exception: `int`/`i64` and
+  `float`/`f64` are both canonical ([ADR 0059](decisions/0059-default-numeric-spelling.md)).
 
 Added during Stage 1 (ADR 0002):
 

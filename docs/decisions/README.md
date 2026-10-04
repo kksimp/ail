@@ -61,3 +61,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0053](0053-enum-declarations.md) | Enums: `enum Name` with one indented variant per line | Accepted | 2026-10-04 |
 | [0054](0054-match-arm-syntax.md) | Match arms: `pattern => result` | Accepted | 2026-10-04 |
 | [0055](0055-numeric-type-names.md) | Numeric types by bit width; `int`/`float` default aliases | Accepted | 2026-10-04 |
+| [0056](0056-exhaustive-matching.md) | Matches must be exhaustive; `_` hiding variants is warned | Accepted | 2026-10-04 |
+| [0057](0057-variant-references.md) | Variants bare where the type is known, qualified otherwise | Accepted | 2026-10-04 |
+| [0058](0058-struct-literal-syntax.md) | Struct literals `Type(field: value)`; `name: value` for named args | Accepted | 2026-10-04 |
+| [0059](0059-default-numeric-spelling.md) | `int`/`i64` and `float`/`f64` both canonical | Accepted | 2026-10-04 |

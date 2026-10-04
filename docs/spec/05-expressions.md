@@ -48,7 +48,17 @@ area := match s
     Empty => 0.0
 ```
 
-> **Note:** pattern syntax, guards and exhaustiveness are not yet decided.
+**expr.match.2** — A `match` MUST be exhaustive. A non-exhaustive match is a
+compile-time error, and the diagnostic MUST list the uncovered cases.
+*(ADR 0056)*
+
+**expr.match.3** — When the scrutinee has an enum type and a catch-all arm
+`_` covers one or more of its named variants, the implementation MUST warn
+and name those variants, unless the warning is suppressed for that match.
+*(ADR 0056)*
+
+> **Note:** pattern syntax, guards, and warning-suppression syntax are not yet
+> decided.
 
 ## Integer arithmetic
 
