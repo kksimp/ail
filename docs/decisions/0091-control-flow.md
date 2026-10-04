@@ -21,6 +21,7 @@ fewer keywords.
    returns the value of its body, and `return` exits early.
 2. `if c` / `elif c` / `else`, each followed by an indented block. `if` is an
    expression when every branch produces a value and `else` is present.
+   (Layout of a multi-line `if` used as a value: [ADR 0111](0111-if-expression-layout.md).)
 3. `for x in iterable` and `while condition` loops, with `break` and `continue`.
 4. `a..b` is the half-open range from `a` up to but excluding `b`. `a..=b`
    includes `b`.

@@ -74,16 +74,32 @@ next iteration. *(ADR 0091)*
 **expr.loop.3** — `a..b` is the half-open range from `a` up to but excluding
 `b`. `a..=b` includes `b`. *(ADR 0091)*
 
+**expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`.
+*(ADR 0110)*
+
+**expr.if.3** — When an `if` begins inside a statement (e.g. as a binding's
+value), its blocks are indented one level deeper than that statement's line,
+and its `elif` and `else` lines are at that statement's level. *(ADR 0111)*
+
 ```ail
 kind := if n < 0
-        "negative"
-    elif n == 0
-        "zero"
-    else
-        "positive"
+    "negative"
+elif n == 0
+    "zero"
+else
+    "positive"
 ```
 
 ## Operators
+
+**expr.prec.1** — Operators bind, from tightest to loosest: postfix (call,
+field, method, index, `?`); unary `-`; `* / %`; `+ -`; comparisons
+`== != < <= > >=`; `not`; `and`; `or`; ranges `.. ..=`. Binary operators at
+the same level associate to the left, except comparisons and ranges.
+*(ADR 0112)*
+
+**expr.prec.2** — Two comparison operators in sequence without parentheses
+(e.g. `a < b < c`) are a compile-time error. *(ADR 0112)*
 
 **expr.op.1** — The logical operators are `and` and `or` (both
 short-circuiting) and `not`. *(ADR 0092)*

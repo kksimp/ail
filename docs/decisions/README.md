@@ -115,3 +115,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0107](0107-unknown-names.md) | Every name must resolve; "did you mean" suggestions *(delegated)* | Accepted | 2026-10-04 |
 | [0108](0108-call-rules-and-syntax-errors.md) | Calls: one argument per parameter, exact types; `gram.syntax.1` *(delegated)* | Accepted | 2026-10-04 |
 | [0109](0109-merge-via-pull-requests.md) | Code branches merge via GitHub PRs; GitHub deletes them on merge | Accepted | 2026-10-04 |
+| [0110](0110-bool.md) | `bool` with `true`/`false`; conditions must be `bool` *(delegated)* | Accepted | 2026-10-04 |
+| [0111](0111-if-expression-layout.md) | `elif`/`else` align with the line that starts the `if` (corrects 0091's example) *(delegated)* | Accepted | 2026-10-04 |
+| [0112](0112-operator-precedence.md) | Operator precedence; comparisons don't chain *(delegated)* | Accepted | 2026-10-04 |
+| [0113](0113-struct-literal-field-order.md) | Struct literals name every field once, in any order *(delegated)* | Accepted | 2026-10-04 |

@@ -46,8 +46,11 @@ by a parenthesised, comma-separated list of `field: value` pairs.
 u := User(id: 7, name: "Ada", email: none)
 ```
 
-> **Note:** field shorthand, defaults, and field ordering are not yet decided.
-> The spelling of the absent optional value (`none` above) is illustrative.
+**type.struct.4** — A struct literal MUST name every field of the struct
+exactly once, in any order. Missing, unknown and repeated fields are
+compile-time errors. *(ADR 0113)*
+
+> **Note:** field shorthand and defaults are not yet decided.
 
 ## Enums
 
@@ -95,6 +98,11 @@ fn find(id i64) User?
 
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
 converts implicitly to a present optional. *(ADR 0093)*
+
+## Booleans
+
+**type.bool.1** — `bool` is the type of the literals `true` and `false`.
+Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 
 ## Strings and characters
 
