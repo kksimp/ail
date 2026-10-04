@@ -3,7 +3,8 @@
 #
 #   tools/verify.sh BRANCH
 #
-# Checks out BRANCH into .verify/BRANCH (a temporary git worktree), runs the
+# First deletes remote branches that are already merged into main. Then checks
+# out BRANCH into .verify/BRANCH (a temporary git worktree), runs the
 # bootstrap's self-tests and the examples there, and prints PASS or FAIL.
 # Reuses the private Rust toolchain in .toolchain/ (ADR 0087).
 set -euo pipefail
@@ -15,6 +16,9 @@ fi
 branch="$1"
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 wt="$root/.verify/$branch"
+
+# Housekeeping: delete remote branches already merged into main (ADR 0028).
+"$root/tools/prune-merged.sh" || echo "(couldn't prune merged branches; continuing)"
 
 echo "fetching $branch ..."
 git -C "$root" fetch --quiet origin "$branch"
