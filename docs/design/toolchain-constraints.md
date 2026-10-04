@@ -43,6 +43,19 @@ Components AIL has to build because there's no LLVM and no external tools
 | Debugger, profiler | Per OS. Uses ptrace, the Windows Debug API, and Mach task ports. |
 | C header importer (for FFI) | Needs a C parser. Clang isn't allowed as a dependency, so a **custom C parser** for headers is needed. This is significant work, because system headers use many compiler extensions. |
 
+## 2b. Building the Rust bootstrap needs the platform linker
+
+Rust links its programs with each platform's system linker:
+- **macOS:** Apple's Command Line Tools (`xcode-select --install`). This is a
+  one-time system install by Apple. It can't be made private to the repository,
+  but Homebrew users already have it. `./ail` detects it and explains.
+- **Linux:** a system C compiler (`cc`).
+- **Windows x64:** the GNU toolchain bundles its linker, so no Visual Studio
+  is needed. **Windows ARM64:** the Visual Studio Build Tools (C++ workload).
+
+This applies only to building the Rust bootstrap. AIL's own toolchain will
+ship its own linker (ADR 0009).
+
 ## 3. The bootstrap problem
 
 Something has to compile the first AIL compiler. **Resolved:** the front end
