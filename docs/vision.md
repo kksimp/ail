@@ -64,6 +64,11 @@ and tooling all treat AI as a first-class user.
 10. **Don't prematurely optimise the design.** Semantics first, implementation
     second.
 
+Interpretations made during Stage 1:
+
+- "Predictable data layouts" means **reported and controllable**, not
+  "declaration order" ([ADR 0013](decisions/0013-compiler-chosen-layout.md)).
+
 Added during Stage 1 (ADR 0002):
 
 11. **Correctness must be checkable.** Spec rules are citable and their examples

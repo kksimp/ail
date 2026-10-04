@@ -129,33 +129,25 @@ See [design/toolchain-constraints.md](design/toolchain-constraints.md).
 | Link libc on Linux | Easier. Mixing with C libraries is easier. | Inconsistent with macOS and Windows minimal-dependency stance. glibc versioning problems. |
 
 ## OQ-015 — Default data layout
-See [design/performance-beyond-c.md §3.1](design/performance-beyond-c.md#31-compiler-chosen-data-layout).
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Compiler-chosen by default, explicit fixed-layout opt-in, always reported (recommended)** | Enables reordering, hot/cold splitting and struct-of-arrays, which C can't do. | Layout isn't obvious from the source (the report is required). FFI types need annotations. |
-| Declaration order (like C) by default, optimisations opt-in | Predictable. Simple FFI. | Leaves performance that C can't reach on the table. |
+**Resolved** by [ADR 0013](decisions/0013-compiler-chosen-layout.md).
 
 ## OQ-016 — Compressed managed references
-See [design/performance-beyond-c.md §3.2](design/performance-beyond-c.md#32-compressed-managed-references).
-Would refine spec rule `plat.ptr.1`: raw pointers stay 64-bit, managed
-reference representation becomes implementation-defined.
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Allow it (representation implementation-defined; raw pointers stay 64-bit) (recommended)** | Pointer-dense data can shrink by up to half, improving cache use. | Decode cost (one shift and add). A heap size cap per compressed region. More complex FFI. |
-| Always 64-bit references | Simple. Unlimited heap. | Wastes cache in pointer-heavy code. |
+**Resolved** by [ADR 0014](decisions/0014-compressed-managed-references.md).
 
 ## OQ-017 — Whole-program optimisation by default
+**Designer's leaning (2026-10-04):** between "release whole-program, debug
+incremental" and "always whole-program", leaning toward **always**. A
+follow-up with refined options, including *incremental* whole-program
+optimisation, was put to the designer.
+
 | Option | Pros | Cons |
 |---|---|---|
-| **Whole-program in release, incremental in debug, with whole-program facts cached (recommended)** | Maximum optimisation where it matters. Fast edit loop. | Debug and release can behave differently in performance (not semantics). Complex build cache. |
-| Always separate compilation | Simple and fast. | Gives up devirtualisation, specialisation and cross-module constant propagation. |
-| Always whole-program | One mode. | Slow edit loop on large projects. |
+| Always whole-program, made fast by fine-grained incremental caching of optimisation results | One mode. Debug performance matches release. Fast edit loop when it works. | R&D-heavy. Edits to widely-inlined code or to the set of interface implementers cascade invalidations. Optimised code is harder to debug. |
+| Release whole-program, debug incremental | Proven approach. Fast edit loop. | Performance differs between modes. |
+| Always whole-program, no special incremental work | Simplest. | Slow edit loop on large projects. |
 
 ## OQ-018 — Which memory-management R&D tracks to pursue
-See [design/performance-beyond-c.md §5](design/performance-beyond-c.md#5-suggested-rd-tracks-for-the-designer-to-approve-or-reject).
-Allocation ladder, task-local heaps, compile-time reuse, region inference.
+**Resolved** by [ADR 0012](decisions/0012-memory-rd-tracks.md).
 
 ## OQ-019 — Debug-info formats
 | Option | Pros | Cons |
@@ -166,5 +158,8 @@ Allocation ladder, task-local heaps, compile-time reuse, region inference.
 ---
 
 ### Not yet opened
+The proposals in [design/ai-author-wishlist.md](design/ai-author-wishlist.md)
+will be raised as questions under their respective topics.
+
 The 28 design topics in [status.md](status.md) each still need their own
 questions. They will be opened topic by topic during Stage 1.

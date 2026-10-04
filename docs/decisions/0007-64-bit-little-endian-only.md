@@ -5,6 +5,7 @@
 - **Decided by:** Designer
 - **Topic:** 3 — Type system; 5 — Memory model; 24 — Cross-platform ABI strategy
 - **Spec rules:** [plat.ptr.1, plat.ptr.2, plat.endian.1](../spec/01-platforms.md)
+- **Refined by:** [ADR 0014](0014-compressed-managed-references.md): the 64-bit rule applies to raw pointers; managed reference representation is implementation-defined
 
 ## Context
 

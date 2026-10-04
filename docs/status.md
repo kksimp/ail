@@ -18,8 +18,8 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 2 | Core syntax | D (principle only) | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) | |
 | 3 | Grammar | — | | |
 | 4 | Type system | Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes) | `plat.ptr.*` |
-| 5 | Memory model | Q | [0007](decisions/0007-64-bit-little-endian-only.md) | `plat.endian.1` |
-| 6 | GC design | Q (research) | | |
+| 5 | Memory model | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md), [0014](decisions/0014-compressed-managed-references.md) | `plat.endian.1`, `plat.ptr.3` |
+| 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
 | 7 | Ownership/lifetime semantics | — | | |
 | 8 | Error handling | — | | |
 | 9 | Generics | — | | |
@@ -38,7 +38,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 22 | Runtime architecture | Q | [0009](decisions/0009-custom-tooling-policy.md) | |
 | 23 | Compiler architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0010](decisions/0010-no-llvm-backend.md) | |
 | 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md) (proposed) | `plat.*` |
-| 25 | Optimization strategy | D (partial) | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md) | `plat.isa.*` |
+| 25 | Optimization strategy | D (partial) + Q | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md) | `plat.isa.*` |
 | 26 | Debugging/profiling architecture | — | | |
 | 27 | Build system | Q | | |
 | 28 | Testing strategy | Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests) | |

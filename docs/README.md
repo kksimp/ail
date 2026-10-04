@@ -20,6 +20,8 @@ Design notes:
   on matching or beating C for systems and allocation-heavy code.
 - [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
   external limits on a fully custom toolchain.
+- [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
+  make AIL easiest and most efficient for an AI author (proposals).
 
 Contributors, human or AI, should read [AGENTS.md](../AGENTS.md) for the
 documentation rules. **A change is not complete until its documentation is.**
