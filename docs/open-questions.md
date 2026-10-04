@@ -106,19 +106,10 @@ Should the compiler eventually be written in AIL (self-hosting), and at which
 stage? Should the brief's stage order be changed? See [roadmap.md](roadmap.md).
 
 ## OQ-012 — May the compiler emit C as a temporary path to native code?
-[ADR 0010](decisions/0010-no-llvm-backend.md) bans LLVM and other external
-backends. Emitting C and compiling it with clang or gcc would be a backend crutch too.
-
-| Option | Pros | Cons |
-|---|---|---|
-| **No: own backend only (recommended, consistent with ADR 0010)** | No external influence on the IR. No crutch. | No native binaries until the custom backend works. |
-| Yes, for running tests only, never shipped | Earlier native test runs. | Still a crutch. C semantics (undefined behaviour) leak into the test results. |
+**Resolved** by [ADR 0017](decisions/0017-no-c-emission.md).
 
 ## OQ-013 — Strategy for the first native backend
-| Option | Pros | Cons |
-|---|---|---|
-| **A simple, correct code generator first (linear-scan register allocation, minimal optimisation) on a shared machine-IR framework, then optimisation passes added (recommended)** | Earliest native binaries. Every later optimisation is measurable against a baseline. | Early code is slow (published honestly). |
-| An optimising backend from the start (SSA, graph-colouring or SSA-based allocation) | Better code sooner after it lands. No rewrite. | Much later first binary. Harder to debug. |
+**Resolved** by [ADR 0018](decisions/0018-optimizing-backend-from-start.md).
 
 ## OQ-014 — Linux runtime without libc?
 See [design/toolchain-constraints.md](design/toolchain-constraints.md).
@@ -135,16 +126,7 @@ See [design/toolchain-constraints.md](design/toolchain-constraints.md).
 **Resolved** by [ADR 0014](decisions/0014-compressed-managed-references.md).
 
 ## OQ-017 — Whole-program optimisation by default
-**Designer's leaning (2026-10-04):** between "release whole-program, debug
-incremental" and "always whole-program", leaning toward **always**. A
-follow-up with refined options, including *incremental* whole-program
-optimisation, was put to the designer.
-
-| Option | Pros | Cons |
-|---|---|---|
-| Always whole-program, made fast by fine-grained incremental caching of optimisation results | One mode. Debug performance matches release. Fast edit loop when it works. | R&D-heavy. Edits to widely-inlined code or to the set of interface implementers cascade invalidations. Optimised code is harder to debug. |
-| Release whole-program, debug incremental | Proven approach. Fast edit loop. | Performance differs between modes. |
-| Always whole-program, no special incremental work | Simplest. | Slow edit loop on large projects. |
+**Resolved** by [ADR 0015](decisions/0015-always-whole-program-incremental.md), [ADR 0016](decisions/0016-optimized-and-observable-debugging.md).
 
 ## OQ-018 — Which memory-management R&D tracks to pursue
 **Resolved** by [ADR 0012](decisions/0012-memory-rd-tracks.md).
@@ -154,6 +136,19 @@ optimisation, was put to the designer.
 |---|---|---|
 | **AIL's own rich format, plus DWARF and PDB emitters (recommended)** | Works with gdb, lldb, WinDbg, Visual Studio, perf and crash reporters, *and* AIL's own debugger and AI API get full information. | Three formats to maintain. |
 | Own format only | Least work. Full control. | No existing debugger, profiler or crash tool can read AIL binaries. Adoption suffers. |
+
+---
+
+## OQ-020 — Correctness oracles for the optimising backend
+[ADR 0018](decisions/0018-optimizing-backend-from-start.md) removes the simple
+baseline backend. Proposed mitigations: differential testing against the
+interpreter (including fuzzing), IR verifiers after every pass, translation
+validation research, and per-pass or per-decision bisection.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **All four (recommended)** | Defence in depth against miscompilation, the costliest kind of compiler bug. | Significant test-infrastructure effort. |
+| Differential testing + IR verifiers only | Covers most bugs cheaply. | Subtle optimisation bugs can slip through. |
 
 ---
 
