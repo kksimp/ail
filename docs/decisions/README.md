@@ -32,7 +32,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0024](0024-semantic-api-from-stage-2.md) | AI semantic API starts in Stage 2 and grows each stage | Accepted | 2026-10-04 |
 | [0025](0025-memory-model-atomics.md) | Abstract weak memory model; data-race-free safe code; SeqCst-default atomics | Accepted | 2026-10-04 |
 | [0026](0026-hardware-feature-acceleration.md) | Portable runtime core; ISA-specific features only as optional accelerators | Accepted | 2026-10-04 |
-| [0027](0027-ci-gating-all-targets.md) | All five Tier 1 targets gate every merge | Accepted | 2026-10-04 |
+| [0027](0027-ci-gating-all-targets.md) | All five Tier 1 targets gate every merge | Accepted; amended (interim) by 0085 | 2026-10-04 |
 | [0028](0028-git-workflow.md) | Git workflow: `main` is the only long-lived branch | Accepted | 2026-10-04 |
 | [0029](0029-token-efficiency-benchmarks.md) | Token-efficiency benchmarks: corpus, multiple tokenizers, AI task runs | Accepted | 2026-10-04 |
 | [0030](0030-performance-benchmarks.md) | Performance benchmarks: standard suites, real apps, automated drag races | Accepted | 2026-10-04 |
@@ -90,3 +90,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0082](0082-method-placement-coherence.md) | Associated functions; placement; coherence; no ambiguous calls *(delegated)* | Accepted | 2026-10-04 |
 | [0083](0083-attribute-syntax.md) | Attributes `@name(args)`, same line as the declaration *(delegated)* | Accepted | 2026-10-04 |
 | [0084](0084-no-shadowing-module-names.md) | Locals can't reuse module-level, imported or prelude names *(delegated)* | Accepted | 2026-10-04 |
+| [0085](0085-interim-local-testing-gate.md) | Interim gate: local Linux (AI) and macOS (designer) runs; no hosted CI | Accepted (interim) | 2026-10-04 |
+| [0086](0086-finish-core-design-before-stage-2.md) | Finish the core design before Stage 2; Hello World is the first milestone | Accepted | 2026-10-04 |
+| [0087](0087-private-rust-toolchain.md) | Pinned Rust toolchain installed privately inside the repository | Accepted | 2026-10-04 |

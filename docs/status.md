@@ -57,6 +57,9 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Token measurement tool (`tools/tokbench/`) | D, implemented | [0070](decisions/0070-token-bench-tool.md) |
 | Delegated decisions by priority order | D | [0076](decisions/0076-delegated-decisions.md) |
 | One-command scripts for everything people run | D, implemented for tokbench | [0071](decisions/0071-one-command-scripts.md) |
+| Interim testing gate: local Linux and macOS, no hosted CI | D (interim) | [0085](decisions/0085-interim-local-testing-gate.md) |
+| Stage 2 entry criteria; Hello World milestone | D | [0086](decisions/0086-finish-core-design-before-stage-2.md) |
+| Private, pinned Rust toolchain for the bootstrap | D (takes effect in Stage 2) | [0087](decisions/0087-private-rust-toolchain.md) |
 
 ## Open questions
 

@@ -13,16 +13,20 @@ humans and AI agents are both first-class programmers. Source files use `.ail`.
 The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 
 The project is in **Stage 1: language specification and design**.
-**Do not write compiler code** until the designer explicitly starts Stage 2.
+**Do not write compiler code** until the core design is finished and Stage 2
+starts ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md)).
+The first Stage 2 milestone is `./ail run examples/hello.ail` on macOS.
 
 ## Git workflow
 
 Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - **`main` is the only long-lived branch.** Always reduce back to `main`.
 - **Docs and spec changes:** commit directly to `main`.
-- **Code changes (Stage 2+):** use a short-lived branch and a PR that must
-  pass the five-target CI gate. Merge and **delete the branch** as soon as
-  it passes.
+- **Code changes (Stage 2+):** use a short-lived branch. **Interim gate
+  ([ADR 0085](docs/decisions/0085-interim-local-testing-gate.md)):** there's no
+  hosted CI. The AI runs the tests on Linux x86-64, and the designer runs one
+  script on macOS ARM64. Merge and **delete the branch** when both pass.
+  Windows is tested by the designer when convenient and doesn't gate.
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
 - Commit with clear messages, and push when a change is complete.
@@ -124,7 +128,8 @@ tools/
 - x86-64 baseline is x86-64-v3, with runtime dispatch for higher levels (ADR 0005).
 - ARM64 baseline is ARMv8.2-A (ADR 0006).
 - x86-64 and ARM64 are developed in **strict lockstep**. Nothing lands unless
-  it works and is optimised on both (ADR 0008). All five targets gate CI (ADR 0027).
+  it works and is optimised on both (ADR 0008). For now the merge gate is local
+  Linux x86-64 plus macOS ARM64 runs, with no hosted CI (ADR 0085, amending ADR 0027).
 - The memory model is abstract and weakly ordered. Safe code is data-race-free.
   Atomics default to SeqCst (ADR 0025).
 - **Custom tooling by default.** An existing tool is acceptable only if it meets

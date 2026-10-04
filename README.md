@@ -25,8 +25,9 @@ Linux, Windows, and macOS are all first-class.
 | macOS | — | ✓ |
 
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
-strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)), and all
-five targets gate CI.
+strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
+now, testing is local on Linux and macOS
+([ADR 0085](docs/decisions/0085-interim-local-testing-gate.md)).
 
 ## Documentation
 

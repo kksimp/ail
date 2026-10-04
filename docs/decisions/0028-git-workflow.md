@@ -1,6 +1,6 @@
 # 0028. Git workflow: `main` is the only long-lived branch
 
-- **Status:** Accepted
+- **Status:** Accepted. Rule 3 (CI-gated pull requests) is **amended (interim)** by [ADR 0085](0085-interim-local-testing-gate.md).
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** Project process

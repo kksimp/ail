@@ -1,6 +1,6 @@
 # 0027. All five Tier 1 targets gate every merge
 
-- **Status:** Accepted
+- **Status:** Accepted. **Amended (interim)** by [ADR 0085](0085-interim-local-testing-gate.md): local testing on Linux and macOS, with no hosted CI for now.
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 28 — Testing strategy; 24 — Cross-platform
