@@ -49,10 +49,10 @@ defined when the diagnostic format is designed.
 | # | Chapter | Key | State |
 |---|---|---|---|
 | 01 | [Platforms and targets](01-platforms.md) | `plat` | Drafted (partial) |
-| 02 | Lexical structure | `lex` | Not started |
+| 02 | [Lexical structure](02-lexical.md) | `lex` | Drafted (partial) |
 | 03 | Grammar | `gram` | Not started |
 | 04 | Types | `type` | Not started |
-| 05 | Expressions and statements | `expr` | Not started |
+| 05 | [Expressions and statements](05-expressions.md) | `expr` | Drafted (partial) |
 | 06 | Memory model and allocation | `mem` | Not started |
 | 07 | Ownership and lifetimes | `own` | Not started |
 | 08 | Errors | `err` | Not started |

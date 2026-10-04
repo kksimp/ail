@@ -15,9 +15,9 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | # | Topic | State | ADRs | Spec |
 |---|---|---|---|---|
 | 1 | Language name | D | — (founding brief: **AIL**, by Voltare, `.ail`, `ail` CLI) | — |
-| 2 | Core syntax | D (principle only) | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) | |
-| 3 | Grammar | — | | |
-| 4 | Type system | Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes) | `plat.ptr.*` |
+| 2 | Core syntax | D (partial) + Q | [0011](decisions/0011-ai-familiarity-not-a-constraint.md), [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md) | `lex.block.*`, `lex.stmt.*` |
+| 3 | Grammar | D (partial) | [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md) | `lex.*` |
+| 4 | Type system | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes), [0035](decisions/0035-integer-overflow-traps.md) (overflow) | `plat.ptr.*`, `expr.arith.*` |
 | 5 | Memory model | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md), [0014](decisions/0014-compressed-managed-references.md) | `plat.endian.1`, `plat.ptr.3` |
 | 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
 | 7 | Ownership/lifetime semantics | — | | |
@@ -41,7 +41,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 25 | Optimization strategy | D (partial) + Q | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md) | `plat.isa.*` |
 | 26 | Debugging/profiling architecture | D (partial) + Q | [0016](decisions/0016-optimized-and-observable-debugging.md), [0021](decisions/0021-debug-info-formats.md) | |
 | 27 | Build system | D (partial) + Q | [0015](decisions/0015-always-whole-program-incremental.md) (incremental cache), [0031](decisions/0031-hosts-and-cross-compilation.md) (hosts and cross-compilation) | |
-| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating), [0029](decisions/0029-token-efficiency-benchmarks.md) and [0030](decisions/0030-performance-benchmarks.md) (benchmarks), [0032](decisions/0032-keep-rust-interpreter-as-oracle.md) (oracle) | |
+| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating), [0029](decisions/0029-token-efficiency-benchmarks.md) and [0030](decisions/0030-performance-benchmarks.md), [0036](decisions/0036-drag-race-c-styles.md) (benchmarks), [0032](decisions/0032-keep-rust-interpreter-as-oracle.md) (oracle) | |
 
 ## Project process
 
@@ -57,4 +57,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-025).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-026).

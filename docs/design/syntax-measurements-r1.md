@@ -66,6 +66,35 @@ Findings:
 - `:=` saves one token per declaration compared with `let`.
 - Word operators (`and`, `or`, `not`) cost the same as symbols.
 
+## Addendum: indentation, signatures, declarations
+
+Whole program (variant A) re-indented with each unit:
+
+| Indent unit | cl100k | o200k | anthropic-legacy | mistral-tekken | mistral-spm-v1 | Mean |
+|---|---|---|---|---|---|---|
+| 4 spaces | 181 | 182 | 201 | 198 | 243 | 201.0 |
+| 2 spaces | 181 | 182 | 201 | 198 | 242 | 200.8 |
+| 3 spaces | 181 | 182 | 201 | 198 | 242 | 200.8 |
+| 8 spaces | 181 | 182 | 201 | 198 | 259 | 204.2 |
+| Tab | 184 | 185 | 227 | 201 | 268 | 213.0 (+6%) |
+
+Signature `fn tokenize(src ..., limit ...) Result[List[Token], LexError]`:
+
+| Form | cl100k | o200k | anthropic-legacy | tekken | spm-v1 |
+|---|---|---|---|---|---|
+| `src: str, limit: i64) -> R` | 20 | 20 | 23 | 23 | 25 |
+| `src: str, limit: i64) R` | 19 | 19 | 22 | 22 | 24 |
+| `src str, limit i64) R` | **17** | **17** | **20** | **20** | **22** |
+
+Three lines (declare an int, declare a string, reassign the int):
+
+| Form | cl100k | o200k | anthropic-legacy | tekken | spm-v1 |
+|---|---|---|---|---|---|
+| `count := 0` … | **20** | **20** | **17** | **20** | **21** |
+| `mut count := 0` (mutable marked) … | 21 | 21 | 18 | 21 | 22 |
+| `let count = 0` / `var count = 0` … | 22 | 22 | 19 | 22 | 23 |
+| `let mut count = 0` … | 23 | 23 | 20 | 23 | 24 |
+
 ## Caveats
 
 - One program is not a corpus. These results guide the first syntax

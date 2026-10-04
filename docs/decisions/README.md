@@ -38,3 +38,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0030](0030-performance-benchmarks.md) | Performance benchmarks: standard suites, real apps, automated drag races | Accepted | 2026-10-04 |
 | [0031](0031-hosts-and-cross-compilation.md) | Compiler runs on all five platforms and builds for all of them | Accepted | 2026-10-04 |
 | [0032](0032-keep-rust-interpreter-as-oracle.md) | Keep the Rust interpreter permanently as an independent oracle | Accepted | 2026-10-04 |
+| [0033](0033-indentation-blocks.md) | Blocks are delimited by indentation | Accepted | 2026-10-04 |
+| [0034](0034-newline-terminated-statements.md) | Newlines end statements; no semicolons | Accepted | 2026-10-04 |
+| [0035](0035-integer-overflow-traps.md) | Integer overflow traps; wrapping/saturating/checked ops are explicit | Accepted | 2026-10-04 |
+| [0036](0036-drag-race-c-styles.md) | Drag races compare against both idiomatic and tuned C | Accepted | 2026-10-04 |

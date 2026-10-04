@@ -14,9 +14,11 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
+| **Drag race** | A head-to-head benchmark: the same small program in AIL, idiomatic C and tuned C, built and run automatically with identical outputs checked (ADR 0030, ADR 0036). |
 | **Escape analysis** | Compiler analysis that determines whether a value can outlive or leave its creating scope. A value that does not escape can be stack-allocated. |
 | **Hot/cold splitting** | Placing rarely used fields (or code) away from frequently used ones to improve cache use. |
 | **In-place reuse** | Reusing a uniquely owned value's memory at its last use for a new value, avoiding the allocator (Perceus-style). See ADR 0012. |
+| **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
 | **ISA** | Instruction Set Architecture, e.g. x86-64 or ARM64 (AArch64). |
 | **LSE** | Large System Extensions (ARMv8.1+): single-instruction atomic operations (CAS, LDADD, SWP…). Guaranteed by AIL's ARMv8.2-A baseline. |
 | **Managed reference** | A reference to an object whose storage is managed by the compiler or runtime, as opposed to a raw pointer. See spec `plat.ptr.3`. |
@@ -36,6 +38,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Task-local heap** | A heap private to one task, collected independently with no synchronisation or write barriers. See ADR 0012. |
 | **TBI** | Top Byte Ignore (ARM64): the hardware ignores the top 8 bits of an address, so software can store tags there for free. |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
+| **Trap** | An unrecoverable runtime error that stops execution with a diagnostic, e.g. on integer overflow (ADR 0035). Whether a trap stops the task or the whole program is decided in the error-handling topic. |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |
 | **Whole-program optimisation** | Optimising across all modules at once (specialisation, devirtualisation, cross-module constant propagation). See OQ-017. |

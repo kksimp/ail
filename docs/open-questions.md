@@ -35,16 +35,7 @@ point. Chapters can be added later without renumbering existing rule IDs.
 **Resolved** by [ADR 0030](decisions/0030-performance-benchmarks.md) (initial scope; three-bar suite deferred).
 
 ## OQ-009 — Integer overflow semantics
-Affects both safety and performance. Raised early because it constrains the optimizer.
-
-| Option | Pros | Cons |
-|---|---|---|
-| Trap on overflow in all builds, with explicit wrapping and saturating operators | Safe. Bugs are found. | A small runtime cost, partly removable by range analysis. It can block some vectorisation. |
-| Trap in debug, wrap in release | Fast release builds. | Behaviour differs between builds, so bugs hide in production. |
-| Always wrap | Fastest and simplest. | Silent bugs. |
-| Overflow is undefined behaviour (as in C) | Maximum optimizer freedom. | Unsafe. Contradicts "safe by default". |
-
-*No recommendation yet.* This needs the type-system discussion first.
+**Resolved** by [ADR 0035](decisions/0035-integer-overflow-traps.md).
 
 ## OQ-010 — Implementation language of the bootstrap compiler
 **Resolved** by [ADR 0023](decisions/0023-rust-bootstrap.md).
@@ -100,14 +91,18 @@ subset"? To be decided once the type system and syntax are drafted.
 **Resolved** by [ADR 0028](decisions/0028-git-workflow.md).
 
 ## OQ-025 — What kind of C do the drag races compare against?
-[ADR 0030](decisions/0030-performance-benchmarks.md). The coding style of the C
-side changes what the results mean.
+**Resolved** by [ADR 0036](decisions/0036-drag-race-c-styles.md).
+
+## OQ-026 — Indentation unit
+Measured ([syntax-measurements-r1.md](design/syntax-measurements-r1.md#addendum-indentation-signatures-declarations)):
+2, 3 and 4 spaces cost the same on modern tokenizers. Tabs cost ~6% more on
+average (up to 13% on some tokenizers).
 
 | Option | Pros | Cons |
 |---|---|---|
-| **Both versions per race: idiomatic C and tuned C (recommended)** | Shows both "beats typical C" and "gap to expert C" honestly. | Twice the C to write per race. |
-| Idiomatic C only | Cheap. Reflects what most C code looks like. | Flattering, so outsiders may dismiss the results. |
-| Expert-tuned C only | The hardest bar, and credible. | Expensive to write. Hides the everyday advantage. |
+| **4 spaces (recommended)** | The clearest nesting for readers. Same token cost as 2 spaces. | Deep nesting runs wide (which also discourages it). |
+| 2 spaces | Compact width. | Nesting is harder to see. |
+| Tabs | Each reader picks their display width. | ~6% more tokens. Mixed-whitespace hazards. |
 
 ---
 
