@@ -119,3 +119,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0111](0111-if-expression-layout.md) | `elif`/`else` align with the line that starts the `if` (corrects 0091's example) *(delegated)* | Accepted | 2026-10-04 |
 | [0112](0112-operator-precedence.md) | Operator precedence; comparisons don't chain *(delegated)* | Accepted | 2026-10-04 |
 | [0113](0113-struct-literal-field-order.md) | Struct literals name every field once, in any order *(delegated)* | Accepted | 2026-10-04 |
+| [0114](0114-reserved-keywords.md) | Reserved keywords; no contextual keywords *(delegated)* | Accepted | 2026-10-04 |
+| [0115](0115-integer-division.md) | Integer division truncates toward zero *(delegated)* | Accepted | 2026-10-04 |
+| [0116](0116-core-library-basics.md) | Sizes and indexes are `int`; `len`, `push`; text forms *(delegated)* | Accepted | 2026-10-04 |
+| [0117](0117-typing-rules.md) | Typing rules for fields, assignment, `match`, loops and places *(delegated)* | Accepted | 2026-10-04 |

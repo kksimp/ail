@@ -33,7 +33,8 @@ fn total(items List[Item]) i64
 **expr.bind.5** — Declaring a local name equal to a visible module-level
 item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
 
-> **Note:** the `for` syntax in the example is illustrative and not yet decided.
+**expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
+(`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
 
 ## Names
 
@@ -58,6 +59,10 @@ last expression, or no value if it ends in a statement. *(ADR 0091)*
 **expr.block.2** — A function returns the value of its body block. `return e`
 exits the function early with value `e`. *(ADR 0091)*
 
+**expr.block.3** — A block whose last statement is `return`, `break` or
+`continue` produces no value and is accepted wherever a value of any type is
+expected. *(ADR 0117)*
+
 ## Conditionals and loops
 
 **expr.if.1** — `if c` is followed by an indented block, then optionally any
@@ -74,6 +79,14 @@ next iteration. *(ADR 0091)*
 **expr.loop.3** — `a..b` is the half-open range from `a` up to but excluding
 `b`. `a..=b` includes `b`. *(ADR 0091)*
 
+**expr.loop.4** — In `for x in e`, `e` MUST be a `List[T]`, giving `x` type
+`T`, or a range of `int`, giving `x` type `int`. `x` is an immutable binding
+scoped to the loop body. The loop iterates the value `e` had when the loop
+started. *(ADR 0117)*
+
+**expr.loop.5** — `break` and `continue` outside a loop are compile-time
+errors. *(ADR 0117)*
+
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`.
 *(ADR 0110)*
 
@@ -89,6 +102,11 @@ elif n == 0
 else
     "positive"
 ```
+
+**expr.if.4** — An `if` or `match` whose value is used (bound, passed,
+returned, or ending a block whose value is used) MUST produce a value on every
+path, so such an `if` MUST have an `else`. All its branches or arms MUST have
+the same type. *(ADR 0117)*
 
 ## Operators
 
@@ -133,8 +151,14 @@ compile-time error, and the diagnostic MUST list the uncovered cases.
 and name those variants, unless the warning is suppressed for that match.
 *(ADR 0056)*
 
-> **Note:** pattern syntax, guards, and warning-suppression syntax are not yet
-> decided.
+**expr.match.4** — Until general patterns are designed, a pattern is `_` or
+a variant of the scrutinee's enum type, bare or qualified. *(ADR 0117)*
+
+**expr.match.5** — An arm whose pattern is already covered by earlier arms is
+a compile-time error. *(ADR 0117)*
+
+> **Note:** general pattern syntax, guards, and warning-suppression syntax are
+> not yet decided.
 
 ## Integer arithmetic
 
@@ -153,6 +177,9 @@ of the minimum value by `-1`, MUST trap. *(ADR 0035)*
 **expr.arith.4** — An implementation MAY omit an overflow check that it proves
 can never fail. It MUST report the overflow checks that remain in the
 performance report. *(ADR 0035)*
+
+**expr.arith.5** — Integer `a / b` rounds toward zero, and `a % b` has the
+sign of `a`, so that `a == (a / b) * b + a % b`. *(ADR 0115)*
 
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is

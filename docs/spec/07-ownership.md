@@ -24,6 +24,12 @@ b.x = 6.0
 # a.x is still 1.0
 ```
 
+## Places
+
+**own.place.1** — A place is a local binding, a parameter or `self`, or a
+field (`p.f`) or element (`p[i]`) of a place. A place is mutable when its
+root is a `mut` binding, a `mut` parameter or `mut self`. *(ADR 0117)*
+
 ## Parameters
 
 **own.param.1** — A parameter declared without `mut` is read-only within the

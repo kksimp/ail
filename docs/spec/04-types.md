@@ -22,6 +22,10 @@ floating-point types are `f32` and `f64`. *(ADR 0055)*
 **type.num.4** — `int` and `i64` are both canonical spellings, as are `float`
 and `f64`. The formatter MUST NOT rewrite one into the other. *(ADR 0059)*
 
+**type.num.5** — Integer types support `+ - * / %`, unary `-` and the
+comparisons `== != < <= > >=`. Sizes, lengths and indexes have type `int`
+(this is the size and index type of `plat.ptr.2`). *(ADR 0116)*
+
 ## Structs
 
 **type.struct.1** — A struct type is declared with the keyword `struct`, its
@@ -50,6 +54,12 @@ u := User(id: 7, name: "Ada", email: none)
 exactly once, in any order. Missing, unknown and repeated fields are
 compile-time errors. *(ADR 0113)*
 
+**type.struct.5** — A struct's field names MUST be distinct. Each value in a
+struct literal MUST have its field's type. *(ADR 0117)*
+
+**type.struct.6** — `e.f` reads field `f` of `e`. The type of `e` MUST be a
+struct that declares `f`. *(ADR 0117)*
+
 > **Note:** field shorthand and defaults are not yet decided.
 
 ## Enums
@@ -74,6 +84,8 @@ known enum type, its variants MAY be written without qualification
 
 **type.enum.4** — The canonical form omits the qualification wherever
 `type.enum.3` permits it. *(ADR 0057)*
+
+**type.enum.5** — An enum's variant names MUST be distinct. *(ADR 0117)*
 
 ## Optional types
 
@@ -113,6 +125,11 @@ of a single Unicode scalar value. *(ADR 0089)*
 character access go through explicit views (`s.bytes`, `s.chars()`).
 *(ADR 0089)*
 
+**type.str.3** — The text form of an `int` is its decimal representation,
+with a leading `-` when negative. The text form of a `bool` is `true` or
+`false`, and of a `str` is the string itself. `bool` and `str` support `==`
+and `!=`; `str` equality compares UTF-8 bytes. *(ADR 0116)*
+
 ## Collections
 
 **type.coll.1** — The standard library provides `List[T]`, `Map[K, V]` and
@@ -126,6 +143,12 @@ type. Otherwise they are a compile-time error. *(ADR 0090)*
 
 **type.coll.4** — `xs[i]` traps if `i` is out of bounds. `xs[a..b]` yields
 the sub-list from `a` up to but excluding `b`, as a value. *(ADR 0090)*
+
+**type.coll.5** — `xs.len()` returns the number of elements of a list as an
+`int`. *(ADR 0116)*
+
+**type.coll.6** — `xs.push(v)` appends `v` to a list. Its receiver is
+`mut self` (`trait.method.3`). *(ADR 0116)*
 
 ```ail
 ports := {"http": 80, "https": 443}

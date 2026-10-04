@@ -3,8 +3,18 @@
 Chapter key: `lex`
 
 > **Status:** Drafted (partial). Specified: block structure, statement
-> termination, comments, and string, character and numeric literals. Not yet
-> designed: the character set, identifiers, and the keyword list.
+> termination, comments, keywords, and string, character and numeric
+> literals. Not yet designed: the character set and identifiers.
+
+## Keywords
+
+**lex.kw.1** — These words are reserved keywords and MUST NOT be used as
+names: `and any as break continue defer elif else enum extern false fn for if
+impl in match move mut none not or pub ref return self spawn struct trait true
+unique unsafe use while`. *(ADR 0114)*
+
+**lex.kw.2** — `c` is not reserved. It has its FFI meaning only directly
+after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*
 
 ## Blocks
 
