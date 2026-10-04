@@ -20,7 +20,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 4 | Type system | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes), [0035](decisions/0035-integer-overflow-traps.md) (overflow), [0052](decisions/0052-struct-declarations.md), [0053](decisions/0053-enum-declarations.md), [0055](decisions/0055-numeric-type-names.md), [0056](decisions/0056-exhaustive-matching.md), [0057](decisions/0057-variant-references.md), [0058](decisions/0058-struct-literal-syntax.md), [0059](decisions/0059-default-numeric-spelling.md) | `plat.ptr.*`, `expr.arith.*`, `expr.match.*`, `type.*` |
 | 5 | Memory model | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md), [0014](decisions/0014-compressed-managed-references.md) | `plat.endian.1`, `plat.ptr.3` |
 | 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
-| 7 | Ownership/lifetime semantics | D (core model) + Q | [0038](decisions/0038-immutable-bindings-by-default.md), [0044](decisions/0044-no-shadowing.md), [0060](decisions/0060-mutable-value-semantics.md), [0061](decisions/0061-call-site-mut.md), [0062](decisions/0062-second-class-borrows.md), [0063](decisions/0063-use-site-ref.md), [0064](decisions/0064-exclusivity.md), [0065](decisions/0065-copy-reporting.md), [0066](decisions/0066-unique-resource-types.md), [0067](decisions/0067-ref-access.md) | `expr.bind.*`, `own.*` |
+| 7 | Ownership/lifetime semantics | D (core model) + Q | [0038](decisions/0038-immutable-bindings-by-default.md), [0044](decisions/0044-no-shadowing.md), [0060](decisions/0060-mutable-value-semantics.md), [0061](decisions/0061-call-site-mut.md), [0062](decisions/0062-second-class-borrows.md), [0063](decisions/0063-use-site-ref.md), [0064](decisions/0064-exclusivity.md), [0065](decisions/0065-copy-reporting.md), [0066](decisions/0066-unique-resource-types.md), [0067](decisions/0067-ref-access.md), [0068](decisions/0068-move-parameters.md), [0069](decisions/0069-unique-keyword.md) | `expr.bind.*`, `own.*` |
 | 8 | Error handling | D (core) + Q | [0045](decisions/0045-error-model.md), [0046](decisions/0046-inferred-error-sets.md), [0047](decisions/0047-traps-end-the-task.md), [0048](decisions/0048-optional-shorthand.md), [0049](decisions/0049-else-for-fallback-and-early-exit.md), [0050](decisions/0050-error-return-traces.md), [0051](decisions/0051-no-implicit-optional-to-error.md) | `err.*`, `type.opt.*` |
 | 9 | Generics | D (syntax only) | [0041](decisions/0041-square-bracket-generics.md) | `gram.generic.1` |
 | 10 | Traits/interfaces | — | | |
@@ -54,6 +54,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | No external backend | D | [0010](decisions/0010-no-llvm-backend.md) |
 | Open-source intent | D | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) |
 | Git workflow: `main` only long-lived branch | D | [0028](decisions/0028-git-workflow.md) |
+| Token measurement tool (`tools/tokbench/`) | D, implemented | [0070](decisions/0070-token-bench-tool.md) |
 
 ## Open questions
 

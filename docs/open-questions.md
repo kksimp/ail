@@ -133,9 +133,7 @@ generics handled during inference?
 **Resolved** by [ADR 0066](decisions/0066-unique-resource-types.md).
 
 ## OQ-035 — Parameter form that takes ownership
-[ADR 0066](decisions/0066-unique-resource-types.md) needs a way for a function
-to take ownership of a unique value (e.g. `close(take f File)`), alongside
-read-only and `mut` parameters. Also: the marker syntax for unique types.
+**Resolved** by [ADR 0068](decisions/0068-move-parameters.md) (`move`) and [ADR 0069](decisions/0069-unique-keyword.md) (`unique`).
 
 ---
 

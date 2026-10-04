@@ -4,8 +4,8 @@ Chapter key: `own`
 
 > **Status:** Drafted (partial). Specified: the value model, parameter modes,
 > exclusivity, copy reporting, borrows, unique resource types, `defer`, and
-> shared references. Not yet designed: the ownership-taking parameter form
-> (OQ-035), closures, and element projections.
+> shared references, and `move` parameters. Not yet designed: closures, and
+> element projections.
 
 ## Values
 
@@ -65,6 +65,23 @@ swap(mut a[i], mut a[j])     # traps if i == j
 implementation MUST report every site where a deep storage copy may occur,
 in the performance report and through the semantic API. *(ADR 0065)*
 
+**own.move.1** — A parameter declared `move p T` takes ownership of its
+argument. *(ADR 0068)*
+
+**own.move.2** — An argument passed to a `move` parameter MUST be written with a
+leading `move` at the call site. Any later use of the moved-from binding is a
+compile-time error. *(ADR 0068)*
+
+```ail
+unique struct File
+    fd int
+
+fn close(move f File)
+    ...
+
+close(move f)
+```
+
 ## Borrows
 
 **own.borrow.1** — A parameter's access to its argument lasts only for the
@@ -104,8 +121,9 @@ root.value = 2
 
 ## Unique types and cleanup
 
-**own.uniq.1** — A type declared unique cannot be copied. Its values can only
-be moved. *(ADR 0066; marker syntax to be decided)*
+**own.uniq.1** — A struct or enum declaration prefixed with `unique` declares
+a unique type. A unique type cannot be copied. Its values can only be moved.
+*(ADR 0066, ADR 0069)*
 
 **own.uniq.2** — Assigning, returning, or passing a unique value to a
 parameter that takes ownership moves it. Any later use of the moved-from

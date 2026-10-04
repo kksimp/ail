@@ -23,6 +23,8 @@
 - **Constraint:** the official tokenizer download hosts are blocked in the
   measurement environment, so the files came from PyPI packages that bundle
   them. Results are exact for these files.
+- **Reproduce:** [tools/tokbench](../../tools/tokbench/README.md). Its
+  `--claude` flag adds current-Claude counts via the API.
 
 ## Result 1: block structure (whole program)
 
@@ -117,6 +119,18 @@ How spaces tokenize (o200k): the line `        i += 1` (8 spaces) becomes
 why 2, 3, 4 or 8 spaces all cost about the same. Characters are **not** all
 equal: tokenizers learned dedicated tokens for runs of spaces because they are
 extremely common in training data.
+
+## Addendum: the decided syntax so far
+
+`tools/tokbench/corpus/current/tokenize.ail` is the same tokenizer program,
+written in the syntax decided as of 2026-10-04 (`enum`, `mut`/`:=`, `=>` arms,
+error-returning signature, bare variants). Reproduce with
+`python tools/tokbench/tokbench.py`:
+
+| File | cl100k | o200k | claude-legacy | tekken | spm-v1 | Mean | vs. Rust |
+|---|---|---|---|---|---|---|---|
+| Rust reference | 237 | 239 | 272 | 257 | 330 | 267.0 | — |
+| AIL, decided syntax | 178 | 179 | 188 | 194 | 230 | 193.8 | **−27%** |
 
 ## Caveats
 

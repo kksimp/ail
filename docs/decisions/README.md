@@ -73,3 +73,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0065](0065-copy-reporting.md) | Copies implicit in source, reported by the compiler | Accepted | 2026-10-04 |
 | [0066](0066-unique-resource-types.md) | Unique (non-copyable) resource types, scope-end cleanup, `defer` | Accepted | 2026-10-04 |
 | [0067](0067-ref-access.md) | `ref` cells: automatic access, mutable through any copy | Accepted | 2026-10-04 |
+| [0068](0068-move-parameters.md) | Ownership-taking parameters and arguments are marked `move` | Accepted | 2026-10-04 |
+| [0069](0069-unique-keyword.md) | Non-copyable types are declared `unique` | Accepted | 2026-10-04 |
+| [0070](0070-token-bench-tool.md) | Token-measurement tooling in `tools/tokbench/` (Python) | Accepted | 2026-10-04 |

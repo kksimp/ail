@@ -92,6 +92,8 @@ docs/
   decisions/              Architecture Decision Records (ADRs), one per decision
   spec/                   normative language specification with rule IDs
   design/                 non-normative design notes, research, and constraints
+tools/
+  tokbench/               token measurement harness (Python; measurement only, ADR 0070)
 ```
 
 ## Settled constraints (summary; the ADRs are authoritative)
