@@ -50,3 +50,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0042](0042-fn-keyword.md) | Functions are introduced by `fn` | Accepted | 2026-10-04 |
 | [0043](0043-hash-comments.md) | Comments `#`, doc comments `##`, no block comments | Accepted | 2026-10-04 |
 | [0044](0044-no-shadowing.md) | Names may not shadow other visible local names | Accepted | 2026-10-04 |
+| [0045](0045-error-model.md) | Error model: values + `?`; bugs trap; no exceptions | Accepted | 2026-10-04 |
+| [0046](0046-inferred-error-sets.md) | Error sets inferred inside a package, explicit at APIs; `T ! E`, `!T` | Accepted | 2026-10-04 |
+| [0047](0047-traps-end-the-task.md) | A trap ends the current task; the parent observes it | Accepted | 2026-10-04 |
+| [0048](0048-optional-shorthand.md) | No null; optional values are `T?` | Accepted | 2026-10-04 |

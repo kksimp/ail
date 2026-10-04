@@ -21,7 +21,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 5 | Memory model | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md), [0014](decisions/0014-compressed-managed-references.md) | `plat.endian.1`, `plat.ptr.3` |
 | 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
 | 7 | Ownership/lifetime semantics | D (bindings only) + Q | [0038](decisions/0038-immutable-bindings-by-default.md), [0044](decisions/0044-no-shadowing.md) | `expr.bind.*` |
-| 8 | Error handling | — | | |
+| 8 | Error handling | D (core) + Q | [0045](decisions/0045-error-model.md), [0046](decisions/0046-inferred-error-sets.md), [0047](decisions/0047-traps-end-the-task.md), [0048](decisions/0048-optional-shorthand.md) | `err.*`, `type.opt.*` |
 | 9 | Generics | D (syntax only) | [0041](decisions/0041-square-bracket-generics.md) | `gram.generic.1` |
 | 10 | Traits/interfaces | — | | |
 | 11 | Concurrency | D (partial) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md) | `conc.mm.1`, `conc.race.1`, `conc.atomic.*` |
@@ -57,4 +57,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-028).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-030).

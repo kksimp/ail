@@ -107,6 +107,19 @@ To be asked with the declarations grammar.
 local binding be allowed to reuse the name of a module-level item, an import,
 or a built-in (e.g. a local `len`)? To be decided with the modules topic.
 
+## OQ-029 — Error and absence handling forms
+[ADR 0045](decisions/0045-error-model.md) and [ADR 0048](decisions/0048-optional-shorthand.md)
+define propagation with `?`. Still to design: fallbacks (e.g. `x := f() else default`),
+early exit on absence (`else return ...`), safe member access (`a?.b`), matching
+on errors, adding context to propagated errors, and whether `?` on an optional
+is allowed inside a function returning `T ! E`.
+
+## OQ-030 — What is an error type?
+[ADR 0046](decisions/0046-inferred-error-sets.md). Can any type be an error,
+or only declared error types? How is an explicit union written? How does an
+inferred set convert to a public API's error type? How are recursion and
+generics handled during inference?
+
 ---
 
 ### Not yet opened

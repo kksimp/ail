@@ -51,11 +51,11 @@ defined when the diagnostic format is designed.
 | 01 | [Platforms and targets](01-platforms.md) | `plat` | Drafted (partial) |
 | 02 | [Lexical structure](02-lexical.md) | `lex` | Drafted (partial) |
 | 03 | [Grammar](03-grammar.md) | `gram` | Drafted (partial) |
-| 04 | Types | `type` | Not started |
+| 04 | [Types](04-types.md) | `type` | Drafted (partial) |
 | 05 | [Expressions and statements](05-expressions.md) | `expr` | Drafted (partial) |
 | 06 | Memory model and allocation | `mem` | Not started |
 | 07 | Ownership and lifetimes | `own` | Not started |
-| 08 | Errors | `err` | Not started |
+| 08 | [Errors](08-errors.md) | `err` | Drafted (partial) |
 | 09 | Generics | `gen` | Not started |
 | 10 | Traits / interfaces | `trait` | Not started |
 | 11 | [Concurrency](11-concurrency.md) | `conc` | Drafted (partial) |
