@@ -1,0 +1,6 @@
+fn largest[T](items List[T]) T
+    mut best := items[0]
+    for item in items
+        if item.area() > best.area()
+            best = item
+    best

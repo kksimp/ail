@@ -30,6 +30,9 @@ Design notes:
 - [design/ownership-options.md](design/ownership-options.md): value vs.
   reference semantics, borrows, and shared identity, with examples and
   measurements.
+- [design/traits-generics-options.md](design/traits-generics-options.md):
+  method declarations, trait conformance, generic constraints, and receiver
+  mutation, with measurements.
 
 Tools:
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.

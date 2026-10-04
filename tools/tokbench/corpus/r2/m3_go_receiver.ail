@@ -1,0 +1,8 @@
+struct Circle
+    r f64
+
+fn (c Circle) area() f64
+    pi * c.r * c.r
+
+fn (mut c Circle) scale(k f64)
+    c.r = c.r * k

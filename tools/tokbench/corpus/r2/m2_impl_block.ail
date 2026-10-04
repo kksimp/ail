@@ -1,0 +1,9 @@
+struct Circle
+    r f64
+
+impl Circle
+    fn area(self) f64
+        pi * self.r * self.r
+
+    fn scale(mut self, k f64)
+        self.r = self.r * k

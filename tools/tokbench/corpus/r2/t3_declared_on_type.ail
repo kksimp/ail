@@ -1,0 +1,8 @@
+trait Shape
+    fn area(self) f64
+
+struct Circle is Shape
+    r f64
+
+fn Circle.area(self) f64
+    pi * self.r * self.r

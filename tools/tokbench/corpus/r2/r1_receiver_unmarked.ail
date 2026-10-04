@@ -1,0 +1,4 @@
+mut tokens := List[Token]()
+tokens.push(LParen)
+tokens.push(Num(42))
+tokens.push(RParen)
