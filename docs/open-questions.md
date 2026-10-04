@@ -124,20 +124,18 @@ generics handled during inference?
 **Resolved** by [ADR 0059](decisions/0059-default-numeric-spelling.md).
 
 ## OQ-032 — Exclusivity of `mut` arguments
-Under [ADR 0060](decisions/0060-mutable-value-semantics.md), a call like
-`f(mut x, x)` or `swap(mut a[i], mut a[j])` could alias. Options: a
-compile-time error, with a dynamic check when the compiler can't prove the
-indices differ; or an implicit copy of the read-only argument. To be asked.
+**Resolved** by [ADR 0064](decisions/0064-exclusivity.md).
 
 ## OQ-033 — Visibility of copy-on-write copies
-Implicit cheap copies plus a performance report that flags actual deep copies
-in hot paths, or explicit `.copy()` where the compiler can't prove sharing
-is free. To be asked.
+**Resolved** by [ADR 0065](decisions/0065-copy-reporting.md).
 
 ## OQ-034 — Deterministic cleanup of resources
-Files, sockets and lock guards need prompt release despite the GC. Candidates:
-non-copyable (unique) resource types with deterministic drop at last use,
-`defer`, and scoped `with` blocks. To be asked.
+**Resolved** by [ADR 0066](decisions/0066-unique-resource-types.md).
+
+## OQ-035 — Parameter form that takes ownership
+[ADR 0066](decisions/0066-unique-resource-types.md) needs a way for a function
+to take ownership of a unique value (e.g. `close(take f File)`), alongside
+read-only and `mut` parameters. Also: the marker syntax for unique types.
 
 ---
 

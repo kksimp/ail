@@ -3,9 +3,9 @@
 Chapter key: `own`
 
 > **Status:** Drafted (partial). Specified: the value model, parameter modes,
-> borrows, and shared references. Not yet designed: exclusivity details
-> (OQ-032), copy reporting (OQ-033), resource cleanup (OQ-034), closures, and
-> element projections.
+> exclusivity, copy reporting, borrows, unique resource types, `defer`, and
+> shared references. Not yet designed: the ownership-taking parameter form
+> (OQ-035), closures, and element projections.
 
 ## Values
 
@@ -42,6 +42,29 @@ mut b := Point(x: 1.0, y: 2.0)
 shift(mut b, 5.0)
 ```
 
+## Exclusivity
+
+**own.excl.1** — During a call, a place passed as a `mut` argument MUST NOT
+overlap any other argument of the same call. *(ADR 0064)*
+
+**own.excl.2** — A violation of `own.excl.1` that is statically certain is a
+compile-time error. *(ADR 0064)*
+
+**own.excl.3** — If whether two arguments overlap depends on run-time values,
+the implementation MUST check before the call and trap on overlap. Each such
+check MUST be listed in the performance report. *(ADR 0064)*
+
+```ail
+f(mut x, x)                  # compile-time error
+swap(mut a[i], mut a[j])     # traps if i == j
+```
+
+## Copies
+
+**own.copy.1** — Copies of values are never written explicitly. The
+implementation MUST report every site where a deep storage copy may occur,
+in the performance report and through the semantic API. *(ADR 0065)*
+
 ## Borrows
 
 **own.borrow.1** — A parameter's access to its argument lasts only for the
@@ -67,3 +90,37 @@ struct Node
     value int
     children List[ref Node]
 ```
+
+**own.ref.3** — Field access and method calls on a `ref T` value apply to the
+`T` held in the cell, with no explicit dereference. *(ADR 0067)*
+
+**own.ref.4** — The contents of a `ref` cell MAY be mutated through any copy
+of the reference, including one held in an immutable binding. *(ADR 0067)*
+
+```ail
+root := ref Node(value: 1, children: [])
+root.value = 2
+```
+
+## Unique types and cleanup
+
+**own.uniq.1** — A type declared unique cannot be copied. Its values can only
+be moved. *(ADR 0066; marker syntax to be decided)*
+
+**own.uniq.2** — Assigning, returning, or passing a unique value to a
+parameter that takes ownership moves it. Any later use of the moved-from
+binding is a compile-time error. *(ADR 0066)*
+
+**own.uniq.3** — A unique type MAY define a cleanup operation. It MUST run
+exactly once, when the scope that owns the value exits by any path
+(including a trap), unless the value was moved out of that scope first.
+*(ADR 0066)*
+
+**own.uniq.4** — Cleanup operations for values owned by the same scope run in
+reverse order of declaration. *(ADR 0066)*
+
+**own.defer.1** — `defer S` schedules statement `S` to run when the enclosing
+block exits by any path, including a trap. *(ADR 0066)*
+
+**own.defer.2** — Deferred statements in the same block run in reverse order
+of their `defer` statements. *(ADR 0066)*

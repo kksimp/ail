@@ -69,3 +69,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0061](0061-call-site-mut.md) | `mut` parameters are marked `mut` at the call site | Accepted | 2026-10-04 |
 | [0062](0062-second-class-borrows.md) | Second-class borrows; no lifetime annotations | Accepted | 2026-10-04 |
 | [0063](0063-use-site-ref.md) | Shared mutable identity via use-site `ref T` | Accepted | 2026-10-04 |
+| [0064](0064-exclusivity.md) | Exclusivity: overlap is a compile error; runtime check when undecidable | Accepted | 2026-10-04 |
+| [0065](0065-copy-reporting.md) | Copies implicit in source, reported by the compiler | Accepted | 2026-10-04 |
+| [0066](0066-unique-resource-types.md) | Unique (non-copyable) resource types, scope-end cleanup, `defer` | Accepted | 2026-10-04 |
+| [0067](0067-ref-access.md) | `ref` cells: automatic access, mutable through any copy | Accepted | 2026-10-04 |
