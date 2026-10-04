@@ -15,11 +15,11 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | # | Topic | State | ADRs | Spec |
 |---|---|---|---|---|
 | 1 | Language name | D | — (founding brief: **AIL**, by Voltare, `.ail`, `ail` CLI) | — |
-| 2 | Core syntax | — | | |
+| 2 | Core syntax | D (principle only) | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) | |
 | 3 | Grammar | — | | |
 | 4 | Type system | Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes) | `plat.ptr.*` |
 | 5 | Memory model | Q | [0007](decisions/0007-64-bit-little-endian-only.md) | `plat.endian.1` |
-| 6 | GC design | Q | | |
+| 6 | GC design | Q (research) | | |
 | 7 | Ownership/lifetime semantics | — | | |
 | 8 | Error handling | — | | |
 | 9 | Generics | — | | |
@@ -35,8 +35,8 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 19 | AST/IR architecture | — | | |
 | 20 | AI semantic API | — | | |
 | 21 | Standard library architecture | — | | |
-| 22 | Runtime architecture | Q | | |
-| 23 | Compiler architecture | Q | | |
+| 22 | Runtime architecture | Q | [0009](decisions/0009-custom-tooling-policy.md) | |
+| 23 | Compiler architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0010](decisions/0010-no-llvm-backend.md) | |
 | 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md) (proposed) | `plat.*` |
 | 25 | Optimization strategy | D (partial) | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md) | `plat.isa.*` |
 | 26 | Debugging/profiling architecture | — | | |
@@ -50,7 +50,11 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | Decision records | D | [0001](decisions/0001-record-decisions-as-adrs.md) |
 | Spec format and rule IDs | D | [0002](decisions/0002-normative-spec-with-rule-ids.md) |
 | Documentation system | D | [0003](decisions/0003-documentation-in-repo-markdown.md) |
+| Custom tooling policy | D | [0009](decisions/0009-custom-tooling-policy.md) |
+| No external backend | D | [0010](decisions/0010-no-llvm-backend.md) |
+| Open-source intent | D | [0011](decisions/0011-ai-familiarity-not-a-constraint.md) |
+| Git workflow: work on `main` | D (instruction) | — |
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-011).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-019).

@@ -15,6 +15,12 @@ The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 The project is in **Stage 1: language specification and design**.
 **Do not write compiler code** until the designer explicitly starts Stage 2.
 
+## Git workflow
+
+- Work directly on **`main`** (designer's instruction, 2026-10-04). Don't
+  create feature branches unless the designer asks for one.
+- Commit with clear messages, and push when a change is complete.
+
 ## Roles
 
 - **The human is the systems designer.** They make every design decision.
@@ -75,7 +81,7 @@ docs/
   glossary.md             shared terminology
   decisions/              Architecture Decision Records (ADRs), one per decision
   spec/                   normative language specification with rule IDs
-  design/                 non-normative design notes and analyses
+  design/                 non-normative design notes, research, and constraints
 ```
 
 ## Settled constraints (summary; the ADRs are authoritative)
@@ -84,4 +90,12 @@ docs/
 - All targets are 64-bit and little-endian (ADR 0007).
 - x86-64 baseline is x86-64-v3, with runtime dispatch for higher levels (ADR 0005).
 - ARM64 baseline is ARMv8.2-A (ADR 0006).
+- **Custom tooling by default.** An existing tool is acceptable only if it meets
+  *every* requirement. Prefer R&D over losing a feature (ADR 0009).
+- **No LLVM or any external backend, ever.** Clang, gcc and rustc are allowed
+  only for benchmarks and differential testing (ADR 0010).
+- Resemblance to existing languages is not a design goal. Tokenizer cost is
+  still measured (ADR 0011).
+- When a constraint blocks something the designer wants, **explain the
+  constraint plainly** so the designer can design around it.
 - See `docs/decisions/README.md` for the full list.

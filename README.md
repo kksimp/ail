@@ -36,6 +36,7 @@ under decision ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)).
 - [Open questions](docs/open-questions.md)
 - [Roadmap](docs/roadmap.md)
 - [Feasibility: token efficiency and performance estimates](docs/design/feasibility.md)
+- [Research: beating C on systems and allocation-heavy code](docs/design/performance-beyond-c.md)
 
 AI agents: read [AGENTS.md](AGENTS.md) first.
 

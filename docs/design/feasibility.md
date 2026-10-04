@@ -75,12 +75,18 @@ per iteration.
   improvement** is a realistic stretch goal, mostly from layers 2 and 3.
 
 ### The biggest risk: AI has never seen AIL
+> **Update:** the designer ruled that this is **not a design constraint**
+> ([ADR 0011](../decisions/0011-ai-familiarity-not-a-constraint.md)). AIL will
+> be open-sourced once compelling, and adoption will produce training data.
+> Tokenizer cost remains a measured constraint. The mitigations below are
+> kept as tooling, not as syntax restrictions.
+
 Current models were trained on huge amounts of Python, C, Rust and Go, and
 on zero AIL. A brand-new language starts with *worse* AI fluency than a
 mainstream one, which costs tokens in errors. Mitigations, to be raised as
 design questions:
-1. Keep the grammar small, regular and close to familiar conventions where
-   familiarity costs nothing.
+1. Keep the grammar small and regular. (~~Close to familiar conventions~~,
+   dropped by ADR 0011.)
 2. Maintain a compact **"language card"**: the whole language summarised in a
    few thousand tokens that fits in any AI context window.
 3. Make diagnostics so precise that the first repair attempt usually works.
@@ -121,9 +127,11 @@ design questions:
 LLVM and GCC embody decades of optimisation work. A custom backend will
 almost certainly produce **slower code than LLVM for years**. Cranelift-class
 backends, which favour compile speed, typically produce code noticeably slower
-than LLVM -O3. Recommendation (roadmap refinement #3): keep the bootstrap
-backend as a **permanent benchmark reference**, and make the custom backend
-the default only once it meets a parity threshold that the designer sets.
+than LLVM -O3. The designer has decided that AIL uses **no LLVM backend at
+all** ([ADR 0010](../decisions/0010-no-llvm-backend.md)). Clang, gcc and rustc
+are comparison baselines only, and the gap is measured and published from the
+first native binary. For ideas aimed at closing and exceeding that gap, see
+[performance-beyond-c.md](performance-beyond-c.md).
 
 ### Bottom line
 **C-class performance is realistic for code written with performance in mind**

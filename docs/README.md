@@ -16,6 +16,10 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 Design notes:
 - [design/feasibility.md](design/feasibility.md): is AIL achievable, and what
   token-efficiency and performance levels are realistic?
+- [design/performance-beyond-c.md](design/performance-beyond-c.md): research
+  on matching or beating C for systems and allocation-heavy code.
+- [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
+  external limits on a fully custom toolchain.
 
 Contributors, human or AI, should read [AGENTS.md](../AGENTS.md) for the
 documentation rules. **A change is not complete until its documentation is.**

@@ -87,21 +87,81 @@ Affects both safety and performance. Raised early because it constrains the opti
 *No recommendation yet.* This needs the type-system discussion first.
 
 ## OQ-010 — Implementation language of the bootstrap compiler
-Which language is the Stage 2–4 compiler written in, before AIL can compile
-itself?
+Which language is the first AIL compiler written in, before AIL can compile
+itself? The custom-tooling policy ([ADR 0009](decisions/0009-custom-tooling-policy.md))
+governs AIL's *product*. The bootstrap compiler is scaffolding, and is thrown
+away if AIL self-hosts (OQ-011).
 
 | Option | Pros | Cons |
 |---|---|---|
-| Rust | Fast, safe, good parser and LLVM tooling. | Slow compile times. Ownership friction in compiler graph code. |
-| Zig or C | Minimal dependencies and closest to the "own the stack" ethos. | Less safety, so more effort. |
-| OCaml or Haskell | Excellent for type checkers and prototyping. | Distant from the final self-hosted compiler. Smaller ecosystem. |
-| Go | Simple, fast builds, easy cross-compilation. | Less expressive for compiler ASTs. |
+| Rust | Fast, memory-safe, strong enums and pattern matching for compilers. | Slow builds. Ownership friction in graph-heavy compiler code. |
+| Zig or C | Minimal runtime, and closest to the "own everything" ethos. | Less safety, more effort and more bugs. |
+| OCaml | Excellent for type checkers and fast to prototype in. | Far from the final self-hosted compiler. Smaller talent pool. |
+| Go | Simple, fast builds, trivial cross-compilation. | Less expressive for ASTs and IR (no sum types). |
 
-*No recommendation yet.* Depends on OQ-011 (whether and when to self-host).
+*No recommendation yet.* Depends on OQ-011.
 
 ## OQ-011 — Self-hosting and roadmap order
 Should the compiler eventually be written in AIL (self-hosting), and at which
 stage? Should the brief's stage order be changed? See [roadmap.md](roadmap.md).
+
+## OQ-012 — May the compiler emit C as a temporary path to native code?
+[ADR 0010](decisions/0010-no-llvm-backend.md) bans LLVM and other external
+backends. Emitting C and compiling it with clang or gcc would be a backend crutch too.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **No: own backend only (recommended, consistent with ADR 0010)** | No external influence on the IR. No crutch. | No native binaries until the custom backend works. |
+| Yes, for running tests only, never shipped | Earlier native test runs. | Still a crutch. C semantics (undefined behaviour) leak into the test results. |
+
+## OQ-013 — Strategy for the first native backend
+| Option | Pros | Cons |
+|---|---|---|
+| **A simple, correct code generator first (linear-scan register allocation, minimal optimisation) on a shared machine-IR framework, then optimisation passes added (recommended)** | Earliest native binaries. Every later optimisation is measurable against a baseline. | Early code is slow (published honestly). |
+| An optimising backend from the start (SSA, graph-colouring or SSA-based allocation) | Better code sooner after it lands. No rewrite. | Much later first binary. Harder to debug. |
+
+## OQ-014 — Linux runtime without libc?
+See [design/toolchain-constraints.md](design/toolchain-constraints.md).
+
+| Option | Pros | Cons |
+|---|---|---|
+| **No libc on Linux; raw syscalls (recommended)** | Full control, static binaries, and no glibc version problems. Fits ADR 0009. | Must reimplement thread creation, TLS setup, DNS resolution and locale behaviour, and handle `vDSO` (the kernel-provided time functions). FFI to C libraries then needs a libc-compatible mode. |
+| Link libc on Linux | Easier. Mixing with C libraries is easier. | Inconsistent with macOS and Windows minimal-dependency stance. glibc versioning problems. |
+
+## OQ-015 — Default data layout
+See [design/performance-beyond-c.md §3.1](design/performance-beyond-c.md#31-compiler-chosen-data-layout).
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Compiler-chosen by default, explicit fixed-layout opt-in, always reported (recommended)** | Enables reordering, hot/cold splitting and struct-of-arrays, which C can't do. | Layout isn't obvious from the source (the report is required). FFI types need annotations. |
+| Declaration order (like C) by default, optimisations opt-in | Predictable. Simple FFI. | Leaves performance that C can't reach on the table. |
+
+## OQ-016 — Compressed managed references
+See [design/performance-beyond-c.md §3.2](design/performance-beyond-c.md#32-compressed-managed-references).
+Would refine spec rule `plat.ptr.1`: raw pointers stay 64-bit, managed
+reference representation becomes implementation-defined.
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Allow it (representation implementation-defined; raw pointers stay 64-bit) (recommended)** | Pointer-dense data can shrink by up to half, improving cache use. | Decode cost (one shift and add). A heap size cap per compressed region. More complex FFI. |
+| Always 64-bit references | Simple. Unlimited heap. | Wastes cache in pointer-heavy code. |
+
+## OQ-017 — Whole-program optimisation by default
+| Option | Pros | Cons |
+|---|---|---|
+| **Whole-program in release, incremental in debug, with whole-program facts cached (recommended)** | Maximum optimisation where it matters. Fast edit loop. | Debug and release can behave differently in performance (not semantics). Complex build cache. |
+| Always separate compilation | Simple and fast. | Gives up devirtualisation, specialisation and cross-module constant propagation. |
+| Always whole-program | One mode. | Slow edit loop on large projects. |
+
+## OQ-018 — Which memory-management R&D tracks to pursue
+See [design/performance-beyond-c.md §5](design/performance-beyond-c.md#5-suggested-rd-tracks-for-the-designer-to-approve-or-reject).
+Allocation ladder, task-local heaps, compile-time reuse, region inference.
+
+## OQ-019 — Debug-info formats
+| Option | Pros | Cons |
+|---|---|---|
+| **AIL's own rich format, plus DWARF and PDB emitters (recommended)** | Works with gdb, lldb, WinDbg, Visual Studio, perf and crash reporters, *and* AIL's own debugger and AI API get full information. | Three formats to maintain. |
+| Own format only | Least work. Full control. | No existing debugger, profiler or crash tool can read AIL binaries. Adoption suffers. |
 
 ---
 
