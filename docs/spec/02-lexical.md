@@ -2,9 +2,9 @@
 
 Chapter key: `lex`
 
-> **Status:** Drafted (partial). Only block structure and statement
-> termination are specified. The character set, identifiers, keywords,
-> literals, comments and operators are not yet designed.
+> **Status:** Drafted (partial). Block structure, statement termination and
+> comments are specified. The character set, identifiers, keywords, literals
+> and operators are not yet designed.
 
 ## Blocks
 
@@ -43,3 +43,21 @@ do not open or close blocks. *(ADR 0034)*
 > **Rationale:** semicolons cost up to ~5% more tokens with no semantic
 > benefit once lines and indentation carry structure. See
 > [syntax-measurements-r1.md](../design/syntax-measurements-r1.md).
+
+## Comments
+
+**lex.comment.1** — Outside string and character literals, `#` begins a
+comment that extends to the end of the line. *(ADR 0043)*
+
+**lex.comment.2** — A comment beginning with `##` is a documentation comment.
+It documents the declaration that immediately follows it. *(ADR 0043)*
+
+**lex.comment.3** — There are no block (multi-line delimited) comments.
+*(ADR 0043)*
+
+```ail
+## Returns the area of a circle.
+fn area(r f64) f64
+    # pi is a library constant
+    pi * r * r
+```

@@ -46,3 +46,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0038](0038-immutable-bindings-by-default.md) | Local bindings are immutable by default | Accepted | 2026-10-04 |
 | [0039](0039-declaration-syntax.md) | Declarations: `x := v`, `mut x := v`; reassignment `x = v` | Accepted | 2026-10-04 |
 | [0040](0040-four-space-indentation.md) | Indentation unit is four spaces; no tabs in indentation | Accepted | 2026-10-04 |
+| [0041](0041-square-bracket-generics.md) | Generic arguments use `[ ]`; indexing also uses `[ ]` | Accepted | 2026-10-04 |
+| [0042](0042-fn-keyword.md) | Functions are introduced by `fn` | Accepted | 2026-10-04 |
+| [0043](0043-hash-comments.md) | Comments `#`, doc comments `##`, no block comments | Accepted | 2026-10-04 |
+| [0044](0044-no-shadowing.md) | Names may not shadow other visible local names | Accepted | 2026-10-04 |

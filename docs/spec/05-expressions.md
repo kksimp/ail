@@ -2,8 +2,37 @@
 
 Chapter key: `expr`
 
-> **Status:** Drafted (partial). Only integer arithmetic semantics are
+> **Status:** Drafted (partial). Bindings and integer arithmetic are
 > specified.
+
+## Bindings
+
+**expr.bind.1** — `name := expr` declares an immutable local binding. An
+immutable binding MUST NOT be reassigned. *(ADR 0038, ADR 0039)*
+
+**expr.bind.2** — `mut name := expr` declares a mutable local binding.
+*(ADR 0038, ADR 0039)*
+
+**expr.bind.3** — `name = expr` assigns to an existing mutable binding. Using
+`=` with an undeclared name, or with an immutable binding, is a compile-time
+error. *(ADR 0039)*
+
+**expr.bind.4** — Declaring a local name that is already visible from the same
+or an enclosing local scope of the same function is a compile-time error. This
+applies to variables, parameters, and loop and pattern bindings. *(ADR 0039,
+ADR 0044)*
+
+```ail
+fn total(items List[Item]) i64
+    mut sum := 0
+    for item in items
+        sum = sum + item.price
+    sum
+```
+
+> **Note:** the interaction with module-level, imported and built-in names is
+> open (OQ-028). The `for` syntax in the example is illustrative and not yet
+> decided.
 
 ## Integer arithmetic
 

@@ -50,7 +50,7 @@ defined when the diagnostic format is designed.
 |---|---|---|---|
 | 01 | [Platforms and targets](01-platforms.md) | `plat` | Drafted (partial) |
 | 02 | [Lexical structure](02-lexical.md) | `lex` | Drafted (partial) |
-| 03 | Grammar | `gram` | Not started |
+| 03 | [Grammar](03-grammar.md) | `gram` | Drafted (partial) |
 | 04 | Types | `type` | Not started |
 | 05 | [Expressions and statements](05-expressions.md) | `expr` | Drafted (partial) |
 | 06 | Memory model and allocation | `mem` | Not started |

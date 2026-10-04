@@ -16,13 +16,13 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 |---|---|---|---|---|
 | 1 | Language name | D | — (founding brief: **AIL**, by Voltare, `.ail`, `ail` CLI) | — |
 | 2 | Core syntax | D (partial) + Q | [0011](decisions/0011-ai-familiarity-not-a-constraint.md), [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md), [0037](decisions/0037-signature-syntax.md), [0039](decisions/0039-declaration-syntax.md), [0040](decisions/0040-four-space-indentation.md) | `lex.block.*`, `lex.stmt.*` |
-| 3 | Grammar | D (partial) | [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md) | `lex.*` |
+| 3 | Grammar | D (partial) + Q | [0033](decisions/0033-indentation-blocks.md), [0034](decisions/0034-newline-terminated-statements.md), [0041](decisions/0041-square-bracket-generics.md), [0042](decisions/0042-fn-keyword.md), [0043](decisions/0043-hash-comments.md) | `lex.*`, `gram.*` |
 | 4 | Type system | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md) (64-bit sizes), [0035](decisions/0035-integer-overflow-traps.md) (overflow) | `plat.ptr.*`, `expr.arith.*` |
 | 5 | Memory model | D (partial) + Q | [0007](decisions/0007-64-bit-little-endian-only.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md), [0014](decisions/0014-compressed-managed-references.md) | `plat.endian.1`, `plat.ptr.3` |
 | 6 | GC design | D (direction) + Q | [0012](decisions/0012-memory-rd-tracks.md), [0014](decisions/0014-compressed-managed-references.md) | |
-| 7 | Ownership/lifetime semantics | D (bindings only) + Q | [0038](decisions/0038-immutable-bindings-by-default.md) | |
+| 7 | Ownership/lifetime semantics | D (bindings only) + Q | [0038](decisions/0038-immutable-bindings-by-default.md), [0044](decisions/0044-no-shadowing.md) | `expr.bind.*` |
 | 8 | Error handling | — | | |
-| 9 | Generics | — | | |
+| 9 | Generics | D (syntax only) | [0041](decisions/0041-square-bracket-generics.md) | `gram.generic.1` |
 | 10 | Traits/interfaces | — | | |
 | 11 | Concurrency | D (partial) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md) | `conc.mm.1`, `conc.race.1`, `conc.atomic.*` |
 | 12 | Modules | — | | |
@@ -57,4 +57,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-026).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-028).

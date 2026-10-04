@@ -96,6 +96,17 @@ subset"? To be decided once the type system and syntax are drafted.
 ## OQ-026 — Indentation unit
 **Resolved** by [ADR 0040](decisions/0040-four-space-indentation.md).
 
+## OQ-027 — Attribute and annotation syntax
+`#` is taken by comments ([ADR 0043](decisions/0043-hash-comments.md)).
+Attributes are needed for fixed layout ([ADR 0013](decisions/0013-compiler-chosen-layout.md)),
+inlining hints, FFI and tests. The natural candidate is `@name` (e.g. `@layout(c)`).
+To be asked with the declarations grammar.
+
+## OQ-028 — Local names vs. module-level, imported and built-in names
+[ADR 0044](decisions/0044-no-shadowing.md) forbids local shadowing. Should a
+local binding be allowed to reuse the name of a module-level item, an import,
+or a built-in (e.g. a local `len`)? To be decided with the modules topic.
+
 ---
 
 ### Not yet opened

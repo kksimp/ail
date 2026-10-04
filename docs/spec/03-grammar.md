@@ -1,0 +1,39 @@
+# 03. Grammar
+
+Chapter key: `gram`
+
+> **Status:** Drafted (partial). Only function-declaration shape and generic
+> brackets are specified. The full grammar (in a machine-checkable form, per
+> ADR 0002) will be written as the syntax decisions are completed.
+
+## Function declarations
+
+**gram.fn.1** — A function declaration begins with the keyword `fn`, followed
+by the function name, a parenthesised parameter list, and optionally a return
+type. Its body is the indented block that follows. *(ADR 0042, ADR 0037, ADR 0033)*
+
+**gram.fn.2** — Each parameter is written as a name followed by its type,
+separated by whitespace, with no colon. The return type, if present, follows
+the closing parenthesis, with no arrow. *(ADR 0037)*
+
+```ail
+fn add(a i32, b i32) i32
+    a + b
+```
+
+> **Note:** parameter grouping (`a, b i32`), function types, multiple return
+> values, and named arguments are not yet decided.
+
+## Generic arguments
+
+**gram.generic.1** — Generic type parameters and type arguments are enclosed
+in square brackets `[` `]`. Angle brackets are never used for generics.
+*(ADR 0041)*
+
+```ail
+fn load(path str) Result[Map[str, User], DbError]
+    ...
+```
+
+> **Note:** square brackets also denote indexing. They are told apart by
+> whether the operand is a type or generic function, or a value (ADR 0041).

@@ -41,8 +41,8 @@ measured 20 tokens with `:=`, 22 with `let`/`var`, and 23 with `let`/`let mut`
 - Using `=` on an undeclared name is a compile error. The fix offered is
   "declare with `:=`".
 - Using `:=` on a name already declared in the same scope is a compile error
-  (no silent redeclaration). Whether shadowing in *nested* scopes is allowed is
-  open (see [ai-author-wishlist.md 1.2](../design/ai-author-wishlist.md)).
+  (no silent redeclaration). Shadowing in nested scopes is also forbidden
+  ([ADR 0044](0044-no-shadowing.md)).
 - How to write an explicit type annotation on a declaration needs to be
   designed consistently with [ADR 0037](0037-signature-syntax.md).
 
