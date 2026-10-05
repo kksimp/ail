@@ -1,0 +1,6 @@
+error: ConfigError.Missing(key: "host")
+  context: loading the host
+  context: starting the server
+  at $FILE:7:5
+  at $FILE:11:27
+  at $FILE:16:22

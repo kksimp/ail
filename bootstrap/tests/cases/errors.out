@@ -1,0 +1,8 @@
+7: ok 7
+: ParseError.Empty
+x: ParseError.NotANumber(text: "x")
+500: TooBig(value: 500, limit: 100)
+sum: 6
+sum failed: ParseError.NotANumber(text: "oops")
+0
+0 -1

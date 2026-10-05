@@ -1,0 +1,28 @@
+error enum E
+    Bad
+
+error enum F
+    Worse
+
+fn e() int ! E
+    1
+
+fn f() int ! F
+    2
+
+fn only_e() int ! E
+    x := f()?
+    x
+
+fn plain() int
+    e()?
+
+fn opt() int?
+    5
+
+fn not_optional() int
+    opt()?
+
+fn main()
+    n := 5
+    m := n?

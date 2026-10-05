@@ -7,6 +7,9 @@
 //!   if any of them is an error; with only warnings, it is accepted (exit 0).
 //! - `NAME.ail` + `NAME.trap`: must trap (exit 1) with the rule ID in the
 //!   file, after printing exactly `NAME.out` if that exists.
+//! - `NAME.ail` + `NAME.err`: `main` must fail (exit 1) with exactly this
+//!   error report on stderr, where `$FILE` stands for the program's path,
+//!   after printing exactly `NAME.out` if that exists.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,8 +33,25 @@ fn check_case(path: &Path) -> Result<(), String> {
     let out_file = path.with_extension("out");
     let rules_file = path.with_extension("rules");
     let trap_file = path.with_extension("trap");
+    let err_file = path.with_extension("err");
     let name = path.display();
-    if trap_file.exists() {
+    if err_file.exists() {
+        let out = ail().arg("run").arg(path).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let want = fs::read_to_string(&err_file).unwrap().replace("$FILE", &path.display().to_string());
+        if out.status.code() != Some(1) || stderr != want {
+            return Err(format!(
+                "{name}: expected exit 1 and this report\n--- expected\n{want}--- actual (exit {:?})\n{stderr}",
+                out.status.code()
+            ));
+        }
+        let expected = fs::read_to_string(&out_file).unwrap_or_default();
+        if stdout != expected {
+            return Err(format!("{name}: output differs\n--- expected\n{expected}--- actual\n{stdout}"));
+        }
+        Ok(())
+    } else if trap_file.exists() {
         let out = ail().arg("run").arg(path).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
@@ -73,7 +93,7 @@ fn check_case(path: &Path) -> Result<(), String> {
         }
         Ok(())
     } else {
-        Err(format!("{name}: needs a .out, .rules or .trap file"))
+        Err(format!("{name}: needs a .out, .rules, .trap or .err file"))
     }
 }
 

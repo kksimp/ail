@@ -1,0 +1,11 @@
+enum Shape
+    Circle(r int)
+    Empty
+
+fn main()
+    a := Shape.Circle
+    b := Shape.Empty(r: 1)
+    c := Shape.Circle(r: 1)
+    match c
+        Circle => print("c")
+        Empty(x) => print("e")

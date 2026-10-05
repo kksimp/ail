@@ -7,8 +7,8 @@
 //! `bootstrap.unsupported` with the rule they belong to.
 
 use crate::ast::{
-    Arg, Arm, BinOp, Block, EnumDecl, Expr, Field, FnDecl, InterpPart, Param, Pattern, Program, Receiver, Stmt,
-    StructDecl, TypeRef, UnOp,
+    Arg, Arm, BinOp, Block, Else, EnumDecl, Expr, Field, FnDecl, InterpPart, Param, Pattern, Program, Receiver, Stmt,
+    StructDecl, TypeKind, TypeRef, UnOp, Variant,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED};
@@ -29,7 +29,6 @@ const NOT_YET: &[(&str, &str)] = &[
     ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
     ("as", "ffi.decl.1"),
-    ("none", "type.opt.4"),
 ];
 
 const ASSIGN_OPS: &[(&str, Option<BinOp>)] = &[
@@ -61,17 +60,37 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 }
             }
             Tok::Kw("struct") => {
-                if let Some(s) = p.struct_decl() {
+                if let Some(s) = p.struct_decl(false) {
                     prog.structs.push(s);
                 }
             }
             Tok::Kw("enum") => {
-                if let Some(e) = p.enum_decl() {
+                if let Some(e) = p.enum_decl(false) {
                     prog.enums.push(e);
                 }
             }
+            // `error struct` and `error enum` declare error types (err.decl.1).
+            Tok::Kw("error") => match p.peek_at(1) {
+                Tok::Kw("struct") => {
+                    p.i += 1;
+                    if let Some(s) = p.struct_decl(true) {
+                        prog.structs.push(s);
+                    }
+                }
+                Tok::Kw("enum") => {
+                    p.i += 1;
+                    if let Some(e) = p.enum_decl(true) {
+                        prog.enums.push(e);
+                    }
+                }
+                _ => {
+                    p.i += 1;
+                    p.unexpected("`struct` or `enum` after `error`", "err.decl.1");
+                    p.skip_statement();
+                }
+            },
             _ => {
-                p.unexpected("a declaration (`fn`, `struct` or `enum`)", "gram.syntax.1");
+                p.unexpected("a declaration (`fn`, `struct`, `enum` or `error`)", "gram.syntax.1");
                 p.skip_statement();
             }
         }
@@ -361,16 +380,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) => Some(self.type_ref("a return type", "gram.fn.2")?),
-            Tok::Sym("!") => {
-                let pos = self.pos();
-                self.error(
-                    UNSUPPORTED,
-                    pos,
-                    "error return types are not supported by the bootstrap yet (spec err.type.2)",
-                );
-                return None;
-            }
+            Tok::Ident(_) | Tok::Sym("!") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
@@ -381,8 +391,49 @@ impl Parser {
         Some(FnDecl { owner, name, pos, receiver, params, ret, body })
     }
 
-    /// `Name` or `Name[Arg, ...]` (gram.generic.1).
+    /// A type: `T`, `T?`, `T ! E`, `T ! A | B`, `!T`, or a bare `!`
+    /// (type.opt.2, err.type.1-2, err.type.5).
     fn type_ref(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
+        let pos = self.pos();
+        if self.eat_sym("!") {
+            let ok = match self.peek() {
+                Tok::Ident(_) => Some(Box::new(self.optional_type(expected, rule)?)),
+                _ => None,
+            };
+            return Some(TypeRef { kind: TypeKind::Fallible { ok, errors: None }, pos });
+        }
+        let ok = self.optional_type(expected, rule)?;
+        if !self.eat_sym("!") {
+            return Some(ok);
+        }
+        let mut errors = vec![self.named_type("an error type after `!`", "err.type.1")?];
+        while self.eat_sym("|") {
+            errors.push(self.named_type("an error type after `|`", "err.type.5")?);
+        }
+        Some(TypeRef { kind: TypeKind::Fallible { ok: Some(Box::new(ok)), errors: Some(errors) }, pos })
+    }
+
+    /// `T` or `T?` (type.opt.2).
+    fn optional_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
+        let t = self.named_type(expected, rule)?;
+        if !self.eat_sym("?") {
+            return Some(t);
+        }
+        if self.at_sym("?") {
+            let at = self.pos();
+            self.error(
+                UNSUPPORTED,
+                at,
+                "nested optional types are not supported by the bootstrap yet (spec type.opt.2)",
+            );
+            return None;
+        }
+        let pos = t.pos;
+        Some(TypeRef { kind: TypeKind::Optional(Box::new(t)), pos })
+    }
+
+    /// `Name` or `Name[Arg, ...]` (gram.generic.1).
+    fn named_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
         let (name, pos) = self.name(expected, rule)?;
         let mut args = Vec::new();
         if self.at_sym("<") {
@@ -404,21 +455,28 @@ impl Parser {
             }
             self.expect_sym("]", "`]` after the type arguments", "gram.generic.1")?;
         }
-        if self.at_sym("?") {
+        Some(TypeRef { kind: TypeKind::Named { name, args }, pos })
+    }
+
+    /// `name Type`, a field of a struct or of a variant (type.struct.2, type.enum.2).
+    fn field_decl(&mut self, rule: &'static str) -> Option<Field> {
+        let (fname, fpos) = self.name("a field name", rule)?;
+        if self.at_sym(":") {
             let at = self.pos();
-            self.error(UNSUPPORTED, at, "optional types are not supported by the bootstrap yet (spec type.opt.2)");
-            return None;
+            self.error_help(
+                rule,
+                at,
+                "fields are written `name Type`, without a colon",
+                format!("write `{fname} <Type>`"),
+            );
+            self.i += 1;
         }
-        if self.at_sym("!") {
-            let at = self.pos();
-            self.error(UNSUPPORTED, at, "error types are not supported by the bootstrap yet (spec err.type.1)");
-            return None;
-        }
-        Some(TypeRef { name, args, pos })
+        let ty = self.type_ref("the field's type (written `name Type`)", rule)?;
+        Some(Field { name: fname, pos: fpos, ty })
     }
 
     /// `struct Name` followed by one `name Type` field per line (type.struct.1-2).
-    fn struct_decl(&mut self) -> Option<StructDecl> {
+    fn struct_decl(&mut self, is_error: bool) -> Option<StructDecl> {
         self.bump(); // struct
         let Some((name, pos)) = self.name("a struct name after `struct`", "type.struct.1") else {
             self.skip_statement();
@@ -432,26 +490,14 @@ impl Parser {
         }
         let mut fields = Vec::new();
         self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
-            let (fname, fpos) = p.name("a field name", "type.struct.2")?;
-            if p.at_sym(":") {
-                let at = p.pos();
-                p.error_help(
-                    "type.struct.2",
-                    at,
-                    "fields are written `name Type`, without a colon",
-                    format!("write `{fname} <Type>`"),
-                );
-                p.i += 1;
-            }
-            let ty = p.type_ref("the field's type (written `name Type`)", "type.struct.2")?;
-            fields.push(Field { name: fname, pos: fpos, ty });
+            fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
-        Some(StructDecl { name, pos, fields })
+        Some(StructDecl { name, pos, is_error, fields })
     }
 
-    /// `enum Name` followed by one variant per line (type.enum.1).
-    fn enum_decl(&mut self) -> Option<EnumDecl> {
+    /// `enum Name` followed by one variant per line (type.enum.1-2).
+    fn enum_decl(&mut self, is_error: bool) -> Option<EnumDecl> {
         self.bump(); // enum
         let Some((name, pos)) = self.name("an enum name after `enum`", "type.enum.1") else {
             self.skip_statement();
@@ -459,20 +505,21 @@ impl Parser {
         };
         let mut variants = Vec::new();
         self.members(&format!("`enum {name}`"), "type.enum.1", |p| {
-            let v = p.name("a variant name", "type.enum.1")?;
-            if p.at_sym("(") {
-                let at = p.pos();
-                p.error(
-                    UNSUPPORTED,
-                    at,
-                    "variants carrying data are not supported by the bootstrap yet (spec type.enum.2)",
-                );
-                return None;
+            let (vname, vpos) = p.name("a variant name", "type.enum.1")?;
+            let mut fields = Vec::new();
+            if p.eat_sym("(") {
+                while !p.at_sym(")") {
+                    fields.push(p.field_decl("type.enum.2")?);
+                    if !p.eat_sym(",") {
+                        break;
+                    }
+                }
+                p.expect_sym(")", "`)` or `,` in the variant's fields", "type.enum.2")?;
             }
-            variants.push(v);
+            variants.push(Variant { name: vname, pos: vpos, fields });
             Some(())
         });
-        Some(EnumDecl { name, pos, variants })
+        Some(EnumDecl { name, pos, is_error, variants })
     }
 
     /// An indented block of one-line members, each parsed by `member`.
@@ -548,12 +595,14 @@ impl Parser {
                 let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
                 self.expect_sym(":=", "`:=` after the name", "expr.bind.2")?;
                 let value = self.expression()?;
-                Some(Stmt::Let { name, pos, mutable: true, value })
+                let otherwise = self.otherwise()?;
+                Some(Stmt::Let { name, pos, mutable: true, value, otherwise })
             }
             Tok::Ident(name) if matches!(self.peek_at(1), Tok::Sym(":=")) => {
                 self.i += 2;
                 let value = self.expression()?;
-                Some(Stmt::Let { name, pos, mutable: false, value })
+                let otherwise = self.otherwise()?;
+                Some(Stmt::Let { name, pos, mutable: false, value, otherwise })
             }
             Tok::Ident(word)
                 if ["let", "var", "const"].contains(&word.as_str()) && matches!(self.peek_at(1), Tok::Ident(_)) =>
@@ -574,6 +623,7 @@ impl Parser {
             }
             Tok::Kw("for") => {
                 self.bump();
+                let mutable = self.eat_kw("mut");
                 let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
                 if !self.eat_kw("in") {
                     self.unexpected("`in` after the loop variable", "expr.loop.1");
@@ -581,7 +631,7 @@ impl Parser {
                 }
                 let iter = self.range()?;
                 let body = self.block("the `for` header", "expr.loop.1")?;
-                Some(Stmt::For { var, var_pos, iter, body, pos })
+                Some(Stmt::For { var, var_pos, mutable, iter, body, pos })
             }
             Tok::Kw("break") => {
                 self.bump();
@@ -634,6 +684,26 @@ impl Parser {
                 Some(Stmt::Expr(target))
             }
         }
+    }
+
+    /// The `else` part of a binding, if any (err.else.1-3). The outer `None`
+    /// means a syntax error was reported.
+    fn otherwise(&mut self) -> Option<Option<Else>> {
+        if !self.at_kw("else") {
+            return Some(None);
+        }
+        let pos = self.bump().pos;
+        let part = match self.peek().clone() {
+            Tok::Newline => Else::Block { err: None, body: self.block("`else`", "err.else.2")?, pos },
+            Tok::Ident(name) if matches!(self.peek_at(1), Tok::Newline) && matches!(self.peek_at(2), Tok::Indent) => {
+                let at = self.bump().pos;
+                let body = self.block(&format!("`else {name}`"), "err.else.3")?;
+                Else::Block { err: Some((name, at)), body, pos }
+            }
+            Tok::Kw("return" | "break" | "continue") => Else::Leave(Box::new(self.statement_inner()?)),
+            _ => Else::Value(self.expression()?),
+        };
+        Some(Some(part))
     }
 
     // ---- Expressions, loosest binding first (expr.prec.1) ----
@@ -790,9 +860,13 @@ impl Parser {
                 self.expect_sym("]", "`]` after the index", "type.coll.4")?;
                 expr = Expr::Index { recv: Box::new(expr), index: Box::new(index), pos };
             } else if self.at_sym("?") {
-                let pos = self.pos();
-                self.error(UNSUPPORTED, pos, "`?` is not supported by the bootstrap yet (spec err.prop.1)");
-                return None;
+                // `e?` propagates; `e? "message"` also adds context (err.prop.1, err.ctx.2).
+                let pos = self.bump().pos;
+                let context = match self.peek() {
+                    Tok::Str(_) | Tok::Interp(_) => Some(Box::new(self.primary()?)),
+                    _ => None,
+                };
+                expr = Expr::Try { expr: Box::new(expr), context, pos };
             } else {
                 return Some(expr);
             }
@@ -843,6 +917,10 @@ impl Parser {
             Tok::Kw("false") => {
                 self.i += 1;
                 Some(Expr::Bool(false, pos))
+            }
+            Tok::Kw("none") => {
+                self.i += 1;
+                Some(Expr::None(pos))
             }
             Tok::Kw("self") => {
                 self.i += 1;
@@ -1017,16 +1095,20 @@ impl Parser {
                 } else {
                     (None, n)
                 };
-                if self.at_sym("(") {
-                    let at = self.pos();
-                    self.error(
-                        UNSUPPORTED,
-                        at,
-                        "patterns with data are not supported by the bootstrap yet (spec type.enum.2)",
-                    );
-                    return None;
+                // `Variant(a, _)`: one binding per field (expr.match.6).
+                let mut bindings = None;
+                if self.eat_sym("(") {
+                    let mut names = Vec::new();
+                    while !self.at_sym(")") {
+                        names.push(self.name("a name or `_` for the field", "expr.match.6")?);
+                        if !self.eat_sym(",") {
+                            break;
+                        }
+                    }
+                    self.expect_sym(")", "`)` or `,` in the pattern", "expr.match.6")?;
+                    bindings = Some(names);
                 }
-                Some(Pattern::Variant { qualifier, name, pos })
+                Some(Pattern::Variant { qualifier, name, bindings, pos })
             }
             Tok::Int(_) | Tok::Str(_) | Tok::Kw("true" | "false") | Tok::Sym("-") => {
                 self.error(
@@ -1077,7 +1159,7 @@ mod tests {
         assert!(rules.is_empty(), "{rules:?}");
         let f = &prog.fns[0];
         assert_eq!(f.params.len(), 1);
-        assert_eq!(f.ret.as_ref().map(|t| t.name.as_str()), Some("str"));
+        assert!(matches!(&f.ret.as_ref().unwrap().kind, TypeKind::Named { name, .. } if name == "str"));
         assert!(matches!(f.body[0], Stmt::Let { .. }));
     }
 

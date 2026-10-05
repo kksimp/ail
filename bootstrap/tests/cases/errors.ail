@@ -1,0 +1,48 @@
+error enum ParseError
+    Empty
+    NotANumber(text str)
+
+error struct TooBig
+    value int
+    limit int
+
+fn parse_num(s str) int ! ParseError
+    if s == ""
+        return Empty
+    n := s.to_int() else return NotANumber(text: s)
+    n
+
+fn checked(s str, limit int) int ! ParseError | TooBig
+    n := parse_num(s)?
+    if n > limit
+        return TooBig(value: n, limit: limit)
+    n
+
+fn sum(items List[str]) !int
+    mut total := 0
+    for s in items
+        total += checked(s, 100)? "item {s}"
+    total
+
+fn countdown(n int) !int
+    if n < 0
+        return ParseError.NotANumber(text: "{n}")
+    if n == 0
+        return 0
+    countdown(n - 1)?
+
+fn main()
+    for s in ["7", "", "x", "500"]
+        n := checked(s, 100) else err
+            print("{s}: {err}")
+            continue
+        print("{s}: ok {n}")
+    total := sum(["1", "2", "3"]) else -1
+    print("sum: {total}")
+    bad := sum(["1", "oops"]) else err
+        print("sum failed: {err}")
+        0
+    print(bad)
+    c := countdown(3) else -1
+    d := countdown(-1) else -1
+    print("{c} {d}")

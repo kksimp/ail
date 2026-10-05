@@ -1,0 +1,17 @@
+error enum ConfigError
+    Missing(key str)
+
+fn lookup(key str) str ! ConfigError
+    if key == "port"
+        return "8080"
+    Missing(key: key)
+
+fn load() !str
+    port := lookup("port")?
+    host := lookup("host")? "loading the host"
+    "{host}:{port}"
+
+fn main() !
+    print("starting")
+    address := load()? "starting the server"
+    print(address)

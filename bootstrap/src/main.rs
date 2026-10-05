@@ -72,15 +72,21 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    let file = path.to_string();
     let result = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
-        .spawn(move || interp::run(&program, &resolved).map_err(|t| t.to_string()))
+        .spawn(move || {
+            interp::run(&program, &resolved).map_err(|stop| match stop {
+                interp::Stop::Trap(t) => format!("{file}:{t}"),
+                interp::Stop::Failed(report) => report.render(&file),
+            })
+        })
         .expect("spawn interpreter thread")
         .join();
     match result {
         Ok(Ok(())) => ExitCode::SUCCESS,
-        Ok(Err(trap)) => {
-            eprintln!("{path}:{trap}");
+        Ok(Err(message)) => {
+            eprintln!("{message}");
             ExitCode::from(1)
         }
         Err(_) => {

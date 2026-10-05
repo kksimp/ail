@@ -1,0 +1,40 @@
+struct Item
+    name str
+    qty int
+
+struct Store
+    name str
+    items List[Item]
+
+fn restock(mut items List[Item], min int) int
+    mut added := 0
+    for mut item in items
+        if item.qty < min
+            added += min - item.qty
+            item.qty = min
+    added
+
+fn first_empty(mut items List[Item]) str
+    for mut item in items
+        if item.qty == 0
+            item.qty = 1
+            return item.name
+    "none"
+
+fn main()
+    mut store := Store(name: "corner", items: [
+        Item(name: "tea", qty: 0),
+        Item(name: "milk", qty: 5),
+        Item(name: "jam", qty: 0),
+    ])
+    print(first_empty(mut store.items))
+    added := restock(mut store.items, 3)
+    for mut item in store.items
+        if item.name == "milk"
+            break
+        item.qty *= 10
+    mut doubled := [1, 2, 3]
+    for mut n in doubled
+        n *= 2
+    print("{added} {store.items[0].qty} {store.items[1].qty} {store.items[2].qty} {store.name}")
+    print("{doubled[0]} {doubled[1]} {doubled[2]}")
