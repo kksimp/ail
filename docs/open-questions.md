@@ -104,8 +104,18 @@ subset"? To be decided once the type system and syntax are drafted.
 **Partly resolved:** fallbacks and early exit ([ADR 0049](decisions/0049-else-for-fallback-and-early-exit.md)),
 context ([ADR 0050](decisions/0050-error-return-traces.md)), and `?` on optionals
 ([ADR 0051](decisions/0051-no-implicit-optional-to-error.md)).
-**Still open:** safe member access (`a?.b`) and matching on specific errors.
-Both depend on the `match` design.
+**Still open:** safe member access (`a?.b`), matching on specific errors, and
+handling success *or* failure as a statement, without a fallback value.
+**Evidence** ([design/program-measurements-r1.md](design/program-measurements-r1.md),
+round 2): both agents writing a config parser needed a helper function to
+print either the result or the error, because `else` must supply a value or
+leave. One agent's first attempt ended `main` early by mistake.
+**Options:**
+- `match` on a result, with success and error arms;
+- `else` on an expression statement (`save() else err` followed by a block);
+- a binding condition (`if cfg := parse(lines)`).
+
+To be decided with error matching, measured on these programs.
 
 ## OQ-030 — What is an error type?
 **Partly resolved:** error types are declared with `error`
