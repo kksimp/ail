@@ -152,6 +152,8 @@ fn main() !                                 # main can fail; the error is report
 - `if x := e` also works on optionals (`else` without a name), and in `elif`.
   On a result that can fail, it needs an `else`.
 - `?` on an optional works only in a function that returns an optional.
+- `print` of a `T?` shows the value, or `none`. A value is returned as a
+  `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
 
 ## Traits and generics
@@ -161,13 +163,30 @@ trait Shape
     fn area(self) int
     fn name(self) str                # a default; an `impl` may replace it
         "shape"
+    fn describe(self) str            # defaults call other methods on `self`
+        "{self.name()}: {self.area()}"
 
 struct Circle
     r int
 
+struct Square
+    side int
+
 impl Shape for Circle                # defines every method without a default
     fn area(self) int
         3 * self.r * self.r
+
+impl Shape for Square
+    fn area(self) int
+        self.side * self.side
+    fn name(self) str
+        "square"
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version                 # no methods: compares major, then minor
 
 fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
     mut best := items[0]
@@ -175,6 +194,11 @@ fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
         if x > best
             best = x
     best
+
+fn first[T](xs List[T]) T?
+    if xs.len() == 0
+        return none
+    xs[0]
 
 fn bigger(a Shape, b Shape) bool     # a trait as a parameter type
     a.area() > b.area()
@@ -193,19 +217,23 @@ struct Scene
 
 fn main()
     c := Circle(r: 2)
-    print(c.name())                  # shape
+    print(c.describe())              # shape: 12
     print(largest([3, 9, 4]))        # type arguments are inferred...
-    mut s := Stack[int].new()        # ...or written when nothing gives them
+    print(first[int]([]))            # ...or written when nothing gives them
+    mut s := Stack[int].new()
     s.push(1)
-    scene := Scene(shapes: [c, Circle(r: 1)])
-    print(bigger(c, Circle(r: 1)))
+    scene := Scene(shapes: [c, Square(side: 3)])
+    for sh in scene.shapes
+        print(sh.describe())
+    print(Version(major: 1, minor: 9) < Version(major: 2, minor: 0))
+    print(bigger(c, Square(side: 1)))
     print(Shape.area(c))             # the qualified form of `c.area()`
 ```
 
 - `<`, `<=`, `>`, `>=` work on `int`, `str`, lists, and types with
-  `impl Ord for T`. An empty `impl Ord for Version` compares the fields in
-  order. Or write `fn cmp(self, other Self) Ordering`, returning `Less`,
-  `Equal` or `Greater`.
+  `impl Ord for T`, which compares the fields in order, or uses your
+  `fn cmp(self, other Self) Ordering` (returning `Less`, `Equal` or
+  `Greater`).
 - To customise: `impl ToStr for Color` with `fn to_str(self) str`, or
   `impl Eq for T` with `fn eq(self, other Self) bool`.
 - To constrain one method of a generic type: `fn Stack[T Ord].max(self) T?`.
