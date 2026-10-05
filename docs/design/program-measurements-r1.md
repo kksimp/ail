@@ -121,6 +121,19 @@ total with context that ends `main` with an error report.
   else handles success or failure as a statement. This is now part of
   [OQ-029](../open-questions.md).
 
+## Round 3: after the fix (ADR 0125)
+
+The config-parser task was repeated with fresh agents. This time `main` had
+to make four separate `parse` calls, the case that needed a helper before.
+The quick reference now shows `if x := e` … `else err`.
+
+| Task | Small model | Mid-size model |
+|---|---|---|
+| Config parser, four calls in `main` | 1 attempt | 1 attempt |
+
+Both first attempts printed exactly the right output. Both used
+`if cfg := parse(...)` … `else err` four times, with no helper function.
+
 ## Follow-ups
 
 - Quick reference: the gaps above are now covered.
@@ -128,4 +141,5 @@ total with context that ends `main` with an error report.
   suggest assigning with `=` (with milestone 3).
 - [OQ-038](../open-questions.md): in-place iteration over list elements
   (resolved by ADR 0121).
-- [OQ-029](../open-questions.md): handling success or failure as a statement.
+- [OQ-029](../open-questions.md): handling success or failure as a statement
+  (resolved by ADR 0125, confirmed in round 3).
