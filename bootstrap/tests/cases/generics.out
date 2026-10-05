@@ -1,0 +1,10 @@
+3 5 7
+none
+bo
+Pair(first: "one", second: 1)
+Pair(first: true, second: "one")
+[1, 2, 3, 5, 8, 9]
+["apple", "fig", "pear"]
+10
+none
+Stack(items: [3, 7, 5])

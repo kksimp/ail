@@ -1,0 +1,8 @@
+circle with area 12
+rectangle with area 12
+square with area 16
+biggest: Size(area: 16, name: "square")
+9
+pear
+true
+Circle(r: 2)

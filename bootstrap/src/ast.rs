@@ -4,9 +4,49 @@ use crate::diag::Pos;
 
 #[derive(Debug, Default)]
 pub struct Program {
+    /// Every function: free functions, methods, and the functions of
+    /// `trait` and `impl` blocks (see `FnDecl::within`).
     pub fns: Vec<FnDecl>,
     pub structs: Vec<StructDecl>,
     pub enums: Vec<EnumDecl>,
+    pub traits: Vec<TraitDecl>,
+    pub impls: Vec<ImplDecl>,
+}
+
+/// Declarations of the prelude (the standard traits and `Ordering`) are at
+/// line 0, before the program's own.
+pub fn is_prelude(pos: Pos) -> bool {
+    pos.line == 0
+}
+
+/// `T`, or `T Bound + Bound`, in a generic parameter list (gen.decl.1, gen.bound.1).
+#[derive(Debug, Clone)]
+pub struct GenericParam {
+    pub name: String,
+    pub pos: Pos,
+    pub bounds: Vec<(String, Pos)>,
+}
+
+/// `trait Name` with an indented block of functions (trait.decl.1-2).
+#[derive(Debug)]
+pub struct TraitDecl {
+    pub name: String,
+    pub pos: Pos,
+    /// Indexes into `Program::fns`.
+    pub methods: Vec<usize>,
+}
+
+/// `impl Trait for Type`, optionally with an indented block of functions
+/// (trait.impl.1). The target may list its parameters to add bounds
+/// (gen.method.2).
+#[derive(Debug)]
+pub struct ImplDecl {
+    pub trait_name: String,
+    pub trait_pos: Pos,
+    pub target: Owner,
+    pub pos: Pos,
+    /// Indexes into `Program::fns`.
+    pub methods: Vec<usize>,
 }
 
 /// `struct Name` with one `name Type` field per line (type.struct.1-2), or
@@ -16,6 +56,7 @@ pub struct StructDecl {
     pub name: String,
     pub pos: Pos,
     pub is_error: bool,
+    pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
 }
 
@@ -33,6 +74,7 @@ pub struct EnumDecl {
     pub name: String,
     pub pos: Pos,
     pub is_error: bool,
+    pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
 }
 
@@ -45,25 +87,55 @@ pub struct Variant {
 }
 
 /// `fn name(...)`, or `fn Type.name(...)` for a method or associated
-/// function (trait.method.1, trait.method.4).
+/// function (trait.method.1, trait.method.4). Functions in `trait` and `impl`
+/// blocks have the trait or the implementing type as their owner.
 #[derive(Debug)]
 pub struct FnDecl {
-    pub owner: Option<(String, Pos)>,
+    pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
+    /// The function's own type parameters (gen.decl.1, gen.method.3).
+    pub generics: Vec<GenericParam>,
     pub receiver: Option<Receiver>,
     pub params: Vec<Param>,
     pub ret: Option<TypeRef>,
-    pub body: Block,
+    /// `None` only for a trait method without a default (trait.decl.2).
+    pub body: Option<Block>,
+    pub within: Within,
+}
+
+/// Where a function is declared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Within {
+    /// At the top level: a free function, method or associated function.
+    TopLevel,
+    /// In `trait` block number `n`.
+    Trait(usize),
+    /// In `impl` block number `n`.
+    Impl(usize),
+}
+
+/// The type a method belongs to: `Stack`, or `Stack[T Ord]` to add bounds
+/// (gen.method.1-2). For a trait's functions, the trait.
+#[derive(Debug, Clone)]
+pub struct Owner {
+    pub name: String,
+    pub pos: Pos,
+    pub params: Option<Vec<GenericParam>>,
 }
 
 impl FnDecl {
     /// `name` or `Type.name`, as written in diagnostics.
     pub fn full_name(&self) -> String {
         match &self.owner {
-            Some((owner, _)) => format!("{owner}.{}", self.name),
+            Some(owner) => format!("{}.{}", owner.name, self.name),
             None => self.name.clone(),
         }
+    }
+
+    /// A free function, method or associated function declared at the top level.
+    pub fn top_level(&self) -> bool {
+        self.within == Within::TopLevel
     }
 }
 
@@ -98,6 +170,8 @@ pub enum TypeKind {
     /// `T ! E`, `T ! A | B`, `!T`, or a bare `!`. `ok` is `None` when there is
     /// no success value; `errors` is `None` when the set is inferred.
     Fallible { ok: Option<Box<TypeRef>>, errors: Option<Vec<TypeRef>> },
+    /// `any Trait` (trait.any.1)
+    Any(String),
 }
 
 pub type Block = Vec<Stmt>;
@@ -220,6 +294,13 @@ pub enum Expr {
     None(Pos),
     /// A name, including `self` and bare enum variants (type.enum.3).
     Name(String, Pos),
+    /// A generic function or type with explicit type arguments, `f[int]` or
+    /// `Stack[int]` (gen.infer.2). Only a callee or a method's receiver.
+    TypeArgs {
+        name: String,
+        args: Vec<TypeRef>,
+        pos: Pos,
+    },
     /// `[a, b, c]` (type.coll.2)
     List(Vec<Expr>, Pos),
     /// `f(args)`, including struct literals `Type(field: value)` (type.struct.3).
@@ -298,6 +379,7 @@ impl Expr {
             | Expr::Bool(_, p)
             | Expr::None(p)
             | Expr::Name(_, p)
+            | Expr::TypeArgs { pos: p, .. }
             | Expr::List(_, p)
             | Expr::Unary { pos: p, .. }
             | Expr::If { pos: p, .. }

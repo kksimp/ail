@@ -55,7 +55,7 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
     };
 
     let (tokens, mut diags) = lexer::lex(&src);
-    let (program, parse_diags) = parser::parse(tokens);
+    let (program, parse_diags) = parser::parse_with_prelude(tokens);
     diags.extend(parse_diags);
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {

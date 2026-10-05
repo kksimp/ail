@@ -1,0 +1,16 @@
+## The standard traits and `Ordering` (ADR 0127). The bootstrap reads this
+## before every program, at line 0, so its declarations are built in.
+
+enum Ordering
+    Less
+    Equal
+    Greater
+
+trait Eq
+    fn eq(self, other Self) bool
+
+trait Ord
+    fn cmp(self, other Self) Ordering
+
+trait ToStr
+    fn to_str(self) str

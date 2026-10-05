@@ -1,0 +1,99 @@
+# `==`, ordering and text forms (trait.std.1-4, trait.derive.1, trait.auto.1-3, expr.cmp.1).
+enum Dir
+    North
+    East
+    South
+    West
+
+impl ToStr for Dir
+    fn to_str(self) str
+        match self
+            North => "N"
+            East => "E"
+            South => "S"
+            West => "W"
+
+struct Move
+    dir Dir
+    steps int
+
+struct Point
+    x int
+    y int
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version
+
+enum Level
+    Low
+    High
+
+impl Ord for Level
+
+struct Name
+    text str
+    id int
+
+impl Eq for Name
+    fn eq(self, other Self) bool
+        self.text == other.text
+
+struct Money
+    cents int
+
+impl Ord for Money
+    fn cmp(self, other Self) Ordering
+        other.cents.cmp(self.cents)
+
+fn largest[T Ord](items List[T]) T
+    mut best := items[0]
+    for x in items
+        if x > best
+            best = x
+    best
+
+fn count[T Eq](items List[T], x T) int
+    mut n := 0
+    for y in items
+        if y == x
+            n += 1
+    n
+
+fn find(xs List[int], x int) int?
+    for i in 0..xs.len()
+        if xs[i] == x
+            return i
+    none
+
+fn main()
+    d := Dir.East
+    print(d == East)
+    print(d != West)
+    print("{d} {[Dir.North, South]}")
+    print(Move(dir: West, steps: 3))
+    p := Point(x: 1, y: 2)
+    print(p == Point(x: 1, y: 2))
+    print(p == Point(x: 2, y: 1))
+    print(Version(major: 1, minor: 9) < Version(major: 2, minor: 0))
+    print(largest([Version(major: 1, minor: 2), Version(major: 1, minor: 10), Version(major: 0, minor: 99)]))
+    print(largest(["pear", "apple", "zoo"]))
+    print(largest([3, 9, 4]))
+    print(Level.Low < High)
+    print(largest([[1, 2], [1, 3], [0, 9]]))
+    print(Name(text: "ab", id: 1) == Name(text: "ab", id: 2))
+    print(count([Name(text: "x", id: 1), Name(text: "y", id: 2), Name(text: "x", id: 3)], Name(text: "x", id: 0)))
+    print(largest([Money(cents: 5), Money(cents: 1), Money(cents: 9)]))
+    n := 1
+    print(n.cmp(2))
+    print("b".cmp("a"))
+    match Version(major: 1, minor: 0).cmp(Version(major: 1, minor: 0))
+        Less => print("less")
+        Equal => print("equal")
+        Greater => print("greater")
+    print(find([4, 5], 6) == none)
+    print(find([4, 5], 5) == 1)
+    print([d, North] == [East, North])
+    print(Ordering.Less)

@@ -4,17 +4,22 @@
 //! until one copy is mutated (own.val.2). Traps: expr.arith.1, expr.arith.3,
 //! type.coll.4, type.str.4, own.excl.3, err.trap.1. Failures carry context
 //! and a return trace (err.ctx.1-3), and end the program from `main`
-//! (mod.main.2).
+//! (mod.main.2). Generic code runs on the values it is given (gen.impl.1);
+//! trait methods dispatch on the value's type (trait.any.1), and `==`, `<`
+//! and text forms use a type's `impl` or the built-in structural forms
+//! (trait.std.1-4, trait.auto.1-2, trait.derive.1).
 
 use std::collections::HashMap;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
 use std::rc::Rc;
 
+use std::cmp::Ordering;
+
 use crate::ast::{
     Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Pattern, Program, Stmt, TypeKind, UnOp, place_path,
 };
-use crate::check::Resolved;
+use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
 
 #[derive(Clone, Debug)]
@@ -152,10 +157,10 @@ enum Step {
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let mut fns = HashMap::new();
     let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::new();
-    for f in &prog.fns {
+    for f in prog.fns.iter().filter(|f| f.top_level()) {
         match &f.owner {
-            Some((owner, _)) => {
-                methods.entry(owner.as_str()).or_default().insert(f.name.as_str(), f);
+            Some(owner) => {
+                methods.entry(owner.name.as_str()).or_default().insert(f.name.as_str(), f);
             }
             None => {
                 fns.insert(f.name.as_str(), f);
@@ -178,14 +183,16 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     };
     let main = it.fns["main"];
     let (result, _) = it.call(main, None, Vec::new(), main.pos)?;
+    let report = match result {
+        Value::Fail(f) => {
+            Some(Report { error: it.text(&f.error, main.pos)?, context: f.context.clone(), trace: f.trace.clone() })
+        }
+        _ => None,
+    };
     it.flush(main.pos)?;
-    match result {
-        Value::Fail(f) => Err(Stop::Failed(Report {
-            error: it.describe(&f.error),
-            context: f.context.clone(),
-            trace: f.trace.clone(),
-        })),
-        _ => Ok(()),
+    match report {
+        Some(r) => Err(Stop::Failed(r)),
+        None => Ok(()),
     }
 }
 
@@ -204,6 +211,16 @@ struct Interp<'a, W: Write> {
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
     env.iter().rev().find(|(n, _)| *n == name).map(|(_, v)| v)
+}
+
+/// The type or trait an expression names, when it isn't a value: `Shape`
+/// in `Shape.Circle(r: 1)`, or `Stack` in `Stack[int].new()`.
+fn type_head<'e>(e: &'e Expr, env: &Env<'_>) -> Option<&'e str> {
+    match e {
+        Expr::Name(n, _) if lookup(env, n).is_none() => Some(n),
+        Expr::TypeArgs { name, .. } => Some(name),
+        _ => None,
+    }
 }
 
 fn element(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
@@ -323,8 +340,9 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         env.extend(f.params.iter().map(|p| p.name.as_str()).zip(args));
         let n = env.len();
-        let end = f.body.last().map_or(f.pos, Stmt::pos);
-        let (mut result, at) = match self.block(&f.body, &mut env) {
+        let body = f.body.as_ref().expect("checked: the function has a body");
+        let end = body.last().map_or(f.pos, Stmt::pos);
+        let (mut result, at) = match self.block(body, &mut env) {
             Ok(v) => (v, end),
             Err(Exit::Return(v, at)) => (v, at),
             Err(Exit::Trap(t)) => return Err(t),
@@ -553,7 +571,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         InterpPart::Lit(text) => s.push_str(text),
                         InterpPart::Expr(x) => {
                             let v = self.eval(x, env)?;
-                            s.push_str(&self.text(&v));
+                            s.push_str(&self.text(&v, x.pos())?);
                         }
                     }
                 }
@@ -575,11 +593,10 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Expr::Call { callee, args, pos } => self.call_expr(callee, args, *pos, env)?,
             Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env)?,
+            Expr::TypeArgs { .. } => unreachable!("checked: type arguments only on a callee or receiver"),
             Expr::Field { recv, name, .. } => {
-                if let Expr::Name(tn, _) = &**recv
-                    && lookup(env, tn).is_none()
-                {
-                    let e = self.enums[tn.as_str()];
+                if let Some(tn) = type_head(recv, env) {
+                    let e = self.enums[tn];
                     let v = self.variant_index(e, name);
                     return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
                 }
@@ -718,14 +735,125 @@ impl<'a, W: Write> Interp<'a, W> {
                 BinOp::Ge => a >= b,
                 _ => unreachable!("arithmetic handled above"),
             }),
-            (Value::Str(a), Value::Str(b)) => Value::Bool((a == b) == (op == BinOp::Eq)),
-            (Value::Bool(a), Value::Bool(b)) => Value::Bool((a == b) == (op == BinOp::Eq)),
-            (l, r) => unreachable!("checked: `{l:?} {sym} {r:?}`"),
+            (l, r) => match op {
+                BinOp::Eq => Value::Bool(self.equal(&l, &r, pos)?),
+                BinOp::Ne => Value::Bool(!self.equal(&l, &r, pos)?),
+                _ => {
+                    let o = self.compare(&l, &r, pos)?;
+                    Value::Bool(match op {
+                        BinOp::Lt => o.is_lt(),
+                        BinOp::Le => o.is_le(),
+                        BinOp::Gt => o.is_gt(),
+                        _ => o.is_ge(),
+                    })
+                }
+            },
         })
     }
 
+    /// The function implementing trait `tr`'s method `name` for `v`: from
+    /// its type's `impl` block, or else the trait's default. `None` means the
+    /// built-in implementation of a standard trait (trait.auto.1-2,
+    /// trait.derive.1).
+    fn dispatch(&self, tr: usize, name: &str, v: &Value) -> Option<&'a FnDecl> {
+        let prog = self.prog;
+        let con = match v {
+            Value::Int(_) => Some(Con::Int),
+            Value::Str(_) => Some(Con::Str),
+            Value::Bool(_) => Some(Con::Bool),
+            Value::List(_) => Some(Con::List),
+            Value::Struct(s, _) => Some(Con::Struct(*s)),
+            Value::Enum(e, _, _) => Some(Con::Enum(*e)),
+            _ => None,
+        };
+        if let Some(con) = con
+            && let Some(&i) = self.resolved.impls.get(&(tr, con))
+            && let Some(&m) = prog.impls[i].methods.iter().find(|&&m| prog.fns[m].name == name)
+        {
+            return Some(&prog.fns[m]);
+        }
+        let m = prog.traits[tr].methods.iter().copied().find(|&m| prog.fns[m].name == name)?;
+        prog.fns[m].body.is_some().then(|| &prog.fns[m])
+    }
+
+    /// `a == b` (trait.std.1): the type's `eq`, or structural equality (trait.auto.1).
+    fn equal(&mut self, a: &Value, b: &Value, pos: Pos) -> Result<bool, Trap> {
+        if let Some(f) = self.dispatch(self.resolved.std.eq, "eq", a) {
+            let (r, _) = self.call(f, Some(a.clone()), vec![b.clone()], pos)?;
+            return Ok(r.bool());
+        }
+        Ok(match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Bool(x), Value::Bool(y)) => x == y,
+            (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::None, Value::None) => true,
+            (Value::None, _) | (_, Value::None) => false,
+            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
+                self.all_equal(x, y, pos)?
+            }
+            (Value::Enum(e, v, x), Value::Enum(f, w, y)) => e == f && v == w && self.all_equal(x, y, pos)?,
+            (x, y) => unreachable!("checked: comparing {x:?} and {y:?}"),
+        })
+    }
+
+    fn all_equal(&mut self, x: &[Value], y: &[Value], pos: Pos) -> Result<bool, Trap> {
+        if x.len() != y.len() {
+            return Ok(false);
+        }
+        for (p, q) in x.iter().zip(y) {
+            if !self.equal(p, q, pos)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    /// `a.cmp(b)` (trait.std.2): the type's `cmp`, or the built-in order
+    /// (trait.std.4, trait.derive.1).
+    fn compare(&mut self, a: &Value, b: &Value, pos: Pos) -> Result<Ordering, Trap> {
+        if let Some(f) = self.dispatch(self.resolved.std.ord, "cmp", a) {
+            let (r, _) = self.call(f, Some(a.clone()), vec![b.clone()], pos)?;
+            let Value::Enum(_, v, _) = r else { unreachable!("checked: `cmp` returns an `Ordering`") };
+            return Ok([Ordering::Less, Ordering::Equal, Ordering::Greater][v]);
+        }
+        Ok(match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
+            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
+                self.lexicographic(x, y, pos)?
+            }
+            (Value::Enum(_, v, x), Value::Enum(_, w, y)) => match v.cmp(w) {
+                Ordering::Equal => self.lexicographic(x, y, pos)?,
+                o => o,
+            },
+            (x, y) => unreachable!("checked: ordering {x:?} and {y:?}"),
+        })
+    }
+
+    fn lexicographic(&mut self, x: &[Value], y: &[Value], pos: Pos) -> Result<Ordering, Trap> {
+        for (p, q) in x.iter().zip(y) {
+            match self.compare(p, q, pos)? {
+                Ordering::Equal => {}
+                o => return Ok(o),
+            }
+        }
+        Ok(x.len().cmp(&y.len()))
+    }
+
+    fn ordering_value(&self, o: Ordering) -> Value {
+        let v = match o {
+            Ordering::Less => 0,
+            Ordering::Equal => 1,
+            Ordering::Greater => 2,
+        };
+        Value::Enum(self.resolved.std.ordering, v, Rc::new(Vec::new()))
+    }
+
     fn call_expr(&mut self, callee: &'a Expr, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
-        let Expr::Name(n, _) = callee else { unreachable!("checked: named callee") };
+        let n = match callee {
+            Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } => n,
+            _ => unreachable!("checked: named callee"),
+        };
         if n == "print" {
             let v = self.eval(&args[0].value, env)?;
             self.print(&v, pos)?;
@@ -767,48 +895,68 @@ impl<'a, W: Write> Interp<'a, W> {
         }
     }
 
-    /// Text form, as used by `print` and interpolation (type.str.3, err.text.1).
-    fn text(&self, v: &Value) -> String {
+    /// Text form, as used by `print`, interpolation and error reports
+    /// (type.str.3, trait.std.3, err.text.1).
+    fn text(&mut self, v: &Value, pos: Pos) -> Result<String, Trap> {
         match v {
-            Value::Unit => String::new(),
-            Value::Int(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Str(s) => s.to_string(),
-            other => self.describe(other),
+            Value::Unit => Ok(String::new()),
+            Value::Str(s) => Ok(s.to_string()),
+            other => self.describe(other, pos),
         }
     }
 
-    /// The default form of a value inside an error description (err.text.1):
+    /// A value's text form inside another (trait.auto.2): its `to_str`, or
     /// `Type.Variant(field: value, ...)`, with strings quoted.
-    fn describe(&self, v: &Value) -> String {
-        let fields = |names: &mut dyn Iterator<Item = &str>, values: &[Value]| -> String {
-            if values.is_empty() {
-                return String::new();
-            }
-            let parts: Vec<String> = names.zip(values).map(|(n, x)| format!("{n}: {}", self.describe(x))).collect();
-            format!("({})", parts.join(", "))
-        };
-        match v {
+    fn describe(&mut self, v: &Value, pos: Pos) -> Result<String, Trap> {
+        if let Some(f) = self.dispatch(self.resolved.std.to_str, "to_str", v) {
+            let (r, _) = self.call(f, Some(v.clone()), Vec::new(), pos)?;
+            let Value::Str(s) = r else { unreachable!("checked: `to_str` returns a `str`") };
+            return Ok(s.to_string());
+        }
+        let prog = self.prog;
+        Ok(match v {
             Value::Unit => "()".into(),
             Value::Int(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => format!("{:?}", &**s),
             Value::None => "none".into(),
             Value::List(items) => {
-                format!("[{}]", items.iter().map(|x| self.describe(x)).collect::<Vec<_>>().join(", "))
+                let mut parts = Vec::with_capacity(items.len());
+                for x in items.iter() {
+                    parts.push(self.describe(x, pos)?);
+                }
+                format!("[{}]", parts.join(", "))
             }
             Value::Struct(s, values) => {
-                let decl = &self.prog.structs[*s];
-                format!("{}{}", decl.name, fields(&mut decl.fields.iter().map(|f| f.name.as_str()), values))
+                let decl = &prog.structs[*s];
+                let names = decl.fields.iter().map(|f| f.name.as_str());
+                format!("{}{}", decl.name, self.fields_text(names, values, pos)?)
             }
             Value::Enum(e, i, values) => {
-                let decl = &self.prog.enums[*e];
+                let decl = &prog.enums[*e];
                 let variant = &decl.variants[*i];
-                let shown = fields(&mut variant.fields.iter().map(|f| f.name.as_str()), values);
-                format!("{}.{}{shown}", decl.name, variant.name)
+                let names = variant.fields.iter().map(|f| f.name.as_str());
+                format!("{}.{}{}", decl.name, variant.name, self.fields_text(names, values, pos)?)
             }
-            Value::Fail(f) => self.describe(&f.error),
+            Value::Fail(f) => self.describe(&f.error, pos)?,
+        })
+    }
+
+    /// `(name: value, ...)`, or nothing when there are no fields.
+    fn fields_text<'n>(
+        &mut self,
+        names: impl Iterator<Item = &'n str>,
+        values: &[Value],
+        pos: Pos,
+    ) -> Result<String, Trap> {
+        if values.is_empty() {
+            return Ok(String::new());
         }
+        let mut parts = Vec::with_capacity(values.len());
+        for (n, x) in names.zip(values) {
+            parts.push(format!("{n}: {}", self.describe(x, pos)?));
+        }
+        Ok(format!("({})", parts.join(", ")))
     }
 
     fn method_call(
@@ -819,21 +967,29 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
+        let call = self.resolved.calls.get(&pos).copied();
+        // `Trait.name(x, ...)` (trait.res.1).
+        if let Some(Call::Qualified(tr)) = call {
+            let (first, rest) = args.split_first().expect("checked: a receiver argument");
+            let op = self.operand(&first.value, env)?;
+            return self.trait_method(tr, name, op, rest, pos, env);
+        }
         // `Type.Variant(field: value)` (type.enum.6), or an associated
         // function `Type.name(args)` (trait.method.4).
-        if let Expr::Name(tn, _) = recv
-            && lookup(env, tn).is_none()
-        {
-            if let Some(&e) = self.enums.get(tn.as_str())
+        if let Some(tn) = type_head(recv, env) {
+            if let Some(&e) = self.enums.get(tn)
                 && let Some(v) = self.prog.enums[e].variants.iter().position(|v| v.name == name)
             {
                 let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;
                 return Ok(Value::Enum(e, v, Rc::new(fields)));
             }
-            let f = self.methods[tn.as_str()][name];
+            let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
         }
         let recv = self.operand(recv, env)?;
+        if let Some(Call::Trait(tr)) = call {
+            return self.trait_method(tr, name, recv, args, pos, env);
+        }
         let value = match &recv {
             Operand::Place(p) => peek(env, p)?,
             Operand::Value(v) => v,
@@ -853,6 +1009,38 @@ impl<'a, W: Write> Interp<'a, W> {
         };
         let f = self.methods[type_name][name];
         self.invoke(f, Some(recv), args, pos, env)
+    }
+
+    /// A trait's method called on `recv`: the implementation for its type,
+    /// the trait's default, or the built-in `eq`, `cmp` or `to_str`.
+    fn trait_method(
+        &mut self,
+        tr: usize,
+        name: &str,
+        recv: Operand,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        let value = match &recv {
+            Operand::Place(p) => peek(env, p)?.clone(),
+            Operand::Value(v) => v.clone(),
+        };
+        if let Some(f) = self.dispatch(tr, name, &value) {
+            return self.invoke(f, Some(recv), args, pos, env);
+        }
+        let std = self.resolved.std;
+        Ok(if tr == std.to_str {
+            Value::Str(Rc::from(self.text(&value, pos)?))
+        } else {
+            let other = self.eval(&args[0].value, env)?;
+            if tr == std.eq {
+                Value::Bool(self.equal(&value, &other, pos)?)
+            } else {
+                let o = self.compare(&value, &other, pos)?;
+                self.ordering_value(o)
+            }
+        })
     }
 
     /// `s.split(sep)` and `s.to_int()` (type.str.4-5).
@@ -951,10 +1139,10 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn print(&mut self, v: &Value, pos: Pos) -> Result<(), Trap> {
+        let text = self.text(v, pos)?;
         if self.closed {
             return Ok(());
         }
-        let text = self.text(v);
         match writeln!(self.out, "{text}") {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::BrokenPipe => {

@@ -1,0 +1,22 @@
+true
+true
+E [N, S]
+Move(dir: W, steps: 3)
+true
+false
+true
+Version(major: 1, minor: 10)
+zoo
+9
+true
+[1, 3]
+true
+2
+Money(cents: 1)
+Ordering.Less
+Ordering.Greater
+equal
+true
+true
+true
+Ordering.Less

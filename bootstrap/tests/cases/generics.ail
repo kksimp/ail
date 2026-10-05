@@ -1,0 +1,89 @@
+# Generic types, methods and functions (gen.decl.1, gen.method.1-3, gen.infer.1-2).
+struct Stack[T]
+    items List[T]
+
+fn Stack.new() Self
+    Stack(items: [])
+
+fn Stack.push(mut self, x T)
+    self.items.push(x)
+
+fn Stack.peek(self) T?
+    n := self.items.len()
+    if n == 0
+        return none
+    self.items[n - 1]
+
+fn Stack.len(self) int
+    self.items.len()
+
+fn Stack[T Ord].max(self) T?
+    if self.items.len() == 0
+        return none
+    mut best := self.items[0]
+    for x in self.items
+        if x > best
+            best = x
+    best
+
+struct Pair[A, B]
+    first A
+    second B
+
+fn Pair.swap(self) Pair[B, A]
+    Pair(first: self.second, second: self.first)
+
+fn Pair.with_first[C](self, c C) Pair[C, B]
+    Pair(first: c, second: self.second)
+
+enum Tree[T]
+    Leaf
+    Node(left Tree[T], value T, right Tree[T])
+
+fn insert[T Ord](t Tree[T], x T) Tree[T]
+    match t
+        Leaf => Node(left: Leaf, value: x, right: Leaf)
+        Node(l, v, r) =>
+            if x < v
+                Node(left: insert(l, x), value: v, right: r)
+            else
+                Node(left: l, value: v, right: insert(r, x))
+
+fn collect[T](t Tree[T], acc List[T]) List[T]
+    match t
+        Leaf => acc
+        Node(l, v, r) =>
+            mut out := collect(l, acc)
+            out.push(v)
+            collect(r, out)
+
+fn sorted[T Ord](xs List[T]) List[T]
+    mut t := Tree[T].Leaf
+    for x in xs
+        t = insert(t, x)
+    collect(t, [])
+
+fn first[T](xs List[T]) T?
+    if xs.len() == 0
+        return none
+    xs[0]
+
+fn main()
+    mut s := Stack[int].new()
+    s.push(3)
+    s.push(7)
+    s.push(5)
+    print("{s.len()} {s.peek()} {s.max()}")
+    mut names := Stack[str].new()
+    print(names.max())
+    names.push("bo")
+    names.push("al")
+    print(names.max())
+    p := Pair(first: 1, second: "one")
+    print(p.swap())
+    print(p.with_first(true))
+    print(sorted([5, 2, 8, 1, 9, 3]))
+    print(sorted(["pear", "fig", "apple"]))
+    print(first([10, 20]))
+    print(first[str]([]))
+    print(s)
