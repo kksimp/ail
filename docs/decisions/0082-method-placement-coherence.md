@@ -1,6 +1,6 @@
 # 0082. Associated functions; methods live in the type's package; coherence rules; no ambiguous calls
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0137](0137-integer-methods-and-min-max.md) (inherent and built-in methods take precedence over standard-trait defaults)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 10 — Traits; 12 — Modules

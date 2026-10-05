@@ -1,6 +1,6 @@
 # 0054. Match arms are written `pattern => result`
 
-- **Status:** Accepted
+- **Status:** Accepted; extended by [ADR 0138](0138-literal-and-or-patterns.md) (literal and or-patterns, one-line statement arms)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 2 — Core syntax (expressions)

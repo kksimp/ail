@@ -4,8 +4,8 @@ Chapter key: `own`
 
 > **Status:** Drafted (partial). Specified: the value model, parameter modes,
 > exclusivity, copy reporting, borrows, unique resource types, `defer`, and
-> shared references, and `move` parameters. Not yet designed: closures, and
-> element projections.
+> shared references, and `move` parameters, with map entries as places. Not yet
+> designed: closures, and element projections.
 
 ## Values
 
@@ -27,8 +27,19 @@ b.x = 6.0
 ## Places
 
 **own.place.1** — A place is a local binding, a parameter or `self`, or a
-field (`p.f`) or element (`p[i]`) of a place. A place is mutable when its
-root is a `mut` binding, a `mut` parameter or `mut self`. *(ADR 0117)*
+field (`p.f`) or element (`p[i]`) of a place, or an entry (`p[k]`) of a map
+place. A place is mutable when its root is a `mut` binding, a `mut` parameter
+or `mut self`. A map entry is a place with the added rules of `type.map.3`:
+only when `m[k]` is the whole target of `=` does it insert a missing key or
+replace the value. Every other use of an entry as a place needs `k` to be
+present and traps if it isn't. *(ADR 0117, ADR 0131)*
+
+```ail
+mut counts := Map[str, int]()
+counts["a"] = 1      # inserts
+counts["a"] += 1     # fine: "a" is present
+counts["b"] += 1     # traps: "b" is missing
+```
 
 ## Parameters
 
@@ -60,7 +71,9 @@ compile-time error. *(ADR 0064)*
 
 **own.excl.3** — If whether two `mut` arguments overlap depends on run-time
 values, the implementation MUST check before the call and trap on overlap.
-Each such check MUST be listed in the performance report. *(ADR 0064)*
+Each such check MUST be listed in the performance report. Two entries `m[j]`
+and `m[k]` of the same map place overlap when their keys are equal, like list
+elements with equal indexes. *(ADR 0064, ADR 0131)*
 
 **own.excl.4** — A read-only argument or receiver that overlaps a `mut`
 argument of the same call is passed as a copy of its value, made before the
@@ -69,13 +82,15 @@ call. Each such copy site MUST be listed in the performance report.
 
 **own.excl.5** — The body of `for mut x in e` MUST NOT use `e`, or any place
 that may overlap `e`, except through `x`. An overlap that depends on index
-values counts as an overlap. Violations are compile-time errors.
-*(ADR 0121)*
+values counts as an overlap, and so does one that depends on map keys:
+inside `for mut x in m[k]`, `m[j]` may overlap `m[k]`. Violations are
+compile-time errors. *(ADR 0121, ADR 0131)*
 
 ```ail
 xs.push(xs[0])               # xs[0] is copied before the call
 f(mut x, mut x)              # compile-time error
 swap(mut a[i], mut a[j])     # traps if i == j; a.swap(i, j) doesn't
+swap(mut m[a], mut m[b])     # traps if a == b (equal keys overlap)
 ```
 
 ## Copies

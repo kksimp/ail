@@ -1,6 +1,6 @@
 # 0126. Every type gets `==` and a text form automatically
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0133](0133-automatic-hash.md) (`Hash` is a third automatic trait)
 - **Date:** 2026-10-05
 - **Decided by:** Designer
 - **Topic:** 10 — Traits; 4 — Types

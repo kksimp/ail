@@ -2,8 +2,11 @@
 
 Chapter key: `expr`
 
-> **Status:** Drafted (partial). Specified: bindings, blocks, `if`, loops,
-> ranges, logical and compound operators, `match`, and integer arithmetic.
+> **Status:** Drafted (partial). Specified: bindings, names, blocks and
+> divergence, `if`, loops, ranges, logical and compound operators, comparisons,
+> `match` (variant, literal and or-patterns), and integer arithmetic. Not yet
+> designed: range patterns, guards, and binding or-patterns (see the note at
+> the end of the match section).
 
 ## Bindings
 
@@ -42,6 +45,38 @@ item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
 visible at that point. Otherwise it's a compile-time error. The diagnostic
 SHOULD suggest the closest visible names. *(ADR 0107)*
 
+**expr.name.2** — When an unknown function or method is the name another
+mainstream language uses for something AIL spells differently, the
+diagnostic MUST also give a fixed help that names the AIL form. The
+implementation keeps these helps in a table. The table MUST contain at least
+the entries below. A declared name is never overridden by the table.
+*(ADR 0140, ADR 0107)*
+
+| Habit | Help names |
+|---|---|
+| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()`; for a `str`, `s.chars().len()` |
+| `str(x)` | `"{x}"` |
+| `int(s)` | `s.to_int()` |
+| `float(x)` | `s.to_float()` for text, `n.to_float()` for an `int` |
+| `ord(c)`, `chr(n)` | `c.code()`, `char.from_code(n)` |
+| `abs(x)` | `x.abs()` |
+| `sorted(xs)` | `xs.sorted()` |
+| `sum(xs)` | `xs.sum()` |
+| `min(a, b)`, `max(a, b)`, `min(xs)`, `max(xs)` | `a.min(b)`, `a.max(b)`, `xs.min()`, `xs.max()` |
+| `"".join(xs)`, `str.from_chars(xs)` | `xs.join("")` |
+| `strip`, `lstrip`, `rstrip` | `trim` |
+| `startswith`, `endswith` | `starts_with`, `ends_with` |
+| `removeprefix`, `removesuffix` | `strip_prefix`, `strip_suffix` |
+| `rjust`, `ljust`, `zfill`, `padStart` | `pad_left`, `pad_right`, with a fill char: `s.pad_left(4, '0')` |
+| `splitlines` | `lines` |
+| `isdigit`, `is_numeric`; `isalpha`, `is_alphabetic`; `is_whitespace` | the `char` methods `is_digit`; `is_alpha`; `is_space` |
+| `contains_key`, `has`, `hasKey` | `contains` |
+| `m.get(k, d)` | `v := m.get(k) else d` |
+| `items()` | iterate `m.keys()` and index with `m[k]` |
+| `append`, `add` on a list | `push` |
+| `panic`, `assert` | `unreachable(message)` |
+| `loop` | `while true` |
+
 ## Calls
 
 **expr.call.1** — A call MUST supply exactly one argument per parameter of the
@@ -60,9 +95,14 @@ last expression, or no value if it ends in a statement. *(ADR 0091)*
 **expr.block.2** — A function returns the value of its body block. `return e`
 exits the function early with value `e`. *(ADR 0091)*
 
-**expr.block.3** — A block whose last statement is `return`, `break` or
-`continue` produces no value and is accepted wherever a value of any type is
-expected. *(ADR 0117)*
+**expr.block.3** — A statement **diverges** when it is `return`, `break` or
+`continue`; a call to `unreachable(message)` (`err.model.2`); a `while true`
+(the literal `true`) whose body has no `break` for that loop (`expr.loop.7`);
+or an `if`/`else` or `match` all of whose branches diverge. A block whose last
+statement diverges produces no value and is accepted wherever a value of any
+type is expected, including as a one-line arm (`expr.match.9`) and as an
+`else` part. So a function can end with `while true`. There is no nameable
+`Never` type. *(ADR 0117, ADR 0139)*
 
 ## Conditionals and loops
 
@@ -81,9 +121,12 @@ next iteration. *(ADR 0091)*
 `b`. `a..=b` includes `b`. *(ADR 0091)*
 
 **expr.loop.4** — In `for x in e`, `e` MUST be a `List[T]`, giving `x` type
-`T`, or a range of `int`, giving `x` type `int`. `x` is an immutable binding
-scoped to the loop body. The loop iterates the value `e` had when the loop
-started. *(ADR 0117)*
+`T`, a `Set[T]`, giving `x` type `T`, or a range of `int`, giving `x` type
+`int`. A set is iterated in insertion order (`type.map.1`). `x` is an
+immutable binding scoped to the loop body. The loop iterates the value `e` had
+when the loop started. `e` MUST NOT be a `Map`: `for k in m` is a
+compile-time error, and its help says to iterate `m.keys()` (the habit is
+ambiguous between keys and pairs). *(ADR 0117, ADR 0131)*
 
 **expr.loop.5** — `break` and `continue` outside a loop are compile-time
 errors. *(ADR 0117)*
@@ -91,7 +134,16 @@ errors. *(ADR 0117)*
 **expr.loop.6** — In `for mut x in e`, `e` MUST be a mutable place
 (`own.place.1`) of type `List[T]`. `x` is a mutable place of type `T` that
 refers to each element in turn, in order, so changes to `x` change the
-element. The body's use of `e` is restricted by `own.excl.5`. *(ADR 0121)*
+element. The body's use of `e` is restricted by `own.excl.5`. `for mut` over
+a `Set`, over `m.keys()` or over `m.values()` is a compile-time error: they
+are not places. If `e` is a map entry `m[k]` (`own.place.1`), `k` MUST be
+present, or the loop traps (`type.map.3`). *(ADR 0121, ADR 0131)*
+
+**expr.loop.7** — A `while` whose condition is the literal `true` and whose
+body contains no `break` for that loop never completes normally, so as a
+statement it diverges (`expr.block.3`). A `break` inside a nested loop belongs
+to that loop. AIL has no `loop` keyword: the help for it says `while true`.
+*(ADR 0139)*
 
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
 apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
@@ -116,7 +168,8 @@ runs. Otherwise the next `elif` or `else` is tried. *(ADR 0125)*
 
 **expr.if.6** — When an `if` has exactly one condition, and it binds a value
 of type `T ! E`, its `else` may be written `else name`, which binds the error
-value to `name` within the `else` block. *(ADR 0125)*
+value to `name` within the `else` block. The type of `name` is given by
+`err.else.3`. *(ADR 0125, ADR 0139)*
 
 ```ail
 if cfg := parse(lines)
@@ -154,14 +207,28 @@ calls with no arguments. *(ADR 0092)*
 `a >= b`, both operands have the same type, and the expected type of `b` is
 the type of `a` (so `d == East` needs no qualification, `type.enum.3`).
 `==` and `!=` need a type implementing `Eq`; the others need `Ord`
-(`trait.std.1–2`). *(ADR 0129, ADR 0127)*
+(`trait.std.1–2`). On `float` operands all six are the IEEE 754 comparisons
+(`type.num.6`): NaN is unequal to everything, itself included, and every
+ordering comparison with NaN is false. *(ADR 0129, ADR 0127, ADR 0130)*
+
+**expr.cmp.3** — `==` or `!=` between an optional and a negative integer
+literal is a compile-time error. The help says that `index_of` returns `none`
+when the element is absent, not `-1`. *(ADR 0136)*
+
+```ail
+i := xs.index_of(x)
+if i == -1        # compile-time error: index_of returns none when absent
+    print("absent")
+```
 
 ## Match
 
 **expr.match.1** — A `match` expression is the keyword `match`, the
 scrutinee expression, and an indented block containing one arm per line. Each
-arm is written `pattern => result`. A result consisting of several statements
-is written as an indented block following `=>`. *(ADR 0054)*
+arm is written `pattern => result`. The result is an expression, or a
+one-line statement on the arm's line (`expr.match.9`). A result consisting of
+several statements is written as an indented block following `=>`.
+*(ADR 0054, ADR 0138)*
 
 ```ail
 area := match s
@@ -179,20 +246,60 @@ compile-time error, and the diagnostic MUST list the uncovered cases.
 and name those variants, unless the warning is suppressed for that match.
 *(ADR 0056)*
 
-**expr.match.4** — Until general patterns are designed, a pattern is `_`, or
-a variant of the scrutinee's enum type, bare or qualified. A variant with
-data is followed by a parenthesised pattern for each of its fields
-(`expr.match.6`). *(ADR 0117, ADR 0123)*
+**expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
+bare or qualified; a literal (`expr.match.7`); or an or-pattern
+(`expr.match.8`). A variant with data is followed by a parenthesised pattern
+for each of its fields (`expr.match.6`). *(ADR 0117, ADR 0123, ADR 0138)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
-a compile-time error. *(ADR 0117)*
+a compile-time error. Literals are compared by value (`0x41` after `65` is
+redundant), and the rule applies to each alternative of an or-pattern.
+*(ADR 0117, ADR 0138)*
 
 **expr.match.6** — In a pattern `Variant(p1, ..., pn)`, there MUST be one
 `pi` per field, in declaration order. Each `pi` is a new immutable binding
 name or `_`, which ignores the field. *(ADR 0123)*
 
-> **Note:** general pattern syntax, guards, and warning-suppression syntax are
-> not yet decided.
+**expr.match.7** — A literal pattern is an `int` literal (with an optional
+`-`), a `char` literal, a `str` literal without interpolation (a raw string is
+allowed), or a `bool` literal. The literal MUST have the scrutinee's type, with
+no conversion; when a `char` and a `str` are confused, the help offers the
+other quote. A `float` literal pattern is a compile-time error, and its help
+says to compare with `==` or `<` in an `if`. A match on `int`, `str` or `char`
+MUST have a `_` arm even when every value is listed; a match on `bool` is
+exhaustive with `true` and `false`. A `-` directly before an integer literal
+is part of the literal for `lex.num.3`, so `-9223372036854775808` is valid in
+patterns, expressions and constants. *(ADR 0138, ADR 0130)*
+
+**expr.match.8** — `p1 | p2 | ...` is an or-pattern. It matches when any
+alternative matches. No alternative may bind a name; a variant pattern whose
+fields are all `_` is fine. *(ADR 0138)*
+
+**expr.match.9** — The result of an arm may be a one-line statement on the
+arm's line: `return x`, `break`, `continue`, `total += n`, `x = y` or
+`print(x)`. A statement that diverges (`expr.block.3`) is accepted wherever
+the match's type is expected. Any other statement gives the arm no value, so
+the match can't be used as a value (`expr.if.4`). *(ADR 0138, ADR 0139)*
+
+```ail
+fn class(c char) int
+    match c
+        '0' | '1' => 1
+        'a' | 'b' | 'c' => 2
+        '\n' => return 0
+        _ => 3
+
+fn kind(t Token) str
+    match t
+        Number(_) | Label(_) => "atom"
+        Plus => "op"
+```
+
+> **Note:** not yet designed: range patterns (`'0'..='9'`), guards
+> (`x if x > 0`), or-patterns that bind names, patterns nested inside a
+> variant's fields (`expr.match.6`), and warning-suppression syntax. The
+> diagnostics for range patterns and guards suggest an `if` chain.
+> *(ADR 0138)*
 
 ## Integer arithmetic
 

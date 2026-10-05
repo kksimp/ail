@@ -5,7 +5,10 @@ Chapter key: `gen`
 > **Status:** Drafted (partial). Specified: bracket syntax (`gram.generic.1`),
 > generic types, constraints, methods on generic types, inference, anonymous
 > generic parameters, and the compilation-strategy freedom. Not yet designed:
-> variance, const generics, and methods for one instantiation only.
+> variance, const generics, and methods for one instantiation only. Because
+> user code can't declare such methods, `xs.sum()` (`List[int]` and
+> `List[float]` only) is a built-in special case (`type.coll.12`, ADR 0136).
+> `Hash` is now a usable bound (`trait.auto.5`, ADR 0133).
 
 ## Generic declarations
 
@@ -22,7 +25,7 @@ or another type parameter in scope. *(ADR 0128)*
 
 **gen.bound.1** — A generic type parameter MAY be followed by one or more
 constraints, joined with `+`, inside the generic parameter brackets:
-`[T Shape]`, `[K Hash + Eq, V]`. *(ADR 0074)*
+`[T Shape]`, `[K Hash + ToStr, V]`. *(ADR 0074)*
 
 **gen.bound.2** — The body of a generic declaration is type-checked using only
 the operations its declared constraints provide. Using any other operation on a
@@ -37,6 +40,10 @@ fn largest[T Ord](items List[T]) T
             best = item
     best
 ```
+
+> **Note:** `Hash` has no methods and implies `Eq` (`trait.auto.5`), so a body
+> constrained by `[K Hash]` can use `==` on `K`. Writing `Hash + Eq` is
+> allowed but redundant. *(ADR 0133)*
 
 **gen.bound.3** — Every type argument MUST satisfy its parameter's
 constraints. The diagnostic names the type and the trait it doesn't

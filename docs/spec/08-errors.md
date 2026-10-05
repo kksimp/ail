@@ -3,8 +3,9 @@
 Chapter key: `err`
 
 > **Status:** Drafted (partial). Specified: the error model, error-type
-> declarations and spelling, unions, propagation, handling, `else`, error
-> context, the default error form, and trap behaviour. Not yet designed:
+> declarations and spelling, unions, results with no success value,
+> propagation, handling, `else` (including statement `else`), error context,
+> the default error form, and trap behaviour. Not yet designed:
 > matching on error unions, safe member access (OQ-029), and converting an
 > inferred set to a public error type (OQ-030).
 
@@ -15,7 +16,20 @@ represented as a value returned from a function. *(ADR 0045)*
 
 **err.model.2** — Integer overflow (`expr.arith.1`), out-of-bounds access,
 failed assertions and explicitly unreachable code **trap**. They are not
-recoverable error values. *(ADR 0045, ADR 0035)*
+recoverable error values. The prelude function `unreachable(message str)`
+traps with `message`, and a call to it diverges (`expr.block.3`). A call
+`unreachable()` without a message is a compile-time error whose help says to
+add one. The names `panic`, `assert`, `fatalError` and `loop` get helps
+(`expr.name.2`) that point to `unreachable(message)` and `while true`.
+*(ADR 0045, ADR 0035, ADR 0139)*
+
+```ail
+fn tag(k Kind) str
+    match k
+        A => "a"
+        B => "b"
+        _ => unreachable("tag: new Kind not handled")
+```
 
 ## Error types
 
@@ -47,12 +61,15 @@ of type `T` or an error of type `E`. *(ADR 0046)*
 
 **err.type.2** — In a function's return type, `!T` denotes `T ! S`, where `S`
 is the error set **inferred** from the function body: the union of all error
-types the body can propagate or return. *(ADR 0046)*
+types the body can propagate or return. This holds when `T` isn't a declared
+error type; for `!X` with a declared error type `X`, see `err.type.7`.
+*(ADR 0046, ADR 0139)*
 
 **err.type.3** — A function that is part of its package's public API MUST
-state its error type explicitly, using `T ! E`. Inferred error sets
-(`err.type.2`) are permitted only for functions that are not part of the
-package's public API. *(ADR 0046)*
+state its error type explicitly, using `T ! E` or `! E` (`err.type.7`).
+Inferred error sets (`err.type.2`, and bare `!`) are permitted only for
+functions that are not part of the package's public API. *(ADR 0046,
+ADR 0139)*
 
 **err.type.4** — An inferred error set is a closed union. Matching on it MUST
 be checked for exhaustiveness. *(ADR 0046)*
@@ -70,6 +87,30 @@ fn read_config(path str) !Config
 every error its function's body can propagate or return. For mutually
 recursive functions, the sets are computed together, and recursion adds no
 error by itself. *(ADR 0122)*
+
+**err.type.7** — A return type may have no success value. `! E` or
+`! A | B`, with nothing before the `!`, means "no success value; can fail with
+`E`" (or with `A` or `B`). A bare `!` means no success value and an inferred error set
+(`err.type.2`). Both forms are valid for every function, not only `main`
+(`mod.main.1`). A type name directly after `!` is read by name resolution: if
+`X` is a declared error type, `!X` is `! X`; otherwise it is `X ! S` with `S`
+inferred. A type parameter is never an error type here. No valid program
+changes meaning, since `err.decl.3` already rejects an error type as a
+success type. The canonical spacing, which the formatter writes, is `! E` for
+an explicit error type and `!T` for an inferred set. The body of such a
+function is a statement block. It succeeds when it completes normally or
+reaches a bare `return`, and it fails on `return e` (with `e` an error) or on
+`?`. *(ADR 0139, ADR 0046)*
+
+```ail
+fn save(path str, text str) ! IoError
+    file := open_file(path)?
+    file.write(text)?
+
+fn sync_all() !
+    save("a.txt", "x")?
+    save("b.txt", "y")?
+```
 
 > **Note:** converting an inferred set to a public API's error type is open
 > (OQ-030).
@@ -108,14 +149,30 @@ that case. *(ADR 0049)*
 **err.else.2** — The `else` part may instead be a statement, or an indented
 block, that definitely leaves the enclosing block (by `return`, `break`,
 `continue` or a trap). It is a compile-time error if an `else` block can
-complete normally without producing a value of type `T`. *(ADR 0049)*
+complete normally without producing a value of type `T`. This is for a
+declaration with a success value; `err.else.5` covers results with none.
+*(ADR 0049, ADR 0139)*
 
 **err.else.3** — For `e` of type `T ! E`, `else name` followed by an indented
-block binds the error value to `name` within that block. *(ADR 0049)*
+block binds the error value to `name` within that block. The same holds for
+`if ... else name` (`expr.if.6`) and for statement `else` (`err.else.5`). The
+type of `name` is the error part's type: when the error type is an inferred or
+explicit set with one member, that member's type (so field access works); with
+two or more members, field access waits for OQ-029. *(ADR 0049, ADR 0139)*
 
 **err.else.4** — After a declaration with an `else` part, the declared name
 holds a success value on every path that reaches the following statement.
 *(ADR 0049)*
+
+**err.else.5** — When `e` has a type that is a result with no success value
+(`!` or `! E`, `err.type.7`), the expression statement `e else BLOCK`,
+`e else name BLOCK` (which binds the error as in `err.else.3`) or
+`e else STATEMENT` (as in `save() else return`) runs its `else` part only on
+failure. The block MAY complete normally: `err.else.2`'s requirement to
+produce a `T` doesn't apply, and execution continues after the statement. A
+value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
+`T ! E` with a success value, statement `else` is a compile-time error whose
+help says to bind the value: `x := ... else ...`. *(ADR 0139)*
 
 ```ail
 port := env("PORT") else 8080
@@ -123,6 +180,12 @@ user := find(id) else return NotFound
 data := read(path) else err
     log.warn("read failed", err)
     return Defaults
+```
+
+```ail
+save(path, text) else err
+    print("save failed: {err}")       # completes normally; execution continues
+save(path, text) else return          # in a function with no success value, a bare return succeeds
 ```
 
 ## Context and traces

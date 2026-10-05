@@ -1,6 +1,6 @@
 # 0089. Strings: double-quoted UTF-8 literals with `{expr}` interpolation; no direct indexing
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0135](0135-string-literals-and-methods.md) (exact multi-line string rules, raw strings, `\'`)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 4 — Type system; 2 — Core syntax

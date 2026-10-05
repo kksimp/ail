@@ -1,6 +1,6 @@
 # 0127. The standard traits `Eq`, `Ord` and `ToStr`; an empty `impl` derives them
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0130](0130-floats.md) (`float`'s operators are IEEE) and [ADR 0137](0137-integer-methods-and-min-max.md) (`Ord` gains `min` and `max`)
 - **Date:** 2026-10-05
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 10 — Traits; 21 — Standard library

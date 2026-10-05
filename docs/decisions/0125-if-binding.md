@@ -1,6 +1,6 @@
 # 0125. `if x := e` handles success or absence as a statement; `else err` binds the error
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0139](0139-unit-results-statement-else-and-divergence.md) (statement `else` on results with no success value)
 - **Date:** 2026-10-05
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 8 — Error handling; 2 — Core syntax (expressions)

@@ -168,5 +168,62 @@ code? Options for supertraits:
 
 Associated functions in traits need the concrete type at run time in shared
 generic code (ADR 0080), as Swift's witness tables provide. To be decided
-with the standard library (`Default`, numeric `zero`). *Owner: AI under ADR
+with the standard library (`Default`, numeric `zero`). `Hash` already
+behaves as if it required `Eq` (a `[T Hash]` bound allows `==`,
+[ADR 0133](decisions/0133-automatic-hash.md)), so the answer must cover it.
+*Owner: AI under ADR 0076.*
+
+## OQ-040 — `else` as an expression
+`x := e else d` works only as a declaration (ADR 0049), so a fallback inside
+a larger expression needs a throwaway binding:
+`Min =>` / `lo := nums.min() else 0` / `lo`. In the spreadsheet example,
+`Min => nums.min() else 0` measured 20.8 tokens against 33.6 (−38% on those
+arms; a tie at file level), and the JSON example wanted
+`(m.get(k) else 0) + 1`. Options:
+- `e else d` as an expression with the lowest precedence, so it must be
+  parenthesised inside operators: familiar from Kotlin's `?:` and Swift's
+  `??`, but needs a precedence decision and interacts with `else` blocks;
+- a method (`nums.min().or(0)`): no grammar change, but a second spelling of
+  the same fallback;
+- leave as is.
+
+Recommendation: the first, restricted to a value fallback (no block form in
+expression position), decided with the expression grammar. *Owner: AI under
+ADR 0076.*
+
+## OQ-041 — Format specifications in interpolation
+`"{x}"` gives only the default text form. Width, fill, precision and radix
+(`f"{x:>8}"`, `f"{n:04x}"`, `f"{r:.2f}"` in Python) are written today with
+`pad_left(width, fill)` and `to_hex()` ([ADR 0135](decisions/0135-string-literals-and-methods.md)),
+and fixed decimal places can't be written at all. Options: a spec after `:`
+inside the braces (Python, Rust; compact, but a mini-language to learn),
+methods only (`x.to_fixed(2)`; one way, longer), or both. Recommendation:
+measure on programs that print tables and money before deciding.
+*Owner: AI under ADR 0076.*
+
+## OQ-042 — Custom hashing
+`Hash` is automatic and can't be implemented by hand
+([ADR 0133](decisions/0133-automatic-hash.md)), so a type with its own
+`fn eq` can't be a map key or set element. Options: let `impl Hash` declare
+which fields take part (consistent with a custom `eq` by construction), a
+`fn hash(self, mut h Hasher)` method as in Rust (flexible, but can disagree
+with `eq`), or keep the restriction. Hash values must stay invisible to
+programs, so output never depends on the hash function. *Owner: AI under
+ADR 0076; decide when a real program needs it.*
+
+## OQ-043 — `s.len()`: bytes or characters
+`str` has no `len()` yet; `s.chars().len()` counts characters
+([ADR 0135](decisions/0135-string-literals-and-methods.md)). Python counts
+code points, Rust and Go count bytes, Swift counts grapheme clusters. Options:
+`len()` in bytes plus `chars().len()` (fast and honest about cost, but
+surprising to Python users), `len()` in characters (O(n) unless cached), or
+no `len()` at all with named views (`bytes().len()`, `chars().len()`).
+Decide with `s.bytes()` and string slicing. *Owner: AI under ADR 0076.*
+
+## OQ-044 — Nested optionals
+`m.get(k)` on a `Map[K, V?]` has type `V??`, and `none` could mean either
+level. Options: nested optionals are distinct types and `none` is the outer
+one (Swift); optionals flatten (TypeScript's `undefined`; loses
+information); or `Map` values can't be optional (restrictive). Recommendation:
+the first, with a diagnostic when `none` is ambiguous. *Owner: AI under ADR
 0076.*

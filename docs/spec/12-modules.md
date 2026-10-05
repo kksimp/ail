@@ -3,8 +3,8 @@
 Chapter key: `mod`
 
 > **Status:** Drafted (partial). Specified: modules, visibility, imports,
-> single-file programs, and the entry point. Not yet designed: packages,
-> manifests, and dependency resolution (build-system topic).
+> constants, single-file programs, and the entry point. Not yet designed:
+> packages, manifests, and dependency resolution (build-system topic).
 
 ## Modules
 
@@ -44,11 +44,48 @@ pub fn fetch(url str) Data ! FetchError
     decode(resp.body)?
 ```
 
+## Constants
+
+**mod.const.1** — A top-level `NAME := expr` declares a module constant. It is
+visible in every file of the module (`mod.unit.1`), shares the namespace of
+the module's functions and types, and is private unless marked `pub`
+(`mod.vis.1`). Importers refer to it as `m.NAME` (`mod.use.2`). Its type is
+the type of `expr`. Because a constant is a module-level item, `expr.bind.5`
+applies to it. A top-level `mut`, `const`, `let`, `var` or `static` is a
+compile-time error whose help says to write `NAME := value`, or, for `mut`,
+that there are no mutable globals. *(ADR 0132)*
+
+**mod.const.2** — `expr` MUST be a constant expression: literals (`int`,
+`float`, `str`, `char`, `bool`); other constants (a cycle is a compile-time
+error that names it); list, map and set literals; `List[T]()`, `Map[K, V]()`
+and `Set[T]()`; struct literals and variants with constant arguments;
+`none`, `[]` and `{}` where a field or element gives the expected type; and
+built-in operators and interpolation on built-in types only (`int`, `float`,
+`bool`, `str`, `char`, and lists, maps, sets and optionals of them). Calls,
+method calls, `?`, `ref`, indexing, field access, ranges, `if`, `match`, and
+anything that would run a user `impl` are compile-time errors. A bare `none`, `[]` or `{}` can't be a constant, since it
+has no expected type. *(ADR 0132)*
+
+**mod.const.3** — Constants have no order and no side effects. They are
+computed before `main` runs. A failure while computing one (overflow, division
+by zero) is an error reported at the constant before the program runs.
+*(ADR 0132)*
+
+```ail
+pub MAX_DEPTH := 64
+KEYWORDS := {"if", "else", "while"}
+SCRIPTS := [["a", "b"], ["c"]]
+LIMIT := MAX_DEPTH * 2
+EMPTY := Map[str, int]()
+```
+
 ## Program entry point
 
 **mod.main.1** — A program begins executing at a function named `main` that
-takes no parameters. Its return type is either absent, or an error type in the
-form `!` (inferred) or `! E`. *(ADR 0088)*
+takes no parameters. Its return type is either absent, or a result with no
+success value, in the form `!` (inferred) or `! E` (`err.type.7`). ADR 0139
+generalises these forms to every function, so `main` has no special return
+types of its own. *(ADR 0088, ADR 0139)*
 
 **mod.main.2** — If `main` returns an error, the program writes the error
 report (`err.ctx.3`) to standard error and exits with status 1. If `main`

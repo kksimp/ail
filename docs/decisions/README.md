@@ -87,14 +87,14 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0079](0079-any-dynamic-dispatch.md) | Dynamic dispatch is explicit: `any Trait` *(delegated)* | Accepted | 2026-10-04 |
 | [0080](0080-generic-compilation-strategy.md) | Compiler chooses specialisation vs sharing per generic instance *(delegated)* | Accepted | 2026-10-04 |
 | [0081](0081-default-methods.md) | Traits may provide default methods *(delegated)* | Accepted | 2026-10-04 |
-| [0082](0082-method-placement-coherence.md) | Associated functions; placement; coherence; no ambiguous calls *(delegated)* | Accepted | 2026-10-04 |
+| [0082](0082-method-placement-coherence.md) | Associated functions; placement; coherence; no ambiguous calls *(delegated)* | Accepted; amended by 0137 | 2026-10-04 |
 | [0083](0083-attribute-syntax.md) | Attributes `@name(args)`, same line as the declaration *(delegated)* | Accepted | 2026-10-04 |
 | [0084](0084-no-shadowing-module-names.md) | Locals can't reuse module-level, imported or prelude names *(delegated)* | Accepted | 2026-10-04 |
 | [0085](0085-interim-local-testing-gate.md) | Interim gate: local Linux (AI) and macOS (designer) runs; no hosted CI | Accepted (interim) | 2026-10-04 |
 | [0086](0086-finish-core-design-before-stage-2.md) | Finish the core design before Stage 2; Hello World is the first milestone | Accepted | 2026-10-04 |
 | [0087](0087-private-rust-toolchain.md) | Pinned Rust toolchain installed privately inside the repository | Accepted | 2026-10-04 |
 | [0088](0088-entry-point-and-print.md) | `fn main()` entry point; prelude `print` ends the line *(delegated)* | Accepted | 2026-10-04 |
-| [0089](0089-strings.md) | Strings: UTF-8, `{expr}` interpolation, no direct indexing *(delegated)* | Accepted | 2026-10-04 |
+| [0089](0089-strings.md) | Strings: UTF-8, `{expr}` interpolation, no direct indexing *(delegated)* | Accepted; amended by 0135 | 2026-10-04 |
 | [0090](0090-collections.md) | `List`/`Map`/`Set` with `[...]`/`{...}` literals *(delegated)* | Accepted | 2026-10-04 |
 | [0091](0091-control-flow.md) | Expression blocks, `if`/`elif`/`else`, `for in`, `while`, ranges *(delegated)* | Accepted | 2026-10-04 |
 | [0092](0092-operators.md) | `and`/`or`/`not`; compound assignment; methods always use `()` *(delegated)* | Accepted | 2026-10-04 |
@@ -130,8 +130,19 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0122](0122-error-unions-and-reports.md) | Error unions `A \| B`; `?` needs a matching error type; failures must be handled; default error form *(delegated)* | Accepted | 2026-10-05 |
 | [0123](0123-variants-with-data.md) | Variants with data are built with named fields and matched by position *(delegated)* | Accepted | 2026-10-05 |
 | [0124](0124-string-split-and-to-int.md) | `s.split(sep)` and `s.to_int()` *(delegated)* | Accepted | 2026-10-05 |
-| [0125](0125-if-binding.md) | `if x := e` handles success or absence as a statement; `else err` binds the error *(delegated)* | Accepted | 2026-10-05 |
-| [0126](0126-automatic-equality-and-text.md) | Every type gets `==` and a text form automatically (amends 0073) | Accepted | 2026-10-05 |
-| [0127](0127-standard-comparison-and-text-traits.md) | The standard traits `Eq`, `Ord` and `ToStr`; an empty `impl` derives them *(delegated)* | Accepted | 2026-10-05 |
+| [0125](0125-if-binding.md) | `if x := e` handles success or absence as a statement; `else err` binds the error *(delegated)* | Accepted; amended by 0139 | 2026-10-05 |
+| [0126](0126-automatic-equality-and-text.md) | Every type gets `==` and a text form automatically (amends 0073) | Accepted; amended by 0133 | 2026-10-05 |
+| [0127](0127-standard-comparison-and-text-traits.md) | The standard traits `Eq`, `Ord` and `ToStr`; an empty `impl` derives them *(delegated)* | Accepted; amended by 0130, 0137 | 2026-10-05 |
 | [0128](0128-methods-on-generic-types.md) | Methods and `impl`s on a generic type use its bare name; `Self` *(delegated)* | Accepted | 2026-10-05 |
 | [0129](0129-using-generics-and-traits.md) | Type arguments are inferred; values convert to `any Trait` implicitly; rules for `impl` blocks and `any` calls *(delegated)* | Accepted | 2026-10-05 |
+| [0130](0130-floats.md) | `float` is IEEE 754 binary64, with Python's text form and a total `cmp` (details delegated) | Accepted | 2026-10-05 |
+| [0131](0131-maps-and-sets.md) | Maps and sets keep insertion order; the collection API, places and loops (details delegated) | Accepted | 2026-10-05 |
+| [0132](0132-module-constants.md) | Module constants: `NAME := expr` with a constant expression (details delegated) | Accepted | 2026-10-05 |
+| [0133](0133-automatic-hash.md) | `Hash` is automatic, like `Eq` and `ToStr` (amends 0126) | Accepted | 2026-10-05 |
+| [0134](0134-characters.md) | `char`: traits, classification, digits and code points *(delegated)* | Accepted | 2026-10-05 |
+| [0135](0135-string-literals-and-methods.md) | Multi-line and raw strings, `\'`, and the `str` methods (amends 0089) *(delegated)* | Accepted | 2026-10-05 |
+| [0136](0136-list-methods-and-slices.md) | List methods, open-ended slices that trap, and `xs.sum()` *(delegated)* | Accepted | 2026-10-05 |
+| [0137](0137-integer-methods-and-min-max.md) | Integer arithmetic methods; `min`/`max` as `Ord` methods; inherent methods beat prelude defaults (amends 0082, 0127) *(delegated)* | Accepted | 2026-10-05 |
+| [0138](0138-literal-and-or-patterns.md) | Literal patterns, or-patterns, and one-line statement arms *(delegated)* | Accepted | 2026-10-05 |
+| [0139](0139-unit-results-statement-else-and-divergence.md) | `! E` results; statement `else`; divergence is a rule, not a type (amends 0125) *(delegated)* | Accepted | 2026-10-05 |
+| [0140](0140-diagnostics-for-other-languages.md) | Names other languages spell differently get a fixed help *(delegated)* | Accepted | 2026-10-05 |
