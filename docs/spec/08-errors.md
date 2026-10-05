@@ -190,6 +190,21 @@ save(path, text) else return          # in a function with no success value, a b
 
 ## Context and traces
 
+
+**err.else.6** — `e else d` is also an expression: the value of `e` if it is
+present or succeeded, otherwise `d`, which MUST have `e`'s success type and
+is evaluated only when needed. `e else return x`, `else break` and
+`else continue` are expressions whose fallback leaves. `else` binds more
+loosely than every other operator and associates to the right
+(`expr.prec.1`). An `else` followed by an indented block is the binding or
+statement form (`err.else.1–5`); at the start of a statement,
+`e else return ...` is the statement form. *(ADR 0144)*
+
+```ail
+fn smallest(nums List[int]) int
+    nums.min() else 0
+count := (m.get(k) else 0) + 1
+```
 **err.ctx.1** — Each propagation by `?` MUST record its source location in
 the propagated error's return trace. *(ADR 0050)*
 

@@ -93,3 +93,11 @@ variant keeps its constructor), the programs measure:
 
 1.5% above Python is a tie under ADR 0076's ~2% rule; `interp` is now below
 its Python version. The corpus files hold these versions.
+
+### `else` as an expression
+
+[ADR 0144](../decisions/0144-else-as-an-expression.md) then let a fallback sit
+inside an expression (`Min => nums.min() else 0`). Inlining the examples'
+single-use fallback bindings, where it read well, brought them to **13,596.6
+tokens, 0.9% above Python** (interp 5,410.4, json 3,412.2, sheet 4,774.0).
+

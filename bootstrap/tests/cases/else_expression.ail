@@ -1,0 +1,26 @@
+enum Agg
+    Min
+    Max
+
+fn agg(a Agg, nums List[int]) int
+    match a
+        Min => nums.min() else 0
+        Max => nums.max() else 0
+
+fn bump(m Map[str, int], k str) int
+    (m.get(k) else 0) + 1
+
+fn double(s str) int
+    v := (s.to_int() else return -1) * 2
+    v
+
+fn main()
+    print(agg(Min, [3, 1, 2]))
+    print(agg(Max, []))
+    print(bump({"a": 4}, "a"))
+    print(bump({"a": 4}, "b"))
+    print(double("21"))
+    print(double("x"))
+    print("{"7".to_int() else 0}")
+    x := "5".to_int() else 9
+    print(x)

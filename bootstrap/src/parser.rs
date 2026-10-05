@@ -854,13 +854,13 @@ impl Parser {
                 self.bump();
                 let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
                 self.expect_sym(":=", "`:=` after the name", "expr.bind.2")?;
-                let value = self.expression()?;
+                let value = self.expression_plain()?;
                 let otherwise = self.otherwise()?;
                 Some(Stmt::Let { name, pos, mutable: true, value, otherwise })
             }
             Tok::Ident(name) if matches!(self.peek_at(1), Tok::Sym(":=")) => {
                 self.i += 2;
-                let value = self.expression()?;
+                let value = self.expression_plain()?;
                 let otherwise = self.otherwise()?;
                 Some(Stmt::Let { name, pos, mutable: false, value, otherwise })
             }
@@ -928,9 +928,15 @@ impl Parser {
                 None
             }
             _ => {
-                let target = self.expression()?;
-                // `f(x) else ...` handles a failure with no success value (err.else.4).
+                let target = self.expression_plain()?;
+                // `f(x) else ...` handles a failure with no success value
+                // (err.else.5); `e else d` gives a value (err.else.6).
                 if self.at_kw("else") {
+                    if !self.else_block_follows()
+                        && !matches!(self.peek_at(1), Tok::Kw("return" | "break" | "continue"))
+                    {
+                        return Some(Stmt::Expr(self.else_expr(target)?));
+                    }
                     let otherwise = self.otherwise()?.expect("at `else`");
                     return Some(Stmt::Handle { value: target, otherwise });
                 }
@@ -973,11 +979,42 @@ impl Parser {
 
     // ---- Expressions, loosest binding first (expr.prec.1) ----
 
+    /// An expression, which may end in an `else` fallback (err.else.6).
     fn expression(&mut self) -> Option<Expr> {
+        let value = self.expression_plain()?;
+        self.else_expr(value)
+    }
+
+    /// An expression without a trailing `else`: a binding or a statement
+    /// handles its own `else`, including the block forms.
+    fn expression_plain(&mut self) -> Option<Expr> {
         match self.peek() {
             Tok::Kw("if") => self.if_expr(),
             Tok::Kw("match") => self.match_expr(),
             _ => self.range(),
+        }
+    }
+
+    /// `value else d` or `value else return ...` (err.else.6), the loosest
+    /// operator. An `else` that starts a block belongs to a statement.
+    fn else_expr(&mut self, value: Expr) -> Option<Expr> {
+        if !self.at_kw("else") || self.else_block_follows() {
+            return Some(value);
+        }
+        let pos = self.bump().pos;
+        let otherwise = match self.peek() {
+            Tok::Kw("return" | "break" | "continue") => Else::Leave(Box::new(self.statement_inner()?)),
+            _ => Else::Value(self.expression()?),
+        };
+        Some(Expr::Else { value: Box::new(value), otherwise: Box::new(otherwise), pos })
+    }
+
+    /// At `else`: whether an indented block follows it (`else` or `else err`).
+    fn else_block_follows(&self) -> bool {
+        match self.peek_at(1) {
+            Tok::Newline => true,
+            Tok::Ident(_) => matches!(self.peek_at(2), Tok::Newline) && matches!(self.peek_at(3), Tok::Indent),
+            _ => false,
         }
     }
 
@@ -1239,6 +1276,7 @@ impl Parser {
             Tok::Sym("(") => {
                 self.i += 1;
                 let inner = self.range()?;
+                let inner = self.else_expr(inner)?;
                 self.expect_sym(")", "`)`", "gram.syntax.1")?;
                 Some(inner)
             }

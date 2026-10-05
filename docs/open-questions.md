@@ -174,22 +174,7 @@ behaves as if it required `Eq` (a `[T Hash]` bound allows `==`,
 *Owner: AI under ADR 0076.*
 
 ## OQ-040 — `else` as an expression
-`x := e else d` works only as a declaration (ADR 0049), so a fallback inside
-a larger expression needs a throwaway binding:
-`Min =>` / `lo := nums.min() else 0` / `lo`. In the spreadsheet example,
-`Min => nums.min() else 0` measured 20.8 tokens against 33.6 (−38% on those
-arms; a tie at file level), and the JSON example wanted
-`(m.get(k) else 0) + 1`. Options:
-- `e else d` as an expression with the lowest precedence, so it must be
-  parenthesised inside operators: familiar from Kotlin's `?:` and Swift's
-  `??`, but needs a precedence decision and interacts with `else` blocks;
-- a method (`nums.min().or(0)`): no grammar change, but a second spelling of
-  the same fallback;
-- leave as is.
-
-Recommendation: the first, restricted to a value fallback (no block form in
-expression position), decided with the expression grammar. *Owner: AI under
-ADR 0076.*
+**Resolved** by [ADR 0144](decisions/0144-else-as-an-expression.md) (`e else d` is the loosest operator).
 
 ## OQ-041 — Format specifications in interpolation
 `"{x}"` gives only the default text form. Width, fill, precision and radix

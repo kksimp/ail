@@ -847,6 +847,7 @@ impl<'p> Checker<'p> {
             Expr::If { pos, .. } => reject(self, *pos, "`if`"),
             Expr::Match { pos, .. } => reject(self, *pos, "`match`"),
             Expr::Try { pos, .. } => reject(self, *pos, "`?`"),
+            Expr::Else { pos, .. } => reject(self, *pos, "`else`"),
             Expr::TypeArgs { pos, .. } => reject(self, *pos, "a type"),
         }
     }
@@ -1984,6 +1985,10 @@ impl<'p> Checker<'p> {
                 e(scrutinee).or_else(|| arms.iter().find_map(|a| self.overlapping_use(target, &a.body)))
             }
             Expr::Try { expr, context, .. } => e(expr).or_else(|| context.as_deref().and_then(e)),
+            Expr::Else { value, otherwise, .. } => e(value).or_else(|| match &**otherwise {
+                Else::Value(d) => e(d),
+                _ => None,
+            }),
         }
     }
 
@@ -2006,6 +2011,11 @@ impl<'p> Checker<'p> {
             Expr::Bool(..) => Ty::Bool,
             Expr::None(pos) => self.none(*pos, expect),
             Expr::Try { expr, context, pos } => self.try_expr(expr, context.as_deref(), *pos),
+            // err.else.6: the value, or the fallback when it's absent or failed.
+            Expr::Else { value, otherwise, .. } => {
+                let vt = self.expr(value, None, true);
+                self.else_part(&vt, value, otherwise)
+            }
             Expr::Interp(parts, _) => {
                 for part in parts {
                     if let InterpPart::Expr(x) = part {
@@ -3993,6 +4003,7 @@ fn breaks(body: &[Stmt]) -> bool {
             Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(in_expr),
             Expr::Map(pairs, _) => pairs.iter().any(|(k, v)| in_expr(k) || in_expr(v)),
             Expr::Try { expr, .. } => in_expr(expr),
+            Expr::Else { value, otherwise, .. } => in_expr(value) || in_else(otherwise),
             _ => false,
         }
     }

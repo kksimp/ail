@@ -217,8 +217,7 @@ fn Parser.parse_unicode(mut self, escape int) !char
         return fail_at(escape, "invalid unicode escape")
     mut code := 0
     for d in chars[pos..end]
-        digit := d.to_digit(16) else return fail_at(escape, "invalid unicode escape")
-        code = code * 16 + digit
+        code = code * 16 + (d.to_digit(16) else return fail_at(escape, "invalid unicode escape"))
     ch := char.from_code(code) else return fail_at(escape, "surrogate escapes are not supported")
     pos = end
     ch
@@ -250,10 +249,8 @@ fn Parser.parse_number(mut self) !Json
         is_float = true
     text := chars[start..pos].join("")
     if is_float
-        x := text.to_float() else return fail_at(start, "invalid number")
-        return Float(x)
-    n := text.to_int() else return fail_at(start, "number out of range")
-    Int(n)
+        return Float(text.to_float() else return fail_at(start, "invalid number"))
+    Int(text.to_int() else return fail_at(start, "number out of range"))
 fn parse(text str) Json ! ParseError
     mut p := Parser.new(text)
     p.parse_document()

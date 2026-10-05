@@ -187,9 +187,10 @@ the same type. *(ADR 0117)*
 
 **expr.prec.1** — Operators bind, from tightest to loosest: postfix (call,
 field, method, index, `?`); unary `-`; `* / %`; `+ -`; comparisons
-`== != < <= > >=`; `not`; `and`; `or`; ranges `.. ..=`. Binary operators at
-the same level associate to the left, except comparisons and ranges.
-*(ADR 0112)*
+`== != < <= > >=`; `not`; `and`; `or`; ranges `.. ..=`; `else`
+(`err.else.6`). Binary operators at the same level associate to the left,
+except comparisons, ranges, and `else`, which associates to the right.
+*(ADR 0112, ADR 0144)*
 
 **expr.prec.2** — Two comparison operators in sequence without parentheses
 (e.g. `a < b < c`) are a compile-time error. *(ADR 0112)*

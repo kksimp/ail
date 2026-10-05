@@ -97,8 +97,7 @@ fn tokenize(src str) !List[Token]
                 i += 1
             word := chars[start..i].join("")
             if chars[i - 1].is_digit()
-                pos := parse_pos(word) else return BadCell(word)
-                tokens.push(Cell(word, pos))
+                tokens.push(Cell(word, parse_pos(word) else return BadCell(word)))
             else
                 tokens.push(Name(word))
         elif "+-*/(),:<>=".contains(c)
@@ -143,8 +142,7 @@ fn Parser.formula(mut self) !Expr
 fn Parser.sum(mut self) !Expr
     mut left := product()?
     while true
-        c := take("+-") else break
-        op := match c
+        op := match (take("+-") else break)
             '+' => Op.Add
             _ => Sub
         left = Bin(op, left, product()?)
@@ -152,8 +150,7 @@ fn Parser.sum(mut self) !Expr
 fn Parser.product(mut self) !Expr
     mut left := unary()?
     while true
-        c := take("*/") else break
-        op := match c
+        op := match (take("*/") else break)
             '*' => Op.Mul
             _ => Div
         left = Bin(op, left, unary()?)
@@ -165,9 +162,7 @@ fn Parser.unary(mut self) !Expr
 fn Parser.primary(mut self) !Expr
     tok := next()
     match tok
-        Num(text) =>
-            n := text.to_int() else return TooLarge(text)
-            Lit(n)
+        Num(text) => Lit(text.to_int() else return TooLarge(text))
         Cell(_, pos) => Ref(pos)
         Name(name) => call(name)?
         Sym(c) =>
@@ -189,8 +184,7 @@ fn Parser.call(mut self, name str) !Expr
         return UnknownFunc(name)
     expect('(')?
     left := sum()?
-    c := take("<>=") else return Expected("a comparison", peek())
-    cmp := match c
+    cmp := match (take("<>=") else return Expected("a comparison", peek()))
         '<' => Ordering.Less
         '>' => Greater
         _ => Equal
@@ -273,8 +267,7 @@ fn parse_content(text str) !Content?
     if inner := text.strip_prefix("\"")
         if label := inner.strip_suffix("\"")
             return Label(label)
-    n := text.to_int() else return BadContent(text)
-    Number(n)
+    Number(text.to_int() else return BadContent(text))
 struct Assign
     pos Pos
     content Content?
@@ -309,8 +302,7 @@ fn Sheet.apply(mut self, lines List[str])
 fn Sheet.value(mut self, pos Pos) Value
     if known := memo.get(pos)
         return known
-    content := cells.get(pos) else return Num(0)
-    match content
+    match (cells.get(pos) else return Num(0))
         Number(n) => Num(n)
         Label(text) => Text(text)
         Broken(_, _) => Fail(BadParse)
@@ -358,12 +350,8 @@ fn Sheet.eval(mut self, e Expr) !int
                 Sum => nums.sum()
                 Count => nums.len()
                 Avg => div(nums.sum(), nums.len())?
-                Min =>
-                    lo := nums.min() else 0
-                    lo
-                Max =>
-                    hi := nums.max() else 0
-                    hi
+                Min => nums.min() else 0
+                Max => nums.max() else 0
         If(cmp, left, right, then, other) =>
             if eval(left)?.cmp(eval(right)?) == cmp
                 eval(then)?

@@ -252,6 +252,10 @@ impl Cx<'_> {
                     self.block(&mut arm.body);
                 }
             }
+            Expr::Else { value, otherwise, .. } => {
+                self.expr(value);
+                self.otherwise(otherwise);
+            }
             Expr::Try { expr, context, .. } => {
                 self.expr(expr);
                 if let Some(c) = context {
