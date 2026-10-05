@@ -138,6 +138,22 @@ both, as in Rust (`From[T]` vs. `Iterator`)? To be decided with collections
 and iteration, measured on a real corpus. *Owner: AI under ADR 0076, unless
 it proves hard to reverse.*
 
+## OQ-038 — In-place iteration over list elements
+Changing every element of a list currently needs indexes:
+`for i in 0..items.len()` and `items[i].qty = ...`.
+- **A. `for mut item in items` (recommended):** `item` is the element itself,
+  and changes to it are written back. `items` must be a mutable place, and the
+  loop body can't otherwise use `items` (exclusivity, as for a `mut`
+  argument). Pros: −3.2% tokens on the whole `inventory` program (the loop
+  itself −25%), no index arithmetic, no out-of-bounds risk. Cons: a new
+  borrow that lasts a whole loop, which is a new rule in the ownership model.
+- **B. Keep indexes** (Go, Swift): nothing new, but more tokens and index
+  noise.
+- **C. A library method taking a closure:** closures aren't designed yet.
+
+Evidence: [design/program-measurements-r1.md](design/program-measurements-r1.md).
+*Escalated to the designer: it extends the ownership model (ADR 0062).*
+
 ---
 
 ### Not yet opened

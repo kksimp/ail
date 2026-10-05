@@ -69,4 +69,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-037).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-038).

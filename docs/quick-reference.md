@@ -36,14 +36,16 @@ fn greet(name str)           # no return type: returns nothing
 ## Bindings
 
 ```ail
-x := 1           # immutable
+x := 1           # `:=` declares a new name (immutable)
 mut n := 0       # mutable
-n = 5
+n = 5            # `=` changes an existing `mut` name
 n += 1           # also -= *= /= %=
 ```
 
 A name can't be declared twice in one function, even in an inner block
-(sibling blocks may reuse a name). Locals can't reuse a function or type name.
+(sibling blocks may reuse a name). This includes parameters and loop
+variables. Locals can't reuse a function or type name. To update a `mut`
+variable inside a loop, use `=`, not `:=`.
 
 ## Types
 
@@ -81,9 +83,13 @@ fn main()
     print(p.sum())                # method calls always have ()
     c := Color.Red                # qualify a variant...
     print(is_red(Green))          # ...unless its type is known from context
+    p.x = 10                      # fields of a `mut` variable can be assigned
 ```
 
-Enums have no `==` yet: compare them with `match`. **(not yet):** variants
+A bare variant is allowed wherever the type is known: arguments, return
+values, struct fields, `match` arms, assignments to an existing variable, and
+list elements after the first. Enums have no `==` yet: compare them with
+`match`. **(not yet):** variants
 with data, such as `Circle(r int)`.
 
 ## Control flow
@@ -115,7 +121,16 @@ label := match c     # must cover every variant; `_` covers the rest
     Green =>
         part := "gr"
         "{part}een"
+
+match c              # as a statement, arms can just do things
+    Red => print("stop")
+    Green =>
+        count += 1
+        print("go")
 ```
+
+`if` and `match` work as statements or as values. A function can end with
+either one, and its value is the function's result.
 
 ## Operators and strings
 
@@ -134,10 +149,15 @@ label := match c     # must cover every variant; `_` covers the rest
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2
-xs.push(4)             # push and swap need a `mut` variable
+xs.push(4)             # push and swap need a `mut` variable or parameter
 xs.swap(0, 1)
+xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
 ```
+
+`for x in xs` gives a copy of each element, and changing `xs` inside the loop
+doesn't affect it. To change elements, loop over indexes:
+`for i in 0..xs.len()`.
 
 ## Values and `mut`
 

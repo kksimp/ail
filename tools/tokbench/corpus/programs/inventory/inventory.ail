@@ -1,0 +1,40 @@
+enum Category
+    Food
+    Tool
+    Toy
+
+struct Item
+    name str
+    category Category
+    price int
+    qty int
+
+fn Item.value(self) int
+    self.price * self.qty
+
+fn Category.label(self) str
+    match self
+        Food => "food"
+        Tool => "tool"
+        Toy => "toy"
+
+fn restock(mut items List[Item], min int) int
+    mut added := 0
+    for i in 0..items.len()
+        if items[i].qty < min
+            added += min - items[i].qty
+            items[i].qty = min
+    added
+
+fn main()
+    mut items := [
+        Item(name: "apple", category: Food, price: 3, qty: 10),
+        Item(name: "hammer", category: Tool, price: 25, qty: 1),
+        Item(name: "ball", category: Toy, price: 8, qty: 0),
+    ]
+    added := restock(mut items, 2)
+    mut total := 0
+    for item in items
+        print("{item.name} ({item.category.label()}): {item.qty} x {item.price}")
+        total += item.value()
+    print("restocked {added}, stock value {total}")
