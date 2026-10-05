@@ -37,6 +37,9 @@ Design notes:
 - [design/concurrency-modules-options.md](design/concurrency-modules-options.md):
   task model, task lifetimes, module unit, visibility, and imports, with
   measurements.
+- [design/program-measurements-r1.md](design/program-measurements-r1.md):
+  tokens of whole programs against six languages, and how well fresh AI agents
+  write AIL from the quick reference.
 
 Tools:
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.
