@@ -12,7 +12,7 @@ use std::io::{self, BufWriter, Write};
 use std::rc::Rc;
 
 use crate::ast::{
-    Arg, BinOp, Block, Else, Expr, FnDecl, InterpPart, Pattern, Program, Stmt, TypeKind, UnOp, place_path,
+    Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Pattern, Program, Stmt, TypeKind, UnOp, place_path,
 };
 use crate::check::Resolved;
 use crate::diag::Pos;
@@ -619,16 +619,37 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.binop(*op, l, r, *pos)?
             }
             Expr::Range { .. } => unreachable!("checked: ranges only in `for` and slices"),
-            Expr::If { branches, els, .. } => {
+            Expr::If { branches, els, else_err, .. } => {
+                let mut failure = None;
                 for (cond, body) in branches {
-                    if self.eval(cond, env)?.bool() {
-                        return self.block(body, env);
+                    match cond {
+                        Cond::Expr(c) => {
+                            if self.eval(c, env)?.bool() {
+                                return self.block(body, env);
+                            }
+                        }
+                        // expr.if.5: run the branch with the value bound, if there is one.
+                        Cond::Bind { name, value, .. } => match self.eval(value, env)? {
+                            Value::None => {}
+                            Value::Fail(f) => failure = Some(f),
+                            v => {
+                                let mark = env.len();
+                                env.push((name.as_str(), v));
+                                let r = self.block(body, env);
+                                env.truncate(mark);
+                                return r;
+                            }
+                        },
                     }
                 }
-                match els {
-                    Some(body) => return self.block(body, env),
-                    None => Value::Unit,
+                let Some(body) = els else { return Ok(Value::Unit) };
+                let mark = env.len();
+                if let (Some((name, _)), Some(f)) = (else_err, failure) {
+                    env.push((name.as_str(), f.error.clone()));
                 }
+                let r = self.block(body, env);
+                env.truncate(mark);
+                return r;
             }
             Expr::Match { scrutinee, arms, .. } => {
                 let Value::Enum(e, v, fields) = self.eval(scrutinee, env)? else { unreachable!("checked: enum") };

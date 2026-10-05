@@ -1,0 +1,25 @@
+error enum E
+    Bad
+
+fn f() int ! E
+    1
+
+fn maybe() int?
+    none
+
+fn main()
+    if n := 5
+        print(n)
+    if x := f()
+        print(x)
+    if y := maybe()
+        print(y)
+    else err
+        print("no")
+    if a := f()
+        print(a)
+    elif b := f()
+        print(b)
+    else err
+        print("both failed")
+    print(y)

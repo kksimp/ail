@@ -1,0 +1,50 @@
+error enum ConfigError
+    MissingEquals(line str)
+    BadNumber(text str)
+
+struct Config
+    width int
+
+fn parse(line str) Config ! ConfigError
+    parts := line.split("=")
+    if parts.len() < 2
+        return MissingEquals(line: line)
+    width := parts[1].to_int() else return BadNumber(text: parts[1])
+    Config(width: width)
+
+fn find(names List[str], wanted str) int?
+    for i in 0..names.len()
+        if names[i] == wanted
+            return i
+    none
+
+fn describe(names List[str], wanted str) str
+    if i := find(names, wanted)
+        "{wanted} is at {i}"
+    elif wanted == ""
+        "nothing to find"
+    else
+        "{wanted} is missing"
+
+fn main()
+    if cfg := parse("width=80")
+        print("ok: {cfg.width}")
+    else err
+        print("error: {err}")
+    if cfg := parse("width=wide")
+        print("ok: {cfg.width}")
+    else err
+        print("error: {err}")
+    if cfg := parse("width")
+        print("ok: {cfg.width}")
+    else
+        print("no config")
+    names := ["ada", "linus"]
+    print(describe(names, "linus"))
+    print(describe(names, ""))
+    print(describe(names, "grace"))
+    if i := find(names, "ada")
+        print("found ada at {i}")
+    if i := find(names, "bob")
+        print("never")
+    print("done")

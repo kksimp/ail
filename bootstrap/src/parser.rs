@@ -7,8 +7,8 @@
 //! `bootstrap.unsupported` with the rule they belong to.
 
 use crate::ast::{
-    Arg, Arm, BinOp, Block, Else, EnumDecl, Expr, Field, FnDecl, InterpPart, Param, Pattern, Program, Receiver, Stmt,
-    StructDecl, TypeKind, TypeRef, UnOp, Variant,
+    Arg, Arm, BinOp, Block, Cond, Else, EnumDecl, Expr, Field, FnDecl, InterpPart, Param, Pattern, Program, Receiver,
+    Stmt, StructDecl, TypeKind, TypeRef, UnOp, Variant,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED};
@@ -1000,13 +1000,14 @@ impl Parser {
     /// `if c` block, any `elif c` blocks, optional `else` block (expr.if.1, expr.if.3).
     fn if_expr(&mut self) -> Option<Expr> {
         let pos = self.bump().pos;
-        let cond = self.range()?;
+        let cond = self.condition()?;
         let body = self.block("the `if` condition", "expr.if.1")?;
         let mut branches = vec![(cond, body)];
         let mut els = None;
+        let mut else_err = None;
         loop {
             if self.eat_kw("elif") {
-                let cond = self.range()?;
+                let cond = self.condition()?;
                 let body = self.block("the `elif` condition", "expr.if.1")?;
                 branches.push((cond, body));
             } else if self.at_kw("else") {
@@ -1015,13 +1016,31 @@ impl Parser {
                     self.error_help("expr.if.1", else_pos, "AIL writes `else if` as `elif`", "write `elif`");
                     return None;
                 }
+                // `else err` binds the error (expr.if.6).
+                if let Tok::Ident(name) = self.peek().clone()
+                    && matches!(self.peek_at(1), Tok::Newline)
+                {
+                    else_err = Some((name, self.bump().pos));
+                }
                 els = Some(self.block("`else`", "expr.if.1")?);
                 break;
             } else {
                 break;
             }
         }
-        Some(Expr::If { branches, els, pos })
+        Some(Expr::If { branches, els, else_err, pos })
+    }
+
+    /// A `bool` condition, or a binding `name := e` (expr.if.5).
+    fn condition(&mut self) -> Option<Cond> {
+        if let Tok::Ident(name) = self.peek().clone()
+            && matches!(self.peek_at(1), Tok::Sym(":="))
+        {
+            let pos = self.bump().pos;
+            self.i += 1; // `:=`
+            return Some(Cond::Bind { name, pos, value: self.range()? });
+        }
+        Some(Cond::Expr(self.range()?))
     }
 
     /// `match e` followed by one `pattern => result` arm per line (expr.match.1).
