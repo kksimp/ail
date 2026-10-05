@@ -16,6 +16,11 @@ If-binding conditions (`if x := e` … `else err`, ADR 0125) followed
 runs, with traits, `impl` blocks, default methods, `any Trait`, generic
 functions, types and methods, inference, and the standard traits `Eq`, `Ord`
 and `ToStr` (ADRs 0126–0129). Verified on Linux x86-64 and macOS ARM64.
+Milestone 5 (2026-10-05): three 500–800 line programs run with output
+identical to their Python versions (`examples/interp.ail`, `json.ail`,
+`sheet.ail`), with floats, `char`, maps and sets, multi-line and raw strings,
+literal and or-patterns, constants, `! E` results and statement `else`
+(ADRs 0130–0140). Verified on Linux x86-64 and macOS ARM64.
 See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
 
 ## Design topics
