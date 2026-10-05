@@ -1167,6 +1167,18 @@ impl<'p> Checker<'p> {
                 msg,
                 "this value may be absent; supply a fallback with `x := value else fallback`",
             ),
+            // expr.name.2: conversions other languages make implicitly.
+            (Ty::Int, Ty::Float) => self.error_help(
+                rule,
+                pos,
+                msg,
+                "no implicit conversion: `x.to_int()` truncates toward zero; `x.round().to_int()` rounds",
+            ),
+            (Ty::Float, Ty::Int) => self.error_help(rule, pos, msg, "no implicit conversion: write `n.to_float()`"),
+            (Ty::Str, Ty::Char) => self.error_help(rule, pos, msg, "make a one-character string with \"{c}\""),
+            (Ty::Char, Ty::Str) => {
+                self.error_help(rule, pos, msg, "a character is written in single quotes: 'a'")
+            }
             _ => self.error(rule, pos, msg),
         }
     }
@@ -1343,7 +1355,7 @@ impl<'p> Checker<'p> {
             Stmt::Let { name, pos, mutable, value, otherwise } => {
                 let vt = self.expr(value, None, true);
                 let ty = match otherwise {
-                    Some(o) => self.else_part(&vt, value.pos(), o),
+                    Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => Self::ok_type(&vt),
                     None => vt,
                 };
@@ -1438,7 +1450,7 @@ impl<'p> Checker<'p> {
         let vt = self.expr(value, None, true);
         match &vt {
             Ty::Res(ok, _) if **ok == Ty::Unit => {
-                self.else_part(&vt, value.pos(), otherwise);
+                self.else_part(&vt, value, otherwise);
             }
             Ty::Err => {}
             Ty::Res(..) | Ty::Opt(_) => {
@@ -1462,7 +1474,8 @@ impl<'p> Checker<'p> {
 
     /// The `else` part of `x := e else ...`; returns the type bound to `x`
     /// (err.else.1-3).
-    fn else_part(&mut self, vt: &Ty, pos: Pos, o: &'p Else) -> Ty {
+    fn else_part(&mut self, vt: &Ty, value: &Expr, o: &'p Else) -> Ty {
+        let pos = value.pos();
         let (ok, errors) = match vt {
             Ty::Opt(t) => ((**t).clone(), None),
             Ty::Res(t, e) => ((**t).clone(), Some(self.errs_of(e))),
@@ -1472,7 +1485,10 @@ impl<'p> Checker<'p> {
                     "`else` handles a value that can be absent (`T?`) or fail (`T ! E`), but this is {}",
                     self.show(other)
                 );
-                self.error("err.else.1", pos, msg);
+                match Self::never_absent_help(value) {
+                    Some(h) => self.error_help("err.else.1", pos, msg, h),
+                    None => self.error("err.else.1", pos, msg),
+                }
                 (other.clone(), None)
             }
         };
@@ -2373,11 +2389,7 @@ impl<'p> Checker<'p> {
         if self.implements(t, self.std.hash) {
             return;
         }
-        let why = match t {
-            Ty::Float => "a float can't be a key, since NaN isn't equal to itself".to_string(),
-            Ty::Map(..) | Ty::Set(_) => "a map or set can't be a key".to_string(),
-            _ => format!("{} has its own `impl Eq`, or a part that can't be hashed", self.show(t)),
-        };
+        let why = self.hash_cause(t);
         self.error_help(
             "type.map.2",
             pos,
@@ -3356,6 +3368,20 @@ impl<'p> Checker<'p> {
         if need && els.is_none() { Ty::Err } else { agree.result() }
     }
 
+    /// Help for `else` or `if name :=` on a value that is never absent, when
+    /// it looks like an optional in other languages (expr.name.2).
+    fn never_absent_help(value: &Expr) -> Option<&'static str> {
+        match value {
+            Expr::Index { .. } => {
+                Some("indexing traps when the index or key is missing; for a map, `m.get(k)` gives an optional")
+            }
+            Expr::Method { name, .. } if name == "to_int" => {
+                Some("`x.to_int()` on a float traps on NaN or out of range; it never returns `none`")
+            }
+            _ => None,
+        }
+    }
+
     /// The type bound by `if name := value`, and the errors it can fail with
     /// when `value` is a `T ! E` (expr.if.5).
     fn binding_condition(&mut self, name: &str, value: &'p Expr) -> (Ty, Option<Vec<Ty>>) {
@@ -3368,7 +3394,8 @@ impl<'p> Checker<'p> {
                     "`if {name} := ...` needs a value that can be absent (`T?`) or fail (`T ! E`), but this is {}",
                     self.show(&other)
                 );
-                self.error_help("expr.if.5", value.pos(), msg, "compare it instead, e.g. `if x == ...`");
+                let help = Self::never_absent_help(value).unwrap_or("compare it instead, e.g. `if x == ...`");
+                self.error_help("expr.if.5", value.pos(), msg, help);
                 (other, None)
             }
         }

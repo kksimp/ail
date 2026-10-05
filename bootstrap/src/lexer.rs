@@ -36,6 +36,8 @@ pub enum Tok {
     /// `'a'` (lex.str.4)
     Char(char),
     Int(i64),
+    /// `9223372036854775808`, which fits only after a `-` (lex.num.3).
+    IntMin,
     /// `1.5`, `1e3` (lex.num.2)
     Float(f64),
     Newline,
@@ -612,6 +614,8 @@ impl Lexer {
         let text: String = line[start..end].iter().collect();
         match i64::from_str_radix(&digits, radix) {
             Ok(v) => self.push(Tok::Int(v), pos),
+            // lex.num.3: the magnitude of the minimum `int` is checked with its `-`.
+            Err(_) if u64::from_str_radix(&digits, radix) == Ok(1 << 63) => self.push(Tok::IntMin, pos),
             Err(e) => {
                 let overflow = matches!(e.kind(), std::num::IntErrorKind::PosOverflow);
                 let (rule, msg) = if overflow {

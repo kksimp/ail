@@ -257,7 +257,7 @@ impl Parser {
             Tok::Kw(k) => format!("the keyword `{k}`"),
             Tok::Sym(s) => format!("`{s}`"),
             Tok::Str(_) | Tok::Interp(_) => "a string".into(),
-            Tok::Int(_) => "an integer".into(),
+            Tok::Int(_) | Tok::IntMin => "an integer".into(),
             Tok::Float(_) => "a number".into(),
             Tok::Char(_) => "a character".into(),
             Tok::Newline => "end of line".into(),
@@ -265,6 +265,11 @@ impl Parser {
             Tok::Dedent => "end of block".into(),
             Tok::Eof => "end of file".into(),
         }
+    }
+
+    /// `9223372036854775808` without a `-` before it (lex.num.3).
+    fn int_too_big(&mut self, pos: Pos) {
+        self.error("lex.num.3", pos, "integer literal `9223372036854775808` doesn't fit in `int` (64-bit signed)");
     }
 
     fn error(&mut self, rule: &'static str, pos: Pos, msg: impl Into<String>) {
@@ -1087,6 +1092,11 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Option<Expr> {
+        if self.at_sym("-") && matches!(self.peek_at(1), Tok::IntMin) {
+            let pos = self.bump().pos;
+            self.i += 1;
+            return Some(Expr::Int(i64::MIN, pos));
+        }
         if self.at_sym("-") {
             let pos = self.bump().pos;
             let operand = self.unary()?;
@@ -1183,6 +1193,11 @@ impl Parser {
             Tok::Int(v) => {
                 self.i += 1;
                 Some(Expr::Int(v, pos))
+            }
+            Tok::IntMin => {
+                self.i += 1;
+                self.int_too_big(pos);
+                Some(Expr::Int(0, pos))
             }
             Tok::Float(v) => {
                 self.i += 1;
@@ -1458,10 +1473,18 @@ impl Parser {
                 self.i += 1;
                 Some(Pattern::Literal(Literal::Int(v), pos))
             }
-            Tok::Sym("-") if matches!(self.peek_at(1), Tok::Int(_)) => {
+            Tok::Sym("-") if matches!(self.peek_at(1), Tok::Int(_) | Tok::IntMin) => {
                 self.i += 1;
-                let Tok::Int(v) = self.bump().tok else { unreachable!("an integer") };
-                Some(Pattern::Literal(Literal::Int(-v), pos))
+                let v = match self.bump().tok {
+                    Tok::Int(v) => -v,
+                    _ => i64::MIN,
+                };
+                Some(Pattern::Literal(Literal::Int(v), pos))
+            }
+            Tok::IntMin => {
+                self.i += 1;
+                self.int_too_big(pos);
+                Some(Pattern::Literal(Literal::Int(0), pos))
             }
             Tok::Char(c) => {
                 self.i += 1;

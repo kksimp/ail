@@ -194,7 +194,12 @@ impl<'p> Checker<'p> {
                 None => Ty::Err,
             };
             if tr == Some(self.std.hash) {
-                self.unsupported(imp.pos, "implementing `Hash` yourself is not designed yet (type.map.2)");
+                self.error_help(
+                    "trait.auto.5",
+                    imp.pos,
+                    "`Hash` can't be implemented: every type whose `==` is automatic is `Hash` already",
+                    "remove this `impl`; custom hashing isn't designed yet (OQ-042)",
+                );
                 self.impl_info.push(ImplInfo { tr: None, target: Ty::Err, params: Vec::new() });
                 continue;
             }
@@ -264,11 +269,10 @@ impl<'p> Checker<'p> {
                 if tr == eq {
                     return self.auto_eq(t, con, seen);
                 }
-                // type.map.2: `Hash` is automatic where `Eq` is, except for floats
-                // and types with their own `Eq`.
+                // trait.auto.5: `Hash` is automatic where `Eq` is automatic or
+                // derived, except for floats.
                 if tr == self.std.hash {
-                    let custom = matches!(t, Ty::Struct(..) | Ty::Enum(..)) && self.impl_of.contains_key(&(eq, con));
-                    return !custom && !matches!(t, Ty::Float) && self.auto_hash(t, con, seen);
+                    return !self.custom_eq(t) && !matches!(t, Ty::Float) && self.auto_hash(t, con, seen);
                 }
                 if tr == self.std.ord {
                     return match t {
@@ -304,7 +308,44 @@ impl<'p> Checker<'p> {
         ok
     }
 
-    /// Structural hashing (type.map.2): every part is `Hash`.
+    /// Whether `t` has an `impl Eq` with its own `fn eq` (not a derived one).
+    fn custom_eq(&self, t: &Ty) -> bool {
+        matches!(t, Ty::Struct(..) | Ty::Enum(..))
+            && con_of(t)
+                .and_then(|c| self.impl_of.get(&(self.std.eq, c)))
+                .is_some_and(|&i| !self.prog.impls[i].methods.is_empty())
+    }
+
+    /// Why `t` isn't `Hash` (trait.auto.5), naming the part that isn't.
+    pub(super) fn hash_cause(&self, t: &Ty) -> String {
+        let hash = self.std.hash;
+        match t {
+            Ty::Float => "`float` isn't `Hash`, since NaN isn't equal to itself".into(),
+            Ty::Map(..) | Ty::Set(_) => "maps and sets aren't `Hash`".into(),
+            Ty::Any(_) => "`any` values aren't `Hash`".into(),
+            Ty::Param(p) => format!(
+                "add the constraint where `{}` is declared, e.g. `[{} Hash]`",
+                self.tparams[*p].name, self.tparams[*p].name
+            ),
+            Ty::List(e) | Ty::Opt(e) => self.hash_cause(e),
+            Ty::Struct(_, args) | Ty::Enum(_, args) => {
+                let name = self.type_name(t).unwrap_or_default();
+                if self.custom_eq(t) {
+                    return format!(
+                        "`{name}` has its own `fn eq`, and custom hashing isn't designed yet (OQ-042)"
+                    );
+                }
+                let fields = self.field_types_of(t, args);
+                match fields.iter().find(|f| !self.implements(f, hash)) {
+                    Some(f) => format!("`{name}` has a part of type {}: {}", self.show(f), self.hash_cause(f)),
+                    None => format!("{} isn't `Hash`", self.show(t)),
+                }
+            }
+            _ => format!("{} isn't `Hash`", self.show(t)),
+        }
+    }
+
+    /// Structural hashing (trait.auto.5): every part is `Hash`.
     fn auto_hash(&self, t: &Ty, con: Con, seen: &mut Vec<(Con, usize)>) -> bool {
         let hash = self.std.hash;
         match t {
@@ -411,6 +452,7 @@ impl<'p> Checker<'p> {
                 "add the constraint where `{}` is declared, e.g. `[{} {trait_name}]`",
                 self.tparams[*p].name, self.tparams[*p].name
             )),
+            _ if tr == self.std.hash => Some(self.hash_cause(t)),
             Ty::Struct(..) | Ty::Enum(..) if tr == self.std.eq => {
                 Some(format!("{} has a field that can't be compared with `==`", self.show(t)))
             }
