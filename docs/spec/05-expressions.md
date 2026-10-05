@@ -92,8 +92,8 @@ errors. *(ADR 0117)*
 refers to each element in turn, in order, so changes to `x` change the
 element. The body's use of `e` is restricted by `own.excl.5`. *(ADR 0121)*
 
-**expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`.
-*(ADR 0110)*
+**expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`,
+apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
 
 **expr.if.3** — When an `if` begins inside a statement (e.g. as a binding's
 value), its blocks are indented one level deeper than that statement's line,
@@ -106,6 +106,22 @@ elif n == 0
     "zero"
 else
     "positive"
+```
+
+**expr.if.5** — A condition of `if` or `elif` may be a binding `name := e`,
+where `e` has type `T?` or `T ! E`. When `e` is present or succeeded, `name`
+is bound to its value, immutably and only within that branch, and the branch
+runs. Otherwise the next `elif` or `else` is tried. *(ADR 0125)*
+
+**expr.if.6** — When an `if` has exactly one condition, and it binds a value
+of type `T ! E`, its `else` may be written `else name`, which binds the error
+value to `name` within the `else` block. *(ADR 0125)*
+
+```ail
+if cfg := parse(lines)
+    print("ok: {cfg.width}x{cfg.height}")
+else err
+    print("error: {err}")
 ```
 
 **expr.if.4** — An `if` or `match` whose value is used (bound, passed,

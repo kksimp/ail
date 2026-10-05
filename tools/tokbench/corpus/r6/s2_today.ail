@@ -1,0 +1,9 @@
+fn greet(id int)
+    user := find(id) else
+        print("no user {id}")
+        return
+    print("hello, {user.name}")
+
+fn main()
+    greet(7)
+    print("done")

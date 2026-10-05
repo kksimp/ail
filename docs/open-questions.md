@@ -102,20 +102,16 @@ subset"? To be decided once the type system and syntax are drafted.
 
 ## OQ-029 — Error and absence handling forms
 **Partly resolved:** fallbacks and early exit ([ADR 0049](decisions/0049-else-for-fallback-and-early-exit.md)),
-context ([ADR 0050](decisions/0050-error-return-traces.md)), and `?` on optionals
-([ADR 0051](decisions/0051-no-implicit-optional-to-error.md)).
-**Still open:** safe member access (`a?.b`), matching on specific errors, and
-handling success *or* failure as a statement, without a fallback value.
-**Evidence** ([design/program-measurements-r1.md](design/program-measurements-r1.md),
-round 2): both agents writing a config parser needed a helper function to
-print either the result or the error, because `else` must supply a value or
-leave. One agent's first attempt ended `main` early by mistake.
-**Options:**
-- `match` on a result, with success and error arms;
-- `else` on an expression statement (`save() else err` followed by a block);
-- a binding condition (`if cfg := parse(lines)`).
-
-To be decided with error matching, measured on these programs.
+context ([ADR 0050](decisions/0050-error-return-traces.md)), `?` on optionals
+([ADR 0051](decisions/0051-no-implicit-optional-to-error.md)), and handling
+success *or* failure as a statement ([ADR 0125](decisions/0125-if-binding.md):
+`if x := e` … `else err`).
+**Still open:** safe member access (`a?.b`), and matching on specific errors,
+including on a set of error types (`IoError | ParseError`). Options for the
+latter:
+- qualified variant patterns from every member type (`ParseError.Empty =>`),
+  plus a pattern for a whole error type;
+- `match` with success and error arms.
 
 ## OQ-030 — What is an error type?
 **Partly resolved:** error types are declared with `error`

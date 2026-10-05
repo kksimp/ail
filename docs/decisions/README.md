@@ -130,3 +130,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0122](0122-error-unions-and-reports.md) | Error unions `A \| B`; `?` needs a matching error type; failures must be handled; default error form *(delegated)* | Accepted | 2026-10-05 |
 | [0123](0123-variants-with-data.md) | Variants with data are built with named fields and matched by position *(delegated)* | Accepted | 2026-10-05 |
 | [0124](0124-string-split-and-to-int.md) | `s.split(sep)` and `s.to_int()` *(delegated)* | Accepted | 2026-10-05 |
+| [0125](0125-if-binding.md) | `if x := e` handles success or absence as a statement; `else err` binds the error *(delegated)* | Accepted | 2026-10-05 |

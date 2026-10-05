@@ -1,0 +1,5 @@
+fn main()
+    match find(7)
+        some(user) => print("hello, {user.name}")
+        none => print("no user 7")
+    print("done")

@@ -1,0 +1,6 @@
+fn main()
+    if user := find(7)
+        print("hello, {user.name}")
+    else
+        print("no user 7")
+    print("done")

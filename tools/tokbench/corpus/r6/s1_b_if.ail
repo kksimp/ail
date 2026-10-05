@@ -1,0 +1,6 @@
+fn main()
+    if cfg := parse(read_lines())
+        print("ok: {cfg.width}x{cfg.height}")
+    else err
+        print("error: {err}")
+    print("done")

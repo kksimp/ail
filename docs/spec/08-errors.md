@@ -95,6 +95,9 @@ compile-time error that names the missing types. *(ADR 0122)*
 or returned from a function whose result can hold it. Discarding it, or
 using it where a `T` is expected, is a compile-time error. *(ADR 0122)*
 
+**err.use.2** — An `if` whose condition binds a value of type `T ! E`
+(`expr.if.5`) MUST have an `else`. *(ADR 0125)*
+
 ## Handling with `else`
 
 **err.else.1** — For `e` of type `T?` or `T ! E`, the declaration

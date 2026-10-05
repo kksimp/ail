@@ -1,0 +1,9 @@
+fn report(lines List[str])
+    cfg := parse(lines) else err
+        print("error: {err}")
+        return
+    print("ok: {cfg.width}x{cfg.height}")
+
+fn main()
+    report(read_lines())
+    print("done")

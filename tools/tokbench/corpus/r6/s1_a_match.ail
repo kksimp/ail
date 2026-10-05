@@ -1,0 +1,5 @@
+fn main()
+    match parse(read_lines())
+        ok(cfg) => print("ok: {cfg.width}x{cfg.height}")
+        err(e) => print("error: {e}")
+    print("done")
