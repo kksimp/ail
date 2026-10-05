@@ -1,0 +1,69 @@
+trait Shape
+    fn area(self) int
+    fn name(self) str
+    fn describe(self) str
+        "{self.name()} with area {self.area()}"
+
+struct Circle
+    r int
+
+struct Rect
+    w int
+    h int
+
+impl Shape for Circle
+    fn area(self) int
+        3 * self.r * self.r
+    fn name(self) str
+        "circle"
+
+impl Shape for Rect
+    fn area(self) int
+        self.w * self.h
+    fn name(self) str
+        if self.w == self.h
+            "square"
+        else
+            "rectangle"
+
+struct Size
+    area int
+    name str
+
+impl Ord for Size
+
+struct Drawing
+    title str
+    shapes List[any Shape]
+
+fn Drawing.add(mut self, s any Shape)
+    self.shapes.push(s)
+
+fn Drawing.biggest(self) Size?
+    if self.shapes.len() == 0
+        return none
+    mut best := Size(area: 0, name: "")
+    for s in self.shapes
+        size := Size(area: s.area(), name: s.name())
+        if size > best
+            best = size
+    best
+
+fn largest[T Ord](items List[T]) T
+    mut best := items[0]
+    for x in items
+        if x > best
+            best = x
+    best
+
+fn main()
+    mut d := Drawing(title: "plan", shapes: [Circle(r: 2), Rect(w: 3, h: 4)])
+    d.add(Rect(w: 4, h: 4))
+    for s in d.shapes
+        print(s.describe())
+    if big := d.biggest()
+        print("biggest: {big}")
+    print(largest([3, 9, 4]))
+    print(largest(["pear", "fig", "apple"]))
+    print(Rect(w: 2, h: 3) == Rect(w: 2, h: 3))
+    print(d.shapes[0])

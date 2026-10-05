@@ -134,8 +134,58 @@ The quick reference now shows `if x := e` … `else err`.
 Both first attempts printed exactly the right output. Both used
 `if cfg := parse(...)` … `else err` four times, with no helper function.
 
+## Round 4: traits and generics (milestone 4)
+
+**Tokens.** `shapes` (a trait with a default method, two implementations,
+`any Shape` in a struct, a derived ordering, and a generic `largest`) was
+written idiomatically in Python, Go and Rust, with byte-identical output to
+AIL (`tools/tokbench/corpus/programs/shapes/`):
+
+| Language | Tokens | AIL vs. this language |
+|---|---|---|
+| **AIL** | **448.6** | — |
+| Python | 569.2 | −21% |
+| Go | 622.4 | −28% |
+| Rust | 795.4 | −44% |
+
+Where the savings come from:
+- the automatic text form and `==` (ADR 0126) replace Python's `__str__`,
+  Go's `String()` and Rust's `Display` impls;
+- `impl Ord for Size` derives ordering in one line, where Go writes `Less`
+  by hand;
+- `any Shape` needs no `Box::new` at each element, and `largest[T Ord]`
+  needs no `Clone` bound or `&` borrows.
+
+**AI usability.** Two tasks, with the round-1 method:
+- canvas: a trait with a default method, two implementations, and a struct
+  holding `List[any Shape]`;
+- stack: a generic `Stack[T]` with `pop`, a generic `max_of[T Ord]` used on
+  ints, strings and a struct with derived ordering, and an empty list.
+
+| Task | Small model | Mid-size model |
+|---|---|---|
+| Canvas | 2 attempts | 1 |
+| Stack | 2 attempts | 1 |
+
+- 2 of 4 first attempts ran correctly, and 4 of 4 by the second. Every
+  attempt was re-run independently.
+- Both failed attempts were fixed from the diagnostics' help:
+  - `"{name(self)}"` in a default method (`unknown name`), instead of
+    `self.name()`;
+  - `max_of` on a struct without `impl Ord` (`gen.bound.3`, whose help says
+    "add `impl Ord for Version`"), and `max_of([])` (`gen.infer.1`, whose
+    help shows the explicit form `max_of[...](...)`).
+- The milestone 4 quick reference shows each of these: a default method calling
+  `self`'s methods, `impl Ord` in code, `first[int]([])`, a mixed `any`
+  list, and how optionals print.
+
 ## Follow-ups
 
+- Lists have no `pop` or `remove`. Both stack agents worked around it
+  (with a slice, or a separate count). To be decided with the collections
+  library.
+- `mut xs := []` can't be written: an empty list needs a known type, and
+  bindings have no type annotations (`type.coll.3`).
 - Quick reference: the gaps above are now covered.
 - Diagnostics: when `:=` redeclares a visible `mut` name, the help will
   suggest assigning with `=` (with milestone 3).
