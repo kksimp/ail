@@ -11,8 +11,7 @@
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ```
 
-A program needs `fn main()`. `print(value)` writes an `int`, `bool` or `str`
-and a newline.
+A program needs `fn main()`. `print(value)` writes any value and a newline.
 
 ## Layout
 
@@ -50,8 +49,8 @@ variable inside a loop, use `=`, not `:=`.
 ## Types
 
 `int` (64-bit), `bool` (`true`, `false`), `str`, `List[T]`, structs, enums,
-optionals `T?`, and results that can fail, `T ! E`.
-**(not yet):** floats, `char`, `Map`, `Set`, traits, generics.
+optionals `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+**(not yet):** floats, `char`, `Map`, `Set`.
 
 ## Structs, enums and methods
 
@@ -88,9 +87,11 @@ fn main()
 ```
 
 A bare variant is allowed wherever the type is known: arguments, return
-values, struct fields, `match` arms, assignments to an existing variable, and
-list elements after the first. Enums have no `==` yet: compare them with
-`match`.
+values, struct fields, `match` arms, assignments to an existing variable, list
+elements after the first, and the right side of a comparison (`c == Red`).
+
+Every value can be compared with `==` (structs and lists field by field) and
+printed: `print(p)` shows `Point(x: 1, y: 2)`, and `"{c}"` gives `Color.Red`.
 
 Variants can carry fields. Build them like structs; match them by position:
 
@@ -151,7 +152,93 @@ fn main() !                                 # main can fail; the error is report
 - `if x := e` also works on optionals (`else` without a name), and in `elif`.
   On a result that can fail, it needs an `else`.
 - `?` on an optional works only in a function that returns an optional.
+- `print` of a `T?` shows the value, or `none`. A value is returned as a
+  `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
+
+## Traits and generics
+
+```ail
+trait Shape
+    fn area(self) int
+    fn name(self) str                # a default; an `impl` may replace it
+        "shape"
+    fn describe(self) str            # defaults call other methods on `self`
+        "{self.name()}: {self.area()}"
+
+struct Circle
+    r int
+
+struct Square
+    side int
+
+impl Shape for Circle                # defines every method without a default
+    fn area(self) int
+        3 * self.r * self.r
+
+impl Shape for Square
+    fn area(self) int
+        self.side * self.side
+    fn name(self) str
+        "square"
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version                 # no methods: compares major, then minor
+
+fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
+    mut best := items[0]
+    for x in items
+        if x > best
+            best = x
+    best
+
+fn first[T](xs List[T]) T?
+    if xs.len() == 0
+        return none
+    xs[0]
+
+fn bigger(a Shape, b Shape) bool     # a trait as a parameter type
+    a.area() > b.area()
+
+struct Stack[T]                      # a generic type
+    items List[T]
+
+fn Stack.new() Self                  # its methods use `T` directly;
+    Stack(items: [])                 # `Self` means `Stack[T]`
+
+fn Stack.push(mut self, x T)
+    self.items.push(x)
+
+struct Scene
+    shapes List[any Shape]           # `any`: values of different types
+
+fn main()
+    c := Circle(r: 2)
+    print(c.describe())              # shape: 12
+    print(largest([3, 9, 4]))        # type arguments are inferred...
+    print(first[int]([]))            # ...or written when nothing gives them
+    mut s := Stack[int].new()
+    s.push(1)
+    scene := Scene(shapes: [c, Square(side: 3)])
+    for sh in scene.shapes
+        print(sh.describe())
+    print(Version(major: 1, minor: 9) < Version(major: 2, minor: 0))
+    print(bigger(c, Square(side: 1)))
+    print(Shape.area(c))             # the qualified form of `c.area()`
+```
+
+- `<`, `<=`, `>`, `>=` work on `int`, `str`, lists, and types with
+  `impl Ord for T`, which compares the fields in order, or uses your
+  `fn cmp(self, other Self) Ordering` (returning `Less`, `Equal` or
+  `Greater`).
+- To customise: `impl ToStr for Color` with `fn to_str(self) str`, or
+  `impl Eq for T` with `fn eq(self, other Self) bool`.
+- To constrain one method of a generic type: `fn Stack[T Ord].max(self) T?`.
+- On an `any Shape` value, you can call only the methods whose parameters
+  don't use `Self`.
 
 ## Control flow
 
@@ -197,12 +284,12 @@ either one, and its value is the function's result.
 
 - `+ - * / %` on `int`. Overflow and division by zero stop the program (a
   trap). `/` rounds toward zero.
-- `== != < <= > >=`. Comparisons can't be chained: write `a < b and b < c`.
+- `== != < <= > >=` (see above for which types). Comparisons can't be
+  chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
   `if n != 0`, not `if n`.
-- Strings: `"total: {a + b}"` interpolates any `int`, `bool` or `str`
-  expression, or an error value. `\{` is a literal brace. There's no `+` on
-  strings, and `str` supports only `==` and `!=`.
+- Strings: `"total: {a + b}"` interpolates any expression. `\{` is a literal
+  brace. There's no `+` on strings.
 - `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`.
 
 ## Lists

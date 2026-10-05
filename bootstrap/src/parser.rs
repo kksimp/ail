@@ -2,25 +2,26 @@
 //!
 //! Grammar rules: gram.fn.1-2, gram.list.1, gram.generic.1, gram.syntax.1,
 //! lex.stmt.1, lex.kw.1, type.struct.1-3, type.enum.1, expr.bind.1-3,
-//! expr.if.1, expr.loop.1-3, expr.match.1, expr.prec.1-2, expr.op.1-3.
+//! expr.if.1, expr.loop.1-3, expr.match.1, expr.prec.1-2, expr.op.1-3,
+//! gen.decl.1, gen.bound.1, gen.method.1-3, gen.infer.2, trait.decl.1-2,
+//! trait.impl.1, trait.any.1.
 //! Spec constructs the bootstrap doesn't implement yet report
 //! `bootstrap.unsupported` with the rule they belong to.
 
+use std::collections::HashSet;
+
 use crate::ast::{
-    Arg, Arm, BinOp, Block, Cond, Else, EnumDecl, Expr, Field, FnDecl, InterpPart, Param, Pattern, Program, Receiver,
-    Stmt, StructDecl, TypeKind, TypeRef, UnOp, Variant,
+    Arg, Arm, BinOp, Block, Cond, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart, Owner,
+    Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within,
 };
 use crate::diag::{Diagnostic, Pos};
-use crate::lexer::{Part, Tok, Token, UNSUPPORTED};
+use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
     ("pub", "mod.vis.1"),
     ("use", "mod.use.1"),
-    ("trait", "trait.decl.1"),
-    ("impl", "trait.impl.1"),
-    ("any", "trait.any.1"),
     ("unique", "own.uniq.1"),
     ("move", "own.move.1"),
     ("ref", "own.ref.1"),
@@ -43,8 +44,42 @@ const ASSIGN_OPS: &[(&str, Option<BinOp>)] = &[
 const COMPARISONS: &[(&str, BinOp)] =
     &[("==", BinOp::Eq), ("!=", BinOp::Ne), ("<", BinOp::Lt), ("<=", BinOp::Le), (">", BinOp::Gt), (">=", BinOp::Ge)];
 
+/// The standard traits and `Ordering` (ADR 0127), read before every program.
+const PRELUDE: &str = include_str!("prelude.ail");
+
+/// Parse a program after the prelude, whose declarations are at line 0
+/// (`ast::is_prelude`).
+pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
+    let (mut all, diags) = lex(PRELUDE);
+    debug_assert!(diags.is_empty(), "{diags:?}");
+    all.pop(); // Eof
+    for t in &mut all {
+        t.pos.line = 0;
+    }
+    all.extend(tokens);
+    parse(all)
+}
+
+/// Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
+/// these, `[` starts type arguments rather than an index (gen.infer.2).
+fn generic_names(tokens: &[Token]) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for w in tokens.windows(3) {
+        if let [
+            Token { tok: Tok::Kw("fn" | "struct" | "enum"), .. },
+            Token { tok: Tok::Ident(n), .. },
+            Token { tok: Tok::Sym("["), .. },
+        ] = w
+        {
+            names.insert(n.clone());
+        }
+    }
+    names
+}
+
 pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let mut p = Parser { tokens, i: 0, diags: Vec::new(), in_interp: false };
+    let generic_names = generic_names(&tokens);
+    let mut p = Parser { tokens, i: 0, diags: Vec::new(), in_interp: false, generic_names };
     let mut prog = Program::default();
     loop {
         match p.peek().clone() {
@@ -55,10 +90,12 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 p.skip_block();
             }
             Tok::Kw("fn") => {
-                if let Some(f) = p.function() {
+                if let Some(f) = p.function(Within::TopLevel) {
                     prog.fns.push(f);
                 }
             }
+            Tok::Kw("trait") => p.trait_decl(&mut prog),
+            Tok::Kw("impl") => p.impl_decl(&mut prog),
             Tok::Kw("struct") => {
                 if let Some(s) = p.struct_decl(false) {
                     prog.structs.push(s);
@@ -90,7 +127,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 }
             },
             _ => {
-                p.unexpected("a declaration (`fn`, `struct`, `enum` or `error`)", "gram.syntax.1");
+                p.unexpected("a declaration (`fn`, `struct`, `enum`, `error`, `trait` or `impl`)", "gram.syntax.1");
                 p.skip_statement();
             }
         }
@@ -104,6 +141,7 @@ struct Parser {
     diags: Vec<Diagnostic>,
     /// Parsing the expression inside a string's `{...}`, which ends at `}`.
     in_interp: bool,
+    generic_names: HashSet<String>,
 }
 
 impl Parser {
@@ -303,28 +341,37 @@ impl Parser {
     // ---- Declarations ----
 
     /// `fn [Type.]name(params) [ReturnType]` followed by an indented body.
-    fn function(&mut self) -> Option<FnDecl> {
-        let f = self.function_inner();
+    /// In a trait, the body is optional (trait.decl.2).
+    fn function(&mut self, within: Within) -> Option<FnDecl> {
+        let f = self.function_inner(within);
         if f.is_none() {
             self.skip_statement();
         }
         f
     }
 
-    fn function_inner(&mut self) -> Option<FnDecl> {
+    fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
         self.bump(); // fn
-        let first = self.name("a function name after `fn`", "gram.fn.1")?;
-        let (owner, (name, pos)) = if self.eat_sym(".") {
-            (Some(first), self.name("a method name after `.`", "trait.method.1")?)
+        let (first, first_pos) = self.name("a function name after `fn`", "gram.fn.1")?;
+        // `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
+        let mut generics = if self.at_sym("[") { self.generic_params()? } else { Vec::new() };
+        let (owner, name, pos) = if self.eat_sym(".") {
+            let params = if generics.is_empty() { None } else { Some(std::mem::take(&mut generics)) };
+            let (name, pos) = self.name("a method name after `.`", "trait.method.1")?;
+            if self.at_sym("[") {
+                generics = self.generic_params()?;
+            }
+            (Some(Owner { name: first, pos: first_pos, params }), name, pos)
         } else {
-            (None, first)
+            (None, first, first_pos)
         };
-        if self.at_sym("[") {
-            let pos = self.pos();
-            self.error(
-                UNSUPPORTED,
+        if owner.is_some() && within != Within::TopLevel {
+            let block = if matches!(within, Within::Trait(_)) { "a `trait`" } else { "an `impl`" };
+            self.error_help(
+                "trait.impl.1",
                 pos,
-                "generic functions are not supported by the bootstrap yet (spec gram.generic.1)",
+                format!("functions in {block} block are written without a type name"),
+                format!("write `fn {name}(...)`"),
             );
             return None;
         }
@@ -336,7 +383,7 @@ impl Parser {
             if is_self {
                 let mutable = self.eat_kw("mut");
                 let pos = self.bump().pos;
-                if owner.is_none() {
+                if owner.is_none() && within == Within::TopLevel {
                     self.error_help(
                         "trait.method.1",
                         pos,
@@ -380,15 +427,136 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
-            Some((o, _)) => format!("`{o}.{name}`"),
+            Some(o) => format!("`{}.{name}`", o.name),
             None => format!("`{name}`"),
         };
-        let body = self.block(&format!("the signature of {full}"), "gram.fn.1")?;
-        Some(FnDecl { owner, name, pos, receiver, params, ret, body })
+        // A trait method without a default ends with its signature (trait.decl.2).
+        let body = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
+            if !self.eat(&Tok::Newline) {
+                self.unexpected("end of line after the signature", "trait.decl.1");
+                return None;
+            }
+            None
+        } else {
+            Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
+        };
+        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within })
+    }
+
+    /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
+    fn generic_params(&mut self) -> Option<Vec<GenericParam>> {
+        self.bump(); // [
+        let mut params = Vec::new();
+        while !self.at_sym("]") {
+            let (name, pos) = self.name("a type parameter name", "gen.decl.1")?;
+            let mut bounds = Vec::new();
+            if matches!(self.peek(), Tok::Ident(_)) {
+                bounds.push(self.name("a trait", "gen.bound.1")?);
+                while self.eat_sym("+") {
+                    bounds.push(self.name("a trait after `+`", "gen.bound.1")?);
+                }
+            }
+            params.push(GenericParam { name, pos, bounds });
+            if !self.eat_sym(",") {
+                break;
+            }
+        }
+        self.expect_sym("]", "`]` or `,` in the type parameters", "gen.decl.1")?;
+        Some(params)
+    }
+
+    /// `trait Name` followed by an indented block of functions (trait.decl.1).
+    fn trait_decl(&mut self, prog: &mut Program) {
+        self.bump(); // trait
+        let Some((name, pos)) = self.name("a trait name after `trait`", "trait.decl.1") else {
+            self.skip_statement();
+            return;
+        };
+        if self.at_sym("[") {
+            let at = self.pos();
+            self.error(UNSUPPORTED, at, "traits with type parameters are not designed yet (OQ-037)");
+            self.skip_statement();
+            return;
+        }
+        let index = prog.traits.len();
+        prog.traits.push(TraitDecl { name: name.clone(), pos, methods: Vec::new() });
+        if !self.eat(&Tok::Newline) {
+            self.unexpected(&format!("end of line after `trait {name}`"), "trait.decl.1");
+            self.skip_statement();
+            return;
+        }
+        let methods = self.fn_block(prog, Within::Trait(index), &format!("`trait {name}`"));
+        prog.traits[index].methods = methods;
+    }
+
+    /// `impl Trait for Type`, with an optional indented block of functions
+    /// (trait.impl.1, trait.derive.1).
+    fn impl_decl(&mut self, prog: &mut Program) {
+        let pos = self.bump().pos; // impl
+        let parsed = (|| {
+            let (trait_name, trait_pos) = self.name("a trait name after `impl`", "trait.impl.1")?;
+            if !self.eat_kw("for") {
+                self.unexpected("`for` after the trait name", "trait.impl.1");
+                return None;
+            }
+            let (name, tpos) = self.name("the implementing type after `for`", "trait.impl.1")?;
+            let params = if self.at_sym("[") { Some(self.generic_params()?) } else { None };
+            Some((trait_name, trait_pos, Owner { name, pos: tpos, params }))
+        })();
+        let Some((trait_name, trait_pos, target)) = parsed else {
+            self.skip_statement();
+            return;
+        };
+        let index = prog.impls.len();
+        let label = format!("`impl {trait_name} for {}`", target.name);
+        prog.impls.push(ImplDecl { trait_name, trait_pos, target, pos, methods: Vec::new() });
+        if !self.eat(&Tok::Newline) {
+            self.unexpected(&format!("end of line after {label}"), "trait.impl.1");
+            self.skip_statement();
+            return;
+        }
+        if matches!(self.peek(), Tok::Indent) {
+            let methods = self.fn_block(prog, Within::Impl(index), &label);
+            prog.impls[index].methods = methods;
+        }
+    }
+
+    /// The indented functions of a `trait` or `impl` block, after its first
+    /// line's end of line. Returns their indexes in `prog.fns`.
+    fn fn_block(&mut self, prog: &mut Program, within: Within, what: &str) -> Vec<usize> {
+        let mut indexes = Vec::new();
+        if !self.eat(&Tok::Indent) {
+            if matches!(within, Within::Trait(_)) {
+                let pos = self.pos();
+                self.error_help(
+                    "trait.decl.1",
+                    pos,
+                    format!("{what} needs an indented block of methods"),
+                    "indent each method by 4 spaces",
+                );
+            }
+            return indexes;
+        }
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if self.eat(&Tok::Newline) {
+                continue;
+            }
+            if !self.at_kw("fn") {
+                self.unexpected(&format!("a method (`fn ...`) in {what}"), "trait.decl.1");
+                self.skip_statement();
+                continue;
+            }
+            if let Some(f) = self.function(within) {
+                indexes.push(prog.fns.len());
+                prog.fns.push(f);
+            }
+        }
+        self.eat(&Tok::Dedent);
+        indexes
     }
 
     /// A type: `T`, `T?`, `T ! E`, `T ! A | B`, `!T`, or a bare `!`
@@ -398,9 +566,14 @@ impl Parser {
         if self.eat_sym("!") {
             let ok = match self.peek() {
                 Tok::Ident(_) => Some(Box::new(self.optional_type(expected, rule)?)),
+                Tok::Kw("any") => Some(Box::new(self.type_ref(expected, rule)?)),
                 _ => None,
             };
             return Some(TypeRef { kind: TypeKind::Fallible { ok, errors: None }, pos });
+        }
+        if self.eat_kw("any") {
+            let (name, _) = self.name("a trait after `any`", "trait.any.1")?;
+            return Some(TypeRef { kind: TypeKind::Any(name), pos });
         }
         let ok = self.optional_type(expected, rule)?;
         if !self.eat_sym("!") {
@@ -482,18 +655,23 @@ impl Parser {
             self.skip_statement();
             return None;
         };
-        if self.at_sym("[") {
-            let at = self.pos();
-            self.error(UNSUPPORTED, at, "generic structs are not supported by the bootstrap yet (spec gram.generic.1)");
-            self.skip_statement();
-            return None;
-        }
+        let generics = if self.at_sym("[") {
+            match self.generic_params() {
+                Some(g) => g,
+                None => {
+                    self.skip_statement();
+                    return None;
+                }
+            }
+        } else {
+            Vec::new()
+        };
         let mut fields = Vec::new();
         self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
             fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
-        Some(StructDecl { name, pos, is_error, fields })
+        Some(StructDecl { name, pos, is_error, generics, fields })
     }
 
     /// `enum Name` followed by one variant per line (type.enum.1-2).
@@ -502,6 +680,17 @@ impl Parser {
         let Some((name, pos)) = self.name("an enum name after `enum`", "type.enum.1") else {
             self.skip_statement();
             return None;
+        };
+        let generics = if self.at_sym("[") {
+            match self.generic_params() {
+                Some(g) => g,
+                None => {
+                    self.skip_statement();
+                    return None;
+                }
+            }
+        } else {
+            Vec::new()
         };
         let mut variants = Vec::new();
         self.members(&format!("`enum {name}`"), "type.enum.1", |p| {
@@ -519,7 +708,7 @@ impl Parser {
             variants.push(Variant { name: vname, pos: vpos, fields });
             Some(())
         });
-        Some(EnumDecl { name, pos, is_error, variants })
+        Some(EnumDecl { name, pos, is_error, generics, variants })
     }
 
     /// An indented block of one-line members, each parsed by `member`.
@@ -841,6 +1030,23 @@ impl Parser {
     /// Calls, fields, methods and indexing (expr.prec.1 level 1).
     fn postfix(&mut self) -> Option<Expr> {
         let mut expr = self.primary()?;
+        // `f[int](x)`, `Stack[int].new()`: type arguments after a generic name (gen.infer.2).
+        if let Expr::Name(name, pos) = &expr
+            && self.at_sym("[")
+            && self.generic_names.contains(name)
+        {
+            let (name, pos) = (name.clone(), *pos);
+            self.bump(); // [
+            let mut args = Vec::new();
+            while !self.at_sym("]") {
+                args.push(self.type_ref("a type argument", "gen.infer.2")?);
+                if !self.eat_sym(",") {
+                    break;
+                }
+            }
+            self.expect_sym("]", "`]` or `,` in the type arguments", "gen.infer.2")?;
+            expr = Expr::TypeArgs { name, args, pos };
+        }
         loop {
             if self.at_sym("(") {
                 let pos = self.bump().pos;
@@ -980,7 +1186,8 @@ impl Parser {
             match part {
                 Part::Lit(s) => out.push(InterpPart::Lit(s)),
                 Part::Code(tokens) => {
-                    let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true };
+                    let generic_names = self.generic_names.clone();
+                    let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true, generic_names };
                     let expr = sub.expression();
                     if expr.is_some() && !matches!(sub.peek(), Tok::Eof) {
                         sub.unexpected("`}` after the interpolated expression", "lex.str.2");
@@ -1160,7 +1367,7 @@ mod tests {
     fn body(src: &str) -> Block {
         let (mut prog, rules) = parse_src(src);
         assert!(rules.is_empty(), "{rules:?}");
-        prog.fns.remove(0).body
+        prog.fns.remove(0).body.expect("a body")
     }
 
     #[test]
@@ -1169,7 +1376,7 @@ mod tests {
         assert!(rules.is_empty());
         assert_eq!(prog.fns.len(), 1);
         assert_eq!(prog.fns[0].name, "main");
-        assert_eq!(prog.fns[0].body.len(), 1);
+        assert_eq!(prog.fns[0].body.as_ref().map(Vec::len), Some(1));
     }
 
     #[test]
@@ -1179,7 +1386,7 @@ mod tests {
         let f = &prog.fns[0];
         assert_eq!(f.params.len(), 1);
         assert!(matches!(&f.ret.as_ref().unwrap().kind, TypeKind::Named { name, .. } if name == "str"));
-        assert!(matches!(f.body[0], Stmt::Let { .. }));
+        assert!(matches!(f.body.as_ref().unwrap()[0], Stmt::Let { .. }));
     }
 
     #[test]
@@ -1221,7 +1428,24 @@ mod tests {
         assert!(rules.is_empty(), "{rules:?}");
         assert_eq!((prog.structs.len(), prog.enums.len(), prog.fns.len()), (1, 1, 2));
         assert!(prog.fns[0].receiver.is_some());
-        assert!(matches!(prog.fns[1].body[2], Stmt::Assign { op: Some(BinOp::Add), .. }));
+        assert!(matches!(prog.fns[1].body.as_ref().unwrap()[2], Stmt::Assign { op: Some(BinOp::Add), .. }));
+    }
+
+    #[test]
+    fn generics_traits_and_impls() {
+        let src = "struct Stack[T]\n    items List[T]\nfn Stack[T Ord].max(self) T?\n    none\ntrait Shape\n    fn area(self) int\n    fn name(self) str\n        \"s\"\nimpl Shape for Stack\n    fn area(self) int\n        0\nimpl Ord for Stack[T Ord]\nfn main()\n    s := Stack[int].new()\n    x := f[int](s)\n";
+        let (prog, rules) = parse_src(src);
+        assert!(rules.is_empty(), "{rules:?}");
+        assert_eq!(prog.structs[0].generics.len(), 1);
+        let max = &prog.fns[0];
+        assert_eq!(max.owner.as_ref().and_then(|o| o.params.as_ref()).map(|p| p[0].bounds.len()), Some(1));
+        assert_eq!(prog.traits[0].methods.len(), 2);
+        assert!(prog.fns[prog.traits[0].methods[0]].body.is_none());
+        assert!(prog.fns[prog.traits[0].methods[1]].body.is_some());
+        assert_eq!((prog.impls.len(), prog.impls[1].methods.len()), (2, 0));
+        let main = prog.fns.last().unwrap().body.as_ref().unwrap();
+        let Stmt::Let { value: Expr::Method { recv, .. }, .. } = &main[0] else { panic!("{:?}", main[0]) };
+        assert!(matches!(&**recv, Expr::TypeArgs { name, .. } if name == "Stack"));
     }
 
     #[test]

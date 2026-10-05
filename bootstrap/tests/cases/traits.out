@@ -1,0 +1,12 @@
+circle with area 12
+shape with area 9
+12
+24
+true
+Rect(w: 3, h: 1)
+Rect(w: 6, h: 6) Rect(w: 3, h: 3)
+3600
+circle with area 12
+shape with area 9
+Scene(shapes: [Circle(r: 2), Rect(w: 3, h: 3)])
+#7

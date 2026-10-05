@@ -1,0 +1,84 @@
+trait Shape
+    fn area(self) int
+    fn same_size(self, other Self) bool
+
+struct Point
+    x int
+    y int
+
+struct Circle
+    r int
+
+struct Flag
+    on bool
+
+struct Stack[T]
+    items List[T]
+
+fn Stack.new() Self
+    Stack(items: [])
+
+fn Stack[U].peek(self) U?
+    none
+
+impl Shape for Circle
+    fn area(self) str
+        "big"
+    fn perimeter(self) int
+        6 * self.r
+
+impl Shape for Point
+    fn area(self) int
+        0
+
+impl Shape for Point
+    fn area(self) int
+        1
+    fn same_size(self, other Self) bool
+        true
+
+impl Ord for Flag
+
+impl Eq for int
+
+fn Point.to_str(self) str
+    "point"
+
+fn largest[T Ord](items List[T]) T
+    items[0]
+
+fn has[T](items List[T], x T) bool
+    items[0] == x
+
+fn bad[int](x int) int
+    x
+
+struct Holder
+    s any Shape
+
+impl Ord for Holder
+    fn cmp(self, other Self) Ordering
+        Equal
+
+fn Circle.area(self) int
+    1
+
+fn use_any(xs List[any Shape]) bool
+    xs[0].same_size(xs[1])
+
+fn takes(p Shape) Shape
+    p
+
+fn calls(c Circle) int
+    c.area()
+
+fn helper(x Self) int
+    1
+
+fn main()
+    s := Stack.new()
+    big := largest([Point(x: 1, y: 2)])
+    shapes := [Circle(r: 1)]
+    a := Point(x: 1, y: 2) < Point(x: 2, y: 1)
+    t := Stack[int, str].new()
+    u := Self
