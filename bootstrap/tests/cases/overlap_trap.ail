@@ -1,0 +1,13 @@
+fn swap(mut a int, mut b int)
+    t := a
+    a = b
+    b = t
+
+fn main()
+    mut xs := [1, 2, 3]
+    i := 0
+    j := 2
+    swap(mut xs[i], mut xs[j])
+    print("{xs[0]} {xs[2]}")
+    k := 0
+    swap(mut xs[i], mut xs[k])

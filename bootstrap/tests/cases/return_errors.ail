@@ -1,0 +1,9 @@
+fn f() int
+    return
+
+fn g()
+    return 1
+
+fn main()
+    f()
+    g()

@@ -1,0 +1,13 @@
+fn inc(mut n int)
+    n += 1
+
+fn show(n int)
+    print(n)
+
+fn main()
+    mut a := 1
+    b := 2
+    inc(a)
+    inc(mut b)
+    show(mut a)
+    inc(mut 5)

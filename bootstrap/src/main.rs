@@ -57,11 +57,15 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
     let (tokens, mut diags) = lexer::lex(&src);
     let (program, parse_diags) = parser::parse(tokens);
     diags.extend(parse_diags);
+    let mut resolved = check::Resolved::default();
     if diags.is_empty() {
-        diags = check::check(&program);
+        (diags, resolved) = check::check(&program);
     }
+    let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
         diag::report(&mut diags, path, &src, json);
+    }
+    if rejected {
         return ExitCode::from(2);
     }
     if !execute {
@@ -70,13 +74,13 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
 
     let result = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
-        .spawn(move || interp::run(&program).map_err(|t| t.to_string()))
+        .spawn(move || interp::run(&program, &resolved).map_err(|t| t.to_string()))
         .expect("spawn interpreter thread")
         .join();
     match result {
         Ok(Ok(())) => ExitCode::SUCCESS,
         Ok(Err(trap)) => {
-            eprintln!("{path}: {trap}");
+            eprintln!("{path}:{trap}");
             ExitCode::from(1)
         }
         Err(_) => {

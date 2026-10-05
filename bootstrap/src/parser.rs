@@ -1,32 +1,26 @@
 //! Parser: tokens to a syntax tree for the subset the bootstrap supports.
 //!
-//! Supported so far: functions (gram.fn.1-2), immutable bindings (expr.bind.1),
-//! calls, string and integer literals, and names. Other constructs report
-//! `bootstrap.unsupported` with the spec rule they belong to.
+//! Grammar rules: gram.fn.1-2, gram.list.1, gram.generic.1, gram.syntax.1,
+//! lex.stmt.1, lex.kw.1, type.struct.1-3, type.enum.1, expr.bind.1-3,
+//! expr.if.1, expr.loop.1-3, expr.match.1, expr.prec.1-2, expr.op.1-3.
+//! Spec constructs the bootstrap doesn't implement yet report
+//! `bootstrap.unsupported` with the rule they belong to.
 
-use crate::ast::{Expr, FnDecl, Param, Program, Stmt, TypeRef};
+use crate::ast::{
+    Arg, Arm, BinOp, Block, EnumDecl, Expr, Field, FnDecl, InterpPart, Param, Pattern, Program, Receiver, Stmt,
+    StructDecl, TypeRef, UnOp,
+};
 use crate::diag::{Diagnostic, Pos};
-use crate::lexer::{Tok, Token, UNSUPPORTED};
+use crate::lexer::{Part, Tok, Token, UNSUPPORTED};
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
-/// with the spec rule or chapter each belongs to.
+/// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
-    ("if", "expr.if.1"),
-    ("elif", "expr.if.1"),
-    ("else", "expr.if.1"),
-    ("for", "expr.loop.1"),
-    ("while", "expr.loop.1"),
-    ("break", "expr.loop.2"),
-    ("continue", "expr.loop.2"),
-    ("match", "expr.match.1"),
-    ("return", "expr.block.2"),
-    ("mut", "expr.bind.2"),
     ("pub", "mod.vis.1"),
     ("use", "mod.use.1"),
-    ("struct", "type.struct.1"),
-    ("enum", "type.enum.1"),
     ("trait", "trait.decl.1"),
     ("impl", "trait.impl.1"),
+    ("any", "trait.any.1"),
     ("unique", "own.uniq.1"),
     ("move", "own.move.1"),
     ("ref", "own.ref.1"),
@@ -34,42 +28,73 @@ const NOT_YET: &[(&str, &str)] = &[
     ("spawn", "conc.task.1"),
     ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
-    ("and", "expr.op.1"),
-    ("or", "expr.op.1"),
-    ("not", "expr.op.1"),
+    ("as", "ffi.decl.1"),
     ("none", "type.opt.4"),
 ];
 
+const ASSIGN_OPS: &[(&str, Option<BinOp>)] = &[
+    ("=", None),
+    ("+=", Some(BinOp::Add)),
+    ("-=", Some(BinOp::Sub)),
+    ("*=", Some(BinOp::Mul)),
+    ("/=", Some(BinOp::Div)),
+    ("%=", Some(BinOp::Rem)),
+];
+
+const COMPARISONS: &[(&str, BinOp)] =
+    &[("==", BinOp::Eq), ("!=", BinOp::Ne), ("<", BinOp::Lt), ("<=", BinOp::Le), (">", BinOp::Gt), (">=", BinOp::Ge)];
+
 pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let mut p = Parser { tokens, i: 0, diags: Vec::new() };
-    let mut fns = Vec::new();
+    let mut p = Parser { tokens, i: 0, diags: Vec::new(), in_interp: false };
+    let mut prog = Program::default();
     loop {
         match p.peek().clone() {
             Tok::Eof => break,
-            Tok::Newline => p.i += 1,
-            Tok::Fn => {
+            Tok::Newline | Tok::Dedent => p.i += 1,
+            Tok::Indent => {
+                p.diags.push(Diagnostic::new("lex.block.1", p.pos(), "unexpected indentation"));
+                p.skip_block();
+            }
+            Tok::Kw("fn") => {
                 if let Some(f) = p.function() {
-                    fns.push(f);
+                    prog.fns.push(f);
+                }
+            }
+            Tok::Kw("struct") => {
+                if let Some(s) = p.struct_decl() {
+                    prog.structs.push(s);
+                }
+            }
+            Tok::Kw("enum") => {
+                if let Some(e) = p.enum_decl() {
+                    prog.enums.push(e);
                 }
             }
             _ => {
-                p.unexpected("a top-level declaration (`fn ...`)", "gram.fn.1");
+                p.unexpected("a declaration (`fn`, `struct` or `enum`)", "gram.syntax.1");
                 p.skip_statement();
             }
         }
     }
-    (Program { fns }, p.diags)
+    (prog, p.diags)
 }
 
 struct Parser {
     tokens: Vec<Token>,
     i: usize,
     diags: Vec<Diagnostic>,
+    /// Parsing the expression inside a string's `{...}`, which ends at `}`.
+    in_interp: bool,
 }
 
 impl Parser {
     fn peek(&self) -> &Tok {
         &self.tokens[self.i].tok
+    }
+
+    fn peek_at(&self, n: usize) -> &Tok {
+        let last = self.tokens.len() - 1;
+        &self.tokens[(self.i + n).min(last)].tok
     }
 
     fn pos(&self) -> Pos {
@@ -93,18 +118,43 @@ impl Parser {
         }
     }
 
-    fn describe(tok: &Tok) -> String {
+    fn at_sym(&self, s: &str) -> bool {
+        matches!(self.peek(), Tok::Sym(x) if *x == s)
+    }
+
+    fn eat_sym(&mut self, s: &str) -> bool {
+        let found = self.at_sym(s);
+        if found {
+            self.i += 1;
+        }
+        found
+    }
+
+    fn at_kw(&self, k: &str) -> bool {
+        matches!(self.peek(), Tok::Kw(x) if *x == k)
+    }
+
+    fn eat_kw(&mut self, k: &str) -> bool {
+        let found = self.at_kw(k);
+        if found {
+            self.i += 1;
+        }
+        found
+    }
+
+    /// The previous token closed a block, so the statement ended there.
+    fn after_block(&self) -> bool {
+        self.i > 0 && matches!(self.tokens[self.i - 1].tok, Tok::Dedent)
+    }
+
+    fn describe(&self, tok: &Tok) -> String {
         match tok {
+            Tok::Eof if self.in_interp => "`}`".into(),
             Tok::Ident(n) => format!("`{n}`"),
-            Tok::Fn => "`fn`".into(),
-            Tok::Str(_) => "a string".into(),
+            Tok::Kw(k) => format!("the keyword `{k}`"),
+            Tok::Sym(s) => format!("`{s}`"),
+            Tok::Str(_) | Tok::Interp(_) => "a string".into(),
             Tok::Int(_) => "an integer".into(),
-            Tok::LParen => "`(`".into(),
-            Tok::RParen => "`)`".into(),
-            Tok::Comma => "`,`".into(),
-            Tok::ColonEq => "`:=`".into(),
-            Tok::Colon => "`:`".into(),
-            Tok::Arrow => "`->`".into(),
             Tok::Newline => "end of line".into(),
             Tok::Indent => "an indented block".into(),
             Tok::Dedent => "end of block".into(),
@@ -112,74 +162,111 @@ impl Parser {
         }
     }
 
+    fn error(&mut self, rule: &'static str, pos: Pos, msg: impl Into<String>) {
+        self.diags.push(Diagnostic::new(rule, pos, msg));
+    }
+
+    fn error_help(&mut self, rule: &'static str, pos: Pos, msg: impl Into<String>, help: impl Into<String>) {
+        self.diags.push(Diagnostic::new(rule, pos, msg).help(help));
+    }
+
     /// Report an unexpected token, preferring a precise "not supported yet"
     /// message for spec keywords the bootstrap doesn't implement.
     fn unexpected(&mut self, expected: &str, rule: &'static str) {
         let pos = self.pos();
-        if let Tok::Ident(name) = self.peek() {
-            if let Some((_, spec)) = NOT_YET.iter().find(|(k, _)| k == name) {
-                self.diags.push(Diagnostic::new(
-                    UNSUPPORTED,
-                    pos,
-                    format!("`{name}` is not supported by the bootstrap yet (spec {spec})"),
-                ));
-                return;
-            }
+        if let Tok::Kw(k) = self.peek()
+            && let Some((_, spec)) = NOT_YET.iter().find(|(n, _)| n == k)
+        {
+            let k = *k;
+            self.error(UNSUPPORTED, pos, format!("`{k}` is not supported by the bootstrap yet (spec {spec})"));
+            return;
         }
-        let found = Self::describe(self.peek());
-        self.diags.push(Diagnostic::new(rule, pos, format!("expected {expected}, found {found}")));
+        let found = self.describe(self.peek());
+        self.error(rule, pos, format!("expected {expected}, found {found}"));
+    }
+
+    fn expect_sym(&mut self, s: &str, expected: &str, rule: &'static str) -> Option<()> {
+        if self.eat_sym(s) {
+            Some(())
+        } else {
+            self.unexpected(expected, rule);
+            None
+        }
     }
 
     /// Skip to the end of the current statement, including any indented
-    /// block that follows it, so one error doesn't cascade.
+    /// blocks that follow it, so one error doesn't cascade.
     fn skip_statement(&mut self) {
-        while !matches!(self.peek(), Tok::Newline | Tok::Eof) {
+        while !matches!(self.peek(), Tok::Newline | Tok::Indent | Tok::Dedent | Tok::Eof) {
             self.i += 1;
         }
         self.eat(&Tok::Newline);
-        if self.eat(&Tok::Indent) {
-            let mut depth = 1;
-            while depth > 0 && !matches!(self.peek(), Tok::Eof) {
-                match self.bump().tok {
-                    Tok::Indent => depth += 1,
-                    Tok::Dedent => depth -= 1,
-                    _ => {}
+        while matches!(self.peek(), Tok::Indent) {
+            self.skip_block();
+            // `elif`/`else` continue the statement whose block was skipped.
+            if self.at_kw("elif") || self.at_kw("else") {
+                while !matches!(self.peek(), Tok::Newline | Tok::Indent | Tok::Dedent | Tok::Eof) {
+                    self.i += 1;
                 }
+                self.eat(&Tok::Newline);
             }
         }
     }
 
-    fn ident(&mut self, expected: &str, rule: &'static str) -> Option<(String, Pos)> {
-        if let Tok::Ident(name) = self.peek().clone() {
-            if NOT_YET.iter().all(|(k, _)| *k != name) {
+    /// Skip an indented block, starting at its INDENT.
+    fn skip_block(&mut self) {
+        if !self.eat(&Tok::Indent) {
+            return;
+        }
+        let mut depth = 1;
+        while depth > 0 && !matches!(self.peek(), Tok::Eof) {
+            match self.bump().tok {
+                Tok::Indent => depth += 1,
+                Tok::Dedent => depth -= 1,
+                _ => {}
+            }
+        }
+    }
+
+    /// A name (not a keyword).
+    fn name(&mut self, expected: &str, rule: &'static str) -> Option<(String, Pos)> {
+        match self.peek().clone() {
+            Tok::Ident(name) => {
+                let pos = self.bump().pos;
+                Some((name, pos))
+            }
+            Tok::Kw(k) if NOT_YET.iter().all(|(n, _)| *n != k) => {
                 let pos = self.pos();
-                self.i += 1;
-                return Some((name, pos));
+                self.error_help(
+                    "lex.kw.1",
+                    pos,
+                    format!("`{k}` is a keyword and can't be used as a name"),
+                    "choose a different name",
+                );
+                None
+            }
+            _ => {
+                self.unexpected(expected, rule);
+                None
             }
         }
-        self.unexpected(expected, rule);
-        None
     }
 
-    /// `fn name(param Type, ...) [ReturnType]` followed by an indented body.
-    fn function(&mut self) -> Option<FnDecl> {
-        let fn_pos = self.bump().pos;
-        let parsed = self.function_header(fn_pos);
-        let Some((name, name_pos, params, ret)) = parsed else {
-            self.skip_statement();
-            return None;
-        };
+    /// NEWLINE INDENT statement+ DEDENT, after a line that opens a block.
+    fn block(&mut self, after: &str, rule: &'static str) -> Option<Block> {
         if !self.eat(&Tok::Newline) {
-            self.unexpected("end of line after the function signature", "gram.fn.1");
-            self.skip_statement();
+            self.unexpected(&format!("end of line after {after}"), rule);
             return None;
         }
         if !self.eat(&Tok::Indent) {
-            self.diags.push(
-                Diagnostic::new("gram.fn.1", self.pos(), format!("function `{name}` has no body"))
-                    .help("indent the body by 4 spaces under the signature"),
+            let pos = self.pos();
+            self.error_help(
+                rule,
+                pos,
+                format!("expected an indented block after {after}"),
+                "indent the block by 4 spaces",
             );
-            return None;
+            return Some(Vec::new());
         }
         let mut body = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
@@ -191,141 +278,769 @@ impl Parser {
             }
         }
         self.eat(&Tok::Dedent);
-        Some(FnDecl { name, pos: name_pos, params, ret, body })
+        Some(body)
     }
 
-    #[allow(clippy::type_complexity)]
-    fn function_header(&mut self, _fn_pos: Pos) -> Option<(String, Pos, Vec<Param>, Option<TypeRef>)> {
-        let (name, name_pos) = self.ident("a function name after `fn`", "gram.fn.1")?;
-        if !self.eat(&Tok::LParen) {
-            self.unexpected("`(` after the function name", "gram.fn.1");
+    // ---- Declarations ----
+
+    /// `fn [Type.]name(params) [ReturnType]` followed by an indented body.
+    fn function(&mut self) -> Option<FnDecl> {
+        let f = self.function_inner();
+        if f.is_none() {
+            self.skip_statement();
+        }
+        f
+    }
+
+    fn function_inner(&mut self) -> Option<FnDecl> {
+        self.bump(); // fn
+        let first = self.name("a function name after `fn`", "gram.fn.1")?;
+        let (owner, (name, pos)) = if self.eat_sym(".") {
+            (Some(first), self.name("a method name after `.`", "trait.method.1")?)
+        } else {
+            (None, first)
+        };
+        if self.at_sym("[") {
+            let pos = self.pos();
+            self.error(
+                UNSUPPORTED,
+                pos,
+                "generic functions are not supported by the bootstrap yet (spec gram.generic.1)",
+            );
             return None;
         }
+        self.expect_sym("(", "`(` after the function name", "gram.fn.1")?;
+        let mut receiver = None;
         let mut params = Vec::new();
-        while !matches!(self.peek(), Tok::RParen) {
-            let (pname, ppos) = self.ident("a parameter name", "gram.fn.2")?;
-            if matches!(self.peek(), Tok::Colon) {
-                self.diags.push(
-                    Diagnostic::new("gram.fn.2", self.pos(), "parameters are written `name Type`, without a colon")
-                        .help(format!("write `{pname} <Type>`")),
-                );
-                self.i += 1;
+        while !self.at_sym(")") {
+            let is_self = self.at_kw("self") || (self.at_kw("mut") && matches!(self.peek_at(1), Tok::Kw("self")));
+            if is_self {
+                let mutable = self.eat_kw("mut");
+                let pos = self.bump().pos;
+                if owner.is_none() {
+                    self.error_help(
+                        "trait.method.1",
+                        pos,
+                        "`self` is only allowed in methods",
+                        format!("declare a method as `fn Type.{name}(self, ...)`"),
+                    );
+                } else if receiver.is_some() || !params.is_empty() {
+                    self.error("trait.method.1", pos, "`self` must be the first parameter");
+                } else {
+                    receiver = Some(Receiver { mutable });
+                }
+            } else {
+                let mutable = self.eat_kw("mut");
+                let (pname, ppos) = self.name("a parameter name", "gram.fn.2")?;
+                if self.at_sym(":") {
+                    let pos = self.pos();
+                    self.error_help(
+                        "gram.fn.2",
+                        pos,
+                        "parameters are written `name Type`, without a colon",
+                        format!("write `{pname} <Type>`"),
+                    );
+                    self.i += 1;
+                }
+                let ty = self.type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?;
+                params.push(Param { name: pname, pos: ppos, mutable, ty });
             }
-            let (tname, tpos) = self.ident("the parameter's type (written `name Type`)", "gram.fn.2")?;
-            params.push(Param { name: pname, pos: ppos, ty: TypeRef { name: tname, pos: tpos } });
-            if !self.eat(&Tok::Comma) {
+            if !self.eat_sym(",") {
                 break;
             }
         }
-        if !self.eat(&Tok::RParen) {
-            self.unexpected("`)` or `,` in the parameter list", "gram.fn.2");
-            return None;
-        }
-        if matches!(self.peek(), Tok::Arrow) {
-            self.diags.push(
-                Diagnostic::new("gram.fn.2", self.pos(), "there is no `->`; the return type follows `)` directly")
-                    .help("remove the `->`"),
+        self.expect_sym(")", "`)` or `,` in the parameter list", "gram.fn.2")?;
+        if self.at_sym("->") {
+            let pos = self.pos();
+            self.error_help(
+                "gram.fn.2",
+                pos,
+                "there is no `->`; the return type follows `)` directly",
+                "remove the `->`",
             );
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) => {
-                let (tname, tpos) = self.ident("a return type", "gram.fn.2")?;
-                Some(TypeRef { name: tname, pos: tpos })
+            Tok::Ident(_) => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Sym("!") => {
+                let pos = self.pos();
+                self.error(
+                    UNSUPPORTED,
+                    pos,
+                    "error return types are not supported by the bootstrap yet (spec err.type.2)",
+                );
+                return None;
             }
             _ => None,
         };
-        Some((name, name_pos, params, ret))
+        let full = match &owner {
+            Some((o, _)) => format!("`{o}.{name}`"),
+            None => format!("`{name}`"),
+        };
+        let body = self.block(&format!("the signature of {full}"), "gram.fn.1")?;
+        Some(FnDecl { owner, name, pos, receiver, params, ret, body })
     }
 
-    /// A statement ends at the end of its line (lex.stmt.1).
-    fn statement(&mut self) -> Option<Stmt> {
-        if matches!(self.peek(), Tok::Indent) {
-            self.diags.push(Diagnostic::new("lex.block.1", self.pos(), "unexpected indentation"));
-            self.skip_statement();
+    /// `Name` or `Name[Arg, ...]` (gram.generic.1).
+    fn type_ref(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
+        let (name, pos) = self.name(expected, rule)?;
+        let mut args = Vec::new();
+        if self.at_sym("<") {
+            let at = self.pos();
+            self.error_help(
+                "gram.generic.1",
+                at,
+                "type arguments are written in square brackets",
+                format!("write `{name}[...]`"),
+            );
             return None;
         }
-        let is_binding = matches!(self.peek(), Tok::Ident(_))
-            && matches!(self.tokens.get(self.i + 1).map(|t| &t.tok), Some(Tok::ColonEq));
-        let stmt = if is_binding {
-            let (name, pos) = match self.ident("a binding name", "expr.bind.1") {
-                Some(v) => v,
-                None => {
-                    self.skip_statement();
-                    return None;
-                }
-            };
-            self.i += 1; // `:=`
-            match self.expression() {
-                Some(value) => Stmt::Let { name, pos, value },
-                None => {
-                    self.skip_statement();
-                    return None;
-                }
-            }
-        } else {
-            match self.expression() {
-                Some(e) => Stmt::Expr(e),
-                None => {
-                    self.skip_statement();
-                    return None;
-                }
-            }
-        };
-        if !self.eat(&Tok::Newline) {
-            self.unexpected("end of line after the statement", "lex.stmt.1");
-            self.skip_statement();
-            return None;
-        }
-        Some(stmt)
-    }
-
-    fn expression(&mut self) -> Option<Expr> {
-        let pos = self.pos();
-        let mut expr = match self.peek().clone() {
-            Tok::Str(s) => {
-                self.i += 1;
-                Expr::Str(s, pos)
-            }
-            Tok::Int(v) => {
-                self.i += 1;
-                Expr::Int(v, pos)
-            }
-            Tok::Ident(_) => {
-                let (name, pos) = self.ident("an expression", "expr.name.1")?;
-                Expr::Name(name, pos)
-            }
-            Tok::LParen => {
-                self.i += 1;
-                let inner = self.expression()?;
-                if !self.eat(&Tok::RParen) {
-                    self.unexpected("`)`", "lex.stmt.2");
-                    return None;
-                }
-                inner
-            }
-            _ => {
-                self.unexpected("an expression", "gram.syntax.1");
-                return None;
-            }
-        };
-        while matches!(self.peek(), Tok::LParen) {
-            let call_pos = self.pos();
-            self.i += 1;
-            let mut args = Vec::new();
-            while !matches!(self.peek(), Tok::RParen) {
-                args.push(self.expression()?);
-                if !self.eat(&Tok::Comma) {
+        if self.eat_sym("[") {
+            loop {
+                args.push(self.type_ref("a type argument", "gram.generic.1")?);
+                if !self.eat_sym(",") || self.at_sym("]") {
                     break;
                 }
             }
-            if !self.eat(&Tok::RParen) {
-                self.unexpected("`)` or `,` in the argument list", "expr.call.1");
+            self.expect_sym("]", "`]` after the type arguments", "gram.generic.1")?;
+        }
+        if self.at_sym("?") {
+            let at = self.pos();
+            self.error(UNSUPPORTED, at, "optional types are not supported by the bootstrap yet (spec type.opt.2)");
+            return None;
+        }
+        if self.at_sym("!") {
+            let at = self.pos();
+            self.error(UNSUPPORTED, at, "error types are not supported by the bootstrap yet (spec err.type.1)");
+            return None;
+        }
+        Some(TypeRef { name, args, pos })
+    }
+
+    /// `struct Name` followed by one `name Type` field per line (type.struct.1-2).
+    fn struct_decl(&mut self) -> Option<StructDecl> {
+        self.bump(); // struct
+        let Some((name, pos)) = self.name("a struct name after `struct`", "type.struct.1") else {
+            self.skip_statement();
+            return None;
+        };
+        if self.at_sym("[") {
+            let at = self.pos();
+            self.error(UNSUPPORTED, at, "generic structs are not supported by the bootstrap yet (spec gram.generic.1)");
+            self.skip_statement();
+            return None;
+        }
+        let mut fields = Vec::new();
+        self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
+            let (fname, fpos) = p.name("a field name", "type.struct.2")?;
+            if p.at_sym(":") {
+                let at = p.pos();
+                p.error_help(
+                    "type.struct.2",
+                    at,
+                    "fields are written `name Type`, without a colon",
+                    format!("write `{fname} <Type>`"),
+                );
+                p.i += 1;
+            }
+            let ty = p.type_ref("the field's type (written `name Type`)", "type.struct.2")?;
+            fields.push(Field { name: fname, pos: fpos, ty });
+            Some(())
+        });
+        Some(StructDecl { name, pos, fields })
+    }
+
+    /// `enum Name` followed by one variant per line (type.enum.1).
+    fn enum_decl(&mut self) -> Option<EnumDecl> {
+        self.bump(); // enum
+        let Some((name, pos)) = self.name("an enum name after `enum`", "type.enum.1") else {
+            self.skip_statement();
+            return None;
+        };
+        let mut variants = Vec::new();
+        self.members(&format!("`enum {name}`"), "type.enum.1", |p| {
+            let v = p.name("a variant name", "type.enum.1")?;
+            if p.at_sym("(") {
+                let at = p.pos();
+                p.error(
+                    UNSUPPORTED,
+                    at,
+                    "variants carrying data are not supported by the bootstrap yet (spec type.enum.2)",
+                );
                 return None;
             }
-            expr = Expr::Call { callee: Box::new(expr), args, pos: call_pos };
+            variants.push(v);
+            Some(())
+        });
+        Some(EnumDecl { name, pos, variants })
+    }
+
+    /// An indented block of one-line members, each parsed by `member`.
+    fn members(&mut self, what: &str, rule: &'static str, mut member: impl FnMut(&mut Self) -> Option<()>) {
+        if !self.eat(&Tok::Newline) {
+            self.unexpected(&format!("end of line after {what}"), rule);
+            self.skip_statement();
+            return;
+        }
+        if !self.eat(&Tok::Indent) {
+            let pos = self.pos();
+            self.error_help(
+                rule,
+                pos,
+                format!("{what} needs an indented block of members"),
+                "indent each member by 4 spaces",
+            );
+            return;
+        }
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if self.eat(&Tok::Newline) {
+                continue;
+            }
+            if member(self).is_some() && self.eat(&Tok::Newline) {
+                continue;
+            }
+            if !self.diags.last().is_some_and(|d| d.pos.line == self.pos().line) {
+                self.unexpected("end of line", "lex.stmt.1");
+            }
+            self.skip_statement();
+        }
+        self.eat(&Tok::Dedent);
+    }
+
+    // ---- Statements ----
+
+    /// A statement ends at the end of its line (lex.stmt.1), or with its block.
+    fn statement(&mut self) -> Option<Stmt> {
+        if matches!(self.peek(), Tok::Indent) {
+            let pos = self.pos();
+            self.error_help(
+                "lex.block.1",
+                pos,
+                "unexpected indentation",
+                "only a line that opens a block (like `if`, `for` or `fn`) can be followed by an indented line",
+            );
+            self.skip_block();
+            return None;
+        }
+        let errors_before = self.diags.len();
+        match self.statement_inner() {
+            Some(stmt) if self.after_block() || self.eat(&Tok::Newline) => Some(stmt),
+            Some(_) => {
+                self.unexpected("end of line after the statement", "lex.stmt.1");
+                self.skip_statement();
+                None
+            }
+            None => {
+                if self.diags.len() == errors_before {
+                    self.unexpected("a statement", "gram.syntax.1");
+                }
+                self.skip_statement();
+                None
+            }
+        }
+    }
+
+    fn statement_inner(&mut self) -> Option<Stmt> {
+        let pos = self.pos();
+        match self.peek().clone() {
+            Tok::Kw("mut") => {
+                self.bump();
+                let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
+                self.expect_sym(":=", "`:=` after the name", "expr.bind.2")?;
+                let value = self.expression()?;
+                Some(Stmt::Let { name, pos, mutable: true, value })
+            }
+            Tok::Ident(name) if matches!(self.peek_at(1), Tok::Sym(":=")) => {
+                self.i += 2;
+                let value = self.expression()?;
+                Some(Stmt::Let { name, pos, mutable: false, value })
+            }
+            Tok::Ident(word)
+                if ["let", "var", "const"].contains(&word.as_str()) && matches!(self.peek_at(1), Tok::Ident(_)) =>
+            {
+                self.error_help(
+                    "expr.bind.1",
+                    pos,
+                    format!("AIL has no `{word}`; bindings are declared with `:=`"),
+                    "write `name := value`, or `mut name := value` to allow reassignment",
+                );
+                None
+            }
+            Tok::Kw("while") => {
+                self.bump();
+                let cond = self.range()?;
+                let body = self.block("the `while` condition", "expr.loop.1")?;
+                Some(Stmt::While { cond, body, pos })
+            }
+            Tok::Kw("for") => {
+                self.bump();
+                let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
+                if !self.eat_kw("in") {
+                    self.unexpected("`in` after the loop variable", "expr.loop.1");
+                    return None;
+                }
+                let iter = self.range()?;
+                let body = self.block("the `for` header", "expr.loop.1")?;
+                Some(Stmt::For { var, var_pos, iter, body, pos })
+            }
+            Tok::Kw("break") => {
+                self.bump();
+                Some(Stmt::Break(pos))
+            }
+            Tok::Kw("continue") => {
+                self.bump();
+                Some(Stmt::Continue(pos))
+            }
+            Tok::Kw("return") => {
+                self.bump();
+                if matches!(self.peek(), Tok::Newline | Tok::Dedent | Tok::Eof) {
+                    Some(Stmt::Return(None, pos))
+                } else {
+                    Some(Stmt::Return(Some(self.expression()?), pos))
+                }
+            }
+            Tok::Kw(k) if matches!(self.peek_at(1), Tok::Sym(":=")) && NOT_YET.iter().all(|(n, _)| *n != k) => {
+                self.error_help(
+                    "lex.kw.1",
+                    pos,
+                    format!("`{k}` is a keyword and can't be used as a name"),
+                    "choose a different name",
+                );
+                None
+            }
+            Tok::Kw(k @ ("elif" | "else")) => {
+                self.error_help(
+                    "expr.if.1",
+                    pos,
+                    format!("`{k}` without a matching `if`"),
+                    "line it up with its `if` (or with the statement the `if` starts in)",
+                );
+                None
+            }
+            _ => {
+                let target = self.expression()?;
+                if let Tok::Sym(s) = self.peek().clone() {
+                    if let Some((_, op)) = ASSIGN_OPS.iter().find(|(sym, _)| *sym == s) {
+                        let pos = self.bump().pos;
+                        let value = self.expression()?;
+                        return Some(Stmt::Assign { target, op: *op, value, pos });
+                    }
+                    if s == ":=" {
+                        let pos = self.pos();
+                        self.error("expr.bind.1", pos, "only a plain name can be declared with `:=`");
+                        return None;
+                    }
+                }
+                Some(Stmt::Expr(target))
+            }
+        }
+    }
+
+    // ---- Expressions, loosest binding first (expr.prec.1) ----
+
+    fn expression(&mut self) -> Option<Expr> {
+        match self.peek() {
+            Tok::Kw("if") => self.if_expr(),
+            Tok::Kw("match") => self.match_expr(),
+            _ => self.range(),
+        }
+    }
+
+    /// `a..b` and `a..=b` (expr.loop.3): the loosest operators.
+    fn range(&mut self) -> Option<Expr> {
+        let lo = self.or()?;
+        let inclusive = if self.at_sym("..") {
+            false
+        } else if self.at_sym("..=") {
+            true
+        } else {
+            return Some(lo);
+        };
+        let pos = self.bump().pos;
+        let hi = self.or()?;
+        Some(Expr::Range { lo: Box::new(lo), hi: Box::new(hi), inclusive, pos })
+    }
+
+    /// A C-style logical operator: report it and treat it as its AIL spelling.
+    fn logical_typo(&mut self, sym: &str, word: &str) -> bool {
+        if !self.at_sym(sym) {
+            return false;
+        }
+        let pos = self.pos();
+        self.error_help("expr.op.1", pos, format!("AIL writes `{sym}` as `{word}`"), format!("write `{word}`"));
+        true
+    }
+
+    fn or(&mut self) -> Option<Expr> {
+        let mut lhs = self.and()?;
+        while self.at_kw("or") || self.logical_typo("||", "or") {
+            let pos = self.bump().pos;
+            let rhs = self.and()?;
+            lhs = Expr::Binary { op: BinOp::Or, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
+        }
+        Some(lhs)
+    }
+
+    fn and(&mut self) -> Option<Expr> {
+        let mut lhs = self.not()?;
+        while self.at_kw("and") || self.logical_typo("&&", "and") {
+            let pos = self.bump().pos;
+            let rhs = self.not()?;
+            lhs = Expr::Binary { op: BinOp::And, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
+        }
+        Some(lhs)
+    }
+
+    /// `not` binds more loosely than comparisons (ADR 0112).
+    fn not(&mut self) -> Option<Expr> {
+        if self.at_kw("not") || self.logical_typo("!", "not") {
+            let pos = self.bump().pos;
+            let operand = self.not()?;
+            return Some(Expr::Unary { op: UnOp::Not, operand: Box::new(operand), pos });
+        }
+        self.comparison()
+    }
+
+    fn comparison_op(&self) -> Option<BinOp> {
+        match self.peek() {
+            Tok::Sym(s) => COMPARISONS.iter().find(|(sym, _)| sym == s).map(|(_, op)| *op),
+            _ => None,
+        }
+    }
+
+    /// Comparisons don't chain (expr.prec.2).
+    fn comparison(&mut self) -> Option<Expr> {
+        let lhs = self.additive()?;
+        let Some(op) = self.comparison_op() else {
+            return Some(lhs);
+        };
+        let pos = self.bump().pos;
+        let rhs = self.additive()?;
+        let expr = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
+        if self.comparison_op().is_some() {
+            let at = self.pos();
+            self.error_help(
+                "expr.prec.2",
+                at,
+                "comparisons can't be chained",
+                "combine them with `and`, e.g. `a < b and b < c`",
+            );
+            return None;
         }
         Some(expr)
+    }
+
+    fn additive(&mut self) -> Option<Expr> {
+        let mut lhs = self.multiplicative()?;
+        loop {
+            let op = match self.peek() {
+                Tok::Sym("+") => BinOp::Add,
+                Tok::Sym("-") => BinOp::Sub,
+                _ => return Some(lhs),
+            };
+            let pos = self.bump().pos;
+            let rhs = self.multiplicative()?;
+            lhs = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
+        }
+    }
+
+    fn multiplicative(&mut self) -> Option<Expr> {
+        let mut lhs = self.unary()?;
+        loop {
+            let op = match self.peek() {
+                Tok::Sym("*") => BinOp::Mul,
+                Tok::Sym("/") => BinOp::Div,
+                Tok::Sym("%") => BinOp::Rem,
+                _ => return Some(lhs),
+            };
+            let pos = self.bump().pos;
+            let rhs = self.unary()?;
+            lhs = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
+        }
+    }
+
+    fn unary(&mut self) -> Option<Expr> {
+        if self.at_sym("-") {
+            let pos = self.bump().pos;
+            let operand = self.unary()?;
+            return Some(Expr::Unary { op: UnOp::Neg, operand: Box::new(operand), pos });
+        }
+        self.postfix()
+    }
+
+    /// Calls, fields, methods and indexing (expr.prec.1 level 1).
+    fn postfix(&mut self) -> Option<Expr> {
+        let mut expr = self.primary()?;
+        loop {
+            if self.at_sym("(") {
+                let pos = self.bump().pos;
+                let args = self.args()?;
+                expr = Expr::Call { callee: Box::new(expr), args, pos };
+            } else if self.eat_sym(".") {
+                let (name, name_pos) = self.name("a field or method name after `.`", "gram.syntax.1")?;
+                if self.eat_sym("(") {
+                    let args = self.args()?;
+                    expr = Expr::Method { recv: Box::new(expr), name, name_pos, args };
+                } else {
+                    expr = Expr::Field { recv: Box::new(expr), name, name_pos };
+                }
+            } else if self.at_sym("[") {
+                let pos = self.bump().pos;
+                let index = self.range()?;
+                self.expect_sym("]", "`]` after the index", "type.coll.4")?;
+                expr = Expr::Index { recv: Box::new(expr), index: Box::new(index), pos };
+            } else if self.at_sym("?") {
+                let pos = self.pos();
+                self.error(UNSUPPORTED, pos, "`?` is not supported by the bootstrap yet (spec err.prop.1)");
+                return None;
+            } else {
+                return Some(expr);
+            }
+        }
+    }
+
+    /// Arguments after `(`, up to and including `)` (gram.list.1).
+    fn args(&mut self) -> Option<Vec<Arg>> {
+        let mut args = Vec::new();
+        while !self.at_sym(")") {
+            let label = if matches!(self.peek(), Tok::Ident(_)) && matches!(self.peek_at(1), Tok::Sym(":")) {
+                let l = self.name("a field name", "type.struct.3")?;
+                self.i += 1; // `:`
+                Some(l)
+            } else {
+                None
+            };
+            let mutable = self.eat_kw("mut");
+            let value = self.expression()?;
+            args.push(Arg { label, mutable, value });
+            if !self.eat_sym(",") {
+                break;
+            }
+        }
+        self.expect_sym(")", "`)` or `,` in the argument list", "expr.call.1")?;
+        Some(args)
+    }
+
+    fn primary(&mut self) -> Option<Expr> {
+        let pos = self.pos();
+        match self.peek().clone() {
+            Tok::Str(s) => {
+                self.i += 1;
+                Some(Expr::Str(s, pos))
+            }
+            Tok::Interp(parts) => {
+                self.i += 1;
+                self.interpolation(parts, pos)
+            }
+            Tok::Int(v) => {
+                self.i += 1;
+                Some(Expr::Int(v, pos))
+            }
+            Tok::Kw("true") => {
+                self.i += 1;
+                Some(Expr::Bool(true, pos))
+            }
+            Tok::Kw("false") => {
+                self.i += 1;
+                Some(Expr::Bool(false, pos))
+            }
+            Tok::Kw("self") => {
+                self.i += 1;
+                Some(Expr::Name("self".into(), pos))
+            }
+            Tok::Ident(name) => {
+                self.i += 1;
+                Some(Expr::Name(name, pos))
+            }
+            Tok::Sym("(") => {
+                self.i += 1;
+                let inner = self.range()?;
+                self.expect_sym(")", "`)`", "gram.syntax.1")?;
+                Some(inner)
+            }
+            Tok::Sym("[") => {
+                self.i += 1;
+                let mut elems = Vec::new();
+                while !self.at_sym("]") {
+                    elems.push(self.expression()?);
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                }
+                self.expect_sym("]", "`]` or `,` in the list", "type.coll.2")?;
+                Some(Expr::List(elems, pos))
+            }
+            Tok::Sym("{") => {
+                self.error(
+                    UNSUPPORTED,
+                    pos,
+                    "map and set literals are not supported by the bootstrap yet (spec type.coll.2)",
+                );
+                None
+            }
+            Tok::Kw(k @ ("if" | "match")) => {
+                self.error_help(
+                    "gram.syntax.1",
+                    pos,
+                    format!("`{k}` can't be part of a larger expression"),
+                    format!("bind the `{k}` to a name first, then use the name"),
+                );
+                None
+            }
+            _ => {
+                self.unexpected("an expression", "gram.syntax.1");
+                None
+            }
+        }
+    }
+
+    /// Parse each `{...}` part of an interpolated string (lex.str.2).
+    fn interpolation(&mut self, parts: Vec<Part>, pos: Pos) -> Option<Expr> {
+        let mut out = Vec::new();
+        let mut ok = true;
+        for part in parts {
+            match part {
+                Part::Lit(s) => out.push(InterpPart::Lit(s)),
+                Part::Code(tokens) => {
+                    let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true };
+                    let expr = sub.expression();
+                    if expr.is_some() && !matches!(sub.peek(), Tok::Eof) {
+                        sub.unexpected("`}` after the interpolated expression", "lex.str.2");
+                    }
+                    let clean = sub.diags.is_empty();
+                    self.diags.append(&mut sub.diags);
+                    match expr {
+                        Some(e) if clean => out.push(InterpPart::Expr(e)),
+                        _ => ok = false,
+                    }
+                }
+            }
+        }
+        ok.then_some(Expr::Interp(out, pos))
+    }
+
+    /// `if c` block, any `elif c` blocks, optional `else` block (expr.if.1, expr.if.3).
+    fn if_expr(&mut self) -> Option<Expr> {
+        let pos = self.bump().pos;
+        let cond = self.range()?;
+        let body = self.block("the `if` condition", "expr.if.1")?;
+        let mut branches = vec![(cond, body)];
+        let mut els = None;
+        loop {
+            if self.eat_kw("elif") {
+                let cond = self.range()?;
+                let body = self.block("the `elif` condition", "expr.if.1")?;
+                branches.push((cond, body));
+            } else if self.at_kw("else") {
+                let else_pos = self.bump().pos;
+                if self.at_kw("if") {
+                    self.error_help("expr.if.1", else_pos, "AIL writes `else if` as `elif`", "write `elif`");
+                    return None;
+                }
+                els = Some(self.block("`else`", "expr.if.1")?);
+                break;
+            } else {
+                break;
+            }
+        }
+        Some(Expr::If { branches, els, pos })
+    }
+
+    /// `match e` followed by one `pattern => result` arm per line (expr.match.1).
+    fn match_expr(&mut self) -> Option<Expr> {
+        let pos = self.bump().pos;
+        let scrutinee = self.range()?;
+        if !self.eat(&Tok::Newline) {
+            self.unexpected("end of line after the `match` value", "expr.match.1");
+            return None;
+        }
+        if !self.eat(&Tok::Indent) {
+            let at = self.pos();
+            self.error_help(
+                "expr.match.1",
+                at,
+                "a `match` needs an indented block of arms",
+                "write one `pattern => result` per line",
+            );
+            return None;
+        }
+        let mut arms = Vec::new();
+        while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
+            if self.eat(&Tok::Newline) {
+                continue;
+            }
+            match self.arm() {
+                Some(arm) => arms.push(arm),
+                None => self.skip_statement(),
+            }
+        }
+        self.eat(&Tok::Dedent);
+        Some(Expr::Match { scrutinee: Box::new(scrutinee), arms, pos })
+    }
+
+    fn arm(&mut self) -> Option<Arm> {
+        let pat = self.pattern()?;
+        if !self.eat_sym("=>") {
+            if self.at_sym(":") || self.at_sym("->") {
+                let at = self.pos();
+                self.error_help("expr.match.1", at, "arms are written `pattern => result`", "write `=>`");
+                return None;
+            }
+            self.unexpected("`=>` after the pattern", "expr.match.1");
+            return None;
+        }
+        if matches!(self.peek(), Tok::Newline) {
+            let body = self.block("`=>`", "expr.match.1")?;
+            return Some(Arm { pat, body });
+        }
+        let result = self.expression()?;
+        if !self.after_block() && !self.eat(&Tok::Newline) {
+            self.unexpected("end of line after the arm", "expr.match.1");
+            return None;
+        }
+        Some(Arm { pat, body: vec![Stmt::Expr(result)] })
+    }
+
+    /// `_`, `Variant` or `Enum.Variant` (expr.match.4).
+    fn pattern(&mut self) -> Option<Pattern> {
+        let pos = self.pos();
+        match self.peek().clone() {
+            Tok::Ident(n) if n == "_" => {
+                self.i += 1;
+                Some(Pattern::Wildcard(pos))
+            }
+            Tok::Ident(n) => {
+                self.i += 1;
+                let (qualifier, name) = if self.eat_sym(".") {
+                    let (v, _) = self.name("a variant name after `.`", "expr.match.4")?;
+                    (Some(n), v)
+                } else {
+                    (None, n)
+                };
+                if self.at_sym("(") {
+                    let at = self.pos();
+                    self.error(
+                        UNSUPPORTED,
+                        at,
+                        "patterns with data are not supported by the bootstrap yet (spec type.enum.2)",
+                    );
+                    return None;
+                }
+                Some(Pattern::Variant { qualifier, name, pos })
+            }
+            Tok::Int(_) | Tok::Str(_) | Tok::Kw("true" | "false") | Tok::Sym("-") => {
+                self.error(
+                    UNSUPPORTED,
+                    pos,
+                    "literal patterns are not supported by the bootstrap yet (spec expr.match.4)",
+                );
+                None
+            }
+            _ => {
+                self.unexpected("a pattern (a variant name or `_`)", "expr.match.4");
+                None
+            }
+        }
     }
 }
 
@@ -339,6 +1054,12 @@ mod tests {
         assert!(lex_diags.is_empty(), "{lex_diags:?}");
         let (prog, diags) = parse(tokens);
         (prog, diags.into_iter().map(|d| d.rule).collect())
+    }
+
+    fn body(src: &str) -> Block {
+        let (mut prog, rules) = parse_src(src);
+        assert!(rules.is_empty(), "{rules:?}");
+        prog.fns.remove(0).body
     }
 
     #[test]
@@ -361,8 +1082,50 @@ mod tests {
     }
 
     #[test]
+    fn precedence_follows_adr_0112() {
+        let b = body("fn main()\n    x := not 1 + 2 * 3 == 7 and true\n");
+        let Stmt::Let { value, .. } = &b[0] else { panic!() };
+        // and(not(==( +(1, *(2,3)), 7)), true)
+        let Expr::Binary { op: BinOp::And, lhs, .. } = value else { panic!("{value:?}") };
+        let Expr::Unary { op: UnOp::Not, operand, .. } = &**lhs else { panic!("{lhs:?}") };
+        let Expr::Binary { op: BinOp::Eq, lhs, .. } = &**operand else { panic!() };
+        let Expr::Binary { op: BinOp::Add, rhs, .. } = &**lhs else { panic!() };
+        assert!(matches!(**rhs, Expr::Binary { op: BinOp::Mul, .. }));
+    }
+
+    #[test]
+    fn if_expression_layout_follows_adr_0111() {
+        let b = body("fn main()\n    k := if a\n        1\n    elif b\n        2\n    else\n        3\n    print(k)\n");
+        assert_eq!(b.len(), 2);
+        let Stmt::Let { value: Expr::If { branches, els, .. }, .. } = &b[0] else { panic!() };
+        assert_eq!(branches.len(), 2);
+        assert!(els.is_some());
+    }
+
+    #[test]
+    fn match_arms_inline_and_block() {
+        let b = body(
+            "fn main()\n    match g\n        A => 1\n        Grade.B =>\n            x := 2\n            x\n        _ => 3\n",
+        );
+        let Stmt::Expr(Expr::Match { arms, .. }) = &b[0] else { panic!() };
+        assert_eq!(arms.len(), 3);
+        assert_eq!(arms[1].body.len(), 2);
+        assert!(matches!(arms[2].pat, Pattern::Wildcard(_)));
+    }
+
+    #[test]
+    fn declarations_methods_and_literals() {
+        let src = "struct P\n    x int\nenum E\n    A\n    B\nfn P.get(self) int\n    self.x\nfn main()\n    ps := [\n        P(x: 1),\n    ]\n    mut q := ps[0]\n    q.x += 1\n    print(\"{q.get()}\")\n";
+        let (prog, rules) = parse_src(src);
+        assert!(rules.is_empty(), "{rules:?}");
+        assert_eq!((prog.structs.len(), prog.enums.len(), prog.fns.len()), (1, 1, 2));
+        assert!(prog.fns[0].receiver.is_some());
+        assert!(matches!(prog.fns[1].body[2], Stmt::Assign { op: Some(BinOp::Add), .. }));
+    }
+
+    #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    while x\n        print(1)\n");
+        let (_, rules) = parse_src("fn main()\n    defer x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 
@@ -370,5 +1133,14 @@ mod tests {
     fn rust_style_signatures_get_precise_fixes() {
         let (_, rules) = parse_src("fn f(a: int) -> int\n    a\n");
         assert_eq!(rules, vec!["gram.fn.2", "gram.fn.2"]);
+    }
+
+    #[test]
+    fn foreign_syntax_gets_precise_fixes() {
+        assert_eq!(parse_src("fn main()\n    x := a < b < c\n").1, vec!["expr.prec.2"]);
+        assert_eq!(parse_src("fn main()\n    x := a && b\n").1, vec!["expr.op.1"]);
+        assert_eq!(parse_src("fn main()\n    let x = 1\n").1, vec!["expr.bind.1"]);
+        assert_eq!(parse_src("fn main()\n    if := 1\n").1, vec!["lex.kw.1"]);
+        assert_eq!(parse_src("fn main()\n    if a\n        1\n    else if b\n        2\n").1, vec!["expr.if.1"]);
     }
 }

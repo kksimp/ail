@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 
 /// A source position, 1-based.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Pos {
     pub line: usize,
     pub col: usize,
@@ -17,11 +17,21 @@ pub struct Diagnostic {
     pub pos: Pos,
     pub message: String,
     pub help: Option<String>,
+    /// Warnings are reported but don't stop a program from running.
+    pub warning: bool,
 }
 
 impl Diagnostic {
     pub fn new(rule: &'static str, pos: Pos, message: impl Into<String>) -> Self {
-        Diagnostic { rule, pos, message: message.into(), help: None }
+        Diagnostic { rule, pos, message: message.into(), help: None, warning: false }
+    }
+
+    pub fn warning(rule: &'static str, pos: Pos, message: impl Into<String>) -> Self {
+        Diagnostic { warning: true, ..Diagnostic::new(rule, pos, message) }
+    }
+
+    fn severity(&self) -> &'static str {
+        if self.warning { "warning" } else { "error" }
     }
 
     pub fn help(mut self, help: impl Into<String>) -> Self {
@@ -46,7 +56,7 @@ pub fn report(diags: &mut [Diagnostic], path: &str, src: &str, json: bool) {
 }
 
 fn to_text(d: &Diagnostic, path: &str, src: &str) -> String {
-    let mut s = format!("{path}:{}:{}: error[{}]: {}\n", d.pos.line, d.pos.col, d.rule, d.message);
+    let mut s = format!("{path}:{}:{}: {}[{}]: {}\n", d.pos.line, d.pos.col, d.severity(), d.rule, d.message);
     if let Some(line) = src.lines().nth(d.pos.line.saturating_sub(1)) {
         let _ = writeln!(s, "    {line}");
         let _ = writeln!(s, "    {}^", " ".repeat(d.pos.col.saturating_sub(1)));
@@ -58,7 +68,7 @@ fn to_text(d: &Diagnostic, path: &str, src: &str) -> String {
 }
 
 fn to_json(d: &Diagnostic, path: &str) -> String {
-    let mut s = String::from("{\"severity\":\"error\"");
+    let mut s = format!("{{\"severity\":{}", json_str(d.severity()));
     let _ = write!(s, ",\"rule\":{}", json_str(d.rule));
     let _ = write!(s, ",\"file\":{}", json_str(path));
     let _ = write!(s, ",\"line\":{},\"col\":{}", d.pos.line, d.pos.col);

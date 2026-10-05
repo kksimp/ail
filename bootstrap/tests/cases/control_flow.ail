@@ -1,0 +1,40 @@
+fn classify(n int) str
+    if n < 0
+        "negative"
+    elif n == 0
+        "zero"
+    else
+        "positive"
+
+fn first_multiple(xs List[int], k int) int
+    for x in xs
+        if x % k == 0
+            return x
+    -1
+
+fn main()
+    print(classify(-5))
+    print(classify(0))
+    print(classify(7))
+    kind := if 3 > 2 and not false
+        "yes"
+    else
+        "no"
+    print(kind)
+    mut sum := 0
+    for i in 1..=10
+        if i % 2 == 0
+            continue
+        if i > 7
+            break
+        sum += i
+    print(sum)
+    mut n := 1
+    while n < 100
+        n *= 3
+    print(n)
+    print(first_multiple([5, 7, 12, 14], 7))
+    print(first_multiple([1, 2], 5))
+    for i in 0..0
+        print("never")
+    print(1 < 2 or 1 / 0 == 0)

@@ -1,0 +1,10 @@
+struct User
+    name str
+    age int
+
+fn main()
+    a := User(name: "Ada")
+    b := User(name: "Bob", age: 3, email: "x")
+    c := User(name: 5, age: 1)
+    d := User("Dee", 4)
+    e := User(name: "E", name: "F", age: 2)

@@ -1,0 +1,5 @@
+0: red stop=true
+1: green stop=false
+2: yellow stop=false
+3: red stop=true
+yellow

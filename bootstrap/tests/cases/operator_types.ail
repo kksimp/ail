@@ -1,0 +1,5 @@
+fn main()
+    a := 1 + "two"
+    b := true + false
+    c := not 5
+    d := "a" + "b"

@@ -1,0 +1,6 @@
+enum Grade
+    A
+
+fn main()
+    print(Grade.A)
+    print("{Grade.A}")

@@ -1,0 +1,7 @@
+fn add_to(mut total int, n int)
+    total += n
+
+fn main()
+    mut xs := [1, 2]
+    add_to(mut xs[0], xs[0])
+    xs.push(xs[1])

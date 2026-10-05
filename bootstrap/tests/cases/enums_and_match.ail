@@ -1,0 +1,32 @@
+enum Light
+    Red
+    Yellow
+    Green
+
+fn Light.next(self) Light
+    match self
+        Red => Green
+        Green => Yellow
+        Yellow => Red
+
+fn Light.name(self) str
+    match self
+        Light.Red => "red"
+        Yellow => "yellow"
+        Green =>
+            start := "gr"
+            "{start}een"
+
+fn is_stop(l Light) bool
+    match l
+        Red => true
+        Yellow => false
+        Green => false
+
+fn main()
+    mut l := Light.Red
+    for i in 0..4
+        print("{i}: {l.name()} stop={is_stop(l)}")
+        l = l.next()
+    lights := [Light.Green, Yellow]
+    print(lights[1].name())
