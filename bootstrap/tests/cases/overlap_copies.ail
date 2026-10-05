@@ -1,0 +1,28 @@
+# A read-only argument that overlaps a `mut` one is passed as a copy (own.excl.4).
+struct Total
+    x int
+
+fn Total.add(mut self, n int)
+    self.x += n
+
+fn add_to(mut total int, n int)
+    total += n
+
+fn main()
+    mut xs := [1, 2, 3]
+    xs.push(xs[0])
+    xs.push(xs.len())
+    add_to(mut xs[1], xs[1])
+    print("{xs[3]} {xs[4]} {xs[1]}")
+    mut t := Total(x: 5)
+    t.add(t.x)
+    print(t.x)
+    xs.swap(0, 2)
+    xs.swap(1, 1)
+    print("{xs[0]} {xs[1]} {xs[2]}")
+    mut grid := [[1, 2], [3]]
+    grid[0].push(grid[0][1])
+    print(grid[0][2])
+    i := 0
+    add_to(mut xs[i], xs[i])
+    print(xs[0])
