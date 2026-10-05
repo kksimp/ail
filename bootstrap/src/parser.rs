@@ -68,7 +68,9 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     }
     shift(&mut all);
     all.extend(tokens);
-    parse(all)
+    let (mut prog, mut diags) = parse(all);
+    crate::implicit_self::rewrite(&mut prog, &mut diags);
+    (prog, diags)
 }
 
 /// Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of

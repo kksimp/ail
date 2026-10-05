@@ -1,0 +1,21 @@
+# trait.method.7: a method's locals can't take a field's name, and a bare call
+# can't mean both a method and a function.
+struct Box
+    size int
+
+fn grow(n int) int
+    n + 1
+
+fn Box.grow(self) int
+    size + 1
+
+fn Box.resize(self, size int) int
+    size
+
+fn Box.twice(self) int
+    grow() * 2
+
+fn main()
+    b := Box(size: 1)
+    print(b.resize(2))
+    print(b.twice())

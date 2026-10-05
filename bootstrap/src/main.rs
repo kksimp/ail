@@ -6,6 +6,7 @@
 mod ast;
 mod check;
 mod diag;
+mod implicit_self;
 mod interp;
 mod lexer;
 mod parser;

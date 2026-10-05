@@ -1180,14 +1180,13 @@ impl<'a, W: Write> Interp<'a, W> {
         self.invoke(f, None, args, callee.pos(), env)
     }
 
-    /// Field values in declaration order from `field: value` arguments,
-    /// evaluated in the order written (type.struct.3, type.enum.6).
+    /// Field values in declaration order from named, shorthand and
+    /// positional arguments, evaluated in the order written (type.struct.3,
+    /// type.struct.7, type.enum.6).
     fn labelled(&mut self, fields: &'a [crate::ast::Field], args: &'a [Arg], env: &mut Env<'a>) -> Flow<Vec<Value>> {
         let mut values = vec![Value::Unit; fields.len()];
-        for a in args {
-            let (label, _) = a.label.as_ref().expect("checked: labelled");
-            let i = fields.iter().position(|f| f.name == *label).expect("checked: field exists");
-            values[i] = self.eval(&a.value, env)?;
+        for (a, (slot, _)) in args.iter().zip(crate::ast::field_slots(fields, args)) {
+            values[slot.expect("checked: field exists")] = self.eval(&a.value, env)?;
         }
         Ok(values)
     }

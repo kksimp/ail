@@ -1,0 +1,9 @@
+# type.struct.7: positional arguments can't fill two fields of one type.
+struct Pos
+    row int
+    col int
+
+fn main()
+    print(Pos(1, 2))
+    print(Pos(row: 1, 2, 3))
+    print(Pos(1, row: 2))

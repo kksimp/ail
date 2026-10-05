@@ -36,7 +36,7 @@ reported but don't stop a program from running.
 
 All errors in a file are reported in one pass, sorted by position.
 
-## Supported subset (milestone 5: the big example programs)
+## Supported subset (milestone 6: Python parity)
 
 - **Declarations:** `fn` with `name Type` and `mut name Type` parameters and a
   return type, which can be `T?`, `T ! E`, `T ! A | B`, `!T`, `!` or `! E`;
@@ -65,7 +65,8 @@ All errors in a file are reported in one pass, sorted by position.
   `==` and `!=` on any type that supports them, and `<` on `Ord` types;
   `mut` arguments, method calls, fields, indexing `xs[i]` and `m[k]`, slices
   `xs[a..b]`, `xs[a..]`, `xs[..b]`; struct and variant literals
-  `Type(field: value)`; list, map and set literals; `List[T]()`,
+  `Type(field: value)`, with shorthand (`Pos(row, col)`) and positional
+  arguments when no two fields filled share a type; list, map and set literals; `List[T]()`,
   `Map[K, V]()`, `Set[T]()`; float and char literals; multi-line,
   one-line `"""..."""` and raw strings; operators
   by ADR 0112's precedence; string interpolation `"{expr}"`; bare enum
@@ -80,6 +81,9 @@ All errors in a file are reported in one pass, sorted by position.
   `type.char.*`, `type.num.*`, `type.coll.*`, `type.map.*`); the standard
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
+- **Methods:** inside a method, the receiver's fields and methods by bare
+  name (`pos += 1`, `peek()`); `[]` and `{}` declared with `:=` are typed by
+  their first use (`out.push(x)`)
 - **Semantics:** value semantics with copy-on-write; `mut` operands are moved
   into calls and written back; a read-only argument that overlaps a `mut` one
   is a copy; overflow, division, index and overlapping-`mut` traps; failures

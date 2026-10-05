@@ -6,7 +6,7 @@ struct Pos
 impl Ord for Pos
 impl ToStr for Pos
     fn to_str(self) str
-        "{col_name(self.col)}{self.row}"
+        "{col_name(col)}{row}"
 fn col_name(col int) str
     "{COLS.chars()[col]}"
 fn parse_pos(text str) Pos?
@@ -17,9 +17,9 @@ fn parse_pos(text str) Pos?
     row := chars[1..].join("").to_int()?
     if row < 1 or row > MAX_ROW
         return none
-    Pos(col: col, row: row)
+    Pos(col, row)
 fn cells_in(first Pos, last Pos) List[Pos]
-    mut out := List[Pos]()
+    mut out := []
     for r in first.row.min(last.row)..=first.row.max(last.row)
         for c in first.col.min(last.col)..=first.col.max(last.col)
             out.push(Pos(col: c, row: r))
@@ -91,118 +91,118 @@ fn tokenize(src str) !List[Token]
         elif c.is_digit()
             while i < chars.len() and chars[i].is_digit()
                 i += 1
-            tokens.push(Num(text: chars[start..i].join("")))
+            tokens.push(Num(chars[start..i].join("")))
         elif c.is_alpha()
             while i < chars.len() and chars[i].is_alnum()
                 i += 1
             word := chars[start..i].join("")
             if chars[i - 1].is_digit()
-                pos := parse_pos(word) else return BadCell(text: word)
-                tokens.push(Cell(text: word, pos: pos))
+                pos := parse_pos(word) else return BadCell(word)
+                tokens.push(Cell(word, pos))
             else
-                tokens.push(Name(text: word))
+                tokens.push(Name(word))
         elif "+-*/(),:<>=".contains(c)
-            tokens.push(Sym(c: c))
+            tokens.push(Sym(c))
             i += 1
         else
-            return BadChar(c: c)
+            return BadChar(c)
     tokens.push(End)
     tokens
 struct Parser
     tokens List[Token]
     at int
 fn Parser.peek(self) Token
-    self.tokens[self.at]
+    tokens[at]
 fn Parser.next(mut self) Token
-    tok := self.peek()
+    tok := peek()
     if tok != End
-        self.at += 1
+        at += 1
     tok
 fn Parser.take(mut self, syms str) char?
-    c := match self.peek()
+    c := match peek()
         Sym(s) => s
         Num(_) | Cell(_, _) | Name(_) | End => return none
     if not syms.contains(c)
         return none
-    self.at += 1
+    at += 1
     c
 fn Parser.expect(mut self, sym char) !
-    tok := self.next()
-    if tok != Sym(c: sym)
-        return Expected(what: "'{sym}'", found: tok)
+    tok := next()
+    if tok != Sym(sym)
+        return Expected("'{sym}'", tok)
 fn Parser.cell(mut self) !Pos
-    tok := self.next()
+    tok := next()
     match tok
         Cell(_, pos) => pos
-        Num(_) | Name(_) | Sym(_) | End => return Expected(what: "a cell", found: tok)
+        Num(_) | Name(_) | Sym(_) | End => return Expected("a cell", tok)
 fn Parser.formula(mut self) !Expr
-    e := self.sum()?
-    if self.peek() != End
-        return Unexpected(found: self.peek())
+    e := sum()?
+    if peek() != End
+        return Unexpected(peek())
     e
 fn Parser.sum(mut self) !Expr
-    mut left := self.product()?
+    mut left := product()?
     while true
-        c := self.take("+-") else break
+        c := take("+-") else break
         op := match c
             '+' => Op.Add
             _ => Sub
-        left = Bin(op: op, left: left, right: self.product()?)
+        left = Bin(op, left, product()?)
     left
 fn Parser.product(mut self) !Expr
-    mut left := self.unary()?
+    mut left := unary()?
     while true
-        c := self.take("*/") else break
+        c := take("*/") else break
         op := match c
             '*' => Op.Mul
             _ => Div
-        left = Bin(op: op, left: left, right: self.unary()?)
+        left = Bin(op, left, unary()?)
     left
 fn Parser.unary(mut self) !Expr
-    if self.take("-") == none
-        return self.primary()
-    Neg(operand: self.unary()?)
+    if take("-") == none
+        return primary()
+    Neg(unary()?)
 fn Parser.primary(mut self) !Expr
-    tok := self.next()
+    tok := next()
     match tok
         Num(text) =>
-            n := text.to_int() else return TooLarge(text: text)
-            Lit(n: n)
-        Cell(_, pos) => Ref(pos: pos)
-        Name(name) => self.call(name)?
+            n := text.to_int() else return TooLarge(text)
+            Lit(n)
+        Cell(_, pos) => Ref(pos)
+        Name(name) => call(name)?
         Sym(c) =>
             if c != '('
-                return Unexpected(found: tok)
-            inner := self.sum()?
-            self.expect(')')?
+                return Unexpected(tok)
+            inner := sum()?
+            expect(')')?
             inner
-        End => return Unexpected(found: tok)
+        End => return Unexpected(tok)
 fn Parser.call(mut self, name str) !Expr
     if func := Func.parse(name)
-        self.expect('(')?
-        first := self.cell()?
-        self.expect(':')?
-        last := self.cell()?
-        self.expect(')')?
-        return Agg(func: func, first: first, last: last)
+        expect('(')?
+        first := cell()?
+        expect(':')?
+        last := cell()?
+        expect(')')?
+        return Agg(func, first, last)
     if name != "IF"
-        return UnknownFunc(name: name)
-    self.expect('(')?
-    left := self.sum()?
-    c := self.take("<>=") else return Expected(what: "a comparison", found: self.peek())
+        return UnknownFunc(name)
+    expect('(')?
+    left := sum()?
+    c := take("<>=") else return Expected("a comparison", peek())
     cmp := match c
         '<' => Ordering.Less
         '>' => Greater
         _ => Equal
-    right := self.sum()?
-    self.expect(',')?
-    then := self.sum()?
-    self.expect(',')?
-    other := self.sum()?
-    self.expect(')')?
-    If(cmp: cmp, left: left, right: right, then: then, other: other)
+    right := sum()?
+    expect(',')?
+    then := sum()?
+    expect(',')?
+    other := sum()?
+    expect(')')?
+    If(cmp, left, right, then, other)
 fn parse_formula(src str) !Expr
-    mut p := Parser(tokens: tokenize(src)?, at: 0)
+    mut p := Parser(tokenize(src)?, 0)
     p.formula()
 fn collect_refs(e Expr, mut out Set[Pos])
     match e
@@ -268,13 +268,13 @@ fn parse_content(text str) !Content?
     if rest := text.strip_prefix("=")
         src := rest.trim()
         expr := parse_formula(src) else err
-            return Broken(src: src, err: err)
-        return Formula(src: src, expr: expr)
+            return Broken(src, err)
+        return Formula(src, expr)
     if inner := text.strip_prefix("\"")
         if label := inner.strip_suffix("\"")
-            return Label(text: label)
-    n := text.to_int() else return BadContent(text: text)
-    Number(n: n)
+            return Label(label)
+    n := text.to_int() else return BadContent(text)
+    Number(n)
 struct Assign
     pos Pos
     content Content?
@@ -283,9 +283,9 @@ fn parse_line(line str) !Assign
     if parts.len() < 2
         return MissingEquals
     name := parts[0].trim()
-    pos := parse_pos(name) else return BadName(text: name)
+    pos := parse_pos(name) else return BadName(name)
     rest := parts[1..].join("=").trim()
-    Assign(pos: pos, content: parse_content(rest)?)
+    Assign(pos, parse_content(rest)?)
 struct Order
     order List[Pos]
     blocked List[Pos]
@@ -294,7 +294,7 @@ struct Sheet
     memo Map[Pos, Value]
     active Set[Pos]
 fn Sheet.new() Sheet
-    Sheet(cells: {}, memo: {}, active: {})
+    Sheet({}, {}, {})
 fn Sheet.apply(mut self, lines List[str])
     for i in 0..lines.len()
         line := lines[i]
@@ -302,39 +302,39 @@ fn Sheet.apply(mut self, lines List[str])
             print("line {i + 1}: {err}: {line}")
             continue
         if content := a.content
-            self.cells[a.pos] = content
+            cells[a.pos] = content
         else
-            self.cells.remove(a.pos)
-    self.memo = {}
+            cells.remove(a.pos)
+    memo = {}
 fn Sheet.value(mut self, pos Pos) Value
-    if known := self.memo.get(pos)
+    if known := memo.get(pos)
         return known
-    content := self.cells.get(pos) else return Num(n: 0)
+    content := cells.get(pos) else return Num(0)
     match content
-        Number(n) => Num(n: n)
-        Label(text) => Text(text: text)
-        Broken(_, _) => Fail(err: BadParse)
+        Number(n) => Num(n)
+        Label(text) => Text(text)
+        Broken(_, _) => Fail(BadParse)
         Formula(_, expr) =>
-            if not self.active.add(pos)
-                return Fail(err: Cycle)
-            result := if v := self.eval(expr)
-                Value.Num(n: v)
+            if not active.add(pos)
+                return Fail(Cycle)
+            result := if v := eval(expr)
+                Value.Num(v)
             else err
-                Value.Fail(err: err)
-            self.active.remove(pos)
-            self.memo[pos] = result
+                Value.Fail(err)
+            active.remove(pos)
+            memo[pos] = result
             result
 fn Sheet.number(mut self, pos Pos) !int
-    match self.value(pos)
+    match value(pos)
         Num(n) => n
         Text(_) => return BadValue
         Fail(err) => return err
 fn Sheet.numbers(mut self, first Pos, last Pos) !List[int]
-    mut found := List[int]()
+    mut found := []
     for pos in cells_in(first, last)
-        if not self.cells.contains(pos)
+        if not cells.contains(pos)
             continue
-        match self.value(pos)
+        match value(pos)
             Num(n) => found.push(n)
             Text(_) => continue
             Fail(err) => return err
@@ -342,18 +342,18 @@ fn Sheet.numbers(mut self, first Pos, last Pos) !List[int]
 fn Sheet.eval(mut self, e Expr) !int
     match e
         Lit(n) => n
-        Ref(pos) => self.number(pos)?
-        Neg(operand) => -self.eval(operand)?
+        Ref(pos) => number(pos)?
+        Neg(operand) => -eval(operand)?
         Bin(op, left, right) =>
-            a := self.eval(left)?
-            b := self.eval(right)?
+            a := eval(left)?
+            b := eval(right)?
             match op
                 Add => a + b
                 Sub => a - b
                 Mul => a * b
                 Div => div(a, b)?
         Agg(func, first, last) =>
-            nums := self.numbers(first, last)?
+            nums := numbers(first, last)?
             match func
                 Sum => nums.sum()
                 Count => nums.len()
@@ -365,61 +365,61 @@ fn Sheet.eval(mut self, e Expr) !int
                     hi := nums.max() else 0
                     hi
         If(cmp, left, right, then, other) =>
-            if self.eval(left)?.cmp(self.eval(right)?) == cmp
-                self.eval(then)?
+            if eval(left)?.cmp(eval(right)?) == cmp
+                eval(then)?
             else
-                self.eval(other)?
+                eval(other)?
 fn Sheet.display(mut self, pos Pos) str
-    if not self.cells.contains(pos)
+    if not cells.contains(pos)
         return ""
-    self.value(pos).to_str()
+    value(pos).to_str()
 fn Sheet.snapshot(mut self) Map[Pos, str]
-    mut shot := Map[Pos, str]()
-    for pos in self.cells.keys()
-        shot[pos] = self.display(pos)
+    mut shot := {}
+    for pos in cells.keys()
+        shot[pos] = display(pos)
     shot
 fn Sheet.formulas(self) List[Pos]
-    mut out := List[Pos]()
-    for pos in self.cells.keys()
-        if self.cells[pos].is_formula()
+    mut out := []
+    for pos in cells.keys()
+        if cells[pos].is_formula()
             out.push(pos)
     out.sorted()
 fn Sheet.deps(self, pos Pos) List[Pos]
-    content := self.cells.get(pos) else return []
-    mut refs := Set[Pos]()
+    content := cells.get(pos) else return []
+    mut refs := {}
     match content
         Formula(_, expr) => collect_refs(expr, mut refs)
         Number(_) | Label(_) | Broken(_, _) => return []
     refs.sorted()
 fn Sheet.eval_order(self) Order
-    formulas := self.formulas()
-    mut waits := Map[Pos, Set[Pos]]()
+    formulas := formulas()
+    mut waits := {}
     for pos in formulas
-        mut need := Set[Pos]()
-        for d in self.deps(pos)
+        mut need := {}
+        for d in deps(pos)
             if formulas.contains(d)
                 need.add(d)
         waits[pos] = need
-    mut order := List[Pos]()
-    mut done := Set[Pos]()
+    mut order := []
+    mut done := {}
     while true
         ready := first_ready(formulas, waits, done) else break
         order.push(ready)
         done.add(ready)
-    mut blocked := List[Pos]()
+    mut blocked := []
     for pos in formulas
         if not done.contains(pos)
             blocked.push(pos)
-    Order(order: order, blocked: blocked)
+    Order(order, blocked)
 fn first_ready(formulas List[Pos], waits Map[Pos, Set[Pos]], done Set[Pos]) Pos?
     for pos in formulas
         if not done.contains(pos) and waits[pos].is_subset(done)
             return pos
     none
 fn Sheet.table(mut self) List[str]
-    mut col_set := Set[int]()
-    mut row_set := Set[int]()
-    for pos in self.cells.keys()
+    mut col_set := {}
+    mut row_set := {}
+    for pos in cells.keys()
         col_set.add(pos.col)
         row_set.add(pos.row)
     cols := col_set.sorted()
@@ -430,9 +430,9 @@ fn Sheet.table(mut self) List[str]
     for r in row_set.sorted()
         mut row := [r.to_str()]
         for c in cols
-            row.push(self.display(Pos(col: c, row: r)))
+            row.push(display(Pos(col: c, row: r)))
         grid.push(row)
-    mut dashes := List[str]()
+    mut dashes := []
     for i in 0..header.len()
         mut w := 0
         for g in grid
@@ -440,22 +440,22 @@ fn Sheet.table(mut self) List[str]
         dashes.push("-".repeat(w))
         for mut g in grid
             g[i] = g[i].pad_left(w, ' ')
-    mut lines := List[str]()
+    mut lines := []
     for g in grid
         lines.push(g.join(" | "))
         if lines.len() == 1
             lines.push(dashes.join("-+-"))
     lines
 fn Sheet.print_table(mut self)
-    for line in self.table()
+    for line in table()
         print(line)
 fn Sheet.print_deps(self)
     print("dependencies:")
-    for pos in self.formulas()
-        match self.cells[pos]
+    for pos in formulas()
+        match cells[pos]
             Broken(_, err) => print("  {pos} <- {CellError.BadParse.code()} {err}")
             Formula(_, _) =>
-                deps := self.deps(pos)
+                deps := deps(pos)
                 listing := if deps == []
                     "(none)"
                 else
@@ -463,12 +463,12 @@ fn Sheet.print_deps(self)
                 print("  {pos} <- {listing}")
             Number(_) | Label(_) => continue
 fn Sheet.print_parse_errors(self)
-    for pos in self.formulas()
-        match self.cells[pos]
+    for pos in formulas()
+        match cells[pos]
             Broken(src, err) => print("parse error in {pos}: {err} in '{src}'")
             Formula(_, _) | Number(_) | Label(_) => continue
 fn Sheet.print_order(self)
-    o := self.eval_order()
+    o := eval_order()
     print("order: {o.order.join(", ")}")
     if o.blocked != []
         print("blocked by a cycle: {o.blocked.join(", ")}")
@@ -478,12 +478,12 @@ fn or_empty(text str) str
     else
         text
 fn print_changes(before Map[Pos, str], after Map[Pos, str])
-    mut all := Set[Pos]()
+    mut all := {}
     for pos in before.keys()
         all.add(pos)
     for pos in after.keys()
         all.add(pos)
-    mut changed := List[str]()
+    mut changed := []
     for pos in all.sorted()
         old := before.get(pos) else ""
         now := after.get(pos) else ""
@@ -549,11 +549,11 @@ struct Edit
     title str
     lines List[str]
 EDITS := [
-    Edit(title: "change a value", lines: ["B2 = 20"]),
-    Edit(title: "introduce a cycle", lines: ["D11 = =D12 + 50", "G15 = =G15 + 1"]),
-    Edit(title: "break the cycle", lines: ["D11 = 250", "G15 = "]),
-    Edit(title: "divide by zero", lines: ["C5 = 0", "B11 = =D11 / (B5 - 1)", "B12 = =AVG(F1:F3)"]),
-    Edit(title: "parse errors", lines: [
+    Edit("change a value", ["B2 = 20"]),
+    Edit("introduce a cycle", ["D11 = =D12 + 50", "G15 = =G15 + 1"]),
+    Edit("break the cycle", ["D11 = 250", "G15 = "]),
+    Edit("divide by zero", ["C5 = 0", "B11 = =D11 / (B5 - 1)", "B12 = =AVG(F1:F3)"]),
+    Edit("parse errors", [
         "D4 = =B4 * (C4 + 1",
         "B12 = =SUMM(B2:B5)",
         "B13 = =B2 $ 3",
@@ -561,7 +561,7 @@ EDITS := [
         "C12 = =Z9 + 1",
         "C13 = =3 4",
     ]),
-    Edit(title: "fix the formula, then reference a text cell", lines: [
+    Edit("fix the formula, then reference a text cell", [
         "D4 = =B4 * (C4 + 1)",
         "B11 = =A2 * 2",
         "B12 = =SUM(A2:A5) + COUNT(A2:B5)",

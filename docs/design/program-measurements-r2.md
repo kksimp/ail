@@ -78,8 +78,18 @@ measured (tokens; 14,802.8 before):
 | An `in` operator for `contains` | 14,786.8 | −0.1% | tie |
 | Methods grouped in a type block | 14,797.8 | −0.0% | tie |
 
-With the three adopted changes together, the programs measure **13,658.2:
-1.4% above Python** (a tie under ADR 0076's ~2% rule), 11% below TypeScript,
-24% below Rust and 26% below Go. These figures come from scripted rewrites;
-they are re-measured on the examples once the bootstrap implements the
-changes.
+With the three adopted changes implemented in the bootstrap and the examples
+rewritten to use them (where the checker accepts it: a type with two fields of
+one type keeps its labels, and an empty literal whose first use is a bare
+variant keeps its constructor), the programs measure:
+
+| Language | interp | json | sheet | Total | AIL vs. this language |
+|---|---|---|---|---|---|
+| **AIL** | **5424.6** | **3426.4** | **4818.0** | **13669.0** | — |
+| Python | 5565.2 | 3233.2 | 4674.0 | 13472.4 | +1.5% |
+| TypeScript | 6221.4 | 3684.2 | 5498.8 | 15404.4 | −11% |
+| Rust | 7137.4 | 4336.4 | 6564.2 | 18038.0 | −24% |
+| Go | 7452.0 | 4512.2 | 6466.8 | 18431.0 | −26% |
+
+1.5% above Python is a tie under ADR 0076's ~2% rule; `interp` is now below
+its Python version. The corpus files hold these versions.

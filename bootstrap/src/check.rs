@@ -26,8 +26,8 @@ use builtins::builtin;
 use traits::{Cand, bind, bound, subst, subst_unknown};
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep, Pattern,
-    Program, Stmt, TypeKind, TypeRef, UnOp, Within, is_prelude, place_path,
+    Arg, ArgKind, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep,
+    Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::UNSUPPORTED;
@@ -180,6 +180,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
         self_ty: None,
         deferred: Some(Vec::new()),
         locals: Vec::new(),
+        pending: Vec::new(),
         ret: Ty::Unit,
         loops: 0,
     };
@@ -245,6 +246,16 @@ enum Kind {
     Param,
     SelfParam,
     LoopVar,
+}
+
+/// A local declared from `[]` or `{}`, typed by its first use (type.coll.13).
+struct Pending {
+    name: String,
+    /// The literal, and whether it is `{}` (a map or a set).
+    lit: Pos,
+    brace: bool,
+    /// Its index in `locals`.
+    index: usize,
 }
 
 struct Local {
@@ -315,6 +326,8 @@ struct Checker<'p> {
     deferred: Option<Vec<(Ty, usize, Pos, String)>>,
     /// Locals of the function being checked, innermost last.
     locals: Vec<Local>,
+    /// Locals declared from `[]` or `{}` whose type isn't known yet (type.coll.13).
+    pending: Vec<Pending>,
     ret: Ty,
     loops: usize,
 }
@@ -1279,6 +1292,7 @@ impl<'p> Checker<'p> {
         self.scope = self.fn_scopes[idx].clone();
         self.self_ty = self.fn_self[idx].clone();
         self.locals.clear();
+        self.pending.clear();
         self.loops = 0;
         self.ret = sig.ret.clone();
         if f.receiver.is_some() {
@@ -1344,13 +1358,33 @@ impl<'p> Checker<'p> {
                 ty = Ty::Err;
             }
         }
-        self.locals.truncate(mark);
+        self.end_scope(mark);
         if leaves { Ty::Never } else { ty }
     }
 
     fn stmt(&mut self, s: &'p Stmt, expect: Option<&Ty>, need: bool) -> Ty {
         match s {
             Stmt::Let { name, pos, mutable, value, otherwise } => {
+                // type.coll.13: `x := []` or `{}` is typed by its first use.
+                let empty = match value {
+                    Expr::List(xs, _) | Expr::Set(xs, _) => xs.is_empty(),
+                    Expr::Map(xs, _) => xs.is_empty(),
+                    _ => false,
+                };
+                if empty && otherwise.is_none() {
+                    if self.declare(name, *pos) {
+                        let brace = !matches!(value, Expr::List(..));
+                        let index = self.locals.len();
+                        self.locals.push(Local {
+                            name: name.clone(),
+                            ty: Ty::Err,
+                            mutable: *mutable,
+                            kind: Kind::Binding,
+                        });
+                        self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, index });
+                    }
+                    return Ty::Unit;
+                }
                 let vt = self.expr(value, None, true);
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
@@ -1399,7 +1433,7 @@ impl<'p> Checker<'p> {
                 self.loops += 1;
                 self.block(body, None, false);
                 self.loops -= 1;
-                self.locals.truncate(mark);
+                self.end_scope(mark);
                 Ty::Unit
             }
             Stmt::Break(pos) | Stmt::Continue(pos) => {
@@ -1536,7 +1570,7 @@ impl<'p> Checker<'p> {
                 // err.else.4: with no value to supply, the block may just end.
                 let unit = ok == Ty::Unit;
                 let t = if unit { self.block(body, None, false) } else { self.block(body, Some(&ok), true) };
-                self.locals.truncate(mark);
+                self.end_scope(mark);
                 if !unit && !self.accepts(&ok, &t) {
                     let msg = format!(
                         "this `else` block must leave (with `return`, `break` or `continue`) or end with {}",
@@ -1576,6 +1610,60 @@ impl<'p> Checker<'p> {
             "choose a different name for the local",
         );
         false
+    }
+
+    /// The pending entry of local `n`, if its type isn't known yet (type.coll.13).
+    fn pending_of(&self, n: &str) -> Option<usize> {
+        self.pending.iter().position(|p| p.name == n && self.locals.get(p.index).is_some_and(|l| l.name == n))
+    }
+
+    /// Give pending local `k` its type, now known.
+    fn settle(&mut self, k: usize, ty: Ty) {
+        let p = self.pending.remove(k);
+        if matches!(ty, Ty::Set(_)) {
+            self.resolved.empty_sets.insert(p.lit);
+        }
+        self.locals[p.index].ty = ty;
+    }
+
+    /// Report a use of pending local `k` before its type is known.
+    fn unsettled(&mut self, k: usize, at: Pos) {
+        let p = self.pending.remove(k);
+        let ctor = if p.brace { "`Map[K, V]()` or `Set[T]()`" } else { "`List[T]()`" };
+        let first =
+            if p.brace { format!("`{0}.add(x)` or `{0}[k] = v`", p.name) } else { format!("`{}.push(x)`", p.name) };
+        self.error_help(
+            "type.coll.13",
+            at,
+            format!("the type of `{}` isn't known yet", p.name),
+            format!("its first use should fix it, such as {first}; or declare it with {ctor}"),
+        );
+        self.locals[p.index].ty = Ty::Err;
+    }
+
+    /// The type of `e`, without reporting anything: to fix a pending local's
+    /// type before `e` is checked for real.
+    fn quiet_type(&mut self, e: &'p Expr) -> Ty {
+        let n = self.diags.len();
+        let t = self.expr(e, None, true);
+        self.diags.truncate(n);
+        t
+    }
+
+    /// Leave a block: its locals go out of scope, and one never typed is an
+    /// error (type.coll.13).
+    fn end_scope(&mut self, mark: usize) {
+        while let Some(k) = self.pending.iter().position(|p| p.index >= mark) {
+            let p = self.pending.remove(k);
+            let ctor = if p.brace { "`Map[K, V]()` or `Set[T]()`" } else { "`List[T]()`" };
+            self.error_help(
+                "type.coll.13",
+                p.lit,
+                format!("nothing fixes the type of `{}`", p.name),
+                format!("declare it with {ctor}"),
+            );
+        }
+        self.locals.truncate(mark);
     }
 
     fn local(&self, name: &str) -> Option<&Local> {
@@ -1691,6 +1779,30 @@ impl<'p> Checker<'p> {
     // ---- Assignment and places ----
 
     fn assign(&mut self, target: &'p Expr, op: Option<BinOp>, value: &'p Expr, pos: Pos) {
+        // type.coll.13: `m[k] = v` or `x = e` can fix a pending local's type.
+        if op.is_none() {
+            match target {
+                Expr::Index { recv, index, .. } => {
+                    if let Expr::Name(n, _) = &**recv
+                        && let Some(k) = self.pending_of(n)
+                        && self.pending[k].brace
+                    {
+                        let (kt, vt) = (self.quiet_type(index), self.quiet_type(value));
+                        self.settle(k, Ty::Map(Box::new(kt), Box::new(vt)));
+                    }
+                }
+                Expr::Name(n, _) => {
+                    if let Some(k) = self.pending_of(n) {
+                        let vt = self.quiet_type(value);
+                        match (&vt, self.pending[k].brace) {
+                            (Ty::List(_), false) | (Ty::Map(..) | Ty::Set(_), true) => self.settle(k, vt),
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
         if let Expr::Name(n, npos) = target
             && self.local(n).is_none()
         {
@@ -1957,6 +2069,28 @@ impl<'p> Checker<'p> {
     }
 
     fn name(&mut self, n: &str, pos: Pos, expect: Option<&Ty>) -> Ty {
+        if let Some(k) = self.pending_of(n) {
+            let want = match expect {
+                Some(Ty::Opt(t)) => Some(&**t),
+                e => e,
+            };
+            return match want {
+                Some(t @ Ty::List(_)) if !self.pending[k].brace => {
+                    let t = t.clone();
+                    self.settle(k, t.clone());
+                    t
+                }
+                Some(t @ (Ty::Map(..) | Ty::Set(_))) if self.pending[k].brace => {
+                    let t = t.clone();
+                    self.settle(k, t.clone());
+                    t
+                }
+                _ => {
+                    self.unsettled(k, pos);
+                    Ty::Err
+                }
+            };
+        }
         if let Some(l) = self.local(n) {
             return l.ty.clone();
         }
@@ -2748,7 +2882,10 @@ impl<'p> Checker<'p> {
         pos: Pos,
     ) {
         let mut given = vec![false; fields.len()];
-        for (k, a) in args.iter().enumerate() {
+        let slots = field_slots(fields, args);
+        self.positional_types(type_label, fields, types, args, &slots);
+        let mut lost = false;
+        for (a, (slot, kind)) in args.iter().zip(&slots) {
             if a.mutable {
                 self.error_help(
                     "own.param.2",
@@ -2757,27 +2894,32 @@ impl<'p> Checker<'p> {
                     "remove the `mut`",
                 );
             }
-            let Some((label, lpos)) = &a.label else {
+            let Some(i) = *slot else {
                 self.expr(&a.value, None, true);
-                let help = match fields.get(k) {
-                    Some(f) => format!("write `{}: ...`", f.name),
-                    None => "write `field: value`".into(),
-                };
-                self.error_help("type.struct.3", a.value.pos(), "fields are given by name", help);
-                continue;
-            };
-            let Some(i) = fields.iter().position(|f| f.name == *label) else {
-                self.expr(&a.value, None, true);
-                let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
-                let mut d = Diagnostic::new("type.struct.4", *lpos, format!("`{type_label}` has no field `{label}`"));
-                if let Some(s) = suggest(label, &names) {
-                    d = d.help(format!("did you mean `{s}`?"));
+                lost = true;
+                match &a.label {
+                    Some((label, lpos)) => {
+                        let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+                        let mut d =
+                            Diagnostic::new("type.struct.4", *lpos, format!("`{type_label}` has no field `{label}`"));
+                        if let Some(s) = suggest(label, &names) {
+                            d = d.help(format!("did you mean `{s}`?"));
+                        }
+                        self.diags.push(d);
+                    }
+                    None => self.error(
+                        "type.struct.4",
+                        a.value.pos(),
+                        format!("too many arguments: `{type_label}` has {}", count(fields.len(), "field")),
+                    ),
                 }
-                self.diags.push(d);
                 continue;
             };
+            let label = &fields[i].name;
             if given[i] {
-                self.error("type.struct.4", *lpos, format!("field `{label}` is given more than once"));
+                let at = a.label.as_ref().map_or(a.value.pos(), |(_, p)| *p);
+                let how = if *kind == ArgKind::Shorthand { " (a local named like it sets it too)" } else { "" };
+                self.error("type.struct.4", at, format!("field `{label}` is given more than once{how}"));
             }
             given[i] = true;
             let hint = subst_unknown(&types[i], binds, vars);
@@ -2794,8 +2936,7 @@ impl<'p> Checker<'p> {
         }
         let missing: Vec<&str> =
             fields.iter().zip(&given).filter(|(_, g)| !**g).map(|(f, _)| f.name.as_str()).collect();
-        // Unnamed arguments were already reported; don't also call their fields missing.
-        if !missing.is_empty() && args.iter().all(|a| a.label.is_some()) {
+        if !missing.is_empty() && !lost {
             let msg = format!(
                 "`{type_label}(...)` is missing {} {}",
                 if missing.len() == 1 { "field" } else { "fields" },
@@ -2805,7 +2946,54 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// type.struct.7: positional arguments may only fill fields whose types
+    /// all differ, so that swapping two of them is a type error.
+    fn positional_types(
+        &mut self,
+        type_label: &str,
+        fields: &[Field],
+        types: &[Ty],
+        args: &[Arg],
+        slots: &[(Option<usize>, ArgKind)],
+    ) {
+        let filled: Vec<usize> =
+            slots.iter().filter(|(_, k)| *k == ArgKind::Positional).filter_map(|(i, _)| *i).collect();
+        let clash = filled
+            .iter()
+            .enumerate()
+            .find_map(|(n, &a)| filled[n + 1..].iter().find(|&&b| may_be_same(&types[a], &types[b])).map(|&b| (a, b)));
+        let Some((a, b)) = clash else { return };
+        let at = args
+            .iter()
+            .zip(slots)
+            .find(|(_, (i, k))| *k == ArgKind::Positional && *i == Some(b))
+            .map_or(Pos { line: 0, col: 0 }, |(arg, _)| arg.value.pos());
+        let (fa, fb) = (&fields[a].name, &fields[b].name);
+        let msg = format!(
+            "fields `{fa}` and `{fb}` of `{type_label}` are both {}, so they can't be given by position",
+            self.show(&types[a])
+        );
+        self.error_help("type.struct.7", at, msg, format!("name them: `{type_label}({fa}: ..., {fb}: ...)`"));
+    }
+
     fn method(&mut self, recv: &'p Expr, name: &'p str, pos: Pos, args: &'p [Arg], expect: Option<&Ty>) -> Ty {
+        // type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
+        if let Expr::Name(n, _) = recv
+            && let Some(k) = self.pending_of(n)
+            && let [arg] = args
+        {
+            match (name, self.pending[k].brace) {
+                ("push", false) => {
+                    let t = self.quiet_type(&arg.value);
+                    self.settle(k, Ty::List(Box::new(t)));
+                }
+                ("add", true) => {
+                    let t = self.quiet_type(&arg.value);
+                    self.settle(k, Ty::Set(Box::new(t)));
+                }
+                _ => {}
+            }
+        }
         // `Type.name(...)` and `Type[int].name(...)`: an associated function
         // (trait.method.4) or a variant; `Trait.name(x, ...)`: a qualified
         // trait method call (trait.res.1).
@@ -3364,7 +3552,7 @@ impl<'p> Checker<'p> {
                 }
             }
             agree.block(self, body, pos);
-            self.locals.truncate(mark);
+            self.end_scope(mark);
         }
         // err.use.2: a failure is never ignored silently.
         if binds_failure && els.is_none() {
@@ -3394,7 +3582,7 @@ impl<'p> Checker<'p> {
                 }
             }
             agree.block(self, body, pos);
-            self.locals.truncate(mark);
+            self.end_scope(mark);
         }
         if need && els.is_none() { Ty::Err } else { agree.result() }
     }
@@ -3485,7 +3673,7 @@ impl<'p> Checker<'p> {
                 }
             }
             agree.block(self, &arm.body, pos);
-            self.locals.truncate(mark);
+            self.end_scope(mark);
         }
         if let Some((e, _)) = e {
             let missing: Vec<&str> = (self.prog.enums[e].variants.iter())
@@ -3825,6 +4013,21 @@ fn breaks(body: &[Stmt]) -> bool {
         Stmt::For { iter, .. } => in_expr(iter),
         _ => false,
     })
+}
+
+/// Whether two declared field types could be the same type: equal, or
+/// both mentioning type parameters (type.struct.7).
+fn may_be_same(a: &Ty, b: &Ty) -> bool {
+    fn has_param(t: &Ty) -> bool {
+        match t {
+            Ty::Param(_) => true,
+            Ty::List(e) | Ty::Opt(e) | Ty::Set(e) => has_param(e),
+            Ty::Map(k, v) => has_param(k) || has_param(v),
+            Ty::Struct(_, args) | Ty::Enum(_, args) => args.iter().any(has_param),
+            _ => false,
+        }
+    }
+    a == b || (has_param(a) && has_param(b))
 }
 
 fn count(n: usize, noun: &str) -> String {
