@@ -51,19 +51,26 @@ shift(mut b, 5.0)
 
 ## Exclusivity
 
-**own.excl.1** — During a call, a place passed as a `mut` argument MUST NOT
-overlap any other argument of the same call. *(ADR 0064)*
+**own.excl.1** — During a call, a place passed as a `mut` argument, including
+a `mut self` receiver, MUST NOT overlap another `mut` argument of the same
+call. *(ADR 0064, ADR 0119)*
 
 **own.excl.2** — A violation of `own.excl.1` that is statically certain is a
 compile-time error. *(ADR 0064)*
 
-**own.excl.3** — If whether two arguments overlap depends on run-time values,
-the implementation MUST check before the call and trap on overlap. Each such
-check MUST be listed in the performance report. *(ADR 0064)*
+**own.excl.3** — If whether two `mut` arguments overlap depends on run-time
+values, the implementation MUST check before the call and trap on overlap.
+Each such check MUST be listed in the performance report. *(ADR 0064)*
+
+**own.excl.4** — A read-only argument or receiver that overlaps a `mut`
+argument of the same call is passed as a copy of its value, made before the
+call. Each such copy site MUST be listed in the performance report.
+*(ADR 0119)*
 
 ```ail
-f(mut x, x)                  # compile-time error
-swap(mut a[i], mut a[j])     # traps if i == j
+xs.push(xs[0])               # xs[0] is copied before the call
+f(mut x, mut x)              # compile-time error
+swap(mut a[i], mut a[j])     # traps if i == j; a.swap(i, j) doesn't
 ```
 
 ## Copies

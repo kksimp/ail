@@ -1,6 +1,6 @@
 # 0064. Exclusivity: overlapping `mut` access is a compile error, with a runtime check only where overlap can't be decided
 
-- **Status:** Accepted
+- **Status:** Accepted; partly superseded by [ADR 0119](0119-copy-read-only-overlaps.md) (a read-only argument that overlaps a `mut` one is now copied)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 7 — Ownership

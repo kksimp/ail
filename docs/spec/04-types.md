@@ -150,6 +150,10 @@ the sub-list from `a` up to but excluding `b`, as a value. *(ADR 0090)*
 **type.coll.6** — `xs.push(v)` appends `v` to a list. Its receiver is
 `mut self` (`trait.method.3`). *(ADR 0116)*
 
+**type.coll.7** — `xs.swap(i, j)` exchanges the elements at indexes `i` and
+`j`, and does nothing when `i == j`. It traps if either index is out of
+bounds. Its receiver is `mut self`. *(ADR 0119)*
+
 ```ail
 ports := {"http": 80, "https": 443}
 primes := [2, 3, 5, 7]
