@@ -164,6 +164,8 @@ fn main() !                                 # main can fail; the error is report
   `if x := ...` with `else err`.
 - `if x := e` also works on optionals (`else` without a name), and in `elif`.
   On a result that can fail, it needs an `else`.
+- `else` also works inside an expression: `Min => nums.min() else 0`,
+  `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`.
 - `?` on an optional works only in a function that returns an optional.
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
