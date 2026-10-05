@@ -125,3 +125,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0117](0117-typing-rules.md) | Typing rules for fields, assignment, `match`, loops and places *(delegated)* | Accepted | 2026-10-04 |
 | [0118](0118-trailing-commas.md) | A trailing comma is allowed in every comma-separated list *(delegated)* | Accepted | 2026-10-04 |
 | [0119](0119-copy-read-only-overlaps.md) | A read-only argument that overlaps a `mut` argument is passed as a copy (partly supersedes 0064) | Accepted | 2026-10-05 |
+| [0120](0120-error-keyword.md) | Error types are declared with the `error` keyword (amends 0114) | Accepted | 2026-10-05 |
+| [0121](0121-for-mut.md) | `for mut x in xs` changes list elements in place | Accepted | 2026-10-05 |
+| [0122](0122-error-unions-and-reports.md) | Error unions `A \| B`; `?` needs a matching error type; failures must be handled; default error form *(delegated)* | Accepted | 2026-10-05 |
+| [0123](0123-variants-with-data.md) | Variants with data are built with named fields and matched by position *(delegated)* | Accepted | 2026-10-05 |
+| [0124](0124-string-split-and-to-int.md) | `s.split(sep)` and `s.to_int()` *(delegated)* | Accepted | 2026-10-05 |

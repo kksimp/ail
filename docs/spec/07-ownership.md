@@ -67,6 +67,11 @@ argument of the same call is passed as a copy of its value, made before the
 call. Each such copy site MUST be listed in the performance report.
 *(ADR 0119)*
 
+**own.excl.5** — The body of `for mut x in e` MUST NOT use `e`, or any place
+that may overlap `e`, except through `x`. An overlap that depends on index
+values counts as an overlap. Violations are compile-time errors.
+*(ADR 0121)*
+
 ```ail
 xs.push(xs[0])               # xs[0] is copied before the call
 f(mut x, mut x)              # compile-time error

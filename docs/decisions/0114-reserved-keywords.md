@@ -1,6 +1,6 @@
 # 0114. Reserved keywords
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0120](0120-error-keyword.md) (adds `error`)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 2 — Core syntax

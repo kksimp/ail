@@ -108,10 +108,11 @@ context ([ADR 0050](decisions/0050-error-return-traces.md)), and `?` on optional
 Both depend on the `match` design.
 
 ## OQ-030 — What is an error type?
-[ADR 0046](decisions/0046-inferred-error-sets.md). Can any type be an error,
-or only declared error types? How is an explicit union written? How does an
-inferred set convert to a public API's error type? How are recursion and
-generics handled during inference?
+**Partly resolved:** error types are declared with `error`
+([ADR 0120](decisions/0120-error-keyword.md)). Unions, propagation and
+recursion are covered by [ADR 0122](decisions/0122-error-unions-and-reports.md).
+**Still open:** how an inferred set converts to a public API's error type,
+and inference through generic functions.
 
 ## OQ-031 — Canonical spelling of the default numeric types
 **Resolved** by [ADR 0059](decisions/0059-default-numeric-spelling.md).
@@ -139,20 +140,7 @@ and iteration, measured on a real corpus. *Owner: AI under ADR 0076, unless
 it proves hard to reverse.*
 
 ## OQ-038 — In-place iteration over list elements
-Changing every element of a list currently needs indexes:
-`for i in 0..items.len()` and `items[i].qty = ...`.
-- **A. `for mut item in items` (recommended):** `item` is the element itself,
-  and changes to it are written back. `items` must be a mutable place, and the
-  loop body can't otherwise use `items` (exclusivity, as for a `mut`
-  argument). Pros: −3.2% tokens on the whole `inventory` program (the loop
-  itself −25%), no index arithmetic, no out-of-bounds risk. Cons: a new
-  borrow that lasts a whole loop, which is a new rule in the ownership model.
-- **B. Keep indexes** (Go, Swift): nothing new, but more tokens and index
-  noise.
-- **C. A library method taking a closure:** closures aren't designed yet.
-
-Evidence: [design/program-measurements-r1.md](design/program-measurements-r1.md).
-*Escalated to the designer: it extends the ownership model (ADR 0062).*
+**Resolved** by [ADR 0121](decisions/0121-for-mut.md) (`for mut x in xs`).
 
 ---
 

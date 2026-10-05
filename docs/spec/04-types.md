@@ -87,6 +87,10 @@ known enum type, its variants MAY be written without qualification
 
 **type.enum.5** — An enum's variant names MUST be distinct. *(ADR 0117)*
 
+**type.enum.6** — A variant with data is constructed like a struct literal,
+naming each of its fields exactly once, in any order: `Circle(r: 1.0)`.
+*(ADR 0123)*
+
 ## Optional types
 
 **type.opt.1** — AIL has no null value. *(ADR 0048)*
@@ -129,6 +133,14 @@ character access go through explicit views (`s.bytes`, `s.chars()`).
 with a leading `-` when negative. The text form of a `bool` is `true` or
 `false`, and of a `str` is the string itself. `bool` and `str` support `==`
 and `!=`; `str` equality compares UTF-8 bytes. *(ADR 0116)*
+
+**type.str.4** — `s.split(sep)` returns a `List[str]` of the pieces of `s`
+between occurrences of `sep`, keeping empty pieces, so `n` occurrences give
+`n + 1` pieces. An empty `sep` traps. *(ADR 0124)*
+
+**type.str.5** — `s.to_int()` returns an `int?`. It holds the value of `s`
+when `s` is an optional `-` followed by one or more decimal digits and the
+value fits in `int`; otherwise it is `none`. *(ADR 0124)*
 
 ## Collections
 

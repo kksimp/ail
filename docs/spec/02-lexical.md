@@ -9,9 +9,9 @@ Chapter key: `lex`
 ## Keywords
 
 **lex.kw.1** — These words are reserved keywords and MUST NOT be used as
-names: `and any as break continue defer elif else enum extern false fn for if
-impl in match move mut none not or pub ref return self spawn struct trait true
-unique unsafe use while`. *(ADR 0114)*
+names: `and any as break continue defer elif else enum error extern false fn
+for if impl in match move mut none not or pub ref return self spawn struct
+trait true unique unsafe use while`. *(ADR 0114, ADR 0120)*
 
 **lex.kw.2** — `c` is not reserved. It has its FFI meaning only directly
 after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*

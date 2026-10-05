@@ -3,9 +3,10 @@
 Chapter key: `err`
 
 > **Status:** Drafted (partial). Specified: the error model, error-type
-> spelling, propagation, `else` handling, error context, and trap behaviour.
-> Not yet designed: matching on errors, safe member access (OQ-029), and
-> error-type declarations (OQ-030).
+> declarations and spelling, unions, propagation, handling, `else`, error
+> context, the default error form, and trap behaviour. Not yet designed:
+> matching on error unions, safe member access (OQ-029), and converting an
+> inferred set to a public error type (OQ-030).
 
 ## Model
 
@@ -17,6 +18,29 @@ failed assertions and explicitly unreachable code **trap**. They are not
 recoverable error values. *(ADR 0045, ADR 0035)*
 
 ## Error types
+
+**err.decl.1** — `error struct Name` and `error enum Name` declare error
+types. Apart from that, they are ordinary structs and enums. *(ADR 0120)*
+
+**err.decl.2** — Only error types can be errors: the `E` of `T ! E`, the
+members of an error union (`err.type.5`), and the members of an inferred
+error set. *(ADR 0120)*
+
+**err.decl.3** — In `T ! E`, `T` MUST NOT be an error type. Where a value of
+type `T ! E` is expected, a value of type `T` is the success value, and a
+value of an error type that is in `E` is the error. *(ADR 0120)*
+
+```ail
+error enum ParseError
+    Empty
+    BadNumber(text str)
+
+fn parse_qty(s str) int ! ParseError
+    if s == ""
+        return Empty
+    n := s.to_int() else return BadNumber(text: s)
+    n
+```
 
 **err.type.1** — `T ! E` is the type of a value that is either a success value
 of type `T` or an error of type `E`. *(ADR 0046)*
@@ -39,8 +63,16 @@ fn read_config(path str) !Config
     parse(text)?
 ```
 
-> **Note:** syntax for explicit error unions, which types may be errors, and
-> conversion between error sets are open (OQ-030).
+**err.type.5** — An explicit union of error types is written with `|`:
+`T ! A | B`. The order of the members doesn't matter. *(ADR 0122)*
+
+**err.type.6** — An inferred error set is the smallest set that includes
+every error its function's body can propagate or return. For mutually
+recursive functions, the sets are computed together, and recursion adds no
+error by itself. *(ADR 0122)*
+
+> **Note:** converting an inferred set to a public API's error type is open
+> (OQ-030).
 
 ## Propagation
 
@@ -54,6 +86,14 @@ or returns absence. *(ADR 0045, ADR 0048)*
 **err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
 is a compile-time error unless the enclosing function's return type is an
 optional type. *(ADR 0051)*
+
+**err.prop.3** — If the enclosing function states its error type, every error
+type `e` can fail with MUST be a member of it. Otherwise `e?` is a
+compile-time error that names the missing types. *(ADR 0122)*
+
+**err.use.1** — A value of type `T ! E` MUST be handled with `?` or `else`,
+or returned from a function whose result can hold it. Discarding it, or
+using it where a `T` is expected, is a compile-time error. *(ADR 0122)*
 
 ## Handling with `else`
 
@@ -92,6 +132,12 @@ additionally attaches `m` to the propagated error as context. *(ADR 0050)*
 
 **err.ctx.3** — Error reports MUST present the error, every attached context
 message, and the return trace. *(ADR 0050)*
+
+**err.text.1** — Until the formatting trait is designed, an error value's
+text form is its type name, then `.Variant` for an enum, then its fields as
+`(name: value, ...)` when it has any, with strings quoted:
+`ParseError.BadNumber(text: "x1")`. This form is used in error reports and
+when an error value is interpolated. *(ADR 0122)*
 
 ```ail
 cfg := parse(text)? "parsing config file"

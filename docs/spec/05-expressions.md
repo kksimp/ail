@@ -87,6 +87,11 @@ started. *(ADR 0117)*
 **expr.loop.5** — `break` and `continue` outside a loop are compile-time
 errors. *(ADR 0117)*
 
+**expr.loop.6** — In `for mut x in e`, `e` MUST be a mutable place
+(`own.place.1`) of type `List[T]`. `x` is a mutable place of type `T` that
+refers to each element in turn, in order, so changes to `x` change the
+element. The body's use of `e` is restricted by `own.excl.5`. *(ADR 0121)*
+
 **expr.if.2** — Conditions of `if`, `elif` and `while` MUST have type `bool`.
 *(ADR 0110)*
 
@@ -151,11 +156,17 @@ compile-time error, and the diagnostic MUST list the uncovered cases.
 and name those variants, unless the warning is suppressed for that match.
 *(ADR 0056)*
 
-**expr.match.4** — Until general patterns are designed, a pattern is `_` or
-a variant of the scrutinee's enum type, bare or qualified. *(ADR 0117)*
+**expr.match.4** — Until general patterns are designed, a pattern is `_`, or
+a variant of the scrutinee's enum type, bare or qualified. A variant with
+data is followed by a parenthesised pattern for each of its fields
+(`expr.match.6`). *(ADR 0117, ADR 0123)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. *(ADR 0117)*
+
+**expr.match.6** — In a pattern `Variant(p1, ..., pn)`, there MUST be one
+`pi` per field, in declaration order. Each `pi` is a new immutable binding
+name or `_`, which ignores the field. *(ADR 0123)*
 
 > **Note:** general pattern syntax, guards, and warning-suppression syntax are
 > not yet decided.
