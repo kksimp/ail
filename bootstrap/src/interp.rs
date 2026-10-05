@@ -215,6 +215,8 @@ fn load(env: &Env<'_>, p: &Place) -> Result<Value, Trap> {
 }
 
 /// An operand's place (if it is one) and, unless it is passed `mut`, its value.
+/// Reading read-only operands before any `mut` one is moved out is what makes
+/// a read-only argument that overlaps a `mut` one a copy (own.excl.4).
 type Prepared = (Option<Place>, Option<Value>, bool);
 
 fn prepare(op: Operand, mutable: bool, env: &Env<'_>) -> Result<Prepared, Trap> {
@@ -227,15 +229,16 @@ fn prepare(op: Operand, mutable: bool, env: &Env<'_>) -> Result<Prepared, Trap> 
     })
 }
 
-/// own.excl.3: overlaps that depend on run-time indexes trap before the call.
+/// own.excl.3: `mut` operands that overlap at run time trap before the call.
 fn check_overlap(places: &[(Option<Place>, bool)], pos: Pos) -> Result<(), Trap> {
     for (j, (b, b_mut)) in places.iter().enumerate() {
         for (a, a_mut) in &places[..j] {
             if let (Some(a), Some(b)) = (a, b)
-                && (*a_mut || *b_mut)
+                && *a_mut
+                && *b_mut
                 && overlaps(a, b)
             {
-                return trap("own.excl.3", pos, "two arguments of this call overlap, and one is passed `mut`".into());
+                return trap("own.excl.3", pos, "two `mut` arguments of this call overlap".into());
             }
         }
     }
@@ -624,7 +627,7 @@ impl<'a, W: Write> Interp<'a, W> {
         self.invoke(f, Some(recv), args, pos, env)
     }
 
-    /// `xs.len()` and `xs.push(v)` (type.coll.5-6).
+    /// `xs.len()`, `xs.push(v)` and `xs.swap(i, j)` (type.coll.5-7).
     fn list_method(
         &mut self,
         len: usize,
@@ -637,14 +640,22 @@ impl<'a, W: Write> Interp<'a, W> {
         if name == "len" {
             return Ok(Value::Int(len as i64));
         }
-        let Operand::Place(list) = recv else { unreachable!("checked: `push` needs a mutable place") };
-        let (v, arg_place) = match self.operand(&args[0].value, env)? {
-            Operand::Place(p) => (load(env, &p)?, Some(p)),
-            Operand::Value(v) => (v, None),
-        };
-        check_overlap(&[(Some(list.clone()), true), (arg_place, false)], pos)?;
+        let Operand::Place(list) = recv else { unreachable!("checked: `{name}` needs a mutable place") };
+        // Arguments are read before the list changes, so they are copies (own.excl.4).
+        let mut values = Vec::with_capacity(args.len());
+        for a in args {
+            values.push(self.eval(&a.value, env)?);
+        }
         let Value::List(items) = slot_mut(env, &list)? else { unreachable!("checked: list") };
-        Rc::make_mut(items).push(v);
+        match name {
+            "push" => Rc::make_mut(items).push(values.pop().expect("checked: one argument")),
+            _ => {
+                let (i, j) = (values[0].int(), values[1].int());
+                element(items, i, pos)?;
+                element(items, j, pos)?;
+                Rc::make_mut(items).swap(i as usize, j as usize);
+            }
+        }
         Ok(Value::Unit)
     }
 

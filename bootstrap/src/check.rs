@@ -50,8 +50,8 @@ const BUILTIN_TYPES: &[&str] = &["int", "i64", "str", "bool", "List"];
 const SPEC_TYPES_NOT_YET: &[&str] =
     &["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "f64", "float", "char", "Map", "Set", "Option"];
 
-/// Provisional list methods (type.coll.5-6, ADR 0116).
-const LIST_METHODS: &[&str] = &["len", "push"];
+/// Provisional list methods (type.coll.5-7, ADR 0116, ADR 0119).
+const LIST_METHODS: &[&str] = &["len", "push", "swap"];
 
 pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     let mut c = Checker {
@@ -893,7 +893,8 @@ impl<'p> Checker<'p> {
                 self.error("expr.call.2", a.value.pos(), msg);
             }
         }
-        // own.excl.1-2: a `mut` place must not overlap another argument.
+        // own.excl.1-2: two `mut` places must not overlap. A read-only argument
+        // that overlaps a `mut` one is fine: it is passed as a copy (own.excl.4).
         let mut items: Vec<(&'p Expr, bool)> = Vec::new();
         if let Some(r) = recv {
             items.push((r, sig.receiver == Some(true)));
@@ -901,12 +902,17 @@ impl<'p> Checker<'p> {
         items.extend(args.iter().zip(&sig.params).map(|(a, (pmut, _))| (&a.value, *pmut && a.mutable)));
         for j in 0..items.len() {
             for i in 0..j {
-                if (items[i].1 || items[j].1) && self.certainly_overlap(items[i].0, items[j].0) {
+                if items[i].1 && items[j].1 && self.certainly_overlap(items[i].0, items[j].0) {
+                    let help = if matches!(items[j].0, Expr::Index { .. }) {
+                        "to exchange two list elements, use `xs.swap(i, j)`"
+                    } else {
+                        "pass `mut` only once; the function already sees the change through it"
+                    };
                     self.error_help(
                         "own.excl.2",
                         items[j].0.pos(),
-                        "this argument overlaps another argument that is passed `mut`",
-                        "bind a copy to a name first, then pass the name",
+                        "this `mut` argument overlaps another `mut` argument of the same call",
+                        help,
                     );
                 }
             }
@@ -1086,7 +1092,7 @@ impl<'p> Checker<'p> {
         sig.ret
     }
 
-    /// `xs.len()` and `xs.push(v)` (type.coll.5-6).
+    /// `xs.len()`, `xs.push(v)` and `xs.swap(i, j)` (type.coll.5-7).
     fn list_method(&mut self, recv: &'p Expr, elem: &Ty, name: &str, pos: Pos, args: &'p [Arg]) -> Ty {
         match name {
             "len" => {
@@ -1098,6 +1104,12 @@ impl<'p> Checker<'p> {
                 self.require_mutable(recv, Some("trait.method.3"), "the receiver of `push`");
                 let sig = Sig { receiver: Some(true), params: vec![(false, elem.clone())], ret: Ty::Unit };
                 self.check_args("push", &sig, args, Some(recv), pos);
+                Ty::Unit
+            }
+            "swap" => {
+                self.require_mutable(recv, Some("trait.method.3"), "the receiver of `swap`");
+                let sig = Sig { receiver: Some(true), params: vec![(false, Ty::Int), (false, Ty::Int)], ret: Ty::Unit };
+                self.check_args("swap", &sig, args, Some(recv), pos);
                 Ty::Unit
             }
             _ => {
@@ -1619,8 +1631,15 @@ mod tests {
 
     #[test]
     fn exclusivity_is_checked_statically_when_certain() {
-        let src = "fn f(mut a int, b int)\n    a = b\nfn main()\n    mut xs := [1, 2]\n    i := 0\n    f(mut xs[0], xs[0])\n    f(mut xs[0], xs[1])\n    f(mut xs[i], xs[i])\n    xs.push(xs[0])\n";
-        assert_eq!(rules(src), vec!["own.excl.2", "own.excl.2", "own.excl.2"]);
+        let src = "fn f(mut a int, mut b int)\n    a = b\nfn main()\n    mut xs := [1, 2]\n    i := 0\n    f(mut xs[0], mut xs[0])\n    f(mut xs[0], mut xs[1])\n    f(mut xs[i], mut xs[i])\n";
+        assert_eq!(rules(src), vec!["own.excl.2", "own.excl.2"]);
+    }
+
+    #[test]
+    fn read_only_arguments_may_overlap_mut_ones() {
+        // own.excl.4: they are passed as copies.
+        let src = "fn f(mut a int, b int)\n    a = b\nfn main()\n    mut xs := [1, 2]\n    f(mut xs[0], xs[0])\n    xs.push(xs[0])\n    xs.swap(0, xs[1])\n";
+        assert!(rules(src).is_empty());
     }
 
     #[test]

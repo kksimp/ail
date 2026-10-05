@@ -1,7 +1,23 @@
+struct Total
+    x int
+
+fn Total.add_twice(mut self, mut n int)
+    n += self.x
+    self.x += n
+
+fn swap(mut a int, mut b int)
+    t := a
+    a = b
+    b = t
+
 fn add_to(mut total int, n int)
     total += n
 
 fn main()
     mut xs := [1, 2]
+    swap(mut xs[0], mut xs[0])
+    mut x := 1
+    swap(mut x, mut x)
+    mut t := Total(x: 1)
+    t.add_twice(mut t.x)
     add_to(mut xs[0], xs[0])
-    xs.push(xs[1])

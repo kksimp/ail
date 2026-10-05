@@ -27,8 +27,8 @@ reported but don't stop a program from running.
 |---|---|---|
 | `src/lexer.rs` | Text to tokens, including INDENT/DEDENT and interpolated strings | `lex.block.1–4`, `lex.stmt.1–3`, `lex.kw.1–2`, `lex.comment.*`, `lex.str.1–5`, `lex.num.1–3` |
 | `src/parser.rs` | Tokens to syntax tree | `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `type.struct.1–3`, `type.enum.1`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.loop.1–3`, `expr.match.1`, `expr.prec.1–2`, `expr.op.1–3` |
-| `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–6`, `type.str.2–3`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2` |
-| `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `own.val.1–2`, `own.excl.3`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `type.coll.4`, `err.trap.1`, `err.trap.3` |
+| `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.str.2–3`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2` |
+| `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `type.coll.4`, `err.trap.1`, `err.trap.3` |
 | `src/diag.rs` | Text and JSON diagnostics, errors and warnings | ADR 0002 (rule IDs), ADR 0024 |
 
 All errors in a file are reported in one pass, sorted by position.
@@ -48,9 +48,10 @@ All errors in a file are reported in one pass, sorted by position.
   literals; operators by ADR 0112's precedence; string interpolation `"{expr}"`;
   bare enum variants where the type is known
 - **Types:** `int` (`i64`), `bool`, `str`, `List[T]`, structs, enums
-- **Library:** `print`, `xs.len()`, `xs.push(v)`
+- **Library:** `print`, `xs.len()`, `xs.push(v)`, `xs.swap(i, j)`
 - **Semantics:** value semantics with copy-on-write; `mut` operands are moved
-  into calls and written back; overflow, division, index and overlap traps
+  into calls and written back; a read-only argument that overlaps a `mut` one
+  is a copy; overflow, division, index and overlapping-`mut` traps
 
 Not yet: floats, `char`, optionals and errors (`T?`, `T ! E`, `?`), variants
 with data, literal patterns, maps and sets, traits, generics, modules,

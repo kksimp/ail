@@ -11,8 +11,9 @@ cd "$root"
 
 git fetch --quiet --prune origin
 merged=()
+# Full ref names: the short name of refs/remotes/origin/HEAD is just "origin".
 while read -r ref; do
-    name="${ref#origin/}"
+    name="${ref#refs/remotes/origin/}"
     [ "$name" = main ] && continue
     [ "$name" = HEAD ] && continue
     if git merge-base --is-ancestor "$ref" origin/main; then
@@ -20,7 +21,7 @@ while read -r ref; do
     else
         echo "keeping $name (has commits not in main)"
     fi
-done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin)
+done < <(git for-each-ref --format='%(refname)' refs/remotes/origin)
 
 if [ ${#merged[@]} -eq 0 ]; then
     echo "nothing to delete: no merged branches besides main"

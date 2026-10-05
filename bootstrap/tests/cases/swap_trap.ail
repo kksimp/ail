@@ -1,0 +1,5 @@
+fn main()
+    mut xs := [1, 2, 3]
+    xs.swap(0, 2)
+    print(xs[0])
+    xs.swap(1, 3)
