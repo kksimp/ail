@@ -7,7 +7,7 @@ design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.
 **Implementation:** milestone 1 complete (2026-10-04): `./ail run examples/hello.ail`
 prints `Hello, world!`. Milestone 2 (2026-10-05): `examples/gradebook.ail`
 runs, with structs, enums, methods, `match`, loops, lists, `mut` and
-interpolation. Verified on Linux x86-64; awaiting macOS ARM64 (ADR 0085).
+interpolation. Both verified on Linux x86-64 and macOS ARM64 (ADR 0085).
 See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
 
 ## Design topics
