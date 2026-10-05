@@ -2,14 +2,18 @@
 //!
 //! Values have value semantics (own.val.1): structs and lists share storage
 //! until one copy is mutated (own.val.2). Traps: expr.arith.1, expr.arith.3,
-//! type.coll.4, own.excl.3, err.trap.1.
+//! type.coll.4, type.str.4, own.excl.3, err.trap.1. Failures carry context
+//! and a return trace (err.ctx.1-3), and end the program from `main`
+//! (mod.main.2).
 
 use std::collections::HashMap;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
 use std::rc::Rc;
 
-use crate::ast::{Arg, BinOp, Block, Expr, FnDecl, InterpPart, Pattern, Program, Stmt, UnOp, place_path};
+use crate::ast::{
+    Arg, BinOp, Block, Else, Expr, FnDecl, InterpPart, Pattern, Program, Stmt, TypeKind, UnOp, place_path,
+};
 use crate::check::Resolved;
 use crate::diag::Pos;
 
@@ -21,9 +25,21 @@ enum Value {
     Str(Rc<str>),
     /// A struct (by index in the program) and its fields.
     Struct(usize, Rc<Vec<Value>>),
-    /// An enum and variant, by index.
-    Enum(usize, usize),
+    /// An enum and variant, by index, and the variant's fields.
+    Enum(usize, usize, Rc<Vec<Value>>),
     List(Rc<Vec<Value>>),
+    /// The absent value of an optional (type.opt.4).
+    None,
+    /// The failure of a `T ! E` result (err.model.1).
+    Fail(Rc<Failure>),
+}
+
+/// An error value with its context messages and return trace (err.ctx.1-2).
+#[derive(Debug)]
+struct Failure {
+    error: Value,
+    context: Vec<String>,
+    trace: Vec<Pos>,
 }
 
 impl Value {
@@ -38,19 +54,6 @@ impl Value {
         match self {
             Value::Bool(b) => *b,
             other => unreachable!("checked: bool, found {other:?}"),
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    /// Text form (type.str.3), as used by `print` and interpolation.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Unit => Ok(()),
-            Value::Int(v) => write!(f, "{v}"),
-            Value::Bool(b) => write!(f, "{b}"),
-            Value::Str(s) => f.write_str(s),
-            other => unreachable!("checked: no text form for {other:?}"),
         }
     }
 }
@@ -70,11 +73,48 @@ impl fmt::Display for Trap {
     }
 }
 
+/// How a program stopped other than by finishing.
+#[derive(Debug)]
+pub enum Stop {
+    Trap(Trap),
+    /// `main` returned an error (mod.main.2).
+    Failed(Report),
+}
+
+impl From<Trap> for Stop {
+    fn from(t: Trap) -> Self {
+        Stop::Trap(t)
+    }
+}
+
+/// An error report (err.ctx.3): the error, its context messages, and the
+/// return trace, innermost first.
+#[derive(Debug)]
+pub struct Report {
+    pub error: String,
+    pub context: Vec<String>,
+    pub trace: Vec<Pos>,
+}
+
+impl Report {
+    pub fn render(&self, path: &str) -> String {
+        let mut s = format!("error: {}", self.error);
+        for c in &self.context {
+            let _ = write!(s, "\n  context: {c}");
+        }
+        for p in &self.trace {
+            let _ = write!(s, "\n  at {path}:{}:{}", p.line, p.col);
+        }
+        s
+    }
+}
+
 /// Ways to leave a block other than reaching its end.
 enum Exit {
     Break,
     Continue,
-    Return(Value),
+    /// A returned value, and where it was returned.
+    Return(Value, Pos),
     Trap(Trap),
 }
 
@@ -109,7 +149,7 @@ enum Step {
     Index(i64, Pos),
 }
 
-pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Trap> {
+pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let mut fns = HashMap::new();
     let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::new();
     for f in &prog.fns {
@@ -137,8 +177,16 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Trap> {
         closed: false,
     };
     let main = it.fns["main"];
-    it.call(main, None, Vec::new(), main.pos)?;
-    it.flush(main.pos)
+    let (result, _) = it.call(main, None, Vec::new(), main.pos)?;
+    it.flush(main.pos)?;
+    match result {
+        Value::Fail(f) => Err(Stop::Failed(Report {
+            error: it.describe(&f.error),
+            context: f.context.clone(),
+            trace: f.trace.clone(),
+        })),
+        _ => Ok(()),
+    }
 }
 
 struct Interp<'a, W: Write> {
@@ -275,11 +323,17 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         env.extend(f.params.iter().map(|p| p.name.as_str()).zip(args));
         let n = env.len();
-        let result = match self.block(&f.body, &mut env) {
-            Ok(v) | Err(Exit::Return(v)) => v,
+        let end = f.body.last().map_or(f.pos, Stmt::pos);
+        let (mut result, at) = match self.block(&f.body, &mut env) {
+            Ok(v) => (v, end),
+            Err(Exit::Return(v, at)) => (v, at),
             Err(Exit::Trap(t)) => return Err(t),
             Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
         };
+        // err.decl.3: an error value leaving a fallible function is its failure.
+        if matches!(f.ret.as_ref().map(|t| &t.kind), Some(TypeKind::Fallible { .. })) && self.is_error(&result) {
+            result = Value::Fail(Rc::new(Failure { error: result, context: Vec::new(), trace: vec![at] }));
+        }
         self.depth -= 1;
         env.truncate(n);
         Ok((result, env.into_iter().map(|(_, v)| v).collect()))
@@ -300,8 +354,12 @@ impl<'a, W: Write> Interp<'a, W> {
 
     fn stmt(&mut self, s: &'a Stmt, env: &mut Env<'a>) -> Flow<Value> {
         match s {
-            Stmt::Let { name, value, .. } => {
+            Stmt::Let { name, value, otherwise, .. } => {
                 let v = self.eval(value, env)?;
+                let v = match (otherwise, v) {
+                    (Some(o), v @ (Value::None | Value::Fail(_))) => self.otherwise(o, v, env)?,
+                    (_, v) => v,
+                };
                 env.push((name.as_str(), v));
             }
             Stmt::Assign { target, op, value, pos } => self.assign(target, *op, value, *pos, env)?,
@@ -314,19 +372,62 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            Stmt::For { var, mutable: true, iter, body, .. } => self.for_mut(var, iter, body, env)?,
             Stmt::For { var, iter, body, .. } => self.for_loop(var, iter, body, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
-            Stmt::Return(value, _) => {
+            Stmt::Return(value, pos) => {
                 let v = match value {
                     Some(e) => self.eval(e, env)?,
                     None => Value::Unit,
                 };
-                return Err(Exit::Return(v));
+                return Err(Exit::Return(v, *pos));
             }
             Stmt::Expr(e) => return self.eval(e, env),
         }
         Ok(Value::Unit)
+    }
+
+    /// The `else` part of a binding whose value is absent or failed (err.else.1-3).
+    fn otherwise(&mut self, o: &'a Else, failed: Value, env: &mut Env<'a>) -> Flow<Value> {
+        match o {
+            Else::Value(d) => self.eval(d, env),
+            Else::Leave(stmt) => {
+                self.stmt(stmt, env)?;
+                unreachable!("checked: the statement leaves")
+            }
+            Else::Block { err, body, .. } => {
+                let mark = env.len();
+                if let (Some((name, _)), Value::Fail(f)) = (err, &failed) {
+                    env.push((name.as_str(), f.error.clone()));
+                }
+                let r = self.block(body, env);
+                env.truncate(mark);
+                r
+            }
+        }
+    }
+
+    /// `for mut x in e`: each element is moved into `x` for one iteration and
+    /// written back afterwards, however the iteration ends (expr.loop.6).
+    fn for_mut(&mut self, var: &'a str, iter: &'a Expr, body: &'a Block, env: &mut Env<'a>) -> Flow<()> {
+        let list = self.place(iter, env)?;
+        let Value::List(items) = peek(env, &list)? else { unreachable!("checked: list") };
+        for i in 0..items.len() {
+            let mut at = list.clone();
+            at.path.push(Step::Index(i as i64, iter.pos()));
+            let v = std::mem::replace(slot_mut(env, &at)?, Value::Unit);
+            env.push((var, v));
+            let r = self.block(body, env);
+            let (_, v) = env.pop().expect("the loop variable");
+            *slot_mut(env, &at)? = v;
+            match r {
+                Ok(_) | Err(Exit::Continue) => {}
+                Err(Exit::Break) => break,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
     }
 
     /// `for x in e` iterates the value `e` had when the loop started (expr.loop.4).
@@ -426,6 +527,25 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
             Expr::Int(v, _) => Value::Int(*v),
             Expr::Bool(b, _) => Value::Bool(*b),
+            Expr::None(_) => Value::None,
+            Expr::Try { expr, context, pos } => {
+                let v = self.eval(expr, env)?;
+                match v {
+                    Value::None => return Err(Exit::Return(Value::None, *pos)),
+                    Value::Fail(f) => {
+                        let mut context_list = f.context.clone();
+                        if let Some(c) = context {
+                            let Value::Str(msg) = self.eval(c, env)? else { unreachable!("checked: str") };
+                            context_list.push(msg.to_string());
+                        }
+                        let mut trace = f.trace.clone();
+                        trace.push(*pos);
+                        let failure = Failure { error: f.error.clone(), context: context_list, trace };
+                        return Err(Exit::Return(Value::Fail(Rc::new(failure)), *pos));
+                    }
+                    v => v,
+                }
+            }
             Expr::Interp(parts, _) => {
                 let mut s = String::new();
                 for part in parts {
@@ -433,7 +553,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         InterpPart::Lit(text) => s.push_str(text),
                         InterpPart::Expr(x) => {
                             let v = self.eval(x, env)?;
-                            let _ = write!(s, "{v}");
+                            s.push_str(&self.text(&v));
                         }
                     }
                 }
@@ -443,7 +563,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 Some(v) => v.clone(),
                 None => {
                     let (e, v) = self.resolved.variants[pos];
-                    Value::Enum(e, v)
+                    Value::Enum(e, v, Rc::new(Vec::new()))
                 }
             },
             Expr::List(elems, _) => {
@@ -460,8 +580,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     && lookup(env, tn).is_none()
                 {
                     let e = self.enums[tn.as_str()];
-                    let v = self.prog.enums[e].variants.iter().position(|(v, _)| v == name).expect("checked: variant");
-                    return Ok(Value::Enum(e, v));
+                    let v = self.variant_index(e, name);
+                    return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
                 }
                 let Value::Struct(s, fields) = self.eval(recv, env)? else { unreachable!("checked: struct") };
                 fields[self.field_index(s, name)].clone()
@@ -511,16 +631,25 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             Expr::Match { scrutinee, arms, .. } => {
-                let Value::Enum(e, v) = self.eval(scrutinee, env)? else { unreachable!("checked: enum") };
-                let variant = &self.prog.enums[e].variants[v].0;
+                let Value::Enum(e, v, fields) = self.eval(scrutinee, env)? else { unreachable!("checked: enum") };
+                let variant = &self.prog.enums[e].variants[v].name;
                 for arm in arms {
-                    let hit = match &arm.pat {
-                        Pattern::Wildcard(_) => true,
-                        Pattern::Variant { name, .. } => name == variant,
-                    };
-                    if hit {
-                        return self.block(&arm.body, env);
+                    let mark = env.len();
+                    match &arm.pat {
+                        Pattern::Wildcard(_) => {}
+                        Pattern::Variant { name, .. } if name != variant => continue,
+                        Pattern::Variant { bindings, .. } => {
+                            // expr.match.6: bind fields by position; `_` skips one.
+                            for ((n, _), value) in bindings.iter().flatten().zip(fields.iter()) {
+                                if n != "_" {
+                                    env.push((n.as_str(), value.clone()));
+                                }
+                            }
+                        }
                     }
+                    let r = self.block(&arm.body, env);
+                    env.truncate(mark);
+                    return r;
                 }
                 unreachable!("checked: exhaustive match")
             }
@@ -582,16 +711,83 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(Value::Unit);
         }
         if let Some(&s) = self.structs.get(n.as_str()) {
-            let mut fields = vec![Value::Unit; self.prog.structs[s].fields.len()];
-            for a in args {
-                let (label, _) = a.label.as_ref().expect("checked: labelled");
-                let i = self.field_index(s, label);
-                fields[i] = self.eval(&a.value, env)?;
-            }
+            let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
             return Ok(Value::Struct(s, Rc::new(fields)));
+        }
+        if let Some(&(e, v)) = self.resolved.variants.get(&callee.pos()) {
+            let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;
+            return Ok(Value::Enum(e, v, Rc::new(fields)));
         }
         let f = self.fns[n.as_str()];
         self.invoke(f, None, args, callee.pos(), env)
+    }
+
+    /// Field values in declaration order from `field: value` arguments,
+    /// evaluated in the order written (type.struct.3, type.enum.6).
+    fn labelled(&mut self, fields: &'a [crate::ast::Field], args: &'a [Arg], env: &mut Env<'a>) -> Flow<Vec<Value>> {
+        let mut values = vec![Value::Unit; fields.len()];
+        for a in args {
+            let (label, _) = a.label.as_ref().expect("checked: labelled");
+            let i = fields.iter().position(|f| f.name == *label).expect("checked: field exists");
+            values[i] = self.eval(&a.value, env)?;
+        }
+        Ok(values)
+    }
+
+    fn variant_index(&self, e: usize, name: &str) -> usize {
+        self.prog.enums[e].variants.iter().position(|v| v.name == name).expect("checked: variant exists")
+    }
+
+    fn is_error(&self, v: &Value) -> bool {
+        match v {
+            Value::Struct(s, _) => self.prog.structs[*s].is_error,
+            Value::Enum(e, _, _) => self.prog.enums[*e].is_error,
+            _ => false,
+        }
+    }
+
+    /// Text form, as used by `print` and interpolation (type.str.3, err.text.1).
+    fn text(&self, v: &Value) -> String {
+        match v {
+            Value::Unit => String::new(),
+            Value::Int(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Str(s) => s.to_string(),
+            other => self.describe(other),
+        }
+    }
+
+    /// The default form of a value inside an error description (err.text.1):
+    /// `Type.Variant(field: value, ...)`, with strings quoted.
+    fn describe(&self, v: &Value) -> String {
+        let fields = |names: &mut dyn Iterator<Item = &str>, values: &[Value]| -> String {
+            if values.is_empty() {
+                return String::new();
+            }
+            let parts: Vec<String> = names.zip(values).map(|(n, x)| format!("{n}: {}", self.describe(x))).collect();
+            format!("({})", parts.join(", "))
+        };
+        match v {
+            Value::Unit => "()".into(),
+            Value::Int(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Str(s) => format!("{:?}", &**s),
+            Value::None => "none".into(),
+            Value::List(items) => {
+                format!("[{}]", items.iter().map(|x| self.describe(x)).collect::<Vec<_>>().join(", "))
+            }
+            Value::Struct(s, values) => {
+                let decl = &self.prog.structs[*s];
+                format!("{}{}", decl.name, fields(&mut decl.fields.iter().map(|f| f.name.as_str()), values))
+            }
+            Value::Enum(e, i, values) => {
+                let decl = &self.prog.enums[*e];
+                let variant = &decl.variants[*i];
+                let shown = fields(&mut variant.fields.iter().map(|f| f.name.as_str()), values);
+                format!("{}.{}{shown}", decl.name, variant.name)
+            }
+            Value::Fail(f) => self.describe(&f.error),
+        }
     }
 
     fn method_call(
@@ -602,10 +798,17 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
-        // `Type.name(args)`: an associated function (trait.method.4).
+        // `Type.Variant(field: value)` (type.enum.6), or an associated
+        // function `Type.name(args)` (trait.method.4).
         if let Expr::Name(tn, _) = recv
             && lookup(env, tn).is_none()
         {
+            if let Some(&e) = self.enums.get(tn.as_str())
+                && let Some(v) = self.prog.enums[e].variants.iter().position(|v| v.name == name)
+            {
+                let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;
+                return Ok(Value::Enum(e, v, Rc::new(fields)));
+            }
             let f = self.methods[tn.as_str()][name];
             return self.invoke(f, None, args, pos, env);
         }
@@ -619,12 +822,35 @@ impl<'a, W: Write> Interp<'a, W> {
                 let len = items.len();
                 return self.list_method(len, recv, name, args, pos, env);
             }
+            Value::Str(s) => {
+                let s = s.clone();
+                return self.str_method(s, name, args, pos, env);
+            }
             Value::Struct(s, _) => self.prog.structs[*s].name.as_str(),
-            Value::Enum(e, _) => self.prog.enums[*e].name.as_str(),
+            Value::Enum(e, _, _) => self.prog.enums[*e].name.as_str(),
             other => unreachable!("checked: no methods on {other:?}"),
         };
         let f = self.methods[type_name][name];
         self.invoke(f, Some(recv), args, pos, env)
+    }
+
+    /// `s.split(sep)` and `s.to_int()` (type.str.4-5).
+    fn str_method(&mut self, s: Rc<str>, name: &str, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        if name == "split" {
+            let Value::Str(sep) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
+            if sep.is_empty() {
+                let message = "`split` needs a non-empty separator".into();
+                return Err(Exit::Trap(Trap { rule: "type.str.4", pos, message }));
+            }
+            let pieces = s.split(&*sep).map(|p| Value::Str(Rc::from(p))).collect();
+            return Ok(Value::List(Rc::new(pieces)));
+        }
+        let digits = s.strip_prefix('-').unwrap_or(&s);
+        let valid = !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit());
+        Ok(match s.parse::<i64>() {
+            Ok(n) if valid => Value::Int(n),
+            _ => Value::None,
+        })
     }
 
     /// `xs.len()`, `xs.push(v)` and `xs.swap(i, j)` (type.coll.5-7).
@@ -707,7 +933,8 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.closed {
             return Ok(());
         }
-        match writeln!(self.out, "{v}") {
+        let text = self.text(v);
+        match writeln!(self.out, "{text}") {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::BrokenPipe => {
                 self.closed = true;

@@ -9,11 +9,13 @@ pub struct Program {
     pub enums: Vec<EnumDecl>,
 }
 
-/// `struct Name` with one `name Type` field per line (type.struct.1-2).
+/// `struct Name` with one `name Type` field per line (type.struct.1-2), or
+/// `error struct Name` (err.decl.1).
 #[derive(Debug)]
 pub struct StructDecl {
     pub name: String,
     pub pos: Pos,
+    pub is_error: bool,
     pub fields: Vec<Field>,
 }
 
@@ -24,13 +26,22 @@ pub struct Field {
     pub ty: TypeRef,
 }
 
-/// `enum Name` with one variant per line (type.enum.1). Variants carrying
-/// data (type.enum.2) aren't supported yet.
+/// `enum Name` with one variant per line (type.enum.1), or `error enum Name`
+/// (err.decl.1).
 #[derive(Debug)]
 pub struct EnumDecl {
     pub name: String,
     pub pos: Pos,
-    pub variants: Vec<(String, Pos)>,
+    pub is_error: bool,
+    pub variants: Vec<Variant>,
+}
+
+/// `Name` or `Name(field Type, ...)` (type.enum.2).
+#[derive(Debug)]
+pub struct Variant {
+    pub name: String,
+    pub pos: Pos,
+    pub fields: Vec<Field>,
 }
 
 /// `fn name(...)`, or `fn Type.name(...)` for a method or associated
@@ -71,24 +82,36 @@ pub struct Param {
     pub ty: TypeRef,
 }
 
-/// A type as written, e.g. `int` or `List[Student]` (gram.generic.1).
+/// A type as written (gram.generic.1, type.opt.2, err.type.1-2, err.type.5).
 #[derive(Debug, Clone)]
 pub struct TypeRef {
-    pub name: String,
-    pub args: Vec<TypeRef>,
+    pub kind: TypeKind,
     pub pos: Pos,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypeKind {
+    /// `int`, `List[Student]`
+    Named { name: String, args: Vec<TypeRef> },
+    /// `T?`
+    Optional(Box<TypeRef>),
+    /// `T ! E`, `T ! A | B`, `!T`, or a bare `!`. `ok` is `None` when there is
+    /// no success value; `errors` is `None` when the set is inferred.
+    Fallible { ok: Option<Box<TypeRef>>, errors: Option<Vec<TypeRef>> },
 }
 
 pub type Block = Vec<Stmt>;
 
 #[derive(Debug)]
 pub enum Stmt {
-    /// `name := value` or `mut name := value` (expr.bind.1-2)
+    /// `name := value` or `mut name := value` (expr.bind.1-2), optionally
+    /// with an `else` part (err.else.1-3).
     Let {
         name: String,
         pos: Pos,
         mutable: bool,
         value: Expr,
+        otherwise: Option<Else>,
     },
     /// `target = value` or `target op= value` (expr.bind.3, expr.op.2); `pos` is the operator's.
     Assign {
@@ -102,9 +125,11 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
+    /// `for x in e`, or `for mut x in e` (expr.loop.6).
     For {
         var: String,
         var_pos: Pos,
+        mutable: bool,
         iter: Expr,
         body: Block,
         pos: Pos,
@@ -124,6 +149,17 @@ impl Stmt {
             Stmt::Expr(e) => e.pos(),
         }
     }
+}
+
+/// The `else` part of `x := e else ...` (err.else.1-3).
+#[derive(Debug)]
+pub enum Else {
+    /// `else d`: a fallback value.
+    Value(Expr),
+    /// `else return x`, `else break`, `else continue`.
+    Leave(Box<Stmt>),
+    /// `else` or `else err`, followed by an indented block.
+    Block { err: Option<(String, Pos)>, body: Block, pos: Pos },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +216,8 @@ pub enum Expr {
     Interp(Vec<InterpPart>, Pos),
     Int(i64, Pos),
     Bool(bool, Pos),
+    /// `none` (type.opt.4)
+    None(Pos),
     /// A name, including `self` and bare enum variants (type.enum.3).
     Name(String, Pos),
     /// `[a, b, c]` (type.coll.2)
@@ -240,6 +278,12 @@ pub enum Expr {
         arms: Vec<Arm>,
         pos: Pos,
     },
+    /// `e?` or `e? "context"` (err.prop.1, err.ctx.2); `pos` is the `?`.
+    Try {
+        expr: Box<Expr>,
+        context: Option<Box<Expr>>,
+        pos: Pos,
+    },
 }
 
 impl Expr {
@@ -250,6 +294,7 @@ impl Expr {
             | Expr::Interp(_, p)
             | Expr::Int(_, p)
             | Expr::Bool(_, p)
+            | Expr::None(p)
             | Expr::Name(_, p)
             | Expr::List(_, p)
             | Expr::Unary { pos: p, .. }
@@ -260,7 +305,8 @@ impl Expr {
             | Expr::Field { recv: e, .. }
             | Expr::Index { recv: e, .. }
             | Expr::Binary { lhs: e, .. }
-            | Expr::Range { lo: e, .. } => e.pos(),
+            | Expr::Range { lo: e, .. }
+            | Expr::Try { expr: e, .. } => e.pos(),
         }
     }
 }
@@ -289,10 +335,12 @@ pub struct Arm {
 #[derive(Debug)]
 pub enum Pattern {
     Wildcard(Pos),
-    /// `Variant` or `Enum.Variant`
+    /// `Variant`, `Enum.Variant`, or either with one binding (a name or `_`)
+    /// per field: `Rect(w, _)` (expr.match.6).
     Variant {
         qualifier: Option<String>,
         name: String,
+        bindings: Option<Vec<(String, Pos)>>,
         pos: Pos,
     },
 }

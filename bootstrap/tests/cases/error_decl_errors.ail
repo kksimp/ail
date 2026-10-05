@@ -1,0 +1,14 @@
+enum Plain
+    A
+
+error enum Oops
+    Bad
+
+fn f() int ! Plain
+    1
+
+fn g() Oops ! Oops
+    Oops.Bad
+
+fn main() !int
+    print(1)

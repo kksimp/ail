@@ -1,0 +1,17 @@
+error enum E
+    Bad
+
+fn f() int ! E
+    1
+
+fn maybe() int?
+    none
+
+fn main()
+    a := 5 else 0
+    b := maybe() else err
+        0
+    c := f() else
+        print("failed")
+    d := f() else "zero"
+    e := none

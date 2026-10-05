@@ -1,0 +1,9 @@
+fn main()
+    xs := [1, 2]
+    for mut x in xs
+        x += 1
+    mut ys := [1, 2]
+    for mut y in ys
+        ys.push(y)
+    for mut i in 0..3
+        print(i)

@@ -1,0 +1,6 @@
+error: CommandError.BadQuantity(text: "lots")
+error: CommandError.UnknownVerb(verb: "sell")
+error: CommandError.Empty
+  bread: 1
+  milk: 3
+added: 15

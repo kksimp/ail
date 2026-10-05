@@ -1,0 +1,26 @@
+fn find(names List[str], wanted str) int?
+    for i in 0..names.len()
+        if names[i] == wanted
+            return i
+    none
+
+fn hundreds(s str) int?
+    n := s.to_int()?
+    n / 100
+
+fn main()
+    names := ["ada", "linus", "grace"]
+    a := find(names, "grace") else -1
+    b := find(names, "bob") else -1
+    print("{a} {b}")
+    for text in ["12", "-7", "+3", "", "1x", "99999999999999999999", "-"]
+        n := text.to_int() else
+            print("not a number: \"{text}\"")
+            continue
+        print(n)
+    c := hundreds("4567") else 0
+    d := hundreds("x") else 0
+    print("{c} {d}")
+    parts := "a,,b".split(",")
+    print("{parts.len()} [{parts[0]}] [{parts[1]}] [{parts[2]}]")
+    print("".split(" ").len())

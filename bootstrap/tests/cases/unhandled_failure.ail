@@ -1,0 +1,11 @@
+error enum E
+    Bad
+
+fn f() int ! E
+    1
+
+fn main()
+    x := f()
+    f()
+    print(f())
+    y := f() + 1
