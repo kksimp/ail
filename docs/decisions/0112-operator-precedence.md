@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 5 — Expressions
+- **Topic:** 2 — Core syntax (expressions)
 - **Spec rules:** [expr.prec.1–2](../spec/05-expressions.md)
 
 ## Deciding criterion

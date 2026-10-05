@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 5 — Expressions; 20 — AI semantic API (diagnostics)
+- **Topic:** 2 — Core syntax (expressions); 20 — AI semantic API (diagnostics)
 - **Spec rules:** [expr.call.1–2](../spec/05-expressions.md), [gram.syntax.1](../spec/03-grammar.md)
 
 ## Context

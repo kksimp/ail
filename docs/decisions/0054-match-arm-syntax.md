@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** Designer
-- **Topic:** 2 — Core syntax; 5 — Expressions
+- **Topic:** 2 — Core syntax (expressions)
 - **Spec rules:** [expr.match.1](../spec/05-expressions.md)
 - **Evidence:** cl100k tokens for a 3-arm match: `:` 34, `=>` 36, `->` 36, `case … =>` 39
 

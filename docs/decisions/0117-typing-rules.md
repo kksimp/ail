@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 4 — Type system; 5 — Expressions; 7 — Ownership
+- **Topic:** 4 — Type system; 2 — Core syntax (expressions); 7 — Ownership
 - **Spec rules:** [type.struct.5–6](../spec/04-types.md), [type.enum.5](../spec/04-types.md), [expr.bind.6](../spec/05-expressions.md), [expr.block.3](../spec/05-expressions.md), [expr.if.4](../spec/05-expressions.md), [expr.match.4–5](../spec/05-expressions.md), [expr.loop.4–5](../spec/05-expressions.md), [own.place.1](../spec/07-ownership.md)
 
 ## Context

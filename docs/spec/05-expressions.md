@@ -179,7 +179,8 @@ can never fail. It MUST report the overflow checks that remain in the
 performance report. *(ADR 0035)*
 
 **expr.arith.5** — Integer `a / b` rounds toward zero, and `a % b` has the
-sign of `a`, so that `a == (a / b) * b + a % b`. *(ADR 0115)*
+sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
+`a`, since that result is representable. *(ADR 0115)*
 
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is

@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 10 — Traits; 5 — Expressions
+- **Topic:** 10 — Traits; 2 — Core syntax (expressions)
 - **Spec rules:** [trait.op.1–3](../spec/10-traits.md)
 - **Evidence:** `tools/tokbench/corpus/r3/o1_methods.ail` vs `o2_operators.ail`: 16.4 vs **10.2** mean tokens (−38%)
 

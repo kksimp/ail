@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 2 — Core syntax; 5 — Expressions
+- **Topic:** 2 — Core syntax (expressions)
 - **Spec rules:** [expr.op.1–3](../spec/05-expressions.md)
 - **Evidence:** [syntax-measurements-r1.md](../design/syntax-measurements-r1.md): `and`/`or`/`not` cost the same as `&&`/`||`/`!`
 

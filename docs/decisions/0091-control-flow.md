@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 2 — Core syntax; 5 — Expressions
+- **Topic:** 2 — Core syntax (expressions)
 - **Spec rules:** [expr.block.1–2, expr.if.1, expr.loop.1–3](../spec/05-expressions.md)
 - **Evidence:** `tools/tokbench/corpus/r4/` `elif` 30.0 vs. `else if` 31.0; `0..n` 14.6 vs. `range(0, n)` 16.2
 

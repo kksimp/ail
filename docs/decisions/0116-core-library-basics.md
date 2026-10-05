@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
-- **Topic:** 4 — Type system; 22 — Standard library
+- **Topic:** 4 — Type system; 21 — Standard library
 - **Spec rules:** [type.coll.5–6](../spec/04-types.md), [type.str.3](../spec/04-types.md), [type.num.5](../spec/04-types.md)
 - **Resolves:** the size and index type left open by `plat.ptr.2` ([ADR 0007](0007-64-bit-little-endian-only.md))
 

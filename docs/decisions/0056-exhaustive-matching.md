@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Decided by:** Designer
-- **Topic:** 4 — Type system; 5 — Expressions
+- **Topic:** 4 — Type system; 2 — Core syntax (expressions)
 - **Spec rules:** [expr.match.2–3](../spec/05-expressions.md)
 
 ## Context
