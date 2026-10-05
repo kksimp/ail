@@ -11,12 +11,24 @@ pub struct Program {
     pub enums: Vec<EnumDecl>,
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
+    pub consts: Vec<ConstDecl>,
 }
 
-/// Declarations of the prelude (the standard traits and `Ordering`) are at
-/// line 0, before the program's own.
+/// `NAME := expr` at the top level: a constant (mod.const.1).
+#[derive(Debug)]
+pub struct ConstDecl {
+    pub name: String,
+    pub pos: Pos,
+    pub value: Expr,
+}
+
+/// The prelude (the standard traits, `Ordering` and a few functions) is
+/// read before the program, numbered from this line so its positions never
+/// collide with the program's.
+pub const PRELUDE_LINE: usize = 1 << 30;
+
 pub fn is_prelude(pos: Pos) -> bool {
-    pos.line == 0
+    pos.line >= PRELUDE_LINE
 }
 
 /// `T`, or `T Bound + Bound`, in a generic parameter list (gen.decl.1, gen.bound.1).
@@ -212,6 +224,12 @@ pub enum Stmt {
     Continue(Pos),
     Return(Option<Expr>, Pos),
     Expr(Expr),
+    /// `f(x) else ...`: a call whose result has no success value, with its
+    /// failure handled (err.else.4).
+    Handle {
+        value: Expr,
+        otherwise: Else,
+    },
 }
 
 impl Stmt {
@@ -220,7 +238,7 @@ impl Stmt {
             Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) => *p,
-            Stmt::Expr(e) => e.pos(),
+            Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
         }
     }
 }
@@ -289,6 +307,10 @@ pub enum Expr {
     /// `"text {expr} text"` (lex.str.2)
     Interp(Vec<InterpPart>, Pos),
     Int(i64, Pos),
+    /// `1.5` (lex.num.2)
+    Float(f64, Pos),
+    /// `'a'` (lex.str.4)
+    Char(char, Pos),
     Bool(bool, Pos),
     /// `none` (type.opt.4)
     None(Pos),
@@ -340,13 +362,18 @@ pub enum Expr {
         rhs: Box<Expr>,
         pos: Pos,
     },
-    /// `a..b` or `a..=b` (expr.loop.3)
+    /// `a..b` or `a..=b` (expr.loop.3); in a slice either bound may be
+    /// left out, `xs[a..]`, `xs[..b]` (type.coll.10). `pos` is the `..`.
     Range {
-        lo: Box<Expr>,
-        hi: Box<Expr>,
+        lo: Option<Box<Expr>>,
+        hi: Option<Box<Expr>>,
         inclusive: bool,
         pos: Pos,
     },
+    /// `{k: v, ...}`, or `{}` for an empty map or set (type.coll.2).
+    Map(Vec<(Expr, Expr)>, Pos),
+    /// `{a, b, ...}` (type.coll.2)
+    Set(Vec<Expr>, Pos),
     /// `if c` / `elif c` / `else` (expr.if.1); `else_err` is the name in
     /// `else err` (expr.if.6).
     If {
@@ -376,6 +403,8 @@ impl Expr {
             Expr::Str(_, p)
             | Expr::Interp(_, p)
             | Expr::Int(_, p)
+            | Expr::Float(_, p)
+            | Expr::Char(_, p)
             | Expr::Bool(_, p)
             | Expr::None(p)
             | Expr::Name(_, p)
@@ -383,13 +412,16 @@ impl Expr {
             | Expr::List(_, p)
             | Expr::Unary { pos: p, .. }
             | Expr::If { pos: p, .. }
-            | Expr::Match { pos: p, .. } => *p,
+            | Expr::Match { pos: p, .. }
+            | Expr::Map(_, p)
+            | Expr::Set(_, p)
+            | Expr::Range { lo: None, pos: p, .. } => *p,
+            Expr::Range { lo: Some(e), .. } => e.pos(),
             Expr::Call { callee: e, .. }
             | Expr::Method { recv: e, .. }
             | Expr::Field { recv: e, .. }
             | Expr::Index { recv: e, .. }
             | Expr::Binary { lhs: e, .. }
-            | Expr::Range { lo: e, .. }
             | Expr::Try { expr: e, .. } => e.pos(),
         }
     }
@@ -427,6 +459,10 @@ pub struct Arm {
 #[derive(Debug)]
 pub enum Pattern {
     Wildcard(Pos),
+    /// An integer, character, string or `bool` literal (expr.match.7).
+    Literal(Literal, Pos),
+    /// `A | B`: any of the alternatives, none of which binds names (expr.match.8).
+    Or(Vec<Pattern>, Pos),
     /// `Variant`, `Enum.Variant`, or either with one binding (a name or `_`)
     /// per field: `Rect(w, _)` (expr.match.6).
     Variant {
@@ -435,6 +471,23 @@ pub enum Pattern {
         bindings: Option<Vec<(String, Pos)>>,
         pos: Pos,
     },
+}
+
+/// The value of a literal pattern.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Literal {
+    Int(i64),
+    Char(char),
+    Str(String),
+    Bool(bool),
+}
+
+impl Pattern {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Pattern::Wildcard(p) | Pattern::Literal(_, p) | Pattern::Or(_, p) | Pattern::Variant { pos: p, .. } => *p,
+        }
+    }
 }
 
 /// A place expression's root name and path (own.place.1), or `None` if the

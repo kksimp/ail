@@ -12,10 +12,8 @@ use crate::diag::Diagnostic;
 pub(super) enum Cand {
     /// A method declared `fn Type.name(...)`, by function index.
     Inherent(usize),
-    /// A built-in list method (type.coll.5-7).
-    List,
-    /// A built-in string method (type.str.4-5).
-    Str,
+    /// A method of a built-in type (`check/builtins.rs`).
+    Builtin,
     /// The method of a trait the receiver's type implements.
     Trait(usize),
 }
@@ -42,6 +40,8 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
         Ty::Struct(s, args) => Ty::Struct(*s, all(args)),
         Ty::Enum(e, args) => Ty::Enum(*e, all(args)),
         Ty::List(x) => Ty::List(Box::new(map_params(x, f))),
+        Ty::Set(x) => Ty::Set(Box::new(map_params(x, f))),
+        Ty::Map(k, v) => Ty::Map(Box::new(map_params(k, f)), Box::new(map_params(v, f))),
         Ty::Opt(x) => Ty::Opt(Box::new(map_params(x, f))),
         Ty::Res(x, Errs::Set(set)) => Ty::Res(Box::new(map_params(x, f)), Errs::Set(all(set))),
         Ty::Res(x, errs) => Ty::Res(Box::new(map_params(x, f)), errs.clone()),
@@ -61,7 +61,11 @@ pub(super) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(u
                 binds.push((*p, a.clone()));
             }
         }
-        (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) => bind(x, y, vars, binds),
+        (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => bind(x, y, vars, binds),
+        (Ty::Map(k, v), Ty::Map(l, w)) => {
+            bind(k, l, vars, binds);
+            bind(v, w, vars, binds);
+        }
         // Optional wrapping (type.opt.5).
         (Ty::Opt(x), y) => bind(x, y, vars, binds),
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) if s == t => {
@@ -85,7 +89,8 @@ fn mentions(t: &Ty, p: usize) -> bool {
     match t {
         Ty::Param(q) => *q == p,
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(|x| mentions(x, p)),
-        Ty::List(x) | Ty::Opt(x) => mentions(x, p),
+        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) => mentions(x, p),
+        Ty::Map(k, v) => mentions(k, p) || mentions(v, p),
         Ty::Res(x, Errs::Set(set)) => mentions(x, p) || set.iter().any(|e| mentions(e, p)),
         Ty::Res(x, _) => mentions(x, p),
         _ => false,
@@ -96,7 +101,9 @@ fn mentions(t: &Ty, p: usize) -> bool {
 pub(super) fn con_of(t: &Ty) -> Option<Con> {
     Some(match t {
         Ty::Int => Con::Int,
+        Ty::Float => Con::Float,
         Ty::Str => Con::Str,
+        Ty::Char => Con::Char,
         Ty::Bool => Con::Bool,
         Ty::List(_) => Con::List,
         Ty::Struct(s, _) => Con::Struct(*s),
@@ -128,6 +135,7 @@ impl<'p> Checker<'p> {
                     "Eq" => self.std.eq = i,
                     "Ord" => self.std.ord = i,
                     "ToStr" => self.std.to_str = i,
+                    "Hash" => self.std.hash = i,
                     _ => {}
                 }
             }
@@ -149,7 +157,9 @@ impl<'p> Checker<'p> {
             let target_name = imp.target.name.as_str();
             let (con, declared) = match target_name {
                 "int" | "i64" => (Some(Con::Int), Vec::new()),
+                "float" | "f64" => (Some(Con::Float), Vec::new()),
                 "str" => (Some(Con::Str), Vec::new()),
+                "char" => (Some(Con::Char), Vec::new()),
                 "bool" => (Some(Con::Bool), Vec::new()),
                 "List" => (Some(Con::List), vec![self.list_param]),
                 n => match self.types.get(n).copied() {
@@ -174,13 +184,20 @@ impl<'p> Checker<'p> {
             let args: Vec<Ty> = params.iter().map(|&p| Ty::Param(p)).collect();
             let target = match con {
                 Some(Con::Int) => Ty::Int,
+                Some(Con::Float) => Ty::Float,
                 Some(Con::Str) => Ty::Str,
+                Some(Con::Char) => Ty::Char,
                 Some(Con::Bool) => Ty::Bool,
                 Some(Con::List) => Ty::List(Box::new(args[0].clone())),
                 Some(Con::Struct(s)) => Ty::Struct(s, args),
                 Some(Con::Enum(e)) => Ty::Enum(e, args),
                 None => Ty::Err,
             };
+            if tr == Some(self.std.hash) {
+                self.unsupported(imp.pos, "implementing `Hash` yourself is not designed yet (type.map.2)");
+                self.impl_info.push(ImplInfo { tr: None, target: Ty::Err, params: Vec::new() });
+                continue;
+            }
             if let (Some(t), Some(c)) = (tr, con) {
                 let built_in_type = match c {
                     Con::Struct(s) => is_prelude(prog.structs[s].pos),
@@ -234,8 +251,11 @@ impl<'p> Checker<'p> {
             // A bound `Ord` also provides `==` (trait.std.2).
             Ty::Param(p) => self.tparams[*p].bounds.iter().any(|&b| b == tr || (tr == eq && b == self.std.ord)),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
-            Ty::Union(_) => tr == eq,
-            Ty::Opt(inner) => tr == eq && self.implements_in(inner, tr, seen),
+            Ty::Union(_) => tr == eq || tr == self.std.hash,
+            Ty::Opt(inner) => (tr == eq || tr == self.std.hash) && self.implements_in(inner, tr, seen),
+            // type.map.4: maps and sets compare with `==`, and aren't keys.
+            Ty::Map(k, v) => tr == eq && self.implements_in(k, eq, seen) && self.implements_in(v, eq, seen),
+            Ty::Set(e) => tr == eq && self.implements_in(e, eq, seen),
             _ => {
                 let Some(con) = con_of(t) else { return false };
                 if let Some(&i) = self.impl_of.get(&(tr, con)) {
@@ -244,9 +264,15 @@ impl<'p> Checker<'p> {
                 if tr == eq {
                     return self.auto_eq(t, con, seen);
                 }
+                // type.map.2: `Hash` is automatic where `Eq` is, except for floats
+                // and types with their own `Eq`.
+                if tr == self.std.hash {
+                    let custom = matches!(t, Ty::Struct(..) | Ty::Enum(..)) && self.impl_of.contains_key(&(eq, con));
+                    return !custom && !matches!(t, Ty::Float) && self.auto_hash(t, con, seen);
+                }
                 if tr == self.std.ord {
                     return match t {
-                        Ty::Int | Ty::Str => true,
+                        Ty::Int | Ty::Float | Ty::Str | Ty::Char => true,
                         Ty::List(e) => self.implements_in(e, tr, seen),
                         _ => false,
                     };
@@ -278,11 +304,30 @@ impl<'p> Checker<'p> {
         ok
     }
 
+    /// Structural hashing (type.map.2): every part is `Hash`.
+    fn auto_hash(&self, t: &Ty, con: Con, seen: &mut Vec<(Con, usize)>) -> bool {
+        let hash = self.std.hash;
+        match t {
+            Ty::Int | Ty::Bool | Ty::Str | Ty::Char => true,
+            Ty::List(e) => self.implements_in(e, hash, seen),
+            Ty::Struct(_, args) | Ty::Enum(_, args) => {
+                if seen.contains(&(con, hash)) {
+                    return true;
+                }
+                seen.push((con, hash));
+                let ok = self.field_types_of(t, args).iter().all(|f| self.implements_in(f, hash, seen));
+                seen.pop();
+                ok
+            }
+            _ => false,
+        }
+    }
+
     /// Structural equality (trait.auto.1): every part supports `==`.
     fn auto_eq(&self, t: &Ty, con: Con, seen: &mut Vec<(Con, usize)>) -> bool {
         let eq = self.std.eq;
         match t {
-            Ty::Int | Ty::Bool | Ty::Str => true,
+            Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::Char => true,
             Ty::List(e) => self.implements_in(e, eq, seen),
             Ty::Struct(_, args) | Ty::Enum(_, args) => {
                 if seen.contains(&(con, eq)) {
@@ -330,10 +375,8 @@ impl<'p> Checker<'p> {
     /// What `x.name(...)` can refer to when `x` has type `t` (trait.res.1).
     pub(super) fn candidates(&self, t: &Ty, name: &str) -> Vec<Cand> {
         let mut found = Vec::new();
-        match t {
-            Ty::List(_) if super::LIST_METHODS.contains(&name) => found.push(Cand::List),
-            Ty::Str if super::STR_METHODS.contains(&name) => found.push(Cand::Str),
-            _ => {}
+        if super::builtin(t, name).is_some() {
+            found.push(Cand::Builtin);
         }
         if let Some(i) = self.type_name(t).and_then(|tn| self.method_index(tn, name)) {
             found.push(Cand::Inherent(i));
@@ -342,8 +385,11 @@ impl<'p> Checker<'p> {
             if self.trait_method(tr, name).is_none() {
                 continue;
             }
-            // An inherent `eq` or `to_str` was already reported (trait.auto.4).
-            if !found.is_empty() && (tr == self.std.eq || tr == self.std.to_str) {
+            // A built-in method of the same name takes precedence over a standard
+            // trait's (`xs.max()`), and an inherent `eq` or `to_str` was already
+            // reported (trait.auto.4, trait.res.2).
+            let standard = [self.std.eq, self.std.ord, self.std.to_str, self.std.hash].contains(&tr);
+            if !found.is_empty() && standard {
                 continue;
             }
             let has = match t {
