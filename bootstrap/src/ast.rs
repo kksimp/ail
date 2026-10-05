@@ -514,3 +514,42 @@ pub enum PathStep<'a> {
     Field(&'a str),
     Index(&'a Expr),
 }
+
+/// How an argument of a struct literal or variant sets a field
+/// (type.struct.3, type.struct.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArgKind {
+    /// `field: value`
+    Named,
+    /// A bare name equal to a field's name.
+    Shorthand,
+    /// Any other expression: it fills the next field not set by name.
+    Positional,
+}
+
+/// The field each argument sets, in declaration order of `fields`, and how
+/// (type.struct.3-4, type.struct.7). A field index is `None` for an unknown
+/// label or a positional argument with no field left to fill.
+pub fn field_slots(fields: &[Field], args: &[Arg]) -> Vec<(Option<usize>, ArgKind)> {
+    let by_name = |n: &str| fields.iter().position(|f| f.name == n);
+    let mut slots: Vec<(Option<usize>, ArgKind)> = args
+        .iter()
+        .map(|a| match (&a.label, &a.value) {
+            (Some((label, _)), _) => (by_name(label), ArgKind::Named),
+            (None, Expr::Name(n, _)) if by_name(n).is_some() => (by_name(n), ArgKind::Shorthand),
+            // A bare member name, which implicit `self` made `self.n` (trait.method.6).
+            (None, Expr::Field { recv, name, name_pos })
+                if matches!(&**recv, Expr::Name(s, p) if s == "self" && p == name_pos) && by_name(name).is_some() =>
+            {
+                (by_name(name), ArgKind::Shorthand)
+            }
+            _ => (None, ArgKind::Positional),
+        })
+        .collect();
+    let taken: Vec<usize> = slots.iter().filter_map(|(i, _)| *i).collect();
+    let mut free = (0..fields.len()).filter(|i| !taken.contains(i));
+    for slot in slots.iter_mut().filter(|(_, k)| *k == ArgKind::Positional) {
+        slot.0 = free.next();
+    }
+    slots
+}

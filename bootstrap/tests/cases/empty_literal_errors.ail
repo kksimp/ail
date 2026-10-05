@@ -1,0 +1,5 @@
+# type.coll.13: a use that doesn't fix the type, or no use at all.
+fn main()
+    xs := []
+    print(xs.len())
+    ys := {}

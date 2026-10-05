@@ -55,12 +55,8 @@ fn members(prog: &Program, i: usize) -> (String, HashSet<String>, HashSet<String
             None => return (String::new(), HashSet::new(), HashSet::new()),
         },
     };
-    let fields: HashSet<String> = prog
-        .structs
-        .iter()
-        .filter(|s| s.name == ty)
-        .flat_map(|s| s.fields.iter().map(|fd| fd.name.clone()))
-        .collect();
+    let fields: HashSet<String> =
+        prog.structs.iter().filter(|s| s.name == ty).flat_map(|s| s.fields.iter().map(|fd| fd.name.clone())).collect();
     let mut methods: HashSet<String> = prog
         .fns
         .iter()

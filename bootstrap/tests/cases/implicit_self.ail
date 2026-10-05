@@ -1,0 +1,27 @@
+# trait.method.6: inside a method, fields and methods are in scope by bare name.
+struct Counter
+    count int
+    step int
+
+fn Counter.bump(mut self)
+    count += step
+
+fn Counter.twice(mut self) int
+    bump()
+    bump()
+    count
+
+trait Named
+    fn name(self) str
+    fn greet(self) str
+        "hello, {name()}"
+
+impl Named for Counter
+    fn name(self) str
+        "counter {count}"
+
+fn main()
+    mut c := Counter(count: 0, step: 5)
+    print(c.twice())
+    print(c.greet())
+    print(c.count)

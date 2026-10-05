@@ -1,0 +1,6 @@
+Pos(row: 1, col: 2)
+Pos(row: 4, col: 3)
+Problem(line: 7, msg: "bad")
+late
+Shape.Circle(r: 5)
+Shape.Label(text: "hi", size: 2)

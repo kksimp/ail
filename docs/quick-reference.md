@@ -72,10 +72,10 @@ enum Color
     Green
 
 fn Point.sum(self) int            # method; `self` is read-only
-    self.x + self.y
+    x + y                         # fields and methods by bare name (self.x)
 
 fn Point.shift(mut self, dx int)  # may change self
-    self.x += dx
+    x += dx
 
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
@@ -86,13 +86,18 @@ fn is_red(c Color) bool
         Green => false
 
 fn main()
-    mut p := Point(y: 2, x: 1)    # name every field, in any order
+    mut p := Point(y: 2, x: 1)    # name fields, in any order
     p.shift(3)                    # `mut self` methods need a `mut` variable
     print(p.sum())                # method calls always have ()
     c := Color.Red                # qualify a variant...
     print(is_red(Green))          # ...unless its type is known from context
     p.x = 10                      # fields of a `mut` variable can be assigned
 ```
+
+Arguments can also be positional when no two of the fields they fill have one
+type (`Problem(7, "bad")` for `line int, msg str`), or a local named like the
+field (`Point(x, y)`). `Point(1, 2)` is an error: `x` and `y` are both `int`.
+In a method, a local can't take a field's name.
 
 A bare variant is allowed wherever the type is known: arguments, return
 values, struct fields, `match` arms, assignments to an existing variable, list
@@ -176,7 +181,7 @@ trait Shape
     fn name(self) str                # a default; an `impl` may replace it
         "shape"
     fn describe(self) str            # defaults call other methods on `self`
-        "{self.name()}: {self.area()}"
+        "{name()}: {area()}"
 
 struct Circle
     r int
@@ -186,11 +191,11 @@ struct Square
 
 impl Shape for Circle                # defines every method without a default
     fn area(self) int
-        3 * self.r * self.r
+        3 * r * r
 
 impl Shape for Square
     fn area(self) int
-        self.side * self.side
+        side * side
     fn name(self) str
         "square"
 
@@ -222,7 +227,7 @@ fn Stack.new() Self                  # its methods use `T` directly;
     Stack(items: [])                 # `Self` means `Stack[T]`
 
 fn Stack.push(mut self, x T)
-    self.items.push(x)
+    items.push(x)
 
 struct Scene
     shapes List[any Shape]           # `any`: values of different types
@@ -349,6 +354,7 @@ xs.push(4)             # push, pop, sort and swap need a `mut` variable
 xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
+mut out := []          # typed by its first use: out.push("a") makes a List[str]
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 

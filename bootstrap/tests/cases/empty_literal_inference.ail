@@ -1,0 +1,17 @@
+# type.coll.13: a local declared from `[]` or `{}` is typed by its first use.
+fn total(xs List[int]) int
+    xs.sum()
+
+fn main()
+    mut words := []
+    for w in "a b c".split(" ")
+        words.push(w)
+    print(words)
+    mut seen := {}
+    seen.add('x')
+    print(seen.contains('x'))
+    mut ages := {}
+    ages["ann"] = 31
+    print(ages)
+    none_yet := []
+    print(total(none_yet))

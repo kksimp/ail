@@ -1,0 +1,24 @@
+# type.struct.3-4, type.struct.7: named, shorthand and positional arguments.
+struct Pos
+    row int
+    col int
+
+error struct Problem
+    line int
+    msg str
+
+enum Shape
+    Circle(r int)
+    Label(text str, size int)
+
+fn at(row int, col int) Pos
+    Pos(row, col)
+
+fn main()
+    print(at(1, 2))
+    print(Pos(col: 3, row: 4))
+    msg := "bad"
+    print(Problem(7, msg))
+    print(Problem(9, "late").msg)
+    print(Shape.Circle(5))
+    print(Shape.Label("hi", 2))
