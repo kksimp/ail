@@ -1,0 +1,9 @@
+# err.else.6: the fallback must have the value's type, and a value that
+# can't be absent or fail has nothing to fall back from.
+fn save() !
+    print("saved")
+
+fn main()
+    a := ("1".to_int() else "none")
+    b := (5 else 0) + 1
+    print(save() else 0)

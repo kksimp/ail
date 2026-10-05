@@ -394,6 +394,14 @@ pub enum Expr {
         context: Option<Box<Expr>>,
         pos: Pos,
     },
+    /// `e else d` or `e else return ...` as an expression (err.else.6): the
+    /// value of `e`, or the fallback when it is absent or failed. `pos` is
+    /// the `else`'s.
+    Else {
+        value: Box<Expr>,
+        otherwise: Box<Else>,
+        pos: Pos,
+    },
 }
 
 impl Expr {
@@ -422,7 +430,8 @@ impl Expr {
             | Expr::Field { recv: e, .. }
             | Expr::Index { recv: e, .. }
             | Expr::Binary { lhs: e, .. }
-            | Expr::Try { expr: e, .. } => e.pos(),
+            | Expr::Try { expr: e, .. }
+            | Expr::Else { value: e, .. } => e.pos(),
         }
     }
 }
