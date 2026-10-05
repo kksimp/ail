@@ -10,7 +10,7 @@ runs, with structs, enums, methods, `match`, loops, lists, `mut` and
 interpolation. Both verified on Linux x86-64 and macOS ARM64 (ADR 0085).
 Milestone 3 (2026-10-05): `examples/commands.ail` runs, with error types,
 `T ! E` and `!T`, `?`, `else`, optionals, variants with data, `for mut`, and
-error reports from `main`. Verified on Linux x86-64; awaiting macOS ARM64.
+error reports from `main`. Verified on Linux x86-64 and macOS ARM64.
 See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
 
 ## Design topics
