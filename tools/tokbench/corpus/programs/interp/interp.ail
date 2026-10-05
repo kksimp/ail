@@ -266,8 +266,7 @@ fn Parser.primary(mut self) Expr ! MiniError
     match tok.kind
         Int =>
             advance()
-            value := tok.text.to_int() else return MiniError(tok.pos, "number too large")
-            IntLit(tok.pos, value)
+            IntLit(tok.pos, tok.text.to_int() else return MiniError(tok.pos, "number too large"))
         Str =>
             advance()
             StrLit(tok.pos, tok.text)
@@ -354,8 +353,7 @@ fn Interp.new() Interp
 fn undefined_variable(pos Pos, name str) MiniError
     MiniError(pos, "undefined variable '{name}'")
 fn checked(pos Pos, result int?) Value ! MiniError
-    n := result else return MiniError(pos, "integer overflow")
-    Int(n)
+    Int(result else return MiniError(pos, "integer overflow"))
 fn Interp.run(mut self, program List[Stmt]) !
     exec_all(program)?
 fn Interp.exec_all(mut self, body List[Stmt]) Flow ! MiniError
@@ -393,8 +391,7 @@ fn Interp.exec(mut self, stmt Stmt) Flow ! MiniError
     Next
 fn Interp.condition(mut self, e Expr) bool ! MiniError
     v := eval(e)?
-    b := v.as_bool() else return MiniError(e.pos(), "type mismatch: condition must be bool, got {v.type_name()}")
-    b
+    (v.as_bool() else return MiniError(e.pos(), "type mismatch: condition must be bool, got {v.type_name()}"))
 fn Interp.eval(mut self, e Expr) Value ! MiniError
     match e
         IntLit(_, n) => Int(n)
