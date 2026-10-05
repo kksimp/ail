@@ -3,7 +3,6 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::hash::{Hash as _, Hasher};
 use std::io::Write;
 use std::rc::Rc;
 
@@ -99,6 +98,13 @@ fn s(text: impl AsRef<str>) -> Value {
 /// `s.to_float()` (type.num.8): an optional `-`, digits, an optional
 /// fraction, and an optional exponent.
 fn parse_float(text: &str) -> Option<f64> {
+    // The text forms of the special values read back (type.num.8).
+    match text {
+        "inf" => return Some(f64::INFINITY),
+        "-inf" => return Some(f64::NEG_INFINITY),
+        "nan" => return Some(f64::NAN),
+        _ => {}
+    }
     let b = text.as_bytes();
     let mut i = usize::from(b.first() == Some(&b'-'));
     let digits = |i: &mut usize| {
@@ -192,8 +198,10 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::List(items), "pop") => opt(Rc::make_mut(items).pop()),
             (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
             (Value::Set(t), "add") => {
-                Rc::make_mut(t).insert(a.pop().expect("checked: one argument"), None);
-                Value::Unit
+                let x = a.pop().expect("checked: one argument");
+                let new = t.get(&x).is_none();
+                Rc::make_mut(t).insert(x, None);
+                Value::Bool(new)
             }
             (Value::Set(t), "remove") => Value::Bool(Rc::make_mut(t).remove(&a[0]).is_some()),
             (other, _) => unreachable!("checked: `{name}` on {other:?}"),
@@ -208,6 +216,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Float(x) => float_method(x, name, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
+                "last" => opt(items.last().cloned()),
                 "contains" | "index_of" => {
                     let mut found = None;
                     for (i, x) in items.iter().enumerate() {
@@ -287,8 +296,10 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn str_method(&mut self, text: &str, name: &str, a: Vec<Value>, pos: Pos) -> Result<Value, Trap> {
+        // type.str.6: a `char` argument works like a one-character string.
         let arg_str = |i: usize| match &a[i] {
             Value::Str(t) => t.clone(),
+            Value::Char(c) => Rc::from(c.to_string()),
             other => unreachable!("checked: str, found {other:?}"),
         };
         Ok(match name {
@@ -309,6 +320,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             "to_float" => opt(parse_float(text).map(Value::Float)),
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
+            "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
             "starts_with" => Value::Bool(text.starts_with(&*arg_str(0))),
             "ends_with" => Value::Bool(text.ends_with(&*arg_str(0))),
@@ -322,8 +334,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             },
             "pad_left" | "pad_right" => {
+                // type.str.9: up to `width` characters; never shorter.
                 let width = usize::try_from(a[0].int()).unwrap_or(0);
-                let fill = " ".repeat(width.saturating_sub(text.chars().count()));
+                let fill = a[1].char().to_string().repeat(width.saturating_sub(text.chars().count()));
                 if name == "pad_left" { s(format!("{fill}{text}")) } else { s(format!("{text}{fill}")) }
             }
             _ => unreachable!("checked: str.{name}"),
@@ -352,12 +365,6 @@ impl<'a, W: Write> Interp<'a, W> {
         Ok(out)
     }
 
-    /// `x.hash()` (type.map.2): the same for equal values within a run.
-    pub(super) fn hash_of(&self, v: &Value) -> Value {
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        Key::of(v).hash(&mut h);
-        Value::Int(h.finish() as i64)
-    }
 }
 
 fn char_method(c: char, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> {
@@ -399,6 +406,8 @@ fn int_method(n: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> 
         "checked_mul" => checked(n.checked_mul(m())),
         "checked_div" => checked(n.checked_div(m())),
         "checked_neg" => checked(n.checked_neg()),
+        "checked_rem" => checked(n.checked_rem(m())),
+        "wrapping_neg" => Value::Int(n.wrapping_neg()),
         "wrapping_add" => Value::Int(n.wrapping_add(m())),
         "wrapping_sub" => Value::Int(n.wrapping_sub(m())),
         "wrapping_mul" => Value::Int(n.wrapping_mul(m())),

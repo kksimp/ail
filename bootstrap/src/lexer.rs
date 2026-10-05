@@ -401,6 +401,19 @@ impl Lexer {
         let pos = Pos { line: first + 1, col: col + 1 };
         let open_end = col + if raw { 4 } else { 3 };
         let opening = &lines[first];
+        // `"""text"""` on one line: no dedenting (lex.str.3).
+        if let Some(k) = find_triple(&opening[open_end..], raw) {
+            let close = open_end + k;
+            let mut value = String::new();
+            let mut parts = Vec::new();
+            if raw {
+                value.extend(&opening[open_end..close]);
+            } else {
+                self.content(opening, open_end, close, first + 1, false, &mut value, &mut parts);
+            }
+            self.push(string_token(value, parts), pos);
+            return (first, close + 3);
+        }
         if opening[open_end..].iter().any(|c| *c != ' ') {
             self.diags.push(
                 Diagnostic::new(
@@ -408,7 +421,7 @@ impl Lexer {
                     Pos { line: first + 1, col: open_end + 1 },
                     "text after the opening `\"\"\"`",
                 )
-                .help("start the string's text on the next line"),
+                .help("start the string's text on the next line, or close it on this line"),
             );
         }
         // Find the closing `"""`.
@@ -434,6 +447,17 @@ impl Lexer {
         // it holds only the delimiter) is removed.
         let indent = |l: &[char]| l.iter().take_while(|c| **c == ' ').count();
         let blank = |l: &[char]| l.iter().all(|c| *c == ' ' || *c == '\t');
+        // Only spaces indent a multi-line string's text (lex.str.3).
+        for k in first + 1..=last {
+            let line = if k == last { &lines[k][..close] } else { &lines[k][..] };
+            let lead = line.iter().take_while(|c| **c == ' ' || **c == '\t').count();
+            if !blank(line) && line[..lead].contains(&'\t') {
+                self.diags.push(
+                    Diagnostic::new("lex.str.3", Pos { line: k + 1, col: 1 }, "tab in a multi-line string's indentation")
+                        .help("indent with spaces; write `\\t` for a tab in the text"),
+                );
+            }
+        }
         let mut common = (first + 1..last).filter(|&k| !blank(&lines[k])).map(|k| indent(&lines[k])).min();
         let closing_indent = if alone { close } else { indent(&closing[..close]) };
         common = Some(common.map_or(closing_indent, |c| c.min(closing_indent)));
@@ -484,6 +508,13 @@ impl Lexer {
                 None => self.placeholder(pos),
             }
             return next + 1;
+        }
+        if line.get(start + 1..start + 3) == Some(&['\'', '\'']) {
+            self.diags.push(
+                Diagnostic::new("lex.str.4", pos, "a `'` in a character literal must be escaped").help("write '\\''"),
+            );
+            self.placeholder(pos);
+            return start + 3;
         }
         let end = line[start + 1..].iter().position(|c| *c == '\'').map_or(line.len(), |p| start + p + 2);
         self.diags.push(
@@ -619,7 +650,14 @@ fn find_triple(line: &[char], raw: bool) -> Option<usize> {
         match line[i] {
             '\\' if !raw => i += 2,
             '{' if !raw => i = find_close(line, i).map_or(line.len(), |c| c + 1),
-            '"' if starts_triple(line, i) => return Some(i),
+            // In a run of more than three quotes, the last three close it.
+            '"' if starts_triple(line, i) => {
+                let mut end = i;
+                while line.get(end + 3) == Some(&'"') {
+                    end += 1;
+                }
+                return Some(end);
+            }
             _ => i += 1,
         }
     }
@@ -848,6 +886,9 @@ mod tests {
         assert_eq!(t[3], Tok::Sym(","));
         let raw = toks("r\"\"\"\n  a\\n{b}\n  \"\"\"\n");
         assert_eq!(raw[0], Tok::Str("a\\n{b}".into()));
+        // One line, and quotes at the end of the text.
+        assert_eq!(toks(r#"r"""say "hi"""""#)[0], Tok::Str("say \"hi\"".into()));
+        assert_eq!(toks(r#""""a\tb""""#)[0], Tok::Str("a\tb".into()));
     }
 
     #[test]

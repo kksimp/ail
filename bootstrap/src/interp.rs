@@ -72,6 +72,13 @@ impl Value {
         }
     }
 
+    fn char(&self) -> char {
+        match self {
+            Value::Char(c) => *c,
+            other => unreachable!("checked: char, found {other:?}"),
+        }
+    }
+
     fn bool(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
@@ -353,11 +360,35 @@ fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<&'e Value, Trap> {
     Ok(v)
 }
 
+/// A string or character as it appears inside another value (trait.auto.2):
+/// in its quotes, with `\\`, the quote and control characters escaped.
+fn quoted(text: &str, quote: char) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            '\0' => out.push_str("\\0"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if c.is_control() => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
 /// A key for a trap message: strings and characters quoted, as inside a value.
 fn key_text(k: &Value) -> String {
     match k {
-        Value::Str(s) => format!("{:?}", &**s),
-        Value::Char(c) => format!("{c:?}"),
+        Value::Str(s) => quoted(s, '"'),
+        Value::Char(c) => quoted(&c.to_string(), '\''),
         Value::Int(n) => n.to_string(),
         Value::Bool(b) => b.to_string(),
         _ => "(a value)".into(),
@@ -644,6 +675,8 @@ impl<'a, W: Write> Interp<'a, W> {
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
             Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
+            // type.num.10
+            Expr::Int(v, pos) if self.resolved.float_literals.contains(pos) => Value::Float(*v as f64),
             Expr::Int(v, _) => Value::Int(*v),
             Expr::Float(v, _) => Value::Float(*v),
             Expr::Char(c, _) => Value::Char(*c),
@@ -1027,8 +1060,13 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         Ok(match (a, b) {
             (Value::Int(x), Value::Int(y)) => x.cmp(y),
-            // trait.std.2 for floats: NaN compares equal to everything.
-            (Value::Float(x), Value::Float(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+            // type.num.7: a total order for sorting, with NaN after every number.
+            (Value::Float(x), Value::Float(y)) => match (x.is_nan(), y.is_nan()) {
+                (true, true) => Ordering::Equal,
+                (true, false) => Ordering::Greater,
+                (false, true) => Ordering::Less,
+                _ => x.partial_cmp(y).expect("not NaN"),
+            },
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
@@ -1144,8 +1182,8 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Int(n) => n.to_string(),
             Value::Float(x) => float_text(*x),
             Value::Bool(b) => b.to_string(),
-            Value::Str(s) => format!("{:?}", &**s),
-            Value::Char(c) => format!("{c:?}"),
+            Value::Str(s) => quoted(s, '"'),
+            Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
@@ -1270,8 +1308,6 @@ impl<'a, W: Write> Interp<'a, W> {
         let std = self.resolved.std;
         Ok(if tr == std.to_str {
             Value::Str(Rc::from(self.text(&value, pos)?))
-        } else if tr == std.hash {
-            self.hash_of(&value)
         } else {
             let other = self.eval(&args[0].value, env)?;
             if tr == std.eq {

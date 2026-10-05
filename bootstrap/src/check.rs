@@ -137,6 +137,8 @@ pub struct Resolved {
     /// `e?` on an optional, which passes on `none` (err.prop.2); every other
     /// `?` passes on only a failure, so a successful `none` stays a value.
     pub optional_try: std::collections::HashSet<Pos>,
+    /// Integer literals that are floats because a float is expected (type.num.10).
+    pub float_literals: std::collections::HashSet<Pos>,
     pub std: Std,
 }
 
@@ -1346,11 +1348,16 @@ impl<'p> Checker<'p> {
                     None => vt,
                 };
                 if ty == Ty::Unit {
-                    self.error(
-                        "expr.bind.1",
-                        value.pos(),
-                        format!("`{name}` would be bound to an expression that produces no value"),
-                    );
+                    let msg = format!("`{name}` would be bound to an expression that produces no value");
+                    match value {
+                        Expr::Method { name: m, .. } if m == "sort" => self.error_help(
+                            "expr.bind.1",
+                            value.pos(),
+                            msg,
+                            "`sort()` changes the list in place; `xs.sorted()` gives a new sorted list",
+                        ),
+                        _ => self.error("expr.bind.1", value.pos(), msg),
+                    }
                 }
                 if self.declare(name, *pos) {
                     self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding });
@@ -1592,6 +1599,10 @@ impl<'p> Checker<'p> {
                     "`for` iterates a map's keys or values explicitly",
                     "write `for k in m.keys()`, or `m.values()`",
                 );
+                Ty::Err
+            }
+            Ty::Str => {
+                self.error_help("expr.loop.4", iter.pos(), "`for` can't iterate over a `str`", "iterate `s.chars()`");
                 Ty::Err
             }
             t => {
@@ -1858,6 +1869,11 @@ impl<'p> Checker<'p> {
     fn expr(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         match e {
             Expr::Str(..) => Ty::Str,
+            // type.num.10: an integer literal where a float is expected is a float.
+            Expr::Int(_, pos) if matches!(expect, Some(Ty::Float)) => {
+                self.resolved.float_literals.insert(*pos);
+                Ty::Float
+            }
             Expr::Int(..) => Ty::Int,
             Expr::Float(..) => Ty::Float,
             Expr::Char(..) => Ty::Char,
@@ -1889,6 +1905,12 @@ impl<'p> Checker<'p> {
             Expr::Method { recv, name, name_pos, args } => self.method(recv, name, *name_pos, args, expect),
             Expr::Field { recv, name, name_pos } => self.field(recv, name, *name_pos, expect),
             Expr::Index { recv, index, .. } => self.index(recv, index),
+            Expr::Unary { op: UnOp::Neg, operand, .. }
+                if matches!(expect, Some(Ty::Float)) && matches!(**operand, Expr::Int(..)) =>
+            {
+                self.float_literal(operand);
+                Ty::Float
+            }
             Expr::Unary { op, operand, pos } => self.unary(*op, operand, *pos),
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
             Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
@@ -2983,7 +3005,9 @@ impl<'p> Checker<'p> {
             return;
         }
         let mut d = Diagnostic::new("expr.name.1", pos, format!("{shown} has no method `{name}`"));
-        if let Some(s) = suggest(name, &names) {
+        if let Some(h) = builtins::method_help(rt, name) {
+            d = d.help(h);
+        } else if let Some(s) = suggest(name, &names) {
             d = d.help(format!("did you mean `{s}`?"));
         } else if let Ty::Param(p) = rt {
             d = d.help(format!(
@@ -3091,6 +3115,21 @@ impl<'p> Checker<'p> {
             }
             return (**v).clone();
         }
+        // type.coll.4: indexes start at 0; there are no negative indexes.
+        let negative = |e: &Expr| matches!(e, Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..)));
+        let bad = match index {
+            Expr::Range { lo, hi, .. } => [lo, hi].into_iter().flatten().find(|b| negative(b)).map(|b| b.pos()),
+            e if negative(e) => Some(e.pos()),
+            _ => None,
+        };
+        if let Some(at) = bad {
+            self.error_help(
+                "type.coll.4",
+                at,
+                "a list has no negative indexes",
+                "count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`",
+            );
+        }
         let slice = matches!(index, Expr::Range { .. });
         if let Expr::Range { lo, hi, .. } = index {
             self.range_bounds(lo.as_deref(), hi.as_deref());
@@ -3106,7 +3145,12 @@ impl<'p> Checker<'p> {
             Ty::List(t) => *t,
             Ty::Err => Ty::Err,
             Ty::Str => {
-                self.error("type.str.2", recv.pos(), "a `str` can't be indexed");
+                self.error_help(
+                    "type.str.2",
+                    recv.pos(),
+                    "a `str` can't be indexed",
+                    "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
+                );
                 Ty::Err
             }
             t => {
@@ -3114,6 +3158,19 @@ impl<'p> Checker<'p> {
                 self.error("type.coll.4", recv.pos(), msg);
                 Ty::Err
             }
+        }
+    }
+
+    /// Whether `e` is an integer literal (or its negation), which can be a
+    /// float where one is expected; if so, it is recorded as one (type.num.10).
+    fn float_literal(&mut self, e: &Expr) -> bool {
+        match e {
+            Expr::Int(_, pos) => {
+                self.resolved.float_literals.insert(*pos);
+                true
+            }
+            Expr::Unary { op: UnOp::Neg, operand, .. } => self.float_literal(operand),
+            _ => false,
         }
     }
 
@@ -3152,8 +3209,24 @@ impl<'p> Checker<'p> {
             return Ty::Bool;
         }
         // expr.cmp.1: the right operand's expected type is the left's.
-        let lt = self.expr(lhs, None, true);
+        let mut lt = self.expr(lhs, None, true);
         let rt = self.expr(rhs, Some(&lt), true);
+        // type.num.10: `2 * x` with a float `x`.
+        if lt == Ty::Int && rt == Ty::Float && self.float_literal(lhs) {
+            lt = Ty::Float;
+        }
+        // expr.cmp.3: `xs.index_of(x) == -1` would always be false.
+        if matches!(op, BinOp::Eq | BinOp::Ne)
+            && lt == Ty::Opt(Box::new(Ty::Int))
+            && matches!(rhs, Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..)))
+        {
+            self.error_help(
+                "expr.cmp.3",
+                rhs.pos(),
+                "this compares an optional with a negative number, so it's never equal: absence is `none`",
+                "write `== none`, or bind it: `if i := ...`",
+            );
+        }
         self.operator(op, &lt, &rt, pos)
     }
 
@@ -3569,7 +3642,9 @@ impl<'p> Checker<'p> {
             .chain(self.types.keys().copied())
             .collect();
         let mut d = Diagnostic::new("expr.name.1", pos, format!("unknown name `{name}`"));
-        if let Some(s) = suggest(name, &candidates) {
+        if let Some(h) = builtins::function_help(name) {
+            d = d.help(h);
+        } else if let Some(s) = suggest(name, &candidates) {
             d = d.help(format!("did you mean `{s}`?"));
         }
         self.diags.push(d);

@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 
 use crate::ast::{
+    is_prelude,
     Arg, Arm, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart,
     Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef,
     UnOp, Variant, Within,
@@ -151,8 +152,28 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                     p.skip_statement();
                 }
             },
+            Tok::Kw("mut") if matches!(p.peek_at(1), Tok::Ident(_)) => {
+                let pos = p.pos();
+                p.error_help(
+                    "mod.const.1",
+                    pos,
+                    "there are no mutable top-level variables",
+                    "declare a constant `NAME := value`, or pass the value to the functions that change it",
+                );
+                p.skip_statement();
+            }
+            Tok::Ident(word) if ["const", "let", "var", "static"].contains(&word.as_str()) => {
+                let pos = p.pos();
+                p.error_help(
+                    "mod.const.1",
+                    pos,
+                    format!("AIL has no `{word}`; a constant is declared `NAME := value`"),
+                    "remove the keyword",
+                );
+                p.skip_statement();
+            }
             _ => {
-                p.unexpected("a declaration (`fn`, `struct`, `enum`, `error`, `trait` or `impl`)", "gram.syntax.1");
+                p.unexpected("a declaration (`fn`, `struct`, `enum`, `error`, `trait`, `impl` or a constant)", "gram.syntax.1");
                 p.skip_statement();
             }
         }
@@ -514,6 +535,10 @@ impl Parser {
         if !self.eat(&Tok::Newline) {
             self.unexpected(&format!("end of line after `trait {name}`"), "trait.decl.1");
             self.skip_statement();
+            return;
+        }
+        // The prelude's `Hash` has no methods: the language provides it (trait.auto.5).
+        if is_prelude(pos) && !matches!(self.peek(), Tok::Indent) {
             return;
         }
         let methods = self.fn_block(prog, Within::Trait(index), &format!("`trait {name}`"));
@@ -1252,6 +1277,16 @@ impl Parser {
         for part in parts {
             match part {
                 Part::Lit(s) => out.push(InterpPart::Lit(s)),
+                // lex.str.2: `{{` isn't an escape; `\{` is.
+                Part::Code(tokens) if matches!(tokens.first().map(|t| &t.tok), Some(Tok::Sym("{"))) => {
+                    self.error_help(
+                        "lex.str.2",
+                        tokens[0].pos,
+                        "`{{` in a string isn't an escaped brace",
+                        "write `\\{` for a literal `{`, or use a raw string `r\"...\"`",
+                    );
+                    ok = false;
+                }
                 Part::Code(tokens) => {
                     let generic_names = self.generic_names.clone();
                     let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true, generic_names };

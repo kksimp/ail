@@ -25,5 +25,5 @@ trait Ord
 trait ToStr
     fn to_str(self) str
 
+## Map keys and set elements. Automatic, with no methods (trait.auto.5).
 trait Hash
-    fn hash(self) int
