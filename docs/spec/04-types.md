@@ -163,16 +163,18 @@ struct User
 ```
 
 **type.struct.3** — A struct value is constructed by the type name followed
-by a parenthesised, comma-separated list of `field: value` pairs.
-*(ADR 0058)*
+by a parenthesised, comma-separated list of arguments. An argument is named
+(`field: value`), shorthand (a bare local name equal to a field's name, which
+sets that field), or positional (any other expression). *(ADR 0058,
+ADR 0142)*
 
 ```ail
 u := User(id: 7, name: "Ada", email: none)
 ```
 
-**type.struct.4** — A struct literal MUST name every field of the struct
-exactly once, in any order. Missing, unknown and repeated fields are
-compile-time errors. *(ADR 0113)*
+**type.struct.4** — A struct literal MUST set every field of the struct
+exactly once. Named and shorthand arguments may come in any order. Missing,
+unknown and repeated fields are compile-time errors. *(ADR 0113, ADR 0142)*
 
 **type.struct.5** — A struct's field names MUST be distinct. Each value in a
 struct literal MUST have its field's type. *(ADR 0117)*
@@ -180,7 +182,24 @@ struct literal MUST have its field's type. *(ADR 0117)*
 **type.struct.6** — `e.f` reads field `f` of `e`. The type of `e` MUST be a
 struct that declares `f`. *(ADR 0117)*
 
-> **Note:** field shorthand and defaults are not yet decided.
+**type.struct.7** — Positional arguments fill the fields not set by named or
+shorthand arguments, in declaration order. They are allowed only when the
+fields they fill have pairwise different declared types, so that a swap is
+always a type error; two fields whose types are type parameters count as the
+same type. Otherwise it's a compile-time error whose help names the fields.
+*(ADR 0142)*
+
+```ail
+struct Pos
+    row int
+    col int
+
+Pos(row, col)          # shorthand: locals named row and col
+Pos(row: r, col: c)    # named
+Pos(r, c)              # error: row and col are both int
+```
+
+> **Note:** field defaults are not yet decided.
 
 ## Enums
 
@@ -207,9 +226,9 @@ known enum type, its variants MAY be written without qualification
 
 **type.enum.5** — An enum's variant names MUST be distinct. *(ADR 0117)*
 
-**type.enum.6** — A variant with data is constructed like a struct literal,
-naming each of its fields exactly once, in any order: `Circle(r: 1.0)`.
-*(ADR 0123)*
+**type.enum.6** — A variant with data is constructed like a struct literal
+(`type.struct.3–4`, `type.struct.7`): `Circle(r: 1.0)`, or `Circle(1.0)`.
+*(ADR 0123, ADR 0142)*
 
 ## Optional types
 
@@ -370,8 +389,9 @@ primes := [2, 3, 5, 7]
 ```
 
 **type.coll.3** — The empty literals `[]` and `{}` require a known expected
-type. Otherwise they are a compile-time error, whose help suggests the
-constructors of `type.coll.8`. *(ADR 0090, ADR 0131)*
+type, except when they declare a local (`type.coll.13`). Otherwise they are a
+compile-time error, whose help suggests the constructors of `type.coll.8`.
+*(ADR 0090, ADR 0131, ADR 0143)*
 
 **type.coll.4** — `xs[i]` traps if `i` is out of bounds. `xs[a..b]` yields
 the sub-list from `a` up to but excluding `b`, as a value; `xs[a..=b]` also
@@ -439,6 +459,19 @@ code can't declare (ADR 0128 is unchanged for user code). It starts at `0` or
 `0.0` and adds left to right with `+`: an `int` overflow traps, and an empty
 list gives `0` or `0.0`. For `float` it matches a Python loop, not Python
 3.12's compensated `sum()`. *(ADR 0136)*
+
+**type.coll.13** — A local declared with `:=` from `[]` or `{}` with no
+expected type takes its type from the first statement that determines it:
+`x.push(e)` (a `List`), `x.add(e)` (a `Set`), `x[k] = v` (a `Map`), `x = e`,
+passing `x` where a parameter's type is known, returning `x`, or using it as
+a field's value. Any other use before then, or none at all, is a
+compile-time error whose help suggests `List[T]()`, `Map[K, V]()` or
+`Set[T]()`. *(ADR 0143)*
+
+```ail
+mut out := []
+out.push("a")          # out is List[str]
+```
 
 ## Maps and sets
 

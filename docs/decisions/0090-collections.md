@@ -1,6 +1,6 @@
 # 0090. Collections: `List[T]`, `Map[K, V]`, `Set[T]`, with `[...]` and `{...}` literals
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0143](0143-empty-literals-typed-by-use.md) (an empty literal declaring a local is typed by its first use)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 4 — Type system; 21 — Standard library

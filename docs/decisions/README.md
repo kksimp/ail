@@ -63,7 +63,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0055](0055-numeric-type-names.md) | Numeric types by bit width; `int`/`float` default aliases | Accepted | 2026-10-04 |
 | [0056](0056-exhaustive-matching.md) | Matches must be exhaustive; `_` hiding variants is warned | Accepted | 2026-10-04 |
 | [0057](0057-variant-references.md) | Variants bare where the type is known, qualified otherwise | Accepted | 2026-10-04 |
-| [0058](0058-struct-literal-syntax.md) | Struct literals `Type(field: value)`; `name: value` for named args | Accepted | 2026-10-04 |
+| [0058](0058-struct-literal-syntax.md) | Struct literals `Type(field: value)`; `name: value` for named args | Accepted; amended by 0142 | 2026-10-04 |
 | [0059](0059-default-numeric-spelling.md) | `int`/`i64` and `float`/`f64` both canonical | Accepted | 2026-10-04 |
 | [0060](0060-mutable-value-semantics.md) | AIL uses mutable value semantics | Accepted | 2026-10-04 |
 | [0061](0061-call-site-mut.md) | `mut` parameters are marked `mut` at the call site | Accepted | 2026-10-04 |
@@ -95,7 +95,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0087](0087-private-rust-toolchain.md) | Pinned Rust toolchain installed privately inside the repository | Accepted | 2026-10-04 |
 | [0088](0088-entry-point-and-print.md) | `fn main()` entry point; prelude `print` ends the line *(delegated)* | Accepted | 2026-10-04 |
 | [0089](0089-strings.md) | Strings: UTF-8, `{expr}` interpolation, no direct indexing *(delegated)* | Accepted; amended by 0135 | 2026-10-04 |
-| [0090](0090-collections.md) | `List`/`Map`/`Set` with `[...]`/`{...}` literals *(delegated)* | Accepted | 2026-10-04 |
+| [0090](0090-collections.md) | `List`/`Map`/`Set` with `[...]`/`{...}` literals *(delegated)* | Accepted; amended by 0143 | 2026-10-04 |
 | [0091](0091-control-flow.md) | Expression blocks, `if`/`elif`/`else`, `for in`, `while`, ranges *(delegated)* | Accepted | 2026-10-04 |
 | [0092](0092-operators.md) | `and`/`or`/`not`; compound assignment; methods always use `()` *(delegated)* | Accepted | 2026-10-04 |
 | [0093](0093-optional-values.md) | `none`; implicit wrapping into optionals *(delegated)* | Accepted | 2026-10-04 |
@@ -118,7 +118,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0110](0110-bool.md) | `bool` with `true`/`false`; conditions must be `bool` *(delegated)* | Accepted | 2026-10-04 |
 | [0111](0111-if-expression-layout.md) | `elif`/`else` align with the line that starts the `if` (corrects 0091's example) *(delegated)* | Accepted | 2026-10-04 |
 | [0112](0112-operator-precedence.md) | Operator precedence; comparisons don't chain *(delegated)* | Accepted | 2026-10-04 |
-| [0113](0113-struct-literal-field-order.md) | Struct literals name every field once, in any order *(delegated)* | Accepted | 2026-10-04 |
+| [0113](0113-struct-literal-field-order.md) | Struct literals name every field once, in any order *(delegated)* | Accepted; amended by 0142 | 2026-10-04 |
 | [0114](0114-reserved-keywords.md) | Reserved keywords; no contextual keywords *(delegated)* | Accepted | 2026-10-04 |
 | [0115](0115-integer-division.md) | Integer division truncates toward zero *(delegated)* | Accepted | 2026-10-04 |
 | [0116](0116-core-library-basics.md) | Sizes and indexes are `int`; `len`, `push`; text forms *(delegated)* | Accepted | 2026-10-04 |
@@ -128,7 +128,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0120](0120-error-keyword.md) | Error types are declared with the `error` keyword (amends 0114) | Accepted | 2026-10-05 |
 | [0121](0121-for-mut.md) | `for mut x in xs` changes list elements in place | Accepted | 2026-10-05 |
 | [0122](0122-error-unions-and-reports.md) | Error unions `A \| B`; `?` needs a matching error type; failures must be handled; default error form *(delegated)* | Accepted | 2026-10-05 |
-| [0123](0123-variants-with-data.md) | Variants with data are built with named fields and matched by position *(delegated)* | Accepted | 2026-10-05 |
+| [0123](0123-variants-with-data.md) | Variants with data are built with named fields and matched by position *(delegated)* | Accepted; amended by 0142 | 2026-10-05 |
 | [0124](0124-string-split-and-to-int.md) | `s.split(sep)` and `s.to_int()` *(delegated)* | Accepted | 2026-10-05 |
 | [0125](0125-if-binding.md) | `if x := e` handles success or absence as a statement; `else err` binds the error *(delegated)* | Accepted; amended by 0139 | 2026-10-05 |
 | [0126](0126-automatic-equality-and-text.md) | Every type gets `==` and a text form automatically (amends 0073) | Accepted; amended by 0133 | 2026-10-05 |
@@ -146,3 +146,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0138](0138-literal-and-or-patterns.md) | Literal patterns, or-patterns, and one-line statement arms *(delegated)* | Accepted | 2026-10-05 |
 | [0139](0139-unit-results-statement-else-and-divergence.md) | `! E` results; statement `else`; divergence is a rule, not a type (amends 0125) *(delegated)* | Accepted | 2026-10-05 |
 | [0140](0140-diagnostics-for-other-languages.md) | Names other languages spell differently get a fixed help *(delegated)* | Accepted | 2026-10-05 |
+| [0141](0141-implicit-self.md) | Inside a method, the receiver's fields and methods are in scope by bare name | Accepted | 2026-10-05 |
+| [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
+| [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |

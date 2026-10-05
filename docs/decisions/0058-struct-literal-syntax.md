@@ -1,6 +1,6 @@
 # 0058. Struct values are constructed `Type(field: value, ...)`; `name: value` is the form for named arguments
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0142](0142-positional-constructor-arguments.md) (shorthand and positional arguments)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 2 — Core syntax; 4 — Type system

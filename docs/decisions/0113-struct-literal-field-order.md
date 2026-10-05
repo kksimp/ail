@@ -1,6 +1,6 @@
 # 0113. Struct literals name every field exactly once, in any order
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0142](0142-positional-constructor-arguments.md) (positional arguments)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 4 — Type system

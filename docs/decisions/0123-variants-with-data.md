@@ -1,6 +1,6 @@
 # 0123. Variants with data are built with named fields and matched by position
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0142](0142-positional-constructor-arguments.md) (positional arguments)
 - **Date:** 2026-10-05
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 4 — Type system

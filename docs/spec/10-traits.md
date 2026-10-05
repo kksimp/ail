@@ -38,6 +38,25 @@ not `self` declares an associated function, called as `Type.name(arguments)`.
 **trait.method.5** — Methods and associated functions of a type MUST be
 declared in the package that declares the type. *(ADR 0082)*
 
+**trait.method.6** — Inside a method declared with `self` or `mut self`, every
+field and method of the receiver is in scope by its bare name: `x` means
+`self.x` and `f(args)` means `self.f(args)`. The methods are the type's own
+and those of the traits it implements; in a trait's default method, they are
+the trait's methods. `self.x` stays valid, and the formatter writes `x`.
+Associated functions see no members by bare name. *(ADR 0141)*
+
+**trait.method.7** — A parameter or local of a method MUST NOT have the name
+of a field or method of its receiver. A bare call whose name is both a method
+of the receiver and a top-level or prelude function is a compile-time error;
+the help suggests `self.f()` or renaming. *(ADR 0141, ADR 0044)*
+
+```ail
+fn Parser.advance(mut self) char?
+    c := peek() else return none   # self.peek()
+    pos += 1                       # self.pos += 1
+    c
+```
+
 ```ail
 fn Circle.new(r f64) Circle
     Circle(r: r)

@@ -60,7 +60,26 @@ propagated with `?` (Go spends 13–24 `if err != nil` blocks per program),
 bare variants, enums with data and `match` without per-arm boilerplate, and
 `"{x}"` interpolation.
 
-Candidates to measure next: field-init shorthand (`ParseError(line, col,
-msg)` when locals share the field names), positional construction of
-one-field variants, and `else` as an expression (OQ-040, −38% on the sheet's
-aggregate arms).
+## Python parity round
+
+Each candidate was applied to the three AIL programs by a script and
+measured (tokens; 14,802.8 before):
+
+| Change | Tokens | Change | Decision |
+|---|---|---|---|
+| Bare fields and methods inside methods (`peek()` for `self.peek()`) | 14,205.6 | −4.0% | adopted, [ADR 0141](../decisions/0141-implicit-self.md) |
+| Bare fields only | 14,618.4 | −1.2% | rejected |
+| Positional constructor arguments, always | 14,359.2 | −3.0% | rejected (silent swaps) |
+| Positional when the fields filled have different types, plus shorthand | 14,375.4 | −2.9% | adopted, [ADR 0142](../decisions/0142-positional-constructor-arguments.md) |
+| Shorthand only | 14,641.8 | −1.1% | rejected |
+| `[]` and `{}` typed by their first use | 14,681.4 | −0.8% | adopted, [ADR 0143](../decisions/0143-empty-literals-typed-by-use.md) |
+| `!T` instead of `T ! E` on private functions | 14,754.4 | −0.3% | style only |
+| No `mut` on local declarations | 14,746.8 | −0.4% | rejected (ADR 0038) |
+| An `in` operator for `contains` | 14,786.8 | −0.1% | tie |
+| Methods grouped in a type block | 14,797.8 | −0.0% | tie |
+
+With the three adopted changes together, the programs measure **13,658.2:
+1.4% above Python** (a tie under ADR 0076's ~2% rule), 11% below TypeScript,
+24% below Rust and 26% below Go. These figures come from scripted rewrites;
+they are re-measured on the examples once the bootstrap implements the
+changes.
