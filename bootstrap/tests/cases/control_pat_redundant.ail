@@ -1,0 +1,72 @@
+# ADR 0138 expr.match.5: redundancy is by value, including inside or-patterns and after `_`.
+fn ints(n int) int
+    match n
+        65 => 1
+        0x41 => 2
+        0b1000001 => 3
+        0o101 => 4
+        6_5 => 5
+        _ => 0
+
+fn chars(c char) int
+    match c
+        'A' => 1
+        '\u{41}' => 2
+        '\u{0041}' => 3
+        _ => 0
+
+fn escapes(c char) int
+    match c
+        '\t' => 1
+        '\u{9}' => 2
+        '\'' => 3
+        '\u{27}' => 4
+        _ => 0
+
+fn strs(s str) int
+    match s
+        "A" => 1
+        "\u{41}" => 2
+        r"A" => 3
+        _ => 0
+
+fn raw(s str) int
+    match s
+        "a\\b" => 1
+        r"a\b" => 2
+        _ => 0
+
+fn in_or(n int) int
+    match n
+        1 => 1
+        2 | 1 => 2
+        3 | 3 => 3
+        0x4 | 4 => 4
+        _ => 0
+
+fn after_wild(n int) int
+    match n
+        _ => 1
+        2 => 2
+
+fn after_wild2(s str) int
+    match s
+        _ => 1
+        "a" => 2
+
+fn bools(b bool) int
+    match b
+        true => 1
+        false => 2
+        true => 3
+
+fn negatives(n int) int
+    match n
+        -1 => 1
+        -1 => 2
+        0 => 3
+        -0 => 4
+        _ => 5
+
+fn main()
+    print(1)

@@ -316,9 +316,16 @@ impl Lexer {
                 self.diags.push(
                     Diagnostic::new("lex.str.1", pos, "unterminated string literal").help("close the string with `\"`"),
                 );
+                self.forget_brackets(line_no);
                 line.len()
             }
         }
+    }
+
+    /// After a string error, the brackets opened on its line don't continue
+    /// the statement, so the error isn't followed by others about them.
+    fn forget_brackets(&mut self, line_no: usize) {
+        self.open.retain(|(_, p)| p.line != line_no);
     }
 
     /// `r"..."`: no escapes and no interpolation (lex.str.6). `line[start]` is the `r`.
@@ -333,6 +340,7 @@ impl Lexer {
                 self.diags.push(
                     Diagnostic::new("lex.str.1", pos, "unterminated string literal").help("close the string with `\"`"),
                 );
+                self.forget_brackets(line_no);
                 line.len()
             }
         }
@@ -371,6 +379,7 @@ impl Lexer {
                             Diagnostic::new("lex.str.2", here, "this `{` in a string is never closed")
                                 .help("close it with `}`, or write `\\{` for a literal brace"),
                         );
+                        self.forget_brackets(line_no);
                         return quoted.then_some(to);
                     };
                     let code = self.sub_lex(line, i + 1, close, line_no);
@@ -450,13 +459,17 @@ impl Lexer {
         let indent = |l: &[char]| l.iter().take_while(|c| **c == ' ').count();
         let blank = |l: &[char]| l.iter().all(|c| *c == ' ' || *c == '\t');
         // Only spaces indent a multi-line string's text (lex.str.3).
-        for k in first + 1..=last {
-            let line = if k == last { &lines[k][..close] } else { &lines[k][..] };
+        for (k, whole) in lines.iter().enumerate().take(last + 1).skip(first + 1) {
+            let line = if k == last { &whole[..close] } else { &whole[..] };
             let lead = line.iter().take_while(|c| **c == ' ' || **c == '\t').count();
-            if !blank(line) && line[..lead].contains(&'\t') {
+            if (k == last || !blank(line)) && line[..lead].contains(&'\t') {
                 self.diags.push(
-                    Diagnostic::new("lex.str.3", Pos { line: k + 1, col: 1 }, "tab in a multi-line string's indentation")
-                        .help("indent with spaces; write `\\t` for a tab in the text"),
+                    Diagnostic::new(
+                        "lex.str.3",
+                        Pos { line: k + 1, col: 1 },
+                        "tab in a multi-line string's indentation",
+                    )
+                    .help("indent with spaces; write `\\t` for a tab in the text"),
                 );
             }
         }
@@ -563,8 +576,9 @@ impl Lexer {
         {
             let hex: String = line[i + 3..i + 3 + close].iter().collect();
             let next = i + 4 + close;
-            return match u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
-                Some(c) if !hex.is_empty() => (Some(c), next),
+            let digits = !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit());
+            return match u32::from_str_radix(&hex, 16).ok().filter(|_| digits).and_then(char::from_u32) {
+                Some(c) => (Some(c), next),
                 _ => {
                     self.diags.push(Diagnostic::new(
                         "lex.str.1",
@@ -707,6 +721,17 @@ fn find_close(line: &[char], open: usize) -> Option<usize> {
             }
             '"' => {
                 i = skip_string(line, i)?;
+                continue;
+            }
+            // A character literal such as '{' or '\'' (lex.str.4).
+            '\'' if line.get(i + 1) == Some(&'\\') => {
+                if let Some(end) = line[i + 3..].iter().position(|c| *c == '\'') {
+                    i += end + 4;
+                    continue;
+                }
+            }
+            '\'' if line.get(i + 2) == Some(&'\'') => {
+                i += 3;
                 continue;
             }
             _ => {}

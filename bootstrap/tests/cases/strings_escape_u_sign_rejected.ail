@@ -1,0 +1,6 @@
+# lex.str.1: `\u{hex}` takes hex digits only; a sign is not a hex digit.
+fn main()
+    a := '\u{+41}'
+    b := "\u{+41}"
+    print([a])
+    print([b])

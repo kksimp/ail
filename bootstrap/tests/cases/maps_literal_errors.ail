@@ -1,0 +1,27 @@
+fn a()
+    x := {}
+    print(x)
+
+fn b()
+    x := {1: "a", "b": "c"}
+    print(x)
+
+fn c()
+    x := {1: "a", 2: 3}
+    print(x)
+
+fn d()
+    x := {1, "a"}
+    print(x)
+
+fn e()
+    x := {"k": {}}
+    print(x)
+
+fn f()
+    m := {"a": 1}
+    s := {1, 2}
+    print(m == s)
+
+fn main()
+    a()

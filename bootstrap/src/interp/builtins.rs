@@ -41,21 +41,50 @@ impl Key {
     }
 }
 
-/// Keys in insertion order, with their values for a map (type.map.1).
+/// Keys in insertion order, with their values for a map (type.map.1). A
+/// removed key leaves a gap, so removal is O(1); gaps are compacted away
+/// once they outnumber the keys.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Table {
-    pub keys: Vec<Value>,
+    keys: Vec<Option<Value>>,
     /// Parallel to `keys` for a map; empty for a set.
-    pub vals: Vec<Value>,
+    vals: Vec<Value>,
     index: HashMap<Key, usize>,
 }
 
 impl Table {
+    /// The slot of `k`, if it is a key.
     pub fn get(&self, k: &Value) -> Option<usize> {
         self.index.get(&Key::of(k)).copied()
     }
 
-    /// Insert or replace; a replaced key keeps its position. Returns its index.
+    pub fn val(&self, i: usize) -> &Value {
+        &self.vals[i]
+    }
+
+    pub fn val_mut(&mut self, i: usize) -> &mut Value {
+        &mut self.vals[i]
+    }
+
+    /// The keys, in insertion order.
+    pub fn keys(&self) -> impl Iterator<Item = &Value> {
+        self.keys.iter().flatten()
+    }
+
+    /// The keys with their values, in insertion order (maps only).
+    pub fn entries(&self) -> impl Iterator<Item = (&Value, &Value)> {
+        self.keys.iter().zip(&self.vals).filter_map(|(k, v)| k.as_ref().map(|k| (k, v)))
+    }
+
+    pub fn key_list(&self) -> Vec<Value> {
+        self.keys().cloned().collect()
+    }
+
+    pub fn val_list(&self) -> Vec<Value> {
+        self.entries().map(|(_, v)| v.clone()).collect()
+    }
+
+    /// Insert or replace; a replaced key keeps its position. Returns its slot.
     pub fn insert(&mut self, k: Value, v: Option<Value>) -> usize {
         if let Some(i) = self.get(&k) {
             if let Some(v) = v {
@@ -64,26 +93,41 @@ impl Table {
             return i;
         }
         self.index.insert(Key::of(&k), self.keys.len());
-        self.keys.push(k);
+        self.keys.push(Some(k));
         if let Some(v) = v {
             self.vals.push(v);
         }
         self.keys.len() - 1
     }
 
-    /// Remove a key, returning its value (for a map) if it was there.
+    /// Remove a key, returning its value (for a map) if it was there. The
+    /// others keep their order (type.map.1).
     pub fn remove(&mut self, k: &Value) -> Option<Option<Value>> {
         let i = self.index.remove(&Key::of(k))?;
-        self.keys.remove(i);
-        let v = if self.vals.is_empty() { None } else { Some(self.vals.remove(i)) };
-        for (j, key) in self.keys.iter().enumerate().skip(i) {
-            self.index.insert(Key::of(key), j);
+        self.keys[i] = None;
+        let v = if self.vals.is_empty() { None } else { Some(std::mem::replace(&mut self.vals[i], Value::Unit)) };
+        let gaps = self.keys.len() - self.index.len();
+        if gaps > 16 && gaps > self.index.len() {
+            self.compact();
         }
         Some(v)
     }
 
+    fn compact(&mut self) {
+        let map = !self.vals.is_empty();
+        let (keys, vals) = (std::mem::take(&mut self.keys), std::mem::take(&mut self.vals));
+        self.index.clear();
+        let mut vals = vals.into_iter();
+        for k in keys {
+            let v = if map { vals.next() } else { None };
+            if let Some(k) = k {
+                self.insert(k, v);
+            }
+        }
+    }
+
     pub fn len(&self) -> usize {
-        self.keys.len()
+        self.index.len()
     }
 }
 
@@ -273,21 +317,21 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             Value::Map(t) => match name {
                 "len" => Value::Int(t.len() as i64),
-                "get" => opt(t.get(&a[0]).map(|i| t.vals[i].clone())),
+                "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
-                "keys" => Value::List(Rc::new(t.keys.clone())),
-                "values" => Value::List(Rc::new(t.vals.clone())),
+                "keys" => Value::List(Rc::new(t.key_list())),
+                "values" => Value::List(Rc::new(t.val_list())),
                 _ => unreachable!("checked: Map.{name}"),
             },
             Value::Set(t) => match name {
                 "len" => Value::Int(t.len() as i64),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
-                "sorted" => Value::List(Rc::new(self.sorted(t.keys.clone(), pos)?)),
+                "sorted" => Value::List(Rc::new(self.sorted(t.key_list(), pos)?)),
                 "is_subset" => {
                     let Value::Set(other) = a.pop().expect("checked: one argument") else {
                         unreachable!("checked: set")
                     };
-                    Value::Bool(t.keys.iter().all(|k| other.get(k).is_some()))
+                    Value::Bool(t.keys().all(|k| other.get(k).is_some()))
                 }
                 _ => unreachable!("checked: Set.{name}"),
             },
@@ -330,7 +374,11 @@ impl<'a, W: Write> Interp<'a, W> {
             "repeat" => match usize::try_from(a[0].int()) {
                 Ok(n) => s(text.repeat(n)),
                 Err(_) => {
-                    return trap("type.str.10", pos, format!("`repeat` needs a count of 0 or more, not {}", a[0].int()));
+                    return trap(
+                        "type.str.10",
+                        pos,
+                        format!("`repeat` needs a count of 0 or more, not {}", a[0].int()),
+                    );
                 }
             },
             "pad_left" | "pad_right" => {
@@ -364,7 +412,6 @@ impl<'a, W: Write> Interp<'a, W> {
         out.extend(r);
         Ok(out)
     }
-
 }
 
 fn char_method(c: char, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> {
@@ -434,7 +481,7 @@ fn float_method(x: f64, name: &str, pos: Pos) -> Result<Value, Trap> {
         "sqrt" => Value::Float(x.sqrt()),
         "to_int" => {
             // type.num.9: truncates toward zero; NaN and out-of-range values trap.
-            if x.is_nan() || !(-9.223_372_036_854_775_808e18..9.223_372_036_854_775_808e18).contains(&x) {
+            if x.is_nan() || !(i64::MIN as f64..-(i64::MIN as f64)).contains(&x) {
                 return trap("type.num.9", pos, format!("`{}` doesn't fit in `int`", float_text(x)));
             }
             Value::Int(x.trunc() as i64)
@@ -451,7 +498,7 @@ pub(super) fn map_value<'v>(
     pos: Pos,
 ) -> Result<&'v Value, Trap> {
     match t.get(k) {
-        Some(i) => Ok(&t.vals[i]),
+        Some(i) => Ok(t.val(i)),
         None => trap("type.map.3", pos, format!("the map has no key {}", shown())),
     }
 }

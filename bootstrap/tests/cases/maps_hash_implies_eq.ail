@@ -1,0 +1,22 @@
+struct Pos
+    x int
+    y int
+
+fn same[T Hash](a T, b T) bool
+    a == b
+
+fn differs[T Hash](a T, b T) bool
+    a != b
+
+fn count_eq[T Hash](xs List[T], x T) int
+    mut n := 0
+    for y in xs
+        if y == x
+            n += 1
+    n
+
+fn main()
+    print(same(Pos(x: 1, y: 2), Pos(x: 1, y: 2)))
+    print(same("a", "b"))
+    print(differs(1, 2))
+    print(count_eq(["a", "b", "a"], "a"))

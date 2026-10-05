@@ -57,6 +57,10 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
     let (tokens, mut diags) = lexer::lex(&src);
     let (program, parse_diags) = parser::parse_with_prelude(tokens);
     diags.extend(parse_diags);
+    // A string literal with an error throws off the rest of its line, so
+    // report only the string's own errors there.
+    let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
+    diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);

@@ -1,0 +1,53 @@
+# ADR 0138 expr.match.7: int, str and char matches need `_` even when every value is
+# listed; bool is covered by `true` and `false`; a partial bool match is an error.
+fn ints(n int) int
+    match n
+        0 => 1
+        1 => 2
+
+fn many_ints(n int) int
+    match n
+        0 | 1 | 2 | 3 => 1
+        -1 | -2 => 2
+
+fn strs(s str) int
+    match s
+        "a" => 1
+        "b" => 2
+
+fn chars(c char) int
+    match c
+        'a' => 1
+        'b' | 'c' => 2
+
+fn only_true(b bool) int
+    match b
+        true => 1
+
+fn only_false(b bool) int
+    match b
+        false => 1
+
+fn both(b bool) int
+    match b
+        true => 1
+        false => 2
+
+fn both_or(b bool) int
+    match b
+        true | false => 1
+
+fn with_wildcard(n int, s str, c char) int
+    a := match n
+        0 => 1
+        _ => 2
+    b := match s
+        "" => 1
+        _ => 2
+    d := match c
+        'x' => 1
+        _ => 2
+    a + b + d
+
+fn main()
+    print(1)

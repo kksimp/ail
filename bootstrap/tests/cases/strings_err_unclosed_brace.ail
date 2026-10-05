@@ -1,0 +1,4 @@
+# lex.str.2: a stray `{` is one error; the rest of the file still checks normally.
+fn main()
+    print("a { b")
+    print("fine")

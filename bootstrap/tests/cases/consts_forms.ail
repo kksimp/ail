@@ -1,0 +1,40 @@
+# mod.const.2: every allowed form of constant expression, in any order.
+TOTAL := BASE * 2 + OFFSET
+BASE := 20
+OFFSET := 2
+PI := 3.25
+HALF := PI / 2.0
+INITIAL := 'q'
+NAME := "ail"
+YES := true
+NO := not YES
+BOTH := YES and NO or YES
+TITLE := "{NAME}-{TOTAL}-{INITIAL}-{PI}-{YES}"
+DIGITS := [1, 2, 3]
+NESTED := [[1], [2, 3], []]
+WORDS := {"one": 1, "two": 2}
+KEYS := {'a', 'b'}
+EMPTY_LIST := List[int]()
+EMPTY_MAP := Map[str, List[int]]()
+EMPTY_SET := Set[char]()
+CMP := DIGITS == [1, 2, 3] and NAME < "zz" and 2.5 >= HALF
+SAME := WORDS == {"two": 2, "one": 1}
+MINUS := -BASE - -OFFSET
+QUOT := TOTAL / 5 % 3
+
+fn main()
+    print(TOTAL)
+    print(HALF)
+    print(TITLE)
+    print(NO)
+    print(BOTH)
+    print(NESTED)
+    print(WORDS)
+    print(KEYS)
+    print(EMPTY_LIST)
+    print(EMPTY_MAP)
+    print(EMPTY_SET)
+    print(CMP)
+    print(SAME)
+    print(MINUS)
+    print(QUOT)

@@ -1,0 +1,14 @@
+# type.num.6: float has no % or %=.
+fn main()
+    a := 5.5
+    b := 2.0
+    print(a % b)
+    print(a % 2)
+    print(5 % 2.0)
+    print(5.5 % 2.0)
+    mut c := 7.0
+    c %= 2.0
+    c %= 2
+    c %= b
+    print(c)
+    print(5 % 3)

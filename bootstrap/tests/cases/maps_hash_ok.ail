@@ -1,0 +1,100 @@
+struct Pos
+    x int
+    y int
+
+struct Named
+    name str
+    pos Pos
+    tags List[str]
+    parent Pos?
+
+enum Shape
+    Dot
+    Circle(r int)
+    Rect(w int, h int)
+
+enum Tree
+    Leaf
+    Node(left List[Tree], v int)
+
+struct Box[T]
+    v T
+
+error enum Fail
+    Bad(code int)
+    Worse
+
+struct Flags
+    on bool
+    c char
+    o Ordering
+
+struct Empty
+    n int
+
+impl Eq for Empty
+
+struct Ranked
+    a int
+    b int
+
+impl Ord for Ranked
+
+struct Custom
+    a int
+    b int
+
+impl Ord for Custom
+    fn cmp(self, other Self) Ordering
+        other.a.cmp(self.a)
+
+fn main()
+    # structs and nested structs
+    s1 := {Pos(x: 1, y: 2), Pos(x: 1, y: 2), Pos(x: 2, y: 1)}
+    print(s1.len())
+    n1 := Named(name: "a", pos: Pos(x: 0, y: 0), tags: ["t"], parent: none)
+    n2 := Named(name: "a", pos: Pos(x: 0, y: 0), tags: ["t"], parent: Pos(x: 1, y: 1))
+    s2 := {n1, n2, n1}
+    print(s2.len())
+    # enums with and without payloads
+    s3 := {Shape.Dot, Shape.Circle(r: 1), Shape.Circle(r: 2), Shape.Circle(r: 1), Shape.Rect(w: 1, h: 1)}
+    print(s3.len())
+    # recursive enum through a list
+    t := Tree.Node(left: [Tree.Leaf, Tree.Leaf], v: 1)
+    print({t, Tree.Leaf, Tree.Node(left: [Tree.Leaf, Tree.Leaf], v: 1)}.len())
+    # optionals and lists
+    so := Set[int?]()
+    print(so.len())
+    mo := {1: "one"}
+    ml := {[1, 2]: "a", [2, 1]: "b", [1, 2]: "c"}
+    print(ml)
+    print(ml[[1, 2]])
+    print({[[1], [2, 3]]: 1}.len())
+    # generic types per instance
+    bs := {Box(v: 1), Box(v: 1), Box(v: 2)}
+    print(bs.len())
+    bm := {Box(v: "a"): 1}
+    print(bm)
+    # error types
+    es := {Fail.Bad(code: 1), Fail.Worse, Fail.Bad(code: 1)}
+    print(es.len())
+    # bool, char, Ordering
+    print({true, false}.len())
+    print({'a', 'b'}.len())
+    fs := {Flags(on: true, c: 'x', o: Less), Flags(on: true, c: 'x', o: Less), Flags(on: true, c: 'x', o: Greater)}
+    print(fs.len())
+    print({Ordering.Less, Equal, Greater, Less}.len())
+    # empty `impl Eq` derives Eq, so the type stays Hash
+    es2 := {Empty(n: 1), Empty(n: 1), Empty(n: 2)}
+    print(es2.len())
+    print(Empty(n: 1) == Empty(n: 1))
+    # `impl Ord` doesn't change Eq: still Hash
+    rs := {Ranked(a: 2, b: 1), Ranked(a: 1, b: 9), Ranked(a: 2, b: 1)}
+    print(rs.len())
+    print(rs.sorted())
+    # `impl Ord` with a custom cmp doesn't change Eq either
+    cs := {Custom(a: 1, b: 1), Custom(a: 1, b: 2), Custom(a: 1, b: 1)}
+    print(cs.len())
+    print(cs.sorted())
+    # keys that are maps' values
+    print({Pos(x: 1, y: 1): {Pos(x: 2, y: 2)}}.len())

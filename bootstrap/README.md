@@ -36,7 +36,7 @@ reported but don't stop a program from running.
 
 All errors in a file are reported in one pass, sorted by position.
 
-## Supported subset (milestone 4: traits and generics)
+## Supported subset (milestone 5: the big example programs)
 
 - **Declarations:** `fn` with `name Type` and `mut name Type` parameters and a
   return type, which can be `T?`, `T ! E`, `T ! A | B`, `!T`, `!` or `! E`;
@@ -47,29 +47,39 @@ All errors in a file are reported in one pass, sorted by position.
   (`fn f[T Ord](...)`, `struct Stack[T]`, `fn Stack[T Ord].max(self)`,
   `fn Pair.with[C](...)`); `trait` with required and default methods;
   `impl Trait for Type`, including empty `impl`s that derive `Eq`, `Ord` or
-  `ToStr`, and `impl`s for `int`, `str`, `bool` and `List`
+  `ToStr`, and `impl`s for `int`, `float`, `str`, `char`, `bool` and `List`;
+  top-level constants `NAME := expr` (constant expressions)
 - **Statements:** `x := v`, `mut x := v`, `x := v else fallback`,
   `x := v else return ...`, `x := v else` or `else err` with a block,
   `p = v`, `p op= v` (for `+ - * / %`), `if`/`elif`/`else`, including
   binding conditions `if x := v` and `else err`, `while`,
   `for x in list`, `for mut x in list`, `for i in a..b` and `a..=b`,
-  `break`, `continue`, `return`
-- **Expressions:** `if` and `match` as values; `match` on enums with variant,
-  `Variant(a, _)` and `_` patterns; `e?` and `e? "context"`; `none`; calls,
+  `break`, `continue`, `return`; `f() else err` with a block, or
+  `f() else return`, on a result with no success value
+- **Expressions:** `if` and `match` as values; `match` with variant,
+  `Variant(a, _)`, literal (`1`, `-1`, `'a'`, `"s"`, `true`), or-pattern
+  (`A | B`) and `_` patterns, and one-line statement arms (`=> continue`);
+  `e?` and `e? "context"`; `none`; `unreachable("why")`; calls,
   with type arguments inferred or written (`f[int](x)`, `Stack[int].new()`);
   trait method calls, including qualified ones (`Shape.area(x)`);
   `==` and `!=` on any type that supports them, and `<` on `Ord` types;
-  `mut` arguments, method calls, fields, indexing `xs[i]`, slices `xs[a..b]`;
-  struct and variant literals `Type(field: value)`; list literals; operators
+  `mut` arguments, method calls, fields, indexing `xs[i]` and `m[k]`, slices
+  `xs[a..b]`, `xs[a..]`, `xs[..b]`; struct and variant literals
+  `Type(field: value)`; list, map and set literals; `List[T]()`,
+  `Map[K, V]()`, `Set[T]()`; float and char literals; multi-line,
+  one-line `"""..."""` and raw strings; operators
   by ADR 0112's precedence; string interpolation `"{expr}"`; bare enum
   variants where the type is known
-- **Types:** `int` (`i64`), `bool`, `str`, `List[T]`, `T?`, structs, enums,
+- **Types:** `int` (`i64`), `float` (`f64`), `bool`, `str`, `char`,
+  `List[T]`, `Map[K, V]`, `Set[T]`, `T?`, structs, enums,
   generic instances such as `Stack[int]`, type parameters, `Self`,
   `any Trait`, and, as return types only, `T ! E` and `!T` with inferred
   error sets
-- **Library:** `print` (any value), `xs.len()`, `xs.push(v)`,
-  `xs.swap(i, j)`, `s.split(sep)`, `s.to_int()`, and the standard traits'
-  `x.eq(y)`, `x.cmp(y)` (returning `Ordering`) and `x.to_str()`
+- **Library:** `print` (any value); the methods of `str`, `char`, `int`,
+  `float`, `List`, `Map` and `Set` in spec chapter 4 (`type.str.*`,
+  `type.char.*`, `type.num.*`, `type.coll.*`, `type.map.*`); the standard
+  traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
+  `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Semantics:** value semantics with copy-on-write; `mut` operands are moved
   into calls and written back; a read-only argument that overlaps a `mut` one
   is a copy; overflow, division, index and overlapping-`mut` traps; failures
@@ -88,11 +98,15 @@ error: ConfigError.Missing(key: "host")
   at config.ail:11:27
 ```
 
-Not yet: floats, `char`, `T ! E` outside return types, matching on a set of
-error types, literal patterns, maps and sets, the arithmetic operator traits,
-trait functions without `self` and supertraits (OQ-039), associated types
-(OQ-037), methods for one instantiation only, modules, `defer`, `ref`,
-`unique`, tasks, `unsafe` and FFI.
+Not yet: `f32` and the sized integer types, `s.bytes()`, `T ! E` outside
+return types, matching on a set of error types, range patterns and guards,
+the arithmetic operator traits, trait functions without `self` and
+supertraits (OQ-039), associated types (OQ-037), methods for one
+instantiation only, modules and `pub`, `defer`, `ref`, `unique`, tasks,
+`unsafe` and FFI. Known gaps: a constant expression that would call a user
+`impl` of `Eq`, `Ord` or `ToStr` (`mod.const.2`) isn't rejected yet, and a
+constant whose evaluation fails traps before `main` rather than at check
+time.
 
 Anything else the spec defines is rejected with a **`bootstrap.unsupported`**
 diagnostic that names the relevant spec rule. That's an implementation limit,

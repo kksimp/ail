@@ -1,0 +1,44 @@
+# trait.auto.1, trait.std.1: composite == compares parts with their own ==, so NaN makes a value unequal to itself.
+struct Q
+    x float
+
+enum E
+    A(v float)
+    B
+
+fn main()
+    inf := 1.0 / 0.0
+    nan := inf - inf
+    print(Q(x: nan) == Q(x: nan))
+    print(Q(x: nan) != Q(x: nan))
+    print(Q(x: -0.0) == Q(x: 0.0))
+    print(E.A(v: nan) == E.A(v: nan))
+    print(E.A(v: 0.0) == E.A(v: -0.0))
+    print(E.B == E.B)
+    a := Q(x: nan)
+    print(a == a)
+    xs := [nan]
+    print(xs == xs)
+    ov := [1.0, nan]
+    print(ov == ov)
+    m1 := {1: nan}
+    print(m1 == m1)
+    m2 := {1: 0.0}
+    m3 := {1: -0.0}
+    print(m2 == m3)
+    print(Q(x: nan) == Q(x: 1.0))
+    print([nan, 1.0].contains(nan))
+    print([nan, 1.0].index_of(nan))
+    print([nan, 1.0].index_of(1.0))
+    print([-0.0].index_of(0.0))
+    print([0.0].contains(-0.0))
+    b := [[nan]]
+    print(b.contains([nan]))
+    print(b == [[nan]])
+    print(maybe(nan) == maybe(nan))
+    print(maybe(0.0) == maybe(-0.0))
+    print(maybe(1.0) == maybe(1.0))
+    print(maybe(1.0) != maybe(nan))
+
+fn maybe(x float) float?
+    x

@@ -96,9 +96,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             _ => None,
         },
         Ty::Int => match name {
-            "checked_add" | "checked_sub" | "checked_mul" | "checked_div" | "checked_rem" => {
-                read(vec![Int], opt(Int))
-            }
+            "checked_add" | "checked_sub" | "checked_mul" | "checked_div" | "checked_rem" => read(vec![Int], opt(Int)),
             "checked_neg" => read(vec![], opt(Int)),
             "wrapping_neg" => read(vec![], Int),
             "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub"

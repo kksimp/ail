@@ -1,0 +1,59 @@
+# lex.str.3 rule 5: dedent happens on the source text, then escapes and
+# interpolation work as in lex.str.1-2.
+fn show(label str, s str)
+    print("{label}: {[s]}")
+
+fn main()
+    name := "Ann"
+    n := 3
+    a := """
+        Hello, {name}!
+        You have {n + 1} items. \{not code}
+        """
+    show("a", a)
+    # escapes at the start of a line are not indentation
+    b := """
+        \tTabbed
+        \u{20}\u{20}Spaces
+        quote: \" backslash: \\ nul: \0 cr: \r
+        """
+    show("b", b)
+    # \n inside makes a real newline; indentation is still removed first
+    c := """
+        x\ny
+          z
+        """
+    show("c", c)
+    # interpolation with a string argument containing quotes and braces
+    d := """
+        {"a}b".chars().len()} {"q".repeat(2)}
+        """
+    show("d", d)
+    # an interpolation whose value contains newlines isn't dedented again
+    inner := """
+        p
+        q
+        """
+    e := """
+        [{inner}]
+        """
+    show("e", e)
+    # expressions with a quote run next to the delimiter
+    f := """
+        "{name}"
+        """
+    show("f", f)
+    g := """
+        {name}"
+        """
+    show("g", g)
+    # quotes inside text
+    h := """
+        say "hi" and ""two"" and "
+        """
+    show("h", h)
+    # escaped brace gives a brace, so braces can be balanced or not
+    i := """
+        \{ open and } close
+        """
+    show("i", i)

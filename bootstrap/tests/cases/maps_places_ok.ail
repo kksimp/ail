@@ -1,0 +1,91 @@
+struct Acct
+    name str
+    bal int
+    tags List[str]
+
+fn bump(mut n int) int
+    n += 1
+    n
+
+fn add_to(mut x int, d int)
+    x += d
+
+fn grow(mut xs List[int])
+    xs.push(99)
+
+fn main()
+    # whole-target `=` inserts or replaces
+    mut m := Map[str, int]()
+    m["a"] = 1
+    m["b"] = 2
+    m["a"] = 10
+    print(m)
+    # op= on a present key
+    m["a"] += 5
+    m["b"] *= 7
+    m["b"] -= 4
+    print(m)
+    # field of a present entry
+    mut accts := {"x": Acct(name: "X", bal: 0, tags: [])}
+    accts["x"].bal = 50
+    accts["x"].bal += 1
+    accts["x"].name = "XX"
+    accts["x"].tags.push("vip")
+    print(accts)
+    # replace the whole entry
+    accts["y"] = Acct(name: "Y", bal: 1, tags: ["new"])
+    print(accts.len())
+    print(accts["y"])
+    # list element of a present entry
+    mut ls := {"k": [1, 2, 3]}
+    ls["k"][1] = 20
+    ls["k"][2] += 7
+    ls["k"].push(4)
+    ls["k"].swap(0, 3)
+    print(ls)
+    # nested maps: m[a][b] = v inserts b when m[a] exists
+    mut nest := {"outer": {"in1": 1}}
+    nest["outer"]["in2"] = 2
+    nest["outer"]["in1"] += 100
+    print(nest)
+    # nested set
+    mut ns := {"s": {1, 2}}
+    print(ns["s"].add(3))
+    print(ns["s"].add(3))
+    print(ns["s"].remove(1))
+    print(ns)
+    # mut arguments
+    mut cnt := {"c": 1}
+    add_to(mut cnt["c"], 41)
+    print(cnt)
+    grow(mut ls["k"])
+    print(ls)
+    # for mut over an entry
+    mut rows := {"r": [1, 2, 3]}
+    for mut v in rows["r"]
+        v *= 2
+    print(rows)
+    # key evaluated once
+    mut c := 0
+    mut kv := {1: 10}
+    kv[bump(mut c)] += 5
+    print(kv)
+    print(c)
+    # the key is evaluated before the right-hand side
+    mut d := 0
+    mut order := Map[int, int]()
+    order[bump(mut d)] = bump(mut d) * 10
+    print(order)
+    print(d)
+    # map in a list
+    mut lm := [{"a": 1}, {"b": 2}]
+    lm[0]["a"] += 1
+    lm[1]["c"] = 3
+    lm[0]["z"] = 26
+    print(lm)
+    # map of map of list
+    mut deep := {"p": {"q": [1]}}
+    deep["p"]["q"].push(2)
+    deep["p"]["q"][0] = 100
+    deep["p"]["r"] = [7]
+    print(deep)

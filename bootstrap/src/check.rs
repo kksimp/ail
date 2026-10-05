@@ -26,8 +26,8 @@ use builtins::builtin;
 use traits::{Cand, bind, bound, subst, subst_unknown};
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep, Pattern, Program,
-    Stmt, TypeKind, TypeRef, UnOp, Within, is_prelude, place_path,
+    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep, Pattern,
+    Program, Stmt, TypeKind, TypeRef, UnOp, Within, is_prelude, place_path,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::UNSUPPORTED;
@@ -1176,9 +1176,7 @@ impl<'p> Checker<'p> {
             ),
             (Ty::Float, Ty::Int) => self.error_help(rule, pos, msg, "no implicit conversion: write `n.to_float()`"),
             (Ty::Str, Ty::Char) => self.error_help(rule, pos, msg, "make a one-character string with \"{c}\""),
-            (Ty::Char, Ty::Str) => {
-                self.error_help(rule, pos, msg, "a character is written in single quotes: 'a'")
-            }
+            (Ty::Char, Ty::Str) => self.error_help(rule, pos, msg, "a character is written in single quotes: 'a'"),
             _ => self.error(rule, pos, msg),
         }
     }
@@ -3160,7 +3158,8 @@ impl<'p> Checker<'p> {
             return (**v).clone();
         }
         // type.coll.4: indexes start at 0; there are no negative indexes.
-        let negative = |e: &Expr| matches!(e, Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..)));
+        let negative =
+            |e: &Expr| matches!(e, Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..)));
         let bad = match index {
             Expr::Range { lo, hi, .. } => [lo, hi].into_iter().flatten().find(|b| negative(b)).map(|b| b.pos()),
             e if negative(e) => Some(e.pos()),
@@ -3530,7 +3529,10 @@ impl<'p> Checker<'p> {
         use crate::ast::Literal;
         match pat {
             Pattern::Wildcard(pos) => {
-                if *wildcard {
+                // `true` and `false` cover a `bool` (expr.match.7).
+                let bools =
+                    *t == Ty::Bool && seen.contains(&Literal::Bool(true)) && seen.contains(&Literal::Bool(false));
+                if *wildcard || bools {
                     self.error("expr.match.5", *pos, "this arm can never match; earlier arms cover every case");
                 }
                 *wildcard = true;
@@ -3786,24 +3788,41 @@ impl Agree {
 /// Whether a loop body has a `break` that ends this loop (not one of a
 /// nested loop's).
 fn breaks(body: &[Stmt]) -> bool {
+    // A `break` for this loop can sit in any block of an `if` or `match`
+    // expression, wherever that expression appears (but not in a nested loop).
     fn in_expr(e: &Expr) -> bool {
         match e {
             Expr::If { branches, els, .. } => {
                 branches.iter().any(|(_, b)| breaks(b)) || els.as_ref().is_some_and(|b| breaks(b))
             }
-            Expr::Match { arms, .. } => arms.iter().any(|a| breaks(&a.body)),
+            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee) || arms.iter().any(|a| breaks(&a.body)),
+            Expr::Unary { operand, .. } => in_expr(operand),
+            Expr::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+            Expr::Call { callee, args, .. } => in_expr(callee) || args.iter().any(|a| in_expr(&a.value)),
+            Expr::Method { recv, args, .. } => in_expr(recv) || args.iter().any(|a| in_expr(&a.value)),
+            Expr::Field { recv, .. } => in_expr(recv),
+            Expr::Index { recv, index, .. } => in_expr(recv) || in_expr(index),
+            Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(in_expr),
+            Expr::Map(pairs, _) => pairs.iter().any(|(k, v)| in_expr(k) || in_expr(v)),
+            Expr::Try { expr, .. } => in_expr(expr),
             _ => false,
+        }
+    }
+    fn in_else(o: &Else) -> bool {
+        match o {
+            Else::Leave(st) => matches!(**st, Stmt::Break(_)),
+            Else::Block { body, .. } => breaks(body),
+            Else::Value(v) => in_expr(v),
         }
     }
     body.iter().any(|s| match s {
         Stmt::Break(_) => true,
-        Stmt::Expr(e) => in_expr(e),
-        Stmt::Let { otherwise: Some(o), .. } | Stmt::Handle { otherwise: o, .. } => match o {
-            Else::Leave(st) => matches!(**st, Stmt::Break(_)),
-            Else::Block { body, .. } => breaks(body),
-            Else::Value(_) => false,
-        },
-        Stmt::Let { value, .. } => in_expr(value),
+        Stmt::Expr(e) | Stmt::Return(Some(e), _) => in_expr(e),
+        Stmt::Let { value, otherwise, .. } => in_expr(value) || otherwise.as_ref().is_some_and(in_else),
+        Stmt::Handle { value, otherwise, .. } => in_expr(value) || in_else(otherwise),
+        Stmt::Assign { target, value, .. } => in_expr(target) || in_expr(value),
+        Stmt::While { cond, .. } => in_expr(cond),
+        Stmt::For { iter, .. } => in_expr(iter),
         _ => false,
     })
 }

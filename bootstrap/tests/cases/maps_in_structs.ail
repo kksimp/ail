@@ -1,0 +1,97 @@
+struct Cell
+    text str
+    deps Set[str]
+
+struct Interp
+    scopes List[Map[str, int]]
+    cells Map[str, Cell]
+    log List[str]
+    visits Map[str, Map[str, int]]
+
+fn Interp.new() Self
+    Interp(scopes: [{}], cells: {}, log: [], visits: {})
+
+fn Interp.push_scope(mut self)
+    self.scopes.push({})
+
+fn Interp.define(mut self, name str, v int)
+    i := self.scopes.len() - 1
+    self.scopes[i][name] = v
+
+fn Interp.assign(mut self, name str, v int)
+    mut i := self.scopes.len() - 1
+    while i >= 0
+        if self.scopes[i].contains(name)
+            self.scopes[i][name] = v
+            return
+        i -= 1
+    self.log.push("undefined {name}")
+
+fn Interp.lookup(self, name str) int?
+    mut i := self.scopes.len() - 1
+    while i >= 0
+        if v := self.scopes[i].get(name)
+            return v
+        i -= 1
+    none
+
+fn Interp.put(mut self, key str, text str)
+    self.cells[key] = Cell(text: text, deps: {})
+
+fn Interp.dep(mut self, key str, on str)
+    self.cells[key].deps.add(on)
+
+fn Interp.edit(mut self, key str, text str)
+    self.cells[key].text = text
+
+fn Interp.visit(mut self, a str, b str)
+    if not self.visits.contains(a)
+        self.visits[a] = {}
+    if self.visits[a].contains(b)
+        self.visits[a][b] += 1
+    else
+        self.visits[a][b] = 1
+
+fn Interp.drop(mut self, key str) bool
+    r := self.cells.remove(key)
+    if c := r
+        self.log.push("dropped {c.text}")
+        return true
+    false
+
+fn main()
+    mut it := Interp.new()
+    it.define("x", 1)
+    it.push_scope()
+    it.define("y", 2)
+    it.define("x", 10)
+    print(it.lookup("x"))
+    print(it.lookup("y"))
+    print(it.lookup("q"))
+    it.assign("y", 20)
+    it.assign("nope", 0)
+    print(it.scopes)
+    it.put("a", "=1")
+    it.put("b", "=a+1")
+    it.dep("b", "a")
+    it.dep("b", "a")
+    it.dep("b", "z")
+    it.edit("a", "=2")
+    print(it.cells)
+    it.visit("p", "q")
+    it.visit("p", "q")
+    it.visit("p", "r")
+    it.visit("s", "t")
+    print(it.visits)
+    print(it.drop("a"))
+    print(it.drop("a"))
+    print(it.log)
+    print(it.cells.keys())
+    # copies of the whole struct are independent
+    snap := it
+    it.define("w", 5)
+    it.dep("b", "new")
+    print(snap.scopes)
+    print(it.scopes)
+    print(snap.cells["b"].deps)
+    print(it.cells["b"].deps)

@@ -1,0 +1,40 @@
+fn a()
+    m := {"a": 1}
+    v := m.get("a", 0)
+    print(v)
+
+fn b()
+    m := {"a": 1}
+    print(m.contains_key("a"))
+
+fn c()
+    m := {"a": 1}
+    for p in m.items()
+        print(p)
+
+fn e()
+    m := {"a": 1}
+    print(m.has("a"))
+
+fn f()
+    s := {1, 2}
+    print(s.push(3))
+
+fn g()
+    s := {"a"}
+    print(s.sorted().len().foo())
+
+fn h()
+    s := {1}
+    print(s.contains("a"))
+
+fn i()
+    m := {"a": 1}
+    print(m.get(1))
+
+fn j()
+    s := {1}
+    print(s.is_subset({"a"}))
+
+fn main()
+    a()

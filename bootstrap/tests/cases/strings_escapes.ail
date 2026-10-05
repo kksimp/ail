@@ -1,0 +1,33 @@
+# lex.str.1 and lex.str.4: every escape, in strings and chars.
+fn main()
+    s := "a\tb\nc\rd\0e\\f\"g\'h\{i\u{41}\u{e9}\u{1F600}\u{10FFFF}"
+    print([s])
+    print(s.chars().len())
+    cs := ['\n', '\t', '\r', '\0', '\\', '\"', '\'', '\{', '\u{41}', '\u{e9}', '\u{1F600}']
+    print(cs)
+    print(cs.len())
+    # \' in a string is a plain quote; a bare ' in a string is fine
+    q := "it's \'quoted\'"
+    print(q)
+    print([q])
+    # a bare " in a char literal needs no escape; neither does {
+    print(['"', '{', '}', '\''])
+    print('{')
+    print('}')
+    # escapes with leading zeros, upper and lower case hex
+    print(['\u{0041}', '\u{00e9}', '\u{00E9}'])
+    print('\u{1f600}' == '\u{1F600}')
+    # the code points of the boundary escapes
+    print('\u{0}'.code())
+    print('\u{7f}'.code())
+    print('\u{d7ff}'.code())
+    print('\u{e000}'.code())
+    print('\u{10ffff}'.code())
+    # escapes that produce characters which look like syntax
+    t := "\u{22}\u{7b}x\u{7d}\u{5c}n"
+    print(t)
+    print([t])
+    # a string made only of escapes
+    print([("\\\\")])
+    print(["\{\{\{"])
+    print("\{x}")

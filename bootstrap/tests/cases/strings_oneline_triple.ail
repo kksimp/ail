@@ -1,0 +1,19 @@
+# lex.str.3 rule 1: `"""text"""` on one line, with no dedent; the closing
+# delimiter is the last three quotes of a run.
+fn show(label str, s str)
+    print("{label}: {[s]}")
+
+fn main()
+    show("a", """say "hi" """)
+    show("b", """say "hi"""")
+    show("c", """"quoted"""")
+    show("d", """""")
+    show("e", """ spaced  """)
+    show("f", """a\tb\n{1 + 1}\{""")
+    show("g", """"" a """"")
+    show("i", """a "b" c""")
+    show("j", """{"q"}""")
+    show("k", """a\"b""")
+    show("l", """a\""""")
+    show("m", """""""")
+    show("n", """"""")

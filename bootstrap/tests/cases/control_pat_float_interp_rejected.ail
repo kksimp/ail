@@ -1,0 +1,13 @@
+# ADR 0138 expr.match.7: float literal patterns and interpolated string patterns are errors.
+fn float_literal(n int) int
+    match n
+        1.5 => 1
+        _ => 0
+
+fn interpolated(s str) int
+    match s
+        "a{s}" => 1
+        _ => 0
+
+fn main()
+    print(1)

@@ -1,0 +1,5 @@
+# type.char.3: a radix outside 2..36 traps (1).
+fn main()
+    print("before")
+    print('5'.to_digit(1))
+    print("after")

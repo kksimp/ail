@@ -1,0 +1,92 @@
+# type.num.6: inf, nan and -0.0 behave as IEEE 754; nothing traps.
+fn main()
+    zero := 0.0
+    nzero := -0.0
+    inf := 1.0 / zero
+    ninf := -1.0 / zero
+    nan := zero / zero
+    print(inf)
+    print(ninf)
+    print(nan)
+    print(1.0 / nzero)
+    print(-1.0 / nzero)
+    print(zero / nzero)
+    print(inf / inf)
+    print(inf - inf)
+    print(inf + inf)
+    print(inf * 0.0)
+    print(inf * -1.0)
+    print(ninf * ninf)
+    print(0.0 * inf)
+    print(1e308 * 10.0)
+    print(-1e308 * 10.0)
+    print(1e308 + 1e308)
+    print(1e-308 / 1e308)
+    print(5.0 / inf)
+    print(-5.0 / inf)
+    print(inf + 1.0)
+    print(nan + 1.0)
+    print(1.0 - nan)
+    print(nan * 0.0)
+    print(nan / nan)
+    print(-nan)
+    print(-inf)
+    print(-ninf)
+    print(zero == nzero)
+    print(zero != nzero)
+    print(nzero < zero)
+    print(zero < nzero)
+    print(nzero <= zero)
+    print(zero >= nzero)
+    print(zero + nzero)
+    print(nzero + nzero)
+    print(nzero + zero)
+    print(zero - zero)
+    print(nzero - zero)
+    print(zero - nzero)
+    print(nzero * 5.0)
+    print(zero * -5.0)
+    print(-zero)
+    print(-nzero)
+    print(nzero / 5.0)
+    print(inf == inf)
+    print(ninf == inf)
+    print(inf > 1e308)
+    print(ninf < -1e308)
+    print(inf >= inf)
+    print(nan == nan)
+    print(nan != nan)
+    print(nan < nan)
+    print(nan <= nan)
+    print(nan > nan)
+    print(nan >= nan)
+    print(nan == 1.0)
+    print(1.0 == nan)
+    print(nan != 1.0)
+    print(nan < 1.0)
+    print(1.0 < nan)
+    print(nan > 1.0)
+    print(1.0 > nan)
+    print(nan <= inf)
+    print(inf <= nan)
+    print(nan >= ninf)
+    print(ninf >= nan)
+    print(not (nan < 1.0))
+    print(not (nan >= 1.0))
+    print(nan < 1.0 or nan >= 1.0)
+    print(nan != nan and nan == nan)
+    # sqrt of negative is nan
+    print((-4.0).sqrt())
+    # nan from arithmetic then propagates
+    mut acc := 1.0
+    acc += nan
+    acc *= 2
+    print(acc)
+    mut ov := 1e300
+    for i in 0..10
+        ov *= 1e10
+    print(ov)
+    mut un := 1e-300
+    for i in 0..10
+        un /= 1e10
+    print(un)

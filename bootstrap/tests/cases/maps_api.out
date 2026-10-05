@@ -1,0 +1,44 @@
+2
+1
+none
+true
+false
+1
+none
+{"b": 2}
+1
+["b"]
+[2]
+b is 2
+no c
+2 -1
+none
+one
+0
+[]
+[]
+0
+true
+true
+false
+2
+true
+false
+true
+false
+{"b"}
+["b"]
+[1, 2, 3]
+["apple", "fig", "pear"]
+[]
+true
+false
+true
+true
+true
+false
+[1]
+[10]
+[[1, 2], []]
+2
+0

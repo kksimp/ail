@@ -1,0 +1,33 @@
+struct Pos
+    x int
+    y int
+
+fn uniq[T Hash](xs List[T]) Set[T]
+    mut out := Set[T]()
+    for x in xs
+        out.add(x)
+    out
+
+fn no_bound[T](xs List[T]) Set[T]
+    mut out := Set[T]()
+    out
+
+fn eq_only[T Eq](xs List[T]) Set[T]
+    mut out := Set[T]()
+    out
+
+fn ord_only[T Ord](xs List[T]) Set[T]
+    mut out := Set[T]()
+    out
+
+fn needs_float()
+    print(uniq([1.5, 2.5]))
+
+fn needs_map()
+    print(uniq([{1: 1}]))
+
+fn needs_set()
+    print(uniq([{1}]))
+
+fn main()
+    needs_float()

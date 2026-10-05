@@ -1,0 +1,9 @@
+struct Acct
+    bal int
+
+fn main()
+    mut m := {"x": Acct(bal: 1)}
+    m["x"].bal = 5
+    print(m)
+    m["y"].bal = 5
+    print("unreachable")

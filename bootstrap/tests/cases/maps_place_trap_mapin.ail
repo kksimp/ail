@@ -1,0 +1,6 @@
+fn main()
+    mut m := {"a": {"x": 1}}
+    m["a"].remove("x")
+    print(m)
+    m["b"].remove("x")
+    print("unreachable")

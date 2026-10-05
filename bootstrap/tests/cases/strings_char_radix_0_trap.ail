@@ -1,0 +1,4 @@
+# type.char.3: radix 0 traps, not a division by zero.
+fn main()
+    r := 0
+    print('a'.to_digit(r))

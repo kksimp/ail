@@ -11,10 +11,9 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    is_prelude,
     Arg, Arm, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart,
     Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef,
-    UnOp, Variant, Within,
+    UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
@@ -173,7 +172,10 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 p.skip_statement();
             }
             _ => {
-                p.unexpected("a declaration (`fn`, `struct`, `enum`, `error`, `trait`, `impl` or a constant)", "gram.syntax.1");
+                p.unexpected(
+                    "a declaration (`fn`, `struct`, `enum`, `error`, `trait`, `impl` or a constant)",
+                    "gram.syntax.1",
+                );
                 p.skip_statement();
             }
         }

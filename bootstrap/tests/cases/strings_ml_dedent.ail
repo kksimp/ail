@@ -1,0 +1,74 @@
+# lex.str.3 rules 2-4: closing line alone, dedent, blank lines, indentation.
+fn show(label str, s str)
+    print("{label}: {[s]}")
+
+fn main()
+    a := """
+        one
+        two
+        """
+    show("a", a)
+    b := """
+        one
+        two
+
+        """
+    show("b", b)
+    # text before the closing delimiter: that line is the last text line
+    c := """
+        one
+        two"""
+    show("c", c)
+    # closing line less indented than the text: the text keeps the difference
+    d := """
+        one
+          two
+    """
+    show("d", d)
+    # closing line more indented than the text lines: the text lines decide
+    e := """
+        one
+        two
+            """
+    show("e", e)
+    # blank lines, and lines of only spaces (fewer or more than the indent)
+    f := """
+        one
+
+  
+        two
+                    
+        three
+        """
+    show("f", f)
+    # only spaces before the closing delimiter, text indented by 4 more
+    g := """
+            deep
+          shallow
+        """
+    show("g", g)
+    # empty text
+    h := """
+        """
+    show("h", h)
+    # one blank text line then the delimiter: one newline? no, a single empty line
+    i := """
+
+        """
+    show("i", i)
+    # text lines less indented than the enclosing code
+    j := """
+x
+  y
+"""
+    show("j", j)
+    # a tab inside text (not in the indentation) is kept
+    k := """
+        a	b
+        """
+    show("k", k)
+    # the delimiter on the line of its own with a comment after it
+    l := """
+        z
+        """ # trailing comment
+    show("l", l)

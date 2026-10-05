@@ -1,0 +1,20 @@
+# type.str.5 and type.str.8: to_int and to_float on text.
+fn main()
+    print(["42".to_int(), "-7".to_int(), "0".to_int(), "-0".to_int(), "007".to_int(), "-007".to_int()])
+    print(["9223372036854775807".to_int(), "-9223372036854775808".to_int(), "9223372036854775808".to_int(), "-9223372036854775809".to_int()])
+    print(["".to_int(), "-".to_int(), "+5".to_int(), "--5".to_int(), "5-".to_int(), " 5".to_int(), "5 ".to_int()])
+    print(["1.5".to_int(), "1e3".to_int(), "0x10".to_int(), "1_000".to_int(), "٣".to_int(), "５".to_int(), "5\n".to_int()])
+    print(["99999999999999999999999".to_int(), "00000000000000000000000000001".to_int()])
+    print(["12abc".to_int(), "abc".to_int(), "i".to_int(), "inf".to_int(), "nan".to_int()])
+    # to_float
+    print(["1.5".to_float(), "-2.25".to_float(), "3".to_float(), "-0".to_float(), "0.1".to_float(), "1e3".to_float(), "1E-2".to_float()])
+    print(["2.5e+3".to_float(), "inf".to_float(), "-inf".to_float(), "007.5".to_float(), "1e400".to_float(), "-1e400".to_float()])
+    print(["".to_float(), "-".to_float(), "+1.5".to_float(), "1_0.5".to_float(), " 1.5".to_float(), "1.5 ".to_float(), ".5".to_float(), "5.".to_float()])
+    print(["1e".to_float(), "e5".to_float(), "1e+".to_float(), "1.5.2".to_float(), "0x1p3".to_float(), "Infinity".to_float(), "INF".to_float(), "NaN".to_float(), "+inf".to_float()])
+    print(["nan".to_float(), "1e-400".to_float(), "5e-324".to_float(), "-1e-400".to_float()])
+    a := "12".to_int() else 0
+    b := "x".to_int() else 0
+    c := "2.5".to_float() else 0.0
+    print(a)
+    print(b)
+    print(c)

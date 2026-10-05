@@ -1,0 +1,27 @@
+# ADR 0138 expr.match.5 / expr.match.7: `true` and `false` cover a bool, so a `_` after
+# them can never match (the same as `_` after every variant of an enum).
+enum E
+    A
+    B
+
+fn on_enum(x E) int
+    match x
+        A => 1
+        B => 2
+        _ => 3
+
+fn on_bool(b bool) int
+    match b
+        true => 1
+        false => 2
+        _ => 3
+
+fn on_bool_or(b bool) int
+    match b
+        true | false => 1
+        _ => 2
+
+fn main()
+    print(on_enum(A))
+    print(on_bool(true))
+    print(on_bool_or(true))

@@ -1,0 +1,5 @@
+# type.char.3: a radix outside 2..36 traps (37), even for a non-digit.
+fn main()
+    print("before")
+    print('-'.to_digit(37))
+    print("after")

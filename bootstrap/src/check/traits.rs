@@ -253,8 +253,11 @@ impl<'p> Checker<'p> {
         match t {
             Ty::Err | Ty::Never => true,
             Ty::Unit | Ty::Res(..) => false,
-            // A bound `Ord` also provides `==` (trait.std.2).
-            Ty::Param(p) => self.tparams[*p].bounds.iter().any(|&b| b == tr || (tr == eq && b == self.std.ord)),
+            // A bound `Ord` or `Hash` also provides `==` (trait.std.2, trait.auto.5).
+            Ty::Param(p) => self.tparams[*p]
+                .bounds
+                .iter()
+                .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
             Ty::Union(_) => tr == eq || tr == self.std.hash,
             Ty::Opt(inner) => (tr == eq || tr == self.std.hash) && self.implements_in(inner, tr, seen),
@@ -331,9 +334,7 @@ impl<'p> Checker<'p> {
             Ty::Struct(_, args) | Ty::Enum(_, args) => {
                 let name = self.type_name(t).unwrap_or_default();
                 if self.custom_eq(t) {
-                    return format!(
-                        "`{name}` has its own `fn eq`, and custom hashing isn't designed yet (OQ-042)"
-                    );
+                    return format!("`{name}` has its own `fn eq`, and custom hashing isn't designed yet (OQ-042)");
                 }
                 let fields = self.field_types_of(t, args);
                 match fields.iter().find(|f| !self.implements(f, hash)) {

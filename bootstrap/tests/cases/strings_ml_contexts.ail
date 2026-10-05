@@ -1,0 +1,82 @@
+# lex.str.3 rule 3 and 6: code after the closing delimiter; multi-line strings
+# as arguments, list elements and a function's last expression.
+fn show(label str, s str)
+    print("{label}: {[s]}")
+
+fn two(a str, b str) str
+    "{a}|{b}"
+
+fn banner() str
+    """
+    +--+
+    |  |
+    +--+
+    """
+
+fn after() str
+    """
+    tail
+    """
+
+struct Doc
+    title str
+    body str
+
+fn main()
+    show("arg", """
+        hello
+        world
+        """)
+    show("two", two("""
+        first
+        """, """
+        second
+        """))
+    xs := [
+        """
+        one
+        """,
+        """
+        two
+        three
+        """,
+        "four",
+    ]
+    print(xs)
+    print(xs.len())
+    show("banner", banner())
+    show("after", after())
+    d := Doc(
+        title: """
+            T
+            """,
+        body: """
+            line1
+            line2
+            """,
+    )
+    print(d)
+    # method call on the closing line
+    parts := """
+        a
+        b
+        c
+        """.lines()
+    print(parts)
+    n := """
+        1,2,3
+        """.split(",")
+    print(n)
+    # the statement continues across the string's lines; a comment may follow
+    show("cmt", """
+        c
+        """) # a comment after the closing line
+    # a string whose lines look like code and comments is still just text
+    code := """
+        fn evil()
+            # not a comment
+        x := 1; y := 2
+        """
+    show("code", code)
+    if code.contains("# not a comment")
+        print("kept")

@@ -1,0 +1,4 @@
+# type.str.4: split with an empty separator traps.
+fn main()
+    print("a,b".split(","))
+    print("abc".split(""))

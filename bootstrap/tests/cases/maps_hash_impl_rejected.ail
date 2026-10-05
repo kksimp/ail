@@ -1,0 +1,14 @@
+struct A
+    x int
+
+impl Hash for A
+
+struct B
+    x int
+
+impl Hash for B
+    fn hash(self) int
+        self.x
+
+fn main()
+    print(1)

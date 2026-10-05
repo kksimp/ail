@@ -1,0 +1,4 @@
+# type.char.3: a radix that does not fit in 32 bits traps (no truncation to a valid radix).
+fn main()
+    r := 4294967306
+    print('a'.to_digit(r))

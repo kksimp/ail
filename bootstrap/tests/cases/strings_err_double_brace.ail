@@ -1,0 +1,8 @@
+# lex.str.2: `{{` is an error (a literal brace is `\{`).
+fn main()
+    x := 1
+    print("{{x}}")
+    print("{{ {x} }}")
+    print("""
+        {{x}}
+        """)

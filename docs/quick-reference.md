@@ -48,9 +48,17 @@ variable inside a loop, use `=`, not `:=`.
 
 ## Types
 
-`int` (64-bit), `bool` (`true`, `false`), `str`, `List[T]`, structs, enums,
-optionals `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
-**(not yet):** floats, `char`, `Map`, `Set`.
+`int` (64-bit), `float` (64-bit IEEE), `bool` (`true`, `false`), `str`,
+`char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
+`T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+
+Constants are top-level `NAME := value`, built from literals, other
+constants, collection and struct literals and operators (no calls):
+
+```ail
+MAX_DEPTH := 64
+KEYWORDS := {"if", "else", "while"}     # a Set[str]
+```
 
 ## Structs, enums and methods
 
@@ -155,6 +163,10 @@ fn main() !                                 # main can fail; the error is report
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
+- No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
+  As a statement, `save() else err` + block handles the failure and goes on;
+  `save() else return` leaves.
+- `unreachable("why")` stops the program; it fits any type, like `return`.
 
 ## Traits and generics
 
@@ -275,10 +287,16 @@ match c              # as a statement, arms can just do things
     Green =>
         count += 1
         print("go")
+
+match ch             # literals and `|`; ints, strings and chars need `_`
+    '+' | '-' => continue           # a one-line statement arm
+    '0' => total += 1
+    _ => return ch
 ```
 
 `if` and `match` work as statements or as values. A function can end with
-either one, and its value is the function's result.
+either one, and its value is the function's result. A `while true` loop with
+no `break` can end a function too.
 
 ## Operators and strings
 
@@ -288,21 +306,57 @@ either one, and its value is the function's result.
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
   `if n != 0`, not `if n`.
-- Strings: `"total: {a + b}"` interpolates any expression. `\{` is a literal
-  brace. There's no `+` on strings.
-- `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`.
+- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). No mixing
+  with `int`: `n.to_float()`, `x.to_int()` (truncates; traps on NaN). An int
+  literal works where a float is expected: `x * 2`, `total: 0`. `round()`
+  rounds halves away from zero and gives a float: `2.5.round()` is `3.0`.
+  Floats print like Python: `0.1 + 0.2` is `0.30000000000000004`, `1e16` is
+  `1e+16`.
+- `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
+  `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
+
+## Strings and characters
+
+```ail
+s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
+t := """
+    line one
+      indented
+    """                    # "line one\n  indented": the closing line adds no newline
+q := """say "hi" """       # on one line, for text with quotes
+r := r"C:\dir\{x}"         # raw: no escapes, no interpolation
+c := 'x'                   # a char; '\n', '\'', '\u{e9}'
+```
+
+- `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
+  `"2.5".to_float()` a `float?`.
+- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
+  `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
+  `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
+  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`.
+- Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
+- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
+  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
+- There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
 
 ## Lists
 
 ```ail
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
-part := xs[1..3]       # a copy of elements 1 and 2
-xs.push(4)             # push and swap need a `mut` variable or parameter
+part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
+xs.push(4)             # push, pop, sort and swap need a `mut` variable
 xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
+empty := List[int]()   # an empty list of a given type, anywhere
 ```
+
+Also: `xs.pop()` and `xs.last()` (give `T?`), `xs.contains(x)`,
+`xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
+(a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
+`xs.sum()` (ints or floats). Slices don't clamp, and negative indexes are
+errors: write `xs[xs.len() - 1]` or `xs.last()`.
 
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:
@@ -313,6 +367,26 @@ for mut item in items      # `items` must be `mut`
 ```
 
 Inside a `for mut` loop, the body can't use the list itself (`items`).
+
+## Maps and sets
+
+```ail
+mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
+ages["cy"] = 40                        # inserts or replaces
+ages["ann"] += 1                       # the key must exist, or the program stops
+a := ages["bob"]                       # traps if missing...
+b := ages.get("dan") else 0            # ...`get` gives an optional
+for name in ages.keys()                # `for k in m` is an error; also values()
+    print("{name}: {ages[name]}")
+mut seen := Set[str]()                 # or a literal: {"a", "b"}
+if seen.add("x")                       # true if it wasn't there
+    print("new")
+```
+
+Also `m.contains(k)`, `m.remove(k)` (gives `V?`), `m.len()`, `s.remove(x)`,
+`s.contains(x)`, `s.sorted()`. Keys and set elements can be any type whose
+`==` is automatic (ints, strings, chars, structs and enums of them), but not
+floats.
 
 ## Values and `mut`
 

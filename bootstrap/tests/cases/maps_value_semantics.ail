@@ -1,0 +1,85 @@
+struct Env
+    vars Map[str, int]
+    seen Set[str]
+
+fn Env.define(mut self, name str, v int)
+    self.vars[name] = v
+    self.seen.add(name)
+
+fn add_one(mut m Map[str, int])
+    m["one"] = 1
+
+fn consume(m Map[str, int]) int
+    mut local := m
+    local["x"] = 99
+    local.len()
+
+fn main()
+    # copy then mutate: the original is unchanged
+    a := {"k": 1}
+    mut b := a
+    b["k"] = 2
+    b["j"] = 3
+    print(a)
+    print(b)
+    # sets
+    s := {1, 2}
+    mut t := s
+    t.add(3)
+    t.remove(1)
+    print(s)
+    print(t)
+    # copy of a map of lists: the inner lists are independent
+    mut x := {"l": [1, 2]}
+    y := x
+    x["l"].push(3)
+    x["l"][0] = 100
+    print(x)
+    print(y)
+    # nested maps
+    mut n1 := {"o": {"i": 1}}
+    n2 := n1
+    n1["o"]["i"] = 5
+    n1["o"]["j"] = 6
+    print(n1)
+    print(n2)
+    # passing by value, and by mut
+    mut base := Map[str, int]()
+    print(consume(base))
+    print(base)
+    add_one(mut base)
+    print(base)
+    # struct fields holding maps
+    mut e1 := Env(vars: {}, seen: {})
+    e1.define("a", 1)
+    e2 := e1
+    e1.define("b", 2)
+    print(e1)
+    print(e2)
+    # list of maps: copies of elements
+    mut ms := [{"a": 1}]
+    first := ms[0]
+    ms[0]["a"] = 2
+    ms.push(first)
+    ms[1]["z"] = 0
+    print(ms)
+    print(first)
+    # keys() snapshot and for-loop snapshot
+    mut live := {1: 1, 2: 2}
+    snap := live
+    for k in live.keys()
+        live[k + 10] = k
+    print(live)
+    print(snap)
+    # a map stored inside a map value is copied on read
+    mut outer := {"in": {1: 1}}
+    got := outer["in"]
+    outer["in"][2] = 2
+    print(got)
+    print(outer)
+    # copies as list elements
+    mut st := {1}
+    lst := [st, st]
+    st.add(2)
+    print(lst)
+    print(st)

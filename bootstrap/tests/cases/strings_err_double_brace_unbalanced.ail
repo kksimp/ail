@@ -1,0 +1,4 @@
+# lex.str.2: `{{` is an error whose help names `\{`; an unbalanced `{{` too.
+fn main()
+    print("{{")
+    print("fine")

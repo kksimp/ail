@@ -1,0 +1,77 @@
+# type.num.6, trait.std.1-2: the operators stay IEEE through an Eq or Ord bound;
+# cmp is the total order. min/max methods use cmp.
+fn lt[T Ord](a T, b T) bool
+    a < b
+
+fn le[T Ord](a T, b T) bool
+    a <= b
+
+fn gt[T Ord](a T, b T) bool
+    a > b
+
+fn ge[T Ord](a T, b T) bool
+    a >= b
+
+fn same[T Eq](a T, b T) bool
+    a == b
+
+fn differ[T Eq](a T, b T) bool
+    a != b
+
+fn same_ord[T Ord](a T, b T) bool
+    a == b
+
+fn show[T Ord](a T, b T)
+    print("{lt(a, b)} {le(a, b)} {gt(a, b)} {ge(a, b)} {same(a, b)} {differ(a, b)} {same_ord(a, b)} {a.cmp(b)}")
+
+fn biggest[T Ord](xs List[T]) T
+    mut best := xs[0]
+    for x in xs
+        if x > best
+            best = x
+    best
+
+fn smallest[T Ord](xs List[T]) T
+    mut best := xs[0]
+    for x in xs
+        if x < best
+            best = x
+    best
+
+fn clamp[T Ord](x T, lo T, hi T) T
+    x.max(lo).min(hi)
+
+fn count_eq[T Eq](xs List[T], y T) int
+    mut n := 0
+    for x in xs
+        if x == y
+            n += 1
+    n
+
+fn main()
+    inf := 1.0 / 0.0
+    nan := inf - inf
+    show(nan, nan)
+    show(nan, 1.0)
+    show(1.0, nan)
+    show(inf, nan)
+    show(nan, inf)
+    show(-0.0, 0.0)
+    show(0.0, -0.0)
+    show(1.0, 2.0)
+    show(2.0, 1.0)
+    show(1.0, 1.0)
+    show(2, 1)
+    # generic loops follow the IEEE operators, not cmp
+    print(biggest([1.0, nan, 3.0]))
+    print(biggest([nan, 1.0, 3.0]))
+    print(smallest([nan, 3.0, 1.0]))
+    print(smallest([3.0, nan, 1.0]))
+    # min/max methods follow cmp: NaN is the greatest value
+    print(clamp(5.0, 1.0, 3.0))
+    print(clamp(nan, 1.0, 3.0))
+    print(clamp(0.0, 1.0, nan))
+    print(clamp(-5.0, nan, 3.0))
+    print(count_eq([1.0, nan, 1.0, nan], nan))
+    print(count_eq([1.0, nan, 1.0, nan], 1.0))
+    print(count_eq([0.0, -0.0, 0.0], -0.0))

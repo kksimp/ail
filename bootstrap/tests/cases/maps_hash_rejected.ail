@@ -1,0 +1,82 @@
+trait Speak
+    fn speak(self) str
+
+struct Pos
+    x int
+    y int
+
+struct WithFloat
+    id int
+    f float
+
+struct Nested
+    p Pos
+    ws List[WithFloat]
+
+enum Mixed
+    Ok(n int)
+    Bad(f float)
+
+struct Box[T]
+    v T
+
+struct Hand
+    n int
+
+impl Eq for Hand
+    fn eq(self, other Self) bool
+        self.n % 2 == other.n % 2
+
+struct Both
+    h Hand
+
+fn a()
+    print(Set[float]())
+
+fn b()
+    print(Map[float, int]())
+
+fn c()
+    print(Set[WithFloat]())
+
+fn d()
+    print(Map[Nested, int]())
+
+fn e()
+    print(Set[Mixed]())
+
+fn f()
+    print(Set[Box[float]]())
+
+fn g()
+    print(Set[Hand]())
+
+fn h()
+    print(Map[Map[int, int], int]())
+
+fn i()
+    print(Set[Set[int]]())
+
+fn j()
+    print(Set[float?]())
+
+fn k()
+    print(Set[List[float]]())
+
+fn l()
+    print(Set[Both]())
+
+fn m()
+    print(Map[Box[Hand], int]())
+
+fn n()
+    print(Set[any Speak]())
+
+fn o()
+    print({1.5})
+
+fn p()
+    print({1.5: 1})
+
+fn main()
+    a()

@@ -1,0 +1,415 @@
+# A JSON parser, printer and query tool over an embedded document.
+# Its output matches a Python version of the same program byte for byte.
+
+WHITESPACE := " \t\n\r"
+KINDS := ["object", "array", "string", "number", "boolean", "null"]
+DOCUMENT := r"""
+{
+  "meta": {"version": 3, "count": 3, "generated": "2026-10-05", "archived": null},
+  "users": [
+    {
+      "id": 1,
+      "name": "Ann \"Annie\" Lee",
+      "email": "ann@example.com",
+      "active": true,
+      "score": 3.5,
+      "tags": ["admin", "dev", "ops"],
+      "address": {"city": "Z\u00fcrich", "zip": "8001"}
+    },
+    {
+      "id": 2,
+      "name": "Jos\u00e9 Garc\u00eda",
+      "active": false,
+      "score": 1e3,
+      "tags": [],
+      "note": "line one\nline two\ttabbed \/ slash \\ backslash"
+    },
+    {
+      "id": 3,
+      "name": "\u674E\u96F7",
+      "active": true,
+      "score": -0.25,
+      "tags": ["guest"],
+      "balance": -42,
+      "ratio": 2.5E-3,
+      "prefs": {"theme": "dark", "langs": ["en", "zh"], "beta": {}},
+      "flags": "\u0007\b\f\r"
+    }
+  ],
+  "snowman": "\u2603"
+}
+"""
+QUERIES := [
+    "users[1].name",
+    "meta.count",
+    "users[0].tags[2]",
+    "users[2].prefs",
+    "meta.archived",
+    "users[1].email",
+    "users[3]",
+    "meta[0]",
+    "users.name",
+    "users[x]",
+]
+BAD_INPUTS := [
+    "\{\"name\": \"Ann\", \"age\": 30,}",
+    "\{\"name\" \"Ann\"}",
+    "[\n  \"a\",\n  \"b\n]",
+    "\{\"path\": \"C:\\qdir\"}",
+    "[1, 2] [3]",
+    "[1, @]",
+    "\{\"a\": \{\"b\": [1, 2",
+    "[-]",
+    "\{\n  \"x\": 1.,\n}",
+    "\"bad \\u12G4\"",
+    "",
+]
+struct Member
+    key str
+    value Json
+enum Json
+    Null
+    Bool(b bool)
+    Int(n int)
+    Float(x float)
+    Str(s str)
+    Arr(items List[Json])
+    Obj(members List[Member])
+error struct ParseError
+    line int
+    col int
+    msg str
+impl ToStr for ParseError
+    fn to_str(self) str
+        "parse error at {self.line}:{self.col}: {self.msg}"
+struct Parser
+    chars List[char]
+    pos int
+fn Parser.new(text str) Parser
+    Parser(chars: text.chars(), pos: 0)
+fn Parser.fail_at(self, at int, msg str) ParseError
+    lines := self.chars[..at].join("").split('\n')
+    last := lines.last() else ""
+    ParseError(line: lines.len(), col: last.chars().len() + 1, msg: msg)
+fn Parser.fail(self, msg str) ParseError
+    self.fail_at(self.pos, msg)
+fn Parser.at_end(self) bool
+    self.pos >= self.chars.len()
+fn Parser.peek(self) char?
+    if self.at_end()
+        return none
+    self.chars[self.pos]
+fn Parser.unexpected(self) ParseError
+    if c := self.peek()
+        return self.fail("unexpected character '{c}'")
+    self.fail("unexpected end of input")
+fn Parser.skip_whitespace(mut self)
+    while not self.at_end() and WHITESPACE.contains(self.chars[self.pos])
+        self.pos += 1
+fn Parser.parse_document(mut self) !Json
+    value := self.parse_value()?
+    self.skip_whitespace()
+    if not self.at_end()
+        return self.fail("extra data after value")
+    value
+fn Parser.parse_value(mut self) !Json
+    self.skip_whitespace()
+    c := self.peek() else return self.unexpected()
+    if c == '-' or c.is_digit()
+        return self.parse_number()
+    match c
+        '{' => self.parse_object()
+        '[' => self.parse_array()
+        '"' => Str(s: self.parse_string()?)
+        _ =>
+            if self.take_word("true")
+                return Bool(b: true)
+            if self.take_word("false")
+                return Bool(b: false)
+            if self.take_word("null")
+                return Null
+            self.unexpected()
+fn Parser.take_word(mut self, word str) bool
+    end := self.pos + word.chars().len()
+    if end > self.chars.len() or self.chars[self.pos..end].join("") != word
+        return false
+    self.pos = end
+    true
+fn Parser.parse_object(mut self) !Json
+    self.pos += 1
+    self.skip_whitespace()
+    if self.peek() == '}'
+        self.pos += 1
+        return Obj(members: [])
+    mut members := List[Member]()
+    while true
+        self.skip_whitespace()
+        if self.peek() != '"'
+            return self.unexpected()
+        key := self.parse_string()?
+        self.skip_whitespace()
+        if self.peek() != ':'
+            if self.at_end()
+                return self.unexpected()
+            return self.fail("expected ':' after object key")
+        self.pos += 1
+        members.push(Member(key: key, value: self.parse_value()?))
+        if self.end_of_container('}')?
+            return Obj(members: members)
+fn Parser.parse_array(mut self) !Json
+    self.pos += 1
+    self.skip_whitespace()
+    if self.peek() == ']'
+        self.pos += 1
+        return Arr(items: [])
+    mut items := List[Json]()
+    while true
+        items.push(self.parse_value()?)
+        if self.end_of_container(']')?
+            return Arr(items: items)
+fn Parser.end_of_container(mut self, close char) !bool
+    self.skip_whitespace()
+    if self.peek() == close
+        self.pos += 1
+        return true
+    if self.peek() != ','
+        return self.unexpected()
+    comma := self.pos
+    self.pos += 1
+    self.skip_whitespace()
+    if self.peek() == ']' or self.peek() == '}'
+        return self.fail_at(comma, "trailing comma")
+    false
+fn Parser.parse_string(mut self) !str
+    start := self.pos
+    self.pos += 1
+    mut text := List[char]()
+    while true
+        c := self.peek() else return self.fail_at(start, "unterminated string")
+        match c
+            '"' => break
+            '\n' => return self.fail_at(start, "unterminated string")
+            '\\' => text.push(self.parse_escape(start)?)
+            _ =>
+                if c.code() < 0x20
+                    return self.fail("control character in string")
+                text.push(c)
+                self.pos += 1
+    self.pos += 1
+    text.join("")
+fn Parser.parse_escape(mut self, start int) !char
+    escape := self.pos
+    self.pos += 1
+    c := self.peek() else return self.fail_at(start, "unterminated string")
+    self.pos += 1
+    match c
+        '"' | '\\' | '/' => c
+        'b' => '\u{8}'
+        'f' => '\u{c}'
+        'n' => '\n'
+        'r' => '\r'
+        't' => '\t'
+        'u' => self.parse_unicode(escape)
+        _ => return self.fail_at(escape, "invalid escape '\\{c}'")
+fn Parser.parse_unicode(mut self, escape int) !char
+    end := self.pos + 4
+    if end > self.chars.len()
+        return self.fail_at(escape, "invalid unicode escape")
+    mut code := 0
+    for d in self.chars[self.pos..end]
+        digit := d.to_digit(16) else return self.fail_at(escape, "invalid unicode escape")
+        code = code * 16 + digit
+    ch := char.from_code(code) else return self.fail_at(escape, "surrogate escapes are not supported")
+    self.pos = end
+    ch
+fn Parser.skip_digits(mut self) int
+    start := self.pos
+    while not self.at_end() and self.chars[self.pos].is_digit()
+        self.pos += 1
+    self.pos - start
+fn Parser.parse_number(mut self) !Json
+    start := self.pos
+    if self.peek() == '-'
+        self.pos += 1
+    if self.peek() == '0'
+        self.pos += 1
+    elif self.skip_digits() == 0
+        return self.fail("invalid number")
+    mut is_float := false
+    if self.peek() == '.'
+        self.pos += 1
+        if self.skip_digits() == 0
+            return self.fail("invalid number")
+        is_float = true
+    if self.peek() == 'e' or self.peek() == 'E'
+        self.pos += 1
+        if self.peek() == '+' or self.peek() == '-'
+            self.pos += 1
+        if self.skip_digits() == 0
+            return self.fail("invalid number")
+        is_float = true
+    text := self.chars[start..self.pos].join("")
+    if is_float
+        x := text.to_float() else return self.fail_at(start, "invalid number")
+        return Float(x: x)
+    n := text.to_int() else return self.fail_at(start, "number out of range")
+    Int(n: n)
+fn parse(text str) Json ! ParseError
+    mut p := Parser.new(text)
+    p.parse_document()
+fn quote(s str) str
+    mut out := ["\""]
+    for c in s.chars()
+        piece := match c
+            '"' => "\\\""
+            '\\' => "\\\\"
+            '\n' => "\\n"
+            '\r' => "\\r"
+            '\t' => "\\t"
+            '\u{8}' => "\\b"
+            '\u{c}' => "\\f"
+            _ =>
+                if c.code() < 0x20
+                    "\\u{c.code().to_hex().pad_left(4, '0')}"
+                else
+                    "{c}"
+        out.push(piece)
+    out.push("\"")
+    out.join("")
+fn compact(v Json) str
+    match v
+        Null => "null"
+        Bool(b) => "{b}"
+        Int(n) => "{n}"
+        Float(x) => "{x}"
+        Str(s) => quote(s)
+        Arr(items) =>
+            mut parts := List[str]()
+            for item in items
+                parts.push(compact(item))
+            "[{parts.join(",")}]"
+        Obj(members) =>
+            mut parts := List[str]()
+            for m in members
+                parts.push("{quote(m.key)}:{compact(m.value)}")
+            "\{{parts.join(",")}}"
+fn pretty(v Json, level int) str
+    pad := "  ".repeat(level + 1)
+    close := "  ".repeat(level)
+    match v
+        Arr(items) =>
+            if items.len() == 0
+                return "[]"
+            mut lines := List[str]()
+            for item in items
+                lines.push("{pad}{pretty(item, level + 1)}")
+            "[\n{lines.join(",\n")}\n{close}]"
+        Obj(members) =>
+            if members.len() == 0
+                return "\{}"
+            mut lines := List[str]()
+            for m in members
+                lines.push("{pad}{quote(m.key)}: {pretty(m.value, level + 1)}")
+            "\{\n{lines.join(",\n")}\n{close}}"
+        Null | Bool(_) | Int(_) | Float(_) | Str(_) => compact(v)
+enum Step
+    Key(name str)
+    Index(i int)
+fn parse_path(path str) List[Step]?
+    mut steps := List[Step]()
+    for part in path.split(".")
+        pieces := part.split("[")
+        if pieces[0] != ""
+            steps.push(Key(name: pieces[0]))
+        for piece in pieces[1..]
+            inner := piece.split("]")
+            if inner.len() != 2 or inner[1] != ""
+                return none
+            steps.push(Index(i: inner[0].to_int()?))
+    steps
+fn Json.get(self, key str) Json?
+    match self
+        Obj(members) =>
+            for m in members
+                if m.key == key
+                    return m.value
+            none
+        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Arr(_) => none
+fn Json.at(self, i int) Json?
+    match self
+        Arr(items) =>
+            if i < 0 or i >= items.len()
+                return none
+            items[i]
+        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Obj(_) => none
+fn query(doc Json, steps List[Step]) Json?
+    mut current := doc
+    for step in steps
+        current = match step
+            Key(name) => current.get(name)?
+            Index(i) => current.at(i)?
+    current
+struct Stats
+    counts Map[str, int]
+    max_depth int
+    total float
+fn Stats.new() Stats
+    mut counts := Map[str, int]()
+    for kind in KINDS
+        counts[kind] = 0
+    Stats(counts: counts, max_depth: 0, total: 0)
+fn kind_of(v Json) str
+    match v
+        Obj(_) => "object"
+        Arr(_) => "array"
+        Str(_) => "string"
+        Int(_) | Float(_) => "number"
+        Bool(_) => "boolean"
+        Null => "null"
+fn walk(v Json, depth int, mut stats Stats)
+    stats.counts[kind_of(v)] += 1
+    match v
+        Obj(members) =>
+            stats.max_depth = stats.max_depth.max(depth)
+            for m in members
+                walk(m.value, depth + 1, mut stats)
+        Arr(items) =>
+            stats.max_depth = stats.max_depth.max(depth)
+            for item in items
+                walk(item, depth + 1, mut stats)
+        Int(n) => stats.total += n.to_float()
+        Float(x) => stats.total += x
+        Null | Bool(_) | Str(_) => return
+fn main() !
+    doc := parse(DOCUMENT)?
+    print("== pretty ==")
+    print(pretty(doc, 0))
+    print("== compact ==")
+    text := compact(doc)
+    print(text)
+    if parse(text)? == doc
+        print("round trip: ok")
+    else
+        print("round trip: MISMATCH")
+    print("== queries ==")
+    for path in QUERIES
+        steps := parse_path(path) else
+            print("bad path: {path}")
+            continue
+        if result := query(doc, steps)
+            print("{path} = {compact(result)}")
+        else
+            print("not found: {path}")
+    print("== stats ==")
+    mut stats := Stats.new()
+    walk(doc, 1, mut stats)
+    for kind in KINDS
+        print("{kind}: {stats.counts[kind]}")
+    print("max depth: {stats.max_depth}")
+    print("sum of numbers: {stats.total}")
+    print("== errors ==")
+    for i in 0..BAD_INPUTS.len()
+        if value := parse(BAD_INPUTS[i])
+            print("{i + 1}: ok {compact(value)}")
+        else err
+            print("{i + 1}: {err}")

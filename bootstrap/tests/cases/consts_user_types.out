@@ -1,0 +1,8 @@
+Config(name: "base", limit: none, tags: [], extra: {}, seen: {})
+Config(name: "lim", limit: 10, tags: ["x"], extra: {"k": 4}, seen: {1, 2})
+[Shape.Circle(r: 4), Shape.Rect(w: 2, h: 8), Shape.Dot]
+Color.Green
+Holder(color: Color.Red, shape: Shape.Circle(r: 1))
+Pair(a: 1, b: 4)
+[Pair(a: "x", b: "y")]
+{"c": Shape.Circle(r: 9)}

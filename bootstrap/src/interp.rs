@@ -180,7 +180,35 @@ enum Step {
     Key(Value, Pos),
 }
 
+/// Type and field names, for showing a map key in a trap message without
+/// running user code (type.map.3).
+struct TypeNames {
+    /// Each struct's name and field names.
+    structs: Vec<Named>,
+    /// Each enum's name, and each variant's name and field names.
+    enums: Vec<(String, Vec<Named>)>,
+}
+
+/// A name and its field names.
+type Named = (String, Vec<String>);
+
+thread_local! {
+    static NAMES: std::cell::RefCell<TypeNames> =
+        const { std::cell::RefCell::new(TypeNames { structs: Vec::new(), enums: Vec::new() }) };
+}
+
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
+    NAMES.with(|n| {
+        let fields = |fs: &[crate::ast::Field]| fs.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+        *n.borrow_mut() = TypeNames {
+            structs: prog.structs.iter().map(|s| (s.name.clone(), fields(&s.fields))).collect(),
+            enums: prog
+                .enums
+                .iter()
+                .map(|e| (e.name.clone(), e.variants.iter().map(|v| (v.name.clone(), fields(&v.fields))).collect()))
+                .collect(),
+        };
+    });
     let mut fns = HashMap::new();
     let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::new();
     for f in prog.fns.iter().filter(|f| f.top_level()) {
@@ -311,10 +339,10 @@ fn slot_mut<'e>(env: &'e mut Env<'_>, p: &Place, insert: bool) -> Result<&'e mut
             (Step::Key(k, pos), Value::Map(t)) => {
                 let t = Rc::make_mut(t);
                 match t.get(k) {
-                    Some(i) => &mut t.vals[i],
+                    Some(i) => t.val_mut(i),
                     None if insert && n + 1 == last => {
                         let i = t.insert(k.clone(), Some(Value::Unit));
-                        &mut t.vals[i]
+                        t.val_mut(i)
                     }
                     None => return trap("type.map.3", *pos, format!("the map has no key {}", key_text(k))),
                 }
@@ -386,11 +414,30 @@ fn quoted(text: &str, quote: char) -> String {
 
 /// A key for a trap message: strings and characters quoted, as inside a value.
 fn key_text(k: &Value) -> String {
+    let fields = |names: &[String], values: &[Value]| {
+        if values.is_empty() {
+            return String::new();
+        }
+        let parts: Vec<String> = names.iter().zip(values).map(|(n, v)| format!("{n}: {}", key_text(v))).collect();
+        format!("({})", parts.join(", "))
+    };
     match k {
         Value::Str(s) => quoted(s, '"'),
         Value::Char(c) => quoted(&c.to_string(), '\''),
         Value::Int(n) => n.to_string(),
         Value::Bool(b) => b.to_string(),
+        Value::None => "none".into(),
+        Value::List(items) => format!("[{}]", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
+        Value::Struct(s, values) => NAMES.with(|n| {
+            let (name, names) = &n.borrow().structs[*s];
+            format!("{name}{}", fields(names, values))
+        }),
+        Value::Enum(e, i, values) => NAMES.with(|n| {
+            let n = n.borrow();
+            let (enum_name, variants) = &n.enums[*e];
+            let (name, names) = &variants[*i];
+            format!("{enum_name}.{name}{}", fields(names, values))
+        }),
         _ => "(a value)".into(),
     }
 }
@@ -591,7 +638,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
-            Value::Set(t) => Rc::new(t.keys.clone()),
+            Value::Set(t) => Rc::new(t.key_list()),
             other => unreachable!("checked: iterable, found {other:?}"),
         };
         for item in items.iter() {
@@ -1025,15 +1072,15 @@ impl<'a, W: Write> Interp<'a, W> {
                 if x.len() != y.len() {
                     return Ok(false);
                 }
-                for (k, v) in x.keys.iter().zip(&x.vals) {
+                for (k, v) in x.entries() {
                     match y.get(k) {
-                        Some(i) if self.equal(v, &y.vals[i], pos)? => {}
+                        Some(i) if self.equal(v, y.val(i), pos)? => {}
                         _ => return Ok(false),
                     }
                 }
                 true
             }
-            (Value::Set(x), Value::Set(y)) => x.len() == y.len() && x.keys.iter().all(|k| y.get(k).is_some()),
+            (Value::Set(x), Value::Set(y)) => x.len() == y.len() && x.keys().all(|k| y.get(k).is_some()),
             (x, y) => unreachable!("checked: comparing {x:?} and {y:?}"),
         })
     }
@@ -1206,14 +1253,14 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Fail(f) => self.describe(&f.error, pos)?,
             Value::Map(t) => {
                 let mut parts = Vec::with_capacity(t.len());
-                for (k, v) in t.keys.iter().zip(&t.vals) {
+                for (k, v) in t.entries() {
                     parts.push(format!("{}: {}", self.describe(k, pos)?, self.describe(v, pos)?));
                 }
                 format!("{{{}}}", parts.join(", "))
             }
             Value::Set(t) => {
                 let mut parts = Vec::with_capacity(t.len());
-                for k in &t.keys {
+                for k in t.keys() {
                     parts.push(self.describe(k, pos)?);
                 }
                 format!("{{{}}}", parts.join(", "))

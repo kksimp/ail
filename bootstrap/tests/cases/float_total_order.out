@@ -1,0 +1,58 @@
+Ordering.Equal
+Ordering.Greater
+Ordering.Less
+Ordering.Greater
+Ordering.Less
+Ordering.Equal
+Ordering.Equal
+Ordering.Less
+Ordering.Greater
+Ordering.Equal
+Ordering.Less
+Ordering.Greater
+Ordering.Less
+[-inf, -1.5, 0.0, -0.0, 1.5, 3.0, inf, nan, nan]
+[-inf, -1.5, 0.0, -0.0, 1.5, 3.0, inf, nan, nan]
+[3.0, nan, -inf, 0.0, -0.0, inf, 1.5, -1.5, nan]
+-inf
+nan
+1.0
+nan
+nan
+nan
+1.0
+[0.0, -0.0, 0.0, -0.0, -0.0, 0.0]
+0.0
+-0.0
+0.0
+-0.0
+none
+none
+[]
+[[0.5, nan], [1.0], [1.0, 2.0], [1.0, nan]]
+[1.0, nan]
+[0.5, nan]
+Ordering.Equal
+false
+true
+true
+true
+false
+false
+true
+true
+false
+[R(k: -inf, tag: "f"), R(k: 0.0, tag: "a"), R(k: -0.0, tag: "d"), R(k: 0.0, tag: "e"), R(k: 1.0, tag: "b"), R(k: nan, tag: "a"), R(k: nan, tag: "c")]
+R(k: -inf, tag: "f")
+R(k: nan, tag: "c")
+true
+false
+true
+true
+true
+true
+false
+Ordering.Equal
+[W(k: -0.0, tag: "d"), W(k: 0.0, tag: "e"), W(k: -0.0, tag: "f"), W(k: 1.0, tag: "b"), W(k: nan, tag: "a"), W(k: nan, tag: "c")]
+W(k: nan, tag: "a")
+W(k: -0.0, tag: "d")

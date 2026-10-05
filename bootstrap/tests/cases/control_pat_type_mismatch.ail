@@ -1,0 +1,33 @@
+# ADR 0138 expr.match.7: a literal pattern must have the scrutinee's type.
+fn char_vs_str(s str) int
+    match s
+        'a' => 1
+        _ => 0
+
+fn str_vs_char(c char) int
+    match c
+        "a" => 1
+        _ => 0
+
+fn str_vs_int(n int) int
+    match n
+        "a" => 1
+        _ => 0
+
+fn bool_vs_int(n int) int
+    match n
+        true => 1
+        _ => 0
+
+fn int_vs_bool(b bool) int
+    match b
+        0 => 1
+        _ => 0
+
+fn char_vs_int(n int) int
+    match n
+        'a' => 1
+        _ => 0
+
+fn main()
+    print(1)

@@ -1,0 +1,4 @@
+# type.char.3: a negative radix traps.
+fn main()
+    r := 0 - 16
+    print('a'.to_digit(r))
