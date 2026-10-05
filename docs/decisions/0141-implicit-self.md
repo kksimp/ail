@@ -36,10 +36,11 @@ tokens today):
 2. `self.x` and `self.f()` stay valid; the formatter writes the bare form.
    `self` alone still names the whole receiver.
 3. To keep a bare name unambiguous, a parameter or local of a method can't
-   have the name of a field or method of its receiver (an extension of
-   ADR 0044). A bare call whose name is both a method of the receiver and a
-   top-level function is a compile-time error that names both and suggests
-   `self.f()` or renaming.
+   have the name of a field of its receiver (an extension of ADR 0044). A
+   local may share a method's name (`pos := pos()`), since a method is only
+   reached through a call. A bare call whose name is both a method of the
+   receiver and a top-level function is a compile-time error that names both
+   and suggests `self.f()` or renaming.
 4. Associated functions (no `self`) see no fields or methods by bare name.
 
 ```ail
@@ -53,8 +54,8 @@ fn Parser.parse_value(mut self) !Json
 
 - A method body reads like a function body; whether a bare name is a local or
   a member is decided by whether the function declares it.
-- Adding a field or method to a type can make an existing method's local of
-  that name an error. That is the price of rule 3, and the error names the
+- Adding a field to a type can make an existing method's local of that name
+  an error. That is the price of rule 3, and the error names the
   new member.
 
 ## Rejected alternatives

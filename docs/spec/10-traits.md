@@ -46,9 +46,10 @@ the trait's methods. `self.x` stays valid, and the formatter writes `x`.
 Associated functions see no members by bare name. *(ADR 0141)*
 
 **trait.method.7** — A parameter or local of a method MUST NOT have the name
-of a field or method of its receiver. A bare call whose name is both a method
-of the receiver and a top-level or prelude function is a compile-time error;
-the help suggests `self.f()` or renaming. *(ADR 0141, ADR 0044)*
+of a field of its receiver; it may share a method's name, since a method is
+only reached through a call. A bare call whose name is both a method of the
+receiver and a top-level or prelude function is a compile-time error; the help
+suggests `self.f()` or renaming. *(ADR 0141, ADR 0044)*
 
 ```ail
 fn Parser.advance(mut self) char?
