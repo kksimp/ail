@@ -1,0 +1,6 @@
+fn divide(a int, b int) int
+    a / b
+
+fn main()
+    print(divide(7, 2))
+    print(divide(1, 0))

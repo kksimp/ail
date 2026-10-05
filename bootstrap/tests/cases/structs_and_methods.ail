@@ -1,0 +1,42 @@
+struct Point
+    x int
+    y int
+
+fn Point.origin() Point
+    Point(x: 0, y: 0)
+
+fn Point.sum(self) int
+    self.x + self.y
+
+fn Point.shift(mut self, dx int)
+    self.x += dx
+
+fn bump(mut p Point, by int)
+    p.y += by
+
+struct Team
+    name str
+    members List[Point]
+
+fn main()
+    a := Point(y: 2, x: 1)
+    mut b := a
+    b.x = 10
+    print("{a.x} {b.x}")
+    b.shift(5)
+    print(b.x)
+    bump(mut b, 7)
+    print(b.y)
+    print(Point.origin().sum())
+    mut t := Team(name: "red", members: [])
+    t.members.push(a)
+    t.members.push(b)
+    t.members[0].x += 100
+    print("{t.members.len()} {t.members[0].x} {a.x}")
+    copy := t.members
+    t.members[1].shift(1)
+    print("{copy[1].x} {t.members[1].x}")
+    mut xs := [3, 1, 4, 1, 5]
+    xs[1] = 9
+    middle := xs[1..4]
+    print("{middle.len()} {middle[0]} {xs[0..=1][1]}")

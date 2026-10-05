@@ -1,0 +1,11 @@
+fn twice(s str) str
+    "{s}{s}"
+
+fn main()
+    name := "Ada"
+    n := 3
+    print("{name} has {n} items")
+    print("nested: {twice("ab")}")
+    print("math: {n * 2 + 1}, bool: {n > 2}")
+    print("braces: \{n} and }")
+    print("{n}{n}")

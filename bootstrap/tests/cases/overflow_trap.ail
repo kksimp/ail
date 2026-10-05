@@ -1,0 +1,5 @@
+fn main()
+    mut n := 1
+    for i in 0..100
+        n *= 2
+    print(n)

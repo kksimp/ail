@@ -1,0 +1,8 @@
+struct P
+    x int
+
+fn main()
+    p := P(x: 1)
+    print(p.y)
+    p.go()
+    Q.make()

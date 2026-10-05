@@ -1,0 +1,10 @@
+enum Grade
+    A
+    B
+
+fn main()
+    g := Grade.A
+    match g
+        A => print("a")
+        B => print("b")
+        A => print("again")

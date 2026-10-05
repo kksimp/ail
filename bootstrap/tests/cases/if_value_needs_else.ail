@@ -1,0 +1,8 @@
+fn sign(n int) str
+    if n < 0
+        "negative"
+    elif n > 0
+        "positive"
+
+fn main()
+    print(sign(1))

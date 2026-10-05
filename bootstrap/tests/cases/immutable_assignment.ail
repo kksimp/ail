@@ -1,0 +1,19 @@
+struct P
+    x int
+
+fn P.reset(self)
+    self.x = 0
+
+fn P.bump(mut self)
+    self.x += 1
+
+fn set(p P)
+    p.x = 1
+
+fn main()
+    n := 1
+    n = 2
+    for i in 0..3
+        i += 1
+    p := P(x: 1)
+    p.bump()

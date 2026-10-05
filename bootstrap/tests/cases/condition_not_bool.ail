@@ -1,0 +1,6 @@
+fn main()
+    n := 3
+    if n
+        print("yes")
+    while "x"
+        print("no")

@@ -2,8 +2,11 @@
 //!
 //! - `examples/NAME.ail` + `NAME.out`: must run and print exactly `NAME.out`.
 //! - `bootstrap/tests/cases/NAME.ail` + `NAME.out`: same.
-//! - `bootstrap/tests/cases/NAME.ail` + `NAME.rules`: must be rejected, and
-//!   the diagnostics' spec rule IDs (in report order) must equal the file's lines.
+//! - `NAME.ail` + `NAME.rules`: the diagnostics' spec rule IDs (in report
+//!   order) must equal the file's lines. The program must be rejected (exit 2)
+//!   if any of them is an error; with only warnings, it is accepted (exit 0).
+//! - `NAME.ail` + `NAME.trap`: must trap (exit 1) with the rule ID in the
+//!   file, after printing exactly `NAME.out` if that exists.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -26,8 +29,22 @@ fn ail_files(dir: &Path) -> Vec<PathBuf> {
 fn check_case(path: &Path) -> Result<(), String> {
     let out_file = path.with_extension("out");
     let rules_file = path.with_extension("rules");
+    let trap_file = path.with_extension("trap");
     let name = path.display();
-    if out_file.exists() {
+    if trap_file.exists() {
+        let out = ail().arg("run").arg(path).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let rule = fs::read_to_string(&trap_file).unwrap().trim().to_string();
+        if out.status.code() != Some(1) || !stderr.contains(&format!("trap[{rule}]")) {
+            return Err(format!("{name}: expected trap[{rule}] (exit 1), got {:?}\n{stderr}", out.status.code()));
+        }
+        let expected = fs::read_to_string(&out_file).unwrap_or_default();
+        if stdout != expected {
+            return Err(format!("{name}: output differs\n--- expected\n{expected}--- actual\n{stdout}"));
+        }
+        Ok(())
+    } else if out_file.exists() {
         let out = ail().arg("run").arg(path).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         let expected = fs::read_to_string(&out_file).unwrap();
@@ -40,10 +57,11 @@ fn check_case(path: &Path) -> Result<(), String> {
         Ok(())
     } else if rules_file.exists() {
         let out = ail().args(["check", "--json"]).arg(path).output().unwrap();
-        if out.status.code() != Some(2) {
-            return Err(format!("{name}: expected rejection (exit 2), got {:?}", out.status.code()));
-        }
         let stderr = String::from_utf8_lossy(&out.stderr);
+        let want_exit = if stderr.contains("\"severity\":\"error\"") { 2 } else { 0 };
+        if out.status.code() != Some(want_exit) {
+            return Err(format!("{name}: expected exit {want_exit}, got {:?}\n{stderr}", out.status.code()));
+        }
         let got: Vec<String> = stderr
             .lines()
             .filter_map(|l| l.split("\"rule\":\"").nth(1))
@@ -55,7 +73,7 @@ fn check_case(path: &Path) -> Result<(), String> {
         }
         Ok(())
     } else {
-        Err(format!("{name}: needs a .out or .rules file"))
+        Err(format!("{name}: needs a .out, .rules or .trap file"))
     }
 }
 

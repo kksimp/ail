@@ -1,0 +1,19 @@
+# Regression test: `mut` receivers and arguments are moved for the call, not
+# copied, so building a list through methods takes linear time.
+struct Bag
+    items List[int]
+
+fn Bag.add(mut self, x int)
+    self.items.push(x)
+
+fn fill(mut b Bag, n int)
+    for i in 0..n
+        b.add(i)
+
+fn main()
+    mut bag := Bag(items: [])
+    fill(mut bag, 100000)
+    for i in 0..100000
+        bag.items.push(i)
+    print(bag.items.len())
+    print(bag.items[199999])
