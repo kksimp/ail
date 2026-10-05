@@ -26,7 +26,7 @@ use builtins::builtin;
 use traits::{Cand, bind, bound, subst, subst_unknown};
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Owner, PathStep, Pattern, Program,
+    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep, Pattern, Program,
     Stmt, TypeKind, TypeRef, UnOp, Within, is_prelude, place_path,
 };
 use crate::diag::{Diagnostic, Pos};
@@ -2431,6 +2431,7 @@ impl<'p> Checker<'p> {
         let k = self.elements(&keys, kh, "type.coll.2", "map keys");
         let v = self.elements(&vals, vh, "type.coll.2", "map values");
         self.require_key(&k, pos);
+        self.duplicate_literals(&keys, "key");
         Ty::Map(Box::new(k), Box::new(v))
     }
 
@@ -2447,7 +2448,38 @@ impl<'p> Checker<'p> {
         let items: Vec<&'p Expr> = items.iter().collect();
         let t = self.elements(&items, hint, "type.coll.2", "set elements");
         self.require_key(&t, pos);
+        self.duplicate_literals(&items, "element");
         Ty::Set(Box::new(t))
+    }
+
+    /// Report a key or element written twice as the same literal (type.map.1).
+    fn duplicate_literals(&mut self, items: &[&'p Expr], what: &str) {
+        let mut seen: Vec<(Literal, Pos)> = Vec::new();
+        for e in items {
+            let lit = match e {
+                Expr::Int(n, _) => Literal::Int(*n),
+                Expr::Unary { op: UnOp::Neg, operand, .. } => match &**operand {
+                    Expr::Int(n, _) => Literal::Int(n.wrapping_neg()),
+                    _ => continue,
+                },
+                Expr::Str(s, _) => Literal::Str(s.clone()),
+                Expr::Char(c, _) => Literal::Char(*c),
+                Expr::Bool(b, _) => Literal::Bool(*b),
+                _ => continue,
+            };
+            match seen.iter().find(|(l, _)| *l == lit) {
+                Some((_, first)) => {
+                    let (line, col) = (first.line, first.col);
+                    self.error_help(
+                        "type.map.1",
+                        e.pos(),
+                        format!("this {what} is written twice in the literal"),
+                        format!("the first is at {line}:{col}; remove one"),
+                    );
+                }
+                None => seen.push((lit, e.pos())),
+            }
+        }
     }
 
     /// The common type of a literal's elements: the expected one, which each

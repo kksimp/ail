@@ -1092,7 +1092,12 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Option<Expr> {
-        if self.at_sym("-") && matches!(self.peek_at(1), Tok::IntMin) {
+        // lex.num.3: `-9223372036854775808` is the minimum `int`, unless a
+        // postfix operator binds the literal first.
+        if self.at_sym("-")
+            && matches!(self.peek_at(1), Tok::IntMin)
+            && !matches!(self.peek_at(2), Tok::Sym("." | "[" | "("))
+        {
             let pos = self.bump().pos;
             self.i += 1;
             return Some(Expr::Int(i64::MIN, pos));

@@ -406,7 +406,8 @@ fn int_method(n: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> 
         "checked_mul" => checked(n.checked_mul(m())),
         "checked_div" => checked(n.checked_div(m())),
         "checked_neg" => checked(n.checked_neg()),
-        "checked_rem" => checked(n.checked_rem(m())),
+        // expr.arith.5: `a % -1` is 0 for every `a`, so it never overflows.
+        "checked_rem" => checked(if m() == -1 { Some(0) } else { n.checked_rem(m()) }),
         "wrapping_neg" => Value::Int(n.wrapping_neg()),
         "wrapping_add" => Value::Int(n.wrapping_add(m())),
         "wrapping_sub" => Value::Int(n.wrapping_sub(m())),
