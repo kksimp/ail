@@ -1,0 +1,78 @@
+error enum CommandError
+    Empty
+    UnknownVerb(verb str)
+    MissingArgument(verb str)
+    BadQuantity(text str)
+
+enum Command
+    Add(item str, qty int)
+    Remove(item str)
+    Show
+
+struct Entry
+    item str
+    qty int
+
+fn parse(line str) Command ! CommandError
+    words := line.split(" ")
+    verb := words[0]
+    if verb == ""
+        return Empty
+    if verb == "show"
+        return Show
+    if words.len() < 2
+        return MissingArgument(verb: verb)
+    if verb == "remove"
+        return Remove(item: words[1])
+    if verb != "add"
+        return UnknownVerb(verb: verb)
+    if words.len() < 3
+        return MissingArgument(verb: verb)
+    qty := words[2].to_int() else return BadQuantity(text: words[2])
+    Add(item: words[1], qty: qty)
+
+fn apply(mut stock List[Entry], cmd Command)
+    match cmd
+        Add(item, qty) =>
+            for mut entry in stock
+                if entry.item == item
+                    entry.qty += qty
+                    return
+            stock.push(Entry(item: item, qty: qty))
+        Remove(item) =>
+            for mut entry in stock
+                if entry.item == item
+                    entry.qty = 0
+        Show =>
+            for entry in stock
+                if entry.qty > 0
+                    print("  {entry.item}: {entry.qty}")
+
+fn total_added(lines List[str]) !int
+    mut total := 0
+    for line in lines
+        cmd := parse(line)? "reading \"{line}\""
+        total += match cmd
+            Add(_, qty) => qty
+            Remove(_) => 0
+            Show => 0
+    total
+
+fn main() !
+    lines := [
+        "add milk 2",
+        "add eggs 12",
+        "add milk 1",
+        "remove eggs",
+        "add tea lots",
+        "sell milk 1",
+        "",
+        "show",
+    ]
+    mut stock := [Entry(item: "bread", qty: 1)]
+    for line in lines
+        cmd := parse(line) else err
+            print("error: {err}")
+            continue
+        apply(mut stock, cmd)
+    print("added: {total_added(lines[0..4])?}")

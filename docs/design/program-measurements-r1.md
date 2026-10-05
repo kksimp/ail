@@ -84,9 +84,48 @@ failure):
 - A broader round (larger programs, more model families, tasks needing error
   handling) should follow each milestone.
 
+## Round 2: error handling (milestone 3)
+
+**Tokens.** `commands`, a command parser that reports bad input as errors,
+was written idiomatically in Python (exceptions), Go (`if err != nil`) and
+Rust (`Result` and `?`), with byte-identical output to AIL:
+
+| Language | Tokens | AIL vs. this language |
+|---|---|---|
+| **AIL** | **526.2** | — |
+| Python | 677.2 | −22% |
+| Go | 852.8 | −38% |
+| Rust | 901.6 | −42% |
+
+The gap is wider than in round 1. Errors are where the savings compound:
+- `?` and `else` replace Go's `if err != nil { return ... }` and Rust's
+  `map_err` closures;
+- bare variants make `return BadQuantity(text: s)` short;
+- the default error form (`err.text.1`) replaces hand-written `Display` or
+  `__str__` code.
+
+**AI usability.** The same method as round 1, with two tasks needing errors:
+a config parser with an error enum carrying data, and a `?`-propagating
+total with context that ends `main` with an error report.
+
+| Task | Small model | Mid-size model |
+|---|---|---|
+| Config parser | 2 attempts | 1 |
+| Total with `?` and context | 1 | 1 |
+
+- 3 of 4 first attempts ran correctly, and 4 of 4 by the second.
+- The failed first attempt compiled, but its `else err` block ended `main`
+  with `return`, so later inputs were never parsed.
+- Both config-parser agents needed a helper function to print "the result or
+  the error" and carry on. `else` must supply a value or leave, and nothing
+  else handles success or failure as a statement. This is now part of
+  [OQ-029](../open-questions.md).
+
 ## Follow-ups
 
 - Quick reference: the gaps above are now covered.
 - Diagnostics: when `:=` redeclares a visible `mut` name, the help will
   suggest assigning with `=` (with milestone 3).
-- [OQ-038](../open-questions.md): in-place iteration over list elements.
+- [OQ-038](../open-questions.md): in-place iteration over list elements
+  (resolved by ADR 0121).
+- [OQ-029](../open-questions.md): handling success or failure as a statement.
