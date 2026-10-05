@@ -27,8 +27,8 @@ the sign of `a`, so that `a == (a / b) * b + a % b`. For example,
 
 ## Consequences
 
-- \`a % -1\` is \`0\` for every \`a\`, including the minimum value: the result
-  is representable, so unlike \`a / -1\` it doesn't trap (\`expr.arith.3\`).
+- `a % -1` is `0` for every `a`, including the minimum value: the result
+  is representable, so unlike `a / -1` it doesn't trap (`expr.arith.3`).
   On x86-64 the compiler adds the same check it needs for division.
 
 - Floor and Euclidean division and remainder (useful for wrap-around indexes)
