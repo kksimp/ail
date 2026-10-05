@@ -1,0 +1,14 @@
+@derive(ToStr)
+struct Point
+    x int
+    y int
+
+@derive(ToStr)
+enum Dir
+    North
+    South
+
+fn main()
+    p := Point(x: 1, y: 2)
+    d := North
+    print("{p} heading {d}")

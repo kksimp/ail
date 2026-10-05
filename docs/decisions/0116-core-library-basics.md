@@ -1,6 +1,6 @@
 # 0116. Sizes and indexes are `int`; list basics; text forms of `int`, `bool` and `str`
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0127](0127-standard-comparison-and-text-traits.md) (`str` gains ordering)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 4 — Type system; 21 — Standard library

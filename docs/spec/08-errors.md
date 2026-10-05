@@ -136,11 +136,11 @@ additionally attaches `m` to the propagated error as context. *(ADR 0050)*
 **err.ctx.3** — Error reports MUST present the error, every attached context
 message, and the return trace. *(ADR 0050)*
 
-**err.text.1** — Until the formatting trait is designed, an error value's
-text form is its type name, then `.Variant` for an enum, then its fields as
-`(name: value, ...)` when it has any, with strings quoted:
-`ParseError.BadNumber(text: "x1")`. This form is used in error reports and
-when an error value is interpolated. *(ADR 0122)*
+**err.text.1** — An error report shows the error value's text form
+(`trait.std.3`). By default it is the type name, then `.Variant` for an enum,
+then the fields as `(name: value, ...)` when there are any, with strings
+quoted: `ParseError.BadNumber(text: "x1")` (`trait.auto.2`). *(ADR 0122,
+ADR 0126)*
 
 ```ail
 cfg := parse(text)? "parsing config file"

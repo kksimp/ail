@@ -1,0 +1,9 @@
+struct Version
+    major int
+    minor int
+
+impl Ord for Version
+    fn less(self, other Self) bool
+        if self.major != other.major
+            return self.major < other.major
+        self.minor < other.minor

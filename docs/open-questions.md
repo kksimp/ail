@@ -156,3 +156,17 @@ will be raised as questions under their respective topics.
 
 The 28 design topics in [status.md](status.md) each still need their own
 questions. They will be opened topic by topic during Stage 1.
+
+## OQ-039 — Supertraits and associated functions in traits
+How does a user trait require another (`Ord` requires `Eq`, ADR 0127), and
+can a trait declare functions without `self`, called as `T.zero()` in generic
+code? Options for supertraits:
+- `trait Ord Eq`, mirroring constraints (`[T Eq]`): consistent, but reads
+  oddly;
+- `trait Ord: Eq` (Rust, Swift): familiar, but AIL writes no `:` in
+  declarations (ADR 0037).
+
+Associated functions in traits need the concrete type at run time in shared
+generic code (ADR 0080), as Swift's witness tables provide. To be decided
+with the standard library (`Default`, numeric `zero`). *Owner: AI under ADR
+0076.*

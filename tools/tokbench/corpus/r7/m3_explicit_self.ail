@@ -1,0 +1,41 @@
+struct Stack[T]
+    items List[T]
+
+fn Stack[T].new() Self
+    Stack(items: [])
+
+fn Stack[T].push(mut self, x T)
+    self.items.push(x)
+
+fn Stack[T].pop(mut self) T?
+    if self.items.len() == 0
+        return none
+    self.items.pop()
+
+fn Stack[T].peek(self) T?
+    n := self.items.len()
+    if n == 0
+        return none
+    self.items[n - 1]
+
+fn Stack[T].len(self) int
+    self.items.len()
+
+struct Pair[A, B]
+    first A
+    second B
+
+fn Pair[A, B].swap(self) Pair[B, A]
+    Pair(first: self.second, second: self.first)
+
+impl Show for Stack[T]
+    fn show(self) str
+        "Stack{self.items}"
+
+fn main()
+    mut s := Stack[int].new()
+    s.push(1)
+    s.push(2)
+    top := s.pop() else 0
+    p := Pair(first: 1, second: "a")
+    print("{top} {s.len()} {p.swap()}")

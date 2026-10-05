@@ -1,0 +1,9 @@
+struct Version
+    major int
+    minor int
+
+impl Ord for Version
+    fn cmp(self, other Self) Order
+        if self.major != other.major
+            return self.major.cmp(other.major)
+        self.minor.cmp(other.minor)

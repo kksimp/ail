@@ -132,7 +132,8 @@ character access go through explicit views (`s.bytes`, `s.chars()`).
 **type.str.3** — The text form of an `int` is its decimal representation,
 with a leading `-` when negative. The text form of a `bool` is `true` or
 `false`, and of a `str` is the string itself. `bool` and `str` support `==`
-and `!=`; `str` equality compares UTF-8 bytes. *(ADR 0116)*
+and `!=`; `str` equality compares UTF-8 bytes. `str` also supports `<`, `<=`,
+`>` and `>=` (`trait.std.4`). *(ADR 0116, ADR 0127)*
 
 **type.str.4** — `s.split(sep)` returns a `List[str]` of the pieces of `s`
 between occurrences of `sep`, keeping empty pieces, so `n` occurrences give

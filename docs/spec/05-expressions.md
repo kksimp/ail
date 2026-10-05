@@ -49,7 +49,8 @@ called function, in order. *(ADR 0108)*
 
 **expr.call.2** — Each argument's type MUST equal the corresponding parameter's
 type, or satisfy its constraint for a generic parameter. No implicit conversion
-applies, except optional wrapping (`type.opt.5`). *(ADR 0108)*
+applies, except optional wrapping (`type.opt.5`) and conversion to `any Trait`
+(`trait.any.3`). *(ADR 0108, ADR 0129)*
 
 ## Blocks
 
@@ -148,6 +149,12 @@ MUST be a mutable place. *(ADR 0092)*
 
 **expr.op.3** — Every method call is written with parentheses, including
 calls with no arguments. *(ADR 0092)*
+
+**expr.cmp.1** — In `a == b`, `a != b`, `a < b`, `a <= b`, `a > b` and
+`a >= b`, both operands have the same type, and the expected type of `b` is
+the type of `a` (so `d == East` needs no qualification, `type.enum.3`).
+`==` and `!=` need a type implementing `Eq`; the others need `Ord`
+(`trait.std.1–2`). *(ADR 0129, ADR 0127)*
 
 ## Match
 

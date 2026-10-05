@@ -1,0 +1,16 @@
+struct Point
+    x int
+    y int
+
+enum Dir
+    North
+    South
+
+impl ToStr for Point
+
+impl ToStr for Dir
+
+fn main()
+    p := Point(x: 1, y: 2)
+    d := North
+    print("{p} heading {d}")

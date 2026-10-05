@@ -1,6 +1,6 @@
 # 0073. Types implement traits explicitly with `impl Trait for Type`
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0126](0126-automatic-equality-and-text.md) (`Eq` and `ToStr` are implemented automatically)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 10 — Traits/interfaces

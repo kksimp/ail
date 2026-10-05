@@ -1,0 +1,27 @@
+enum Dir
+    North
+    East
+    South
+    West
+
+struct Point
+    x int
+    y int
+
+fn step(p Point, d Dir) Point
+    match d
+        North => Point(x: p.x, y: p.y + 1)
+        East => Point(x: p.x + 1, y: p.y)
+        South => Point(x: p.x, y: p.y - 1)
+        West => Point(x: p.x - 1, y: p.y)
+
+fn main()
+    mut p := Point(x: 0, y: 0)
+    start := p
+    for d in [North, East, South, West]
+        p = step(p, d)
+        match d
+            East => print("turned east")
+            _ => print("moved")
+    if p.x == start.x and p.y == start.y
+        print("back home")

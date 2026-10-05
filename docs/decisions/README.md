@@ -131,3 +131,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0123](0123-variants-with-data.md) | Variants with data are built with named fields and matched by position *(delegated)* | Accepted | 2026-10-05 |
 | [0124](0124-string-split-and-to-int.md) | `s.split(sep)` and `s.to_int()` *(delegated)* | Accepted | 2026-10-05 |
 | [0125](0125-if-binding.md) | `if x := e` handles success or absence as a statement; `else err` binds the error *(delegated)* | Accepted | 2026-10-05 |
+| [0126](0126-automatic-equality-and-text.md) | Every type gets `==` and a text form automatically (amends 0073) | Accepted | 2026-10-05 |
+| [0127](0127-standard-comparison-and-text-traits.md) | The standard traits `Eq`, `Ord` and `ToStr`; an empty `impl` derives them *(delegated)* | Accepted | 2026-10-05 |
+| [0128](0128-methods-on-generic-types.md) | Methods and `impl`s on a generic type use its bare name; `Self` *(delegated)* | Accepted | 2026-10-05 |
+| [0129](0129-using-generics-and-traits.md) | Type arguments are inferred; values convert to `any Trait` implicitly; rules for `impl` blocks and `any` calls *(delegated)* | Accepted | 2026-10-05 |

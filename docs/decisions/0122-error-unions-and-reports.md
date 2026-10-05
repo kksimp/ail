@@ -1,6 +1,6 @@
 # 0122. Error unions are written `A | B`; `?` needs a matching error type; failures must be handled; the default error form
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0126](0126-automatic-equality-and-text.md) (the default error form becomes every value's default text form)
 - **Date:** 2026-10-05
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 8 — Error handling
