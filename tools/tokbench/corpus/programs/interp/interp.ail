@@ -1,0 +1,675 @@
+MAX_DEPTH := 200
+KEYWORDS := {"let", "if", "else", "while", "fn", "return", "true", "false", "and", "or", "not"}
+TWO_CHAR_OPS := {"==", "!=", "<=", ">="}
+ONE_CHAR_OPS := r"+-*/%<>=(){},"
+ESCAPES := {'n': '\n', '"': '"', '\\': '\\'}
+BINARY_LEVELS := [
+    ["or"],
+    ["and"],
+    ["==", "!="],
+    ["<", "<=", ">", ">="],
+    ["+", "-"],
+    ["*", "/", "%"],
+]
+struct Pos
+    line int
+    col int
+error struct MiniError
+    pos Pos
+    msg str
+enum TokKind
+    Int
+    Str
+    Ident
+    Keyword
+    Op
+    End
+struct Token
+    kind TokKind
+    text str
+    pos Pos
+fn Token.describe(self) str
+    match self.kind
+        End => "end of input"
+        Int => "number {self.text}"
+        Str => "string"
+        Ident | Keyword | Op => "'{self.text}'"
+struct Lexer
+    chars List[char]
+    i int
+    line int
+    col int
+fn Lexer.new(src str) Lexer
+    Lexer(chars: src.chars(), i: 0, line: 1, col: 1)
+fn Lexer.peek_at(self, offset int) char
+    j := self.i + offset
+    if j < self.chars.len()
+        return self.chars[j]
+    '\0'
+fn Lexer.peek(self) char
+    self.peek_at(0)
+fn Lexer.pos(self) Pos
+    Pos(line: self.line, col: self.col)
+fn Lexer.advance(mut self) char
+    c := self.chars[self.i]
+    self.i += 1
+    if c == '\n'
+        self.line += 1
+        self.col = 1
+    else
+        self.col += 1
+    c
+fn Lexer.text_from(self, start int) str
+    self.chars[start..self.i].join("")
+fn Lexer.skip_blank(mut self)
+    while true
+        match self.peek()
+            ' ' | '\n' | '\t' | '\r' => self.advance()
+            '/' =>
+                if self.peek_at(1) != '/'
+                    return
+                while self.peek() != '\0' and self.peek() != '\n'
+                    self.advance()
+            _ => return
+fn Lexer.token(mut self) Token ! MiniError
+    pos := self.pos()
+    c := self.peek()
+    if c.is_digit()
+        start := self.i
+        while self.peek().is_digit()
+            self.advance()
+        return Token(kind: Int, text: self.text_from(start), pos: pos)
+    if c.is_alpha() or c == '_'
+        start := self.i
+        while self.peek().is_alnum() or self.peek() == '_'
+            self.advance()
+        word := self.text_from(start)
+        kind := if KEYWORDS.contains(word)
+            TokKind.Keyword
+        else
+            Ident
+        return Token(kind: kind, text: word, pos: pos)
+    if c == '"'
+        return self.string(pos)
+    if TWO_CHAR_OPS.contains("{c}{self.peek_at(1)}")
+        self.advance()
+        self.advance()
+        return Token(kind: Op, text: self.text_from(self.i - 2), pos: pos)
+    if ONE_CHAR_OPS.contains(c)
+        self.advance()
+        return Token(kind: Op, text: "{c}", pos: pos)
+    MiniError(pos: pos, msg: "unexpected character '{c}'")
+fn Lexer.string(mut self, pos Pos) Token ! MiniError
+    self.advance()
+    mut parts := List[char]()
+    while true
+        match self.peek()
+            '\0' | '\n' => return MiniError(pos: pos, msg: "unterminated string")
+            '"' => break
+            '\\' =>
+                escape_pos := self.pos()
+                self.advance()
+                e := self.peek()
+                if e == '\0' or e == '\n'
+                    continue
+                decoded := ESCAPES.get(e) else return MiniError(pos: escape_pos, msg: "unknown escape '\\{e}'")
+                self.advance()
+                parts.push(decoded)
+            _ => parts.push(self.advance())
+    self.advance()
+    Token(kind: Str, text: parts.join(""), pos: pos)
+fn tokenize(src str) List[Token] ! MiniError
+    mut lexer := Lexer.new(src)
+    mut tokens := List[Token]()
+    while true
+        lexer.skip_blank()
+        if lexer.peek() == '\0'
+            tokens.push(Token(kind: End, text: "", pos: lexer.pos()))
+            return tokens
+        tokens.push(lexer.token()?)
+enum Expr
+    IntLit(pos Pos, value int)
+    StrLit(pos Pos, value str)
+    BoolLit(pos Pos, value bool)
+    Var(pos Pos, name str)
+    Unary(pos Pos, op str, operand Expr)
+    Binary(pos Pos, op str, left Expr, right Expr)
+    Call(pos Pos, name str, args List[Expr])
+fn Expr.pos(self) Pos
+    match self
+        IntLit(pos, _) => pos
+        StrLit(pos, _) => pos
+        BoolLit(pos, _) => pos
+        Var(pos, _) => pos
+        Unary(pos, _, _) => pos
+        Binary(pos, _, _, _) => pos
+        Call(pos, _, _) => pos
+struct FnDef
+    name str
+    params List[str]
+    body List[Stmt]
+enum Stmt
+    Let(pos Pos, name str, value Expr)
+    Assign(pos Pos, name str, value Expr)
+    If(pos Pos, cond Expr, then_body List[Stmt], else_body List[Stmt])
+    While(pos Pos, cond Expr, body List[Stmt])
+    FnDecl(def FnDef)
+    Return(pos Pos, value Expr?)
+    ExprStmt(expr Expr)
+struct Parser
+    tokens List[Token]
+    i int
+fn Parser.peek(self) Token
+    self.tokens[self.i]
+fn Parser.peek_next(self) Token
+    self.tokens[(self.i + 1).min(self.tokens.len() - 1)]
+fn Parser.advance(mut self) Token
+    tok := self.peek()
+    if tok.kind != End
+        self.i += 1
+    tok
+fn Parser.at_any(self, ops List[str]) bool
+    tok := self.peek()
+    (tok.kind == Op or tok.kind == Keyword) and ops.contains(tok.text)
+fn Parser.at(self, text str) bool
+    self.at_any([text])
+fn Parser.expected(self, what str) MiniError
+    tok := self.peek()
+    MiniError(pos: tok.pos, msg: "expected {what} but found {tok.describe()}")
+fn Parser.expect(mut self, text str) Token ! MiniError
+    if not self.at(text)
+        return self.expected("'{text}'")
+    self.advance()
+fn Parser.expect_ident(mut self) str ! MiniError
+    if self.peek().kind != Ident
+        return self.expected("identifier")
+    self.advance().text
+fn Parser.program(mut self) List[Stmt] ! MiniError
+    mut stmts := List[Stmt]()
+    while self.peek().kind != End
+        stmts.push(self.statement()?)
+    stmts
+fn Parser.block(mut self) List[Stmt] ! MiniError
+    self.expect("\{")?
+    mut stmts := List[Stmt]()
+    while not self.at("}")
+        if self.peek().kind == End
+            return self.expected("'}'")
+        stmts.push(self.statement()?)
+    self.advance()
+    stmts
+fn Parser.statement(mut self) Stmt ! MiniError
+    tok := self.peek()
+    pos := tok.pos
+    if self.at("let")
+        self.advance()
+        name := self.expect_ident()?
+        self.expect("=")?
+        return Let(pos: pos, name: name, value: self.expression(0)?)
+    if self.at("if")
+        return self.if_statement()
+    if self.at("while")
+        self.advance()
+        cond := self.expression(0)?
+        return While(pos: pos, cond: cond, body: self.block()?)
+    if self.at("fn")
+        self.advance()
+        name := self.expect_ident()?
+        self.expect("(")?
+        mut params := List[str]()
+        if not self.at(")")
+            params.push(self.expect_ident()?)
+            while self.at(",")
+                self.advance()
+                params.push(self.expect_ident()?)
+        self.expect(")")?
+        return FnDecl(def: FnDef(name: name, params: params, body: self.block()?))
+    if self.at("return")
+        self.advance()
+        if self.at("}")
+            return Return(pos: pos, value: none)
+        return Return(pos: pos, value: self.expression(0)?)
+    next := self.peek_next()
+    if tok.kind == Ident and next.kind == Op and next.text == "="
+        self.advance()
+        self.advance()
+        return Assign(pos: pos, name: tok.text, value: self.expression(0)?)
+    ExprStmt(expr: self.expression(0)?)
+fn Parser.if_statement(mut self) Stmt ! MiniError
+    pos := self.expect("if")?.pos
+    cond := self.expression(0)?
+    then_body := self.block()?
+    mut else_body := List[Stmt]()
+    if self.at("else")
+        self.advance()
+        else_body = if self.at("if")
+            [self.if_statement()?]
+        else
+            self.block()?
+    If(pos: pos, cond: cond, then_body: then_body, else_body: else_body)
+fn Parser.expression(mut self, level int) Expr ! MiniError
+    if level == BINARY_LEVELS.len()
+        return self.unary()
+    mut left := self.expression(level + 1)?
+    while self.at_any(BINARY_LEVELS[level])
+        op := self.advance()
+        right := self.expression(level + 1)?
+        left = Binary(pos: op.pos, op: op.text, left: left, right: right)
+    left
+fn Parser.unary(mut self) Expr ! MiniError
+    if self.at("-") or self.at("not")
+        op := self.advance()
+        return Unary(pos: op.pos, op: op.text, operand: self.unary()?)
+    self.primary()
+fn Parser.primary(mut self) Expr ! MiniError
+    tok := self.peek()
+    match tok.kind
+        Int =>
+            self.advance()
+            value := tok.text.to_int() else return MiniError(pos: tok.pos, msg: "number too large")
+            IntLit(pos: tok.pos, value: value)
+        Str =>
+            self.advance()
+            StrLit(pos: tok.pos, value: tok.text)
+        Ident =>
+            self.advance()
+            if not self.at("(")
+                return Var(pos: tok.pos, name: tok.text)
+            self.advance()
+            mut args := List[Expr]()
+            if not self.at(")")
+                args.push(self.expression(0)?)
+                while self.at(",")
+                    self.advance()
+                    args.push(self.expression(0)?)
+            self.expect(")")?
+            Call(pos: tok.pos, name: tok.text, args: args)
+        Keyword =>
+            if tok.text != "true" and tok.text != "false"
+                return self.expected("expression")
+            self.advance()
+            BoolLit(pos: tok.pos, value: tok.text == "true")
+        Op =>
+            if tok.text != "("
+                return self.expected("expression")
+            self.advance()
+            inner := self.expression(0)?
+            self.expect(")")?
+            inner
+        End => self.expected("expression")
+enum Value
+    Int(n int)
+    Str(s str)
+    Bool(b bool)
+    Nil
+fn Value.type_name(self) str
+    match self
+        Int(_) => "int"
+        Str(_) => "str"
+        Bool(_) => "bool"
+        Nil => "nil"
+fn Value.as_int(self) int?
+    match self
+        Int(n) => n
+        Str(_) | Bool(_) | Nil => none
+fn Value.as_str(self) str?
+    match self
+        Str(s) => s
+        Int(_) | Bool(_) | Nil => none
+fn Value.as_bool(self) bool?
+    match self
+        Bool(b) => b
+        Int(_) | Str(_) | Nil => none
+impl ToStr for Value
+    fn to_str(self) str
+        match self
+            Int(n) => "{n}"
+            Str(s) => s
+            Bool(b) => "{b}"
+            Nil => "nil"
+enum Flow
+    Next
+    Returned(value Value)
+struct Env
+    scopes List[Map[str, Value]]
+    base int
+fn Env.find(self, name str) int?
+    mut k := self.scopes.len()
+    while k > self.base
+        k -= 1
+        if self.scopes[k].contains(name)
+            return k
+    if self.scopes[0].contains(name)
+        return 0
+    none
+fn Env.get(self, name str) Value?
+    k := self.find(name)?
+    self.scopes[k].get(name)
+struct Interp
+    env Env
+    functions Map[str, FnDef]
+    depth int
+fn Interp.new() Interp
+    Interp(env: Env(scopes: [{}], base: 0), functions: {}, depth: 0)
+fn undefined_variable(pos Pos, name str) MiniError
+    MiniError(pos: pos, msg: "undefined variable '{name}'")
+fn checked(pos Pos, result int?) Value ! MiniError
+    n := result else return MiniError(pos: pos, msg: "integer overflow")
+    Int(n: n)
+fn Interp.run(mut self, program List[Stmt]) !
+    self.exec_all(program)?
+fn Interp.exec_all(mut self, body List[Stmt]) Flow ! MiniError
+    for stmt in body
+        flow := self.exec(stmt)?
+        if flow != Next
+            return flow
+    Next
+fn Interp.exec_block(mut self, body List[Stmt]) Flow ! MiniError
+    self.env.scopes.push({})
+    flow := self.exec_all(body)?
+    self.env.scopes.pop()
+    flow
+fn Interp.exec(mut self, stmt Stmt) Flow ! MiniError
+    match stmt
+        Let(_, name, value) => self.env.scopes[self.env.scopes.len() - 1][name] = self.eval(value)?
+        Assign(pos, name, value) =>
+            k := self.env.find(name) else return undefined_variable(pos, name)
+            self.env.scopes[k][name] = self.eval(value)?
+        If(_, cond, then_body, else_body) =>
+            if self.condition(cond)?
+                return self.exec_block(then_body)
+            return self.exec_block(else_body)
+        While(_, cond, body) =>
+            while self.condition(cond)?
+                flow := self.exec_block(body)?
+                if flow != Next
+                    return flow
+        FnDecl(def) => self.functions[def.name] = def
+        Return(_, value) =>
+            if e := value
+                return Returned(value: self.eval(e)?)
+            return Returned(value: Nil)
+        ExprStmt(e) => self.eval(e)?
+    Next
+fn Interp.condition(mut self, e Expr) bool ! MiniError
+    v := self.eval(e)?
+    b := v.as_bool() else return MiniError(pos: e.pos(), msg: "type mismatch: condition must be bool, got {v.type_name()}")
+    b
+fn Interp.eval(mut self, e Expr) Value ! MiniError
+    match e
+        IntLit(_, n) => Int(n: n)
+        StrLit(_, s) => Str(s: s)
+        BoolLit(_, b) => Bool(b: b)
+        Var(pos, name) =>
+            v := self.env.get(name) else return undefined_variable(pos, name)
+            v
+        Unary(pos, op, operand) =>
+            v := self.eval(operand)?
+            if op == "-"
+                if n := v.as_int()
+                    return checked(pos, n.checked_neg())
+            if op == "not"
+                if b := v.as_bool()
+                    return Bool(b: not b)
+            MiniError(pos: pos, msg: "type mismatch: cannot apply '{op}' to {v.type_name()}")
+        Binary(pos, op, left, right) =>
+            if op == "and" or op == "or"
+                return self.logical(pos, op, left, right)
+            binary(pos, op, self.eval(left)?, self.eval(right)?)
+        Call(pos, name, args) =>
+            mut values := List[Value]()
+            for arg in args
+                values.push(self.eval(arg)?)
+            self.call(pos, name, values)
+fn Interp.logical(mut self, pos Pos, op str, left Expr, right Expr) Value ! MiniError
+    a := self.eval(left)?
+    x := a.as_bool() else return MiniError(pos: pos, msg: "type mismatch: '{op}' needs bool operands, got {a.type_name()}")
+    if (op == "and" and not x) or (op == "or" and x)
+        return a
+    b := self.eval(right)?
+    if b.as_bool() == none
+        return MiniError(pos: pos, msg: "type mismatch: '{op}' needs bool operands, got {b.type_name()}")
+    b
+fn binary(pos Pos, op str, a Value, b Value) Value ! MiniError
+    if op == "=="
+        return Bool(b: a == b)
+    if op == "!="
+        return Bool(b: a != b)
+    if op == "+"
+        if sa := a.as_str()
+            if sb := b.as_str()
+                return Str(s: "{sa}{sb}")
+    mismatch := MiniError(pos: pos, msg: "type mismatch: cannot apply '{op}' to {a.type_name()} and {b.type_name()}")
+    x := a.as_int() else return mismatch
+    y := b.as_int() else return mismatch
+    if (op == "/" or op == "%") and y == 0
+        return MiniError(pos: pos, msg: "division by zero")
+    match op
+        "+" => checked(pos, x.checked_add(y))
+        "-" => checked(pos, x.checked_sub(y))
+        "*" => checked(pos, x.checked_mul(y))
+        "/" => checked(pos, x.checked_div(y))
+        "%" => Int(n: x % y)
+        "<" => Bool(b: x < y)
+        "<=" => Bool(b: x <= y)
+        ">" => Bool(b: x > y)
+        ">=" => Bool(b: x >= y)
+        _ => unreachable("unknown operator {op}")
+fn wrong_arguments(pos Pos, name str, want int, got int) MiniError
+    MiniError(pos: pos, msg: "wrong number of arguments: '{name}' takes {want} but got {got}")
+fn Interp.call(mut self, pos Pos, name str, args List[Value]) Value ! MiniError
+    if name == "print" or name == "str"
+        if args.len() != 1
+            return wrong_arguments(pos, name, 1, args.len())
+        if name == "str"
+            return Str(s: "{args[0]}")
+        print(args[0])
+        return Nil
+    def := self.functions.get(name) else return MiniError(pos: pos, msg: "undefined function '{name}'")
+    if args.len() != def.params.len()
+        return wrong_arguments(pos, name, def.params.len(), args.len())
+    if self.depth == MAX_DEPTH
+        return MiniError(pos: pos, msg: "stack overflow")
+    mut frame := Map[str, Value]()
+    for i in 0..args.len()
+        frame[def.params[i]] = args[i]
+    saved_base := self.env.base
+    self.env.base = self.env.scopes.len()
+    self.env.scopes.push(frame)
+    self.depth += 1
+    flow := self.exec_all(def.body)?
+    self.depth -= 1
+    self.env.scopes = self.env.scopes[..self.env.base]
+    self.env.base = saved_base
+    match flow
+        Next => Nil
+        Returned(v) => v
+SCRIPTS := {
+    "fibonacci": r"""
+        // The first sixteen Fibonacci numbers, on one line
+        fn fib(n) {
+            if n < 2 {
+                return n
+            }
+            return fib(n - 1) + fib(n - 2)
+        }
+        let line = ""
+        let i = 0
+        while i <= 15 {
+            if i > 0 {
+                line = line + " "
+            }
+            line = line + str(fib(i))
+            i = i + 1
+        }
+        print(line)
+        """,
+    "factorial": r"""
+        fn fact(n) {
+            if n <= 1 {
+                return 1
+            }
+            return n * fact(n - 1)
+        }
+        fn fact_loop(n) {
+            let result = 1
+            while n > 1 {
+                result = result * n
+                n = n - 1
+            }
+            return result
+        }
+        print(fact(10))
+        print(fact(20))
+        print(fact(12) == fact_loop(12))
+        print(fact(21))
+        """,
+    "fizzbuzz": r"""
+        let n = 1
+        let out = ""
+        while n <= 15 {
+            if n % 15 == 0 {
+                out = out + "FizzBuzz"
+            } else if n % 3 == 0 {
+                out = out + "Fizz"
+            } else {
+                if n % 5 == 0 {
+                    out = out + "Buzz"
+                } else {
+                    out = out + str(n)
+                }
+            }
+            if n < 15 { out = out + "," }
+            n = n + 1
+        }
+        print(out)
+        """,
+    "strings": r"""
+        fn repeat(s, times) {
+            let out = ""
+            while times > 0 {
+                out = out + s
+                times = times - 1
+            }
+            return out
+        }
+        let row = 1
+        while row <= 4 {
+            print(repeat(" ", 4 - row) + repeat("*", 2 * row - 1))
+            row = row + 1
+        }
+        print("she said \"hi\"\nand left")
+        print("ab" + "cd" == "abcd")
+        print(1 == "1")
+        print(true != 1)
+        print(-7 / 2)
+        print(-7 % 2)
+        print(not (3 > 2) or 2 >= 2)
+        print(false and missing)
+        print(true or missing())
+        fn nothing() { return }
+        print(nothing())
+        """,
+    "even and odd": r"""
+        fn is_even(n) {
+            if n == 0 { return true }
+            return is_odd(n - 1)
+        }
+        fn is_odd(n) {
+            if n == 0 { return false }
+            return is_even(n - 1)
+        }
+        print(is_even(10))
+        print(is_odd(7))
+        print(is_even(7))
+        print(is_odd(150))
+        """,
+    "scopes": r"""
+        let x = "global"
+        let count = 0
+        fn bump() {
+            count = count + 1
+            let x = "local"
+            return x
+        }
+        if true {
+            let x = "block"
+            print(x)
+            count = 10
+        }
+        print(x)
+        print(bump())
+        print(count)
+        """,
+    "bad character": r"""
+        let a = 1
+        let b = a # 2
+        """,
+    "unterminated string": r"""
+        print("ok")
+        print("hello)
+        """,
+    "missing paren": r"""
+        fn add(a, b {
+            return a + b
+        }
+        """,
+    "undefined variable": r"""
+        fn peek() {
+            return secret
+        }
+        let secret = 1
+        fn outer() {
+            let hidden = 2
+            return inner()
+        }
+        fn inner() { return hidden }
+        print(peek())
+        print(outer())
+        """,
+    "type mismatch": r"""
+        let total = 5
+        print("total: " + str(total))
+        let flag = true
+        print(total + flag)
+        """,
+    "division by zero": r"""
+        fn average(sum, count) {
+            return sum / count
+        }
+        print(average(10, 2))
+        print(average(7, 0))
+        """,
+    "undefined function": r"""
+        fn square(n) { return n * n }
+        print(square(4))
+        print(sqaure(5))
+        """,
+    "wrong arguments": r"""
+        fn add(a, b) { return a + b }
+        print(add(1, 2))
+        print(add(1, 2, 3))
+        """,
+    "stack overflow": r"""
+        fn down(n) {
+            return down(n + 1)
+        }
+        print("going down")
+        down(0)
+        """,
+    "bad condition": r"""
+        let n = 3
+        while n {
+            n = n - 1
+        }
+        """,
+}
+fn run_script(source str) !
+    mut parser := Parser(tokens: tokenize(source)?, i: 0)
+    mut interp := Interp.new()
+    interp.run(parser.program()?)?
+fn main()
+    for name in SCRIPTS.keys()
+        print("== {name} ==")
+        run_script(SCRIPTS[name]) else err
+            print("error at {err.pos.line}:{err.pos.col}: {err.msg}")

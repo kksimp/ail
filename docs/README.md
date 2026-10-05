@@ -40,6 +40,8 @@ Design notes:
 - [design/program-measurements-r1.md](design/program-measurements-r1.md):
   tokens of whole programs against six languages, and how well fresh AI agents
   write AIL from the quick reference.
+- [design/program-measurements-r2.md](design/program-measurements-r2.md):
+  three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
 
 Tools:
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.
