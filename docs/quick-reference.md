@@ -323,7 +323,7 @@ t := """
     line one
       indented
     """                    # "line one\n  indented": the closing line adds no newline
-q := """say "hi" """       # on one line, for text with quotes
+q := """say "hi""""        # on one line, for text with quotes: say "hi"
 r := r"C:\dir\{x}"         # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 ```
