@@ -1,0 +1,50 @@
+# type.char.2: is_digit (ASCII only), is_alpha, is_alnum, is_space, is_upper, is_lower.
+# Each line: code point, then digit alpha alnum space upper lower as 0/1.
+fn b(x bool) str
+    if x
+        "1"
+    else
+        "0"
+
+fn row(c char)
+    print("{c.code().to_hex()} {b(c.is_digit())}{b(c.is_alpha())}{b(c.is_alnum())}{b(c.is_space())}{b(c.is_upper())}{b(c.is_lower())}")
+
+fn main()
+    row('\u{61}')
+    row('\u{5a}')
+    row('\u{35}')
+    row('\u{663}')
+    row('\u{ff15}')
+    row('\u{e9}')
+    row('\u{c9}')
+    row('\u{df}')
+    row('\u{1c5}')
+    row('\u{4e2d}')
+    row('\u{2177}')
+    row('\u{2167}')
+    row('\u{aa}')
+    row('\u{20}')
+    row('\u{9}')
+    row('\u{a}')
+    row('\u{d}')
+    row('\u{b}')
+    row('\u{c}')
+    row('\u{1c}')
+    row('\u{1f}')
+    row('\u{85}')
+    row('\u{a0}')
+    row('\u{1680}')
+    row('\u{2003}')
+    row('\u{2028}')
+    row('\u{202f}')
+    row('\u{3000}')
+    row('\u{200b}')
+    row('\u{180e}')
+    row('\u{feff}')
+    row('\u{5f}')
+    row('\u{2d}')
+    row('\u{b2}')
+    row('\u{bd}')
+    row('\u{1f600}')
+    row('\u{30}')
+    row('\u{39}')

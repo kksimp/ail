@@ -1,0 +1,6 @@
+fn main()
+    mut m := {"a": [1]}
+    m["a"].push(2)
+    print(m)
+    m["b"].push(3)
+    print("unreachable")

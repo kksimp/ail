@@ -1,0 +1,7 @@
+enum Dir
+    North
+    South
+
+fn main()
+    m := {Dir.North: 1}
+    print(m[Dir.South])

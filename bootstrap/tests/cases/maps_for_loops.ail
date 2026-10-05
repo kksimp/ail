@@ -1,0 +1,52 @@
+struct P
+    x int
+    y int
+
+fn main()
+    s := {30, 10, 20}
+    for x in s
+        print(x)
+    # the loop sees the value at loop start
+    mut t := {1, 2}
+    for x in t
+        t.add(x + 10)
+        t.remove(x)
+    print(t)
+    # keys and values, insertion order, snapshot
+    mut m := {"b": 2, "a": 1, "c": 3}
+    for k in m.keys()
+        if not m.contains(k)
+            continue
+        m[k] = m[k] * 10
+        if k == "b"
+            m["d"] = 4
+            m.remove("c")
+    print(m)
+    for k in m.keys()
+        print("{k}={m[k]}")
+    mut total := 0
+    for v in m.values()
+        total += v
+    print(total)
+    # break and continue
+    for x in {1, 2, 3, 4, 5}
+        if x == 2
+            continue
+        if x == 5
+            break
+        print("x={x}")
+    # structs in a set, and a set of sets' elements via sorted
+    ps := {P(x: 2, y: 1), P(x: 1, y: 1), P(x: 2, y: 1)}
+    print(ps.len())
+    for p in ps
+        print("{p.x},{p.y}")
+    # nested loops over sets
+    for a in {"x", "y"}
+        for b in {1, 2}
+            print("{a}{b}")
+    # a loop over an empty set
+    for x in Set[int]()
+        print("never {x}")
+    # sorted
+    for x in {3, 1, 2}.sorted()
+        print(x)

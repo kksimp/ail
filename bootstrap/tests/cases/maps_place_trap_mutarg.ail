@@ -1,0 +1,9 @@
+fn inc(mut n int)
+    n += 1
+
+fn main()
+    mut m := {"a": 1}
+    inc(mut m["a"])
+    print(m)
+    inc(mut m["b"])
+    print("unreachable")

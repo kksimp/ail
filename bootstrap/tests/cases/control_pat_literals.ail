@@ -1,0 +1,62 @@
+# ADR 0138 expr.match.7: literal patterns of every kind.
+fn describe(n int) str
+    match n
+        0 => "zero"
+        -1 => "minus one"
+        0x10 => "sixteen"
+        0b101 => "five"
+        0o17 => "fifteen"
+        1_000 => "thousand"
+        9223372036854775807 => "max"
+        _ => "other"
+
+fn cname(c char) str
+    match c
+        'a' => "A"
+        '\n' => "newline"
+        '\t' => "tab"
+        '\u{263A}' => "smile"
+        '\'' => "quote"
+        '\\' => "backslash"
+        '{' => "brace"
+        '"' => "dquote"
+        _ => "?"
+
+fn sname(s str) int
+    match s
+        "" => 0
+        "hello" => 1
+        r"a\b{c}" => 2
+        "tab\t" => 3
+        """say "hi"""" => 4
+        "caf\u{e9}" => 5
+        _ => -1
+
+fn bname(b bool) str
+    match b
+        true => "yes"
+        false => "no"
+
+fn lt(a int, b int) str
+    match a < b
+        false => "not less"
+        true => "less"
+
+fn main()
+    for n in [0, -1, 16, 5, 15, 1000, 9223372036854775807, 7, -2]
+        print("{n}: {describe(n)}")
+    for c in ['a', '\n', '\t', '☺', '\'', '\\', '{', '"', 'z']
+        print(cname(c))
+    print(sname(""))
+    print(sname("hello"))
+    print(sname("a\\b\{c}"))
+    print(sname("tab\t"))
+    print(sname("say \"hi\""))
+    print(sname("café"))
+    print(sname("x"))
+    print(bname(true))
+    print(bname(false))
+    print(lt(1, 2))
+    print(lt(2, 1))
+    print(describe(1 + 15))
+    print(cname("xyz".chars()[1]))

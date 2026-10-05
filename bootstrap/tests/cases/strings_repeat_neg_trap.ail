@@ -1,0 +1,6 @@
+# type.str.10: repeat with a negative count traps.
+fn main()
+    print("ab".repeat(2))
+    print("ab".repeat(0).chars().len())
+    n := 0 - 1
+    print("ab".repeat(n))

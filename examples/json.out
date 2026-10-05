@@ -1,0 +1,91 @@
+== pretty ==
+{
+  "meta": {
+    "version": 3,
+    "count": 3,
+    "generated": "2026-10-05",
+    "archived": null
+  },
+  "users": [
+    {
+      "id": 1,
+      "name": "Ann \"Annie\" Lee",
+      "email": "ann@example.com",
+      "active": true,
+      "score": 3.5,
+      "tags": [
+        "admin",
+        "dev",
+        "ops"
+      ],
+      "address": {
+        "city": "Zürich",
+        "zip": "8001"
+      }
+    },
+    {
+      "id": 2,
+      "name": "José García",
+      "active": false,
+      "score": 1000.0,
+      "tags": [],
+      "note": "line one\nline two\ttabbed / slash \\ backslash"
+    },
+    {
+      "id": 3,
+      "name": "李雷",
+      "active": true,
+      "score": -0.25,
+      "tags": [
+        "guest"
+      ],
+      "balance": -42,
+      "ratio": 0.0025,
+      "prefs": {
+        "theme": "dark",
+        "langs": [
+          "en",
+          "zh"
+        ],
+        "beta": {}
+      },
+      "flags": "\u0007\b\f\r"
+    }
+  ],
+  "snowman": "☃"
+}
+== compact ==
+{"meta":{"version":3,"count":3,"generated":"2026-10-05","archived":null},"users":[{"id":1,"name":"Ann \"Annie\" Lee","email":"ann@example.com","active":true,"score":3.5,"tags":["admin","dev","ops"],"address":{"city":"Zürich","zip":"8001"}},{"id":2,"name":"José García","active":false,"score":1000.0,"tags":[],"note":"line one\nline two\ttabbed / slash \\ backslash"},{"id":3,"name":"李雷","active":true,"score":-0.25,"tags":["guest"],"balance":-42,"ratio":0.0025,"prefs":{"theme":"dark","langs":["en","zh"],"beta":{}},"flags":"\u0007\b\f\r"}],"snowman":"☃"}
+round trip: ok
+== queries ==
+users[1].name = "José García"
+meta.count = 3
+users[0].tags[2] = "ops"
+users[2].prefs = {"theme":"dark","langs":["en","zh"],"beta":{}}
+meta.archived = null
+not found: users[1].email
+not found: users[3]
+not found: meta[0]
+not found: users.name
+bad path: users[x]
+== stats ==
+object: 8
+array: 5
+string: 17
+number: 10
+boolean: 3
+null: 1
+max depth: 5
+sum of numbers: 973.2525
+== errors ==
+1: parse error at 1:26: trailing comma
+2: parse error at 1:9: expected ':' after object key
+3: parse error at 3:3: unterminated string
+4: parse error at 1:13: invalid escape '\q'
+5: parse error at 1:8: extra data after value
+6: parse error at 1:5: unexpected character '@'
+7: parse error at 1:18: unexpected end of input
+8: parse error at 1:3: invalid number
+9: parse error at 2:10: invalid number
+10: parse error at 1:6: invalid unicode escape
+11: parse error at 1:1: unexpected end of input

@@ -1,0 +1,10 @@
+mismatches: 0
+inf -> inf Ordering.Equal
+-inf -> -inf Ordering.Equal
+nan -> nan Ordering.Equal
+-0.0 -> -0.0 Ordering.Equal
+0.0 -> 0.0 Ordering.Equal
+5e-324 -> 5e-324 Ordering.Equal
+1.7976931348623157e+308 -> 1.7976931348623157e+308 Ordering.Equal
+none
+false

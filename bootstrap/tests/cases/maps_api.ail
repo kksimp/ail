@@ -1,0 +1,69 @@
+fn main()
+    mut m := {"a": 1, "b": 2}
+    print(m.len())
+    print(m.get("a"))
+    print(m.get("zz"))
+    print(m.contains("a"))
+    print(m.contains("zz"))
+    print(m.remove("a"))
+    print(m.remove("a"))
+    print(m)
+    print(m.len())
+    print(m.keys())
+    print(m.values())
+    # get as optional
+    if v := m.get("b")
+        print("b is {v}")
+    if v := m.get("c")
+        print("c is {v}")
+    else
+        print("no c")
+    n := m.get("b") else 0
+    q := m.get("q") else -1
+    print("{n} {q}")
+    # remove returns the old value; absent is none
+    mut e := Map[int, str]()
+    print(e.remove(1))
+    e[1] = "one"
+    r := e.remove(1) else "?"
+    print(r)
+    print(e.len())
+    print(e.keys())
+    print(e.values())
+    # sets
+    mut s := Set[str]()
+    print(s.len())
+    print(s.add("b"))
+    print(s.add("a"))
+    print(s.add("b"))
+    print(s.len())
+    print(s.contains("a"))
+    print(s.contains("c"))
+    print(s.remove("a"))
+    print(s.remove("a"))
+    print(s)
+    print(s.sorted())
+    print({3, 1, 2}.sorted())
+    print({"pear", "apple", "fig"}.sorted())
+    print(Set[int]().sorted())
+    # is_subset
+    print({1, 2}.is_subset({1, 2, 3}))
+    print({1, 2, 3}.is_subset({1, 2}))
+    print({1, 2}.is_subset({2, 1}))
+    print(Set[int]().is_subset({1}))
+    print(Set[int]().is_subset(Set[int]()))
+    print({4}.is_subset({1, 2, 3}))
+    # keys() and values() are copies: later changes don't show
+    mut mm := {1: 10}
+    ks := mm.keys()
+    vs := mm.values()
+    mm[2] = 20
+    print(ks)
+    print(vs)
+    # values/keys of non-scalar types
+    pm := {"x": [1, 2], "y": []}
+    print(pm.values())
+    print(pm.keys().len())
+    # get on map of optional values
+    ov := Map[str, int?]()
+    print(ov.len())

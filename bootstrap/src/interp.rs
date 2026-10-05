@@ -16,8 +16,13 @@ use std::rc::Rc;
 
 use std::cmp::Ordering;
 
+mod builtins;
+
+use builtins::{Key, Table, map_value};
+
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Pattern, Program, Stmt, TypeKind, UnOp, place_path,
+    Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt, TypeKind, UnOp,
+    place_path,
 };
 use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
@@ -26,13 +31,18 @@ use crate::diag::Pos;
 enum Value {
     Unit,
     Int(i64),
+    Float(f64),
     Bool(bool),
     Str(Rc<str>),
+    Char(char),
     /// A struct (by index in the program) and its fields.
     Struct(usize, Rc<Vec<Value>>),
     /// An enum and variant, by index, and the variant's fields.
     Enum(usize, usize, Rc<Vec<Value>>),
     List(Rc<Vec<Value>>),
+    /// `Map[K, V]` and `Set[T]`, in insertion order (type.map.1).
+    Map(Rc<Table>),
+    Set(Rc<Table>),
     /// The absent value of an optional (type.opt.4).
     None,
     /// The failure of a `T ! E` result (err.model.1).
@@ -52,6 +62,20 @@ impl Value {
         match self {
             Value::Int(v) => *v,
             other => unreachable!("checked: int, found {other:?}"),
+        }
+    }
+
+    fn float(&self) -> f64 {
+        match self {
+            Value::Float(v) => *v,
+            other => unreachable!("checked: float, found {other:?}"),
+        }
+    }
+
+    fn char(&self) -> char {
+        match self {
+            Value::Char(c) => *c,
+            other => unreachable!("checked: char, found {other:?}"),
         }
     }
 
@@ -152,9 +176,39 @@ struct Place {
 enum Step {
     Field(usize),
     Index(i64, Pos),
+    /// `m[k]` (type.map.3)
+    Key(Value, Pos),
+}
+
+/// Type and field names, for showing a map key in a trap message without
+/// running user code (type.map.3).
+struct TypeNames {
+    /// Each struct's name and field names.
+    structs: Vec<Named>,
+    /// Each enum's name, and each variant's name and field names.
+    enums: Vec<(String, Vec<Named>)>,
+}
+
+/// A name and its field names.
+type Named = (String, Vec<String>);
+
+thread_local! {
+    static NAMES: std::cell::RefCell<TypeNames> =
+        const { std::cell::RefCell::new(TypeNames { structs: Vec::new(), enums: Vec::new() }) };
 }
 
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
+    NAMES.with(|n| {
+        let fields = |fs: &[crate::ast::Field]| fs.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+        *n.borrow_mut() = TypeNames {
+            structs: prog.structs.iter().map(|s| (s.name.clone(), fields(&s.fields))).collect(),
+            enums: prog
+                .enums
+                .iter()
+                .map(|e| (e.name.clone(), e.variants.iter().map(|v| (v.name.clone(), fields(&v.fields))).collect()))
+                .collect(),
+        };
+    });
     let mut fns = HashMap::new();
     let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::new();
     for f in prog.fns.iter().filter(|f| f.top_level()) {
@@ -180,7 +234,15 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
         out: BufWriter::new(stdout.lock()),
         depth: 0,
         closed: false,
+        consts: HashMap::new(),
     };
+    // mod.const.1: constants are computed before the program runs.
+    for c in &prog.consts {
+        it.constant(&c.name, c.pos).map_err(|e| match e {
+            Exit::Trap(t) => Stop::Trap(t),
+            _ => unreachable!("checked: constants don't leave"),
+        })?;
+    }
     let main = it.fns["main"];
     let (result, _) = it.call(main, None, Vec::new(), main.pos)?;
     let report = match result {
@@ -207,17 +269,53 @@ struct Interp<'a, W: Write> {
     depth: usize,
     /// Standard output was closed by the reader (e.g. `| head`); stop writing quietly.
     closed: bool,
+    /// The values of the constants computed so far (mod.const.1).
+    consts: HashMap<&'a str, Value>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
     env.iter().rev().find(|(n, _)| *n == name).map(|(_, v)| v)
 }
 
+/// The text form of a float (type.num.7): the shortest decimal that reads
+/// back as the same value, in fixed notation when the decimal exponent is
+/// from -4 to 15 and in scientific notation otherwise, as Python's `repr`.
+fn float_text(x: f64) -> String {
+    if x.is_nan() {
+        return "nan".into();
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { "inf".into() } else { "-inf".into() };
+    }
+    let sign = if x.is_sign_negative() { "-" } else { "" };
+    // `{:e}` gives the shortest round-trip digits: "1.2345e3".
+    let sci = format!("{:e}", x.abs());
+    let (mantissa, exp) = sci.split_once('e').expect("scientific form");
+    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let exp: i32 = exp.parse().expect("an exponent");
+    let point = exp + 1; // digits before the decimal point
+    let n = digits.len() as i32;
+    let body = if (-3..=16).contains(&point) {
+        if point <= 0 {
+            format!("0.{}{digits}", "0".repeat((-point) as usize))
+        } else if point >= n {
+            format!("{digits}{}.0", "0".repeat((point - n) as usize))
+        } else {
+            format!("{}.{}", &digits[..point as usize], &digits[point as usize..])
+        }
+    } else {
+        let rest = if n > 1 { format!(".{}", &digits[1..]) } else { String::new() };
+        let e = point - 1;
+        format!("{}{rest}e{}{:02}", &digits[..1], if e < 0 { '-' } else { '+' }, e.abs())
+    };
+    format!("{sign}{body}")
+}
+
 /// The type or trait an expression names, when it isn't a value: `Shape`
 /// in `Shape.Circle(r: 1)`, or `Stack` in `Stack[int].new()`.
-fn type_head<'e>(e: &'e Expr, env: &Env<'_>) -> Option<&'e str> {
+fn type_head<'e>(e: &'e Expr, env: &Env<'_>, prog: &Program) -> Option<&'e str> {
     match e {
-        Expr::Name(n, _) if lookup(env, n).is_none() => Some(n),
+        Expr::Name(n, _) if lookup(env, n).is_none() && !prog.consts.iter().any(|c| c.name == *n) => Some(n),
         Expr::TypeArgs { name, .. } => Some(name),
         _ => None,
     }
@@ -231,10 +329,24 @@ fn element(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
 }
 
 /// The storage a place refers to, copying shared storage first (own.val.2).
-fn slot_mut<'e>(env: &'e mut Env<'_>, p: &Place) -> Result<&'e mut Value, Trap> {
+/// With `insert`, a missing map key at the end of the path is added, for
+/// `m[k] = v` (type.map.3).
+fn slot_mut<'e>(env: &'e mut Env<'_>, p: &Place, insert: bool) -> Result<&'e mut Value, Trap> {
     let mut v = &mut env[p.slot].1;
-    for step in &p.path {
+    let last = p.path.len();
+    for (n, step) in p.path.iter().enumerate() {
         v = match (step, v) {
+            (Step::Key(k, pos), Value::Map(t)) => {
+                let t = Rc::make_mut(t);
+                match t.get(k) {
+                    Some(i) => t.val_mut(i),
+                    None if insert && n + 1 == last => {
+                        let i = t.insert(k.clone(), Some(Value::Unit));
+                        t.val_mut(i)
+                    }
+                    None => return trap("type.map.3", *pos, format!("the map has no key {}", key_text(k))),
+                }
+            }
             (Step::Field(i), Value::Struct(_, fields)) => &mut Rc::make_mut(fields)[*i],
             (Step::Index(i, pos), Value::List(items)) => {
                 let items = Rc::make_mut(items);
@@ -269,10 +381,65 @@ fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<&'e Value, Trap> {
         v = match (step, v) {
             (Step::Field(i), Value::Struct(_, fields)) => &fields[*i],
             (Step::Index(i, pos), Value::List(items)) => element(items, *i, *pos)?,
+            (Step::Key(k, pos), Value::Map(t)) => map_value(t, k, || key_text(k), *pos)?,
             (_, other) => unreachable!("checked: place step {step:?} on {other:?}"),
         };
     }
     Ok(v)
+}
+
+/// A string or character as it appears inside another value (trait.auto.2):
+/// in its quotes, with `\\`, the quote and control characters escaped.
+fn quoted(text: &str, quote: char) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            '\0' => out.push_str("\\0"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if c.is_control() => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// A key for a trap message: strings and characters quoted, as inside a value.
+fn key_text(k: &Value) -> String {
+    let fields = |names: &[String], values: &[Value]| {
+        if values.is_empty() {
+            return String::new();
+        }
+        let parts: Vec<String> = names.iter().zip(values).map(|(n, v)| format!("{n}: {}", key_text(v))).collect();
+        format!("({})", parts.join(", "))
+    };
+    match k {
+        Value::Str(s) => quoted(s, '"'),
+        Value::Char(c) => quoted(&c.to_string(), '\''),
+        Value::Int(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::None => "none".into(),
+        Value::List(items) => format!("[{}]", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
+        Value::Struct(s, values) => NAMES.with(|n| {
+            let (name, names) = &n.borrow().structs[*s];
+            format!("{name}{}", fields(names, values))
+        }),
+        Value::Enum(e, i, values) => NAMES.with(|n| {
+            let n = n.borrow();
+            let (enum_name, variants) = &n.enums[*e];
+            let (name, names) = &variants[*i];
+            format!("{enum_name}.{name}{}", fields(names, values))
+        }),
+        _ => "(a value)".into(),
+    }
 }
 
 fn load(env: &Env<'_>, p: &Place) -> Result<Value, Trap> {
@@ -316,6 +483,7 @@ fn overlaps(a: &Place, b: &Place) -> bool {
         && a.path.iter().zip(&b.path).all(|(x, y)| match (x, y) {
             (Step::Field(i), Step::Field(j)) => i == j,
             (Step::Index(i, _), Step::Index(j, _)) => i == j,
+            (Step::Key(i, _), Step::Key(j, _)) => Key::of(i) == Key::of(j),
             _ => false,
         })
 }
@@ -402,6 +570,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 return Err(Exit::Return(v, *pos));
             }
             Stmt::Expr(e) => return self.eval(e, env),
+            // err.else.4: the `else` runs only on a failure.
+            Stmt::Handle { value, otherwise } => {
+                if let v @ Value::Fail(_) = self.eval(value, env)? {
+                    self.otherwise(otherwise, v, env)?;
+                }
+            }
         }
         Ok(Value::Unit)
     }
@@ -434,11 +608,11 @@ impl<'a, W: Write> Interp<'a, W> {
         for i in 0..items.len() {
             let mut at = list.clone();
             at.path.push(Step::Index(i as i64, iter.pos()));
-            let v = std::mem::replace(slot_mut(env, &at)?, Value::Unit);
+            let v = std::mem::replace(slot_mut(env, &at, false)?, Value::Unit);
             env.push((var, v));
             let r = self.block(body, env);
             let (_, v) = env.pop().expect("the loop variable");
-            *slot_mut(env, &at)? = v;
+            *slot_mut(env, &at, false)? = v;
             match r {
                 Ok(_) | Err(Exit::Continue) => {}
                 Err(Exit::Break) => break,
@@ -450,7 +624,7 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// `for x in e` iterates the value `e` had when the loop started (expr.loop.4).
     fn for_loop(&mut self, var: &'a str, iter: &'a Expr, body: &'a Block, env: &mut Env<'a>) -> Flow<()> {
-        if let Expr::Range { lo, hi, inclusive, .. } = iter {
+        if let Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } = iter {
             let lo = self.eval(lo, env)?.int();
             let hi = self.eval(hi, env)?.int();
             let mut i = lo;
@@ -462,7 +636,11 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             return Ok(());
         }
-        let Value::List(items) = self.eval(iter, env)? else { unreachable!("checked: list") };
+        let items = match self.eval(iter, env)? {
+            Value::List(items) => items,
+            Value::Set(t) => Rc::new(t.key_list()),
+            other => unreachable!("checked: iterable, found {other:?}"),
+        };
         for item in items.iter() {
             if !self.loop_body(var, item.clone(), body, env)? {
                 break;
@@ -501,7 +679,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.binop(op, old, rhs, pos)?
             }
         };
-        *slot_mut(env, &p)? = v;
+        *slot_mut(env, &p, op.is_none())? = v;
         Ok(())
     }
 
@@ -519,8 +697,9 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Expr::Index { recv, index, pos } => {
                 let mut p = self.place(recv, env)?;
-                let i = self.eval(index, env)?.int();
-                p.path.push(Step::Index(i, *pos));
+                let is_map = matches!(peek(env, &p)?, Value::Map(_));
+                let i = self.eval(index, env)?;
+                p.path.push(if is_map { Step::Key(i, *pos) } else { Step::Index(i.int(), *pos) });
                 Ok(p)
             }
             _ => unreachable!("checked: a place"),
@@ -543,13 +722,19 @@ impl<'a, W: Write> Interp<'a, W> {
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
             Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
+            // type.num.10
+            Expr::Int(v, pos) if self.resolved.float_literals.contains(pos) => Value::Float(*v as f64),
             Expr::Int(v, _) => Value::Int(*v),
+            Expr::Float(v, _) => Value::Float(*v),
+            Expr::Char(c, _) => Value::Char(*c),
             Expr::Bool(b, _) => Value::Bool(*b),
             Expr::None(_) => Value::None,
             Expr::Try { expr, context, pos } => {
                 let v = self.eval(expr, env)?;
                 match v {
-                    Value::None => return Err(Exit::Return(Value::None, *pos)),
+                    Value::None if self.resolved.optional_try.contains(pos) => {
+                        return Err(Exit::Return(Value::None, *pos));
+                    }
                     Value::Fail(f) => {
                         let mut context_list = f.context.clone();
                         if let Some(c) = context {
@@ -579,8 +764,11 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Expr::Name(n, pos) => match lookup(env, n) {
                 Some(v) => v.clone(),
+                None if self.prog.consts.iter().any(|c| c.name == *n) => self.constant(n, *pos)?,
                 None => {
-                    let (e, v) = self.resolved.variants[pos];
+                    let Some(&(e, v)) = self.resolved.variants.get(pos) else {
+                        unreachable!("checked: `{n}` at {}:{} is a variant", pos.line, pos.col)
+                    };
                     Value::Enum(e, v, Rc::new(Vec::new()))
                 }
             },
@@ -595,7 +783,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env)?,
             Expr::TypeArgs { .. } => unreachable!("checked: type arguments only on a callee or receiver"),
             Expr::Field { recv, name, .. } => {
-                if let Some(tn) = type_head(recv, env) {
+                if let Some(tn) = type_head(recv, env, self.prog) {
                     let e = self.enums[tn];
                     let v = self.variant_index(e, name);
                     return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
@@ -604,17 +792,34 @@ impl<'a, W: Write> Interp<'a, W> {
                 fields[self.field_index(s, name)].clone()
             }
             Expr::Index { recv, index, pos } => {
-                let Value::List(items) = self.eval(recv, env)? else { unreachable!("checked: list") };
+                let items = match self.eval(recv, env)? {
+                    Value::List(items) => items,
+                    Value::Map(t) => {
+                        let k = self.eval(index, env)?;
+                        return Ok(map_value(&t, &k, || key_text(&k), *pos)?.clone());
+                    }
+                    other => unreachable!("checked: list or map, found {other:?}"),
+                };
                 if let Expr::Range { lo, hi, inclusive, pos: range_pos } = &**index {
-                    let lo = self.eval(lo, env)?.int();
-                    let hi = self.eval(hi, env)?.int();
-                    return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, *inclusive, *range_pos)?)));
+                    // type.coll.10: a missing bound is the start or the end.
+                    let lo = match lo {
+                        Some(e) => self.eval(e, env)?.int(),
+                        None => 0,
+                    };
+                    let (hi, inclusive) = match hi {
+                        Some(e) => (self.eval(e, env)?.int(), *inclusive),
+                        None => (items.len() as i64, false),
+                    };
+                    return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, inclusive, *range_pos)?)));
                 }
                 let i = self.eval(index, env)?.int();
                 element(&items, i, *pos)?.clone()
             }
             Expr::Unary { op: UnOp::Neg, operand, pos } => {
-                let v = self.eval(operand, env)?.int();
+                let v = match self.eval(operand, env)? {
+                    Value::Float(x) => return Ok(Value::Float(-x)),
+                    v => v.int(),
+                };
                 match v.checked_neg() {
                     Some(r) => Value::Int(r),
                     None => {
@@ -636,6 +841,27 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.binop(*op, l, r, *pos)?
             }
             Expr::Range { .. } => unreachable!("checked: ranges only in `for` and slices"),
+            Expr::Map(pairs, pos) => {
+                let mut t = Table::default();
+                for (k, v) in pairs {
+                    let k = self.eval(k, env)?;
+                    let v = self.eval(v, env)?;
+                    t.insert(k, Some(v));
+                }
+                if pairs.is_empty() && self.resolved.empty_sets.contains(pos) {
+                    Value::Set(Rc::new(t))
+                } else {
+                    Value::Map(Rc::new(t))
+                }
+            }
+            Expr::Set(items, _) => {
+                let mut t = Table::default();
+                for x in items {
+                    let x = self.eval(x, env)?;
+                    t.insert(x, None);
+                }
+                Value::Set(Rc::new(t))
+            }
             Expr::If { branches, els, else_err, .. } => {
                 let mut failure = None;
                 for (cond, body) in branches {
@@ -669,19 +895,18 @@ impl<'a, W: Write> Interp<'a, W> {
                 return r;
             }
             Expr::Match { scrutinee, arms, .. } => {
-                let Value::Enum(e, v, fields) = self.eval(scrutinee, env)? else { unreachable!("checked: enum") };
-                let variant = &self.prog.enums[e].variants[v].name;
+                let v = self.eval(scrutinee, env)?;
                 for arm in arms {
+                    if !self.matches(&arm.pat, &v) {
+                        continue;
+                    }
                     let mark = env.len();
-                    match &arm.pat {
-                        Pattern::Wildcard(_) => {}
-                        Pattern::Variant { name, .. } if name != variant => continue,
-                        Pattern::Variant { bindings, .. } => {
-                            // expr.match.6: bind fields by position; `_` skips one.
-                            for ((n, _), value) in bindings.iter().flatten().zip(fields.iter()) {
-                                if n != "_" {
-                                    env.push((n.as_str(), value.clone()));
-                                }
+                    // expr.match.6: bind fields by position; `_` skips one.
+                    if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (&arm.pat, &v)
+                    {
+                        for ((n, _), value) in names.iter().zip(fields.iter()) {
+                            if n != "_" {
+                                env.push((n.as_str(), value.clone()));
                             }
                         }
                     }
@@ -692,6 +917,38 @@ impl<'a, W: Write> Interp<'a, W> {
                 unreachable!("checked: exhaustive match")
             }
         })
+    }
+
+    /// The value of the constant `name`, computing it on first use from the
+    /// constants it refers to (mod.const.1).
+    fn constant(&mut self, name: &'a str, pos: Pos) -> Flow<Value> {
+        if let Some(v) = self.consts.get(name) {
+            return Ok(v.clone());
+        }
+        let prog = self.prog;
+        let c = prog.consts.iter().find(|c| c.name == name).expect("checked: a constant");
+        let mut env = Vec::new();
+        let v = self.eval(&c.value, &mut env)?;
+        let _ = pos;
+        self.consts.insert(&c.name, v.clone());
+        Ok(v)
+    }
+
+    /// Whether `v` matches `pat` (expr.match.4, expr.match.7-8).
+    fn matches(&self, pat: &Pattern, v: &Value) -> bool {
+        match (pat, v) {
+            (Pattern::Wildcard(_), _) => true,
+            (Pattern::Or(alts, _), v) => alts.iter().any(|a| self.matches(a, v)),
+            (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => self.prog.enums[*e].variants[*i].name == *name,
+            (Pattern::Literal(lit, _), v) => match (lit, v) {
+                (Literal::Int(a), Value::Int(b)) => a == b,
+                (Literal::Char(a), Value::Char(b)) => a == b,
+                (Literal::Str(a), Value::Str(b)) => a.as_str() == &**b,
+                (Literal::Bool(a), Value::Bool(b)) => a == b,
+                _ => false,
+            },
+            _ => false,
+        }
     }
 
     fn slice(&self, items: &[Value], lo: i64, hi: i64, inclusive: bool, pos: Pos) -> Result<Vec<Value>, Trap> {
@@ -726,6 +983,20 @@ impl<'a, W: Write> Interp<'a, W> {
                     None => return trap(rule, pos, format!("`{a} {sym} {b}` overflows `int`")),
                 }
             }
+            // type.num.6: IEEE 754 arithmetic and comparisons, with no traps.
+            (Value::Float(a), Value::Float(b)) => match op {
+                BinOp::Add => Value::Float(a + b),
+                BinOp::Sub => Value::Float(a - b),
+                BinOp::Mul => Value::Float(a * b),
+                BinOp::Div => Value::Float(a / b),
+                BinOp::Eq => Value::Bool(a == b),
+                BinOp::Ne => Value::Bool(a != b),
+                BinOp::Lt => Value::Bool(a < b),
+                BinOp::Le => Value::Bool(a <= b),
+                BinOp::Gt => Value::Bool(a > b),
+                BinOp::Ge => Value::Bool(a >= b),
+                _ => unreachable!("checked: `{sym}` on floats"),
+            },
             (Value::Int(a), Value::Int(b)) => Value::Bool(match op {
                 BinOp::Eq => a == b,
                 BinOp::Ne => a != b,
@@ -759,7 +1030,9 @@ impl<'a, W: Write> Interp<'a, W> {
         let prog = self.prog;
         let con = match v {
             Value::Int(_) => Some(Con::Int),
+            Value::Float(_) => Some(Con::Float),
             Value::Str(_) => Some(Con::Str),
+            Value::Char(_) => Some(Con::Char),
             Value::Bool(_) => Some(Con::Bool),
             Value::List(_) => Some(Con::List),
             Value::Struct(s, _) => Some(Con::Struct(*s)),
@@ -784,6 +1057,8 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         Ok(match (a, b) {
             (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Float(x), Value::Float(y)) => x == y,
+            (Value::Char(x), Value::Char(y)) => x == y,
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
             (Value::None, Value::None) => true,
@@ -792,6 +1067,20 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.all_equal(x, y, pos)?
             }
             (Value::Enum(e, v, x), Value::Enum(f, w, y)) => e == f && v == w && self.all_equal(x, y, pos)?,
+            // type.map.4: the same keys with equal values, in any order.
+            (Value::Map(x), Value::Map(y)) => {
+                if x.len() != y.len() {
+                    return Ok(false);
+                }
+                for (k, v) in x.entries() {
+                    match y.get(k) {
+                        Some(i) if self.equal(v, y.val(i), pos)? => {}
+                        _ => return Ok(false),
+                    }
+                }
+                true
+            }
+            (Value::Set(x), Value::Set(y)) => x.len() == y.len() && x.keys().all(|k| y.get(k).is_some()),
             (x, y) => unreachable!("checked: comparing {x:?} and {y:?}"),
         })
     }
@@ -818,6 +1107,14 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         Ok(match (a, b) {
             (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            // type.num.7: a total order for sorting, with NaN after every number.
+            (Value::Float(x), Value::Float(y)) => match (x.is_nan(), y.is_nan()) {
+                (true, true) => Ordering::Equal,
+                (true, false) => Ordering::Greater,
+                (false, true) => Ordering::Less,
+                _ => x.partial_cmp(y).expect("not NaN"),
+            },
+            (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
                 self.lexicographic(x, y, pos)?
@@ -858,6 +1155,18 @@ impl<'a, W: Write> Interp<'a, W> {
             let v = self.eval(&args[0].value, env)?;
             self.print(&v, pos)?;
             return Ok(Value::Unit);
+        }
+        if n == "unreachable" && lookup(env, n).is_none() {
+            let Value::Str(msg) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
+            return Err(Exit::Trap(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }));
+        }
+        if matches!(callee, Expr::TypeArgs { .. }) {
+            match n.as_str() {
+                "List" => return Ok(Value::List(Rc::new(Vec::new()))),
+                "Map" => return Ok(Value::Map(Rc::new(Table::default()))),
+                "Set" => return Ok(Value::Set(Rc::new(Table::default()))),
+                _ => {}
+            }
         }
         if let Some(&s) = self.structs.get(n.as_str()) {
             let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
@@ -901,6 +1210,7 @@ impl<'a, W: Write> Interp<'a, W> {
         match v {
             Value::Unit => Ok(String::new()),
             Value::Str(s) => Ok(s.to_string()),
+            Value::Char(c) => Ok(c.to_string()),
             other => self.describe(other, pos),
         }
     }
@@ -917,8 +1227,10 @@ impl<'a, W: Write> Interp<'a, W> {
         Ok(match v {
             Value::Unit => "()".into(),
             Value::Int(n) => n.to_string(),
+            Value::Float(x) => float_text(*x),
             Value::Bool(b) => b.to_string(),
-            Value::Str(s) => format!("{:?}", &**s),
+            Value::Str(s) => quoted(s, '"'),
+            Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
@@ -939,6 +1251,20 @@ impl<'a, W: Write> Interp<'a, W> {
                 format!("{}.{}{}", decl.name, variant.name, self.fields_text(names, values, pos)?)
             }
             Value::Fail(f) => self.describe(&f.error, pos)?,
+            Value::Map(t) => {
+                let mut parts = Vec::with_capacity(t.len());
+                for (k, v) in t.entries() {
+                    parts.push(format!("{}: {}", self.describe(k, pos)?, self.describe(v, pos)?));
+                }
+                format!("{{{}}}", parts.join(", "))
+            }
+            Value::Set(t) => {
+                let mut parts = Vec::with_capacity(t.len());
+                for k in t.keys() {
+                    parts.push(self.describe(k, pos)?);
+                }
+                format!("{{{}}}", parts.join(", "))
+            }
         })
     }
 
@@ -976,7 +1302,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         // `Type.Variant(field: value)` (type.enum.6), or an associated
         // function `Type.name(args)` (trait.method.4).
-        if let Some(tn) = type_head(recv, env) {
+        if let Some(tn) = type_head(recv, env, self.prog) {
+            if tn == "char" {
+                let n = self.eval(&args[0].value, env)?.int();
+                let c = u32::try_from(n).ok().and_then(char::from_u32);
+                return Ok(c.map_or(Value::None, Value::Char));
+            }
             if let Some(&e) = self.enums.get(tn)
                 && let Some(v) = self.prog.enums[e].variants.iter().position(|v| v.name == name)
             {
@@ -995,17 +1326,9 @@ impl<'a, W: Write> Interp<'a, W> {
             Operand::Value(v) => v,
         };
         let type_name = match value {
-            Value::List(items) => {
-                let len = items.len();
-                return self.list_method(len, recv, name, args, pos, env);
-            }
-            Value::Str(s) => {
-                let s = s.clone();
-                return self.str_method(s, name, args, pos, env);
-            }
             Value::Struct(s, _) => self.prog.structs[*s].name.as_str(),
             Value::Enum(e, _, _) => self.prog.enums[*e].name.as_str(),
-            other => unreachable!("checked: no methods on {other:?}"),
+            _ => return self.builtin(recv, name, args, pos, env),
         };
         let f = self.methods[type_name][name];
         self.invoke(f, Some(recv), args, pos, env)
@@ -1043,57 +1366,6 @@ impl<'a, W: Write> Interp<'a, W> {
         })
     }
 
-    /// `s.split(sep)` and `s.to_int()` (type.str.4-5).
-    fn str_method(&mut self, s: Rc<str>, name: &str, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
-        if name == "split" {
-            let Value::Str(sep) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
-            if sep.is_empty() {
-                let message = "`split` needs a non-empty separator".into();
-                return Err(Exit::Trap(Trap { rule: "type.str.4", pos, message }));
-            }
-            let pieces = s.split(&*sep).map(|p| Value::Str(Rc::from(p))).collect();
-            return Ok(Value::List(Rc::new(pieces)));
-        }
-        let digits = s.strip_prefix('-').unwrap_or(&s);
-        let valid = !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit());
-        Ok(match s.parse::<i64>() {
-            Ok(n) if valid => Value::Int(n),
-            _ => Value::None,
-        })
-    }
-
-    /// `xs.len()`, `xs.push(v)` and `xs.swap(i, j)` (type.coll.5-7).
-    fn list_method(
-        &mut self,
-        len: usize,
-        recv: Operand,
-        name: &str,
-        args: &'a [Arg],
-        pos: Pos,
-        env: &mut Env<'a>,
-    ) -> Flow<Value> {
-        if name == "len" {
-            return Ok(Value::Int(len as i64));
-        }
-        let Operand::Place(list) = recv else { unreachable!("checked: `{name}` needs a mutable place") };
-        // Arguments are read before the list changes, so they are copies (own.excl.4).
-        let mut values = Vec::with_capacity(args.len());
-        for a in args {
-            values.push(self.eval(&a.value, env)?);
-        }
-        let Value::List(items) = slot_mut(env, &list)? else { unreachable!("checked: list") };
-        match name {
-            "push" => Rc::make_mut(items).push(values.pop().expect("checked: one argument")),
-            _ => {
-                let (i, j) = (values[0].int(), values[1].int());
-                element(items, i, pos)?;
-                element(items, j, pos)?;
-                Rc::make_mut(items).swap(i as usize, j as usize);
-            }
-        }
-        Ok(Value::Unit)
-    }
-
     /// Call `f`. Operands are evaluated left to right, and read-only ones are
     /// read immediately. After the overlap check (own.excl.3), `mut` receivers
     /// and arguments are moved out of their places for the call and written
@@ -1123,7 +1395,7 @@ impl<'a, W: Write> Interp<'a, W> {
             values.push(match value.take() {
                 Some(v) => v,
                 None => std::mem::replace(
-                    slot_mut(env, place.as_ref().expect("checked: `mut` operands are places"))?,
+                    slot_mut(env, place.as_ref().expect("checked: `mut` operands are places"), false)?,
                     Value::Unit,
                 ),
             });
@@ -1132,7 +1404,7 @@ impl<'a, W: Write> Interp<'a, W> {
         let (result, finals) = self.call(f, recv_value, values, pos)?;
         for ((place, _, mutable), v) in ops.into_iter().zip(finals) {
             if mutable {
-                *slot_mut(env, &place.expect("checked: `mut` operands are places"))? = v;
+                *slot_mut(env, &place.expect("checked: `mut` operands are places"), false)? = v;
             }
         }
         Ok(result)

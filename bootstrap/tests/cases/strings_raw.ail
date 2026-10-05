@@ -1,0 +1,38 @@
+# lex.str.6: raw strings keep backslashes and braces literally.
+fn show(label str, s str)
+    print("{label}: {[s]}")
+
+fn r(x str) str
+    "<{x}>"
+
+fn main()
+    show("a", r"C:\path\n\t{x}")
+    show("b", r"")
+    show("c", r"\")
+    show("d", r"\u{41} \{ {{ }}")
+    show("e", r"""one line, no "escapes" \n {x}""")
+    show("f", r"""say "hi"""")
+    show("g", r"""
+        raw \n {braces}
+          indented \"
+        """)
+    show("h", r"""
+        a\
+        b
+        """)
+    # `r` not immediately followed by a quote is the name r
+    show("i", r("x"))
+    # regex-like and source-like text
+    pattern := r"^\d+\.\d*$"
+    show("j", pattern)
+    src := r"""
+        fn main()
+            print("hi {name}\n")
+        """
+    show("k", src)
+    # a name that ends in r, and a longer name starting with r
+    bar := 7
+    rate := 2
+    show("l", "{bar}{rate}")
+    # raw next to a comma and in a list
+    print([r"a\b", r"c{d}", "e\\f"])

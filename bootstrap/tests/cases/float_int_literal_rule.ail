@@ -1,0 +1,113 @@
+# type.num.10: an integer literal (or `-` literal) whose expected type is float is a float.
+struct P
+    x float
+    y float
+
+struct Stats
+    total float
+    count int
+
+enum Shape
+    Circle(r float)
+    Rect(w float, h float)
+
+fn scale(x float, k float) float
+    x * k
+
+fn zero() float
+    0
+
+fn neg() float
+    -3
+
+fn early(b bool) float
+    if b
+        return 7
+    2.5
+
+fn pick(b bool) float
+    if b
+        1
+    else
+        2
+
+fn area(s Shape) float
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+
+fn main()
+    # struct fields, arguments, returns
+    print(P(x: 1, y: -2))
+    print(Stats(total: 0, count: 0))
+    print(scale(2, 3))
+    print(scale(2.5, 2))
+    print(scale(-2, -3))
+    print(zero())
+    print(neg())
+    print(early(true))
+    print(early(false))
+    print(pick(true))
+    print(pick(false))
+    print(Shape.Circle(r: 2))
+    print(Shape.Rect(w: 2, h: 3))
+    print(area(Shape.Circle(r: 2)))
+    # binary operators: either side
+    x := 1.5
+    print(x * 2)
+    print(2 * x)
+    print(x + 1)
+    print(1 + x)
+    print(x - 1)
+    print(1 - x)
+    print(x / 2)
+    print(10 / x)
+    print(-2 * x)
+    print(x * -2)
+    print(1 + 2 * x)
+    print(2 * x + 1)
+    print(2 * (x + 1))
+    print(x * (2))
+    print((2) * x)
+    print(x * 0x10)
+    print(x * 0b11)
+    print(x * 1_000)
+    # comparisons
+    print(x == 1)
+    print(1 == x)
+    print(x != 3)
+    print(x < 2)
+    print(2 > x)
+    print(x >= -1)
+    print(-1 <= x)
+    # compound assignment and assignment
+    mut t := 0.0
+    t += 1
+    t -= 3
+    t *= 4
+    t /= 8
+    print(t)
+    t = 5
+    print(t)
+    t = -5
+    print(t)
+    mut p := P(x: 0, y: 0)
+    p.x += 2
+    p.y = 3
+    p.y *= 2
+    print(p)
+    # lists
+    print([1.5, 2, 3])
+    print([0.5, -1])
+    mut ys := [1.5]
+    ys.push(2)
+    print(ys)
+    # large literals round to nearest, ties to even
+    print(x + 9007199254740993)
+    print(f(9223372036854775807))
+    print(f(-3))
+    print(f((3)))
+    print(f(0x1F))
+
+fn f(x float) float
+    x

@@ -1,0 +1,78 @@
+struct Pos
+    x int
+    y int
+
+struct Counter[K Hash]
+    counts Map[K, int]
+
+fn Counter.new() Self
+    Counter(counts: {})
+
+fn Counter[K Hash].add(mut self, key K)
+    n := self.counts.get(key) else 0
+    self.counts[key] = n + 1
+
+fn Counter[K Hash].get(self, key K) int
+    n := self.counts.get(key) else 0
+    n
+
+fn uniq[T Hash](xs List[T]) Set[T]
+    mut out := Set[T]()
+    for x in xs
+        out.add(x)
+    out
+
+fn dedup[T Hash](xs List[T]) List[T]
+    mut seen := Set[T]()
+    mut out := List[T]()
+    for x in xs
+        if seen.add(x)
+            out.push(x)
+    out
+
+fn group[K Hash, V](pairs List[Pos], keyf K, v V) Map[K, List[V]]
+    mut m := Map[K, List[V]]()
+    m[keyf] = [v]
+    m
+
+fn index_of[T Hash](xs List[T]) Map[T, int]
+    mut m := Map[T, int]()
+    for i in 0..xs.len()
+        m[xs[i]] = i
+    m
+
+fn has_all[T Hash](s Set[T], xs List[T]) bool
+    for x in xs
+        if not s.contains(x)
+            return false
+    true
+
+fn invert[K Hash, V Hash](m Map[K, V]) Map[V, K]
+    mut out := Map[V, K]()
+    for k in m.keys()
+        out[m[k]] = k
+    out
+
+fn main()
+    print(uniq([3, 1, 3, 2, 1]))
+    print(uniq(["b", "a", "b"]))
+    print(uniq([Pos(x: 1, y: 1), Pos(x: 1, y: 1), Pos(x: 2, y: 2)]))
+    print(dedup(["z", "y", "z", "x", "y"]))
+    print(dedup([[1], [2], [1]]))
+    print(index_of(["a", "b", "a"]))
+    print(has_all({1, 2, 3}, [1, 3]))
+    print(has_all({1, 2, 3}, [1, 4]))
+    print(invert({"a": 1, "b": 2}))
+    print(group([], "k", 5))
+    mut c := Counter[str].new()
+    c.add("x")
+    c.add("y")
+    c.add("x")
+    print(c.get("x"))
+    print(c.get("z"))
+    print(c)
+    mut cp := Counter[Pos].new()
+    cp.add(Pos(x: 1, y: 1))
+    cp.add(Pos(x: 1, y: 1))
+    print(cp.get(Pos(x: 1, y: 1)))
+    print(uniq(Set[int]().sorted()))

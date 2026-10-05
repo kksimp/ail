@@ -1,0 +1,36 @@
+# ADR 0138 expr.match.7: matches that are exhaustive through `_` or `true`/`false`.
+fn kind(n int) str
+    match n
+        0 => "zero"
+        _ => "nonzero"
+
+fn word(s str) int
+    match s
+        "one" => 1
+        "two" => 2
+        _ => 0
+
+fn letter(c char) bool
+    match c
+        'a' | 'b' => true
+        _ => false
+
+fn yn(b bool) str
+    match b
+        true => "yes"
+        false => "no"
+
+fn both(b bool) int
+    match b
+        true | false => 1
+
+fn main()
+    print(kind(0))
+    print(kind(5))
+    print(word("two"))
+    print(word("three"))
+    print(letter('b'))
+    print(letter('z'))
+    print(yn(1 < 2))
+    print(yn(1 > 2))
+    print(both(false))

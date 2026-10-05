@@ -1,0 +1,6 @@
+fn main()
+    mut m := {"a": {"b": 1}}
+    m["a"]["c"] = 2
+    print(m)
+    m["zz"]["c"] = 3
+    print("unreachable")

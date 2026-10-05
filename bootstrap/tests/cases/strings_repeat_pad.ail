@@ -1,0 +1,26 @@
+# type.str.9 and type.str.10: pad_left, pad_right (fill char, width in
+# characters), and repeat.
+fn main()
+    print(["ab".repeat(3), "ab".repeat(1), "ab".repeat(0), "".repeat(5), "é".repeat(2), "😀".repeat(3)])
+    print("ab".repeat(0).chars().len())
+    print("-".repeat(20))
+    # pad_left / pad_right
+    print(["7".pad_left(3, '0'), "7".pad_right(3, '0'), "ab".pad_left(5, ' '), "ab".pad_right(5, '.')])
+    print(["12345".pad_left(3, '0'), "12345".pad_right(3, '0'), "abc".pad_left(3, '*'), "abc".pad_right(3, '*')])
+    print(["abc".pad_left(0, '*'), "abc".pad_right(0, '*'), "abc".pad_left(-1, '*'), "abc".pad_right(-100, '*')])
+    print(["".pad_left(3, 'x'), "".pad_right(2, 'y'), "".pad_left(0, 'z')])
+    # width counts characters (scalar values), not bytes
+    print(["é".pad_left(3, '→'), "é".pad_right(3, '→'), "日本".pad_left(4, '.'), "😀".pad_left(2, '!')])
+    print(["e\u{301}".pad_left(3, '-').chars().len(), "e\u{301}".pad_left(2, '-').chars().len()])
+    # the fill may be any character, including quotes, braces, a space and a tab
+    print(["x".pad_left(3, '\''), "x".pad_left(3, '"'), "x".pad_right(3, '{'), "x".pad_left(3, ' '), "x".pad_left(2, '\t')])
+    # a column of numbers
+    for n in [5, 42, 777, 1000]
+        print("|{"{n}".pad_left(5, ' ')}|{"{n}".pad_right(5, ' ')}|{"{n}".pad_left(5, '0')}|")
+    # hex digits padded to a fixed width
+    print(255.to_hex().pad_left(4, '0'))
+    print(0.to_hex().pad_left(2, '0'))
+    print((0 - 255).to_hex().pad_left(6, '0'))
+    print(9223372036854775807.to_hex())
+    print((0 - 9223372036854775807 - 1).to_hex())
+    print(["abc".pad_left(2, 'x'), "abc".pad_left(3, 'x'), "abc".pad_left(4, 'x')])

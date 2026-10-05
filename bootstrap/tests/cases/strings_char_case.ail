@@ -1,0 +1,30 @@
+# type.char.2: to_upper / to_lower are single-character mappings; a character
+# whose mapping is several characters is unchanged.
+fn main()
+    # ordinary mappings
+    print(['a'.to_upper(), 'z'.to_upper(), 'A'.to_lower(), 'Z'.to_lower()])
+    print(['é'.to_upper(), 'É'.to_lower(), 'ñ'.to_upper(), 'Ω'.to_lower(), 'ω'.to_upper()])
+    print(['σ'.to_upper(), 'ς'.to_upper(), 'Σ'.to_lower()])
+    print(['я'.to_upper(), 'Я'.to_lower(), 'ж'.to_upper()])
+    # already in the target case, or no case at all
+    print(['A'.to_upper(), 'a'.to_lower(), '5'.to_upper(), '5'.to_lower(), '中'.to_upper(), '-'.to_lower()])
+    # single-character mappings that are not ASCII
+    print(['ǆ'.to_upper().code(), 'ǅ'.to_upper().code(), 'ǅ'.to_lower().code(), 'ǆ'.to_lower().code()])
+    print(['ⅷ'.to_upper().code(), 'Ⅷ'.to_lower().code()])
+    # multi-character mappings leave the character unchanged
+    print('ß'.to_upper().code() == 0xDF)
+    print('ß'.to_lower() == 'ß')
+    print('ŉ'.to_upper().code() == 0x149)
+    print('ﬁ'.to_upper().code() == 0xFB01)
+    print('ǰ'.to_upper().code() == 0x1F0)
+    print('İ'.to_lower().code() == 0x130)
+    print('ΐ'.to_upper().code() == 0x390)
+    # applying them to every char of a string
+    mut up := ""
+    for c in "straße, Ärger!".chars()
+        up = "{up}{c.to_upper()}"
+    print(up)
+    mut low := ""
+    for c in "STRAßE, ÄRGER!".chars()
+        low = "{low}{c.to_lower()}"
+    print(low)

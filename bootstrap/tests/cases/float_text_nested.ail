@@ -1,0 +1,42 @@
+# type.num.7: the same text form inside lists, structs, enums, optionals, maps, interpolation, join.
+struct P
+    x float
+    y float?
+
+enum Shape
+    Circle(r float)
+    Rect(w float, h float)
+    Dot
+
+fn maybe(b bool) float?
+    if b
+        return 1.5
+    none
+
+fn main()
+    inf := 1.0 / 0.0
+    nan := inf - inf
+    xs := [0.1 + 0.2, 1e16, 5e-324, -0.0, inf, -inf, nan, 1e-5, 1000.0]
+    print(xs)
+    print("{xs}")
+    print(xs.join(", "))
+    print(P(x: 1e16, y: 1e-5))
+    print(P(x: nan, y: none))
+    print(Shape.Circle(r: 2.5))
+    print(Shape.Rect(w: 1e22, h: -0.0))
+    print([Shape.Dot, Shape.Circle(r: 0.1 + 0.2)])
+    print(maybe(true))
+    print(maybe(false))
+    print("{maybe(true)}|{-0.0}|{1e16}|{nan}|{-nan_check(nan)}")
+    print([maybe(true), maybe(false)])
+    m := {1: 0.1 + 0.2, 2: 1e-5}
+    print(m)
+    n := {"a": [1.0, 2.5]}
+    print(n)
+    print([[1.0, 2.0], [], [1e-5]])
+    print([1e100].join("; "))
+    print("{1.0}{2.5}")
+    print("x = {0.1 + 0.2}")
+
+fn nan_check(x float) float
+    x

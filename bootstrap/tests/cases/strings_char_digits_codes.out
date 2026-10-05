@@ -1,0 +1,20 @@
+[7, none, 7, 0, 1, none]
+[10, 10, 15, 15, none, none]
+[16, 16, 35, 35, none, none]
+[9, none, none, 10, 10]
+[none, none, none, none, none, none]
+[0, 5, 5, none]
+true
+[65, 48, 0, 233, 128512, 1114111]
+['A', '\0', 'é', '😀']
+[true, false, false, false, false, true]
+[true, false, false, false, false]
+true
+none
+true
+[true, false, true, true, true, true, false, true]
+[true, false, true, true, true]
+['0', 'A', 'Z', 'a', 'b', 'é', '😀']
+A
+b
+true

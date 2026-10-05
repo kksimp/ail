@@ -1,0 +1,6 @@
+fn main()
+    x := r"""
+	a
+        b
+        """
+    print([x])

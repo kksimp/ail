@@ -1,5 +1,5 @@
 ## The standard traits and `Ordering` (ADR 0127). The bootstrap reads this
-## before every program, at line 0, so its declarations are built in.
+## before every program, so its declarations are built in.
 
 enum Ordering
     Less
@@ -11,6 +11,19 @@ trait Eq
 
 trait Ord
     fn cmp(self, other Self) Ordering
+    fn min(self, other Self) Self
+        if self.cmp(other) == Greater
+            other
+        else
+            self
+    fn max(self, other Self) Self
+        if self.cmp(other) == Less
+            other
+        else
+            self
 
 trait ToStr
     fn to_str(self) str
+
+## Map keys and set elements. Automatic, with no methods (trait.auto.5).
+trait Hash

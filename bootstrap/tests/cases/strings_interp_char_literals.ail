@@ -1,0 +1,11 @@
+# lex.str.2 and lex.str.4: an interpolated expression may contain char literals,
+# including `'{'`, `'}'` and `'"'`, which never interpolate.
+fn main()
+    c := '}'
+    print("{'{'}")
+    print("{'}'}")
+    print("{'"'}")
+    print("[{c == '}'}]")
+    print("[{c == '{'}]")
+    print("{'\''}{'x'}")
+    print("{[c, '{', '"']}")

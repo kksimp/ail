@@ -1,0 +1,43 @@
+# lex.str.3 rule 5: CRLF source line endings become \n inside strings.
+fn show(label str, s str)
+    print("{label}: {[s]}")
+
+fn main()
+    a := """
+        one
+        two
+
+        three
+        """
+    show("a", a)
+    b := """
+        one
+        two
+        """.lines()
+    print(b)
+    c := r"""
+        raw \ {x}
+          more
+        """
+    show("c", c)
+    d := """one line"""
+    show("d", d)
+    e := """
+        {a.lines().len()} lines
+        """
+    show("e", e)
+    # trailing spaces before CRLF stay part of the text
+    f := """
+        pad   
+        end
+        """
+    show("f", f)
+    # a statement continued with CRLF line endings
+    xs := [1,
+        2,
+        3]
+    print(xs)
+    # escape \r gives a real carriage return
+    g := "x\r\ny"
+    show("g", g)
+    show("g lines", g.lines().join("|"))

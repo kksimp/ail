@@ -1,0 +1,65 @@
+struct P
+    x int
+    y int
+
+struct Holder
+    m Map[str, int]
+    s Set[int]
+
+enum E
+    A(m Map[int, int])
+    B
+
+fn main()
+    # order is ignored
+    a := {"x": 1, "y": 2}
+    b := {"y": 2, "x": 1}
+    print(a == b)
+    print(a != b)
+    print(a)
+    print(b)
+    print({"x": 1} == {"x": 2})
+    print({"x": 1} == {"y": 1})
+    print({"x": 1} == {"x": 1, "y": 2})
+    print({"x": 1, "y": 2} == {"x": 1})
+    print({1, 2, 3} == {3, 2, 1})
+    print({1, 2, 3} == {3, 2})
+    print({1, 2} == {1, 2, 3})
+    print({1, 2} != {1, 2})
+    print(Map[int, int]() == Map[int, int]())
+    print(Set[int]() == Set[int]())
+    print(Set[int]() != {1})
+    # nested
+    print({"k": {1, 2}} == {"k": {2, 1}})
+    print({"k": {1, 2}} == {"k": {2, 3}})
+    print({"k": [1, 2]} == {"k": [1, 2]})
+    print({"k": [1, 2]} == {"k": [2, 1]})
+    print({1: {"a": {5: 6, 7: 8}}} == {1: {"a": {7: 8, 5: 6}}})
+    print({1: {"a": {5: 6, 7: 8}}} == {1: {"a": {7: 8, 5: 7}}})
+    # keys that are structs and lists
+    print({P(x: 1, y: 2): "a", P(x: 3, y: 4): "b"} == {P(x: 3, y: 4): "b", P(x: 1, y: 2): "a"})
+    print({P(x: 1, y: 2): "a"} == {P(x: 2, y: 1): "a"})
+    print({[1, 2]: 1} == {[1, 2]: 1})
+    print({[1, 2]: 1} == {[2, 1]: 1})
+    # in structs, enums, lists, optionals
+    h1 := Holder(m: {"a": 1, "b": 2}, s: {1, 2})
+    h2 := Holder(m: {"b": 2, "a": 1}, s: {2, 1})
+    print(h1 == h2)
+    print(h1 == Holder(m: {"a": 1}, s: {1, 2}))
+    print(E.A(m: {1: 2, 3: 4}) == E.A(m: {3: 4, 1: 2}))
+    print(E.A(m: {1: 2}) == E.B)
+    print([{1: 1}, {2: 2}] == [{1: 1}, {2: 2}])
+    print([{1: 1}, {2: 2}] == [{2: 2}, {1: 1}])
+    o1 := Map[str, int]()
+    print(o1 == {})
+    print({1: 2}.get(1) == 2)
+    # equal maps copied and mutated back
+    mut c := a
+    c["z"] = 0
+    print(c == a)
+    c.remove("z")
+    print(c == a)
+    print(c)
+    # values compare by Eq
+    print({1: "a", 2: "b"} == {2: "b", 1: "a"})
+    print({1: "a", 2: "b"} == {2: "a", 1: "b"})

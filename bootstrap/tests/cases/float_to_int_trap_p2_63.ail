@@ -1,0 +1,6 @@
+# type.num.9: x.to_int() traps on NaN or a value outside int (p2_63).
+fn main()
+    print("before")
+    x := 9223372036854775808.0
+    n := x.to_int()
+    print("not reached {n}")

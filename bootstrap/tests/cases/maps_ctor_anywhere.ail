@@ -1,0 +1,35 @@
+struct Box
+    items List[int]
+
+fn id_map(m Map[str, int]) Map[str, int]
+    m
+
+fn main()
+    print(Map[str, int]())
+    print(Set[str]().len())
+    print(List[int]().len())
+    print(id_map(Map[str, int]()).len())
+    mut m := Map[int, str]()
+    m[1] = "one"
+    print(m)
+    mut s := Set[char]()
+    print(s.add('a'))
+    print(s)
+    nested := Map[str, Set[int]]()
+    print(nested)
+    lm := Map[str, List[int]]()
+    print(lm.len())
+    ll := List[Map[int, int]]()
+    print(ll)
+    print(Map[int, int]() == {})
+    print(Set[int]() == {})
+    b := Box(items: List[int]())
+    print(b)
+    print([Set[int]()])
+    x := {1: Set[str]()}
+    print(x)
+    print(Set[List[int]]().len())
+    print(Map[Box, int]().len())
+    print(Map[str, int]().get("a"))
+    print(Set[int]().is_subset({1}))
+    print(Map[int, int]() == Map[int, int]())

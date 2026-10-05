@@ -17,15 +17,17 @@
 //! enum variants (type.enum.3), which method calls go through a trait, and
 //! which `impl` implements each trait for each type.
 
+mod builtins;
 mod traits;
 
 use std::collections::HashMap;
 
+use builtins::builtin;
 use traits::{Cand, bind, bound, subst, subst_unknown};
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Owner, PathStep, Pattern, Program,
-    Stmt, TypeKind, TypeRef, UnOp, Within, is_prelude, place_path,
+    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep, Pattern,
+    Program, Stmt, TypeKind, TypeRef, UnOp, Within, is_prelude, place_path,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::UNSUPPORTED;
@@ -33,7 +35,11 @@ use crate::lexer::UNSUPPORTED;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
     Int,
+    /// `float`, `f64` (type.num.1-2)
+    Float,
     Str,
+    /// `char` (type.str.1)
+    Char,
     Bool,
     /// The result of an expression that produces no value (e.g. `print(...)`).
     Unit,
@@ -46,6 +52,9 @@ pub enum Ty {
     Struct(usize, Vec<Ty>),
     Enum(usize, Vec<Ty>),
     List(Box<Ty>),
+    /// `Map[K, V]` and `Set[T]` (type.coll.1, type.map.1)
+    Map(Box<Ty>, Box<Ty>),
+    Set(Box<Ty>),
     /// `T?` (type.opt.2)
     Opt(Box<Ty>),
     /// `T ! E`; `T` is `Unit` for a bare `!` (err.type.1-2).
@@ -70,7 +79,9 @@ pub enum Errs {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Con {
     Int,
+    Float,
     Str,
+    Char,
     Bool,
     List,
     Struct(usize),
@@ -93,12 +104,13 @@ fn ty_key(t: &Ty) -> (u8, usize) {
     }
 }
 
-/// The standard traits (trait.std.1-3) and `enum Ordering`, by index.
+/// The standard traits (trait.std.1-3, type.map.2) and `enum Ordering`, by index.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Std {
     pub eq: usize,
     pub ord: usize,
     pub to_str: usize,
+    pub hash: usize,
     pub ordering: usize,
 }
 
@@ -120,23 +132,23 @@ pub struct Resolved {
     pub calls: HashMap<Pos, Call>,
     /// The `impl` block for each trait and type constructor (trait.impl.6).
     pub impls: HashMap<(usize, Con), usize>,
+    /// Empty `{}` literals that are sets rather than maps (type.coll.3).
+    pub empty_sets: std::collections::HashSet<Pos>,
+    /// `e?` on an optional, which passes on `none` (err.prop.2); every other
+    /// `?` passes on only a failure, so a successful `none` stays a value.
+    pub optional_try: std::collections::HashSet<Pos>,
+    /// Integer literals that are floats because a float is expected (type.num.10).
+    pub float_literals: std::collections::HashSet<Pos>,
     pub std: Std,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
-const PRELUDE: &[&str] = &["print"];
+const PRELUDE: &[&str] = &["print", "unreachable"];
 
-const BUILTIN_TYPES: &[&str] = &["int", "i64", "str", "bool", "List"];
+const BUILTIN_TYPES: &[&str] = &["int", "i64", "float", "f64", "str", "char", "bool", "List", "Map", "Set"];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
-const SPEC_TYPES_NOT_YET: &[&str] =
-    &["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "f64", "float", "char", "Map", "Set", "Option"];
-
-/// Provisional list methods (type.coll.5-7, ADR 0116, ADR 0119).
-const LIST_METHODS: &[&str] = &["len", "push", "swap"];
-
-/// String methods (type.str.4-5).
-const STR_METHODS: &[&str] = &["split", "to_int"];
+const SPEC_TYPES_NOT_YET: &[&str] = &["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "Option"];
 
 pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     let mut c = Checker {
@@ -160,6 +172,9 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
         fn_scopes: Vec::new(),
         fn_self: Vec::new(),
         inferred: vec![Vec::new(); prog.fns.len()],
+        consts: HashMap::new(),
+        const_types: vec![None; prog.consts.len()],
+        const_busy: vec![false; prog.consts.len()],
         resolved: Resolved::default(),
         scope: Vec::new(),
         self_ty: None,
@@ -174,6 +189,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.collect_impls();
     c.resolve_fields();
     c.collect_fns();
+    c.collect_consts();
     c.check_deferred_bounds();
     c.check_main();
     c.check_impls();
@@ -285,6 +301,11 @@ struct Checker<'p> {
     fn_self: Vec<Option<Ty>>,
     /// The inferred error set of each function with a `!T` result (err.type.2).
     inferred: Vec<Vec<Ty>>,
+    /// Constants by name, their types once known, and which are being typed
+    /// (to report cycles) (mod.const.1-3).
+    consts: HashMap<&'p str, usize>,
+    const_types: Vec<Option<Ty>>,
+    const_busy: Vec<bool>,
     resolved: Resolved,
     /// Type parameter names in scope, and what `Self` means here.
     scope: Vec<(String, usize)>,
@@ -302,7 +323,8 @@ struct Checker<'p> {
 fn same(a: &Ty, b: &Ty) -> bool {
     match (a, b) {
         (Ty::Err, _) | (_, Ty::Err) => true,
-        (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) => same(x, y),
+        (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => same(x, y),
+        (Ty::Map(k, v), Ty::Map(l, w)) => same(k, l) && same(v, w),
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) => {
             s == t && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y))
         }
@@ -314,7 +336,8 @@ fn same(a: &Ty, b: &Ty) -> bool {
 fn has_err(t: &Ty) -> bool {
     match t {
         Ty::Err => true,
-        Ty::List(x) | Ty::Opt(x) => has_err(x),
+        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) => has_err(x),
+        Ty::Map(k, v) => has_err(k) || has_err(v),
         Ty::Res(x, _) => has_err(x),
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(has_err),
         _ => false,
@@ -691,6 +714,130 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// Top-level constants (mod.const.1-3): register their names, check that
+    /// each value is a constant expression, and type them in dependency order.
+    fn collect_consts(&mut self) {
+        let prog = self.prog;
+        for (i, c) in prog.consts.iter().enumerate() {
+            let name = c.name.as_str();
+            let taken = self.fns.contains_key(name)
+                || self.types.contains_key(name)
+                || self.traits.contains_key(name)
+                || self.consts.contains_key(name)
+                || PRELUDE.contains(&name)
+                || BUILTIN_TYPES.contains(&name);
+            if taken {
+                self.error("mod.unit.1", c.pos, format!("`{name}` is declared more than once in this module"));
+            } else {
+                self.consts.insert(name, i);
+            }
+            self.constant_expr(&c.value);
+        }
+        for i in 0..prog.consts.len() {
+            self.const_type(i);
+        }
+    }
+
+    /// The type of constant `i`, typing it first if needed (mod.const.3).
+    fn const_type(&mut self, i: usize) -> Ty {
+        if let Some(t) = &self.const_types[i] {
+            return t.clone();
+        }
+        let c = &self.prog.consts[i];
+        if self.const_busy[i] {
+            self.error_help(
+                "mod.const.3",
+                c.pos,
+                format!("the value of `{}` depends on itself", c.name),
+                "constants can refer to other constants, but not in a cycle",
+            );
+            self.const_types[i] = Some(Ty::Err);
+            return Ty::Err;
+        }
+        self.const_busy[i] = true;
+        let saved = (std::mem::take(&mut self.locals), std::mem::take(&mut self.scope), self.self_ty.take());
+        let t = self.expr(&c.value, None, true);
+        (self.locals, self.scope, self.self_ty) = saved;
+        self.const_busy[i] = false;
+        if t == Ty::Unit {
+            self.error("mod.const.2", c.value.pos(), format!("`{}` would be a constant with no value", c.name));
+        }
+        let t = self.const_types[i].clone().unwrap_or(t);
+        self.const_types[i] = Some(t.clone());
+        t
+    }
+
+    /// Report the parts of a constant's value that aren't constant
+    /// expressions (mod.const.2): calls of functions and methods, and control
+    /// flow.
+    fn constant_expr(&mut self, e: &Expr) {
+        let reject = |c: &mut Self, at: Pos, what: &str| {
+            c.error_help(
+                "mod.const.2",
+                at,
+                format!("a constant's value can't contain {what}"),
+                "use literals, operators, collection and struct literals, and other constants; or write a function",
+            );
+        };
+        match e {
+            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
+            Expr::None(_) => {}
+            Expr::Interp(parts, _) => {
+                for p in parts {
+                    if let InterpPart::Expr(x) = p {
+                        self.constant_expr(x);
+                    }
+                }
+            }
+            Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.constant_expr(x)),
+            Expr::Map(pairs, _) => pairs.iter().for_each(|(k, v)| {
+                self.constant_expr(k);
+                self.constant_expr(v);
+            }),
+            Expr::Unary { operand, .. } => self.constant_expr(operand),
+            Expr::Binary { lhs, rhs, .. } => {
+                self.constant_expr(lhs);
+                self.constant_expr(rhs);
+            }
+            // `Enum.Variant`
+            Expr::Field { recv, .. } if matches!(&**recv, Expr::Name(n, _) if self.types.contains_key(n.as_str())) => {}
+            // Struct literals, variants with data, and `List[T]()`.
+            Expr::Call { callee, args, .. } => {
+                let ok = match &**callee {
+                    Expr::Name(n, _) => !self.fns.contains_key(n.as_str()) && !PRELUDE.contains(&n.as_str()),
+                    Expr::TypeArgs { name, .. } => !self.fns.contains_key(name.as_str()),
+                    _ => false,
+                };
+                if ok {
+                    args.iter().for_each(|a| self.constant_expr(&a.value));
+                } else {
+                    reject(self, e.pos(), "a function call");
+                }
+            }
+            Expr::Method { recv, name, args, name_pos } => {
+                let variant = match &**recv {
+                    Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } => match self.types.get(n.as_str()) {
+                        Some(Def::Enum(en)) => self.variant_index(*en, name).is_some(),
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                if variant {
+                    args.iter().for_each(|a| self.constant_expr(&a.value));
+                } else {
+                    reject(self, *name_pos, "a method call");
+                }
+            }
+            Expr::Field { name_pos, .. } => reject(self, *name_pos, "a field access"),
+            Expr::Index { pos, .. } => reject(self, *pos, "indexing"),
+            Expr::Range { pos, .. } => reject(self, *pos, "a range"),
+            Expr::If { pos, .. } => reject(self, *pos, "`if`"),
+            Expr::Match { pos, .. } => reject(self, *pos, "`match`"),
+            Expr::Try { pos, .. } => reject(self, *pos, "`?`"),
+            Expr::TypeArgs { pos, .. } => reject(self, *pos, "a type"),
+        }
+    }
+
     fn check_main(&mut self) {
         match self.prog.fns.iter().find(|f| f.name == "main" && f.owner.is_none() && f.top_level()) {
             None => self.diags.push(
@@ -704,8 +851,10 @@ impl<'p> Checker<'p> {
                 if !f.params.is_empty() {
                     self.error("mod.main.1", f.params[0].pos, "`main` takes no parameters");
                 }
+                let i = self.fns.get("main").copied();
+                let fails_only = i.is_some_and(|i| matches!(&self.sigs[i].ret, Ty::Res(ok, _) if **ok == Ty::Unit));
                 if let Some(ret) = &f.ret
-                    && !matches!(ret.kind, TypeKind::Fallible { ok: None, .. })
+                    && !fails_only
                 {
                     self.error_help(
                         "mod.main.1",
@@ -724,6 +873,11 @@ impl<'p> Checker<'p> {
             return self.resolve_type(t);
         };
         let ok_ty = ok.as_ref().map_or(Ty::Unit, |o| self.resolve_type(o));
+        // err.type.7: an error type can't be a success value (err.decl.3), so
+        // `! E` is a result with no success value that fails with `E`.
+        if errors.is_none() && self.is_error(&ok_ty) {
+            return Ty::Res(Box::new(Ty::Unit), Errs::Set(vec![ok_ty]));
+        }
         if self.is_error(&ok_ty) {
             self.error_help(
                 "err.decl.3",
@@ -779,7 +933,9 @@ impl<'p> Checker<'p> {
         }
         let ty = match name.as_str() {
             "int" | "i64" => Ty::Int,
+            "float" | "f64" => Ty::Float,
             "str" => Ty::Str,
+            "char" => Ty::Char,
             "bool" => Ty::Bool,
             "Self" => match self.self_ty.clone() {
                 Some(t) => t,
@@ -804,6 +960,27 @@ impl<'p> Checker<'p> {
                     return Ty::Err;
                 }
                 return Ty::List(Box::new(self.resolve_type(&args[0])));
+            }
+            "Map" | "Set" => {
+                let want = if name == "Map" { 2 } else { 1 };
+                if args.len() != want {
+                    let example = if want == 2 { "Map[str, int]" } else { "Set[str]" };
+                    self.error_help(
+                        "gram.generic.1",
+                        t.pos,
+                        format!("`{name}` takes {}, but {} given", count(want, "type argument"), was_were(args.len())),
+                        format!("write e.g. `{example}`"),
+                    );
+                    return Ty::Err;
+                }
+                let first = self.resolve_type(&args[0]);
+                let ty = if want == 2 {
+                    Ty::Map(Box::new(first.clone()), Box::new(self.resolve_type(&args[1])))
+                } else {
+                    Ty::Set(Box::new(first.clone()))
+                };
+                self.require_key(&first, t.pos);
+                return ty;
             }
             n if SPEC_TYPES_NOT_YET.contains(&n) => {
                 self.unsupported(t.pos, format!("type `{n}` is not supported by the bootstrap yet (spec 04-types)"));
@@ -990,6 +1167,16 @@ impl<'p> Checker<'p> {
                 msg,
                 "this value may be absent; supply a fallback with `x := value else fallback`",
             ),
+            // expr.name.2: conversions other languages make implicitly.
+            (Ty::Int, Ty::Float) => self.error_help(
+                rule,
+                pos,
+                msg,
+                "no implicit conversion: `x.to_int()` truncates toward zero; `x.round().to_int()` rounds",
+            ),
+            (Ty::Float, Ty::Int) => self.error_help(rule, pos, msg, "no implicit conversion: write `n.to_float()`"),
+            (Ty::Str, Ty::Char) => self.error_help(rule, pos, msg, "make a one-character string with \"{c}\""),
+            (Ty::Char, Ty::Str) => self.error_help(rule, pos, msg, "a character is written in single quotes: 'a'"),
             _ => self.error(rule, pos, msg),
         }
     }
@@ -1037,13 +1224,17 @@ impl<'p> Checker<'p> {
         };
         match t {
             Ty::Int => "int".into(),
+            Ty::Float => "float".into(),
             Ty::Str => "str".into(),
+            Ty::Char => "char".into(),
             Ty::Bool => "bool".into(),
             Ty::Unit | Ty::Never => "no value".into(),
             Ty::Err => "?".into(),
             Ty::Struct(i, args) => with_args(&self.prog.structs[*i].name, args),
             Ty::Enum(i, args) => with_args(&self.prog.enums[*i].name, args),
             Ty::List(e) => format!("List[{}]", self.ty_name(e)),
+            Ty::Map(k, v) => format!("Map[{}, {}]", self.ty_name(k), self.ty_name(v)),
+            Ty::Set(e) => format!("Set[{}]", self.ty_name(e)),
             Ty::Opt(t) => format!("{}?", self.ty_name(t)),
             Ty::Res(ok, errs) => {
                 let set: Vec<String> = self.errs_of(errs).iter().map(|t| self.ty_name(t)).collect();
@@ -1162,16 +1353,21 @@ impl<'p> Checker<'p> {
             Stmt::Let { name, pos, mutable, value, otherwise } => {
                 let vt = self.expr(value, None, true);
                 let ty = match otherwise {
-                    Some(o) => self.else_part(&vt, value.pos(), o),
+                    Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => Self::ok_type(&vt),
                     None => vt,
                 };
                 if ty == Ty::Unit {
-                    self.error(
-                        "expr.bind.1",
-                        value.pos(),
-                        format!("`{name}` would be bound to an expression that produces no value"),
-                    );
+                    let msg = format!("`{name}` would be bound to an expression that produces no value");
+                    match value {
+                        Expr::Method { name: m, .. } if m == "sort" => self.error_help(
+                            "expr.bind.1",
+                            value.pos(),
+                            msg,
+                            "`sort()` changes the list in place; `xs.sorted()` gives a new sorted list",
+                        ),
+                        _ => self.error("expr.bind.1", value.pos(), msg),
+                    }
                 }
                 if self.declare(name, *pos) {
                     self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding });
@@ -1187,6 +1383,11 @@ impl<'p> Checker<'p> {
                 self.loops += 1;
                 self.block(body, None, false);
                 self.loops -= 1;
+                // expr.loop.7: `while true` with no `break` of its own never finishes.
+                if matches!(cond, Expr::Bool(true, _)) && !breaks(body) { Ty::Never } else { Ty::Unit }
+            }
+            Stmt::Handle { value, otherwise } => {
+                self.handle(value, otherwise);
                 Ty::Unit
             }
             Stmt::For { var, var_pos, mutable, iter, body, .. } => {
@@ -1242,9 +1443,37 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// `f(x) else ...` for a result with no success value (err.else.4).
+    fn handle(&mut self, value: &'p Expr, otherwise: &'p Else) {
+        let vt = self.expr(value, None, true);
+        match &vt {
+            Ty::Res(ok, _) if **ok == Ty::Unit => {
+                self.else_part(&vt, value, otherwise);
+            }
+            Ty::Err => {}
+            Ty::Res(..) | Ty::Opt(_) => {
+                let what = if matches!(vt, Ty::Opt(_)) { "may be absent" } else { "can fail" };
+                self.error_help(
+                    "err.else.4",
+                    value.pos(),
+                    format!(
+                        "this {what}, and has a value ({}); `else` on its own handles only results with no value",
+                        self.show(&vt)
+                    ),
+                    "bind the value: `x := ... else ...`",
+                );
+            }
+            _ => {
+                let msg = format!("`else` handles a failure, but this is {} and can't fail", self.show(&vt));
+                self.error_help("err.else.4", value.pos(), msg, "remove the `else`");
+            }
+        }
+    }
+
     /// The `else` part of `x := e else ...`; returns the type bound to `x`
     /// (err.else.1-3).
-    fn else_part(&mut self, vt: &Ty, pos: Pos, o: &'p Else) -> Ty {
+    fn else_part(&mut self, vt: &Ty, value: &Expr, o: &'p Else) -> Ty {
+        let pos = value.pos();
         let (ok, errors) = match vt {
             Ty::Opt(t) => ((**t).clone(), None),
             Ty::Res(t, e) => ((**t).clone(), Some(self.errs_of(e))),
@@ -1254,11 +1483,23 @@ impl<'p> Checker<'p> {
                     "`else` handles a value that can be absent (`T?`) or fail (`T ! E`), but this is {}",
                     self.show(other)
                 );
-                self.error("err.else.1", pos, msg);
+                match Self::never_absent_help(value) {
+                    Some(h) => self.error_help("err.else.1", pos, msg, h),
+                    None => self.error("err.else.1", pos, msg),
+                }
                 (other.clone(), None)
             }
         };
         match o {
+            Else::Value(d) if ok == Ty::Unit => {
+                self.expr(d, None, true);
+                self.error_help(
+                    "err.else.4",
+                    d.pos(),
+                    "this result has no value, so there's nothing to fall back to",
+                    "write `else return`, or `else err` with a block that handles the error",
+                );
+            }
             Else::Value(d) => {
                 let dt = self.expr(d, Some(&ok), true);
                 if !self.accepts(&ok, &dt) {
@@ -1292,9 +1533,11 @@ impl<'p> Checker<'p> {
                         None => {}
                     }
                 }
-                let t = self.block(body, Some(&ok), true);
+                // err.else.4: with no value to supply, the block may just end.
+                let unit = ok == Ty::Unit;
+                let t = if unit { self.block(body, None, false) } else { self.block(body, Some(&ok), true) };
                 self.locals.truncate(mark);
-                if !self.accepts(&ok, &t) {
+                if !unit && !self.accepts(&ok, &t) {
                     let msg = format!(
                         "this `else` block must leave (with `return`, `break` or `continue`) or end with {}",
                         self.show(&ok)
@@ -1321,6 +1564,8 @@ impl<'p> Checker<'p> {
             "a function"
         } else if self.types.contains_key(name) || BUILTIN_TYPES.contains(&name) {
             "a type"
+        } else if self.consts.contains_key(name) {
+            "a constant"
         } else {
             return true;
         };
@@ -1353,14 +1598,27 @@ impl<'p> Checker<'p> {
 
     /// The element type of a `for` loop's iterable (expr.loop.4).
     fn iterable(&mut self, iter: &'p Expr) -> Ty {
-        if let Expr::Range { lo, hi, .. } = iter {
-            self.range_bounds(lo, hi);
+        if let Expr::Range { lo, hi, pos, .. } = iter {
+            self.loop_range(lo.as_deref(), hi.as_deref(), *pos);
             return Ty::Int;
         }
         match self.expr(iter, None, true) {
-            Ty::List(t) => *t,
+            Ty::List(t) | Ty::Set(t) => *t,
             Ty::Err => Ty::Err,
             t if self.reject_unhandled(&t, iter.pos()) => Ty::Err,
+            Ty::Map(..) => {
+                self.error_help(
+                    "type.map.5",
+                    iter.pos(),
+                    "`for` iterates a map's keys or values explicitly",
+                    "write `for k in m.keys()`, or `m.values()`",
+                );
+                Ty::Err
+            }
+            Ty::Str => {
+                self.error_help("expr.loop.4", iter.pos(), "`for` can't iterate over a `str`", "iterate `s.chars()`");
+                Ty::Err
+            }
             t => {
                 let msg = format!("`for` can't iterate over {}", self.show(&t));
                 if t == Ty::Int {
@@ -1407,8 +1665,21 @@ impl<'p> Checker<'p> {
         elem
     }
 
-    fn range_bounds(&mut self, lo: &'p Expr, hi: &'p Expr) {
-        for bound in [lo, hi] {
+    /// The bounds of a `for` range, which needs both (expr.loop.3).
+    fn loop_range(&mut self, lo: Option<&'p Expr>, hi: Option<&'p Expr>, pos: Pos) {
+        if lo.is_none() || hi.is_none() {
+            self.error_help(
+                "expr.loop.3",
+                pos,
+                "a `for` range needs both bounds",
+                "write `a..b`; open ranges are only for slices, `xs[a..]`",
+            );
+        }
+        self.range_bounds(lo, hi);
+    }
+
+    fn range_bounds(&mut self, lo: Option<&'p Expr>, hi: Option<&'p Expr>) {
+        for bound in [lo, hi].into_iter().flatten() {
             let t = self.expr(bound, Some(&Ty::Int), true);
             if !self.accepts(&Ty::Int, &t) {
                 let msg = format!("range bounds must be `int`, found {}", self.show(&t));
@@ -1545,6 +1816,11 @@ impl<'p> Checker<'p> {
             Stmt::While { cond, body, .. } => e(cond).or_else(|| self.overlapping_use(target, body)),
             Stmt::For { iter, body, .. } => e(iter).or_else(|| self.overlapping_use(target, body)),
             Stmt::Return(Some(v), _) | Stmt::Expr(v) => e(v),
+            Stmt::Handle { value, otherwise } => e(value).or_else(|| match otherwise {
+                Else::Value(d) => e(d),
+                Else::Leave(st) => self.overlap_in_stmt(target, st),
+                Else::Block { body, .. } => self.overlapping_use(target, body),
+            }),
             Stmt::Return(None, _) | Stmt::Break(_) | Stmt::Continue(_) => None,
         }
     }
@@ -1561,9 +1837,14 @@ impl<'p> Checker<'p> {
             });
         }
         match x {
-            Expr::Str(..) | Expr::Int(..) | Expr::Bool(..) | Expr::None(_) | Expr::Name(..) | Expr::TypeArgs { .. } => {
-                None
-            }
+            Expr::Str(..)
+            | Expr::Int(..)
+            | Expr::Float(..)
+            | Expr::Char(..)
+            | Expr::Bool(..)
+            | Expr::None(_)
+            | Expr::Name(..)
+            | Expr::TypeArgs { .. } => None,
             Expr::Interp(parts, _) => parts.iter().find_map(|p| match p {
                 InterpPart::Expr(y) => e(y),
                 InterpPart::Lit(_) => None,
@@ -1575,7 +1856,9 @@ impl<'p> Checker<'p> {
             Expr::Index { recv, index, .. } => e(recv).or_else(|| e(index)),
             Expr::Unary { operand, .. } => e(operand),
             Expr::Binary { lhs, rhs, .. } => e(lhs).or_else(|| e(rhs)),
-            Expr::Range { lo, hi, .. } => e(lo).or_else(|| e(hi)),
+            Expr::Range { lo, hi, .. } => lo.as_deref().and_then(e).or_else(|| hi.as_deref().and_then(e)),
+            Expr::Map(pairs, _) => pairs.iter().find_map(|(k, v)| e(k).or_else(|| e(v))),
+            Expr::Set(items, _) => items.iter().find_map(e),
             Expr::If { branches, els, .. } => branches
                 .iter()
                 .find_map(|(c, b)| {
@@ -1600,7 +1883,14 @@ impl<'p> Checker<'p> {
     fn expr(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         match e {
             Expr::Str(..) => Ty::Str,
+            // type.num.10: an integer literal where a float is expected is a float.
+            Expr::Int(_, pos) if matches!(expect, Some(Ty::Float)) => {
+                self.resolved.float_literals.insert(*pos);
+                Ty::Float
+            }
             Expr::Int(..) => Ty::Int,
+            Expr::Float(..) => Ty::Float,
+            Expr::Char(..) => Ty::Char,
             Expr::Bool(..) => Ty::Bool,
             Expr::None(pos) => self.none(*pos, expect),
             Expr::Try { expr, context, pos } => self.try_expr(expr, context.as_deref(), *pos),
@@ -1629,10 +1919,18 @@ impl<'p> Checker<'p> {
             Expr::Method { recv, name, name_pos, args } => self.method(recv, name, *name_pos, args, expect),
             Expr::Field { recv, name, name_pos } => self.field(recv, name, *name_pos, expect),
             Expr::Index { recv, index, .. } => self.index(recv, index),
+            Expr::Unary { op: UnOp::Neg, operand, .. }
+                if matches!(expect, Some(Ty::Float)) && matches!(**operand, Expr::Int(..)) =>
+            {
+                self.float_literal(operand);
+                Ty::Float
+            }
             Expr::Unary { op, operand, pos } => self.unary(*op, operand, *pos),
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
+            Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
+            Expr::Set(items, pos) => self.set_literal(items, *pos, expect),
             Expr::Range { lo, hi, pos, .. } => {
-                self.range_bounds(lo, hi);
+                self.range_bounds(lo.as_deref(), hi.as_deref());
                 self.unsupported(
                     *pos,
                     "a range outside `for` and list slicing is not supported by the bootstrap yet (spec expr.loop.3)",
@@ -1661,6 +1959,9 @@ impl<'p> Checker<'p> {
     fn name(&mut self, n: &str, pos: Pos, expect: Option<&Ty>) -> Ty {
         if let Some(l) = self.local(n) {
             return l.ty.clone();
+        }
+        if let Some(&i) = self.consts.get(n) {
+            return self.const_type(i);
         }
         if n == "self" {
             self.error_help(
@@ -1849,6 +2150,7 @@ impl<'p> Checker<'p> {
         let ret = self.ret.clone();
         match t {
             Ty::Opt(v) => {
+                self.resolved.optional_try.insert(pos);
                 if !matches!(ret, Ty::Opt(_)) {
                     self.error_help(
                         "err.prop.2",
@@ -1986,6 +2288,24 @@ impl<'p> Checker<'p> {
         if n == "print" {
             return self.print_call(args, npos);
         }
+        // err.model.2: `unreachable(message)` traps; it never returns.
+        if n == "unreachable" {
+            let sig = Sig::plain(None, vec![(false, Ty::Str)], Ty::Unit);
+            self.check_call(n, &sig, Vec::new(), args, None, npos, None);
+            return Ty::Never;
+        }
+        if let Some(t) = targs.and_then(|a| self.collection_constructor(n, a, npos)) {
+            if !args.is_empty() {
+                self.args_only(args);
+                self.error_help(
+                    "type.coll.8",
+                    npos,
+                    format!("`{n}[...]()` makes an empty collection and takes no arguments"),
+                    "write the elements as a literal, e.g. `[1, 2]`",
+                );
+            }
+            return t;
+        }
         match self.types.get(n.as_str()).copied() {
             Some(Def::Struct(s)) => {
                 let explicit = targs.map(|a| self.explicit_args(n, &self.struct_params[s].clone(), a, npos));
@@ -2030,6 +2350,166 @@ impl<'p> Checker<'p> {
             self.unknown_name(n, npos);
         }
         Ty::Err
+    }
+
+    /// `List[T]()`: an empty collection of a given type (type.coll.8).
+    fn collection_constructor(&mut self, name: &str, targs: &[TypeRef], pos: Pos) -> Option<Ty> {
+        let want = match name {
+            "List" | "Set" => 1,
+            "Map" => 2,
+            _ => return None,
+        };
+        if targs.len() != want {
+            self.error_help(
+                "gram.generic.1",
+                pos,
+                format!("`{name}` takes {}, but {} given", count(want, "type argument"), was_were(targs.len())),
+                format!("write e.g. `{name}[int]()`"),
+            );
+            return Some(Ty::Err);
+        }
+        let first = self.resolve_type(&targs[0]);
+        Some(match name {
+            "List" => Ty::List(Box::new(first)),
+            "Set" => {
+                self.require_key(&first, pos);
+                Ty::Set(Box::new(first))
+            }
+            _ => {
+                self.require_key(&first, pos);
+                Ty::Map(Box::new(first), Box::new(self.resolve_type(&targs[1])))
+            }
+        })
+    }
+
+    /// Map keys and set elements must implement `Hash` (type.map.2).
+    fn require_key(&mut self, t: &Ty, pos: Pos) {
+        if self.implements(t, self.std.hash) {
+            return;
+        }
+        let why = self.hash_cause(t);
+        self.error_help(
+            "type.map.2",
+            pos,
+            format!("{} can't be a map key or set element (it isn't `Hash`)", self.show(t)),
+            why,
+        );
+    }
+
+    /// `{k: v, ...}`, or `{}` where a map or set is expected (type.coll.2-3).
+    fn map_literal(&mut self, pairs: &'p [(Expr, Expr)], pos: Pos, expect: Option<&Ty>) -> Ty {
+        let expected = match expect {
+            Some(Ty::Opt(t)) => Some(&**t),
+            e => e,
+        };
+        if pairs.is_empty() {
+            return match expected {
+                Some(t @ Ty::Set(_)) => {
+                    self.resolved.empty_sets.insert(pos);
+                    t.clone()
+                }
+                Some(t @ Ty::Map(..)) => t.clone(),
+                _ => {
+                    self.error_help(
+                        "type.coll.3",
+                        pos,
+                        "the type of this empty `{}` isn't known",
+                        "use `{}` where a map or set is expected, or write `Map[K, V]()` or `Set[T]()`",
+                    );
+                    Ty::Err
+                }
+            };
+        }
+        let (kh, vh) = match expected {
+            Some(Ty::Map(k, v)) => (Some((**k).clone()), Some((**v).clone())),
+            _ => (None, None),
+        };
+        let keys: Vec<&'p Expr> = pairs.iter().map(|(k, _)| k).collect();
+        let vals: Vec<&'p Expr> = pairs.iter().map(|(_, v)| v).collect();
+        let k = self.elements(&keys, kh, "type.coll.2", "map keys");
+        let v = self.elements(&vals, vh, "type.coll.2", "map values");
+        self.require_key(&k, pos);
+        self.duplicate_literals(&keys, "key");
+        Ty::Map(Box::new(k), Box::new(v))
+    }
+
+    /// `{a, b, ...}` (type.coll.2).
+    fn set_literal(&mut self, items: &'p [Expr], pos: Pos, expect: Option<&Ty>) -> Ty {
+        let hint = match expect {
+            Some(Ty::Set(t)) => Some((**t).clone()),
+            Some(Ty::Opt(o)) => match &**o {
+                Ty::Set(t) => Some((**t).clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let items: Vec<&'p Expr> = items.iter().collect();
+        let t = self.elements(&items, hint, "type.coll.2", "set elements");
+        self.require_key(&t, pos);
+        self.duplicate_literals(&items, "element");
+        Ty::Set(Box::new(t))
+    }
+
+    /// Report a key or element written twice as the same literal (type.map.1).
+    fn duplicate_literals(&mut self, items: &[&'p Expr], what: &str) {
+        let mut seen: Vec<(Literal, Pos)> = Vec::new();
+        for e in items {
+            let lit = match e {
+                Expr::Int(n, _) => Literal::Int(*n),
+                Expr::Unary { op: UnOp::Neg, operand, .. } => match &**operand {
+                    Expr::Int(n, _) => Literal::Int(n.wrapping_neg()),
+                    _ => continue,
+                },
+                Expr::Str(s, _) => Literal::Str(s.clone()),
+                Expr::Char(c, _) => Literal::Char(*c),
+                Expr::Bool(b, _) => Literal::Bool(*b),
+                _ => continue,
+            };
+            match seen.iter().find(|(l, _)| *l == lit) {
+                Some((_, first)) => {
+                    let (line, col) = (first.line, first.col);
+                    self.error_help(
+                        "type.map.1",
+                        e.pos(),
+                        format!("this {what} is written twice in the literal"),
+                        format!("the first is at {line}:{col}; remove one"),
+                    );
+                }
+                None => seen.push((lit, e.pos())),
+            }
+        }
+    }
+
+    /// The common type of a literal's elements: the expected one, which each
+    /// must fit, or else the first element's.
+    fn elements(&mut self, items: &[&'p Expr], hint: Option<Ty>, rule: &'static str, what: &str) -> Ty {
+        let known = hint.filter(|h| !has_err(h));
+        let mut first: Option<Ty> = None;
+        for e in items {
+            let want = known.clone().or_else(|| first.clone());
+            let t = self.expr(e, want.as_ref(), true);
+            if self.reject_unhandled(&t, e.pos()) {
+                continue;
+            }
+            if t == Ty::Unit {
+                self.error(rule, e.pos(), format!("{what} must be values"));
+                continue;
+            }
+            match &want {
+                Some(w) if !self.accepts(w, &t) => {
+                    let msg = format!(
+                        "{what} must all have one type: this is {}, the others are {}",
+                        self.show(&t),
+                        self.show(w)
+                    );
+                    self.error(rule, e.pos(), msg);
+                }
+                Some(_) => {}
+                None if t != Ty::Never => first = Some(t),
+                None => {}
+            }
+        }
+        known.or(first).unwrap_or(Ty::Err)
     }
 
     /// Explicit type arguments for `params` (gen.infer.2).
@@ -2338,6 +2818,16 @@ impl<'p> Checker<'p> {
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
+            // type.char.4: `char.from_code(n)`.
+            if tn == "char" && targs.is_none() {
+                if name != "from_code" {
+                    self.args_only(args);
+                    self.error("expr.name.1", pos, format!("`char` has no associated function `{name}`"));
+                    return Ty::Err;
+                }
+                let sig = Sig::plain(None, vec![(false, Ty::Int)], Ty::Opt(Box::new(Ty::Char)));
+                return self.check_call("char.from_code", &sig, Vec::new(), args, None, pos, expect);
+            }
             if targs.is_none()
                 && let Some(&tr) = self.traits.get(tn)
             {
@@ -2356,11 +2846,7 @@ impl<'p> Checker<'p> {
                 self.no_method(&rt, name, pos);
                 Ty::Err
             }
-            [Cand::List] => {
-                let Ty::List(elem) = &rt else { unreachable!("a list") };
-                self.list_method(recv, elem, name, pos, args)
-            }
-            [Cand::Str] => self.str_method(recv, name, pos, args),
+            [Cand::Builtin] => self.builtin_call(recv, &rt, name, pos, args),
             [Cand::Inherent(i)] => {
                 let sig = self.sigs[*i].clone();
                 let tn = self.type_name(&rt).unwrap_or_default();
@@ -2538,40 +3024,11 @@ impl<'p> Checker<'p> {
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 
-    /// `xs.len()`, `xs.push(v)` and `xs.swap(i, j)` (type.coll.5-7).
-    fn list_method(&mut self, recv: &'p Expr, elem: &Ty, name: &str, pos: Pos, args: &'p [Arg]) -> Ty {
-        let (receiver, params, ret) = match name {
-            "len" => (false, Vec::new(), Ty::Int),
-            "push" => (true, vec![(false, elem.clone())], Ty::Unit),
-            _ => (true, vec![(false, Ty::Int), (false, Ty::Int)], Ty::Unit),
-        };
-        if receiver {
-            self.require_mutable(recv, Some("trait.method.3"), &format!("the receiver of `{name}`"));
-        }
-        let sig = Sig::plain(Some(receiver), params, ret);
-        self.check_call(name, &sig, Vec::new(), args, Some(recv), pos, None)
-    }
-
-    /// `s.split(sep)` and `s.to_int()` (type.str.4-5).
-    fn str_method(&mut self, recv: &'p Expr, name: &str, pos: Pos, args: &'p [Arg]) -> Ty {
-        let (params, ret) = match name {
-            "split" => (vec![(false, Ty::Str)], Ty::List(Box::new(Ty::Str))),
-            _ => (Vec::new(), Ty::Opt(Box::new(Ty::Int))),
-        };
-        let sig = Sig::plain(Some(false), params, ret);
-        self.check_call(name, &sig, Vec::new(), args, Some(recv), pos, None)
-    }
-
     /// Report a method call on a type without that method.
     fn no_method(&mut self, rt: &Ty, name: &str, pos: Pos) {
-        let mut names: Vec<&str> = match rt {
-            Ty::List(_) => LIST_METHODS.to_vec(),
-            Ty::Str => STR_METHODS.to_vec(),
-            t => self
-                .type_name(t)
-                .and_then(|tn| self.methods.get(tn))
-                .map(|m| m.keys().copied().collect())
-                .unwrap_or_default(),
+        let mut names: Vec<&str> = match self.type_name(rt).and_then(|tn| self.methods.get(tn)) {
+            Some(m) => m.keys().copied().collect(),
+            None => builtins::builtin_names(rt).to_vec(),
         };
         for (t, decl) in self.prog.traits.iter().enumerate() {
             if self.implements(rt, t) || matches!(rt, Ty::Any(a) if *a == t) {
@@ -2590,7 +3047,9 @@ impl<'p> Checker<'p> {
             return;
         }
         let mut d = Diagnostic::new("expr.name.1", pos, format!("{shown} has no method `{name}`"));
-        if let Some(s) = suggest(name, &names) {
+        if let Some(h) = builtins::method_help(rt, name) {
+            d = d.help(h);
+        } else if let Some(s) = suggest(name, &names) {
             d = d.help(format!("did you mean `{s}`?"));
         } else if let Ty::Param(p) = rt {
             d = d.help(format!(
@@ -2686,9 +3145,37 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&rt, recv.pos()) {
             return Ty::Err;
         }
+        // `m[k]` (type.map.3).
+        if let Ty::Map(k, v) = &rt {
+            if matches!(index, Expr::Range { .. }) {
+                self.error("type.map.3", index.pos(), "a map can't be sliced");
+                return Ty::Err;
+            }
+            let kt = self.expr(index, Some(k), true);
+            if !self.accepts(k, &kt) {
+                self.mismatch("type.map.3", index.pos(), k, &kt);
+            }
+            return (**v).clone();
+        }
+        // type.coll.4: indexes start at 0; there are no negative indexes.
+        let negative =
+            |e: &Expr| matches!(e, Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..)));
+        let bad = match index {
+            Expr::Range { lo, hi, .. } => [lo, hi].into_iter().flatten().find(|b| negative(b)).map(|b| b.pos()),
+            e if negative(e) => Some(e.pos()),
+            _ => None,
+        };
+        if let Some(at) = bad {
+            self.error_help(
+                "type.coll.4",
+                at,
+                "a list has no negative indexes",
+                "count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`",
+            );
+        }
         let slice = matches!(index, Expr::Range { .. });
         if let Expr::Range { lo, hi, .. } = index {
-            self.range_bounds(lo, hi);
+            self.range_bounds(lo.as_deref(), hi.as_deref());
         } else {
             let it = self.expr(index, Some(&Ty::Int), true);
             if !self.accepts(&Ty::Int, &it) {
@@ -2701,14 +3188,32 @@ impl<'p> Checker<'p> {
             Ty::List(t) => *t,
             Ty::Err => Ty::Err,
             Ty::Str => {
-                self.error("type.str.2", recv.pos(), "a `str` can't be indexed");
+                self.error_help(
+                    "type.str.2",
+                    recv.pos(),
+                    "a `str` can't be indexed",
+                    "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
+                );
                 Ty::Err
             }
             t => {
-                let msg = format!("only lists can be indexed, not {}", self.show(&t));
+                let msg = format!("only lists and maps can be indexed, not {}", self.show(&t));
                 self.error("type.coll.4", recv.pos(), msg);
                 Ty::Err
             }
+        }
+    }
+
+    /// Whether `e` is an integer literal (or its negation), which can be a
+    /// float where one is expected; if so, it is recorded as one (type.num.10).
+    fn float_literal(&mut self, e: &Expr) -> bool {
+        match e {
+            Expr::Int(_, pos) => {
+                self.resolved.float_literals.insert(*pos);
+                true
+            }
+            Expr::Unary { op: UnOp::Neg, operand, .. } => self.float_literal(operand),
+            _ => false,
         }
     }
 
@@ -2720,6 +3225,9 @@ impl<'p> Checker<'p> {
         let t = self.expr(operand, Some(&want), true);
         if self.reject_unhandled(&t, operand.pos()) {
             return Ty::Err;
+        }
+        if op == UnOp::Neg && t == Ty::Float {
+            return Ty::Float;
         }
         if self.accepts(&want, &t) {
             return want;
@@ -2744,8 +3252,24 @@ impl<'p> Checker<'p> {
             return Ty::Bool;
         }
         // expr.cmp.1: the right operand's expected type is the left's.
-        let lt = self.expr(lhs, None, true);
+        let mut lt = self.expr(lhs, None, true);
         let rt = self.expr(rhs, Some(&lt), true);
+        // type.num.10: `2 * x` with a float `x`.
+        if lt == Ty::Int && rt == Ty::Float && self.float_literal(lhs) {
+            lt = Ty::Float;
+        }
+        // expr.cmp.3: `xs.index_of(x) == -1` would always be false.
+        if matches!(op, BinOp::Eq | BinOp::Ne)
+            && lt == Ty::Opt(Box::new(Ty::Int))
+            && matches!(rhs, Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..)))
+        {
+            self.error_help(
+                "expr.cmp.3",
+                rhs.pos(),
+                "this compares an optional with a negative number, so it's never equal: absence is `none`",
+                "write `== none`, or bind it: `if i := ...`",
+            );
+        }
         self.operator(op, &lt, &rt, pos)
     }
 
@@ -2778,6 +3302,8 @@ impl<'p> Checker<'p> {
         if op.is_arithmetic() {
             match lt {
                 Ty::Int => return Ty::Int,
+                // type.num.6: float arithmetic, without `%`.
+                Ty::Float if op != BinOp::Rem => return Ty::Float,
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new(UNSUPPORTED, pos, "joining strings with `+` is not decided yet (spec trait.op.1)")
                         .help("build text with interpolation: \"{a}{b}\""),
@@ -2873,6 +3399,20 @@ impl<'p> Checker<'p> {
         if need && els.is_none() { Ty::Err } else { agree.result() }
     }
 
+    /// Help for `else` or `if name :=` on a value that is never absent, when
+    /// it looks like an optional in other languages (expr.name.2).
+    fn never_absent_help(value: &Expr) -> Option<&'static str> {
+        match value {
+            Expr::Index { .. } => {
+                Some("indexing traps when the index or key is missing; for a map, `m.get(k)` gives an optional")
+            }
+            Expr::Method { name, .. } if name == "to_int" => {
+                Some("`x.to_int()` on a float traps on NaN or out of range; it never returns `none`")
+            }
+            _ => None,
+        }
+    }
+
     /// The type bound by `if name := value`, and the errors it can fail with
     /// when `value` is a `T ! E` (expr.if.5).
     fn binding_condition(&mut self, name: &str, value: &'p Expr) -> (Ty, Option<Vec<Ty>>) {
@@ -2885,7 +3425,8 @@ impl<'p> Checker<'p> {
                     "`if {name} := ...` needs a value that can be absent (`T?`) or fail (`T ! E`), but this is {}",
                     self.show(&other)
                 );
-                self.error_help("expr.if.5", value.pos(), msg, "compare it instead, e.g. `if x == ...`");
+                let help = Self::never_absent_help(value).unwrap_or("compare it instead, e.g. `if x == ...`");
+                self.error_help("expr.if.5", value.pos(), msg, help);
                 (other, None)
             }
         }
@@ -2900,38 +3441,42 @@ impl<'p> Checker<'p> {
         need: bool,
     ) -> Ty {
         let st = self.expr(scrutinee, None, true);
-        let e = match st {
-            Ty::Enum(e, ref args) => Some((e, args.clone())),
-            Ty::Err => None,
-            t if self.reject_unhandled(&t, scrutinee.pos()) => None,
+        // An enum, or a type with literal patterns (expr.match.7).
+        let (e, literal) = match st {
+            Ty::Enum(e, ref args) => (Some((e, args.clone())), None),
+            Ty::Int | Ty::Char | Ty::Str | Ty::Bool => (None, Some(st.clone())),
+            Ty::Err => (None, None),
+            ref t if self.reject_unhandled(t, scrutinee.pos()) => (None, None),
             Ty::Union(_) => {
                 self.unsupported(
                     scrutinee.pos(),
                     "matching on a set of error types is not designed yet (OQ-029); match on one error type",
                 );
-                None
+                (None, None)
             }
-            t => {
-                let msg = format!(
-                    "matching on {} needs literal patterns, which are not supported by the bootstrap yet (spec expr.match.4)",
-                    self.show(&t)
-                );
-                self.unsupported(scrutinee.pos(), msg);
-                None
+            ref t => {
+                let msg = format!("a `match` works on an enum, `int`, `char`, `str` or `bool`, not {}", self.show(t));
+                self.error_help("expr.match.4", scrutinee.pos(), msg, "use `if` and `==` instead");
+                (None, None)
             }
         };
         let mut covered = vec![false; e.as_ref().map_or(0, |(e, _)| self.prog.enums[*e].variants.len())];
+        let mut seen: Vec<crate::ast::Literal> = Vec::new();
         let mut wildcard = false;
         let mut agree = Agree::new(expect, need, "arm", "`match`");
         for arm in arms {
-            let bindings = match (&e, &arm.pat) {
-                (Some((e, args)), _) => self.pattern(*e, args, &arm.pat, &mut covered, &mut wildcard),
+            let bindings = match (&e, &literal, &arm.pat) {
+                (Some((e, args)), _, _) => self.pattern(*e, args, &arm.pat, &mut covered, &mut wildcard),
+                (_, Some(t), _) => {
+                    self.literal_pattern(t, &arm.pat, &mut seen, &mut wildcard);
+                    Vec::new()
+                }
                 // The scrutinee was already reported: bind names quietly to
                 // avoid follow-on errors.
-                (None, Pattern::Variant { bindings: Some(names), .. }) => {
+                (None, None, Pattern::Variant { bindings: Some(names), .. }) => {
                     names.iter().map(|(n, p)| (n.clone(), *p, Ty::Err)).collect()
                 }
-                (None, _) => Vec::new(),
+                _ => Vec::new(),
             };
             let mark = self.locals.len();
             for (name, npos, ty) in bindings {
@@ -2957,11 +3502,88 @@ impl<'p> Checker<'p> {
                 );
             }
         }
+        if let Some(t) = &literal {
+            let both_bools = *t == Ty::Bool
+                && seen.contains(&crate::ast::Literal::Bool(true))
+                && seen.contains(&crate::ast::Literal::Bool(false));
+            if !wildcard && !both_bools {
+                let help = if *t == Ty::Bool {
+                    "add the missing `true` or `false` arm"
+                } else {
+                    "add a `_` arm for the other values"
+                };
+                self.error_help(
+                    "expr.match.2",
+                    pos,
+                    format!("this `match` on {} doesn't cover every value", self.show(t)),
+                    help,
+                );
+            }
+        }
         agree.result()
     }
 
+    /// Check a pattern on a value of type `t` with literal patterns
+    /// (expr.match.5, expr.match.7-8).
+    fn literal_pattern(&mut self, t: &Ty, pat: &Pattern, seen: &mut Vec<crate::ast::Literal>, wildcard: &mut bool) {
+        use crate::ast::Literal;
+        match pat {
+            Pattern::Wildcard(pos) => {
+                // `true` and `false` cover a `bool` (expr.match.7).
+                let bools =
+                    *t == Ty::Bool && seen.contains(&Literal::Bool(true)) && seen.contains(&Literal::Bool(false));
+                if *wildcard || bools {
+                    self.error("expr.match.5", *pos, "this arm can never match; earlier arms cover every case");
+                }
+                *wildcard = true;
+            }
+            Pattern::Or(alts, _) => {
+                for a in alts {
+                    if matches!(a, Pattern::Wildcard(_)) {
+                        self.error(
+                            "expr.match.8",
+                            a.pos(),
+                            "`_` can't be one of several alternatives; it already matches everything",
+                        );
+                    } else {
+                        self.literal_pattern(t, a, seen, wildcard);
+                    }
+                }
+            }
+            Pattern::Literal(lit, pos) => {
+                let lt = match lit {
+                    Literal::Int(_) => Ty::Int,
+                    Literal::Char(_) => Ty::Char,
+                    Literal::Str(_) => Ty::Str,
+                    Literal::Bool(_) => Ty::Bool,
+                };
+                if lt != *t {
+                    let msg = format!("this pattern is {}, but the value matched is {}", self.show(&lt), self.show(t));
+                    let help = match (&lt, t) {
+                        (Ty::Str, Ty::Char) => Some("a character pattern is written in single quotes: `'a'`"),
+                        (Ty::Char, Ty::Str) => Some("a string pattern is written in double quotes: `\"a\"`"),
+                        _ => None,
+                    };
+                    match help {
+                        Some(h) => self.error_help("expr.match.7", *pos, msg, h),
+                        None => self.error("expr.match.7", *pos, msg),
+                    }
+                } else if *wildcard || seen.contains(lit) {
+                    self.error("expr.match.5", *pos, "this arm can never match; an earlier arm covers this value");
+                } else {
+                    seen.push(lit.clone());
+                }
+            }
+            Pattern::Variant { pos, name, .. } => {
+                let msg = format!("`{name}` is a variant pattern, but the value matched is {}", self.show(t));
+                self.error("expr.match.4", *pos, msg);
+            }
+        }
+    }
+
     /// Check one pattern against the scrutinee's enum and type arguments
-    /// (expr.match.3-6), and return the names it binds with their types.
+    /// (expr.match.3-6, expr.match.8), and return the names it binds with
+    /// their types.
     fn pattern(
         &mut self,
         e: usize,
@@ -2973,6 +3595,37 @@ impl<'p> Checker<'p> {
         let prog = self.prog;
         let decl = &prog.enums[e];
         match pat {
+            // expr.match.8: alternatives bind no names.
+            Pattern::Or(alts, _) => {
+                for a in alts {
+                    match a {
+                        Pattern::Variant { bindings: Some(names), pos, .. } if names.iter().any(|(n, _)| n != "_") => {
+                            self.error_help(
+                                "expr.match.8",
+                                *pos,
+                                "a pattern with alternatives can't bind names",
+                                "give this variant an arm of its own, or use `_` for its fields",
+                            );
+                        }
+                        Pattern::Wildcard(p) => {
+                            self.error(
+                                "expr.match.8",
+                                *p,
+                                "`_` can't be one of several alternatives; it already matches everything",
+                            );
+                        }
+                        _ => {
+                            self.pattern(e, args, a, covered, wildcard);
+                        }
+                    }
+                }
+                Vec::new()
+            }
+            Pattern::Literal(_, pos) => {
+                let msg = format!("`{}` is an enum; match it with its variants", decl.name);
+                self.error("expr.match.4", *pos, msg);
+                Vec::new()
+            }
             Pattern::Wildcard(pos) => {
                 if *wildcard || covered.iter().all(|c| *c) {
                     self.error("expr.match.5", *pos, "this arm can never match; earlier arms cover every case");
@@ -3050,7 +3703,9 @@ impl<'p> Checker<'p> {
             .chain(self.types.keys().copied())
             .collect();
         let mut d = Diagnostic::new("expr.name.1", pos, format!("unknown name `{name}`"));
-        if let Some(s) = suggest(name, &candidates) {
+        if let Some(h) = builtins::function_help(name) {
+            d = d.help(h);
+        } else if let Some(s) = suggest(name, &candidates) {
             d = d.help(format!("did you mean `{s}`?"));
         }
         self.diags.push(d);
@@ -3128,6 +3783,48 @@ impl Agree {
             Ty::Never
         }
     }
+}
+
+/// Whether a loop body has a `break` that ends this loop (not one of a
+/// nested loop's).
+fn breaks(body: &[Stmt]) -> bool {
+    // A `break` for this loop can sit in any block of an `if` or `match`
+    // expression, wherever that expression appears (but not in a nested loop).
+    fn in_expr(e: &Expr) -> bool {
+        match e {
+            Expr::If { branches, els, .. } => {
+                branches.iter().any(|(_, b)| breaks(b)) || els.as_ref().is_some_and(|b| breaks(b))
+            }
+            Expr::Match { scrutinee, arms, .. } => in_expr(scrutinee) || arms.iter().any(|a| breaks(&a.body)),
+            Expr::Unary { operand, .. } => in_expr(operand),
+            Expr::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+            Expr::Call { callee, args, .. } => in_expr(callee) || args.iter().any(|a| in_expr(&a.value)),
+            Expr::Method { recv, args, .. } => in_expr(recv) || args.iter().any(|a| in_expr(&a.value)),
+            Expr::Field { recv, .. } => in_expr(recv),
+            Expr::Index { recv, index, .. } => in_expr(recv) || in_expr(index),
+            Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(in_expr),
+            Expr::Map(pairs, _) => pairs.iter().any(|(k, v)| in_expr(k) || in_expr(v)),
+            Expr::Try { expr, .. } => in_expr(expr),
+            _ => false,
+        }
+    }
+    fn in_else(o: &Else) -> bool {
+        match o {
+            Else::Leave(st) => matches!(**st, Stmt::Break(_)),
+            Else::Block { body, .. } => breaks(body),
+            Else::Value(v) => in_expr(v),
+        }
+    }
+    body.iter().any(|s| match s {
+        Stmt::Break(_) => true,
+        Stmt::Expr(e) | Stmt::Return(Some(e), _) => in_expr(e),
+        Stmt::Let { value, otherwise, .. } => in_expr(value) || otherwise.as_ref().is_some_and(in_else),
+        Stmt::Handle { value, otherwise, .. } => in_expr(value) || in_else(otherwise),
+        Stmt::Assign { target, value, .. } => in_expr(target) || in_expr(value),
+        Stmt::While { cond, .. } => in_expr(cond),
+        Stmt::For { iter, .. } => in_expr(iter),
+        _ => false,
+    })
 }
 
 fn count(n: usize, noun: &str) -> String {

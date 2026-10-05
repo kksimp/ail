@@ -1,0 +1,41 @@
+# type.str.7: trim (Unicode White_Space), lines, chars.
+fn main()
+    # trim removes leading and trailing is_space characters
+    print(["  hi  ".trim(), "\t\n hi \r\n".trim(), "hi".trim(), "".trim(), "   ".trim(), " a b ".trim()])
+    print(["\u{a0}\u{2003}x\u{3000}".trim(), "\u{85}x\u{2028}".trim(), "\u{1680}\u{202f}\u{205f}x".trim()])
+    # not White_Space: zero width space, BOM, the C0 separators, the Mongolian vowel separator
+    print(["\u{200b}x\u{200b}".trim().chars().len(), "\u{feff}x".trim().chars().len(), "\u{1c}x\u{1f}".trim().chars().len(), "\u{180e}x".trim().chars().len()])
+    print(["\u{b}\u{c}x\u{b}\u{c}".trim(), "é ".trim(), " é".trim(), "😀 ".trim()])
+    print("  inner  space  ".trim())
+    # lines: split on \n, drop one trailing empty piece, strip a \r before each \n
+    print("a\nb".lines())
+    print("a\nb\n".lines())
+    print("a\n\nb".lines())
+    print("a\nb\n\n".lines())
+    print("\n".lines())
+    print("\n\n".lines())
+    print("a\r\nb\r\n".lines())
+    print("a\r\n\r\nb".lines())
+    print("\r\n".lines())
+    print("a".lines())
+    print("abc\n".lines().len())
+    print("".lines().len())
+    # a \r that is not before a \n stays
+    print("a\rb".lines())
+    print("a\r".lines())
+    print("a\r\r\nb".lines())
+    print("a\n\r".lines())
+    print("x\r\n\r\n".lines())
+    print("é\nü\r\n😀".lines())
+    # chars
+    print("héllo".chars())
+    print("😀a".chars().len())
+    print("e\u{301}".chars().len())
+    print("".chars().len())
+    print("a\tb".chars())
+    print("ab".chars() == ['a', 'b'])
+    mut total := 0
+    for c in "añ😀".chars()
+        total += c.code()
+    print(total)
+    print("abc".chars().join("-"))

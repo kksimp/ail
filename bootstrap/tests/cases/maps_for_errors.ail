@@ -1,0 +1,22 @@
+fn a()
+    m := {"a": 1}
+    for k in m
+        print(k)
+
+fn b()
+    mut s := {1, 2}
+    for mut x in s
+        x += 1
+
+fn c()
+    mut m := {1: 2}
+    for mut k in m.keys()
+        k += 1
+
+fn d()
+    mut m := {1: 2}
+    for mut v in m.values()
+        v += 1
+
+fn main()
+    a()

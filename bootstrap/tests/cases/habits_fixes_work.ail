@@ -1,0 +1,69 @@
+NAMES := ["a", "b"]
+LIMIT := 10
+SCALE := 2.5
+
+fn find_two(xs List[int]) int
+    i := xs.index_of(2) else -1
+    i
+
+fn main()
+    xs := [3, 1, 2]
+    s := " Hello "
+    n := 5
+    x := 2.5
+    c := 'a'
+    mut m := Map[str, int]()
+    m["a"] = 1
+    m["b"] = 2
+    mut ys := List[int]()
+    ys.push(7)
+    ys.push(8)
+    print(xs.len())
+    print(s.chars().len())
+    print("n={n}")
+    v := "12".to_int() else 0
+    print(v)
+    f := "1.5".to_float() else 0.0
+    print(f)
+    print(n.to_float() / 2.0)
+    print(x.to_int())
+    print(c.code())
+    up := char.from_code(65) else 'x'
+    print(up)
+    print(xs.sorted())
+    print(xs.sum())
+    print(n.min(3))
+    print(xs.max())
+    print((-3).abs())
+    print(NAMES.join(""))
+    print(s.trim())
+    print(s.starts_with(" "))
+    print(s.starts_with('H'))
+    print(s.ends_with('o'))
+    rest := s.strip_prefix(" ") else ""
+    print(rest)
+    print(s.pad_left(9, '.'))
+    print("7".pad_left(3, '0'))
+    print("a\nb\n".lines())
+    print('7'.is_digit())
+    print(' '.is_space())
+    print('7'.to_digit(10))
+    z := m.get("z") else 0
+    print(z)
+    print(m.contains("a"))
+    for k in m.keys()
+        print("{k}={m[k]}")
+    print(xs[xs.len() - 1])
+    print(xs.last())
+    print(xs.index_of(2) == none)
+    print(find_two(xs))
+    print("\{n}")
+    print('x' == 'x')
+    print("\u{41}")
+    print(r"C:\path")
+    print(LIMIT * 2)
+    print(SCALE * 2)
+    print(ys)
+    print("-".repeat(5))
+    print(['a', 'b'].join(""))
+    print(m)

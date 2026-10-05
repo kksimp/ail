@@ -1,0 +1,12 @@
+arg: ["hello\nworld"]
+two: ["first|second"]
+["one", "two\nthree", "four"]
+3
+banner: ["+--+\n|  |\n+--+"]
+after: ["tail"]
+Doc(title: "T", body: "line1\nline2")
+["a", "b", "c"]
+["1", "2", "3"]
+cmt: ["c"]
+code: ["fn evil()\n    # not a comment\nx := 1; y := 2"]
+kept

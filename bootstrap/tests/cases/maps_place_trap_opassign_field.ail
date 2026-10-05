@@ -1,0 +1,9 @@
+struct S
+    n int
+
+fn main()
+    mut m := {1: S(n: 0)}
+    m[1].n += 1
+    print(m)
+    m[2].n += 1
+    print("unreachable")

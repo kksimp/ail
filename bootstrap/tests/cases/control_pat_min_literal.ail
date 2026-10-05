@@ -1,0 +1,21 @@
+# ADR 0138 expr.match.7 / lex.num.3: a `-` directly before an integer literal is part of
+# the literal, so the smallest int is writable as a pattern, an expression and a constant.
+MIN := -9223372036854775808
+
+fn name(n int) str
+    match n
+        -9223372036854775808 => "min"
+        -9223372036854775807 => "min plus one"
+        9223372036854775807 => "max"
+        _ => "other"
+
+fn main()
+    x := -9223372036854775808
+    print(x)
+    print(MIN)
+    print(x == MIN)
+    print(x == -9223372036854775807 - 1)
+    print(name(x))
+    print(name(x + 1))
+    print(name(-(x + 1)))
+    print(name(0))

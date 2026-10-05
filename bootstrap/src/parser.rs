@@ -11,8 +11,9 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, BinOp, Block, Cond, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart, Owner,
-    Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within,
+    Arg, Arm, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart,
+    Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef,
+    UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
@@ -47,15 +48,25 @@ const COMPARISONS: &[(&str, BinOp)] =
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
 const PRELUDE: &str = include_str!("prelude.ail");
 
-/// Parse a program after the prelude, whose declarations are at line 0
-/// (`ast::is_prelude`).
+/// Parse a program after the prelude, whose lines are numbered from
+/// `ast::PRELUDE_LINE`.
 pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     let (mut all, diags) = lex(PRELUDE);
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
-    for t in &mut all {
-        t.pos.line = 0;
+    fn shift(tokens: &mut [Token]) {
+        for t in tokens {
+            t.pos.line += PRELUDE_LINE;
+            if let Tok::Interp(parts) = &mut t.tok {
+                for p in parts {
+                    if let Part::Code(code) = p {
+                        shift(code);
+                    }
+                }
+            }
+        }
     }
+    shift(&mut all);
     all.extend(tokens);
     parse(all)
 }
@@ -63,7 +74,8 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 /// these, `[` starts type arguments rather than an index (gen.infer.2).
 fn generic_names(tokens: &[Token]) -> HashSet<String> {
-    let mut names = HashSet::new();
+    // The built-in collections: `List[int]()` (type.coll.8).
+    let mut names: HashSet<String> = ["List", "Map", "Set"].iter().map(|n| n.to_string()).collect();
     for w in tokens.windows(3) {
         if let [
             Token { tok: Tok::Kw("fn" | "struct" | "enum"), .. },
@@ -96,6 +108,19 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             }
             Tok::Kw("trait") => p.trait_decl(&mut prog),
             Tok::Kw("impl") => p.impl_decl(&mut prog),
+            // `NAME := expr`: a constant (mod.const.1).
+            Tok::Ident(name) if matches!(p.peek_at(1), Tok::Sym(":=")) => {
+                let pos = p.bump().pos;
+                p.i += 1; // `:=`
+                match p.expression() {
+                    Some(value) if p.eat(&Tok::Newline) => prog.consts.push(ConstDecl { name, pos, value }),
+                    Some(_) => {
+                        p.unexpected("end of line after the constant", "lex.stmt.1");
+                        p.skip_statement();
+                    }
+                    None => p.skip_statement(),
+                }
+            }
             Tok::Kw("struct") => {
                 if let Some(s) = p.struct_decl(false) {
                     prog.structs.push(s);
@@ -126,8 +151,31 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                     p.skip_statement();
                 }
             },
+            Tok::Kw("mut") if matches!(p.peek_at(1), Tok::Ident(_)) => {
+                let pos = p.pos();
+                p.error_help(
+                    "mod.const.1",
+                    pos,
+                    "there are no mutable top-level variables",
+                    "declare a constant `NAME := value`, or pass the value to the functions that change it",
+                );
+                p.skip_statement();
+            }
+            Tok::Ident(word) if ["const", "let", "var", "static"].contains(&word.as_str()) => {
+                let pos = p.pos();
+                p.error_help(
+                    "mod.const.1",
+                    pos,
+                    format!("AIL has no `{word}`; a constant is declared `NAME := value`"),
+                    "remove the keyword",
+                );
+                p.skip_statement();
+            }
             _ => {
-                p.unexpected("a declaration (`fn`, `struct`, `enum`, `error`, `trait` or `impl`)", "gram.syntax.1");
+                p.unexpected(
+                    "a declaration (`fn`, `struct`, `enum`, `error`, `trait`, `impl` or a constant)",
+                    "gram.syntax.1",
+                );
                 p.skip_statement();
             }
         }
@@ -211,12 +259,19 @@ impl Parser {
             Tok::Kw(k) => format!("the keyword `{k}`"),
             Tok::Sym(s) => format!("`{s}`"),
             Tok::Str(_) | Tok::Interp(_) => "a string".into(),
-            Tok::Int(_) => "an integer".into(),
+            Tok::Int(_) | Tok::IntMin => "an integer".into(),
+            Tok::Float(_) => "a number".into(),
+            Tok::Char(_) => "a character".into(),
             Tok::Newline => "end of line".into(),
             Tok::Indent => "an indented block".into(),
             Tok::Dedent => "end of block".into(),
             Tok::Eof => "end of file".into(),
         }
+    }
+
+    /// `9223372036854775808` without a `-` before it (lex.num.3).
+    fn int_too_big(&mut self, pos: Pos) {
+        self.error("lex.num.3", pos, "integer literal `9223372036854775808` doesn't fit in `int` (64-bit signed)");
     }
 
     fn error(&mut self, rule: &'static str, pos: Pos, msg: impl Into<String>) {
@@ -489,6 +544,10 @@ impl Parser {
             self.skip_statement();
             return;
         }
+        // The prelude's `Hash` has no methods: the language provides it (trait.auto.5).
+        if is_prelude(pos) && !matches!(self.peek(), Tok::Indent) {
+            return;
+        }
         let methods = self.fn_block(prog, Within::Trait(index), &format!("`trait {name}`"));
         prog.traits[index].methods = methods;
     }
@@ -569,6 +628,16 @@ impl Parser {
                 Tok::Kw("any") => Some(Box::new(self.type_ref(expected, rule)?)),
                 _ => None,
             };
+            // `! A | B`: no success value, and these errors (err.type.7).
+            if let Some(first) = &ok
+                && self.at_sym("|")
+            {
+                let mut errors = vec![(**first).clone()];
+                while self.eat_sym("|") {
+                    errors.push(self.named_type("an error type after `|`", "err.type.5")?);
+                }
+                return Some(TypeRef { kind: TypeKind::Fallible { ok: None, errors: Some(errors) }, pos });
+            }
             return Some(TypeRef { kind: TypeKind::Fallible { ok, errors: None }, pos });
         }
         if self.eat_kw("any") {
@@ -858,6 +927,11 @@ impl Parser {
             }
             _ => {
                 let target = self.expression()?;
+                // `f(x) else ...` handles a failure with no success value (err.else.4).
+                if self.at_kw("else") {
+                    let otherwise = self.otherwise()?.expect("at `else`");
+                    return Some(Stmt::Handle { value: target, otherwise });
+                }
                 if let Tok::Sym(s) = self.peek().clone() {
                     if let Some((_, op)) = ASSIGN_OPS.iter().find(|(sym, _)| *sym == s) {
                         let pos = self.bump().pos;
@@ -905,19 +979,20 @@ impl Parser {
         }
     }
 
-    /// `a..b` and `a..=b` (expr.loop.3): the loosest operators.
+    /// `a..b` and `a..=b` (expr.loop.3): the loosest operators. A bound may
+    /// be left out before `]`, for a slice (type.coll.10).
     fn range(&mut self) -> Option<Expr> {
-        let lo = self.or()?;
+        let lo = if self.at_sym("..") || self.at_sym("..=") { None } else { Some(Box::new(self.or()?)) };
         let inclusive = if self.at_sym("..") {
             false
         } else if self.at_sym("..=") {
             true
         } else {
-            return Some(lo);
+            return lo.map(|e| *e);
         };
         let pos = self.bump().pos;
-        let hi = self.or()?;
-        Some(Expr::Range { lo: Box::new(lo), hi: Box::new(hi), inclusive, pos })
+        let hi = if self.at_sym("]") { None } else { Some(Box::new(self.or()?)) };
+        Some(Expr::Range { lo, hi, inclusive, pos })
     }
 
     /// A C-style logical operator: report it and treat it as its AIL spelling.
@@ -1019,6 +1094,16 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Option<Expr> {
+        // lex.num.3: `-9223372036854775808` is the minimum `int`, unless a
+        // postfix operator binds the literal first.
+        if self.at_sym("-")
+            && matches!(self.peek_at(1), Tok::IntMin)
+            && !matches!(self.peek_at(2), Tok::Sym("." | "[" | "("))
+        {
+            let pos = self.bump().pos;
+            self.i += 1;
+            return Some(Expr::Int(i64::MIN, pos));
+        }
         if self.at_sym("-") {
             let pos = self.bump().pos;
             let operand = self.unary()?;
@@ -1116,6 +1201,19 @@ impl Parser {
                 self.i += 1;
                 Some(Expr::Int(v, pos))
             }
+            Tok::IntMin => {
+                self.i += 1;
+                self.int_too_big(pos);
+                Some(Expr::Int(0, pos))
+            }
+            Tok::Float(v) => {
+                self.i += 1;
+                Some(Expr::Float(v, pos))
+            }
+            Tok::Char(c) => {
+                self.i += 1;
+                Some(Expr::Char(c, pos))
+            }
             Tok::Kw("true") => {
                 self.i += 1;
                 Some(Expr::Bool(true, pos))
@@ -1154,13 +1252,29 @@ impl Parser {
                 self.expect_sym("]", "`]` or `,` in the list", "type.coll.2")?;
                 Some(Expr::List(elems, pos))
             }
+            // `{k: v, ...}`, `{a, b, ...}`, or `{}` (type.coll.2).
             Tok::Sym("{") => {
-                self.error(
-                    UNSUPPORTED,
-                    pos,
-                    "map and set literals are not supported by the bootstrap yet (spec type.coll.2)",
-                );
-                None
+                self.i += 1;
+                if self.eat_sym("}") {
+                    return Some(Expr::Map(Vec::new(), pos));
+                }
+                let first = self.expression()?;
+                if self.eat_sym(":") {
+                    let mut pairs = vec![(first, self.expression()?)];
+                    while self.eat_sym(",") && !self.at_sym("}") {
+                        let k = self.expression()?;
+                        self.expect_sym(":", "`:` after the key", "type.coll.2")?;
+                        pairs.push((k, self.expression()?));
+                    }
+                    self.expect_sym("}", "`}` or `,` in the map", "type.coll.2")?;
+                    return Some(Expr::Map(pairs, pos));
+                }
+                let mut elems = vec![first];
+                while self.eat_sym(",") && !self.at_sym("}") {
+                    elems.push(self.expression()?);
+                }
+                self.expect_sym("}", "`}` or `,` in the set", "type.coll.2")?;
+                Some(Expr::Set(elems, pos))
             }
             Tok::Kw(k @ ("if" | "match")) => {
                 self.error_help(
@@ -1185,6 +1299,16 @@ impl Parser {
         for part in parts {
             match part {
                 Part::Lit(s) => out.push(InterpPart::Lit(s)),
+                // lex.str.2: `{{` isn't an escape; `\{` is.
+                Part::Code(tokens) if matches!(tokens.first().map(|t| &t.tok), Some(Tok::Sym("{"))) => {
+                    self.error_help(
+                        "lex.str.2",
+                        tokens[0].pos,
+                        "`{{` in a string isn't an escaped brace",
+                        "write `\\{` for a literal `{`, or use a raw string `r\"...\"`",
+                    );
+                    ok = false;
+                }
                 Part::Code(tokens) => {
                     let generic_names = self.generic_names.clone();
                     let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true, generic_names };
@@ -1297,16 +1421,32 @@ impl Parser {
             let body = self.block("`=>`", "expr.match.1")?;
             return Some(Arm { pat, body });
         }
-        let result = self.expression()?;
+        // expr.match.9: one statement on the arm's line, such as a value,
+        // `return x`, `continue` or `total += n`.
+        let stmt = self.statement_inner()?;
         if !self.after_block() && !self.eat(&Tok::Newline) {
             self.unexpected("end of line after the arm", "expr.match.1");
             return None;
         }
-        Some(Arm { pat, body: vec![Stmt::Expr(result)] })
+        Some(Arm { pat, body: vec![stmt] })
     }
 
-    /// `_`, `Variant` or `Enum.Variant` (expr.match.4).
+    /// A pattern, or several joined by `|` (expr.match.8).
     fn pattern(&mut self) -> Option<Pattern> {
+        let pos = self.pos();
+        let first = self.single_pattern()?;
+        if !self.at_sym("|") {
+            return Some(first);
+        }
+        let mut alts = vec![first];
+        while self.eat_sym("|") {
+            alts.push(self.single_pattern()?);
+        }
+        Some(Pattern::Or(alts, pos))
+    }
+
+    /// `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+    fn single_pattern(&mut self) -> Option<Pattern> {
         let pos = self.pos();
         match self.peek().clone() {
             Tok::Ident(n) if n == "_" => {
@@ -1336,11 +1476,41 @@ impl Parser {
                 }
                 Some(Pattern::Variant { qualifier, name, bindings, pos })
             }
-            Tok::Int(_) | Tok::Str(_) | Tok::Kw("true" | "false") | Tok::Sym("-") => {
-                self.error(
-                    UNSUPPORTED,
+            Tok::Int(v) => {
+                self.i += 1;
+                Some(Pattern::Literal(Literal::Int(v), pos))
+            }
+            Tok::Sym("-") if matches!(self.peek_at(1), Tok::Int(_) | Tok::IntMin) => {
+                self.i += 1;
+                let v = match self.bump().tok {
+                    Tok::Int(v) => -v,
+                    _ => i64::MIN,
+                };
+                Some(Pattern::Literal(Literal::Int(v), pos))
+            }
+            Tok::IntMin => {
+                self.i += 1;
+                self.int_too_big(pos);
+                Some(Pattern::Literal(Literal::Int(0), pos))
+            }
+            Tok::Char(c) => {
+                self.i += 1;
+                Some(Pattern::Literal(Literal::Char(c), pos))
+            }
+            Tok::Str(s) => {
+                self.i += 1;
+                Some(Pattern::Literal(Literal::Str(s), pos))
+            }
+            Tok::Kw(b @ ("true" | "false")) => {
+                self.i += 1;
+                Some(Pattern::Literal(Literal::Bool(b == "true"), pos))
+            }
+            Tok::Interp(_) | Tok::Float(_) => {
+                self.error_help(
+                    "expr.match.7",
                     pos,
-                    "literal patterns are not supported by the bootstrap yet (spec expr.match.4)",
+                    "a pattern can be an integer, character, string or `bool` literal",
+                    "compare with `==` in an `if` instead",
                 );
                 None
             }

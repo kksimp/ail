@@ -1,0 +1,46 @@
+# mod.const.2: struct literals and variants with constant arguments;
+# `none`, `[]` and `{}` where a field gives the expected type.
+struct Config
+    name str
+    limit int?
+    tags List[str]
+    extra Map[str, int]
+    seen Set[int]
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+enum Color
+    Red
+    Green
+
+struct Pair[T]
+    a T
+    b T
+
+struct Holder
+    color Color
+    shape Shape
+
+DEFAULT := Config(name: "base", limit: none, tags: [], extra: {}, seen: {})
+LIMITED := Config(tags: ["x"], name: NAME, limit: 10, extra: {"k": SIDE}, seen: {1, 2})
+NAME := "lim"
+SIDE := 4
+SHAPES := [Shape.Circle(r: SIDE), Shape.Rect(w: 2, h: SIDE * 2), Shape.Dot]
+FAVOURITE := Color.Green
+HOLD := Holder(color: Red, shape: Circle(r: 1))
+PAIR := Pair(a: 1, b: SIDE)
+PAIRS := [Pair(a: "x", b: "y")]
+BY_NAME := {"c": Shape.Circle(r: 9)}
+
+fn main()
+    print(DEFAULT)
+    print(LIMITED)
+    print(SHAPES)
+    print(FAVOURITE)
+    print(HOLD)
+    print(PAIR)
+    print(PAIRS)
+    print(BY_NAME)

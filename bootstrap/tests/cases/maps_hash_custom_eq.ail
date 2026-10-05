@@ -1,0 +1,39 @@
+struct Hand
+    n int
+
+impl Eq for Hand
+    fn eq(self, other Self) bool
+        self.n % 2 == other.n % 2
+
+enum Mode
+    On
+    Off
+
+impl Eq for Mode
+    fn eq(self, other Self) bool
+        true
+
+struct Wrapper
+    h Hand
+
+fn a()
+    print(Set[Hand]())
+
+fn b()
+    print({Hand(n: 1): 1})
+
+fn c()
+    print(Set[Mode]())
+
+fn d()
+    print(Set[Wrapper]())
+
+fn e()
+    print(Set[List[Hand]]())
+
+fn f()
+    print(Map[Hand?, int]())
+
+fn main()
+    # custom Eq still works for `==`
+    print(Hand(n: 1) == Hand(n: 3))

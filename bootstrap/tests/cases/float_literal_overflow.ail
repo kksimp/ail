@@ -1,0 +1,9 @@
+# lex.num.3: a float literal that overflows to infinity is a compile-time error;
+# underflow to 0.0 or a subnormal is fine (the valid ones are in float_literal_forms).
+fn main()
+    a := 1e999
+    b := 1.7976931348623159e308
+    c := -1e400
+    d := 1e309
+    e := 2e308
+    print(a)

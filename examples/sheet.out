@@ -1,0 +1,274 @@
+== budget
+line 46: bad cell name 'I3': I3 = 5
+line 47: missing '=': B6 12
+line 48: bad content 'twelve': C6 = twelve
+   |       A |   B |     C |     D |     E |   G
+---+---------+-----+-------+-------+-------+----
+ 1 |    Item | Qty | Price | Total | Share |    
+ 2 |    Pens |  10 |     2 |    20 |    16 |    
+ 3 |   Paper |   5 |     7 |    35 |    29 |    
+ 4 |     Ink |   2 |    25 |    50 |    41 |    
+ 5 | Stapler |   1 |    15 |    15 |    12 |    
+ 7 |     Sum |  18 |       |   120 |    98 |    
+ 8 | Average |     |    12 |    30 |       |    
+ 9 |   Range |     |    23 |    35 |       |    
+10 | Numbers |   8 |       |       |       |    
+11 |  Budget |     |       |   200 |       |    
+12 |    Left |     |       |    80 |       |    
+13 |  Status |     |       |     1 |   -18 |    
+15 |         |     |       |       |       | end
+dependencies:
+  B7 <- B2, B3, B4, B5
+  B10 <- A1, A2, A3, A4, A5, B1, B2, B3, B4, B5, C1, C2, C3, C4, C5
+  C8 <- C2, C3, C4, C5
+  C9 <- C2, C3, C4, C5
+  D2 <- B2, C2
+  D3 <- B3, C3
+  D4 <- B4, C4
+  D5 <- B5, C5
+  D7 <- D2, D3, D4, D5
+  D8 <- D2, D3, D4, D5
+  D9 <- D2, D3, D4, D5
+  D12 <- D7, D11
+  D13 <- D7, D11
+  E2 <- D2, D7
+  E3 <- D3, D7
+  E4 <- D4, D7
+  E5 <- D5, D7
+  E7 <- E2, E3, E4, E5
+  E13 <- B5, D11, D12
+order: B7, B10, C8, C9, D2, D3, D4, D5, D7, D8, D9, D12, D13, E2, E3, E4, E5, E7, E13
+
+== edit 1: change a value
+  B2 = 20
+   |       A |   B |     C |     D |     E |   G
+---+---------+-----+-------+-------+-------+----
+ 1 |    Item | Qty | Price | Total | Share |    
+ 2 |    Pens |  20 |     2 |    40 |    28 |    
+ 3 |   Paper |   5 |     7 |    35 |    25 |    
+ 4 |     Ink |   2 |    25 |    50 |    35 |    
+ 5 | Stapler |   1 |    15 |    15 |    10 |    
+ 7 |     Sum |  28 |       |   140 |    98 |    
+ 8 | Average |     |    12 |    35 |       |    
+ 9 |   Range |     |    23 |    35 |       |    
+10 | Numbers |   8 |       |       |       |    
+11 |  Budget |     |       |   200 |       |    
+12 |    Left |     |       |    60 |       |    
+13 |  Status |     |       |     1 |   -25 |    
+15 |         |     |       |       |       | end
+changed:
+  B2 10 -> 20
+  B7 18 -> 28
+  D2 20 -> 40
+  D7 120 -> 140
+  D8 30 -> 35
+  D12 80 -> 60
+  E2 16 -> 28
+  E3 29 -> 25
+  E4 41 -> 35
+  E5 12 -> 10
+  E13 -18 -> -25
+order: B7, B10, C8, C9, D2, D3, D4, D5, D7, D8, D9, D12, D13, E2, E3, E4, E5, E7, E13
+
+== edit 2: introduce a cycle
+  D11 = =D12 + 50
+  G15 = =G15 + 1
+   |       A |   B |     C |       D |       E |       G
+---+---------+-----+-------+---------+---------+--------
+ 1 |    Item | Qty | Price |   Total |   Share |        
+ 2 |    Pens |  20 |     2 |      40 |      28 |        
+ 3 |   Paper |   5 |     7 |      35 |      25 |        
+ 4 |     Ink |   2 |    25 |      50 |      35 |        
+ 5 | Stapler |   1 |    15 |      15 |      10 |        
+ 7 |     Sum |  28 |       |     140 |      98 |        
+ 8 | Average |     |    12 |      35 |         |        
+ 9 |   Range |     |    23 |      35 |         |        
+10 | Numbers |   8 |       |         |         |        
+11 |  Budget |     |       | #CYCLE! |         |        
+12 |    Left |     |       | #CYCLE! |         |        
+13 |  Status |     |       | #CYCLE! | #CYCLE! |        
+15 |         |     |       |         |         | #CYCLE!
+changed:
+  D11 200 -> #CYCLE!
+  D12 60 -> #CYCLE!
+  D13 1 -> #CYCLE!
+  E13 -25 -> #CYCLE!
+  G15 end -> #CYCLE!
+order: B7, B10, C8, C9, D2, D3, D4, D5, D7, D8, D9, E2, E3, E4, E5, E7
+blocked by a cycle: D11, D12, D13, E13, G15
+
+== edit 3: break the cycle
+  D11 = 250
+  G15 = 
+   |       A |   B |     C |     D |     E
+---+---------+-----+-------+-------+------
+ 1 |    Item | Qty | Price | Total | Share
+ 2 |    Pens |  20 |     2 |    40 |    28
+ 3 |   Paper |   5 |     7 |    35 |    25
+ 4 |     Ink |   2 |    25 |    50 |    35
+ 5 | Stapler |   1 |    15 |    15 |    10
+ 7 |     Sum |  28 |       |   140 |    98
+ 8 | Average |     |    12 |    35 |      
+ 9 |   Range |     |    23 |    35 |      
+10 | Numbers |   8 |       |       |      
+11 |  Budget |     |       |   250 |      
+12 |    Left |     |       |   110 |      
+13 |  Status |     |       |     1 |    -1
+changed:
+  D11 #CYCLE! -> 250
+  D12 #CYCLE! -> 110
+  D13 #CYCLE! -> 1
+  E13 #CYCLE! -> -1
+  G15 #CYCLE! -> (empty)
+order: B7, B10, C8, C9, D2, D3, D4, D5, D7, D8, D9, D12, D13, E2, E3, E4, E5, E7, E13
+
+== edit 4: divide by zero
+  C5 = 0
+  B11 = =D11 / (B5 - 1)
+  B12 = =AVG(F1:F3)
+   |       A |       B |     C |     D |     E
+---+---------+---------+-------+-------+------
+ 1 |    Item |     Qty | Price | Total | Share
+ 2 |    Pens |      20 |     2 |    40 |    32
+ 3 |   Paper |       5 |     7 |    35 |    28
+ 4 |     Ink |       2 |    25 |    50 |    40
+ 5 | Stapler |       1 |     0 |     0 |     0
+ 7 |     Sum |      28 |       |   125 |   100
+ 8 | Average |         |     8 |    31 |      
+ 9 |   Range |         |    25 |    50 |      
+10 | Numbers |       8 |       |       |      
+11 |  Budget | #DIV/0! |       |   250 |      
+12 |    Left | #DIV/0! |       |   125 |      
+13 |  Status |         |       |     1 |    -1
+changed:
+  B11 (empty) -> #DIV/0!
+  B12 (empty) -> #DIV/0!
+  C5 15 -> 0
+  C8 12 -> 8
+  C9 23 -> 25
+  D5 15 -> 0
+  D7 140 -> 125
+  D8 35 -> 31
+  D9 35 -> 50
+  D12 110 -> 125
+  E2 28 -> 32
+  E3 25 -> 28
+  E4 35 -> 40
+  E5 10 -> 0
+  E7 98 -> 100
+order: B7, B10, B11, B12, C8, C9, D2, D3, D4, D5, D7, D8, D9, D12, D13, E2, E3, E4, E5, E7, E13
+
+== edit 5: parse errors
+  D4 = =B4 * (C4 + 1
+  B12 = =SUMM(B2:B5)
+  B13 = =B2 $ 3
+  C11 = =IF(B2, 1, 2)
+  C12 = =Z9 + 1
+  C13 = =3 4
+   |       A |       B |       C |       D |       E
+---+---------+---------+---------+---------+--------
+ 1 |    Item |     Qty |   Price |   Total |   Share
+ 2 |    Pens |      20 |       2 |      40 | #PARSE!
+ 3 |   Paper |       5 |       7 |      35 | #PARSE!
+ 4 |     Ink |       2 |      25 | #PARSE! | #PARSE!
+ 5 | Stapler |       1 |       0 |       0 | #PARSE!
+ 7 |     Sum |      28 |         | #PARSE! | #PARSE!
+ 8 | Average |         |       8 | #PARSE! |        
+ 9 |   Range |         |      25 | #PARSE! |        
+10 | Numbers |       8 |         |         |        
+11 |  Budget | #DIV/0! | #PARSE! |     250 |        
+12 |    Left | #PARSE! | #PARSE! | #PARSE! |        
+13 |  Status | #PARSE! | #PARSE! | #PARSE! | #PARSE!
+changed:
+  B12 #DIV/0! -> #PARSE!
+  B13 (empty) -> #PARSE!
+  C11 (empty) -> #PARSE!
+  C12 (empty) -> #PARSE!
+  C13 (empty) -> #PARSE!
+  D4 50 -> #PARSE!
+  D7 125 -> #PARSE!
+  D8 31 -> #PARSE!
+  D9 50 -> #PARSE!
+  D12 125 -> #PARSE!
+  D13 1 -> #PARSE!
+  E2 32 -> #PARSE!
+  E3 28 -> #PARSE!
+  E4 40 -> #PARSE!
+  E5 0 -> #PARSE!
+  E7 100 -> #PARSE!
+  E13 -1 -> #PARSE!
+parse error in B12: unknown function SUMM in 'SUMM(B2:B5)'
+parse error in B13: unexpected character '$' in 'B2 $ 3'
+parse error in C11: expected a comparison but found ',' in 'IF(B2, 1, 2)'
+parse error in C12: bad cell name Z9 in 'Z9 + 1'
+parse error in C13: unexpected 4 in '3 4'
+parse error in D4: expected ')' but found end of formula in 'B4 * (C4 + 1'
+order: B7, B10, B11, B12, B13, C8, C9, C11, C12, C13, D2, D3, D4, D5, D7, D8, D9, D12, D13, E2, E3, E4, E5, E7, E13
+
+== edit 6: fix the formula, then reference a text cell
+  D4 = =B4 * (C4 + 1)
+  B11 = =A2 * 2
+  B12 = =SUM(A2:A5) + COUNT(A2:B5)
+  B13 = =IF(A3 = 1, 1, 0)
+   |       A |       B |       C |     D |     E
+---+---------+---------+---------+-------+------
+ 1 |    Item |     Qty |   Price | Total | Share
+ 2 |    Pens |      20 |       2 |    40 |    31
+ 3 |   Paper |       5 |       7 |    35 |    27
+ 4 |     Ink |       2 |      25 |    52 |    40
+ 5 | Stapler |       1 |       0 |     0 |     0
+ 7 |     Sum |      28 |         |   127 |    98
+ 8 | Average |         |       8 |    31 |      
+ 9 |   Range |         |      25 |    52 |      
+10 | Numbers |       8 |         |       |      
+11 |  Budget | #VALUE! | #PARSE! |   250 |      
+12 |    Left |       4 | #PARSE! |   123 |      
+13 |  Status | #VALUE! | #PARSE! |     1 |    -1
+changed:
+  B11 #DIV/0! -> #VALUE!
+  B12 #PARSE! -> 4
+  B13 #PARSE! -> #VALUE!
+  D4 #PARSE! -> 52
+  D7 #PARSE! -> 127
+  D8 #PARSE! -> 31
+  D9 #PARSE! -> 52
+  D12 #PARSE! -> 123
+  D13 #PARSE! -> 1
+  E2 #PARSE! -> 31
+  E3 #PARSE! -> 27
+  E4 #PARSE! -> 40
+  E5 #PARSE! -> 0
+  E7 #PARSE! -> 98
+  E13 #PARSE! -> -1
+parse error in C11: expected a comparison but found ',' in 'IF(B2, 1, 2)'
+parse error in C12: bad cell name Z9 in 'Z9 + 1'
+parse error in C13: unexpected 4 in '3 4'
+order: B7, B10, B11, B12, B13, C8, C9, C11, C12, C13, D2, D3, D4, D5, D7, D8, D9, D12, D13, E2, E3, E4, E5, E7, E13
+
+== final
+dependencies:
+  B7 <- B2, B3, B4, B5
+  B10 <- A1, A2, A3, A4, A5, B1, B2, B3, B4, B5, C1, C2, C3, C4, C5
+  B11 <- A2
+  B12 <- A2, A3, A4, A5, B2, B3, B4, B5
+  B13 <- A3
+  C8 <- C2, C3, C4, C5
+  C9 <- C2, C3, C4, C5
+  C11 <- #PARSE! expected a comparison but found ','
+  C12 <- #PARSE! bad cell name Z9
+  C13 <- #PARSE! unexpected 4
+  D2 <- B2, C2
+  D3 <- B3, C3
+  D4 <- B4, C4
+  D5 <- B5, C5
+  D7 <- D2, D3, D4, D5
+  D8 <- D2, D3, D4, D5
+  D9 <- D2, D3, D4, D5
+  D12 <- D7, D11
+  D13 <- D7, D11
+  E2 <- D2, D7
+  E3 <- D3, D7
+  E4 <- D4, D7
+  E5 <- D5, D7
+  E7 <- E2, E3, E4, E5
+  E13 <- B5, D11, D12

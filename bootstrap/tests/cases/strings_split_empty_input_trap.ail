@@ -1,0 +1,5 @@
+# type.str.4: split of an empty string by a separator is [""], not a trap; an empty sep traps.
+fn main()
+    print("".split(","))
+    sep := ""
+    print("abc".split(sep))

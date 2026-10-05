@@ -1,0 +1,32 @@
+struct Pos
+    x int
+    y int
+
+enum Dir
+    North
+    South
+    Turn(deg int)
+
+fn main()
+    a := {"a": 1, "b": 2}
+    s := {1, 2, 3}
+    print(a)
+    print(s)
+    print("{a} and {s}")
+    print(Map[str, int]())
+    print(Set[int]())
+    print({'a': Pos(x: 1, y: 2)})
+    print({Pos(x: 1, y: 2): 'c'})
+    print({'x', 'y'})
+    print({Dir.North: 1, Dir.Turn(deg: 90): 2})
+    print({Dir.South, Dir.Turn(deg: 5)})
+    print({"k": {1, 2}, "j": {3}})
+    print({"x": [1, 2], "y": []})
+    print({1: {"a": 1}})
+    print([{1: 2}, {3: 4}])
+    print({[1, 2]: "list key"})
+    print({"o": Pos(x: 0, y: 0)})
+    print({true: "t", false: "f"})
+    sk := {"a", "b"}
+    print("keys: {sk}")
+    print({"a": "b"})

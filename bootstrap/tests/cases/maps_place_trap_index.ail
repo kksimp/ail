@@ -1,0 +1,6 @@
+fn main()
+    mut m := {"k": [1, 2]}
+    m["k"][0] = 5
+    print(m)
+    m["nope"][0] = 5
+    print("unreachable")

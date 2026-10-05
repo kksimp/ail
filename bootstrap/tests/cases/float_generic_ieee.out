@@ -1,0 +1,22 @@
+false false false false false true false Ordering.Equal
+false false false false false true false Ordering.Greater
+false false false false false true false Ordering.Less
+false false false false false true false Ordering.Less
+false false false false false true false Ordering.Greater
+false true false true true false true Ordering.Equal
+false true false true true false true Ordering.Equal
+true true false false false true false Ordering.Less
+false false true true false true false Ordering.Greater
+false true false true true false true Ordering.Equal
+false false true true false true false Ordering.Greater
+3.0
+nan
+nan
+1.0
+3.0
+3.0
+1.0
+3.0
+0
+2
+3

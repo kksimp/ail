@@ -1,0 +1,24 @@
+struct Holder
+    by_float Map[float, int]
+    ok Set[int]
+
+enum E
+    V(s Set[float])
+
+fn param(s Set[float]) int
+    s.len()
+
+fn ret() Map[float, str]
+    Map[float, str]()
+
+fn nested(m Map[str, Set[float]]) int
+    m.len()
+
+fn lst(xs List[Set[Map[int, int]]]) int
+    xs.len()
+
+struct G[K]
+    m Map[K, int]
+
+fn main()
+    print(1)
