@@ -118,6 +118,7 @@ README.md                 project overview for humans
 docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
+  quick-reference.md      AIL on one page for writing programs (keep it in step with the bootstrap)
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
   open-questions.md       unresolved design questions with pros and cons
