@@ -266,10 +266,12 @@ pub enum Expr {
         inclusive: bool,
         pos: Pos,
     },
-    /// `if c` / `elif c` / `else` (expr.if.1)
+    /// `if c` / `elif c` / `else` (expr.if.1); `else_err` is the name in
+    /// `else err` (expr.if.6).
     If {
-        branches: Vec<(Expr, Block)>,
+        branches: Vec<(Cond, Block)>,
         els: Option<Block>,
+        else_err: Option<(String, Pos)>,
         pos: Pos,
     },
     /// `match e` with `pattern => result` arms (expr.match.1)
@@ -309,6 +311,14 @@ impl Expr {
             | Expr::Try { expr: e, .. } => e.pos(),
         }
     }
+}
+
+/// A condition of `if` or `elif`: a `bool` expression, or a binding
+/// `name := e` of a value that can be absent or fail (expr.if.5).
+#[derive(Debug)]
+pub enum Cond {
+    Expr(Expr),
+    Bind { name: String, pos: Pos, value: Expr },
 }
 
 #[derive(Debug)]

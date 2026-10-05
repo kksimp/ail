@@ -16,8 +16,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    Arg, BinOp, Block, Else, Expr, Field, FnDecl, InterpPart, PathStep, Pattern, Program, Stmt, TypeKind, TypeRef,
-    UnOp, place_path,
+    Arg, BinOp, Block, Cond, Else, Expr, Field, FnDecl, InterpPart, PathStep, Pattern, Program, Stmt, TypeKind,
+    TypeRef, UnOp, place_path,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::UNSUPPORTED;
@@ -1060,7 +1060,12 @@ impl<'p> Checker<'p> {
             Expr::Range { lo, hi, .. } => e(lo).or_else(|| e(hi)),
             Expr::If { branches, els, .. } => branches
                 .iter()
-                .find_map(|(c, b)| e(c).or_else(|| self.overlapping_use(target, b)))
+                .find_map(|(c, b)| {
+                    let cond = match c {
+                        Cond::Expr(x) | Cond::Bind { value: x, .. } => x,
+                    };
+                    e(cond).or_else(|| self.overlapping_use(target, b))
+                })
                 .or_else(|| els.as_ref().and_then(|b| self.overlapping_use(target, b))),
             Expr::Match { scrutinee, arms, .. } => {
                 e(scrutinee).or_else(|| arms.iter().find_map(|a| self.overlapping_use(target, &a.body)))
@@ -1106,7 +1111,9 @@ impl<'p> Checker<'p> {
                 );
                 Ty::Err
             }
-            Expr::If { branches, els, pos } => self.if_expr(branches, els.as_ref(), *pos, expect, need),
+            Expr::If { branches, els, else_err, pos } => {
+                self.if_expr(branches, els.as_ref(), else_err.as_ref(), *pos, expect, need)
+            }
             Expr::Match { scrutinee, arms, pos } => self.match_expr(scrutinee, arms, *pos, expect, need),
         }
     }
@@ -1955,8 +1962,9 @@ impl<'p> Checker<'p> {
 
     fn if_expr(
         &mut self,
-        branches: &'p [(Expr, Block)],
+        branches: &'p [(Cond, Block)],
         els: Option<&'p Block>,
+        else_err: Option<&'p (String, Pos)>,
         pos: Pos,
         expect: Option<&Ty>,
         need: bool,
@@ -1970,14 +1978,73 @@ impl<'p> Checker<'p> {
             );
         }
         let mut agree = Agree::new(expect, need, "branch", "`if`");
+        let mut binds_failure = false;
+        let mut errors = None;
         for (cond, body) in branches {
-            self.condition(cond);
+            let mark = self.locals.len();
+            match cond {
+                Cond::Expr(c) => self.condition(c),
+                Cond::Bind { name, pos: npos, value } => {
+                    let (ty, errs) = self.binding_condition(name, value);
+                    binds_failure |= errs.is_some();
+                    errors = errs;
+                    if self.declare(name, *npos) {
+                        self.locals.push(Local { name: name.clone(), ty, mutable: false, kind: Kind::Binding });
+                    }
+                }
+            }
             agree.block(self, body, pos);
+            self.locals.truncate(mark);
+        }
+        // err.use.2: a failure is never ignored silently.
+        if binds_failure && els.is_none() {
+            self.error_help(
+                "err.use.2",
+                pos,
+                "this `if` ignores the failure; an `if` on a result that can fail needs an `else`",
+                "add `else err` and handle the error",
+            );
         }
         if let Some(body) = els {
+            let mark = self.locals.len();
+            if let Some((name, npos)) = else_err {
+                match (&errors, branches.len()) {
+                    (Some(set), 1) => {
+                        let t = if set.len() == 1 { set[0].clone() } else { Ty::Union(set.clone()) };
+                        if self.declare(name, *npos) {
+                            self.locals.push(Local { name: name.clone(), ty: t, mutable: false, kind: Kind::Binding });
+                        }
+                    }
+                    _ => self.error_help(
+                        "expr.if.6",
+                        *npos,
+                        "`else err` needs an `if` with one condition that binds a result that can fail",
+                        "remove the name, or write `if x := ...` on a `T ! E` value with no `elif`",
+                    ),
+                }
+            }
             agree.block(self, body, pos);
+            self.locals.truncate(mark);
         }
         if need && els.is_none() { Ty::Err } else { agree.result() }
+    }
+
+    /// The type bound by `if name := value`, and the errors it can fail with
+    /// when `value` is a `T ! E` (expr.if.5).
+    fn binding_condition(&mut self, name: &str, value: &'p Expr) -> (Ty, Option<Vec<Ty>>) {
+        match self.expr(value, None, true) {
+            Ty::Opt(t) => (*t, None),
+            Ty::Res(t, e) => (*t, Some(self.errs_of(&e))),
+            Ty::Err => (Ty::Err, None),
+            other => {
+                let msg = format!(
+                    "`if {name} := ...` needs a value that can be absent (`T?`) or fail (`T ! E`), but this is {}",
+                    self.show(&other)
+                );
+                self.error_help("expr.if.5", value.pos(), msg, "compare it instead, e.g. `if x == ...`");
+                (other, None)
+            }
+        }
     }
 
     fn match_expr(

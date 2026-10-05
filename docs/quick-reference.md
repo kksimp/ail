@@ -137,11 +137,19 @@ fn main() !                                 # main can fail; the error is report
         print("bad input: {err}")           # ParseError.BadNumber(text: "x")
         0
     print("{i} {n} {t}")
+    if v := parse("7")                      # do one thing or the other, then go on
+        print("got {v}")
+    else err
+        print("error: {err}")
 ```
 
 - A result that can fail must be handled: with `?`, with `else`, or by
   returning it. Calling `parse(s)` on its own line is an error.
-- `else` works only on declarations (`x := ... else ...`).
+- `x := ... else ...` must give a fallback value or leave (`return`,
+  `continue`, `break`). To handle success and failure and then carry on, use
+  `if x := ...` with `else err`.
+- `if x := e` also works on optionals (`else` without a name), and in `elif`.
+  On a result that can fail, it needs an `else`.
 - `?` on an optional works only in a function that returns an optional.
 - Several error types: `fn load() Config ! IoError | ParseError`.
 
