@@ -54,7 +54,7 @@ the interpreter, under the 50 ms target.
 ## Consequences
 
 - `tools/` now holds AIL programs, not only scripts; the selftest checks them.
-- The window front end waits for `std.ui`; it is in `window.ail.pending`.
+- The window front end is about 40 lines on `std.ui` (ADR 0177); a test drives it with hand-built `ui.Event`s and a never-opened `ui.Window`.
 - Split into modules (`buffer`, `view`, `keys`, `window`) once user modules
   land.
 - Writing it surfaced language gaps, recorded as OQ-047 and OQ-048.
