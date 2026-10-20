@@ -167,6 +167,9 @@ pub struct Resolved {
     /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
+    /// Methods called on a task, group, channel or mutex handle, by the
+    /// position of the name: they synchronise with other tasks (conc.par.2).
+    pub handle_calls: FastSet<Pos>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -3283,6 +3286,7 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         }
         if let Ty::Conc(k, inner) = &rt {
+            self.resolved.handle_calls.insert(pos);
             return self.conc_method(*k, inner, name, pos, args);
         }
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {

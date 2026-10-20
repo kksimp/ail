@@ -207,8 +207,9 @@ the trap of the lowest-index trapping iteration. *(ADR 0236)*
 **conc.par.2** — A `for` loop's iterations are *independent* when its body:
 (1) has no `io`, `unsafe` or `spawn` effect and no capability, through every
 call (`eff.infer.3`); (2) doesn't leave the loop early: no `break` of this
-loop, `return`, `?`, or `else return`; (3) calls no method of a synchronised
-type (`send`, `recv`, `close`, `lock`, `unlock`, `wait`, `wait_all`); and
+loop, `return`, `?`, or `else return`; (3) calls no method of a task,
+`TaskGroup`, `Channel` or `Mutex` handle, directly or through the functions
+it calls; and
 (4) writes only places that `conc.par.3` or `conc.par.4` allow, or places
 rooted at names declared in the body (including the loop variable). Calls
 with a `mut` argument and methods with `mut self` write their place. *(ADR 0236)*

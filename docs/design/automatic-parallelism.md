@@ -1,6 +1,6 @@
 # Automatic parallelism and modern hardware
 
-> **Design note,** 2026-10-20 (lane 39). Decisions are in ADRs 0236–0239 and 0242–0243;
+> **Design note,** 2026-10-20 (lane 39). Decisions are in ADRs 0236–0239 and 0246–0247;
 > normative rules are `conc.par.1–7` in [11-concurrency.md](../spec/11-concurrency.md)
 > and the amended `type.coll.12`. This note explains them and records what a
 > native runtime and backend will build on.
@@ -46,7 +46,7 @@ A `for` loop's iterations are **independent** when all of these hold:
 |---|---|---|
 | No ordering effect | The body's effect set (lane 6's inference, `eff.infer.*`, through every call) has no `io`, `unsafe`, `spawn` or capability (`fs env proc clock random net`) | conc.par.2 |
 | No early exit | No `break` (of this loop), `return`, `?`, or `else return` in the body; `continue` is fine | conc.par.2 |
-| No synchronisation | No call of `send recv close lock unlock wait wait_all` (the `conc.share` types) | conc.par.2 |
+| No synchronisation | No method call on a task, `TaskGroup`, `Channel` or `Mutex` handle (lane 22's types), directly or through a called function (a fixed point over the call graph) | conc.par.2 |
 | Writes stay in the iteration | Every written place is rooted at a name declared in the body (or the loop variable), **or** is an element `r[i]...` where `i` is the variable of a range loop and the steps before `[i]` are fields, literals or outer names, **or** is an `int` accumulator (below). Method calls with `mut self` and `mut` arguments count as writes | conc.par.2–3 |
 | Element reads don't cross | A root written at `r[i]` is read only through `r[i]...` or as `r.len()` | conc.par.3 |
 | Accumulators are reductions | A root written only by `acc += e`, never read in the body, declared as an `int` | conc.par.4 |
@@ -168,7 +168,7 @@ more than the loop bodies, so `ail run --parallel` isn't offered. The
 analysis half (`ail effects --parallel`) is what the native backend will
 consume.
 
-## 5. SIMD (ADR 0242)
+## 5. SIMD (ADR 0246)
 
 The loops that are independent are also the loops that vectorise: no
 loop-carried dependence except recognised reductions. The backend
@@ -200,7 +200,7 @@ have four f64 lanes in flight.
   AIL can beat C here: C can't change a struct array's layout behind the
   programmer's back.
 
-## 6. NPUs and GPUs (ADR 0243)
+## 6. NPUs and GPUs (ADR 0247)
 
 ### 6.1 What's reachable per target
 

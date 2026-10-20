@@ -1,4 +1,4 @@
-//! Parallel loops (conc.par.1-7, ADRs 0236-0239 and 0242-0243): which `for` loops have
+//! Parallel loops (conc.par.1-7, ADRs 0236-0239 and 0246-0247): which `for` loops have
 //! independent iterations, and the checks on `par for`.
 //!
 //! Runs after type checking and reads only the program, the checker's
@@ -8,7 +8,7 @@
 //! iteration is an element picked by the loop variable (conc.par.3) or an
 //! `int` accumulator added to with `+=` (conc.par.4).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::Resolved;
 use super::effects::{CAPABILITIES, Effects, fn_id};
@@ -23,10 +23,6 @@ use crate::diag::{Diagnostic, Pos, json_str};
 fn ordering(e: &str) -> bool {
     matches!(e, "io" | "unsafe" | "spawn") || CAPABILITIES.contains(&e)
 }
-
-/// Methods of the synchronised types (conc.share.2-3): a body that calls one
-/// waits on other tasks, so its iterations are ordered.
-const SYNC_METHODS: &[&str] = &["send", "recv", "close", "lock", "unlock", "wait", "wait_all"];
 
 /// Built-in methods that change their receiver (type.coll.5-11).
 const MUTATING: &[&str] = &["push", "pop", "swap", "sort", "remove", "add"];
@@ -78,6 +74,8 @@ struct Problem {
     help: String,
     at: Pos,
     provable: bool,
+    /// A call of a handle's method (conc.par.2).
+    handle: bool,
 }
 
 /// How a write reaches a place that outlives an iteration.
@@ -121,6 +119,10 @@ struct Scan<'a> {
     writes: Vec<Write<'a>>,
     reads: Vec<Read<'a>>,
     problems: Vec<Problem>,
+    /// Per function: it may call a method of a handle (conc.par.2).
+    sync: &'a [bool],
+    /// Free functions by name.
+    fns: &'a HashMap<&'a str, usize>,
 }
 
 /// `[i]`, `[i - 1]`, `.name`; `[...]` for an index too complex to show.
@@ -170,7 +172,7 @@ impl<'a> Scan<'a> {
     }
 
     fn problem(&mut self, rule: &'static str, at: Pos, provable: bool, reason: String, help: impl Into<String>) {
-        self.problems.push(Problem { rule, reason, help: help.into(), at, provable });
+        self.problems.push(Problem { rule, reason, help: help.into(), at, provable, handle: false });
     }
 
     fn exit(&mut self, what: &str, at: Pos) {
@@ -301,6 +303,19 @@ impl<'a> Scan<'a> {
         true
     }
 
+    /// A call of function `i`, which may synchronise through a handle.
+    fn calls_sync(&mut self, i: usize, name: &str, at: Pos) {
+        if self.sync[i] {
+            self.problem(
+                "conc.par.2",
+                at,
+                true,
+                format!("calls `{name}`, which uses a task, channel or mutex handle"),
+                "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
+            );
+        }
+    }
+
     fn arg(&mut self, mutable: bool, value: &'a Expr) {
         if mutable {
             self.write(value, None, value.pos());
@@ -341,25 +356,37 @@ impl<'a> Scan<'a> {
                 }
             }
             Expr::Call { callee, args, .. } => {
-                if !matches!(**callee, Expr::Name(..) | Expr::TypeArgs { .. }) {
-                    self.expr(callee);
+                match &**callee {
+                    Expr::Name(n, p) | Expr::TypeArgs { name: n, pos: p, .. } => {
+                        if let Some(&i) = self.fns.get(n.as_str()) {
+                            self.calls_sync(i, n, *p);
+                        }
+                    }
+                    _ => self.expr(callee),
                 }
                 args.iter().for_each(|a| self.arg(a.mutable, &a.value));
             }
             Expr::Method { recv, name, name_pos, args } => {
                 let std_module = self.resolved.std_calls.contains_key(name_pos);
-                if SYNC_METHODS.contains(&name.as_str()) && !std_module {
+                if self.resolved.handle_calls.contains(name_pos) {
                     self.problem(
                         "conc.par.2",
                         *name_pos,
                         true,
-                        format!("calls `.{name}()`, which waits on other tasks"),
+                        format!("calls `.{name}()` on a task, channel or mutex handle"),
                         "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
                     );
+                    if let Some(p) = self.problems.last_mut() {
+                        p.handle = true;
+                    }
+                } else if let Some(&i) = self.resolved.targets.get(name_pos) {
+                    self.calls_sync(i, name, *name_pos);
                 }
                 let mutating = match self.resolved.targets.get(name_pos) {
                     Some(&f) => self.prog.fns[f].receiver.is_some_and(|r| r.mutable),
-                    None => !std_module && !self.resolved.calls.contains_key(name_pos) && MUTATING.contains(&name.as_str()),
+                    None => {
+                        !std_module && !self.resolved.calls.contains_key(name_pos) && MUTATING.contains(&name.as_str())
+                    }
                 };
                 if mutating {
                     self.write(recv, None, recv.pos());
@@ -411,6 +438,25 @@ impl<'a> Scan<'a> {
             Expr::Else { value, otherwise, .. } => {
                 self.expr(value);
                 self.otherwise(otherwise);
+            }
+            // expr.comp.1: the clauses' variables are local, and `else break`
+            // ends the comprehension, not the loop.
+            Expr::Comp { elem, value, clauses, .. } => {
+                self.depth += 1;
+                self.scopes.push(Vec::new());
+                for c in clauses {
+                    self.expr(&c.iter);
+                    self.bind(&c.var);
+                    if let Some(cond) = &c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+                self.scopes.pop();
+                self.depth -= 1;
             }
         }
     }
@@ -536,6 +582,14 @@ fn expr_blocks<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Block)) {
             expr_blocks(b, f);
         }
         Expr::Unary { operand: x, .. } | Expr::Try { expr: x, .. } => expr_blocks(x, f),
+        Expr::Comp { elem, value, clauses, .. } => {
+            for c in clauses {
+                expr_blocks(&c.iter, f);
+                c.cond.iter().for_each(|x| expr_blocks(x, f));
+            }
+            expr_blocks(elem, f);
+            value.iter().for_each(|x| expr_blocks(x, f));
+        }
         Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| expr_blocks(x, f)),
         Expr::Map(pairs, _) => pairs.iter().for_each(|(k, v)| {
             expr_blocks(k, f);
@@ -556,7 +610,8 @@ fn loops<'a>(b: &'a Block, out: &mut Vec<&'a Stmt>) {
 }
 
 /// The verdict on loop `s` of function `f` (conc.par.2-5).
-fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt) -> Verdict {
+fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
+    let Context { prog, resolved, fx, .. } = *cx;
     let Stmt::For { par, var, mutable, iter, body, pos, .. } = s else { unreachable!("loops() gives `for` loops") };
     let mut scan = Scan {
         prog,
@@ -568,6 +623,8 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
         writes: Vec::new(),
         reads: Vec::new(),
         problems: Vec::new(),
+        sync: &cx.sync,
+        fns: &cx.fns,
     };
     scan.block(body);
     if let Some((e, source)) = fx.of_block(resolved, body).into_iter().find(|(e, _)| ordering(e)) {
@@ -596,6 +653,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                 ),
                 at: w.pos,
                 provable: true,
+                handle: false,
             });
         } else if ws.iter().any(|w| w.kind == Kind::Add) {
             let at = ws[0].pos;
@@ -606,6 +664,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                     help: format!("use a separate accumulator for `{root} +=`"),
                     at: w.pos,
                     provable: true,
+                    handle: false,
                 });
             } else if let Some(r) = reads_of.first() {
                 problems.push(Problem {
@@ -614,6 +673,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                     help: format!("an accumulator may only be added to; read `{root}` after the loop"),
                     at: r.pos,
                     provable: true,
+                    handle: false,
                 });
             } else {
                 match holds_int(f, resolved, root) {
@@ -624,6 +684,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                         help: "collect the values in a list and call `.sum()`, which adds in a fixed tree order that can run in parallel (type.coll.12)".into(),
                         at,
                         provable: true,
+                        handle: false,
                     }),
                     None => problems.push(Problem {
                         rule: "conc.par.4",
@@ -631,6 +692,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                         help: format!("declare `{root}` with an `int` literal in this function"),
                         at,
                         provable: false,
+                        handle: false,
                     }),
                 }
             }
@@ -652,10 +714,14 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                 };
                 problems.push(Problem {
                     rule: "conc.par.3",
-                    reason: format!("writes `{}`, and {why}: two iterations may write the same element", place_text(root, steps)),
+                    reason: format!(
+                        "writes `{}`, and {why}: two iterations may write the same element",
+                        place_text(root, steps)
+                    ),
                     help: format!("write `{root}[{var}]` from a range loop, or assert independence with `par for`"),
                     at: w.pos,
                     provable: false,
+                    handle: false,
                 });
             } else if sigs.windows(2).any(|p| p[0] != p[1]) {
                 problems.push(Problem {
@@ -664,6 +730,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                     help: "write one element path per iteration".into(),
                     at: ws[1].pos,
                     provable: false,
+                    handle: false,
                 });
             } else {
                 let sig = sigs[0];
@@ -688,6 +755,7 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
                         help: format!("read only `{}` in the body, or keep the loop sequential", place_text(root, sig)),
                         at: r.pos,
                         provable: whole,
+                        handle: false,
                     });
                     break;
                 }
@@ -715,13 +783,25 @@ fn judge(prog: &Program, resolved: &Resolved, fx: &Effects, f: &FnDecl, s: &Stmt
         }
         None if !reductions.is_empty() => {
             let names: Vec<String> = reductions.iter().map(|r| format!("`{r}`")).collect();
-            let more = if elements.is_empty() { String::new() } else { format!(" and writes only `{}`", elements.join("`, `")) };
-            verdict(Outcome::Parallel, "conc.par.4", format!("adds to {} in a fixed order{more}", names.join(", ")), *pos, None)
+            let more = if elements.is_empty() {
+                String::new()
+            } else {
+                format!(" and writes only `{}`", elements.join("`, `"))
+            };
+            verdict(
+                Outcome::Parallel,
+                "conc.par.4",
+                format!("adds to {} in a fixed order{more}", names.join(", ")),
+                *pos,
+                None,
+            )
         }
         None if !elements.is_empty() => {
             verdict(Outcome::Parallel, "conc.par.3", format!("writes only `{}`", elements.join("`, `")), *pos, None)
         }
-        None => verdict(Outcome::Parallel, "conc.par.2", "writes nothing that outlives the iteration".into(), *pos, None),
+        None => {
+            verdict(Outcome::Parallel, "conc.par.2", "writes nothing that outlives the iteration".into(), *pos, None)
+        }
     }
 }
 
@@ -729,16 +809,67 @@ fn scan_range(iter: &Expr, mutable: bool) -> bool {
     matches!(iter, Expr::Range { .. }) && !mutable
 }
 
+/// What every loop's analysis shares.
+struct Context<'a> {
+    prog: &'a Program,
+    resolved: &'a Resolved,
+    fx: &'a Effects<'a>,
+    sync: Vec<bool>,
+    fns: HashMap<&'a str, usize>,
+}
+
 /// The verdict on every `for` loop of the program's own functions, in
 /// source order (conc.par.6).
 pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
     let fx = Effects::infer(prog, resolved);
+    let fns: HashMap<&str, usize> = prog
+        .fns
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.owner.is_none() && f.top_level())
+        .map(|(i, f)| (f.name.as_str(), i))
+        .collect();
+    let mut cx = Context { prog, resolved, fx: &fx, sync: vec![false; prog.fns.len()], fns };
+    // A function synchronises if its body calls a handle's method, or it
+    // calls a function that does: a fixed point over the call graph.
+    let direct: Vec<bool> = prog
+        .fns
+        .iter()
+        .map(|f| {
+            f.body.as_ref().is_some_and(|b| {
+                let mut s = Scan {
+                    prog,
+                    resolved,
+                    var: "",
+                    range: false,
+                    scopes: Vec::new(),
+                    depth: 0,
+                    writes: Vec::new(),
+                    reads: Vec::new(),
+                    problems: Vec::new(),
+                    sync: &[],
+                    fns: &HashMap::new(),
+                };
+                s.block(b);
+                s.problems.iter().any(|p| p.handle)
+            })
+        })
+        .collect();
+    cx.sync = direct;
+    loop {
+        let add: Vec<usize> =
+            (0..prog.fns.len()).filter(|&i| !cx.sync[i] && fx.calls_of(i).iter().any(|&j| cx.sync[j])).collect();
+        if add.is_empty() {
+            break;
+        }
+        add.into_iter().for_each(|i| cx.sync[i] = true);
+    }
     let mut out = Vec::new();
     for f in prog.fns.iter().filter(|f| !is_prelude(f.pos)) {
         let Some(body) = &f.body else { continue };
         let mut found = Vec::new();
         loops(body, &mut found);
-        out.extend(found.into_iter().map(|s| judge(prog, resolved, &fx, f, s)));
+        out.extend(found.into_iter().map(|s| judge(&cx, f, s)));
     }
     out.sort_by_key(|v| (v.pos.line, v.pos.col));
     out
@@ -758,7 +889,11 @@ pub fn check_par(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
         .into_iter()
         .filter(|v| v.par && v.outcome == Outcome::Sequential)
         .map(|v| {
-            let d = Diagnostic::new("conc.par.5", v.at, format!("`par for {}` iterations aren't independent: the body {} ({})", v.var, v.reason, v.rule));
+            let d = Diagnostic::new(
+                "conc.par.5",
+                v.at,
+                format!("`par for {}` iterations aren't independent: the body {} ({})", v.var, v.reason, v.rule),
+            );
             match v.help {
                 Some(h) => d.help(h),
                 None => d,
@@ -795,7 +930,15 @@ pub fn render(verdicts: &[Verdict], json: bool, at: &dyn Fn(Pos) -> String) -> S
             .map(|v| {
                 let kw = if v.par { "par for" } else { "for" };
                 let place = if v.at == v.pos { String::new() } else { format!(" at {}", at(v.at)) };
-                format!("{} {} {kw} {}: {} ({}: {}{place})\n", at(v.pos), v.func, v.var, v.outcome.word(), v.rule, v.reason)
+                format!(
+                    "{} {} {kw} {}: {} ({}: {}{place})\n",
+                    at(v.pos),
+                    v.func,
+                    v.var,
+                    v.outcome.word(),
+                    v.rule,
+                    v.reason
+                )
             })
             .collect()
     }
@@ -836,10 +979,7 @@ mod tests {
     #[test]
     fn reductions_need_a_known_int() {
         let body = "    xs := [1, 2]\n    mut a := 0\n    mut b := xs.len()\n    for x in xs\n        a += x\n    for x in xs\n        b += x\n    for x in xs\n        a += a\n    print(a + b)\n";
-        assert_eq!(
-            verdicts(body),
-            ["4 parallel conc.par.4", "6 sequential conc.par.4", "8 sequential conc.par.4"]
-        );
+        assert_eq!(verdicts(body), ["4 parallel conc.par.4", "6 sequential conc.par.4", "8 sequential conc.par.4"]);
     }
 
     #[test]
@@ -852,5 +992,24 @@ mod tests {
     fn exits_order_the_loop() {
         let body = "    for i in 0..3\n        while true\n            break\n        if i == 1\n            continue\n    for i in 0..3\n        if i == 1\n            return\n";
         assert_eq!(verdicts(body), ["1 parallel conc.par.2", "6 sequential conc.par.2"]);
+    }
+
+    #[test]
+    fn handles_order_the_loop() {
+        let src = "fn bump(m Mutex[int])\n    m.set(m.get() + 1)\nfn main()\n    m := Mutex(0)\n    for i in 0..3\n        m.set(i)\n    for i in 0..3\n        bump(m)\n    for i in 0..3\n        xs := [x * i for x in 0..3 if x > 0]\n        print(xs.len())\n    print(m.get())\n";
+        let (tokens, _) = lex(src);
+        let (prog, _) = parse_with_prelude(tokens);
+        let (diags, resolved) = check(&prog);
+        assert!(diags.is_empty(), "{diags:?}");
+        let got: Vec<String> =
+            analyze(&prog, &resolved).iter().map(|v| format!("{} {}", v.outcome.word(), v.reason)).collect();
+        assert_eq!(
+            got,
+            [
+                "sequential calls `.set()` on a task, channel or mutex handle",
+                "sequential calls `bump`, which uses a task, channel or mutex handle",
+                "sequential has effect `io` via print",
+            ]
+        );
     }
 }

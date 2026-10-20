@@ -124,6 +124,11 @@ impl<'p> Effects<'p> {
         out
     }
 
+    /// The functions that function `i` may call (eff.infer.3).
+    pub fn calls_of(&self, i: usize) -> &[usize] {
+        &self.calls[i]
+    }
+
     /// The effect set of function `i`, sorted (eff.infer.6).
     pub fn of(&self, i: usize) -> &BTreeSet<&'static str> {
         &self.sets[i]

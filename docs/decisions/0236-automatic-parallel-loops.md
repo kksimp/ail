@@ -51,7 +51,7 @@ cover the common parallel loops.
 ## Consequences
 
 - The bootstrap only analyses; it runs every loop in order (values are `Rc`, ADR 0238).
-- Native backend: the analysis result feeds loop parallelisation and vectorisation (ADR 0242).
+- Native backend: the analysis result feeds loop parallelisation and vectorisation (ADR 0246).
 - Not yet recognised: `acc = acc + e`, `-=`, `*=`, min/max patterns, writes through `ref T`. Each stays sequential until added.
 
 ## Rejected alternatives

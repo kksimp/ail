@@ -1,4 +1,4 @@
-# 0242. Vectorise independent loops on both baselines; never contract to FMA implicitly
+# 0246. Vectorise independent loops on both baselines; never contract to FMA implicitly
 
 - **Status:** Accepted
 - **Date:** 2026-10-20

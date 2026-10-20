@@ -1,4 +1,4 @@
-# 0243. NPUs and GPUs through a `std.tensor` module and an `accel` capability (design)
+# 0247. NPUs and GPUs through a `std.tensor` module and an `accel` capability (design)
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
