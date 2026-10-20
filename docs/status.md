@@ -43,7 +43,7 @@ interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
 implemented and tested on Linux x86-64; examples and test cases are canonical.
 Lane 12 added `tools/edit/edit.ail`, a code editor written in AIL with a
 headless, tested core that drives `ail check --json`, fixes, `ail explain` and
-`ail api`; its window front end waits for `std.ui` (ADRs 0180–0181).
+`ail api`, with a window front end on `std.ui` (ADRs 0180–0181).
 Lane 3 added user modules (ADRs 0153–0156): `ail run DIR` runs a package,
 `use a.b` imports a directory, items are reached by qualified name, and
 `pub` controls visibility of items, fields and methods. Linux selftest
