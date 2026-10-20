@@ -178,7 +178,8 @@ fn Parser.top_level(mut self)
         elif tag == "kw" and text == "fn"
             if f := function(ast.Within.TopLevel)
                 fns.push(f)
-        elif tag == "kw" and (text == "unsafe" and kw_at(1) == "fn" or text == "extern" and at_extern_fn())
+        elif tag == "kw"
+            and (text == "unsafe" and kw_at(1) == "fn" or text == "extern" and at_extern_fn())
             if f := function(ast.Within.TopLevel)
                 fns.push(f)
         elif tag == "kw" and text == "use"
@@ -501,7 +502,8 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                     break
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
-        while at_newline() and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe" or kw_at(1) == "extern")
+        while at_newline()
+            and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe" or kw_at(1) == "extern")
             i += 1
     if not at_kw("fn") and not (at_kw("unsafe") and kw_at(1) == "fn") and not at_extern_fn()
         diag("gram.attr.2", here())
