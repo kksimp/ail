@@ -25,7 +25,7 @@ layouts: `int`, `float`, `bool`, the sized numbers, and raw pointers `*T`
 At most six parameters are integer-like (everything but `float` and `f32`) and
 at most eight are `float` or `f32`. *(ADR 0103, ADR 0013, ADR 0432)*
 
-```ail
+```ail fragment
 extern c "libm" fn hypot(a float, b float) float
 extern c fn abs(x i32) i32
 extern c fn strlen(s *u8) int
@@ -60,8 +60,8 @@ byte is not zero. *(ADR 0432)*
 **ffi.load.1** — The library is loaded on the first call to one of its
 functions, not when the program is checked or starts. A name with `/` or `.`
 is the file as written. Any other name `n` is tried as the platform's shared
-library, with and without a `lib` prefix: `n.so`, `n.so.6` and a few other
-versions on Linux; `n.dylib`, `/usr/lib/n.dylib` and `/opt/homebrew/lib/n.dylib`
+library, with and without a `lib` prefix: `n.so` and its versioned names (`.6`,
+`.1`, `.0`, `.2`, `.3`) on Linux; `n.dylib`, `/usr/lib/n.dylib` and `/opt/homebrew/lib/n.dylib`
 on macOS. A declaration without a library names a symbol of the running
 program, which includes the C library. A library that cannot be loaded is a
 run-time trap. *(ADR 0431)*

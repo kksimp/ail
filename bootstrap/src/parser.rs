@@ -2322,7 +2322,7 @@ mod tests {
 
     #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    extern x\n");
+        let (_, rules) = parse_src("fn main()\n    as x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 

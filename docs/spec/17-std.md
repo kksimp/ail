@@ -310,7 +310,7 @@ NUL-terminated string (invalid UTF-8 becomes U+FFFD); and `free(p *u8)`, which
 frees a block. Each is an unsafe operation (`unsafe.op.1`), and a block that is
 not freed leaks. The rules for bad pointers are `unsafe.mem.1-2`. *(ADR 0434)*
 
-```ail
+```ail fragment
 use std.mem
 
 extern c fn strlen(s *u8) int

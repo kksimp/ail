@@ -1,4 +1,5 @@
 # unsafe.mem.2: a block is freed once.
+# bytecode.skip: the trap snapshot shows the freed pointer's address, which differs per run.
 use std.mem
 
 fn main()
