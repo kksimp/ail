@@ -56,7 +56,7 @@ reported but don't stop a program from running.
 | `src/prelude.ail` | The standard traits `Eq`, `Ord Eq`, `ToStr`, `Hash Eq`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker, with its `ToJson`/`FromJson` part (`## @module jsonderive`) only when the program names them; `Default` and its generator (`## @module default`) when the program names it; then the `derive` module (`TypeInfo`, `DeriveError`), read with `std.json`, `@derive` or its names | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–4`, `json.derive.1–3`, `refl.info.1–3` |
 | `src/modules.rs` | Loads a file or package and the modules it imports; renames each module's items to qualified names; import and item-privacy errors; per-file diagnostics | `mod.unit.1–5`, `mod.use.1–6`, `mod.vis.1`, `expr.bind.5` (for imported modules) |
 | `src/parser.rs` | Tokens to syntax tree (`use`, `pub` and qualified names in `src/parser/modules.rs`: `mod.use.1`, `mod.vis.1–2`, `mod.unit.4`) | `mod.use.1`, `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `gram.attr.1–2`, `gen.decl.1`, `gen.bound.1`, `gen.method.1–3`, `gen.infer.2`, `trait.decl.1–2`, `trait.impl.1`, `trait.any.1`, `type.struct.1–3`, `type.enum.1–2`, `type.opt.2`, `err.decl.1`, `err.type.1–2`, `err.type.5`, `err.else.1–3`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.if.5–6`, `expr.if.8`, `expr.loop.1–3`, `expr.loop.6`, `expr.match.1`, `expr.match.6`, `expr.prec.1–2`, `expr.op.1–3`, `expr.comp.1–2` |
-| `src/packages.rs` | Reads `ail.pkg` manifests of the root and every path dependency, maps `use` paths to packages and directories, adds manifests to the program's files; after checking, checks each package's code against its capability grants | `mod.pkg.1–6`, `eff.cap.2`, `eff.cap.4–5` |
+| `src/packages.rs`, `src/packages/git.rs` | Reads `ail.pkg` manifests of the root and every dependency, fetches git dependencies into `$AIL_HOME/deps` with the system `git` and pins them in `ail.lock` (`ail pkg update` re-pins), maps `use` paths to packages and directories, adds manifests to the program's files; after checking, checks each package's code against its capability grants | `mod.pkg.1–9`, `eff.cap.2`, `eff.cap.4–5` |
 | `src/ast.rs` | The syntax tree the parser builds and the checker and interpreter read | none |
 | `src/implicit_self.rs` | Rewrites bare member names inside methods to `self.NAME` before checking; reports locals that hide a member | `trait.method.6–7` |
 | `src/num.rs` | The sized numeric types other than `int` and `float`: storage, wrapping, conversions | `type.num.1`, `type.num.13–16` |
@@ -65,11 +65,11 @@ reported but don't stop a program from running.
 | `src/check/builtins.rs` | Signatures of the methods of `str`, `char`, `int`, `float`, `List`, `Map` and `Set` | `type.str.*`, `type.char.*`, `type.num.6–9`, `type.coll.*`, `type.map.*` |
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel`; `par for` comprehensions | `conc.par.2–6`, `conc.par.12` |
-| `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `Atomic`, `with`, `cancel`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6`, `conc.atomic.3–5`, `conc.cancel.1` |
+| `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `Atomic`, `with`, `cancel`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6`, `conc.atomic.3–5`, `conc.atomic.7`, `conc.cancel.1` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
 | `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–4`, `trace.test.1–2`, `trace.snap.1–4` |
-| `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186) or a seeded random one; channels, `for v in ch`, mutexes, `with`, groups, cancellation, deadlock traps | `conc.task.1–9`, `conc.share.1–7`, `conc.cancel.1–2`, `conc.sched.1` |
-| `src/interp/atomic.rs` | `Atomic[int]` and `Atomic[bool]` as shared hardware atomics | `conc.atomic.3–6` |
+| `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186) or a seeded random one; channels, `for v in ch`, mutexes, `with`, groups, cancellation, deadlock traps | `conc.task.1–9`, `conc.share.1–7`, `conc.cancel.1–4`, `conc.sched.1` |
+| `src/interp/atomic.rs` | `Atomic[int]` and `Atomic[bool]` as shared hardware atomics, with `order:` orderings | `conc.atomic.3–7` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
 | `src/parser/messages.rs`, `src/check/absent.rs`, `src/interp/absent.rs` | Messages on error types (turned into an `impl ToStr` at parse time); `?` on an optional failing with the prelude's `Absent` where errors are inferred | `err.msg.1–2`, `err.prop.5` |
 | `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, `par for` comprehensions, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–12` |
@@ -264,10 +264,14 @@ and `close`, and `Mutex(v)` with `get`, `set`, `swap`, `lock` and `unlock`.
 (`conc.share.6`) (ADRs 0300–0301).
 `Atomic(v)` (`int` or `bool`) with `load`, `store`, `add` and `cas` is a
 hardware atomic shared by tasks, pooled tasks and `par for` workers
-(`conc.atomic.3–6`); `t.cancel()` and `g.cancel()` set a flag that
+(`conc.atomic.3–6`); a trailing `order: Relaxed` (or `Acquire`, `Release`,
+`AcqRel`) weakens one operation, checked against the method
+(`conc.atomic.7`, ADR 0352). `t.cancel()` and `g.cancel()` set a flag that
 `task.cancelled()` reads and `task.check()` turns into `Cancelled`, and make
 `recv`, `for v in ch`, `time.sleep_ms` and `proc.run` return early
-(`conc.cancel.1–2`) (ADRs 0320–0321).
+(`conc.cancel.1–2`) (ADRs 0320–0321); the cancel reaches every task the
+task started, and a cancelled `send` on a full channel drops its value
+(`conc.cancel.3–4`, ADR 0351).
 Tasks run one at a time in a fixed order, so output repeats; a deadlock
 traps (`conc.task.7`). `--schedule=random:SEED` on `run` and `test` picks
 the switch points from the seed instead, and a failing test prints it

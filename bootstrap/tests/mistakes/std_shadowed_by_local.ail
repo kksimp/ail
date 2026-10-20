@@ -1,0 +1,4 @@
+fn main()
+    fs := ["a.txt", "b.txt"]
+    print(fs.len())
+    print(fs.exists("a.txt"))

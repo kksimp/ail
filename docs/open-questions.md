@@ -321,18 +321,10 @@ template (recommended: one rule for every derive, and an agent sees what
 (slower in the interpreter). *Owner: AI under ADR 0076.*
 
 ## OQ-097 — Weaker atomic orderings, cancel trees, and send under cancellation
-Lane 72 (ADRs 0320–0322) left three follow-ups. (1) `conc.atomic.2` requires
-acquire, release, acquire-release and relaxed orderings; the bootstrap has
-only SeqCst. Options: (a) a trailing named argument, `a.load(order: Relaxed)`
-(recommended: rare, so the token cost lands only where it's used); (b)
-separate methods (`load_relaxed`); (c) wait for the native backend. (2)
-Cancelling a task doesn't reach tasks it already started (only tasks it
-starts later). Options: (a) cancel the whole tree, as structured concurrency
-suggests (recommended once tasks record their parent); (b) keep it per
-task. (3) A cancelled task blocked in `send` on a full channel still
-waits. Options: (a) `send` returns `! Cancelled` (breaks every existing
-call's type); (b) keep waiting, so a cancelled producer is released by its
-consumer (current); (c) drop the value and return. *Owner: AI under ADR 0076.*
+*Resolved:* orderings by [ADR 0352](decisions/0352-weaker-atomic-orderings.md)
+(a trailing `order:` argument); cancel trees and a cancelled `send` by
+[ADR 0351](decisions/0351-cancel-trees-and-cancelled-send.md) (the whole
+tree; the value is dropped and `send` returns).
 
 ## OQ-113 — A matrix product operator
 `a.matmul(b)` is the only spelling of the matrix product (ADR 0344). Options:

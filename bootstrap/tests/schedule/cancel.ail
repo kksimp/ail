@@ -1,0 +1,59 @@
+# conc.cancel.3-4 and conc.atomic.7 under random schedules (ADRs 0351-0352):
+# every interleaving must pass.
+
+fn child(gate Channel[int], seen Atomic[int])
+    if gate.recv() == none
+        seen.add(1, order: Relaxed)
+
+fn parent(gate Channel[int], started Channel[int], seen Atomic[int])
+    c := spawn child(gate, seen)
+    started.send(1)
+    c.wait() else
+        return
+
+@test fn a_cancel_reaches_a_running_child()
+    gate := Channel[int](1)
+    started := Channel[int](1)
+    seen := Atomic(0)
+    p := spawn parent(gate, started, seen)
+    started.recv()
+    p.cancel()
+    p.wait()?
+    assert_eq(seen.load(), 1)
+
+fn flood(out Channel[int])
+    for i in 0..100
+        out.send(i)
+    out.close()
+
+@test fn a_cancelled_send_drops_its_value()
+    ch := Channel[int](2)
+    f := spawn flood(ch)
+    first := ch.recv()?
+    f.cancel()
+    f.wait()?
+    mut rest := 0
+    for _ in ch
+        rest += 1
+    assert_eq(first, 0)
+    assert(rest <= 2)
+
+fn publish(data Atomic[int], ready Atomic[bool])
+    data.store(42, order: Relaxed)
+    ready.store(true, order: Release)
+
+@test fn release_then_acquire_publishes()
+    data := Atomic(0)
+    ready := Atomic(false)
+    t := spawn publish(data, ready)
+    while not ready.load(order: Acquire)
+        continue
+    assert_eq(data.load(order: Relaxed), 42)
+    t.wait()?
+
+@test fn orderings_on_read_modify_write()
+    a := Atomic(5)
+    assert_eq(a.add(1, order: AcqRel), 5)
+    assert(a.cas(6, 7, order: Acquire))
+    assert(not a.cas(6, 8, order: Release))
+    assert_eq(a.load(order: SeqCst), 7)

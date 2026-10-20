@@ -1,0 +1,10 @@
+# conc.atomic.7: an ordering must suit the method and be written by name.
+
+fn main()
+    a := Atomic(0)
+    a.store(1, order: Acquire)
+    print(a.load(order: Release))
+    print(a.load(order: AcqRel))
+    o := AtomicOrder.Relaxed
+    print(a.load(order: o))
+    print(a.load(order: Fast))

@@ -1,0 +1,10 @@
+unique struct File
+    fd int
+
+fn File.finish(move self) int
+    fd
+
+fn main()
+    f := File(fd: 3)
+    n := f.finish()
+    print("{n} {f.fd}")

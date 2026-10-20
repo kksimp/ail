@@ -1,0 +1,8 @@
+struct Pair[A, B]
+    a A
+    b B
+
+impl FromJson for Pair[int, str]
+
+fn main()
+    print("x")

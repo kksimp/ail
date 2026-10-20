@@ -276,6 +276,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         resolved: Resolved::default(),
         scope: Vec::new(),
         self_ty: None,
+        in_requires: false,
         deferred: Some(Vec::new()),
         locals: Vec::new(),
         pending: Vec::new(),
@@ -460,6 +461,8 @@ struct Checker<'p> {
     /// Type parameter names in scope, and what `Self` means here.
     scope: Vec<(String, usize)>,
     self_ty: Option<Ty>,
+    /// Checking a `requires` condition, where `result` doesn't exist yet (contract.ens.1).
+    in_requires: bool,
     /// Bounds to check once every declaration is known (gen.bound.3):
     /// the type, the trait, where, and what requires it.
     deferred: Option<Vec<(Ty, usize, Pos, String)>>,
@@ -2186,8 +2189,20 @@ impl<'p> Checker<'p> {
                 let msg = format!("`for` can't iterate over {}", self.show(&t));
                 if t == Ty::Int {
                     self.error_help("expr.loop.4", iter.pos(), msg, "iterate over a range, e.g. `0..n`");
+                } else if matches!(t, Ty::Opt(_)) {
+                    self.error_help(
+                        "expr.loop.4",
+                        iter.pos(),
+                        msg,
+                        "`recv()` gives one value or `none`; to receive until the channel is closed, write `for v in ch`",
+                    );
                 } else {
-                    self.error("expr.loop.4", iter.pos(), msg);
+                    self.error_help(
+                        "expr.loop.4",
+                        iter.pos(),
+                        msg,
+                        "`for` takes a list, a range `a..b`, a `keys()` or `values()` list, or a channel",
+                    );
                 }
                 Ty::Err
             }
@@ -4839,6 +4854,15 @@ impl<'p> Checker<'p> {
                 pos,
                 "`old(...)` is only available in an `ensures` condition",
                 "name the value in the body before it changes, or move the condition to an `ensures` line",
+            );
+            return;
+        }
+        if name == "result" && args.is_none() && self.in_requires {
+            self.error_help(
+                "contract.ens.2",
+                pos,
+                "`result` is only available in an `ensures` condition",
+                "a `requires` condition can read only the parameters; move this check to an `ensures` line",
             );
             return;
         }

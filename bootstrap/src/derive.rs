@@ -448,8 +448,30 @@ pub fn remap(prog: &Program, diags: &mut [Diagnostic]) {
             d.pos.col
         );
         d.notes.insert(0, Note { pos: d.pos, message });
+        json_field_problem(g, d);
         d.pos = g.impl_pos;
         d.end = None;
         d.fixes.clear();
     }
+}
+
+/// json.derive.1-2: a derived JSON conversion that calls `to_json` or
+/// `from_json` on a field type with none says so in the user's terms, not
+/// as a missing method of generated code.
+fn json_field_problem(g: &Generated, d: &mut Diagnostic) {
+    let (trait_name, method) = match g.generator.as_str() {
+        "derive_to_json" => ("ToJson", "to_json"),
+        "derive_from_json" => ("FromJson", "from_json"),
+        _ => return,
+    };
+    let Some(ty) = d.message.strip_suffix(&format!(" has no method `{method}`")).map(str::to_string) else { return };
+    if d.rule != "expr.name.1" {
+        return;
+    }
+    let owner = g.label.split('.').next().unwrap_or(&g.label);
+    d.rule = if method == "to_json" { "json.derive.1" } else { "json.derive.2" };
+    d.message = format!("can't derive `{trait_name}` for `{owner}`: a field has type {ty}, which has no JSON form");
+    d.help = Some(format!(
+        "give {ty} its own `impl {trait_name}`, or change the field to `int`, `float`, `bool`, `str`, `Json`, a `List`, a `Map[str, _]`, an optional or a derived type"
+    ));
 }

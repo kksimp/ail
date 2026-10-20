@@ -1,0 +1,7 @@
+unique struct File
+    fd int
+
+fn main()
+    mut files := [File(fd: 1), File(fd: 2)]
+    f := files.first()
+    print("{files.len()}")

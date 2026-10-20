@@ -1,12 +1,13 @@
 //! `Atomic[int]` and `Atomic[bool]` (conc.atomic.3-6, ADR 0320). An atomic
 //! is a real hardware atomic shared by every copy, so tasks on the
 //! scheduler, pooled tasks and `par for` workers all update the same cell
-//! without a `ref` or a lock. Every operation is sequentially consistent
-//! (conc.atomic.1, ADR 0025).
+//! without a `ref` or a lock. An operation is sequentially consistent
+//! (conc.atomic.1, ADR 0025) unless a trailing `order:` names a weaker
+//! ordering (conc.atomic.7, ADR 0352).
 
 use std::io::Write;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering::SeqCst};
+use std::sync::atomic::{AtomicI64, Ordering, Ordering::SeqCst};
 
 use super::{Env, Flow, Interp, Trap, Value};
 use crate::ast::Arg;
@@ -63,6 +64,12 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
+        // conc.atomic.7: a trailing `order:` names the ordering, which the
+        // checker allowed for this method.
+        let (args, order) = match args.split_last() {
+            Some((o, rest)) if o.label.is_some() => (rest, order_of(&o.value)),
+            _ => (args, SeqCst),
+        };
         let mut a = Vec::with_capacity(args.len());
         for arg in args {
             a.push(self.eval(&arg.value, env)?);
@@ -70,16 +77,16 @@ impl<'a, W: Write> Interp<'a, W> {
         // conc.sched.1: each atomic operation is a switch point.
         self.switch_point(pos)?;
         Ok(match name {
-            "load" => cell.value(cell.v.load(SeqCst)),
+            "load" => cell.value(cell.v.load(order)),
             "store" => {
-                cell.v.store(raw(&a[0]), SeqCst);
+                cell.v.store(raw(&a[0]), order);
                 Value::Unit
             }
             "add" => {
                 let n = a[0].int();
                 // conc.atomic.5: like `+`, an add that would leave `int` traps
                 // and leaves the cell as it was.
-                match cell.v.try_update(SeqCst, SeqCst, |x| x.checked_add(n)) {
+                match cell.v.try_update(order, failure(order), |x| x.checked_add(n)) {
                     Ok(old) => Value::Int(old),
                     Err(old) => {
                         let message = format!("atomic add overflows: {old} + {n} is outside int");
@@ -87,8 +94,32 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
-            "cas" => Value::Bool(cell.v.compare_exchange(raw(&a[0]), raw(&a[1]), SeqCst, SeqCst).is_ok()),
+            "cas" => Value::Bool(cell.v.compare_exchange(raw(&a[0]), raw(&a[1]), order, failure(order)).is_ok()),
             _ => unreachable!("checked: a method of `Atomic`"),
         })
+    }
+}
+
+/// The ordering a checked `order:` argument names (conc.atomic.7).
+fn order_of(e: &crate::ast::Expr) -> Ordering {
+    match e {
+        crate::ast::Expr::Name(n, _) => match n.as_str() {
+            "Acquire" => Ordering::Acquire,
+            "Release" => Ordering::Release,
+            "AcqRel" => Ordering::AcqRel,
+            "Relaxed" => Ordering::Relaxed,
+            _ => SeqCst,
+        },
+        _ => SeqCst,
+    }
+}
+
+/// The ordering of a read-modify-write that doesn't write (a failed `cas`):
+/// the read half of `order` (conc.atomic.7).
+fn failure(order: Ordering) -> Ordering {
+    match order {
+        Ordering::Release | Ordering::Relaxed => Ordering::Relaxed,
+        Ordering::AcqRel | Ordering::Acquire => Ordering::Acquire,
+        _ => SeqCst,
     }
 }

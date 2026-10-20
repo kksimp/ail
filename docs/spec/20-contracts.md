@@ -85,8 +85,9 @@ A failed `ensures` is the function's error. *(ADR 0211)*
 value; for `T ! E` it is the `T`. A function that returns nothing has no
 `result`, and its `ensures` lines describe its `mut` parameters. `result` is
 not a keyword: it is a name the `ensures` lines bind, so a function with an
-`ensures` line can't have a parameter named `result`.
-*(ADR 0210)*
+`ensures` line can't have a parameter named `result`. In a `requires`
+condition, `result` is an error, since nothing has returned yet.
+*(ADR 0210, ADR 0358)*
 
 ```ail error=contract.ens.2
 fn g(result int) int
