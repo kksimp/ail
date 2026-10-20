@@ -1,0 +1,14 @@
+# contract.ens.1: `ensures` describes a success value; a returned error
+# isn't checked against it.
+error enum ParseError
+    Empty
+
+fn first(s str) char ! ParseError
+    ensures result != ' '
+    if s == ""
+        return Empty
+    s.chars()[0]
+
+fn main()
+    print(first("ab") else 'x')
+    print(first("") else '?')

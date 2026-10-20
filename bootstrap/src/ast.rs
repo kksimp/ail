@@ -208,6 +208,19 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+    /// `requires` and `ensures` lines before the body (contract.decl.1).
+    pub contracts: Vec<Contract>,
+}
+
+/// `requires COND` or `ensures COND` (contract.decl.1-2).
+#[derive(Debug)]
+pub struct Contract {
+    /// `true` for `ensures`, `false` for `requires`.
+    pub ensures: bool,
+    pub cond: Expr,
+    /// The condition as written, for traps and `ail api` (contract.req.1).
+    pub text: String,
+    pub pos: Pos,
 }
 
 /// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
@@ -503,6 +516,16 @@ pub enum Expr {
         context: Option<Box<Expr>>,
         pos: Pos,
     },
+    /// `[e for x in xs if c]`, `{e for ...}` or `{k: v for ...}`, a
+    /// comprehension (expr.comp.1); `pos` is the opening bracket's.
+    Comp {
+        kind: CompKind,
+        elem: Box<Expr>,
+        /// The value of a map comprehension, `{k: v for ...}`.
+        value: Option<Box<Expr>>,
+        clauses: Vec<CompFor>,
+        pos: Pos,
+    },
     /// `e else d` or `e else return ...` as an expression (err.else.6): the
     /// value of `e`, or the fallback when it is absent or failed. `pos` is
     /// the `else`'s.
@@ -533,6 +556,7 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
             Expr::Range { lo: Some(e), .. } => e.pos(),
             Expr::Call { callee: e, .. }
@@ -544,6 +568,24 @@ impl Expr {
             | Expr::Else { value: e, .. } => e.pos(),
         }
     }
+}
+
+/// What a comprehension builds (expr.comp.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompKind {
+    List,
+    Set,
+    Map,
+}
+
+/// One `for x in xs` clause of a comprehension, with its optional `if`
+/// filter (expr.comp.2).
+#[derive(Debug)]
+pub struct CompFor {
+    pub var: String,
+    pub var_pos: Pos,
+    pub iter: Expr,
+    pub cond: Option<Expr>,
 }
 
 /// A condition of `if` or `elif`: a `bool` expression, or a binding

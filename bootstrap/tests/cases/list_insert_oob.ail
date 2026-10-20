@@ -1,0 +1,3 @@
+fn main()
+    mut xs := [1, 2]
+    xs.insert(3, 0)

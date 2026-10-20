@@ -1,7 +1,7 @@
 # AIL language card
 
-> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,525 tokens
-> (3,973 on the costliest tokenizer; measure with
+> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,770 tokens
+> (4,253 on the costliest tokenizer; measure with
 > `tools/tokbench/run.sh docs/language-card.md`). Non-normative: the
 > [spec](spec/) is authoritative and the [quick reference](quick-reference.md)
 > has the long form. Everything here runs on the bootstrap interpreter.
@@ -33,6 +33,11 @@ fn add(a int, b int) int     # `name Type`, no colon; return type after `)`
 
 fn greet(name str)           # no return type: returns nothing
     print("hello, {name}")
+
+fn half(n int) int
+    requires n >= 0          # contract: a pure bool; false traps
+    ensures result * 2 <= n  # `result` is the returned value
+    n / 2
 ```
 
 `return x` (or bare `return`) exits early.
@@ -107,7 +112,7 @@ enum Shape
 fn area(s Shape) int
     match s
         Circle(r) => 3 * r * r
-        Rect(w, _) => w * w       # `_` skips a field
+        Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
 ```
 
 ## Absence and errors
@@ -294,7 +299,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`.
+  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -314,9 +319,12 @@ mut out := []          # typed by its first use: out.push("a") makes a List[str]
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
-Also `pop()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`; `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`. Slices don't clamp
 and negative indexes are errors.
+
+Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
+`{k: v for ...}`.
 
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:

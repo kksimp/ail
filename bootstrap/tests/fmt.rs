@@ -24,6 +24,14 @@ fn formatting_examples_keeps_their_output() {
     for f in files.iter().filter(|p| p.extension().is_some_and(|x| x == "ail")) {
         let formatted = ail().args(["fmt", "--stdout"]).arg(f).output().unwrap();
         assert!(formatted.status.success(), "{}: {}", f.display(), String::from_utf8_lossy(&formatted.stderr));
+        // ADR 0218: corpus programs find their fixtures and `ail` from their own
+        // path, so a copy elsewhere can't run. Their layout must already be canonical.
+        let source = fs::read(f).unwrap();
+        if String::from_utf8_lossy(&source).contains("data_dir()") || source.windows(7).any(|w| w == b"/../ail") {
+            assert_eq!(formatted.stdout, source, "{}: not in canonical layout", f.display());
+            checked += 1;
+            continue;
+        }
         let copy = scratch(f.file_name().unwrap().to_str().unwrap());
         fs::write(&copy, &formatted.stdout).unwrap();
         let before = ail().arg("run").arg(f).output().unwrap();
