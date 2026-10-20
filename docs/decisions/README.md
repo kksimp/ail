@@ -150,5 +150,15 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
 | [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
+| [0161](0161-std-json-in-the-prelude.md) | `std.json` lives in the prelude as `Json`, `parse_json`, with `float` numbers *(delegated)* | Accepted | 2026-10-20 |
+| [0162](0162-optional-prelude-modules.md) | Optional prelude modules are read only when named *(delegated)* | Accepted | 2026-10-20 |
+| [0163](0163-inferred-effect-sets.md) | Every function has an inferred effect set, shown by `ail effects` *(delegated)* | Accepted | 2026-10-20 |
+| [0164](0164-pure-functions.md) | `@pure` rejects a function with I/O, `unsafe`, `spawn` or a capability *(delegated)* | Accepted | 2026-10-20 |
+| [0165](0165-capability-denial.md) | `--deny` rejects at compile time a program that reaches a denied capability *(delegated)* | Accepted | 2026-10-20 |
+| [0167](0167-test-functions-and-ail-test.md) | Tests are `@test` functions run by `ail test FILE [--json]` *(delegated)* | Accepted | 2026-10-20 |
+| [0168](0168-assert-and-assert-eq.md) | `assert` and `assert_eq` are prelude functions allowed anywhere *(delegated)* | Accepted | 2026-10-20 |
 | [0169](0169-canonical-formatting-style.md) | One canonical layout, written by `ail fmt`, with a 100-column limit *(delegated)* | Accepted | 2026-10-20 |
 | [0170](0170-ail-fmt-command.md) | `ail fmt` reprints the token stream, and refuses any change but layout *(delegated)* | Accepted | 2026-10-20 |
+| [0172](0172-spec-conformance-harness.md) | Every `ail` block in the spec runs as a conformance test, tagged by expectation *(delegated)* | Accepted | 2026-10-20 |
+| [0173](0173-format-specifications-in-interpolation.md) | Interpolation takes format specs: `{x:>8}`, `{r:.2}`, `{n:0>4x}` (resolves OQ-041) *(delegated)* | Accepted | 2026-10-20 |
+| [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |

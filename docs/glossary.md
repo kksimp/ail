@@ -17,6 +17,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
+| **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `net`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
@@ -30,6 +31,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). |
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
 | **Drag race** | A head-to-head benchmark: the same small program in AIL, idiomatic C and tuned C, built and run automatically with identical outputs checked (ADR 0030, ADR 0036). |
+| **Effect set** | What a function may do to the world outside its arguments: `io`, `fail`, `mutates`, `unsafe`, `spawn`, plus capabilities. Inferred over the call graph, never written; shown by `ail effects` (ADR 0163). |
 | **Error return trace** | The list of source locations an error passed through via `?`, recorded automatically and shown in error reports (ADR 0050). |
 | **Error set** | The closed union of error types a function can fail with. Inferred from the body for non-public functions (`!T`), explicit at package APIs (`T ! E`). See ADR 0046. |
 | **Error type** | A struct or enum declared with `error` (`error enum ParseError`). Only error types can be errors (ADR 0120). |
@@ -42,6 +44,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
 | **Insertion order** | The iteration order of maps and sets: the order keys were first added. Updating a key keeps its place (ADR 0131). |
 | **ISA** | Instruction Set Architecture, e.g. x86-64 or ARM64 (AArch64). |
+| **JSON value (`Json`)** | The standard `enum Json` (`Null`, `Bool`, `Num`, `Str`, `Arr`, `Obj`) that `parse_json` returns and `Json.to_text` prints. Numbers are `float`; objects keep document order (`json.type.1`, ADR 0161). |
 | **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. Keywords can never be used as names (`lex.kw.1`, ADR 0114). |
 | **Literal pattern** | A `match` pattern that is an integer, character, string or `bool` literal (ADR 0138). |
 | **LSE** | Large System Extensions (ARMv8.1+): single-instruction atomic operations (CAS, LDADD, SWP…). Guaranteed by AIL's ARMv8.2-A baseline. |
@@ -54,8 +57,10 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
+| **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |
 | **Place** | A local binding, parameter or `self`, or a field or element of a place: something that can be assigned to or passed `mut`. It is *mutable* when its root is a `mut` binding, `mut` parameter or `mut self` (`own.place.1`, ADR 0117). |
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
+| **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Raw string** | `r"..."` or `r"""..."""`: a string literal with no escapes or interpolation (ADR 0135). |
 | **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
 | **`ref` cell** | A GC-managed shared mutable cell (`ref T`). The only way two names can observe each other's mutations (ADR 0063). |
@@ -73,6 +78,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Target** | An OS + ISA combination the compiler generates code for, e.g. `linux-arm64`. See spec `plat.target.1`. |
 | **Task-local heap** | A heap private to one task, collected independently with no synchronisation or write barriers. See ADR 0012. |
 | **TBI** | Top Byte Ignore (ARM64): the hardware ignores the top 8 bits of an address, so software can store tags there for free. |
+| **Test** | A function marked `@test`, run by `ail test`: it passes unless an assertion fails, it traps, or it returns an error (ADR 0167). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
 | **Total order (float)** | Float's `cmp`: numeric order with NaN after every number and `-0.0` equal to `0.0`, used for sorting; the operators `<` and `==` stay IEEE (ADR 0130). |

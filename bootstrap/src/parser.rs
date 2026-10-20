@@ -11,9 +11,9 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart,
-    Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef,
-    UnOp, Variant, Within, is_prelude,
+    Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
+    InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
+    TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
@@ -48,10 +48,28 @@ const COMPARISONS: &[(&str, BinOp)] =
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
 const PRELUDE: &str = include_str!("prelude.ail");
 
+/// Names of the optional `std.json` prelude module (ADR 0161).
+const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
+
+/// The always-read prelude, plus the `json` module (after its `## @module`
+/// marker) when the program names one of its items and declares none of them.
+fn prelude_text(tokens: &[Token]) -> &'static str {
+    let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
+    let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
+    let declared = tokens.windows(2).any(|w| {
+        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
+    });
+    if tokens.iter().any(named) && !declared {
+        PRELUDE
+    } else {
+        core
+    }
+}
+
 /// Parse a program after the prelude, whose lines are numbered from
 /// `ast::PRELUDE_LINE`.
 pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let (mut all, diags) = lex(PRELUDE);
+    let (mut all, diags) = lex(prelude_text(&tokens));
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
     fn shift(tokens: &mut [Token]) {
@@ -59,7 +77,7 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             t.pos.line += PRELUDE_LINE;
             if let Tok::Interp(parts) = &mut t.tok {
                 for p in parts {
-                    if let Part::Code(code) = p {
+                    if let Part::Code(code) | Part::Fmt(code, _) = p {
                         shift(code);
                     }
                 }
@@ -105,6 +123,12 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             }
             Tok::Kw("fn") => {
                 if let Some(f) = p.function(Within::TopLevel) {
+                    prog.fns.push(f);
+                }
+            }
+            // `@name fn ...` (gram.attr.1-2)
+            Tok::Sym("@") => {
+                if let Some(f) = p.attributed_function() {
                     prog.fns.push(f);
                 }
             }
@@ -407,6 +431,49 @@ impl Parser {
         f
     }
 
+    /// `@name` or `@name(args)`, repeated, then a function on the same line
+    /// (gram.attr.1-2).
+    fn attributed_function(&mut self) -> Option<FnDecl> {
+        let mut attrs = Vec::new();
+        while self.at_sym("@") {
+            self.i += 1;
+            let Some((name, pos)) = self.name("an attribute name after `@`", "gram.attr.1") else {
+                self.skip_statement();
+                return None;
+            };
+            if self.at_sym("(") {
+                let mut depth = 0usize;
+                loop {
+                    match self.peek() {
+                        Tok::Sym("(") => depth += 1,
+                        Tok::Sym(")") => depth -= 1,
+                        Tok::Newline | Tok::Eof => break,
+                        _ => {}
+                    }
+                    self.i += 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            attrs.push(Attr { name, pos });
+        }
+        if !self.at_kw("fn") {
+            let pos = self.pos();
+            self.error_help(
+                "gram.attr.2",
+                pos,
+                "an attribute applies to a function declared on the same line",
+                "write `@test fn name()` on one line",
+            );
+            self.skip_statement();
+            return None;
+        }
+        let mut f = self.function(Within::TopLevel)?;
+        f.attrs = attrs;
+        Some(f)
+    }
+
     fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
         self.bump(); // fn
         let (first, first_pos) = self.name("a function name after `fn`", "gram.fn.1")?;
@@ -501,7 +568,7 @@ impl Parser {
         } else {
             Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
         };
-        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within })
+        Some(FnDecl { attrs: Vec::new(), owner, name, pos, generics, receiver, params, ret, body, within })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -1337,6 +1404,7 @@ impl Parser {
         let mut out = Vec::new();
         let mut ok = true;
         for part in parts {
+            let part_spec = if let Part::Fmt(_, f) = &part { Some(f.clone()) } else { None };
             match part {
                 Part::Lit(s) => out.push(InterpPart::Lit(s)),
                 // lex.str.2: `{{` isn't an escape; `\{` is.
@@ -1349,7 +1417,8 @@ impl Parser {
                     );
                     ok = false;
                 }
-                Part::Code(tokens) => {
+                Part::Code(tokens) | Part::Fmt(tokens, _) => {
+                    let spec = part_spec;
                     let generic_names = self.generic_names.clone();
                     let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true, generic_names };
                     let expr = sub.expression();
@@ -1359,7 +1428,10 @@ impl Parser {
                     let clean = sub.diags.is_empty();
                     self.diags.append(&mut sub.diags);
                     match expr {
-                        Some(e) if clean => out.push(InterpPart::Expr(e)),
+                        Some(e) if clean => out.push(match spec {
+                            Some(f) => InterpPart::Fmt(e, f),
+                            None => InterpPart::Expr(e),
+                        }),
                         _ => ok = false,
                     }
                 }

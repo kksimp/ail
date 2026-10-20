@@ -9,6 +9,9 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
+./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
 
@@ -339,7 +342,11 @@ t := """
 q := """say "hi""""        # on one line, for text with quotes: say "hi"
 r := r"C:\dir\{x}"         # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
+print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, hex
 ```
+
+- Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
+  align (numbers default right, others left); `.N` needs a float, `x` an int.
 
 - `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
@@ -402,6 +409,21 @@ Also `m.contains(k)`, `m.remove(k)` (gives `V?`), `m.len()`, `s.remove(x)`,
 `==` is automatic (ints, strings, chars, structs and enums of them), but not
 floats.
 
+## JSON
+
+`Json` is built in, with no import (`json.type.1`). It is read only when the
+program uses it.
+
+```ail
+doc := parse_json("\{\"a\": [1, \"x\"]}")?   # Json ! JsonError; err.at is the char offset
+doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/as_bool/as_arr/as_obj)
+doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
+```
+
+Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
+`Obj(members)` (`JsonMember` has `key`, `value`). Write `Json.Num(1.0)` when
+the type isn't known. A program that declares its own `Json` keeps it.
+
 ## Values and `mut`
 
 Assigning or passing a value copies it (cheaply): changing `b` after
@@ -415,3 +437,26 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+
+## Tests and assertions
+
+```ail
+@test fn doubles()           # `@test` on the same line; no parameters
+    assert_eq(double(4), 8)  # traps showing both values if unequal
+    assert(double(1) == 2)   # traps if false
+```
+
+A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
+`assert` and `assert_eq` also work in ordinary code (a failure traps).
+
+## Effects
+
+Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
+`fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
+`fs`, `env`, `proc`, `clock`, `net`. A call through `any Trait` counts every
+implementation.
+
+```ail
+@pure fn area(w int, h int) int   # error if it reaches print or a capability
+    w * h
+```

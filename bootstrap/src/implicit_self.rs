@@ -9,7 +9,7 @@ use crate::ast::{Block, Cond, Else, Expr, InterpPart, Pattern, Program, Stmt, Wi
 use crate::diag::{Diagnostic, Pos};
 
 /// The prelude's functions, which a bare call could also mean.
-const PRELUDE_FNS: &[&str] = &["print", "unreachable"];
+const PRELUDE_FNS: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 pub fn rewrite(prog: &mut Program, diags: &mut Vec<Diagnostic>) {
     let free: HashSet<String> = prog
@@ -194,7 +194,7 @@ impl Cx<'_> {
             }
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.expr(x);
                     }
                 }

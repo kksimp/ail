@@ -78,6 +78,13 @@ input's.
 `# ail fmt: off` is left as written. It exists for lexer tests whose layout is
 the point (CRLF line endings, continuation lines); programs shouldn't use it.
 
+## Scope
+
+`ail fmt --check examples bootstrap/tests/cases` must pass, and a test
+enforces it. `tools/tokbench/corpus/` is left as written: its files are
+measurement data, some deliberately in other layouts, and formatting them
+would change recorded measurements.
+
 ## Measurement
 
 Formatting the seven examples (ADR 0169, `tools/tokbench/run.sh`, five

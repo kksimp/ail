@@ -72,6 +72,7 @@ fn significant(tokens: &[Token]) -> Vec<String> {
                     .map(|p| match p {
                         lexer::Part::Lit(s) => format!("{s:?}"),
                         lexer::Part::Code(code) => format!("{{{}}}", significant(code).join(" ")),
+                        lexer::Part::Fmt(code, spec) => format!("{{{}:{spec:?}}}", significant(code).join(" ")),
                     })
                     .collect();
                 format!("interp({})", parts.join(","))

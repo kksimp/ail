@@ -68,3 +68,13 @@ fn main()
     print(largest(["pear", "fig", "apple"]))
     print(Rect(w: 2, h: 3) == Rect(w: 2, h: 3))
     print(d.shapes[0])
+
+@test fn largest_picks_the_greatest()
+    assert_eq(largest([3, 9, 4]), 9)
+    assert_eq(largest(["pear", "fig", "apple"]), "pear")
+
+@test fn drawing_adds_shapes()
+    mut d := Drawing(title: "t", shapes: [])
+    d.add(Circle(r: 1))
+    assert_eq(d.shapes.len(), 1)
+    assert(d.biggest() != none)

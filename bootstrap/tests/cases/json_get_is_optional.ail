@@ -1,0 +1,5 @@
+# std.json: `get` may be absent, so its result is not a `Json` (json.query.1)
+fn main() !
+    doc := parse_json("\{}")?
+    inner := doc.get("a")
+    print(inner.to_text())

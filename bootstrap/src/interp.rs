@@ -17,6 +17,8 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod testing;
+pub use testing::run_tests;
 
 use builtins::{Key, Table, map_value};
 
@@ -197,7 +199,8 @@ thread_local! {
         const { std::cell::RefCell::new(TypeNames { structs: Vec::new(), enums: Vec::new() }) };
 }
 
-pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
+/// An interpreter for `prog` writing standard output to `out`.
+fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Interp<'a, W> {
     NAMES.with(|n| {
         let fields = |fs: &[crate::ast::Field]| fs.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
         *n.borrow_mut() = TypeNames {
@@ -223,19 +226,23 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     }
     let structs = prog.structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
     let enums = prog.enums.iter().enumerate().map(|(i, e)| (e.name.as_str(), i)).collect();
-    let stdout = io::stdout();
-    let mut it = Interp {
+    Interp {
         prog,
         resolved,
         fns,
         methods,
         structs,
         enums,
-        out: BufWriter::new(stdout.lock()),
+        out: BufWriter::new(out),
         depth: 0,
         closed: false,
         consts: HashMap::new(),
-    };
+    }
+}
+
+pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
+    let stdout = io::stdout();
+    let mut it = build(prog, resolved, stdout.lock());
     // mod.const.1: constants are computed before the program runs.
     for c in &prog.consts {
         it.constant(&c.name, c.pos).map_err(|e| match e {
@@ -763,6 +770,10 @@ impl<'a, W: Write> Interp<'a, W> {
                             let v = self.eval(x, env)?;
                             s.push_str(&self.text(&v, x.pos())?);
                         }
+                        InterpPart::Fmt(x, spec) => {
+                            let v = self.eval(x, env)?;
+                            s.push_str(&self.formatted(&v, spec, x.pos())?);
+                        }
                     }
                 }
                 Value::Str(Rc::from(s))
@@ -1165,6 +1176,9 @@ impl<'a, W: Write> Interp<'a, W> {
             let Value::Str(msg) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
             return Err(Exit::Trap(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }));
         }
+        if (n == "assert" || n == "assert_eq") && lookup(env, n).is_none() {
+            return self.assert(n, args, pos, env);
+        }
         if matches!(callee, Expr::TypeArgs { .. }) {
             match n.as_str() {
                 "List" => return Ok(Value::List(Rc::new(Vec::new()))),
@@ -1206,6 +1220,32 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Enum(e, _, _) => self.prog.enums[*e].is_error,
             _ => false,
         }
+    }
+
+    /// `{x:spec}` (type.str.11): the text form of `v` shaped by `spec`.
+    /// Numbers align right by default, everything else left.
+    fn formatted(&mut self, v: &Value, spec: &crate::lexer::FormatSpec, pos: Pos) -> Result<String, Trap> {
+        let numeric = matches!(v, Value::Int(_) | Value::Float(_));
+        let body = match v {
+            Value::Float(x) if spec.precision.is_some() && x.is_finite() => {
+                format!("{x:.*}", spec.precision.unwrap_or(0))
+            }
+            Value::Int(n) if spec.hex => {
+                if *n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }
+            }
+            other => self.text(other, pos)?,
+        };
+        let pad = spec.width.unwrap_or(0).saturating_sub(body.chars().count());
+        let fill = spec.fill.unwrap_or(' ');
+        let (left, right) = match spec.align.unwrap_or(if numeric { '>' } else { '<' }) {
+            '<' => (0, pad),
+            '>' => (pad, 0),
+            _ => (pad / 2, pad - pad / 2),
+        };
+        let mut out: String = std::iter::repeat(fill).take(left).collect();
+        out.push_str(&body);
+        out.extend(std::iter::repeat(fill).take(right));
+        Ok(out)
     }
 
     /// Text form, as used by `print`, interpolation and error reports
