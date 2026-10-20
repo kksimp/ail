@@ -1,7 +1,7 @@
 # AIL language card
 
-> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,550 tokens
-> (3,996 on the costliest tokenizer; measure with
+> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,770 tokens
+> (4,253 on the costliest tokenizer; measure with
 > `tools/tokbench/run.sh docs/language-card.md`). Non-normative: the
 > [spec](spec/) is authoritative and the [quick reference](quick-reference.md)
 > has the long form. Everything here runs on the bootstrap interpreter.

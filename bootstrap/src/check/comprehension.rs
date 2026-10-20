@@ -32,7 +32,7 @@ impl<'p> Checker<'p> {
         for c in clauses {
             let t = self.iterable(&c.iter);
             if self.declare(&c.var, c.var_pos) {
-                self.locals.push(Local { name: c.var.clone(), ty: t, mutable: false, kind: Kind::LoopVar });
+                self.locals.push(Local { name: c.var.clone(), ty: t, mutable: false, kind: Kind::LoopVar, decl: None });
             }
             if let Some(cond) = &c.cond {
                 self.condition(cond);
