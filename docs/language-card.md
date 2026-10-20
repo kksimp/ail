@@ -9,7 +9,15 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail test FILE.ail          # run the `@test` functions (--coverage, --trace)
+./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
+./ail api --text FILE.ail    # declarations and `##` docs without bodies; --card, --symbols
+./ail explain RULE           # a rule's text, its ADRs and an example
+./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
+./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
 ```
+
+`todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
 standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
@@ -165,32 +173,70 @@ fn main() !                                 # main can fail; the error is report
 ```ail
 trait Shape
     fn area(self) int
-    fn describe(self) str            # a default; an `impl` may replace it
-        "shape: {area()}"            # defaults call other methods on `self`
+    fn describe(self) str           # a default; defaults call other methods on `self`
+        "shape: {area()}"
 
 struct Circle
     r int
+
+struct Square
+    s int
 
 impl Shape for Circle                # defines every method without a default
     fn area(self) int
         3 * r * r
 
-fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
+impl Shape for Square
+    fn area(self) int
+        s * s
+    fn describe(self) str           # an `impl` replaces a default
+        "square {s}"
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version                # no body: compares the fields in order, so `<` works
+
+struct Stack[T]                     # a generic type; its methods use `T` and `Self`
+    items List[T]
+
+fn Stack[T].push_twice(mut self, x T)
+    items.push(x)
+    items.push(x)
+
+fn Stack[T].top(self) T?
+    items.last()
+
+enum Color
+    Red
+    Green
+    Rgb(r int, g int, b int)
+
+fn is_red(c Color) bool
+    match c
+        Red => true
+        Rgb => false                # bare `Rgb` matches any fields
+        Green => false
+
+fn main()
+    mut shapes := List[any Shape]()
+    shapes.push(Circle(r: 2))
+    shapes.push(Square(s: 3))
+    for s in shapes
+        print(s.describe())
+    print(Version(major: 1, minor: 2) < Version(major: 1, minor: 3))
+    mut st := Stack[int](items: [])
+    st.push_twice(4)
+    print(st.top())
+    print(is_red(Color.Red))
+
+fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
     mut best := items[0]
     for x in items
         if x > best
             best = x
     best
-
-struct Stack[T]                      # a generic type; its methods use `T`
-    items List[T]                    # and `Self` (for `Stack[T]`) directly
-
-fn main()
-    c := Circle(r: 2)
-    print(c.describe())              # shape: 12
-    print(largest([3, 9, 4]))        # type arguments are inferred
-    mut shapes := List[any Shape]()  # `any`: values of different types
-    shapes.push(c)
 ```
 
 - `impl Ord for Version` with no body compares the fields in order. `<` and
@@ -201,6 +247,30 @@ fn main()
   `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
   `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
   that writes an empty `impl`'s methods; `ail api --expanded` shows them.
+
+Optionals nest and `else` works inside expressions:
+
+```ail
+fn first_word(s str) str?
+    s.split(" ").first()
+
+fn pick(xs List[int?]) int??
+    xs.first()                      # `int??`: no element, or an element that is `none`
+
+fn sign(n int) str
+    if n < 0
+        return "neg"
+    if n >= 0
+        return "non-neg"
+    unreachable("n is an int")      # stops the program; has any type
+
+fn main()
+    a := first_word("") else "-"            # `else` inside an expression
+    n := (["7"].first() else "0").to_int() else 0
+    print("{a} {n + (first_word("a b") else "").len()} {sign(n)}")
+    if v := pick([none, 3])                 # peels one level: v is `int?`
+        print(v)
+```
 
 ## Control flow
 
@@ -327,7 +397,42 @@ bump(mut q)            # `mut` again at the call, on a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
-`ref x` is a cell copies share. `unique` types move: `f(move x)`; `fn T.close(move self)` consumes `x.close()`; lists of them move in with `xs.push(move x)`, out with `pop`, and `xs[i]` borrows.
+
+## Ownership
+
+`unique` types are never copied; they move, and `Drop` cleans them up. `ref T` is a
+cell that copies share. Lists of unique values move in with `xs.push(move x)`,
+out with `pop`, and `xs[i]` borrows.
+
+```ail
+unique struct Conn
+    id int
+
+impl Drop for Conn                  # runs when the value goes away
+    fn drop(mut self)
+        print("close {id}")
+
+fn Conn.finish(move self) int       # consumes the receiver: `c.finish()`
+    id
+
+fn release(move c Conn)             # `move` parameter: the caller writes `move c`
+    print("release {c.id}")
+
+struct Node
+    value int
+    children List[ref Node]         # `ref T`: a shared, mutable cell
+
+fn main()
+    defer print("done")             # runs when the block ends, in reverse order
+    a := Conn(id: 1)                # a `unique` value is never copied
+    b := Conn(id: 2)
+    release(move a)                 # `a` is unusable afterwards
+    n := b.finish()                 # so is `b`
+    root := ref Node(value: 1, children: [])
+    other := root                   # a copy of the reference, same cell
+    other.value = 2                 # root.value is now 2
+    print("{n} {root.value}")
+```
 
 ## Tasks
 
@@ -349,3 +454,88 @@ ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
 Wait or `add` each task exactly once, on every path. A deadlock traps.
+
+`par for` and `par` comprehensions use all cores; the result is what the sequential
+loop gives, and provable conflicts are errors:
+
+```ail
+fn main()
+    xs := [1, 2, 3, 4]
+    mut out := [0, 0, 0, 0]
+    par for i in 0..4               # asserts the iterations are independent
+        out[i] = xs[i] * xs[i]
+    sq := [x * x par for x in xs]   # a list computed on the thread pool
+    n := Atomic(0)                  # shared by tasks and `par for` without a lock
+    par for x in xs
+        n.add(x)
+    print("{out} {sq} {n.load()}")
+```
+
+## Contracts
+
+```ail
+fn divide(a int, b int) int
+    requires b != 0                 # a pure bool; false traps at the call
+    ensures result * b + a % b == a # `result` is the returned value
+    a / b
+
+struct Account
+    balance int
+    invariant balance >= 0          # holds after construction and every `mut self` method
+
+fn Account.add(mut self, n int)
+    ensures balance == old(balance) + n   # `old(e)`: `e` on entry
+    balance += n
+```
+
+A trait method's contracts bind its implementations. `ail run --no-contracts` skips the checks.
+
+## Tests
+
+```ail
+fn double(x int) int
+    x * 2
+
+@test fn doubles()                  # `ail test`; `?` works inside a test
+    assert_eq(double(4), 8)         # traps showing both values
+    assert(double(1) == 2)
+
+@test fn add_commutes(a int, b int) # parameters: a property on generated inputs
+    assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
+```
+
+A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.
+
+## Packages, effects and the system
+
+`ail.pkg` in a package root lists the package and its dependencies; each `dep`
+is imported by name and may reach only the capabilities in its `caps`:
+
+```text
+package notes caps fs
+dep geo path ../geo caps fs
+```
+
+Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
+`env`, `proc`, `clock`, `random`, `net`, `ui`. `@pure fn f()` is an error if it reaches
+one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
+
+A window is a grid of text cells; draw with `put`, then `present`:
+
+```ail
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)      # col, row, text, fg, bg
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, _, _, _) =>                   # "a", "enter"; (key, ctrl, alt, shift)
+                if key == "escape"
+                    break
+            Close => break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
+```
+
+A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
+`matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
+`ToJson`/`FromJson` derives read and write JSON.

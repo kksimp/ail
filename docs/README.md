@@ -59,6 +59,17 @@ Design notes:
   and per-dependency capability grants.
 - [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
   writes.
+- [design/compile-time-execution.md](design/compile-time-execution.md),
+  [design/metaprogramming.md](design/metaprogramming.md),
+  [design/reflection.md](design/reflection.md),
+  [design/ir-architecture.md](design/ir-architecture.md): topics 16–19:
+  compile-time constants, derive generators, compile-time reflection, and the
+  compiler tiers.
+- [design/program-measurements-r5.md](design/program-measurements-r5.md),
+  [design/program-measurements-r8.md](design/program-measurements-r8.md): the
+  agent-tool corpus against Python after rounds 5 and 8.
+- [design/cards/](design/cards/README.md): `ail api --card` output for the
+  editor and the standard library, kept fresh by a test.
 - [design/program-measurements-r3.md](design/program-measurements-r3.md):
   where AIL's tokens go per construct against Python, and the round-3 changes.
 
