@@ -19,13 +19,13 @@ PARSE_OK := 7
 # Threads (ADR 0599): the pool block, a flag that is 1 once a second thread
 # can exist, the allocator's and the output buffer's locks, and the
 # reentrant output lock's owner and depth.
-TASKS := 40
-MULTI := 41
-ALLOC_LOCK := 42
-OUT_LOCK := 43
-OUT_OWNER := 44
-OUT_DEPTH := 45
-STACKS := 46
+TASKS := 56
+MULTI := 57
+ALLOC_LOCK := 58
+OUT_LOCK := 59
+OUT_OWNER := 60
+OUT_DEPTH := 61
+STACKS := 62
 # Windows: the byte count `WriteFile` reports (ADR 0608), one of the free slots.
 WIN_WRITTEN := 9
 

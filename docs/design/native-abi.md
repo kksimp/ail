@@ -369,7 +369,7 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
 - **Atomics.** x86-64: `mov`, `xchg`, `lock xadd`, `lock cmpxchg`. ARM64:
   `ldar`, `stlr`, `swpal`, `ldaddal`, `casal` (LSE). Always sequentially
   consistent.
-- **Globals** 40–46: `TASKS` (the pool block), `MULTI` (1 once the pool
+- **Globals** 56–62: `TASKS` (the pool block), `MULTI` (1 once the pool
   exists: `alloc` then takes `ALLOC_LOCK`), `ALLOC_LOCK`, `OUT_LOCK`,
   `OUT_OWNER` and `OUT_DEPTH` (the reentrant output lock), `STACKS`. The image
   has 64 slots.

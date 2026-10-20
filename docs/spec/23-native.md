@@ -30,25 +30,21 @@ lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
-construct is reported at its position under this rule, all of them at once,
-and nothing is built. *(ADRs 0384, 0390, 0591)*
-and the bit operations of expr.bit.1. Any other construct is reported at its
-position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393)*
-and the bit operations of expr.bit.1. Also: format specifications on numbers,
-`bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
-`.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
-`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`,
-`fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
-`env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
-`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
-call that can fail is in the subset only as the value of `else` with a
-fallback value, a statement that leaves, or a block without a binding
-(err.else.1-2); `else err` and `?` are not yet. Any other construct is
-reported at its position under this rule, all of them at once, and nothing
-is built. *(ADRs 0384, 0390, 0392, 0393, 0580, 0582)*
-Tasks and atomics are in the subset too: `t := spawn f(args)` and `t.wait()?` in `fn main() !`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`, `store`, `cas` and `add` (`native.task.1`, ADRs 0599–0601).
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Also:
+format specifications on numbers, `bool` and `str` in `print` (lex.str.7,
+type.str.11: width, fill, alignment, `.N`, `x`); `s.to_float()` in the `else`
+forms; the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
+`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`,
+`env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line`,
+`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
+(std.fs, std.env, std.io, std.time); and `t := spawn f(args)` and `t.wait()?`
+in `fn main() !`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
+`store`, `cas` and `add` (`native.task.1`). A call that can fail is in the
+subset only as the value of `else` with a fallback value, a statement that
+leaves, or a block without a binding (err.else.1-2); `else err` and the
+`?` of other calls are not yet. Any other construct is reported at its position
+under this rule, all of them at once, and nothing is built.
+*(ADRs 0384, 0390, 0392, 0393, 0580, 0582, 0591, 0599–0601)*
 
 ```ail
 fn steps(n int) int
