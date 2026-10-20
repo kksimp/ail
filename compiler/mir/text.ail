@@ -5,8 +5,6 @@ pub fn module_text(m Module) str
     mut out := List[str]()
     out.push("# MIR (unstable) of {m.path}")
     for f in m.funcs
-        if f.name.starts_with("rt.")
-            continue
         out.push("")
         out.push(func_text(f))
     out.join("\n")

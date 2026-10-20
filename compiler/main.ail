@@ -4,17 +4,22 @@
 #                                         `ail api --ast --program` (first line), one JSON line each
 #   ail run compiler tokens FILE...       the AIL lexer's tokens, as `ail api --tokens FILE` (ADR 0371)
 #   ail run compiler parse FILE...        the AIL parser's tree, as `ail api --ast FILE`
-#   ail run compiler mir FILE             the native backend's MIR of a program (ADR 0384)
+#   ail run compiler mir FILE [RT]        the native backend's MIR of a program (ADR 0384), with
+#                                         the runtime in directory RT when given
+#   ail run compiler build FILE RT        a Linux x86-64 executable of a program as hex text,
+#                                         with the runtime in directory RT (ADR 0385; `ail build`)
 # With several files, each output starts with a line `== PATH`.
 use ast
 use check
 use mir
+use obj
 use syntax
+use x64
 
 fn main() !
     args := env.args()
     if args.len() < 2
-        io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE)")
+        io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
         io.exit(2)
     match args[0]
         "check" =>
@@ -32,8 +37,13 @@ fn main() !
                 lexed := syntax.lex(fs.read_text(path)?)
                 print(syntax.ast_text(lexed, syntax.parse(lexed.tokens)))
         "mir" =>
-            m := lower_file(args[1])?
-            print(mir.module_text(m))
+            if args.len() > 2
+                print(mir.module_text(lower_file(args[1], runtime(args[2])?)?))
+            else
+                print(mir.module_text(lower_file(args[1], none)?))
+        "build" =>
+            m := lower_file(args[1], runtime(args[2])?)?
+            print(obj.hex(obj.elf_x64(x64.generate(m))))
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
@@ -55,13 +65,26 @@ fn check_dump(path str, many bool) !
         for s in check.skipped(prog)
             print("skip {s.file} {s.first} {s.last}")
 
+## The native runtime in directory `dir`, parsed as one program.
+fn runtime(dir str) !ast.Program
+    mut texts := List[str]()
+    for name in ["prim.ail", "core.ail"]
+        texts.push(fs.read_text("{dir}/{name}")?)
+    syntax.parse(syntax.lex(texts.join("\n")).tokens).program
+
 ## Parse a program and lower it to MIR; problems outside the native subset
 ## are printed as `ail check` prints diagnostics, and the run fails.
-fn lower_file(path str) !mir.Module
+fn lower_file(path str, rt ast.Program?) !mir.Module
     text := fs.read_text(path)?
     lexed := syntax.lex(text)
     parsed := syntax.parse(lexed.tokens)
-    m := mir.lower_module(path, text, parsed.program, none) else err
+    mut diags := lexed.diags
+    diags.extend(parsed.diags)
+    if diags.len() > 0
+        for d in diags
+            io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
+        io.exit(1)
+    m := mir.lower_module(path, text, parsed.program, rt) else err
         for p in err.items
             io.eprint("{path}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
         io.exit(1)
