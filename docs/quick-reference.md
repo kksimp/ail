@@ -9,6 +9,7 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -424,3 +425,14 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+
+## Tests and assertions
+
+```ail
+@test fn doubles()           # `@test` on the same line; no parameters
+    assert_eq(double(4), 8)  # traps showing both values if unequal
+    assert(double(1) == 2)   # traps if false
+```
+
+A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
+`assert` and `assert_eq` also work in ordinary code (a failure traps).

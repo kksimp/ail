@@ -1,0 +1,3 @@
+{"test":"doubles","status":"pass","line":4,"col":10,"message":""}
+{"test":"truth","status":"pass","line":7,"col":10,"message":""}
+{"summary":true,"passed":2,"failed":0}

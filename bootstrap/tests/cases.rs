@@ -5,6 +5,8 @@
 //! - `NAME.ail` + `NAME.rules`: the diagnostics' spec rule IDs (in report
 //!   order) must equal the file's lines. The program must be rejected (exit 2)
 //!   if any of them is an error; with only warnings, it is accepted (exit 0).
+//! - `NAME.ail` + `NAME.test`: `ail test --json` must print exactly this on
+//!   stdout, exiting 0 if no line has `"status":"fail"`, else 1.
 //! - `NAME.ail` + `NAME.trap`: must trap (exit 1) with the rule ID in the
 //!   file, after printing exactly `NAME.out` if that exists.
 //! - `NAME.ail` + `NAME.err`: `main` must fail (exit 1) with exactly this
@@ -34,8 +36,21 @@ fn check_case(path: &Path) -> Result<(), String> {
     let rules_file = path.with_extension("rules");
     let trap_file = path.with_extension("trap");
     let err_file = path.with_extension("err");
+    let test_file = path.with_extension("test");
     let name = path.display();
-    if err_file.exists() {
+    if test_file.exists() {
+        let out = ail().args(["test", "--json"]).arg(path).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let expected = fs::read_to_string(&test_file).unwrap();
+        let want_exit = if expected.contains("\"status\":\"fail\"") { 1 } else { 0 };
+        if out.status.code() != Some(want_exit) || stdout != expected {
+            return Err(format!(
+                "{name}: ail test output differs\n--- expected (exit {want_exit})\n{expected}--- actual (exit {:?})\n{stdout}",
+                out.status.code()
+            ));
+        }
+        Ok(())
+    } else if err_file.exists() {
         let out = ail().arg("run").arg(path).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);

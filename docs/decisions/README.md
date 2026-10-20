@@ -152,3 +152,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
 | [0161](0161-std-json-in-the-prelude.md) | `std.json` lives in the prelude as `Json`, `parse_json`, with `float` numbers *(delegated)* | Accepted | 2026-10-20 |
 | [0162](0162-optional-prelude-modules.md) | Optional prelude modules are read only when named *(delegated)* | Accepted | 2026-10-20 |
+| [0167](0167-test-functions-and-ail-test.md) | Tests are `@test` functions run by `ail test FILE [--json]` *(delegated)* | Accepted | 2026-10-20 |
+| [0168](0168-assert-and-assert-eq.md) | `assert` and `assert_eq` are prelude functions allowed anywhere *(delegated)* | Accepted | 2026-10-20 |

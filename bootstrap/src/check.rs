@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod testing;
 mod traits;
 
 use std::collections::HashMap;
@@ -143,7 +144,7 @@ pub struct Resolved {
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
-const PRELUDE: &[&str] = &["print", "unreachable"];
+const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &["int", "i64", "float", "f64", "str", "char", "bool", "List", "Map", "Set"];
 
@@ -193,6 +194,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.collect_consts();
     c.check_deferred_bounds();
     c.check_main();
+    c.check_attrs();
     c.check_impls();
     // err.type.6: inferred error sets are the least fixed point over all
     // functions, found by re-checking them silently until nothing changes.
@@ -2438,6 +2440,9 @@ impl<'p> Checker<'p> {
             self.check_call(n, &sig, Vec::new(), args, None, npos, None);
             return Ty::Never;
         }
+        if n == "assert" || n == "assert_eq" {
+            return self.assert_call(n, args, npos);
+        }
         if let Some(t) = targs.and_then(|a| self.collection_constructor(n, a, npos)) {
             if !args.is_empty() {
                 self.args_only(args);
@@ -2469,6 +2474,7 @@ impl<'p> Checker<'p> {
             None => {}
         }
         if let Some(&i) = self.fns.get(n.as_str()) {
+            self.reject_test_call(i, npos);
             let sig = self.sigs[i].clone();
             let binds = match targs {
                 Some(a) => {

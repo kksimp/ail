@@ -72,6 +72,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Target** | An OS + ISA combination the compiler generates code for, e.g. `linux-arm64`. See spec `plat.target.1`. |
 | **Task-local heap** | A heap private to one task, collected independently with no synchronisation or write barriers. See ADR 0012. |
 | **TBI** | Top Byte Ignore (ARM64): the hardware ignores the top 8 bits of an address, so software can store tags there for free. |
+| **Test** | A function marked `@test`, run by `ail test`: it passes unless an assertion fails, it traps, or it returns an error (ADR 0167). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
 | **Total order (float)** | Float's `cmp`: numeric order with NaN after every number and `-0.0` equal to `0.0`, used for sorting; the operators `<` and `==` stay IEEE (ADR 0130). |
