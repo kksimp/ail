@@ -336,6 +336,8 @@ for v in ch                 # receives until closed and empty
 m := Mutex(0)               # get, set, swap
 with m as mut x             # holds m; stores x back on any exit
     x += 1
+n := Atomic(0)              # int/bool: load, store, add (old value), cas
+g.cancel()                  # task.cancelled(), task.check()? in the task
 ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 

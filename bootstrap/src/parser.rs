@@ -103,7 +103,7 @@ pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// these, `[` starts type arguments rather than an index (gen.infer.2).
 fn generic_names(tokens: &[Token]) -> HashSet<String> {
     // The built-in collections: `List[int]()` (type.coll.8).
-    let mut names: HashSet<String> = ["List", "Map", "Set", "Channel", "Mutex"].iter().map(|n| n.to_string()).collect();
+    let mut names: HashSet<String> = ["List", "Map", "Set", "Channel", "Mutex", "Atomic"].iter().map(|n| n.to_string()).collect();
     for w in tokens.windows(3) {
         if let [
             Token { tok: Tok::Kw("fn" | "struct" | "enum"), .. },

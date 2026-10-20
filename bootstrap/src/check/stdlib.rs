@@ -201,6 +201,9 @@ impl<'p> Checker<'p> {
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
+            // conc.cancel.2
+            ("task", "cancelled") => (vec![], Bool),
+            ("task", "check") => (vec![], Ty::Res(Box::new(Unit), Errs::Set(vec![self.prelude_error("Cancelled")]))),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
             ("ui", "clipboard_get") => (vec![], opt(Str)),
@@ -210,6 +213,14 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
             ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
+        }
+    }
+
+    /// A prelude error type, such as `Cancelled` (conc.cancel.2).
+    fn prelude_error(&self, name: &str) -> Ty {
+        match self.types.get(name) {
+            Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
+            _ => Ty::Err,
         }
     }
 

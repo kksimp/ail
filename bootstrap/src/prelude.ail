@@ -42,6 +42,10 @@ error struct Trapped
 ## What `?` fails with on `none` in a function whose errors are inferred
 ## (err.prop.5, ADR 0279).
 error struct Absent "a value is absent"
+
+## What `task.check()` fails with once the running task is cancelled
+## (conc.cancel.2, ADR 0321).
+error struct Cancelled "the task was cancelled"
 ## @module json
 ## `std.json` (lane 5, plan section 4): a JSON value, parser and printer. It
 ## is read only when the program names one of its public items and doesn't

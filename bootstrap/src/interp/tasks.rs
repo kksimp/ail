@@ -662,7 +662,9 @@ impl<'a, W: Write> Interp<'a, W> {
         let ctx = self.ctx();
         let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
         let mut st = sched.lock();
+        st = sched.switch(st, me, pos)?;
         loop {
+            let cancelled = st.tasks[me].cancelled;
             let ch = &mut st.chans[c];
             if let Some(v) = ch.items.pop_front() {
                 for w in std::mem::take(&mut ch.waiters) {
@@ -670,7 +672,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 return Ok(Some(v));
             }
-            if ch.closed {
+            // conc.cancel.2: a cancelled task's loop ends like a closed channel's.
+            if ch.closed || cancelled {
                 return Ok(None);
             }
             ch.waiters.push(me);

@@ -193,6 +193,9 @@ pub struct Resolved {
     /// Methods called on a task, group, channel or mutex handle, by the
     /// position of the name: they synchronise with other tasks (conc.par.2).
     pub handle_calls: FastSet<Pos>,
+    /// Methods called on an `Atomic`, by the position of the name
+    /// (conc.atomic.6): a parallel loop may run them only under `par for`.
+    pub atomic_calls: FastSet<Pos>,
     /// Names whose use moves the binding's value out (own.uniq.2,
     /// own.move.2), by position, with the rule that makes it a move. The
     /// interpreter takes the value out of the binding there.
@@ -209,7 +212,7 @@ const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &[
     "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
-    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex",
+    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
 ];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
@@ -3740,7 +3743,11 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         }
         if let Ty::Conc(k, inner) = &rt {
-            self.resolved.handle_calls.insert(pos);
+            if *k == conc::Conc::Atomic {
+                self.resolved.atomic_calls.insert(pos);
+            } else {
+                self.resolved.handle_calls.insert(pos);
+            }
             return self.conc_method(*k, inner, name, pos, args);
         }
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {

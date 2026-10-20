@@ -14,6 +14,8 @@ pub enum Conc {
     Group,
     Channel,
     Mutex,
+    /// `Atomic[int]` or `Atomic[bool]` (conc.atomic.3, ADR 0320).
+    Atomic,
 }
 
 impl Conc {
@@ -23,12 +25,13 @@ impl Conc {
             Conc::Group => "TaskGroup",
             Conc::Channel => "Channel",
             Conc::Mutex => "Mutex",
+            Conc::Atomic => "Atomic",
         }
     }
 }
 
 /// The names of the handle types, for `BUILTIN_TYPES`.
-pub(super) const TYPE_NAMES: &[&str] = &["Task", "TaskGroup", "Channel", "Mutex"];
+pub(super) const TYPE_NAMES: &[&str] = &["Task", "TaskGroup", "Channel", "Mutex", "Atomic"];
 
 const TASK_HELP: &str = "wait it with `t.wait()?`, or add it to a group with `g.add(t)`";
 
@@ -53,8 +56,16 @@ impl<'p> Checker<'p> {
                 Ty::Err
             }
             _ if args.len() == 1 => {
-                let k = if name == "Channel" { Conc::Channel } else { Conc::Mutex };
-                Ty::Conc(k, Box::new(self.resolve_type(&args[0])))
+                let k = match name {
+                    "Channel" => Conc::Channel,
+                    "Atomic" => Conc::Atomic,
+                    _ => Conc::Mutex,
+                };
+                let inner = self.resolve_type(&args[0]);
+                if k == Conc::Atomic && !self.atomic_inner(&inner, pos) {
+                    return Ty::Err;
+                }
+                Ty::Conc(k, Box::new(inner))
             }
             _ => {
                 self.error_help(
@@ -82,6 +93,7 @@ impl<'p> Checker<'p> {
             "TaskGroup" => Conc::Group,
             "Channel" => Conc::Channel,
             "Mutex" => Conc::Mutex,
+            "Atomic" => Conc::Atomic,
             "Task" => {
                 self.args_only(args);
                 self.error_help("conc.task.1", pos, "a task is started with `spawn`, not built", "write `spawn f(args)`");
@@ -107,9 +119,12 @@ impl<'p> Checker<'p> {
             (_, None) => match expect {
                 Some(Ty::Conc(k, inner)) if *k == kind => (**inner).clone(),
                 // `Mutex(v)`: the type of the first value.
-                _ if kind == Conc::Mutex && args.len() == 1 => {
+                _ if matches!(kind, Conc::Mutex | Conc::Atomic) && args.len() == 1 => {
                     let t = self.expr(&args[0].value, None, true);
                     if self.reject_unhandled(&t, args[0].value.pos()) {
+                        return Some(Ty::Err);
+                    }
+                    if kind == Conc::Atomic && !self.atomic_inner(&t, args[0].value.pos()) {
                         return Some(Ty::Err);
                     }
                     return Some(Ty::Conc(kind, Box::new(t)));
@@ -177,13 +192,22 @@ impl<'p> Checker<'p> {
             (Conc::Mutex, "get" | "lock") => ("conc.share.5", vec![], t),
             (Conc::Mutex, "set" | "unlock") => ("conc.share.5", vec![t], Ty::Unit),
             (Conc::Mutex, "swap") => ("conc.share.5", vec![t.clone()], t),
+            // conc.cancel.1: ask a task, or every task of a group, to stop.
+            (Conc::Task | Conc::Group, "cancel") => ("conc.cancel.1", vec![], Ty::Unit),
+            // conc.atomic.4-5
+            (Conc::Atomic, "load") => ("conc.atomic.4", vec![], t),
+            (Conc::Atomic, "store") => ("conc.atomic.4", vec![t], Ty::Unit),
+            (Conc::Atomic, "add") if t == Ty::Int => ("conc.atomic.5", vec![Ty::Int], Ty::Int),
+            (Conc::Atomic, "cas") => ("conc.atomic.4", vec![t.clone(), t], Ty::Bool),
             _ => {
                 self.args_only(args);
                 let names = match kind {
-                    Conc::Task => "`wait`",
-                    Conc::Group => "`add` and `wait_all`",
+                    Conc::Task => "`wait` and `cancel`",
+                    Conc::Group => "`add`, `wait_all` and `cancel`",
                     Conc::Channel => "`send`, `recv` and `close`",
                     Conc::Mutex => "`get`, `set`, `swap`, `lock` and `unlock`",
+                    Conc::Atomic if t == Ty::Int => "`load`, `store`, `add` and `cas`",
+                    Conc::Atomic => "`load`, `store` and `cas` (`add` needs `Atomic[int]`)",
                 };
                 self.error_help(
                     "expr.name.1",
@@ -278,6 +302,20 @@ impl<'p> Checker<'p> {
             "wrap the work in a function and spawn a call of it; to wait at once, bind it: `t := spawn work(x)`",
         );
         Ty::Err
+    }
+
+    /// conc.atomic.3: an atomic holds an `int` or a `bool`.
+    fn atomic_inner(&mut self, t: &Ty, pos: Pos) -> bool {
+        if matches!(t, Ty::Int | Ty::Bool | Ty::Err) {
+            return true;
+        }
+        self.error_help(
+            "conc.atomic.3",
+            pos,
+            format!("an `Atomic` holds an `int` or a `bool`, not {}", self.show(t)),
+            "share other values through a `Mutex`, e.g. `Mutex(value)`",
+        );
+        false
     }
 
     /// The prelude's `error struct Trapped` (conc.task.6).
@@ -555,6 +593,8 @@ fn expr_uses(name: &str, e: &Expr, cond: bool, u: &mut Uses) {
         Expr::Method { recv, name: m, name_pos, args } if m == "wait" && args.is_empty() && is_it(recv) => {
             u.consumed.push((*name_pos, cond));
         }
+        // conc.cancel.1: cancelling a task doesn't consume its handle.
+        Expr::Method { recv, name: m, args, .. } if m == "cancel" && args.is_empty() && is_it(recv) => {}
         Expr::Method { recv, name: m, args, .. } if m == "add" && args.len() == 1 && is_it(&args[0].value) => {
             expr_uses(name, recv, cond, u);
             u.consumed.push((args[0].value.pos(), cond));

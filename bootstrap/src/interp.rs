@@ -34,6 +34,7 @@ mod trace;
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
 pub use stdlib::set_program;
+pub use tasks::{schedule_seed, set_schedule};
 mod prop;
 mod testing;
 mod ui;
