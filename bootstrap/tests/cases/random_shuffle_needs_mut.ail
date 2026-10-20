@@ -1,0 +1,9 @@
+use std.random
+
+fn main()
+    xs := [1, 2, 3]
+    random.shuffle(xs)
+    mut ys := [1, 2, 3]
+    random.shuffle(ys)
+    mut n := 3
+    random.shuffle(mut n)

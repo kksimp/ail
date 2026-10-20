@@ -17,8 +17,10 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod random;
 mod stdlib;
 
+pub use random::seed as set_seed;
 pub use stdlib::set_program;
 mod prop;
 mod testing;
@@ -52,6 +54,10 @@ enum Value {
     Set(Rc<Table>),
     /// The absent value of an optional (type.opt.4).
     None,
+    /// `present` applied `n >= 1` times to `none`: an optional of an
+    /// optional whose inner levels are absent (type.opt.7). Any other
+    /// present optional is its content, so `T` converts to `T?` for free.
+    Nested(u32),
     /// The failure of a `T ! E` result (err.model.1).
     Fail(Rc<Failure>),
 }
@@ -65,6 +71,25 @@ struct Failure {
 }
 
 impl Value {
+    /// The optional that holds `v` (type.opt.7): `v` itself, unless `v` is
+    /// an absent optional, which would read as the outer `none`.
+    fn present(v: Value) -> Value {
+        match v {
+            Value::None => Value::Nested(1),
+            Value::Nested(n) => Value::Nested(n + 1),
+            v => v,
+        }
+    }
+
+    /// The content of a present optional (type.opt.7): `present`'s inverse.
+    fn unwrap_present(v: Value) -> Value {
+        match v {
+            Value::Nested(1) => Value::None,
+            Value::Nested(n) => Value::Nested(n - 1),
+            v => v,
+        }
+    }
+
     fn int(&self) -> i64 {
         match self {
             Value::Int(v) => *v,
@@ -441,6 +466,7 @@ fn key_text(k: &Value) -> String {
         Value::Int(n) => n.to_string(),
         Value::Bool(b) => b.to_string(),
         Value::None => "none".into(),
+        Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
         Value::List(items) => format!("[{}]", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
         Value::Struct(s, values) => NAMES.with(|n| {
             let (name, names) = &n.borrow().structs[*s];
@@ -565,6 +591,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = self.eval(value, env)?;
                 let v = match (otherwise, v) {
                     (Some(o), v @ (Value::None | Value::Fail(_))) => self.otherwise(o, v, env)?,
+                    (Some(_), v) => Value::unwrap_present(v),
                     (_, v) => v,
                 };
                 env.push((name.as_str(), v));
@@ -814,7 +841,7 @@ impl<'a, W: Write> Interp<'a, W> {
             // err.else.6: the fallback runs only when the value is absent or failed.
             Expr::Else { value, otherwise, .. } => match self.eval(value, env)? {
                 v @ (Value::None | Value::Fail(_)) => self.otherwise(otherwise, v, env)?,
-                v => v,
+                v => Value::unwrap_present(v),
             },
             Expr::Try { expr, context, pos } => {
                 let v = self.eval(expr, env)?;
@@ -833,6 +860,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         let failure = Failure { error: f.error.clone(), context: context_list, trace };
                         return Err(Exit::Return(Value::Fail(Rc::new(failure)), *pos));
                     }
+                    v if self.resolved.optional_try.contains(pos) => Value::unwrap_present(v),
                     v => v,
                 }
             }
@@ -968,7 +996,7 @@ impl<'a, W: Write> Interp<'a, W> {
                             Value::Fail(f) => failure = Some(f),
                             v => {
                                 let mark = env.len();
-                                env.push((name.as_str(), v));
+                                env.push((name.as_str(), Value::unwrap_present(v)));
                                 let r = self.block(body, env);
                                 env.truncate(mark);
                                 return r;
@@ -1154,6 +1182,8 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Str(x), Value::Str(y)) => x == y,
             (Value::None, Value::None) => true,
             (Value::None, _) | (_, Value::None) => false,
+            (Value::Nested(m), Value::Nested(n)) => m == n,
+            (Value::Nested(_), _) | (_, Value::Nested(_)) => false,
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
                 self.all_equal(x, y, pos)?
             }
@@ -1351,6 +1381,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Str(s) => quoted(s, '"'),
             Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
+            Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
                 for x in items.iter() {

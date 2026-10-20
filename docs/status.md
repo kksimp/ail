@@ -38,6 +38,7 @@ specifications in interpolation (`{x:>8}`, `{r:.2}`, `{n:0>4x}`, resolves OQ-041
 are implemented; `docs/language-card.md` is the whole language in under 4,000
 tokens. Linux selftest passes; macOS verification is pending.
 Lane 25 added property tests (`@test` with parameters, `--cases`, `--seed`, shrinking) and doc examples as tests (ADRs 0198–0201; spec `test.prop.*`, `test.doc.*`).
+Lane 27 (ADRs 0206–0209, resolves OQ-043, OQ-044, OQ-046): `std.random` (`int`, `float`, `seed`, `shuffle`; capability `random`), `ail run --deterministic` and `--seed`, `str.len()` counting characters with `byte_len()`, and nested optionals (`T??`).
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
 interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
@@ -109,4 +110,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-048).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-048; 043, 044 and 046 are resolved).

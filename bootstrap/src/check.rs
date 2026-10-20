@@ -1217,6 +1217,12 @@ impl<'p> Checker<'p> {
                     );
                 }
             }
+            (Ty::Opt(w), Ty::Opt(_)) if matches!(**w, Ty::Opt(_)) => self.error_help(
+                rule,
+                pos,
+                msg,
+                "an optional doesn't convert to a nested optional, since its `none` would be ambiguous (type.opt.7)",
+            ),
             (w, Ty::Opt(g)) if same(w, g) => self.error_help(
                 rule,
                 pos,

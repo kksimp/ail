@@ -11,6 +11,7 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail run --deterministic FILE.ail  # same inputs, same output (no clock/random/proc)
 ```
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
@@ -53,6 +54,9 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `int` (64-bit), `float` (64-bit IEEE), `bool` (`true`, `false`), `str`,
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+
+`use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
+`random.seed(n)`, `random.shuffle(mut xs)`; `--seed N` repeats a run.
 
 Constants are top-level `NAME := value` (literals, constants, operators; no calls).
 
@@ -152,6 +156,8 @@ fn main() !                                 # main can fail; the error is report
 - No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
   As a statement, `save() else err` + block handles the failure and goes on;
   `save() else return` leaves.
+- `int??` (from `m.get(k)` on a `Map[K, int?]`): `none` is the outer level;
+  `else` peels one, so `m.get(k) else none` flattens to `int?`.
 - `unreachable("why")` stops the program; it fits any type, like `return`.
 
 ## Traits and generics
@@ -283,8 +289,8 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
   align (numbers default right, others left); `.N` needs a float, `x` an int.
 - `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
-- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
-  `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
+- `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
+  `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`.
 - Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
