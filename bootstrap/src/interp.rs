@@ -763,6 +763,10 @@ impl<'a, W: Write> Interp<'a, W> {
                             let v = self.eval(x, env)?;
                             s.push_str(&self.text(&v, x.pos())?);
                         }
+                        InterpPart::Fmt(x, spec) => {
+                            let v = self.eval(x, env)?;
+                            s.push_str(&self.formatted(&v, spec, x.pos())?);
+                        }
                     }
                 }
                 Value::Str(Rc::from(s))
@@ -1206,6 +1210,32 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Enum(e, _, _) => self.prog.enums[*e].is_error,
             _ => false,
         }
+    }
+
+    /// `{x:spec}` (type.str.11): the text form of `v` shaped by `spec`.
+    /// Numbers align right by default, everything else left.
+    fn formatted(&mut self, v: &Value, spec: &crate::lexer::FormatSpec, pos: Pos) -> Result<String, Trap> {
+        let numeric = matches!(v, Value::Int(_) | Value::Float(_));
+        let body = match v {
+            Value::Float(x) if spec.precision.is_some() && x.is_finite() => {
+                format!("{x:.*}", spec.precision.unwrap_or(0))
+            }
+            Value::Int(n) if spec.hex => {
+                if *n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }
+            }
+            other => self.text(other, pos)?,
+        };
+        let pad = spec.width.unwrap_or(0).saturating_sub(body.chars().count());
+        let fill = spec.fill.unwrap_or(' ');
+        let (left, right) = match spec.align.unwrap_or(if numeric { '>' } else { '<' }) {
+            '<' => (0, pad),
+            '>' => (pad, 0),
+            _ => (pad / 2, pad - pad / 2),
+        };
+        let mut out: String = std::iter::repeat(fill).take(left).collect();
+        out.push_str(&body);
+        out.extend(std::iter::repeat(fill).take(right));
+        Ok(out)
     }
 
     /// Text form, as used by `print`, interpolation and error reports

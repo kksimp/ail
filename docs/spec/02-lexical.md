@@ -177,6 +177,33 @@ src := r"""
 > A plain string is cheaper for a short escape (a raw form costs about 7%
 > more tokens there, measured), so raw strings don't replace plain ones.
 
+**lex.str.7** — An interpolation may carry a format specification:
+`{expression:spec}`. The `:` is the first one outside brackets, strings and
+character literals. The specification is `[[fill]align][width][.decimals][x]`
+and nothing else:
+
+- `align` is `<` (left), `>` (right) or `^` (centre); `fill` is any one
+  character before it. The default fill is a space. Without `align`, numbers
+  are right-aligned and everything else is left-aligned.
+- `width` is a decimal number with no leading `0` (write `0>4`); text longer
+  than `width` isn't cut. Width counts characters.
+- `.decimals` and `x` are typed by `type.str.11`.
+- `width` and `decimals` are at most 1000. `x` and `.decimals` don't combine.
+
+Anything else is a compile-time error whose help shows the grammar. There is
+no `{x!r}`, sign, `#`, `,` or `e` form. *(ADR 0173)*
+
+```ail fragment
+n := 255
+r := 3.14159
+print("[{n:>6}][{r:.2}][{n:0>4x}][{"ab":^6}][{"ab":*<5}]")
+```
+
+```ail error=lex.str.7
+n := 1
+print("{n:03}")      # compile-time error: write {n:0>3}
+```
+
 ## Numeric literals
 
 **lex.num.1** — Integer literals are decimal, hexadecimal (`0x`), binary (`0b`)

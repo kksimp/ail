@@ -59,7 +59,7 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             t.pos.line += PRELUDE_LINE;
             if let Tok::Interp(parts) = &mut t.tok {
                 for p in parts {
-                    if let Part::Code(code) = p {
+                    if let Part::Code(code) | Part::Fmt(code, _) = p {
                         shift(code);
                     }
                 }
@@ -1337,6 +1337,7 @@ impl Parser {
         let mut out = Vec::new();
         let mut ok = true;
         for part in parts {
+            let part_spec = if let Part::Fmt(_, f) = &part { Some(f.clone()) } else { None };
             match part {
                 Part::Lit(s) => out.push(InterpPart::Lit(s)),
                 // lex.str.2: `{{` isn't an escape; `\{` is.
@@ -1349,7 +1350,8 @@ impl Parser {
                     );
                     ok = false;
                 }
-                Part::Code(tokens) => {
+                Part::Code(tokens) | Part::Fmt(tokens, _) => {
+                    let spec = part_spec;
                     let generic_names = self.generic_names.clone();
                     let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true, generic_names };
                     let expr = sub.expression();
@@ -1359,7 +1361,10 @@ impl Parser {
                     let clean = sub.diags.is_empty();
                     self.diags.append(&mut sub.diags);
                     match expr {
-                        Some(e) if clean => out.push(InterpPart::Expr(e)),
+                        Some(e) if clean => out.push(match spec {
+                            Some(f) => InterpPart::Fmt(e, f),
+                            None => InterpPart::Expr(e),
+                        }),
                         _ => ok = false,
                     }
                 }

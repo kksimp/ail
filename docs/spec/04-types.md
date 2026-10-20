@@ -330,6 +330,18 @@ arguments. *(ADR 0135)*
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
 
+**type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
+exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
+is `2`); `nan` and `inf` print as `{x}` does. `x` formats an `int` in lowercase
+hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`).
+Using `.N` on a non-float or `x` on a non-int is a compile-time error. Width,
+fill and alignment apply to the text form of any value. *(ADR 0173)*
+
+```ail error=type.str.11
+n := 1
+print("{n:.2}")      # compile-time error: write {n.to_float():.2}
+```
+
 > **Note:** joining is `xs.join(sep)` on any list (`type.coll.9`). There is
 > no `str.from_chars`. `s.len()` is absent until bytes versus characters is
 > decided (open questions).

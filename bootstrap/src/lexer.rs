@@ -52,7 +52,82 @@ pub enum Tok {
 pub enum Part {
     Lit(String),
     Code(Vec<Token>),
+    /// `{expression:spec}` (lex.str.7): the expression's tokens and its
+    /// format specification.
+    Fmt(Vec<Token>, FormatSpec),
 }
+
+/// A format specification after the `:` in `{expression:spec}` (lex.str.7):
+/// `[[fill]align][width][.precision][x]`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct FormatSpec {
+    pub fill: Option<char>,
+    /// `<`, `>` or `^`.
+    pub align: Option<char>,
+    pub width: Option<usize>,
+    /// Decimal places of a float (`.N`).
+    pub precision: Option<usize>,
+    /// `x`: lowercase hexadecimal for an int.
+    pub hex: bool,
+}
+
+impl FormatSpec {
+    /// Parse the text after the `:`; the error is the problem, for lex.str.7.
+    pub fn parse(spec: &str) -> Result<FormatSpec, String> {
+        let c: Vec<char> = spec.chars().collect();
+        let is_align = |ch: char| matches!(ch, '<' | '>' | '^');
+        let mut f = FormatSpec::default();
+        let mut i = 0;
+        if c.len() >= 2 && is_align(c[1]) {
+            f.fill = Some(c[0]);
+            f.align = Some(c[1]);
+            i = 2;
+        } else if !c.is_empty() && is_align(c[0]) {
+            f.align = Some(c[0]);
+            i = 1;
+        }
+        let number = |c: &[char], i: &mut usize| -> Result<Option<usize>, String> {
+            let start = *i;
+            while *i < c.len() && c[*i].is_ascii_digit() {
+                *i += 1;
+            }
+            if start == *i {
+                return Ok(None);
+            }
+            let text: String = c[start..*i].iter().collect();
+            text.parse().map(Some).map_err(|_| format!("`{text}` is too large"))
+        };
+        if c.get(i) == Some(&'0') && c.get(i + 1).is_some_and(char::is_ascii_digit) {
+            return Err("a width can't start with 0; write the fill and alignment, e.g. `0>4`".into());
+        }
+        f.width = number(&c, &mut i)?;
+        if c.get(i) == Some(&'.') {
+            i += 1;
+            f.precision = Some(number(&c, &mut i)?.ok_or("`.` needs the number of decimal places")?);
+        }
+        if c.get(i) == Some(&'x') {
+            f.hex = true;
+            i += 1;
+        }
+        if i < c.len() {
+            let rest: String = c[i..].iter().collect();
+            return Err(format!("unexpected `{rest}`"));
+        }
+        if f.width.is_some_and(|w| w > MAX_FORMAT_WIDTH) {
+            return Err(format!("a width is at most {MAX_FORMAT_WIDTH}"));
+        }
+        if f.precision.is_some_and(|p| p > MAX_FORMAT_WIDTH) {
+            return Err(format!("decimal places are at most {MAX_FORMAT_WIDTH}"));
+        }
+        if f.hex && f.precision.is_some() {
+            return Err("`x` and `.N` can't be combined".into());
+        }
+        Ok(f)
+    }
+}
+
+/// Largest width or precision a format specification accepts (lex.str.7).
+pub const MAX_FORMAT_WIDTH: usize = 1000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
@@ -382,7 +457,23 @@ impl Lexer {
                         self.forget_brackets(line_no);
                         return quoted.then_some(to);
                     };
-                    let code = self.sub_lex(line, i + 1, close, line_no);
+                    let colon = spec_colon(&line[..close], i + 1);
+                    let code = self.sub_lex(line, i + 1, colon.unwrap_or(close), line_no);
+                    let mut spec = None;
+                    if let Some(c) = colon {
+                        let text: String = line[c + 1..close].iter().collect();
+                        match FormatSpec::parse(&text) {
+                            Ok(f) => spec = Some(f),
+                            Err(why) => self.diags.push(
+                                Diagnostic::new(
+                                    "lex.str.7",
+                                    Pos { line: line_no, col: c + 2 },
+                                    format!("invalid format specification `{text}`: {why}"),
+                                )
+                                .help("a specification is `[[fill]align][width][.decimals][x]`, e.g. `{n:>8}`, `{r:.2}`, `{n:0>4x}`"),
+                            ),
+                        }
+                    }
                     if code.len() == 1 {
                         self.diags.push(
                             Diagnostic::new("lex.str.2", here, "empty `{}` in a string")
@@ -392,7 +483,10 @@ impl Lexer {
                         if !value.is_empty() {
                             parts.push(Part::Lit(std::mem::take(value)));
                         }
-                        parts.push(Part::Code(code));
+                        match spec {
+                            Some(f) => parts.push(Part::Fmt(code, f)),
+                            None => parts.push(Part::Code(code)),
+                        }
                     }
                     i = close + 1;
                 }
@@ -707,6 +801,38 @@ fn float_end(line: &[char], start: usize) -> Option<usize> {
 }
 
 /// Index of the `}` matching the `{` at `line[open]`, skipping nested strings.
+/// The `:` that starts a format specification (lex.str.7) in the
+/// interpolation whose expression begins at `from`: the first one outside
+/// brackets, strings and character literals.
+fn spec_colon(line: &[char], from: usize) -> Option<usize> {
+    let mut depth = 0;
+    let mut i = from;
+    while i < line.len() {
+        match line[i] {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            '"' => {
+                i = skip_string(line, i)?;
+                continue;
+            }
+            '\'' if line.get(i + 1) == Some(&'\\') => {
+                if let Some(end) = line[i + 3..].iter().position(|c| *c == '\'') {
+                    i += end + 4;
+                    continue;
+                }
+            }
+            '\'' if line.get(i + 2) == Some(&'\'') => {
+                i += 3;
+                continue;
+            }
+            ':' if depth == 0 && line.get(i + 1) != Some(&'=') => return Some(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 fn find_close(line: &[char], open: usize) -> Option<usize> {
     let mut depth = 0;
     let mut i = open;
