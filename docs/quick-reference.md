@@ -344,6 +344,14 @@ no `break` can end a function too.
   rounds halves away from zero and gives a float: `2.5.round()` is `3.0`.
   Floats print like Python: `0.1 + 0.2` is `0.30000000000000004`, `1e16` is
   `1e+16`.
+- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32` (`i64` is `int`, `f64` is
+  `float`). A literal takes its type from context and must fit: `fn mix(a i32)`
+  called `mix(-7)`, `r: 255` for a `u8` field. Operators need two values of
+  one type and trap on overflow; no implicit widening. Convert with
+  `x.to_u8()` (traps if it doesn't fit), `x.to_int()`, `x.to_float()`,
+  `f.to_f32()`; `wrapping_add`, `checked_add` and `saturating_add` work on
+  every sized integer. Unsigned types have no unary `-`. Locals aren't
+  annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
 
@@ -503,3 +511,7 @@ implementation.
 @pure fn area(w int, h int) int   # error if it reaches print or a capability
     w * h
 ```
+
+`@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
+area")` before a function warns at each call, with the reason (required).
+Unknown attributes are errors.

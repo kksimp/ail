@@ -266,6 +266,8 @@ match ch             # literals and `|`; ints, strings and chars need `_`
   `if n != 0`, not `if n`.
 - `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
   `x.to_int()`. An int literal works where a float is expected.
+- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32`: literals take the type from
+  context; same-type operands only; overflow traps; convert with `x.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()`, `checked_add`
   (gives `int?`), `wrapping_add`, `saturating_add`.
 

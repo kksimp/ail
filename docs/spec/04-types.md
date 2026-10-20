@@ -120,8 +120,8 @@ n := 0.0 / 0.0
 n < 1.0                 # false: the operator is IEEE
 ```
 
-> **Note:** float literal patterns are an error (`expr.match.7`). `f32` is
-> named by `type.num.1` but has no implementation yet.
+> **Note:** float literal patterns are an error (`expr.match.7`). The same
+> holds for `f32`.
 
 **type.num.12** — `int` has these methods. *(ADR 0137)*
 - `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`
@@ -144,6 +144,42 @@ x := 9223372036854775807
 x.checked_add(1)        # none
 x.wrapping_add(1)       # -9223372036854775808
 x.saturating_add(1)     # 9223372036854775807
+```
+
+**type.num.13** — A sized number is a value of one of the types of
+`type.num.1` other than `int` and `float`. Its literals are typed by context: an
+integer literal whose expected type is a sized integer type (a parameter, a
+field, a return value, or the other operand of an operator, written on either
+side) has that type; it MUST fit, or the program is rejected. A `-` applied to
+a literal belongs to the literal, so `-128` is an `i8`. An integer or float
+literal whose expected type is `f32` is an `f32`. With no expected type a
+literal is an `int` or a `float` (`type.num.3`). *(ADR 0194)*
+
+**type.num.14** — Arithmetic, unary `-` and comparison on sized numbers are
+defined only between two values of the same type; there is no implicit
+widening or conversion (`trait.op.3`). The sized integers support what `int`
+does (`type.num.5`), and a result outside the type traps (`expr.arith.1`,
+`expr.arith.3`); unary `-` isn't defined for the unsigned types. `f32` follows
+`type.num.6` in single precision and has no `%`. Every sized number is `Eq` and
+`Ord`; every one but `f32` is `Hash`. A sized integer has the methods of
+`type.num.12` (`checked_*`, `wrapping_*`, `saturating_*`, `abs`, `to_hex`,
+computed in the type; `checked_neg`, `wrapping_neg` and `abs` for the signed
+types only), and `f32` has `abs`, `floor`, `ceil`, `round` and `sqrt` in
+single precision. Text forms follow `type.num.7` (an `f32` uses the shortest
+digits that read back as an `f32`). *(ADR 0194)*
+
+**type.num.15** — Conversions are explicit methods named for the target:
+`to_i8`, `to_i16`, `to_i32`, `to_u8`, `to_u16`, `to_u32`, `to_u64` and `to_f32`
+on any integer type (including `int`), `to_f32` on `float`, and `to_int` and
+`to_float` back to `int` and `float` from any sized number. An integer
+conversion is exact and traps (`type.num.15`) when the value doesn't fit; a
+float conversion rounds to nearest, ties to even, and never traps, except
+`to_int` of an `f32`, which is `type.num.9`'s. *(ADR 0195)*
+
+```ail fragment
+a := 300.to_u16()       # a u16
+b := a.to_u32() * 2     # a u32: 600
+c := 0.5.to_f32() + 1   # an f32: 1 is a float literal
 ```
 
 ## Structs

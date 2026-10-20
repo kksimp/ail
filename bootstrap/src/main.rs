@@ -14,6 +14,7 @@ mod fmt;
 mod implicit_self;
 mod interp;
 mod lexer;
+mod num;
 mod parser;
 mod stdlib;
 

@@ -161,6 +161,8 @@ pub struct FnDecl {
 pub struct Attr {
     pub name: String,
     pub pos: Pos,
+    /// The string argument, as in `@deprecated("why")` (gram.attr.3).
+    pub arg: Option<String>,
 }
 
 /// Where a function is declared.
