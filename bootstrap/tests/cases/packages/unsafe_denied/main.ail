@@ -1,0 +1,6 @@
+use geo
+
+fn main()
+    print(geo.half(8))
+    unsafe
+        print(1)

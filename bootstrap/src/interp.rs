@@ -442,7 +442,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
-        tier: bytecode::usable(prog, trace::mode(), has_unique, has_defer),
+        tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
         reg_pool: Vec::new(),
         stats: bytecode::Stats {
@@ -476,7 +476,9 @@ fn has_defer(b: &Block) -> bool {
     }
     b.iter().any(|s| match s {
         Stmt::Defer(..) => true,
-        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } => has_defer(body),
+        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } | Stmt::Unsafe { body, .. } => {
+            has_defer(body)
+        }
         Stmt::Let { value, otherwise, .. } => {
             in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
         }
@@ -1419,6 +1421,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.for_loop(var, iter, body, env)?;
                 }
             }
+            Stmt::Unsafe { body, .. } => return self.block(body, env),
             Stmt::With { mutex, var, body, pos, .. } => self.with_block(mutex, var, body, *pos, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
@@ -2228,6 +2231,13 @@ impl<'a, W: Write> Interp<'a, W> {
                             }
                         }
                     }
+                    // expr.match.11: a false guard falls through to the next arm.
+                    if let Some(g) = &arm.guard
+                        && !matches!(self.eval(g, env)?, Value::Bool(true))
+                    {
+                        env.truncate(mark);
+                        continue;
+                    }
                     let r = self.block(&arm.body, env);
                     env.truncate(mark);
                     return r;
@@ -2268,6 +2278,21 @@ impl<'a, W: Write> Interp<'a, W> {
                 (Literal::Bool(a), Value::Bool(b)) => a == b,
                 _ => false,
             },
+            // expr.match.12
+            (Pattern::Range { lo, hi, inclusive, .. }, v) => {
+                let at = match (lo, v) {
+                    (Literal::Int(_), Value::Int(x)) => i128::from(*x),
+                    (Literal::Int(_), Value::Num(k, x)) => k.decode(*x),
+                    (Literal::Char(_), Value::Char(c)) => i128::from(*c as u32),
+                    _ => return false,
+                };
+                let end = |l: &Literal| match l {
+                    Literal::Int(n) => i128::from(*n),
+                    Literal::Char(c) => i128::from(*c as u32),
+                    _ => 0,
+                };
+                end(lo) <= at && (at < end(hi) || (*inclusive && at == end(hi)))
+            }
             _ => false,
         }
     }

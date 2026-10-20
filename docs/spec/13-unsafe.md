@@ -2,9 +2,10 @@
 
 Chapter key: `unsafe`
 
-> **Status:** Drafted (partial). Specified: unsafe blocks, unsafe functions,
-> package opt-in, and the set of unsafe operations. Not yet specified: the
-> precise undefined-behaviour rules inside `unsafe`.
+> **Status:** Drafted (partial). Specified and implemented in the bootstrap:
+> unsafe blocks, unsafe functions, package opt-in. Specified: the set of
+> unsafe operations (C calls and raw pointers arrive with ADRs 0431–0435).
+> Not yet specified: the precise undefined-behaviour rules inside `unsafe`.
 
 ## Unsafe blocks and functions
 
@@ -14,18 +15,38 @@ inside an `unsafe` block. *(ADR 0102)*
 **unsafe.block.2** — A function declared `unsafe fn` may be called only inside
 an `unsafe` block. *(ADR 0102)*
 
-**unsafe.block.3** — A package may contain `unsafe` blocks only if its
-manifest opts in to unsafe code. *(ADR 0102)*
+**unsafe.block.3** — A package may contain `unsafe` blocks and `unsafe fn`
+only if its manifest opts in: `unsafe allow` on its `package` line, or on the
+`dep` line that declares it (`mod.pkg.2`). A program with no `ail.pkg` may use
+`unsafe`. The error is at the block or the `unsafe fn`. *(ADR 0102, ADR 0430)*
 
 **unsafe.block.4** — An implementation MUST be able to list every `unsafe`
-block and `unsafe fn` in a program. *(ADR 0102)*
+block and `unsafe fn` in a program (`ail api --ast`). *(ADR 0102, ADR 0430)*
 
-```ail skip=bootstrap
-pub fn Buffer.read_u32(self, at int) u32
-    if at + 4 > self.len()
-        trap("out of range")
+**unsafe.block.5** — `unsafe` and an indented block is a statement. The block
+is an ordinary block: its last expression is its value when it ends a body,
+and `return` leaves the function. The body of an `unsafe fn` is not an
+`unsafe` block. A function with an `unsafe` block has the effect `unsafe`
+(`eff.infer.4`, `eff.pure.1`). *(ADR 0430)*
+
+```ail
+unsafe fn twice(x int) int
+    x * 2
+
+fn safe_twice(x int) int
     unsafe
-        load_u32(self.ptr + at)
+        twice(x)
+
+fn main()
+    print(safe_twice(21))
+```
+
+```ail error=unsafe.block.2
+unsafe fn twice(x int) int
+    x * 2
+
+fn main()
+    print(twice(3))
 ```
 
 ## Unsafe operations

@@ -6,5 +6,5 @@ $env:AIL_FUZZ_SEED = if ($args.Count -gt 1) { $args[1] } else { '1' }
 if (-not $env:AIL_FUZZ_OUT) { $env:AIL_FUZZ_OUT = Join-Path $root 'tools\fuzz\failures' }
 if (Test-Path $env:AIL_FUZZ_OUT) { Remove-Item -Recurse -Force $env:AIL_FUZZ_OUT }
 Write-Host "fuzz: $($env:AIL_FUZZ_N) programs from seed $($env:AIL_FUZZ_SEED)"
-& (Join-Path $root 'ail.ps1') selftest --test fuzz fuzz_ -- --nocapture
+& (Join-Path $root 'ail.ps1') selftest --test fuzz --test fuzz_modules fuzz_ -- --nocapture
 exit $LASTEXITCODE

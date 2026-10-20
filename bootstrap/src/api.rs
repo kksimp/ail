@@ -1006,6 +1006,7 @@ impl<'p> Refs<'p> {
                 self.expr(iter);
                 self.block(body);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
             Stmt::Handle { value, otherwise } => {
@@ -1164,6 +1165,9 @@ impl<'p> Refs<'p> {
                 self.expr(scrutinee);
                 for arm in arms {
                     self.pattern(&arm.pat);
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&arm.body);
                 }
             }
@@ -1182,7 +1186,7 @@ impl<'p> Refs<'p> {
 
     fn pattern(&mut self, p: &Pattern) {
         match p {
-            Pattern::Wildcard(_) | Pattern::Literal(..) => {}
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
             Pattern::Or(ps, _) => {
                 for p in ps {
                     self.pattern(p);

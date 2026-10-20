@@ -27,7 +27,6 @@ mod mistakes;
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
-    ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
     ("as", "ffi.decl.1"),
 ];
@@ -169,6 +168,12 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 p.skip_block();
             }
             Tok::Kw("fn") => {
+                if let Some(f) = p.function(Within::TopLevel) {
+                    prog.fns.push(f);
+                }
+            }
+            // `unsafe fn` (unsafe.block.2) and `extern c fn` (ffi.decl.2).
+            Tok::Kw("unsafe") if p.at_fn_start() => {
                 if let Some(f) = p.function(Within::TopLevel) {
                     prog.fns.push(f);
                 }
@@ -603,12 +608,12 @@ impl Parser {
             attrs.push(Attr { name, pos, arg });
             // gram.attr.2: an attribute may sit on its own line above its function.
             while matches!(self.peek(), Tok::Newline)
-                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn")))
+                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn" | "unsafe")))
             {
                 self.i += 1;
             }
         }
-        if !self.at_kw("fn") {
+        if !self.at_fn_start() {
             let pos = self.pos();
             self.error_help(
                 "gram.attr.2",
@@ -624,7 +629,21 @@ impl Parser {
         Some(f)
     }
 
+    /// At `fn`, `unsafe fn` or `extern c ["lib"] fn`.
+    fn at_fn_start(&self) -> bool {
+        match self.peek() {
+            Tok::Kw("fn") => true,
+            Tok::Kw("unsafe") => matches!(self.peek_at(1), Tok::Kw("fn")),
+            _ => false,
+        }
+    }
+
     fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
+        let mut unsafe_fn = false;
+        let ext = None;
+        if self.eat_kw("unsafe") {
+            unsafe_fn = true;
+        }
         self.bump(); // fn
         let (first, first_pos) = self.name("a function name after `fn`", "gram.fn.1")?;
         // `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
@@ -737,7 +756,14 @@ impl Parser {
             None => format!("`{name}`"),
         };
         // A trait method without a default ends with its signature (trait.decl.2).
-        let (body, contracts) = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
+        let (body, contracts) = if ext.is_some() {
+            // ffi.decl.2: a C function has a signature and no body.
+            if !self.eat(&Tok::Newline) {
+                self.unexpected("end of line after the signature of an `extern c fn`", "ffi.decl.2");
+                return None;
+            }
+            (None, Vec::new())
+        } else if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
             if !self.eat(&Tok::Newline) {
                 self.unexpected("end of line after the signature", "trait.decl.1");
                 return None;
@@ -760,6 +786,8 @@ impl Parser {
             within,
             contracts,
             inherits: None,
+            unsafe_fn,
+            ext,
         })
     }
 
@@ -1228,6 +1256,12 @@ impl Parser {
             }
             Tok::Kw("for") => self.for_loop(false, pos),
             Tok::Kw("with") => self.with_stmt(pos),
+            // unsafe.block.1: `unsafe` and an indented block.
+            Tok::Kw("unsafe") if !matches!(self.peek_at(1), Tok::Kw("fn")) => {
+                self.bump();
+                let body = self.block("`unsafe`", "unsafe.block.1")?;
+                Some(Stmt::Unsafe { body, pos })
+            }
             // conc.par.5: `par for` asserts that the iterations are independent.
             Tok::Kw("par") => {
                 self.bump();
@@ -2026,6 +2060,8 @@ impl Parser {
 
     fn arm(&mut self) -> Option<Arm> {
         let pat = self.pattern()?;
+        // expr.match.11: `pattern if cond =>`.
+        let guard = if self.eat_kw("if") { Some(self.expression_plain()?) } else { None };
         if !self.eat_sym("=>") {
             if self.at_sym(":") || self.at_sym("->") {
                 let at = self.pos();
@@ -2048,7 +2084,7 @@ impl Parser {
         }
         if matches!(self.peek(), Tok::Newline) {
             let body = self.block("`=>`", "expr.match.1")?;
-            return Some(Arm { pat, body });
+            return Some(Arm { pat, guard, body });
         }
         // expr.match.9: one statement on the arm's line, such as a value,
         // `return x`, `continue` or `total += n`.
@@ -2057,7 +2093,7 @@ impl Parser {
             self.unexpected("end of line after the arm", "expr.match.1");
             return None;
         }
-        Some(Arm { pat, body: vec![stmt] })
+        Some(Arm { pat, guard, body: vec![stmt] })
     }
 
     /// A pattern, or several joined by `|` (expr.match.8).
@@ -2074,8 +2110,47 @@ impl Parser {
         Some(Pattern::Or(alts, pos))
     }
 
-    /// `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+    /// A pattern that is one alternative: a literal or `lo..hi` / `lo..=hi`
+    /// range of integers or characters (expr.match.12), or see `plain_pattern`.
     fn single_pattern(&mut self) -> Option<Pattern> {
+        let pos = self.pos();
+        let lo = self.plain_pattern()?;
+        let inclusive = if self.at_sym("..=") {
+            true
+        } else if self.at_sym("..") {
+            false
+        } else {
+            return Some(lo);
+        };
+        let Pattern::Literal(lo @ (Literal::Int(_) | Literal::Char(_)), _) = lo else {
+            self.error_help(
+                "expr.match.12",
+                pos,
+                "only integer and character literals can start a range pattern",
+                "write `lo..hi` or `lo..=hi` with literal ends",
+            );
+            return None;
+        };
+        self.i += 1;
+        let hpos = self.pos();
+        match self.plain_pattern()? {
+            Pattern::Literal(hi @ (Literal::Int(_) | Literal::Char(_)), _) => {
+                Some(Pattern::Range { lo, hi, inclusive, pos })
+            }
+            _ => {
+                self.error_help(
+                    "expr.match.12",
+                    hpos,
+                    "the end of a range pattern must be an integer or character literal",
+                    "write `lo..hi` or `lo..=hi` with literal ends",
+                );
+                None
+            }
+        }
+    }
+
+    /// `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+    fn plain_pattern(&mut self) -> Option<Pattern> {
         let pos = self.pos();
         match self.peek().clone() {
             Tok::Ident(n) if n == "_" => {
@@ -2250,7 +2325,7 @@ mod tests {
 
     #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    unsafe x\n");
+        let (_, rules) = parse_src("fn main()\n    extern x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 

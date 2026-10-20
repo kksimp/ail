@@ -341,11 +341,42 @@ fn main()
     print(has_area(Shape.Circle(r: 1)))
 ```
 
-> **Note:** not yet designed: range patterns (`'0'..='9'`), guards
-> (`x if x > 0`), or-patterns that bind names, and patterns nested inside a
-> variant's fields (`expr.match.6`). The diagnostics for range patterns and
-> guards suggest an `if` chain.
-> *(ADR 0138)*
+**expr.match.11** — An arm may carry a guard, `pattern if cond => result`.
+`cond` is a `bool` expression checked after the pattern matches, with the
+pattern's bindings in scope. When it is `false`, matching goes on with the
+next arm. A guarded arm covers no values for exhaustiveness (`expr.match.2`)
+or redundancy (`expr.match.5`), so a `match` whose arms are all guarded needs
+an unguarded one. A guard on an or-pattern applies to every alternative.
+*(ADR 0452)*
+
+**expr.match.12** — A range pattern is `lo..hi` or `lo..=hi`, where `lo` and
+`hi` are both `int` literals (with an optional `-`) or both `char` literals.
+It matches the values from `lo` up to but not including `hi` (`..`), or up to
+and including it (`..=`), as `for` ranges do (`expr.loop.3`). The range MUST
+be non-empty, and its type MUST be the scrutinee's. A range covers some
+values, never all, so a `match` that uses ranges needs a `_` arm, and an
+arm after `_` is still unreachable (`expr.match.5`). A range may be an
+alternative of an or-pattern. *(ADR 0453)*
+
+```ail
+fn grade(score int) str
+    match score
+        90..=100 => "A"
+        _ if score >= 60 => "pass"
+        0..60 => "fail"
+        _ => "?"
+
+fn main()
+    print(grade(95))
+    print(grade(70))
+    print(grade(30))
+```
+
+> **Note:** not yet designed: or-patterns that bind names, patterns nested
+> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+> scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
+> suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
+> ADR 0453)*
 
 ## Comprehensions
 
@@ -440,6 +471,21 @@ performance report. *(ADR 0035)*
 **expr.arith.5** — Integer `a / b` rounds toward zero, and `a % b` has the
 sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
 `a`, since that result is representable. *(ADR 0115)*
+
+**expr.bit.1** — An `int` has the methods `bit_and(b)`, `bit_or(b)` and
+`bit_xor(b)`, which combine the two 64-bit two's complement values bit by bit,
+and `bit_not()`, which flips every bit. `shl(n)` shifts left and discards the
+bits that leave the top; `shr(n)` shifts right and copies the sign bit into the
+vacated positions, so `(-8).shr(1)` is `-4`. *(ADR 0465)*
+
+**expr.bit.2** — A shift count must be in `0..=63`. A count outside that range
+MUST trap. *(ADR 0465)*
+
+```ail fragment
+flags := 5.bit_or(8)        # 13
+low := flags.bit_and(4)     # 4
+hi := (-8).shr(1)           # -4
+```
 
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is
