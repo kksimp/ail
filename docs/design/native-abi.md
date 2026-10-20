@@ -142,7 +142,7 @@ run from `alloc` when the bytes allocated since the last collection exceed
 pointers included. Objects are scanned by kind (list headers: the data
 pointer; strings, bytes and kind 11: nothing; others: every word). The
 collector does not move objects. Global slots 8 and 9 hold the heap state
-block and the stack top; the image has 16 slots.
+block and the stack top; the image has 64 slots, all scanned as roots (slots 16-63 hold constant lists).
 
 ## 6. Output
 
