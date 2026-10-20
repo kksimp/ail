@@ -142,6 +142,7 @@ pub(super) enum Plain {
     None,
     Nested(u32),
     Fail(Box<Plain>, Vec<String>, Vec<Pos>),
+    Tensor(crate::tensor::Tensor),
     /// The same atomic cell, shared with the workers (conc.atomic.6).
     Atomic(std::sync::Arc<super::atomic::Cell>),
 }
@@ -183,6 +184,7 @@ fn plain(v: &Value) -> Option<Plain> {
         // A handle or a shared `ref` has identity a copy would lose (conc.par.8).
         Value::Handle(_) | Value::Ref(_) => return None,
         Value::Atomic(c) => Plain::Atomic(std::sync::Arc::clone(c)),
+        Value::Tensor(t) => Plain::Tensor((**t).clone()),
     })
 }
 
@@ -215,6 +217,7 @@ fn value(p: &Plain) -> Value {
         }
         Plain::None => Value::None,
         Plain::Nested(n) => Value::Nested(*n),
+        Plain::Tensor(t) => Value::Tensor(Rc::new(t.clone())),
         Plain::Fail(e, context, trace) => {
             Value::Fail(Rc::new(Failure { error: value(e), context: context.clone(), trace: trace.clone() }))
         }

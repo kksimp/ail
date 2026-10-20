@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -14,7 +14,7 @@ failures are values (ADR 0157). There is no string-typed shell.
 
 **std.use.1** — `use std.NAME` imports the standard module `NAME`, available
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
-The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `time` and `ui`. Importing
+The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time` and `ui`. Importing
 `std` itself, a submodule of a standard module, or any other `std.NAME` is a
 compile-time error that lists the modules. *(ADR 0157)*
 
@@ -520,3 +520,72 @@ outside the lines highlights none) and takes the wheel. `Tree` shows
 `Node`s in depth-first order, hiding the children of a closed node; Right
 opens, Left closes, Enter opens or closes a parent and submits a leaf.
 *(ADR 0315)*
+
+## Tensors: `std.tensor`
+
+Dense arrays of numbers whose operations run as whole-array kernels: on the
+CPU's vector unit and, for large products, on several cores. This is the
+CPU slice of ADR 0247; accelerator backends wait on OQ-090. *(ADR 0328)*
+
+**std.tensor.1** — `tensor.Tensor[T]` is a value (ADRs 0060–0063) holding
+a shape and `int` or `float` elements, row-major. It has no fields and no
+struct literal; it is built by std.tensor.2 and read by its methods, none
+of which changes the receiver. Its functions and methods have no effects
+(`eff.infer.4`). A tensor of any other element type is a compile-time
+error. *(ADR 0328)*
+
+**std.tensor.2** — `tensor.from(xs List[T])` is the 1-D tensor of `xs`;
+`tensor.from(xs List[T], shape List[int])` gives it `shape`.
+`tensor.zeros(shape List[int])` is all zeros, `Tensor[float]` unless the
+expected type is `Tensor[int]`. A negative size, or a shape whose element
+count differs from `xs.len()`, traps. *(ADR 0328)*
+
+**std.tensor.3** — The methods are `add`, `dot`, `len`, `map`, `matmul`,
+`mul`, `reshape`, `shape`, `sum` and `to_list`. `shape() List[int]`,
+`len() int` (the element count), `to_list() List[T]` (row-major), and
+`reshape(shape List[int]) Tensor[T]` (the same elements; traps like
+std.tensor.2 when the count differs). Any other method is a compile-time
+error that lists them. *(ADR 0328)*
+
+**std.tensor.4** — `a.add(b)` and `a.mul(b)` are elementwise `+` and `*`;
+`a.dot(b) T` is the sum of the elementwise products. `a` and `b` have the
+same element type (checked) and MUST have equal shapes: otherwise the call
+traps. *(ADR 0328)*
+
+**std.tensor.5** — On `float` tensors, `add` and `mul` round each element
+as `+` and `*` do. `sum` and `dot` add in this order: element `i` (or
+product `i`) goes to partial sum `i % 16` for the first `16 * (n / 16)`
+elements; the partial sums then halve, `s[i] += s[i + h]` for `h` = 8, 4,
+2, 1; the remaining elements are added to `s[0]` in order. Products are
+rounded before they are added (no fused multiply-add). So a result is the
+same on every target and vector unit (ADR 0008), though it can differ in
+the last bits from a plain loop that adds left to right. *(ADR 0329)*
+
+**std.tensor.6** — On `int` tensors, `sum`, `dot` and `matmul` add in
+index order and trap when a product or a running sum doesn't fit `int`;
+`add` and `mul` trap when an element's result doesn't fit. *(ADR 0329)*
+
+**std.tensor.7** — `a.matmul(b) Tensor[T]` multiplies an `m` by `k` tensor
+by a `k` by `n` one. Element `(i, j)` adds `a(i, p) * b(p, j)` for `p` from
+0 to `k - 1`, in that order, starting from zero: exactly the plain triple
+loop. Tensors that aren't both 2-D, or whose inner sizes differ, trap. When
+`m * k * n` is at least 64³ the rows are split across the thread pool
+(`conc.par.9`); the result doesn't change. *(ADR 0329)*
+
+**std.tensor.8** — `t.map(|x| e)` evaluates `e` once per element, in
+row-major order, with `x` bound to the element, and gives a tensor of the
+same shape. `e` is `int` or `float` and decides the new element type.
+*(ADR 0328)*
+
+**std.tensor.9** — Two tensors are `==` when their shapes and their
+elements are equal. A tensor's text form is the call that rebuilds it:
+`tensor.from([1.0, 2.0])`, with the shape after the list when the tensor
+isn't 1-D. *(ADR 0328)*
+
+```ail
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
+    print(a.map(|x| x * 2.0).sum())   # 20.0
+    print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32
+```

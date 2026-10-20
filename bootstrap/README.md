@@ -81,6 +81,9 @@ reported but don't stop a program from running.
 | `src/interp/net.rs` | The HTTP/1.1 client of `std.net` (no TLS) | `std.net.2–4` |
 | `src/interp/keyfn.rs` | Key functions: `sorted`, `sort`, `min`, `max` with `by: \|x\| key` | `expr.key.3–4` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
+| `src/check/tensor.rs` | Types of `tensor.from`, `tensor.zeros` and the tensor methods | `std.tensor.1–4`, `std.tensor.8` |
+| `src/interp/tensor.rs` | Builds tensors, runs their methods, text form | `std.tensor.1–9` |
+| `src/tensor.rs` | Tensor buffers and kernels: AVX2, NEON and scalar, picked at run time; `matmul` on the thread pool | `std.tensor.5–7` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
@@ -170,7 +173,8 @@ package's are reported file by file.
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Standard modules:** `fs`, `env`, `io`, `proc`, `net` (HTTP/1.1 `get` and
-  `post`, no TLS; ADR 0283), `path`, `random`, `time` and `ui` (a window of
+  `post`, no TLS; ADR 0283), `path`, `random`, `tensor` (`Tensor[int|float]`
+  on AVX2/NEON kernels; ADRs 0328–0329), `time` and `ui` (a window of
   text cells; ADR 0177), in scope without `use` unless something else has the
   name (ADR 0277; `use std.NAME as d` also works), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)

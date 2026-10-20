@@ -1,5 +1,5 @@
 //! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
-//! `std.net`, `std.path`, `std.random`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0206, 0177, 0281-0283): their names, the functions
+//! `std.net`, `std.path`, `std.random`, `std.tensor`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0206, 0177, 0281-0283, 0328): their names, the functions
 //! each provides, and the declarations of their types. The checker types
 //! calls to them in `check/stdlib.rs`; the interpreter runs them in
 //! `interp/stdlib.rs`.
@@ -23,6 +23,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("proc", &["run", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("task", &["cancelled", "check"]),
+    ("tensor", &["from", "zeros"]),
     ("time", &["now_ms", "sleep_ms"]),
     ("ui", &["clipboard_get", "clipboard_set", "open"]),
 ];
@@ -46,6 +47,11 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
     ("size", false),
 ];
 
+/// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
+/// changes its receiver: a tensor is a value (ADRs 0060-0063).
+pub const TENSOR_METHODS: &[&str] =
+    &["add", "dot", "len", "map", "matmul", "mul", "reshape", "shape", "sum", "to_list"];
+
 /// A call the checker resolved to a standard module (std.use.2), by the
 /// position of the function's name.
 #[derive(Debug, Clone, Copy)]
@@ -56,6 +62,8 @@ pub enum StdCall {
     Type(usize),
     /// `w.m(...)` on a `ui.Window` (std.ui.2-8): the method's name.
     Method(&'static str),
+    /// `t.m(...)` on a `tensor.Tensor` (std.tensor.3-8): the method's name.
+    Tensor(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
 }
@@ -76,6 +84,7 @@ const TYPES: &[(&str, &str)] = &[
     ("Style", "ui"),
     ("Cursor", "ui"),
     ("UiError", "ui"),
+    ("Tensor", "tensor"),
 ];
 
 /// The declarations of the standard modules' types, read with the prelude.

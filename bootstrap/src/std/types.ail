@@ -69,3 +69,10 @@ enum Cursor
 error struct UiError
     kind str
     message str
+
+## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
+## `tensor.zeros(shape)`, read with its methods. The elements live in the
+## bootstrap (`tensor.rs`). The field is a placeholder the checker rejects
+## (std.tensor.1), so a tensor is `Eq` but neither ordered nor a key.
+struct Tensor[T]
+    elements Map[int, T]
