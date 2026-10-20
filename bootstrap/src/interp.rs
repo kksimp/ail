@@ -304,10 +304,11 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     }
     let structs = prog.structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
     let enums = prog.enums.iter().enumerate().map(|(i, e)| (e.name.as_str(), i)).collect();
-    let user_std = [(resolved.std.eq, "eq"), (resolved.std.ord, "cmp"), (resolved.std.to_str, "to_str")].map(|(tr, name)| {
-        resolved.impls.keys().any(|(t, _)| *t == tr)
-            || prog.traits[tr].methods.iter().any(|&m| prog.fns[m].name == name && prog.fns[m].body.is_some())
-    });
+    let user_std =
+        [(resolved.std.eq, "eq"), (resolved.std.ord, "cmp"), (resolved.std.to_str, "to_str")].map(|(tr, name)| {
+            resolved.impls.keys().any(|(t, _)| *t == tr)
+                || prog.traits[tr].methods.iter().any(|&m| prog.fns[m].name == name && prog.fns[m].body.is_some())
+        });
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
@@ -1029,20 +1030,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         match e {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
-                // Int names and literals as operands need no evaluation call or clone (ADR 0219).
-                if let (Some(a), Some(b)) = (self.int_val(lhs, env), self.int_val(rhs, env))
-                    && let Some(v) = int_op(*op, a, b)
-                {
-                    return Ok(v);
-                }
-                let l = self.operand_value(lhs, env)?;
-                let r = self.operand_value(rhs, env)?;
-                if let (Value::Int(a), Value::Int(b)) = (&l, &r)
-                    && let Some(v) = int_op(*op, *a, *b)
-                {
-                    return Ok(v);
-                }
-                Ok(self.binop(*op, l, r, *pos)?)
+                self.eval_binary(*op, lhs, rhs, *pos, env)
             }
             Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
@@ -1076,76 +1064,96 @@ impl<'a, W: Write> Interp<'a, W> {
         else_err: &'a Option<(String, Pos)>,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
-            let mut failure = None;
-            for (cond, body) in branches {
-                match cond {
-                    Cond::Expr(c) => {
-                        if self.cond(c, env)? {
-                            return self.block(body, env);
-                        }
+        let mut failure = None;
+        for (cond, body) in branches {
+            match cond {
+                Cond::Expr(c) => {
+                    if self.cond(c, env)? {
+                        return self.block(body, env);
                     }
-                    // expr.if.5: run the branch with the value bound, if there is one.
-                    Cond::Bind { name, value, .. } => match self.eval(value, env)? {
-                        Value::None => {}
-                        Value::Fail(f) => failure = Some(f),
-                        v => {
-                            let mark = env.len();
-                            env.push((name.as_str(), Value::unwrap_present(v)));
-                            let r = self.block(body, env);
-                            env.truncate(mark);
-                            return r;
-                        }
-                    },
                 }
+                // expr.if.5: run the branch with the value bound, if there is one.
+                Cond::Bind { name, value, .. } => match self.eval(value, env)? {
+                    Value::None => {}
+                    Value::Fail(f) => failure = Some(f),
+                    v => {
+                        let mark = env.len();
+                        env.push((name.as_str(), Value::unwrap_present(v)));
+                        let r = self.block(body, env);
+                        env.truncate(mark);
+                        return r;
+                    }
+                },
             }
-            let Some(body) = els else { return Ok(Value::Unit) };
-            let mark = env.len();
-            if let (Some((name, _)), Some(f)) = (else_err, failure) {
-                env.push((name.as_str(), f.error.clone()));
-            }
-            let r = self.block(body, env);
-            env.truncate(mark);
-            return r;
+        }
+        let Some(body) = els else { return Ok(Value::Unit) };
+        let mark = env.len();
+        if let (Some((name, _)), Some(f)) = (else_err, failure) {
+            env.push((name.as_str(), f.error.clone()));
+        }
+        let r = self.block(body, env);
+        env.truncate(mark);
+        return r;
     }
 
     /// `recv.name`: a field, or a unit variant `Enum.Variant` (type.struct.2, type.enum.2).
     #[inline(never)]
     fn eval_field(&mut self, recv: &'a Expr, name: &'a str, env: &mut Env<'a>) -> Flow<Value> {
-            if let Some(tn) = type_head(recv, env, self.prog) {
-                let e = self.enums[tn];
-                let v = self.variant_index(e, name);
-                return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
-            }
-            let Value::Struct(s, fields) = self.operand_value(recv, env)? else { unreachable!("checked: struct") };
-            Ok(fields[self.field_index(s, name)].clone())
+        if let Some(tn) = type_head(recv, env, self.prog) {
+            let e = self.enums[tn];
+            let v = self.variant_index(e, name);
+            return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
+        }
+        let Value::Struct(s, fields) = self.operand_value(recv, env)? else { unreachable!("checked: struct") };
+        Ok(fields[self.field_index(s, name)].clone())
     }
 
     /// `recv[index]` on a list or map, and `recv[lo..hi]` (type.coll.4, type.coll.10, type.map.3).
     #[inline(never)]
     fn eval_index(&mut self, recv: &'a Expr, index: &'a Expr, pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
         let index: &'a Expr = index;
-            let items = match self.eval(recv, env)? {
-                Value::List(items) => items,
-                Value::Map(t) => {
-                    let k = self.eval(index, env)?;
-                    return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
-                }
-                other => unreachable!("checked: list or map, found {other:?}"),
-            };
-            if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
-                // type.coll.10: a missing bound is the start or the end.
-                let lo = match lo {
-                    Some(e) => self.eval(e, env)?.int(),
-                    None => 0,
-                };
-                let (hi, inclusive) = match hi {
-                    Some(e) => (self.eval(e, env)?.int(), *inclusive),
-                    None => (items.len() as i64, false),
-                };
-                return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, inclusive, *range_pos)?)));
+        let items = match self.eval(recv, env)? {
+            Value::List(items) => items,
+            Value::Map(t) => {
+                let k = self.eval(index, env)?;
+                return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
             }
-            let i = self.eval(index, env)?.int();
-            Ok(element(&items, i, pos)?.clone())
+            other => unreachable!("checked: list or map, found {other:?}"),
+        };
+        if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
+            // type.coll.10: a missing bound is the start or the end.
+            let lo = match lo {
+                Some(e) => self.eval(e, env)?.int(),
+                None => 0,
+            };
+            let (hi, inclusive) = match hi {
+                Some(e) => (self.eval(e, env)?.int(), *inclusive),
+                None => (items.len() as i64, false),
+            };
+            return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, inclusive, *range_pos)?)));
+        }
+        let i = self.eval(index, env)?.int();
+        Ok(element(&items, i, pos)?.clone())
+    }
+
+    /// An arithmetic or comparison operator (expr.arith.1-3). Its own frame keeps
+    /// `eval`'s small for the leaves.
+    #[inline(never)]
+    fn eval_binary(&mut self, op: BinOp, lhs: &'a Expr, rhs: &'a Expr, pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        // Int names and literals as operands need no evaluation call or clone (ADR 0219).
+        if let (Some(a), Some(b)) = (self.int_val(lhs, env), self.int_val(rhs, env))
+            && let Some(v) = int_op(op, a, b)
+        {
+            return Ok(v);
+        }
+        let l = self.operand_value(lhs, env)?;
+        let r = self.operand_value(rhs, env)?;
+        if let (Value::Int(a), Value::Int(b)) = (&l, &r)
+            && let Some(v) = int_op(op, *a, *b)
+        {
+            return Ok(v);
+        }
+        Ok(self.binop(op, l, r, pos)?)
     }
 
     /// `eval` with names and int literals handled in the caller's frame: most
@@ -1206,9 +1214,9 @@ impl<'a, W: Write> Interp<'a, W> {
     fn eval_general(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
             // A literal's text is shared, not copied, on every evaluation.
-            Expr::Str(s, _) => Value::Str(Rc::clone(
-                self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str())),
-            )),
+            Expr::Str(s, _) => {
+                Value::Str(Rc::clone(self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str()))))
+            }
             // type.num.13: a literal typed by context as a sized number.
             Expr::Int(v, pos) if self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
@@ -1391,7 +1399,9 @@ impl<'a, W: Write> Interp<'a, W> {
         match (pat, v) {
             (Pattern::Wildcard(_), _) => true,
             (Pattern::Or(alts, _), v) => alts.iter().any(|a| self.matches(a, v)),
-            (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => name_eq(&self.prog.enums[*e].variants[*i].name, name),
+            (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => {
+                name_eq(&self.prog.enums[*e].variants[*i].name, name)
+            }
             (Pattern::Literal(lit, _), v) => match (lit, v) {
                 (Literal::Int(a), Value::Int(b)) => a == b,
                 (Literal::Int(a), Value::Num(k, b)) => i128::from(*a) == k.decode(*b),
@@ -1712,7 +1722,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 format!("{x:.*}", spec.precision.unwrap_or(0))
             }
             Value::Int(n) if spec.hex => {
-                if *n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }
+                if *n < 0 {
+                    format!("-{:x}", n.unsigned_abs())
+                } else {
+                    format!("{n:x}")
+                }
             }
             other => self.text(other, pos)?,
         };
@@ -1865,11 +1879,7 @@ impl<'a, W: Write> Interp<'a, W> {
             let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
         }
-        let recv = if site.mutating {
-            self.operand(recv, env)?
-        } else {
-            Operand::Value(self.eval(recv, env)?)
-        };
+        let recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
         if let Some(Call::Trait(tr)) = call {
             return self.trait_method(tr, name, recv, args, pos, env);
         }
