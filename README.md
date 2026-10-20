@@ -52,6 +52,7 @@ now, testing is local on Linux and macOS
 - [Documentation index](docs/README.md)
 - [Vision and philosophy](docs/vision.md)
 - [Design decisions](docs/decisions/README.md)
+- [Language card](docs/language-card.md): the whole language in one short read
 - [Language specification](docs/spec/README.md)
 - [Open questions](docs/open-questions.md)
 - [Roadmap](docs/roadmap.md)

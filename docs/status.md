@@ -30,6 +30,11 @@ See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
 progress on ten parallel lanes (semantic API, effects and capabilities,
 standard modules, user modules, tests, formatter, conformance harness,
 interpreter performance).
+Overnight 2026-10-20 (lane 9, ADRs 0172–0174): the spec conformance harness
+(`bootstrap/tests/spec.rs`) checks every `ail` block in `docs/spec/`; format
+specifications in interpolation (`{x:>8}`, `{r:.2}`, `{n:0>4x}`, resolves OQ-041)
+are implemented; `docs/language-card.md` is the whole language in under 4,000
+tokens. Linux selftest passes; macOS verification is pending.
 
 ## Design topics
 
