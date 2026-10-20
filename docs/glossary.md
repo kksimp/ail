@@ -25,6 +25,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Bit operation** | An `int` method that works on the 64-bit two's complement bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-2, ADR 0465). |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
 | **Bytecode tier** | The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
+| **Bytes** | The built-in `bytes` type: an immutable sequence of `u8` for binary data, written `b"..."` (ADR 0412, `type.bytes.1`). Not text: `str` is UTF-8 text, and `b.text()` or `b.to_str()` read bytes as text. |
 | **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early (a `send` on a full channel drops its value); a cancel reaches every task the task started; the scope still waits for it (`conc.cancel.1–4`, ADRs 0321, 0351). |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
@@ -80,6 +81,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
+| **Garlic** | The web browser written in AIL (`tools/garlic`): text mode first, with a page model for agents. See [garlic-browser.md](design/garlic-browser.md). |
 | **Module fuzzer** | A template program in `bootstrap/tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
 | **Drag race** | `tools/perfbench/run.sh --all`: min and median wall time of AIL, native AIL, `clang -O2`, `gcc -O2` and Python on twin programs, with ratios (ADR 0460). |
 | **Generated code** | The text a derive generator returned, checked as if written in its `impl`; addressed `gen:impl:TYPE.TRAIT:LINE:COL` and shown by `ail api --expanded` (`ct.gen.*`, ADRs 0228, 0309). |
@@ -129,6 +131,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
 | **Package** | The code under one package root: its root module and the modules below it, optionally described by an `ail.pkg` manifest (ADRs 0153, 0230). |
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
+| **Page model** | Garlic's agent-facing view of a page: each perceivable element's role, accessible name and the cells it was drawn in, as `--json` (api 1). See [garlic-browser.md](design/garlic-browser.md). |
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
 | **`par for` comprehension** | `[f(x) par for x in xs]`: a list whose elements are computed on the thread pool, in order, with the sequential result (`conc.par.12`, ADR 0302). |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
@@ -164,6 +167,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
 | **Site cache** | A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
 | **Sized number** | One of `i8 i16 i32 u8 u16 u32 u64 f32`: the numeric types besides `int` (`i64`) and `float` (`f64`). Literals take their type from context, and nothing converts implicitly (ADRs 0194–0195). |
+| **Snapshot (expectation)** | An expected value written in a test: a literal in `assert_eq`, a doc example's `# =>` lines, or a `NAME.out` file. `ail test --update` rewrites stale ones and prints the diff (ADR 0395). |
 | **Span-free fingerprint** | The hash of an item's HIR with spans replaced by offsets relative to the item, so moving code doesn't invalidate cached results (ADR 0224). |
 | **Standard module** | A built-in module imported with `use std.NAME` (`fs`, `env`, `io`, `proc`, `time`) whose functions reach the operating system with typed failures (ADR 0157). |
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |

@@ -196,6 +196,9 @@ impl<'p> Checker<'p> {
         match (module, f) {
             ("fs", "read_text") => (vec![Str], io(Str)),
             ("fs", "write_text" | "append_text") => (vec![Str, Str], io(Unit)),
+            // std.fs.13-14 (ADR 0412): the same with `bytes`.
+            ("fs", "read_bytes") => (vec![Str], io(Ty::Bytes)),
+            ("fs", "write_bytes" | "append_bytes") => (vec![Str, Ty::Bytes], io(Unit)),
             ("fs", "exists") => (vec![Str], Bool),
             ("fs", "list_dir") => (vec![Str], io(list(Str))),
             ("fs", "remove" | "make_dir") => (vec![Str], io(Unit)),
@@ -218,6 +221,7 @@ impl<'p> Checker<'p> {
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
+            ("io", "read_bytes") => (vec![], Ty::Bytes),
             // std.io.4: `exit` never returns (ADR 0139).
             ("io", "exit") => (vec![Int], Ty::Never),
             ("proc", "run") => (

@@ -125,6 +125,15 @@ nothing copies a tree. For `rename` and `copy`, a failure's `path` is
 `from` when `from` is missing (or, for `copy`, a directory), else `to`.
 *(ADR 0281)*
 
+**std.fs.13** — `read_bytes(path str) bytes ! IoError` reads the whole file
+as `bytes`, whatever it holds. It fails as `read_text` does, and never because
+of the contents. *(ADR 0415)*
+
+**std.fs.14** — `write_bytes(path str, data bytes) ! IoError` writes `data`
+to the file, creating it or replacing its contents; `append_bytes(path str,
+data bytes) ! IoError` adds `data` at the end, creating the file if needed.
+They fail as `write_text` and `append_text` do. *(ADR 0415)*
+
 ```ail
 use std.fs
 
@@ -286,6 +295,9 @@ already printed reaches standard output first. *(ADR 0157)*
 after writing any pending standard output. It never returns, so the code
 after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 *(ADR 0157)*
+
+**std.io.5** — `read_bytes() bytes` reads the rest of standard input as
+`bytes`, without decoding it. *(ADR 0415)*
 
 ## Processes: `std.proc`
 

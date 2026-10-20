@@ -1,0 +1,11 @@
+## Split and join identities for std.regex (lane 150). Complements
+## std_regex_props.ail. Run with `ail test`.
+use std.regex
+
+@test fn split_then_join_is_identity(text str)
+    comma := regex.compile(",") else return
+    assert_eq(regex.split(comma, text).join(","), text)
+
+@test fn find_all_count_matches_split(text str)
+    comma := regex.compile(",") else return
+    assert_eq(regex.split(comma, text).len(), regex.find_all(comma, text).len() + 1)

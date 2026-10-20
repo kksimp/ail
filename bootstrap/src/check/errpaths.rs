@@ -106,7 +106,13 @@ impl<'p> Checker<'p> {
         if matches!(self.ret, Ty::Res(..) | Ty::Opt(_)) {
             return None;
         }
-        let names = self.error_names(extra).join(" | ");
+        let names = self.error_names(extra);
+        // A module's error type is written with the module's alias (`date.DateError`),
+        // which isn't the name it has here; offer the fix only for names as written.
+        if names.iter().any(|n| n.contains('.')) {
+            return None;
+        }
+        let names = names.join(" | ");
         let title = format!("make `{}` fail with {names}", self.fn_name);
         Some((title, Edit::at_line_end(self.fn_head, format!(" ! {names}"))))
     }
