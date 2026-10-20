@@ -362,7 +362,8 @@ serialises on `ALLOC_LOCK`.
 
 A runtime file calls a libSystem function with the primitive
 `import_call("_name", a, b, c, d)` (the name is a string literal with its
-leading underscore, the four arguments integers; unused ones are 0). It lowers
+leading underscore; the arguments are integers, any number the target's
+calls support, so the declaration in `prim.ail` doesn't limit a call site). It lowers
 to an ordinary MIR `call` named `libsys._name`, so it clobbers the caller-saved
 registers like any call. The ARM64 generator passes the arguments as for any
 call, then `adrp x16, slot; add; ldr x16, [x16]; blr x16`. Slot `k`, for the

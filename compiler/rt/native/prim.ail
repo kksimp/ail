@@ -93,9 +93,12 @@ fn restart(top int, arg int)
     todo
 
 ## Call the libSystem function `sym` (a string literal, with its leading
-## underscore) with up to four integer arguments through a pointer dyld
-## binds at load; gives its result (native-abi.md §11). macOS only: other
-## targets trap, so guard it with `target() == 2`.
+## underscore) with integer arguments through a pointer the loader binds;
+## gives its result (native-abi.md §11). Declared with four arguments, but the
+## lowering takes any count: call sites pass what the function needs (the
+## generators place arguments as for any call, so as many as they support).
+## Targets without the library trap, so guard it with `target() == 2`
+## (or the Windows target).
 fn import_call(sym str, a int, b int, c int, d int) int
     todo
 
