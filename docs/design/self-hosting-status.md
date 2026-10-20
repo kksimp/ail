@@ -12,6 +12,48 @@
 | `compiler/syntax/` | Lexer and parser (lane 113) | 0371–0375 |
 | `compiler/check/` | Checker (lane 114) | [0377](../decisions/0377-checker-in-ail-ported-pass-for-pass.md) |
 
+## Front-end agreement
+
+`ail run compiler tokens|parse FILE...` against `ail api --tokens`
+and `ail api --ast` on every `.ail` file in the repository, byte for byte;
+diagnostics are a rule and a position (ADR 0373). The selftest runs both
+(`bootstrap/tests/self_hosting.rs`).
+
+| Stage | Source | Files | Agreement |
+|---|---|---|---|
+| Lexer | `compiler/syntax/lex.ail` | 770, and 700 fuzzed | all identical |
+| Parser | `compiler/syntax/parse.ail`, `recover.ail` | 770, and 1,000 fuzzed | all identical |
+
+## Front-end size and speed
+
+Measured 2026-10-20 on Linux x86-64. Tokens are the mean of tokbench's five
+tokenizers. The Rust count is `lexer.rs`, `parser.rs`, `parser/*.rs` and
+`foreign.rs` without their test modules; the AIL count is `lex.ail`,
+`parse.ail` and `recover.ail` (`dump.ail` corresponds to Rust's
+`api/syntax.rs`, which isn't counted).
+
+| | Rust | AIL | AIL vs Rust |
+|---|---|---|---|
+| Lexer: lines | 1,132 | 1,101 | −3% |
+| Lexer: tokens | 12,674 | 10,651 | −16% |
+| Parser: lines | 3,311 | 2,281 | −31% |
+| Parser: tokens | 35,752 | 23,580 | −34% |
+| Total tokens | 48,425 | 34,231 | −29% |
+
+The Rust parser also writes the message, help and fixes of each
+diagnostic, about a third of its source, which the AIL one doesn't yet
+(ADR 0373). Without them the two are about the same size. The token saving
+is in the lexer, which writes everything, and in the grammar: no lifetimes,
+borrows or `Box`, and implicit `self`.
+
+Parsing `tools/edit/edit.ail` (5,249 lines) in the interpreter takes about
+0.45 s to lex and 0.85 s to parse, measured inside the program. The
+bootstrap lexes and parses the same file, writes its JSON dump and exits in
+0.15 s, so the AIL front end is at least 8 times slower. The bytecode tier
+(ADR 0361) doesn't change this yet: it compiles 119 of the 131 functions
+called, but string, list and method operations hand off to the walker, 4.3
+million times per parse.
+
 ## Checker agreement
 
 Diagnostics of `ail check` (Rust) and the AIL checker on every program and
@@ -39,6 +81,9 @@ order, over the rules and lines the AIL checker covers so far
 | A module's locals clashed with the root module's items (`expr.bind.5`) | Fixed (ADR 0377) |
 | An or-pattern can't bind names (`Struct(_, xs) \| Enum(_, xs) => ...`, expr.match.8) | Open; arms repeated |
 | A catch-all `_` over an enum always warns (expr.match.3), with no way to suppress it (ADR 0056 left the syntax open); the checker's code has dozens | Open |
-| No literal for an empty optional of a given type (`Ty?()` isn't valid) | Open; a helper `fn no_ty() Ty?` |
+| No literal for an empty optional of a given type (`Ty?()` isn't valid, and `mut x := none` has no type) | Open: [OQ-114](../open-questions.md); a helper `fn no_ty() Ty?`, or a generic `absent[T]()` returning `none` |
 | No bit shifts (`<<`) | Open; constants instead |
+| `if c then x else none` with a plain `T` for `x` doesn't infer `T?` (`type.opt.4`) | Worked around: a helper function; [OQ-115](../open-questions.md) |
+| A local can't take the name of any item in its module (`expr.bind.5`); with a module of several files, a helper `word` in one file forbids a local `word` in all | Open: [OQ-116](../open-questions.md) |
+| `if` can't be an operand, even in parentheses (`col + (if raw then 4 else 3)`) | Worked around: two whole branches; [OQ-117](../open-questions.md) |
 | The Rust lexer continued names with any Unicode numeric (`x٣`); AIL's `is_alnum` takes ASCII digits only | Fixed: names are letters, ASCII digits, `_` (ADR 0372) |

@@ -1,0 +1,531 @@
+## The parser's smaller parts, as the bootstrap splits them: contract
+## lines (contract.decl.1-3), error messages (err.msg.1-2), modules
+## (mod.use.1-2, mod.vis.1-2), `@derive` traits (ct.derive.1), and
+## recovery from other languages' constructs (gram.foreign.1, gram.rec.1).
+use ast
+
+# ---- Contracts ----
+
+## A function body: an indented block whose first lines may be `requires
+## COND` and `ensures COND` (contract.decl.1). A trait method may have
+## contract lines and no body (contract.inh.1).
+fn Parser.fn_body(mut self, after str, bodyless_ok bool) FnBody?
+    if tag_at(1) != "indent"
+        body := block(after, "gram.fn.1")?
+        return FnBody(body: body, contracts: [])
+    i += 2
+    mut contracts := List[ast.Contract]()
+    while true
+        while eat_newline()
+            i += 0
+        is_ensures := at_kw("ensures")
+        if not is_ensures and not at_kw("requires")
+            break
+        if c := contract_line(is_ensures)
+            contracts.push(c)
+        else
+            skip_statement()
+    if bodyless_ok and contracts.len() > 0 and eat_dedent()
+        return FnBody(body: none, contracts: contracts)
+    FnBody(body: block_rest(), contracts: contracts)
+
+## `requires COND`, `ensures COND` or `invariant COND`, up to the end of
+## the line, which is not consumed.
+fn Parser.contract_line(mut self, is_ensures bool) ast.Contract?
+    pos := bump().pos
+    start := i
+    outer_in := in_ensures
+    outer := olds
+    in_ensures = is_ensures
+    olds = []
+    cond := expression()
+    found := olds
+    in_ensures = outer_in
+    olds = outer
+    c := cond?
+    text := render(tokens[start..i])
+    if peek() != Tok.Newline
+        unexpected("end of line after the condition", "contract.decl.1")
+        return none
+    ast.Contract(is_ensures: is_ensures, cond: c, text: text, pos: pos, olds: found)
+
+fn plain_arg(a ast.Arg) bool
+    a.label == none and not a.mutable and not a.moved and a.param == none
+
+## A call, or contract.ens.3's `old(e)` inside an `ensures` condition: the
+## value `e` had on entry, as a hidden name the interpreter binds.
+fn Parser.call_or_old(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) ast.Expr
+    if name_of(callee) != "old" or not in_ensures
+        return ast.Expr.Call(callee: callee, args: args, pos: pos)
+    if args.len() != 1 or not plain_arg(args[0])
+        diag("contract.ens.3", pos)
+        return ast.Expr.Name(name: "old", pos: pos)
+    # The hidden name is the call as written, which can't be a user's name.
+    close := i - 1
+    mut open := close
+    mut depth := 0
+    while open > 0
+        s := if tok_tag(tokens[open].tok) == "sym" then tok_text(tokens[open].tok) else ""
+        if s == ")"
+            depth += 1
+        elif s == "("
+            depth -= 1
+        if depth == 0
+            break
+        open -= 1
+    hidden := "old({render(tokens[open + 1..close])})"
+    olds.push(ast.Old(name: hidden, value: args[0].value))
+    ast.Expr.Name(name: hidden, pos: pos)
+
+## contract.decl.1: a contract line anywhere but directly under a signature.
+fn Parser.misplaced_contract(mut self) bool
+    if not at_kw("requires") and not at_kw("ensures")
+        return false
+    diag("contract.decl.1", here())
+    skip_statement()
+    true
+
+## The source form of a condition's tokens, with the formatter's spacing
+## (fmt.space): what a trap and `ail api` show (contract.req.1).
+fn render(toks List[Token]) str
+    mut out := List[str]()
+    mut before := absent[Tok]()
+    mut prev := absent[Tok]()
+    for t in toks
+        if stops(t.tok)
+            continue
+        if p := prev
+            if spaced(before, p, t.tok)
+                out.push(" ")
+        out.push(render_word(t.tok))
+        before = prev
+        prev = t.tok
+    out.join("")
+
+## Ends an operand, so a following `(` or `[` is a call or an index and a
+## following `-` is binary.
+fn ends_operand(t Tok) bool
+    match t
+        Kw(k) => k == "self" or k == "true" or k == "false" or k == "none" or k == "todo"
+        Sym(s) => s == ")" or s == "]" or s == "}" or s == "?"
+        Ident(_) | Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => true
+
+fn sym_of(t Tok) str
+    if tok_tag(t) == "sym" then tok_text(t) else ""
+
+## Whether a space separates `a` and `b`; `before` precedes `a` (fmt.space).
+fn spaced(before Tok?, a Tok, b Tok) bool
+    sb := sym_of(b)
+    sa := sym_of(a)
+    if [",", ")", "]", "}", ".", "?", ":", "..", "..="].contains(sb)
+        return false
+    if ["(", "[", "\{", ".", "..", "..="].contains(sa)
+        return false
+    # A prefix `-` or `!`.
+    if sa == "-" or sa == "!"
+        prefix := if t := before then not ends_operand(t) else true
+        if prefix
+            return false
+    if sb == "(" or sb == "["
+        return not ends_operand(a)
+    true
+
+fn render_word(t Tok) str
+    match t
+        Ident(s) => s
+        Kw(s) => s
+        Sym(s) => s
+        Str(s) => "\"{escape(s)}\""
+        Interp(parts) =>
+            mut out := List[str]()
+            for part in parts
+                match part
+                    Lit(s) => out.push(escape(s))
+                    Code(code) => out.push("\{{render(code)}}")
+                    Fmt(code, _) => out.push("\{{render(code)}}")
+            "\"{out.join("")}\""
+        Char(c) => "'{escape("{c}")}'"
+        Int(v) => "{v}"
+        IntMin => "9223372036854775808"
+        Float(v) => debug_float(v)
+        Newline | Indent | Dedent | Eof => ""
+
+## A float as Rust's `{:?}` writes it: AIL's text, but an exponent has no
+## `+` and no leading zeros.
+fn debug_float(v float) str
+    s := "{v}"
+    k := s.find("e") else return s
+    mantissa := s.slice(0, k)
+    mut exp := s.slice(k + 1, s.chars().len())
+    mut sign := ""
+    if exp.starts_with("+")
+        exp = exp.chars()[1..].join("")
+    elif exp.starts_with("-")
+        sign = "-"
+        exp = exp.chars()[1..].join("")
+    while exp.len() > 1 and exp.starts_with("0")
+        exp = exp.chars()[1..].join("")
+    "{mantissa}e{sign}{exp}"
+
+fn escape(s str) str
+    mut out := List[str]()
+    for c in s.chars()
+        if c == '"'
+            out.push("\\\"")
+        elif c == '\\'
+            out.push("\\\\")
+        elif c == '\{'
+            out.push("\\\{")
+        elif c == '\n'
+            out.push("\\n")
+        elif c == '\t'
+            out.push("\\t")
+        else
+            out.push("{c}")
+    out.join("")
+
+# ---- Error messages (err.msg.1-2) ----
+
+## The message after an error type's name or one of its variants, if the
+## next token is a string (err.msg.1).
+fn Parser.error_message(mut self, is_error bool) Token?
+    t := tag_at(0)
+    if t != "str" and t != "interp"
+        return none
+    message := bump()
+    if not is_error
+        diag("err.msg.1", message.pos)
+        return none
+    message
+
+## err.msg.2: every variant has a message, or none does. Splices the `impl
+## ToStr` that the messages define after the declaration.
+fn Parser.splice_messages(
+    mut self,
+    name str,
+    pos ast.Pos,
+    generic bool,
+    arms List[VariantMessage],
+    whole Token?,
+)
+    given := [a for a in arms if a.message != none].len()
+    if whole == none and given == 0
+        return
+    if generic
+        diag("err.msg.2", pos)
+        return
+    if given != 0 and given != arms.len()
+        diag("err.msg.2", pos)
+        return
+    mut t := List[Token]()
+    for k in [
+        Tok.Kw("impl"),
+        Tok.Ident("ToStr"),
+        Tok.Kw("for"),
+        Tok.Ident(name),
+        Tok.Newline,
+        Tok.Indent,
+    ]
+        t.push(Token(tok: k, pos: pos))
+    for k in [
+        Tok.Kw("fn"),
+        Tok.Ident("to_str"),
+        Tok.Sym("("),
+        Tok.Kw("self"),
+        Tok.Sym(")"),
+        Tok.Ident("str"),
+        Tok.Newline,
+        Tok.Indent,
+    ]
+        t.push(Token(tok: k, pos: pos))
+    if m := whole
+        # A struct's fields are in scope by bare name (ADR 0141).
+        t.push(m)
+        t.push(Token(tok: Tok.Newline, pos: pos))
+    else
+        for k in [Tok.Kw("match"), Tok.Kw("self"), Tok.Newline, Tok.Indent]
+            t.push(Token(tok: k, pos: pos))
+        for arm in arms
+            message := arm.message else continue
+            used := names_in(message.tok)
+            t.push(Token(tok: Tok.Ident(arm.name), pos: pos))
+            if arm.fields.len() > 0
+                t.push(Token(tok: Tok.Sym("("), pos: pos))
+                for f in arm.fields
+                    if t[t.len() - 1].tok != Tok.Sym("(")
+                        t.push(Token(tok: Tok.Sym(","), pos: pos))
+                    n := if used.contains(f) then f else "_"
+                    t.push(Token(tok: Tok.Ident(n), pos: pos))
+                t.push(Token(tok: Tok.Sym(")"), pos: pos))
+            t.push(Token(tok: Tok.Sym("=>"), pos: pos))
+            t.push(message)
+            t.push(Token(tok: Tok.Newline, pos: pos))
+        t.push(Token(tok: Tok.Dedent, pos: pos))
+    t.push(Token(tok: Tok.Dedent, pos: pos))
+    t.push(Token(tok: Tok.Dedent, pos: pos))
+    mut spliced := tokens[0..i]
+    spliced.extend(t)
+    spliced.extend(tokens[i..])
+    tokens = spliced
+
+## The plain names used inside a string's `{...}` parts.
+fn names_in(tok Tok) List[str]
+    mut names := List[str]()
+    match tok
+        Interp(parts) =>
+            for part in parts
+                code := match part
+                    Lit(_) => List[Token]()
+                    Code(ts) => ts
+                    Fmt(ts, _) => ts
+                for t in code
+                    match t.tok
+                        Ident(n) => names.push(n)
+                        Interp(_) => names.extend(names_in(t.tok))
+                        Kw(_) | Sym(_) | Str(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => continue
+        Ident(_) | Kw(_) | Sym(_) | Str(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return names
+    names
+
+# ---- Modules (mod.use.1-2, mod.vis.1-2) ----
+
+## `use a.b.c` or `use a.b.c as d`, on a line of its own (mod.use.1).
+fn Parser.use_decl(mut self)
+    pos := bump().pos
+    if u := use_path(pos)
+        last := if a := u.alias then a else u.path[u.path.len() - 1]
+        aliases.add(last.name)
+        uses.push(u)
+    else
+        skip_statement()
+
+fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
+    mut path := [take_name("a module path after `use`", "mod.use.1")?]
+    while true
+        if at_sym(":") and sym_at(1) == ":" and adjacent(i)
+            error_fix("gram.foreign.1", here(), "AIL writes paths with `.`, not `::`")
+            i += 2
+            path.push(take_name("a module name after `.`", "mod.use.1")?)
+        elif eat_sym(".")
+            path.push(take_name("a module name after `.`", "mod.use.1")?)
+        else
+            break
+    mut alias := absent[ast.Ident]()
+    if eat_kw("as")
+        alias = take_name("a name after `as`", "mod.use.1")?
+    if not eat_newline() and peek() != Tok.Eof
+        unexpected("end of line after the import", "mod.use.1")
+        return none
+    ast.Use(path: path, alias: alias, pos: pos)
+
+## `pub` before a top-level declaration (mod.vis.1). The declaration follows
+## on the same line, so the line marks it public.
+fn Parser.pub_marker(mut self)
+    pos := bump().pos
+    k := kw_at(0)
+    if k == "fn"
+        or k == "struct"
+        or k == "enum"
+        or k == "error"
+        or k == "trait"
+        or tag_at(0) == "id" and sym_at(1) == ":="
+        public.add(pos.line)
+    elif k == "impl"
+        diag("mod.vis.2", pos)
+    elif k == "use"
+        diag("mod.use.2", pos)
+    else
+        unexpected("a declaration after `pub`", "mod.vis.1")
+        skip_statement()
+
+## `pub` before a member that takes its visibility from its trait or enum
+## (mod.vis.2): reported and skipped.
+fn Parser.member_pub(mut self)
+    if at_kw("pub")
+        diag("mod.vis.2", bump().pos)
+
+## `pub` before a struct field (mod.vis.1).
+fn Parser.field_pub(mut self, rule str)
+    if not at_kw("pub")
+        return
+    pos := bump().pos
+    if rule == "type.struct.2"
+        public.add(pos.line)
+    else
+        diag("mod.vis.2", pos)
+
+# ---- `@derive(f) trait Name` (ct.derive.1) ----
+
+## At `@`: whether the line declares a trait with a generator. Consumes
+## nothing when it doesn't, so `@derive` before a function stays an
+## unknown attribute (test.attr.1).
+fn Parser.derive_trait(mut self) bool
+    if tag_at(1) != "id" or tok_text(peek_at(1)) != "derive"
+        return false
+    shape := sym_at(2) == "(" and tag_at(3) == "id" and sym_at(4) == ")" and kw_at(5) == "trait"
+    if not shape
+        mut k := i
+        mut has_trait := false
+        while tokens[k].tok != Tok.Newline and tokens[k].tok != Tok.Eof
+            if tokens[k].tok == Tok.Kw("trait")
+                has_trait = true
+            k += 1
+        if not has_trait
+            return false
+        diag("ct.derive.1", here())
+        skip_statement()
+        return true
+    name := tok_text(peek_at(3))
+    pos := tokens[i + 3].pos
+    i += 5
+    before := traits.len()
+    trait_decl()
+    if traits.len() > before
+        traits[before].derive = ast.Ident(name: name, pos: pos)
+    true
+
+# ---- Other languages' constructs (gram.foreign.1, gram.rec.1) ----
+
+## A foreign declaration word's fix: "" for none, "-" to delete the word,
+## or its replacement.
+fn decl_fix(w str) str?
+    match w
+        "def" | "func" | "function" | "fun" => "fn"
+        "class" => "struct"
+        "interface" | "protocol" => "trait"
+        "import" => "use"
+        "async" => "-"
+        "public" | "export" => "pub"
+        "private" | "protected" | "static" | "final" | "abstract" | "override" | "sealed" | "internal" => "-"
+        "package" | "namespace" | "module" => ""
+        _ => none
+
+fn stmt_foreign(w str) bool
+    match w
+        "try" | "catch" | "except" | "finally" | "throw" | "raise" | "switch" | "case" | "default" => true
+        "pass" | "await" | "loop" | "elseif" | "elsif" | "else_if" => true
+        "unless" | "until" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => true
+        _ => false
+
+## A top-level word from another language's declarations (`def`, `class`,
+## `import`, `async`, ...). Reports it and skips the line.
+fn Parser.foreign_decl(mut self, w str) bool
+    s := sym_at(1)
+    if s == ":=" or s == "=" or s == "(" or s == "." or s == "["
+        return false
+    # `from a.b import c` becomes `use a.b.c`.
+    if w == "from"
+        return from_import()
+    fix := decl_fix(w) else return false
+    diag("gram.foreign.1", here())
+    # A modifier is followed by the declaration itself.
+    t := tag_at(1)
+    if (fix == "-" or fix == "pub") and (t == "kw" or t == "id")
+        i += 1
+        return true
+    skip_statement()
+    true
+
+## `from a.b import c`: Python's import.
+fn Parser.from_import(mut self) bool
+    mut k := i + 1
+    while true
+        if tok_tag(tokens[k].tok) != "id"
+            return false
+        k += 1
+        if tokens[k].tok == Tok.Sym(".")
+            k += 1
+        else
+            break
+    if tokens[k].tok != Tok.Ident("import")
+        return false
+    diag("gram.foreign.1", here())
+    skip_statement()
+    true
+
+## A statement word from another language (`try`, `switch`, `pass`,
+## `throw`, ...), unless the word is used as a name.
+fn Parser.foreign_stmt(mut self) bool
+    if tag_at(0) != "id"
+        return false
+    t := tag_at(1)
+    if t != "nl" and t != "id" and t != "str" and t != "interp" and t != "int" and t != "kw"
+        return false
+    if not stmt_foreign(tok_text(peek()))
+        return false
+    diag("gram.foreign.1", here())
+    skip_statement()
+    true
+
+## After a block header the line didn't end where it should (`if c:`,
+## `else:`, `if a = b`, `if x is none`, `if a && b {`).
+fn Parser.header_tail(mut self, after str) Header
+    k0 := i
+    pos := tok_pos(k0)
+    cond := after.contains("condition")
+    s := sym_at(0)
+    if s == ":" and (not cond or tag_at(1) == "nl")
+        # `if c:` ends the line; `fn f() : int` goes on to the type.
+        colon_only := tag_at(1) == "nl"
+        error_fix("gram.foreign.1", pos, "AIL doesn't put a `:` after a block header")
+        i += 1
+        if colon_only
+            i += 1
+            return Header.GoOn
+        return Header.Reported
+    if s == "=" and cond
+        error_fix("expr.bind.3", pos, "`=` assigns; it can't be a condition")
+        return Header.Reported
+    if cond and tag_at(0) == "id" and tok_text(peek()) == "is"
+        text := if kw_at(1) == "not" then "is not" else "is"
+        error_fix("gram.foreign.1", pos, "AIL has no `{text}`")
+        return Header.Reported
+    if cond and kw_at(0) == "in"
+        diags.push(Diag(
+            rule: "gram.foreign.1",
+            pos: pos,
+            msg: "AIL has no `in` operator for membership",
+            fixed: true,
+        ))
+        return Header.Reported
+    if s == "\{" and (tag_at(1) == "nl" or line_ends_at(k0))
+        diag("gram.foreign.1", pos)
+        return Header.Reported
+    Header.NotHeader
+
+## The generic "expected end of line after the statement" at a token that
+## betrays another language. `start` is the index of the statement's first
+## token. Returns true when it reported something specific.
+fn Parser.stray_after_statement(mut self, start int) bool
+    k0 := i
+    pos := tok_pos(k0)
+    cur := sym_at(0)
+    # `x: int = 5`
+    if tok_tag(tokens[start].tok) == "id" and cur == ":" and k0 == start + 1
+        diag("expr.bind.1", tok_pos(start))
+        return true
+    # `Color::Red`, `std::fs`
+    if cur == ":" and sym_at(1) == ":" and adjacent(k0)
+        error_fix("gram.foreign.1", pos, "AIL writes paths with `.`, not `::`")
+        return true
+    # `new Point(...)`
+    if k0 >= 1 and tokens[k0 - 1].tok == Tok.Ident("new") and tag_at(0) == "id"
+        error_fix("gram.foreign.1", tok_pos(k0 - 1), "AIL has no `new`")
+        return true
+    # `n > 0 ? a : b`
+    if k0 >= 1 and tokens[k0 - 1].tok == Tok.Sym("?") and peek() != Tok.Newline
+        diag("gram.foreign.1", tok_pos(k0 - 1))
+        return true
+    # `(x) => x + 1`
+    if cur == "=>"
+        diag("gram.foreign.1", pos)
+        return true
+    # `Point{x: 1}`
+    if cur == "\{" and k0 >= 1 and upper_ident(tokens[k0 - 1].tok)
+        diag("gram.foreign.1", pos)
+        return true
+    false
+
+fn upper_ident(t Tok) bool
+    match t
+        Ident(n) => n.chars().len() > 0 and n.chars()[0].is_upper()
+        Kw(_) | Sym(_) | Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false

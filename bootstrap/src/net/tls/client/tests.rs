@@ -262,7 +262,7 @@ fn live_openssl_key_update() {
     assert!(running.wait_for_output("from the client"), "the server couldn't read data under our new keys");
 }
 
-mod openssl {
+pub(crate) mod openssl {
     use std::net::{TcpListener, TcpStream};
     use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
@@ -318,6 +318,17 @@ mod openssl {
     }
 
     impl Server {
+        /// A server directory holding the given key, certificate and
+        /// intermediates (PEM, served with `-cert_chain chain.pem`) instead
+        /// of a fresh self-signed pair.
+        pub fn from_pem(key: &str, cert: &str, chain: &str) -> Option<Server> {
+            let server = Server::cert_dir()?;
+            std::fs::write(server.dir.join("key.pem"), key).unwrap();
+            std::fs::write(server.dir.join("cert.pem"), cert).unwrap();
+            std::fs::write(server.dir.join("chain.pem"), chain).unwrap();
+            Some(server)
+        }
+
         /// `s_server` without `-www`: it echoes what it reads to its stdout
         /// and sends what is typed on its stdin.
         pub fn start_echo(&self, args: &[&str]) -> Running {

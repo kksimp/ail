@@ -1,0 +1,12 @@
+## std.net.5 against the local `openssl s_server` that `tests/net.rs`
+## starts: GET each URL given and print the status and first line, or the
+## failure's kind and message.
+use std.env
+use std.net
+
+fn main() !
+    for url in env.args()
+        r := net.get(url) else err
+            print("{err.kind}: {err.message}")
+            continue
+        print("{r.status} {r.body.lines()[0]}")

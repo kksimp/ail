@@ -1,12 +1,13 @@
-# Fetch a URL and summarise the response (std.net, ADR 0283). With no
-# argument it asks an https URL, which the bootstrap can't reach yet (no TLS),
-# so it reports why and falls back to the copy in examples/data.
-#   ./ail run examples/fetch.ail http://127.0.0.1:8000/tasks.json
+# Fetch a URL and summarise the response (std.net, ADRs 0283 and 0369).
+# With no argument it asks an https URL; when that fails (no network, or
+# the page isn't there) it says why on standard error and summarises the
+# copy in examples/data, so the printed lines are the same either way.
+#   ./ail run examples/fetch.ail https://example.com/
 
 fn main() !
     url := env.args().first() else "https://example.com/tasks.json"
     body := fetch(url) else err
-        print("{err.kind}: {err.message}")
+        io.eprint("{err.kind}: {err.message}")
         fs.read_text(path.join(path.dir(env.program()), "data/{path.base(url)}"))?
     lines := body.lines()
     print("{path.base(url)}: {lines.len()} lines, {body.len()} characters")
