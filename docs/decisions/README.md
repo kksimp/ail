@@ -291,3 +291,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0296](0296-env-home-and-editor-settings.md) | `env.home()`, and editor settings in `~/.ail-edit` *(delegated)* | Accepted | 2026-10-20 |
 | [0312](0312-editor-agent-panel.md) | The editor's agent panel: info (Ctrl-I), trace (Shift-F5) and failure paths (Ctrl-Shift-E) in one pane *(delegated)* | Accepted | 2026-10-20 |
 | [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
+| [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
