@@ -50,7 +50,11 @@ pub(super) const STR_METHODS: &[&str] = &[
     "lines",
     "len",
     "byte_len",
+    "to_bytes",
 ];
+/// type.bytes.7-12
+pub(super) const BYTES_METHODS: &[&str] =
+    &["len", "to_str", "text", "to_list", "concat", "find", "starts_with", "ends_with", "contains", "hex", "base64"];
 pub(super) const CHAR_METHODS: &[&str] = &[
     "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower", "to_upper", "to_lower", "code", "to_digit",
 ];
@@ -124,6 +128,18 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "pad_left" | "pad_right" => read(vec![Int, Char], Str),
             "lines" => read(vec![], list(Str)),
             "len" | "byte_len" => read(vec![], Int),
+            "to_bytes" => read(vec![], Ty::Bytes),
+            _ => None,
+        },
+        // type.bytes.7-12: `bytes` is immutable, so no method changes it.
+        Ty::Bytes => match name {
+            "len" => read(vec![], Int),
+            "to_str" => read(vec![], opt(Str)),
+            "text" | "hex" | "base64" => read(vec![], Str),
+            "to_list" => read(vec![], list(Ty::Num(Num::U8))),
+            "concat" => read(vec![Ty::Bytes], Ty::Bytes),
+            "find" => read(vec![Ty::Bytes], opt(Int)),
+            "starts_with" | "ends_with" | "contains" => read(vec![Ty::Bytes], Bool),
             _ => None,
         },
         Ty::Char => match name {
@@ -245,6 +261,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
 pub(super) fn builtin_names(t: &Ty) -> &'static [&'static str] {
     match t {
         Ty::Str => STR_METHODS,
+        Ty::Bytes => BYTES_METHODS,
         Ty::Char => CHAR_METHODS,
         Ty::Int => INT_METHODS,
         Ty::Float => FLOAT_METHODS,

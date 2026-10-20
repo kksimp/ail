@@ -498,6 +498,8 @@ pub enum UnOp {
 #[derive(Debug)]
 pub enum Expr {
     Str(String, Pos),
+    /// `b"..."` (lex.bytes.1)
+    Bytes(Vec<u8>, Pos),
     /// `"text {expr} text"` (lex.str.2)
     Interp(Vec<InterpPart>, Pos),
     Int(i64, Pos),
@@ -620,6 +622,7 @@ impl Expr {
     pub fn pos(&self) -> Pos {
         match self {
             Expr::Str(_, p)
+            | Expr::Bytes(_, p)
             | Expr::Interp(_, p)
             | Expr::Int(_, p)
             | Expr::Float(_, p)

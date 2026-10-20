@@ -335,7 +335,7 @@ of a single Unicode scalar value. *(ADR 0089)*
 
 **type.str.2** — `str` doesn't support the indexing operator or `for`
 iteration. Character access goes through the explicit view `s.chars()`
-(`type.str.7`); `s.bytes()` is not implemented yet. The diagnostic for `s[i]`
+(`type.str.7`); the UTF-8 bytes are `s.to_bytes()` (`type.bytes.10`). The diagnostic for `s[i]`
 or `for c in s` suggests `s.chars()`. Length is `s.len()` (`type.str.12`).
 *(ADR 0089, ADR 0135, ADR 0208)*
 
@@ -448,6 +448,79 @@ print("{n:.2}")      # compile-time error: write {n.to_float():.2}
 > **Note:** joining is `xs.join(sep)` on any list (`type.coll.9`). There is
 > no `str.from_chars`. `s.len()` is absent until bytes versus characters is
 > decided (open questions).
+
+## Bytes
+
+**type.bytes.1** — `bytes` is the type of an immutable sequence of `u8`. Its
+literal is `b"..."` (`lex.bytes.1`). It holds any bytes, valid UTF-8 or not;
+`str` stays text (`type.str.1`). Copies share storage. *(ADR 0412)*
+
+**type.bytes.2** — `bytes` values never change in place: `b[i] = x` is an
+error, and no method changes its receiver. To change one, build a new value
+(`b[..i] + bytes.from_list([x]) + b[i + 1..]`) or edit a `List[u8]` and
+convert it with `bytes.from_list`. `==` and `!=` compare the bytes; `<`, `<=`,
+`>` and `>=` order them lexicographically by byte value, a shorter prefix
+first; `bytes` is `Hash` and so can be a map key or set element (`trait.std.2`,
+`trait.auto.5`). The text form of `bytes`, in `print` and in interpolation, is
+its literal form `b"..."`: printable ASCII as itself, `\" \\ \n \t \r` as
+escapes, and every other byte as `\xHH`. *(ADR 0412)*
+
+**type.bytes.3** — `b[i]` is the `u8` at index `i`. `i` is an `int`; it traps
+if `i` is negative or not less than `b.len()`. *(ADR 0412)*
+
+**type.bytes.4** — `b[lo..hi]` and `b[lo..=hi]` are the `bytes` between the
+bounds, as for lists (`type.coll.4`); a missing bound is the start or the end.
+It traps if `lo > hi` or a bound is outside `0..=b.len()`. *(ADR 0412)*
+
+**type.bytes.5** — `for x in b` and comprehensions over `b` give each byte as
+a `u8`, in order. *(ADR 0412)*
+
+**type.bytes.6** — `a + b`, for two `bytes`, and `a.concat(b)` are a new
+`bytes`: the bytes of `a` then those of `b`. *(ADR 0412)*
+
+**type.bytes.7** — `b.len()` is the number of bytes, an `int`. `b.to_list()`
+is a new `List[u8]` of them. *(ADR 0412)*
+
+**type.bytes.8** — `b.to_str()` is a `str?`: the bytes as UTF-8 text, or `none`
+if they aren't valid UTF-8. `b.text()` is a `str`: the same, with each invalid
+sequence as U+FFFD. `to_str` on `bytes` is this fallible conversion, not the
+text form of `trait.std.3`; the text form is reached by interpolation
+(`"{b}"`) or `ToStr.to_str(b)`. *(ADR 0414)*
+
+**type.bytes.9** — `b.find(sub)` is the index of the first occurrence of
+`sub` in `b` as an `int?` (`0` for an empty `sub`). `b.contains(sub)`,
+`b.starts_with(p)` and `b.ends_with(p)` return a `bool`. Each argument is a
+`bytes`. *(ADR 0414)*
+
+**type.bytes.10** — `s.to_bytes()` is the UTF-8 bytes of the `str` `s`, a
+`bytes` of length `s.byte_len()`. *(ADR 0414)*
+
+**type.bytes.11** — `b.hex()` is a `str` of two lowercase hexadecimal digits
+for each byte. *(ADR 0414)*
+
+**type.bytes.12** — `b.base64()` is a `str`: the bytes in standard base64
+(RFC 4648, the `+` and `/` alphabet), padded with `=`. *(ADR 0414)*
+
+**type.bytes.13** — `bytes` has these associated functions. *(ADR 0414)*
+- `bytes.from_list(xs)` is the `bytes` of a `List[u8]`.
+- `bytes.from_hex(s)` is a `bytes?`: `none` unless `s` is an even number of
+  hexadecimal digits, either case.
+- `bytes.from_base64(s)` is a `bytes?`: `none` unless `s` is standard base64
+  with its padding and no other character.
+- `bytes.zeros(n)` is `n` zero bytes; it traps if `n` is negative or above 2^32.
+
+```ail fragment
+b := b"hello\x00\n"
+print(b.len())                       # 7
+print(b[1])                          # 101
+print(b[1..3])                       # b"el"
+print(b[..2] + b[3..])               # b"helo\x00\n"
+print(b.hex())                       # 68656c6c6f000a
+print("hi".to_bytes().to_list())     # [104, 105]
+print(bytes.from_base64("aGk=") else b"")
+for x in b"abc"
+    print(x)                         # 97 98 99
+```
 
 ## Characters
 

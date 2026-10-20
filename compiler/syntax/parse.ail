@@ -68,6 +68,7 @@ fn tok_tag(t Tok) str
         Kw(_) => "kw"
         Sym(_) => "sym"
         Str(_) => "str"
+        Bytes(_) => "bytes"
         Interp(_) => "interp"
         Char(_) => "char"
         Int(_) => "int"
@@ -84,7 +85,7 @@ fn tok_text(t Tok) str
         Ident(n) => n
         Kw(w) => w
         Sym(s) => s
-        Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
+        Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 ## Keywords the spec defines that the bootstrap doesn't implement yet.
 fn not_yet(k str) bool
@@ -492,7 +493,7 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                             depth += 1
                         elif s == ")"
                             depth -= 1
-                    Ident(_) | Kw(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+                    Ident(_) | Kw(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
                 i += 1
                 if depth == 0
                     break
@@ -1234,7 +1235,7 @@ fn Parser.comparison_expr(mut self) ast.Expr?
 fn upper_name(e ast.Expr) bool
     match e
         Name(n, _) => n.chars().len() > 0 and n.chars()[0].is_upper()
-        Str(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
             _,
             _,
             _,
@@ -1301,7 +1302,7 @@ fn Parser.unary(mut self) ast.Expr?
 fn name_of(e ast.Expr) str?
     match e
         Name(n, _) => n
-        Str(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
             _,
             _,
             _,
@@ -1312,7 +1313,7 @@ fn name_of(e ast.Expr) str?
 fn name_pos(e ast.Expr) ast.Pos
     match e
         Name(_, p) => p
-        Str(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) => ast.Pos(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) => ast.Pos(
             line: 0,
             col: 0,
         )
@@ -1406,6 +1407,9 @@ fn Parser.primary(mut self) ast.Expr?
         Str(s) =>
             i += 1
             return ast.Expr.Str(value: s, pos: pos)
+        Bytes(hex) =>
+            i += 1
+            return ast.Expr.Bytes(hex: hex, pos: pos)
         Interp(parts) =>
             i += 1
             return interpolation(parts, pos)
@@ -1726,7 +1730,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 i += 1
                 v := match bump().tok
                     Int(n) => "{-n}"
-                    Ident(_) | Kw(_) | Sym(_) | Str(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => "-9223372036854775808"
+                    Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => "-9223372036854775808"
                 return ast.Pattern.Literal(value: ast.Literal.IntLit(v), pos: pos)
         IntMin =>
             i += 1
@@ -1745,6 +1749,6 @@ fn Parser.single_pattern(mut self) ast.Pattern?
         Interp(_) | Float(_) =>
             diag("expr.match.7", pos)
             return none
-        Newline | Indent | Dedent | Eof => i += 0
+        Bytes(_) | Newline | Indent | Dedent | Eof => i += 0
     unexpected("a pattern (a variant name or `_`)", "expr.match.4")
     none

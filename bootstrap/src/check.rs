@@ -62,6 +62,8 @@ pub enum Ty {
     /// `float`, `f64` (type.num.1-2)
     Float,
     Str,
+    /// `bytes`, an immutable sequence of `u8` (type.bytes.1)
+    Bytes,
     /// `char` (type.str.1)
     Char,
     Bool,
@@ -110,6 +112,7 @@ pub enum Con {
     Int,
     Float,
     Str,
+    Bytes,
     Char,
     Bool,
     List,
@@ -230,7 +233,7 @@ pub struct Resolved {
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &[
-    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
+    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "bytes", "char", "bool", "List",
     "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
 ];
 
@@ -992,7 +995,7 @@ impl<'p> Checker<'p> {
             );
         };
         match e {
-            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
+            Expr::Str(..) | Expr::Bytes(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
             Expr::None(_) | Expr::Hole(_) | Expr::TypeArgs { .. } => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
@@ -1154,6 +1157,7 @@ impl<'p> Checker<'p> {
             "float" | "f64" => Ty::Float,
             n if Num::from_name(n).is_some() => Ty::Num(Num::from_name(n).expect("a sized type")),
             "str" => Ty::Str,
+            "bytes" => Ty::Bytes,
             "char" => Ty::Char,
             "bool" => Ty::Bool,
             "Self" => match self.self_ty.clone() {
@@ -1513,6 +1517,7 @@ impl<'p> Checker<'p> {
             Ty::Float => "float".into(),
             Ty::Num(n) => n.name().into(),
             Ty::Str => "str".into(),
+            Ty::Bytes => "bytes".into(),
             Ty::Char => "char".into(),
             Ty::Bool => "bool".into(),
             Ty::Unit | Ty::Never => "no value".into(),
@@ -2168,6 +2173,8 @@ impl<'p> Checker<'p> {
         }
         match self.expr(iter, None, true) {
             Ty::List(t) | Ty::Set(t) => *t,
+            // type.bytes.5: iterating `bytes` gives each `u8`.
+            Ty::Bytes => Ty::Num(Num::U8),
             // conc.share.7: each value received until the channel closes; the
             // loop synchronises with other tasks (conc.par.2).
             Ty::Conc(conc::Conc::Channel, t) => {
@@ -2337,6 +2344,19 @@ impl<'p> Checker<'p> {
             self.expr(value, None, true);
             return;
         }
+        // type.bytes.2: `bytes` never changes in place.
+        if let Expr::Index { recv, .. } = target
+            && self.quiet_type(recv) == Ty::Bytes
+        {
+            self.error_help(
+                "type.bytes.2",
+                target.pos(),
+                "`bytes` is immutable, so an element can't be assigned",
+                "build a new value: `b = b[..i] + bytes.from_list([x]) + b[i + 1..]`, or edit a `List[u8]` and convert it with `bytes.from_list`",
+            );
+            self.expr(value, None, true);
+            return;
+        }
         self.require_mutable(target, None, "assigned");
         let vt = self.expr(value, Some(&tt), true);
         self.consume(value, &vt);
@@ -2470,6 +2490,7 @@ impl<'p> Checker<'p> {
         }
         match x {
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)
@@ -2537,6 +2558,7 @@ impl<'p> Checker<'p> {
     fn expr_of(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         match e {
             Expr::Str(..) => Ty::Str,
+            Expr::Bytes(..) => Ty::Bytes,
             // type.num.10: an integer literal where a float is expected is a float.
             Expr::Int(_, pos) if matches!(expect, Some(Ty::Float)) => {
                 self.resolved.float_literals.insert(*pos);
@@ -3775,6 +3797,27 @@ impl<'p> Checker<'p> {
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
+            // type.bytes.13: `bytes.from_list(xs)` and the like.
+            if tn == "bytes" && targs.is_none() {
+                let sig = match name {
+                    "from_list" => Sig::plain(None, vec![(false, Ty::List(Box::new(Ty::Num(Num::U8))))], Ty::Bytes),
+                    "from_hex" | "from_base64" => {
+                        Sig::plain(None, vec![(false, Ty::Str)], Ty::Opt(Box::new(Ty::Bytes)))
+                    }
+                    "zeros" => Sig::plain(None, vec![(false, Ty::Int)], Ty::Bytes),
+                    _ => {
+                        self.args_only(args);
+                        self.error_help(
+                            "type.bytes.13",
+                            pos,
+                            format!("`bytes` has no associated function `{name}`"),
+                            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
+                        );
+                        return Ty::Err;
+                    }
+                };
+                return self.check_call(&format!("bytes.{name}"), &sig, Vec::new(), args, None, pos, expect);
+            }
             // type.char.4: `char.from_code(n)`.
             if tn == "char" && targs.is_none() {
                 if name != "from_code" {
@@ -4221,13 +4264,21 @@ impl<'p> Checker<'p> {
         } else {
             let it = self.expr(index, Some(&Ty::Int), true);
             if !self.accepts(&Ty::Int, &it) {
-                let msg = format!("a list index must be `int`, found {}", self.show(&it));
-                self.error("type.coll.4", index.pos(), msg);
+                if rt == Ty::Bytes {
+                    let msg = format!("a `bytes` index must be `int`, found {}", self.show(&it));
+                    self.error("type.bytes.3", index.pos(), msg);
+                } else {
+                    let msg = format!("a list index must be `int`, found {}", self.show(&it));
+                    self.error("type.coll.4", index.pos(), msg);
+                }
             }
         }
         match rt {
             Ty::List(t) if slice => Ty::List(t),
             Ty::List(t) => *t,
+            // type.bytes.3-4: an element is a `u8`; a slice is `bytes`.
+            Ty::Bytes if slice => Ty::Bytes,
+            Ty::Bytes => Ty::Num(Num::U8),
             Ty::Err => Ty::Err,
             Ty::Str => {
                 let mut d = Diagnostic::new("type.str.2", recv.pos(), "a `str` can't be indexed")
@@ -4422,6 +4473,8 @@ impl<'p> Checker<'p> {
                 Ty::Num(k) if !(k.is_float() && op == BinOp::Rem) => return lt.clone(),
                 // type.num.6: float arithmetic, without `%`.
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
+                // type.bytes.6: `a + b` joins two `bytes`.
+                Ty::Bytes if op == BinOp::Add => return Ty::Bytes,
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
                         .help("build text with interpolation: \"{a}{b}\"")

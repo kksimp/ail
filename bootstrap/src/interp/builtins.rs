@@ -21,6 +21,7 @@ pub(super) enum Key {
     Int(i64),
     Bool(bool),
     Str(Rc<str>),
+    Bytes(Rc<Vec<u8>>),
     Char(char),
     None,
     Nested(u32),
@@ -36,6 +37,7 @@ impl Key {
             Value::Int(n) | Value::Num(_, n) => Key::Int(*n),
             Value::Bool(b) => Key::Bool(*b),
             Value::Str(s) => Key::Str(s.clone()),
+            Value::Bytes(b) => Key::Bytes(b.clone()),
             Value::Char(c) => Key::Char(*c),
             Value::None => Key::None,
             Value::Nested(n) => Key::Nested(*n),
@@ -378,6 +380,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn read_only(&mut self, v: Value, name: &str, a: &mut Vec<Value>, pos: Pos) -> Result<Value, Trap> {
         Ok(match v {
             Value::Str(text) => self.str_method(&text, name, a, pos)?,
+            Value::Bytes(b) => super::bytes::method(&b, name, a),
             Value::Char(c) => char_method(c, name, a, pos)?,
             Value::Int(n) => int_method(n, name, a, pos)?,
             Value::Num(k, bits) if k.is_float() => f32_method(bits, name, pos)?,
@@ -526,6 +529,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
             "len" => Value::Int(text.chars().count() as i64),
             "byte_len" => Value::Int(text.len() as i64),
+            "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
             "to_lower" => s(text.to_lowercase()),

@@ -380,6 +380,7 @@ impl Parser {
             Tok::Kw(k) => format!("the keyword `{k}`"),
             Tok::Sym(s) => format!("`{s}`"),
             Tok::Str(_) | Tok::Interp(_) => "a string".into(),
+            Tok::Bytes(_) => "a `bytes` literal".into(),
             Tok::Int(_) | Tok::IntMin => "an integer".into(),
             Tok::Float(_) => "a number".into(),
             Tok::Char(_) => "a character".into(),
@@ -1732,6 +1733,10 @@ impl Parser {
             Tok::Str(s) => {
                 self.i += 1;
                 Some(Expr::Str(s, pos))
+            }
+            Tok::Bytes(b) => {
+                self.i += 1;
+                Some(Expr::Bytes(b, pos))
             }
             Tok::Interp(parts) => {
                 self.i += 1;

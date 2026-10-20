@@ -1063,7 +1063,7 @@ impl<'p> Refs<'p> {
 
     fn expr(&mut self, e: &Expr) {
         match e {
-            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) | Expr::Hole(_) => {}
+            Expr::Str(..) | Expr::Bytes(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) | Expr::Hole(_) => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
                     if let InterpPart::Expr(e) | InterpPart::Fmt(e, _) = p {

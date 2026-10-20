@@ -348,6 +348,9 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
+- `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
+  `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`,
+  `bytes.from_list(xs)`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
 ## Lists
 

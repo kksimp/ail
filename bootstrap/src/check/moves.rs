@@ -275,6 +275,7 @@ impl<'p> Walker<'p> {
     fn expr(&mut self, e: &'p Expr) {
         match e {
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)

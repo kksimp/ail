@@ -22,6 +22,7 @@ mod assoc;
 mod atomic;
 mod builtins;
 mod bytecode;
+mod bytes;
 mod keyfn;
 pub mod limits;
 mod contracts;
@@ -68,6 +69,8 @@ enum Value {
     Num(Num, i64),
     Bool(bool),
     Str(Rc<str>),
+    /// `bytes` (type.bytes.1): copies share the storage.
+    Bytes(Rc<Vec<u8>>),
     Char(char),
     /// A struct (by index in the program) and its fields.
     Struct(usize, Rc<Vec<Value>>),
@@ -111,6 +114,7 @@ impl Clone for Value {
             Value::None => Value::None,
             Value::Nested(n) => Value::Nested(*n),
             Value::Str(s) => Value::Str(Rc::clone(s)),
+            Value::Bytes(b) => Value::Bytes(Rc::clone(b)),
             Value::Struct(i, f) => Value::Struct(*i, Rc::clone(f)),
             Value::Enum(e, v, f) => Value::Enum(*e, *v, Rc::clone(f)),
             Value::List(l) => Value::List(Rc::clone(l)),
@@ -905,6 +909,7 @@ fn key_text(k: &Value) -> String {
     };
     match k {
         Value::Str(s) => quoted(s, '"'),
+        Value::Bytes(b) => bytes::bytes_text(b),
         Value::Char(c) => quoted(&c.to_string(), '\''),
         Value::Int(n) => n.to_string(),
         Value::Num(k, bits) if k.is_float() => float_text32(Num::f32_of(*bits)),
@@ -1525,6 +1530,8 @@ impl<'a, W: Write> Interp<'a, W> {
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
             Value::Set(t) => Rc::new(t.key_list()),
+            // type.bytes.5: each byte, as a `u8`.
+            Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
             // conc.share.7: each value received, until the channel is closed and empty.
             Value::Handle(Handle::Channel(c)) => {
                 while let Some(v) = self.chan_next(c, iter.pos())? {
@@ -1579,6 +1586,7 @@ impl<'a, W: Write> Interp<'a, W> {
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
+                Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
                 Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
@@ -1942,6 +1950,22 @@ impl<'a, W: Write> Interp<'a, W> {
                 let k = self.eval(index, env)?;
                 return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
             }
+            // type.bytes.3-4: an element is a `u8`; a range slices.
+            Value::Bytes(b) => {
+                if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
+                    let lo = match lo {
+                        Some(e) => self.eval(e, env)?.int(),
+                        None => 0,
+                    };
+                    let (hi, inclusive) = match hi {
+                        Some(e) => (self.eval(e, env)?.int(), *inclusive),
+                        None => (b.len() as i64, false),
+                    };
+                    return Ok(bytes::slice(&b, lo, hi, inclusive, *range_pos)?);
+                }
+                let i = self.eval(index, env)?.int();
+                return Ok(bytes::at(&b, i, pos)?);
+            }
             other => unreachable!("checked: list or map, found {other:?}"),
         };
         if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
@@ -2053,6 +2077,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Str(s, _) => {
                 Value::Str(Rc::clone(self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str()))))
             }
+            Expr::Bytes(b, _) => bytes::bytes_value(b.clone()),
             // type.num.13: a literal typed by context as a sized number.
             Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
@@ -2324,6 +2349,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => unreachable!("checked: `{sym}` on floats"),
             },
             (Value::Num(k, a), Value::Num(_, b)) => num_binop(op, k, a, b, pos)?,
+            // type.bytes.6: `a + b` joins two `bytes`.
+            (Value::Bytes(a), Value::Bytes(b)) if op == BinOp::Add => {
+                let mut v = Vec::with_capacity(a.len() + b.len());
+                v.extend_from_slice(&a);
+                v.extend_from_slice(&b);
+                bytes::bytes_value(v)
+            }
             // Characters and booleans compare without the trait-aware generic path.
             (Value::Char(a), Value::Char(b)) if !self.user_std[0] && !self.user_std[1] => Value::Bool(match op {
                 BinOp::Eq => a == b,
@@ -2371,6 +2403,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Int(_) => Some(Con::Int),
             Value::Float(_) => Some(Con::Float),
             Value::Str(_) => Some(Con::Str),
+            Value::Bytes(_) => Some(Con::Bytes),
             Value::Char(_) => Some(Con::Char),
             Value::Bool(_) => Some(Con::Bool),
             Value::List(_) => Some(Con::List),
@@ -2404,6 +2437,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Char(x), Value::Char(y)) => x == y,
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::Bytes(x), Value::Bytes(y)) => x == y,
             (Value::None, Value::None) => true,
             (Value::None, _) | (_, Value::None) => false,
             (Value::Nested(m), Value::Nested(n)) => m == n,
@@ -2466,6 +2500,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Float(x), Value::Float(y)) => float_order(*x, *y),
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
+            (Value::Bytes(x), Value::Bytes(y)) => x.cmp(y),
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
                 self.lexicographic(x, y, pos)?
             }
@@ -2665,6 +2700,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Num(k, bits) => k.decode(*bits).to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => quoted(s, '"'),
+            Value::Bytes(b) => bytes::bytes_text(b),
             Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
             Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
@@ -2762,6 +2798,9 @@ impl<'a, W: Write> Interp<'a, W> {
             // `m.f(args)` on a standard module (std.use.2).
             if let Some(&c) = self.resolved.std_calls.get(&pos) {
                 return self.std_call(c, args, pos, env);
+            }
+            if tn == "bytes" {
+                return self.bytes_assoc(name, args, pos, env);
             }
             if tn == "char" {
                 let n = self.eval(&args[0].value, env)?.int();

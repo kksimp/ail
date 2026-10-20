@@ -1,0 +1,5 @@
+# type.bytes.3: an index out of range traps.
+fn main()
+    b := b"abc"
+    print(b[2])
+    print(b[3])

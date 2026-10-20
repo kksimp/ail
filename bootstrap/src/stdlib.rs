@@ -13,11 +13,11 @@ pub const MODULES: &[(&str, &[&str])] = &[
     (
         "fs",
         &[
-            "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_text", "remove", "rename",
-            "walk", "write_text",
+            "append_bytes", "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_bytes",
+            "read_text", "remove", "rename", "walk", "write_bytes", "write_text",
         ],
     ),
-    ("io", &["eprint", "exit", "read_all", "read_line"]),
+    ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("net", &["get", "post"]),
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["run", "which"]),

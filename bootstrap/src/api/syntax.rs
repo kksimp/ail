@@ -91,6 +91,9 @@ fn token_line(t: &Token, out: &mut String) {
         Tok::Str(s) => {
             let _ = writeln!(out, "str {}", json_text(s));
         }
+        Tok::Bytes(b) => {
+            let _ = writeln!(out, "bytes {}", json_text(&hex_of(b)));
+        }
         Tok::Char(c) => {
             let _ = writeln!(out, "char {}", json_text(&c.to_string()));
         }
@@ -535,6 +538,7 @@ fn arg(a: &Arg) -> J {
 fn expr(e: &Expr) -> J {
     match e {
         Expr::Str(v, p) => variant("Str", vec![("value", s(v)), ("pos", pos(*p))]),
+        Expr::Bytes(v, p) => variant("Bytes", vec![("hex", s(&hex_of(v))), ("pos", pos(*p))]),
         Expr::Interp(parts, p) => variant(
             "Interp",
             vec![
@@ -693,4 +697,9 @@ fn json_text(v: &str) -> String {
     let mut out = String::new();
     quote(v, &mut out);
     out
+}
+
+/// A byte string as lowercase hex, the form the syntax API shows `bytes` literals in.
+fn hex_of(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }

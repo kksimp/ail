@@ -47,6 +47,9 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
                 "read_text",
                 "write_text",
                 "append_text",
+                "read_bytes",
+                "write_bytes",
+                "append_bytes",
                 "exists",
                 "list_dir",
                 "remove",
@@ -60,7 +63,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             &["fs", "io"],
         ),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
-        "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
+        "io" => (&["read_line", "read_all", "read_bytes", "eprint", "exit"], &["io"]),
         "proc" => (&["run", "which"], &["proc", "io"]),
         // std.net.1: every request reaches the network.
         "net" => (&["get", "post"], &["net", "io"]),
@@ -577,6 +580,7 @@ impl<'p, 'r> Walker<'p, 'r> {
     fn expr(&mut self, e: &Expr) {
         match e {
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)

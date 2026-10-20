@@ -239,6 +239,8 @@ pub enum UnOp
 
 pub enum Expr
     Str(value str, pos Pos)
+    ## `b"..."`: its bytes as lowercase hex (lex.bytes.1).
+    Bytes(hex str, pos Pos)
     Interp(parts List[InterpPart], pos Pos)
     ## The literal's value in decimal: JSON numbers can't hold every `int`.
     Int(value str, pos Pos)

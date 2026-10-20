@@ -439,6 +439,7 @@ impl<'a> Scan<'a> {
                 );
             }
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)
