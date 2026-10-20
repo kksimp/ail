@@ -4,7 +4,7 @@ fn main()
     b := tensor.from([4.0, 8.0, -1.0, 2.0], [2, 2])
     print((a * b + a).relu())
     print(-(a - b) / b)
-    print((a * 2.0 - b).sigmoid().tanh())
+    print((a * 2.0 - b).relu().sqrt())
     print((a + 1.0) * (b - 0.5))
     x := 2.0
     print((a * x - 1.0).relu().sum())
