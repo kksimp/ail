@@ -20,7 +20,9 @@ outputs must not change when other lanes add examples or fixtures.
    directory. The Python twin finds them from `__file__`.
 2. **Leave no files.** A program that writes (`tasks.ail`) writes into
    `examples/data/`, reads the file back, and removes it. `@test` functions
-   touch no files or processes, so tests can run in parallel.
+   touch no files or processes, so tests can run in parallel. Because they
+   find their fixtures from their own path, the formatter test checks these
+   programs' layout is already canonical instead of running a relocated copy.
 3. **Deterministic output that survives growth.** `build.ail` walks
    `examples/`, so it prints only findings plus an error and warning total,
    never a file count, and it exits 1 on errors via `io.exit`.
