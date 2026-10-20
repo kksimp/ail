@@ -294,6 +294,11 @@ fn fuzz_native_strings() {
     native_differential("strings", pure::strings, false);
 }
 
+#[test]
+fn fuzz_native_maps() {
+    native_differential("maps", pure::maps, false);
+}
+
 fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
     if !has_native() {
         eprintln!("fuzz-native: `ail build` is not available; skipped");

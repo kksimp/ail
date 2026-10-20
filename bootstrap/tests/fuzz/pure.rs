@@ -323,3 +323,51 @@ pub fn strings(seed: u64) -> String {
     }
     s.out
 }
+
+// ---- maps and sets (native.map, ADR 0568-0570) ----
+
+pub fn maps(seed: u64) -> String {
+    let mut r = Rng::new(seed ^ 0x3A95);
+    let mut o = String::from("fn main()\n");
+    o.push_str("    mut mi := Map[int, int]()\n    mut ms := Map[str, int]()\n    mut mf := Map[str, float]()\n    mut si := Set[int]()\n    mut ss := Set[str]()\n");
+    let words = ["a", "b", "tea", "milk", "é", "", "x y", "zz"];
+    for _ in 0..8 + r.below(14) {
+        let k = r.below(12) as i64 - 2;
+        let w = *r.pick(&words);
+        let v = r.below(100) as i64 - 20;
+        let line = match r.below(22) {
+            0 | 1 => format!("mi[{k}] = {v}"),
+            2 => format!("ms[\"{w}\"] = {v}"),
+            3 => format!("mi[{k}] = (mi.get({k}) else 0) + {v}"),
+            4 => format!("ms[\"{w}\"] = (ms.get(\"{w}\") else 0) + {v}"),
+            5 => format!("mf[\"{w}\"] = {v}.5"),
+            6 => format!("mf[\"{w}\"] += 0.25"),
+            7 => format!("print(mi.get({k}) else -1)"),
+            8 => format!("print(ms.get(\"{w}\") else -1)"),
+            9 => format!("print(mi.contains({k}))"),
+            10 => format!("print(ms.contains(\"{w}\"))"),
+            11 => format!("mi.remove({k})"),
+            12 => format!("ms.remove(\"{w}\")"),
+            13 => format!("print(si.add({k}))"),
+            14 => format!("print(ss.add(\"{w}\"))"),
+            15 => format!("print(si.contains({k}))"),
+            16 => format!("print(si.remove({k}))"),
+            17 => "print(mi.len() + ms.len() + si.len() + ss.len())".to_string(),
+            18 => format!("print([{}, {}, {}].len())", k, v, k + v),
+            19 => "for x in si\n        print(x * 2)".to_string(),
+            20 => "print(mi.keys())\n    print(ms.values())".to_string(),
+            _ if r.chance(1, 8) => format!("print(mi[{k}])"), // traps when missing
+            _ => format!("mi[{k}] = {v}"),
+        };
+        o.push_str("    ");
+        o.push_str(&line);
+        o.push('\n');
+    }
+    o.push_str("    print(mi)\n    print(ms)\n    print(mf)\n    print(si)\n    print(ss)\n");
+    // Growth and rehash: many keys, deletions, then a checksum over the table.
+    let (n, m, step) = (50 + r.below(3000), 7 + r.below(2000), 1 + r.below(13));
+    o.push_str(&format!("    mut big := Map[int, int]()\n    for i in 0..{n}\n        big[i * {step} % {m}] = i\n    for i in 0..{n} / 3\n        big.remove(i * {step} % {m})\n    mut sum := 0\n    for k in big.keys()\n        sum += k * 31 + (big.get(k) else 0)\n    print(big.len())\n    print(sum)\n"));
+    o.push_str("    mut total := 0\n    for v in mi.values()\n        total += v\n    print(total)\n");
+    o.push_str("    mut words := Map[str, int]()\n    for w in [\"the\", \"cat\", \"the\", \"hat\", \"the\", \"end\"]\n        words[w] += 1\n    print(words)\n");
+    o
+}
