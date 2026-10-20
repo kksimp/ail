@@ -9,6 +9,7 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -19,6 +20,11 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 - A statement ends at the end of its line, unless the line ends inside
   `(`, `[` or `{`, or after a binary operator or a comma.
 - `#` starts a comment. `##` starts a doc comment.
+- Write the layout `ail fmt` writes ([formatting.md](design/formatting.md)):
+  one space around binary operators and after `,` and `:`; none inside
+  brackets, around `.` and `..`, or before a call's `(`; lines up to 100
+  characters, with a longer list split one element per line plus a trailing
+  comma; one blank line between multi-line top-level declarations.
 
 ## Functions
 
