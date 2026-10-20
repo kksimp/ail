@@ -18,10 +18,12 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
-function is a free function or a method of a struct or enum (no generics or
-contracts), in the root module or a module it imports (mod.unit.1-5), over
-`int`, `float`, `bool`, `str`, structs and enums without generics or
-invariants, and lists of those and of lists, using locals, module constants
+function is a free function, a method of a struct or enum, or a method of
+an `impl` block (no generic methods, `any Trait` values or contracts), in
+the root module or a module it imports (mod.unit.1-5), over `int`, `float`,
+`bool`, `str`, structs and enums without invariants, generic or not, and
+lists of those and of lists, with generic functions and types
+monomorphised (gen.decl.1-2, gen.bound.1), using locals, module constants
 of any expression in the subset (computed once before `main` runs),
 arithmetic, comparisons (`==` on enums, structs and lists compares their
 values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
@@ -46,7 +48,7 @@ only as the value of `else` with a fallback value, a statement that leaves,
 or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
 Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
-0580, 0582, 0591, 0602–0604)*
+0536, 0580, 0582, 0591, 0602–0604)*
 
 ```ail
 fn steps(n int) int

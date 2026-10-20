@@ -1,0 +1,35 @@
+# Generics and traits at the edges of the native subset (native.subset.1):
+# generic methods, `any Trait` values, and a generic over a type outside
+# the subset.
+trait Named
+    fn name(self) str
+
+struct Box[T]
+    item T
+
+struct Tag
+    text str
+
+impl Named for Tag
+    fn name(self) str
+        text
+
+fn Box[T].swap[U](self, other U) Box[U]
+    Box(item: other)
+
+fn Tag.pair[U](self, other U) U
+    other
+
+fn show(x any Named) str
+    x.name()
+
+fn keep[T](x T) T
+    x
+
+fn main()
+    b := Box(item: 1)
+    print(b.swap("a").item)
+    print(Tag(text: "t").pair(2))
+    print(show(Tag(text: "u")))
+    m := keep({"a": 1})
+    print(m.len())

@@ -127,6 +127,13 @@ slots the MIR uses. `==` on an enum with fields compares the index when one
 side is a variant without fields, the index and that variant's fields when
 one side is built in place, else calls the generated `eq.E`.
 
+**Generic instances** (ADR 0536). Each generic function, struct or enum is
+compiled once per set of type arguments, as a plain function or type named
+with them: `first[int]`, `Box[str]`, `Box[str].get`, `Pair[int, str]`.
+An instance has the layout of the same struct or enum written out by hand;
+there is no boxing and no type information at run time. The methods of an
+`impl Trait for T` block are the symbols `T.m`, like any method of `T`.
+
 ## 3. Entry and exit
 
 The object writer points the entry at `_start` (ELF) or `_main` (Mach-O,
