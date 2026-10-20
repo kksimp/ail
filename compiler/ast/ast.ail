@@ -1,0 +1,413 @@
+## The syntax tree of an AIL program, shared by the parser and the checker
+## written in AIL (ADR 0376). It mirrors `bootstrap/src/ast.rs`, and its JSON
+## (the derived `ToJson`/`FromJson`) is the shape `ail api --ast` prints
+## (api.ast.1).
+
+## A source position: line and column, from 1. A package numbers each file's
+## lines from its `SourceFile.base`; the prelude's from 1 << 30.
+pub struct Pos
+    pub line int
+    pub col int
+
+## A name and where it is written.
+pub struct Ident
+    pub name str
+    pub pos Pos
+
+pub struct Program
+    ## Every function: free functions, methods, and the functions of `trait`
+    ## and `impl` blocks (see `FnDecl.within`).
+    pub fns List[FnDecl]
+    pub structs List[StructDecl]
+    pub enums List[EnumDecl]
+    pub traits List[TraitDecl]
+    pub impls List[ImplDecl]
+    pub consts List[ConstDecl]
+    pub uses List[Use]
+    ## The lines that start with `pub` (mod.vis.1), ascending.
+    pub public List[int]
+    pub files List[SourceFile]
+    pub grants List[Grant]
+    pub generated List[Generated]
+
+## One source file of a package: its lines are numbered from `base + 1`.
+pub struct SourceFile
+    pub path str
+    ## The module's import path, `a.b`; empty for the root module.
+    pub module str
+    pub base int
+
+## `caps LIST` on a manifest line (eff.cap.4-5).
+pub struct Grant
+    pub package str
+    pub caps List[str]
+    pub pos Pos
+    pub own bool
+
+## The methods a derive generator wrote for one `impl` (ct.gen.1-4).
+pub struct Generated
+    ## Index into `Program.files`.
+    pub file int
+    pub impl_pos Pos
+    pub label str
+    pub generator str
+
+## `use a.b.c`, or `use a.b.c as d` (mod.use.1).
+pub struct Use
+    pub path List[Ident]
+    pub alias Ident?
+    pub pos Pos
+
+## `NAME := expr` at the top level (mod.const.1).
+pub struct ConstDecl
+    pub name str
+    pub pos Pos
+    pub doc str?
+    pub value Expr
+
+## `T`, or `T Bound + Bound` (gen.decl.1, gen.bound.1).
+pub struct GenericParam
+    pub name str
+    pub pos Pos
+    pub bounds List[Ident]
+
+pub struct TraitDecl
+    pub name str
+    pub pos Pos
+    pub doc str?
+    ## Indexes into `Program.fns`.
+    pub methods List[int]
+    pub derive Ident?
+    pub supers List[Ident]
+
+pub struct ImplDecl
+    pub trait_name str
+    pub trait_pos Pos
+    pub target Owner
+    pub pos Pos
+    ## Indexes into `Program.fns`.
+    pub methods List[int]
+
+pub struct StructDecl
+    pub name str
+    pub pos Pos
+    pub doc str?
+    pub is_error bool
+    pub is_unique bool
+    pub generics List[GenericParam]
+    pub fields List[Field]
+    pub invariants List[Contract]
+
+pub struct Field
+    pub name str
+    pub pos Pos
+    pub doc str?
+    pub ty TypeRef
+
+pub struct EnumDecl
+    pub name str
+    pub pos Pos
+    pub doc str?
+    pub is_error bool
+    pub is_unique bool
+    pub generics List[GenericParam]
+    pub variants List[Variant]
+
+pub struct Variant
+    pub name str
+    pub pos Pos
+    pub doc str?
+    pub fields List[Field]
+
+pub struct FnDecl
+    pub attrs List[Attr]
+    pub owner Owner?
+    pub name str
+    pub pos Pos
+    pub doc str?
+    pub generics List[GenericParam]
+    pub receiver Receiver?
+    pub params List[Param]
+    pub ret TypeRef?
+    ## `none` only for a trait method without a default (trait.decl.2).
+    pub body List[Stmt]?
+    pub within Within
+    pub contracts List[Contract]
+    ## For an `impl` method: the trait's method it inherits contracts from.
+    pub inherits int?
+
+## `requires COND`, `ensures COND` or `invariant COND` (contract.decl.1-2).
+pub struct Contract
+    pub is_ensures bool
+    pub cond Expr
+    pub text str
+    pub pos Pos
+    pub olds List[Old]
+
+## An `old(e)` of an `ensures`: the hidden name it reads and `e`.
+pub struct Old
+    pub name str
+    pub value Expr
+
+## `@name` or `@name("arg")` (gram.attr.1-3).
+pub struct Attr
+    pub name str
+    pub pos Pos
+    pub arg str?
+
+## Where a function is declared.
+pub enum Within
+    TopLevel
+    InTrait(index int)
+    InImpl(index int)
+
+## The type a method belongs to, or a trait's functions' trait.
+pub struct Owner
+    pub name str
+    pub pos Pos
+    pub params List[GenericParam]?
+
+## `self`, `mut self` or `move self`.
+pub struct Receiver
+    pub mutable bool
+    pub moved bool
+
+pub struct Param
+    pub name str
+    pub pos Pos
+    pub mutable bool
+    pub moved bool
+    pub ty TypeRef
+
+## A type as written.
+pub struct TypeRef
+    pub shape TypeShape
+    pub pos Pos
+
+pub enum TypeShape
+    ## `int`, `List[Student]`
+    Named(name str, args List[TypeRef])
+    ## `T?`
+    Optional(inner TypeRef)
+    ## `T ! E`, `!T`, `!`: `ok` none without a success value, `errors` none
+    ## when inferred.
+    Fallible(ok TypeRef?, errors List[TypeRef]?)
+    ## `any Trait`
+    AnyTrait(trait_name str)
+    ## `ref T`
+    RefTo(inner TypeRef)
+
+pub enum Stmt
+    Let(name str, pos Pos, mutable bool, value Expr, otherwise Else?)
+    ## `op` is a `BinOp` name for `op=`; `pos` is the operator's.
+    Assign(target Expr, op BinOp?, value Expr, pos Pos)
+    While(cond Expr, body List[Stmt], pos Pos)
+    For(is_par bool, var str, var_pos Pos, mutable bool, iter Expr, body List[Stmt], pos Pos)
+    Break(pos Pos)
+    Continue(pos Pos)
+    Return(value Expr?, pos Pos)
+    Eval(value Expr)
+    Handle(value Expr, otherwise Else)
+    Defer(stmt Stmt, pos Pos)
+    With(mutex Expr, var str, var_pos Pos, body List[Stmt], pos Pos)
+
+## The `else` part of `x := e else ...` (err.else.1-3).
+pub enum Else
+    Fallback(value Expr)
+    Leave(stmt Stmt)
+    Handler(err Ident?, body List[Stmt], pos Pos)
+
+pub enum BinOp
+    Add
+    Sub
+    Mul
+    Div
+    Rem
+    Eq
+    Ne
+    Lt
+    Le
+    Gt
+    Ge
+    And
+    Or
+
+pub enum UnOp
+    Neg
+    Not
+    Spawn
+
+pub enum Expr
+    Str(value str, pos Pos)
+    Interp(parts List[InterpPart], pos Pos)
+    ## The literal's value in decimal: JSON numbers can't hold every `int`.
+    Int(value str, pos Pos)
+    Float(value float, pos Pos)
+    Char(value str, pos Pos)
+    Bool(value bool, pos Pos)
+    NoneLit(pos Pos)
+    Hole(pos Pos)
+    Name(name str, pos Pos)
+    TypeArgs(name str, args List[TypeRef], pos Pos)
+    ListLit(items List[Expr], pos Pos)
+    Call(callee Expr, args List[Arg], pos Pos)
+    Method(recv Expr, name str, name_pos Pos, args List[Arg])
+    Member(recv Expr, name str, name_pos Pos)
+    Index(recv Expr, index Expr, pos Pos)
+    Unary(op UnOp, operand Expr, pos Pos)
+    Binary(op BinOp, lhs Expr, rhs Expr, pos Pos)
+    Range(lo Expr?, hi Expr?, inclusive bool, pos Pos)
+    MapLit(entries List[MapEntry], pos Pos)
+    SetLit(items List[Expr], pos Pos)
+    If(branches List[Branch], els List[Stmt]?, else_err Ident?, pos Pos)
+    Match(scrutinee Expr, arms List[Arm], pos Pos)
+    Try(expr Expr, context Expr?, pos Pos)
+    Comp(form CompKind, elem Expr, value Expr?, clauses List[CompFor], pos Pos)
+    OrElse(value Expr, otherwise Else, pos Pos)
+    NewRef(value Expr, pos Pos)
+
+pub struct MapEntry
+    pub key Expr
+    pub value Expr
+
+## One `if`/`elif` condition and its block.
+pub struct Branch
+    pub cond Cond
+    pub body List[Stmt]
+
+pub enum CompKind
+    ListComp
+    SetComp
+    MapComp
+
+pub struct CompFor
+    pub is_par bool
+    pub var str
+    pub var_pos Pos
+    pub iter Expr
+    pub cond Expr?
+
+## A `bool` condition, or a binding `name := e` (expr.if.5).
+pub enum Cond
+    Test(value Expr)
+    Bind(name str, pos Pos, value Expr)
+
+pub enum InterpPart
+    Lit(text str)
+    Hole(value Expr)
+    Fmt(value Expr, spec FormatSpec)
+
+## `{expr:spec}` (lex.str.7).
+pub struct FormatSpec
+    pub fill str?
+    pub align str?
+    pub width int?
+    pub precision int?
+    pub hex bool
+
+## A call argument (own.param.2, own.move.2, type.struct.3, expr.key.1).
+pub struct Arg
+    pub label Ident?
+    pub mutable bool
+    pub moved bool
+    pub value Expr
+    pub param Ident?
+
+pub struct Arm
+    pub pat Pattern
+    pub body List[Stmt]
+
+pub enum Pattern
+    Wildcard(pos Pos)
+    Literal(value Literal, pos Pos)
+    Alt(alts List[Pattern], pos Pos)
+    Variant(qualifier str?, name str, bindings List[Ident]?, pos Pos)
+
+pub enum Literal
+    IntLit(value str)
+    CharLit(value str)
+    StrLit(value str)
+    BoolLit(value bool)
+
+impl ToJson for Pos
+impl FromJson for Pos
+impl ToJson for Ident
+impl FromJson for Ident
+impl ToJson for Program
+impl FromJson for Program
+impl ToJson for SourceFile
+impl FromJson for SourceFile
+impl ToJson for Grant
+impl FromJson for Grant
+impl ToJson for Generated
+impl FromJson for Generated
+impl ToJson for Use
+impl FromJson for Use
+impl ToJson for ConstDecl
+impl FromJson for ConstDecl
+impl ToJson for GenericParam
+impl FromJson for GenericParam
+impl ToJson for TraitDecl
+impl FromJson for TraitDecl
+impl ToJson for ImplDecl
+impl FromJson for ImplDecl
+impl ToJson for StructDecl
+impl FromJson for StructDecl
+impl ToJson for Field
+impl FromJson for Field
+impl ToJson for EnumDecl
+impl FromJson for EnumDecl
+impl ToJson for Variant
+impl FromJson for Variant
+impl ToJson for FnDecl
+impl FromJson for FnDecl
+impl ToJson for Contract
+impl FromJson for Contract
+impl ToJson for Old
+impl FromJson for Old
+impl ToJson for Attr
+impl FromJson for Attr
+impl ToJson for Within
+impl FromJson for Within
+impl ToJson for Owner
+impl FromJson for Owner
+impl ToJson for Receiver
+impl FromJson for Receiver
+impl ToJson for Param
+impl FromJson for Param
+impl ToJson for TypeRef
+impl FromJson for TypeRef
+impl ToJson for TypeShape
+impl FromJson for TypeShape
+impl ToJson for Stmt
+impl FromJson for Stmt
+impl ToJson for Else
+impl FromJson for Else
+impl ToJson for BinOp
+impl FromJson for BinOp
+impl ToJson for UnOp
+impl FromJson for UnOp
+impl ToJson for Expr
+impl FromJson for Expr
+impl ToJson for MapEntry
+impl FromJson for MapEntry
+impl ToJson for Branch
+impl FromJson for Branch
+impl ToJson for CompKind
+impl FromJson for CompKind
+impl ToJson for CompFor
+impl FromJson for CompFor
+impl ToJson for Cond
+impl FromJson for Cond
+impl ToJson for InterpPart
+impl FromJson for InterpPart
+impl ToJson for FormatSpec
+impl FromJson for FormatSpec
+impl ToJson for Arg
+impl FromJson for Arg
+impl ToJson for Arm
+impl FromJson for Arm
+impl ToJson for Pattern
+impl FromJson for Pattern
+impl ToJson for Literal
+impl FromJson for Literal
