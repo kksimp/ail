@@ -598,6 +598,10 @@ Any argument of your own functions and methods can be named, `show(tag, scale: 3
 positional ones first, then the named ones in any order, every parameter once.
 Arguments run in parameter order. Built-ins take no names.
 
+A declared function is a value of type `fn(A, B) R`: `f := double`,
+`apply(double, 4)` for `fn apply(f fn(int) int, x int) int`, `f(21)`. Not
+generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+
 ## Shared cells, resources and `move`
 
 `ref T` is the one way to share a value: copies of a reference see each

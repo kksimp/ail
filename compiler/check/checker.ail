@@ -879,6 +879,7 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
     match t.shape
         Optional(inner) => ungeneratable(inner, seen)
         RefTo => "ref"
+        FnType => "fn"
         AnyTrait(tr) => "any {tr}"
         Fallible => "a fallible type"
         Named(n, args) =>

@@ -393,6 +393,8 @@ pub enum TypeKind {
     Any(String),
     /// `ref T` (own.ref.1)
     Ref(Box<TypeRef>),
+    /// `fn(A, B) R`, a function value's type; `ret` is `None` for no result (type.fn.1).
+    Fn { params: Vec<TypeRef>, ret: Option<Box<TypeRef>> },
 }
 
 pub type Block = Vec<Stmt>;

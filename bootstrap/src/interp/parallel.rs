@@ -182,7 +182,7 @@ fn plain(v: &Value) -> Option<Plain> {
         Value::Nested(n) => Plain::Nested(*n),
         Value::Fail(f) => Plain::Fail(Box::new(plain(&f.error)?), f.context.clone(), f.trace.clone()),
         // A handle or a shared `ref` has identity a copy would lose (conc.par.8).
-        Value::Handle(_) | Value::Ref(_) => return None,
+        Value::Handle(_) | Value::Ref(_) | Value::Fn(_) => return None,
         Value::Tensor(t) => Plain::Tensor((**t).clone()),
         Value::Atomic(c) => Plain::Atomic(std::sync::Arc::clone(c)),
     })

@@ -1,0 +1,17 @@
+fn identity[T](x T) T
+    x
+
+fn bump(mut n int)
+    n += 1
+
+fn double(n int) int
+    n * 2
+
+fn main()
+    a := identity
+    b := bump
+    f := double
+    print("{f("x")}")
+    print("{f(1, 2)}")
+    print("{f(n: 1)}")
+    g := f + f
