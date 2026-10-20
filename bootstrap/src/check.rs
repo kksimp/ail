@@ -799,7 +799,7 @@ impl<'p> Checker<'p> {
             Expr::None(_) => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.constant_expr(x);
                     }
                 }
@@ -1961,7 +1961,7 @@ impl<'p> Checker<'p> {
             | Expr::Name(..)
             | Expr::TypeArgs { .. } => None,
             Expr::Interp(parts, _) => parts.iter().find_map(|p| match p {
-                InterpPart::Expr(y) => e(y),
+                InterpPart::Expr(y) | InterpPart::Fmt(y, _) => e(y),
                 InterpPart::Lit(_) => None,
             }),
             Expr::List(items, _) => items.iter().find_map(e),
@@ -2020,9 +2020,17 @@ impl<'p> Checker<'p> {
             }
             Expr::Interp(parts, _) => {
                 for part in parts {
-                    if let InterpPart::Expr(x) = part {
-                        let t = self.expr(x, None, true);
-                        self.text_form(&t, x.pos(), "lex.str.2");
+                    match part {
+                        InterpPart::Expr(x) => {
+                            let t = self.expr(x, None, true);
+                            self.text_form(&t, x.pos(), "lex.str.2");
+                        }
+                        InterpPart::Fmt(x, spec) => {
+                            let t = self.expr(x, None, true);
+                            self.text_form(&t, x.pos(), "lex.str.2");
+                            self.format_spec(&t, spec, x.pos());
+                        }
+                        InterpPart::Lit(_) => {}
                     }
                 }
                 Ty::Str
@@ -2070,6 +2078,26 @@ impl<'p> Checker<'p> {
 
     /// Every value has a text form (trait.auto.2); "no value" and an
     /// unhandled failure don't.
+    /// `{x:spec}` (lex.str.7, type.str.11): `.N` needs a float, `x` an int.
+    fn format_spec(&mut self, t: &Ty, spec: &crate::lexer::FormatSpec, pos: Pos) {
+        if spec.precision.is_some() && !matches!(t, Ty::Float | Ty::Err) {
+            self.error_help(
+                "type.str.11",
+                pos,
+                "`.N` in a format specification needs a `float`",
+                "round a float with `{x:.2}`; to cut an int or text, convert it first",
+            );
+        }
+        if spec.hex && !matches!(t, Ty::Int | Ty::Err) {
+            self.error_help(
+                "type.str.11",
+                pos,
+                "`x` in a format specification needs an `int`",
+                "drop the `x`, or convert the value to an `int` first",
+            );
+        }
+    }
+
     fn text_form(&mut self, t: &Ty, pos: Pos, no_value_rule: &'static str) {
         match t {
             Ty::Unit => self.error(no_value_rule, pos, "this expression produces no value"),

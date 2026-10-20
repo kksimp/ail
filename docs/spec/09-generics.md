@@ -32,7 +32,7 @@ the operations its declared constraints provide. Using any other operation on a
 value of a type parameter is a compile-time error at the declaration.
 *(ADR 0074)*
 
-```ail
+```ail fragment
 fn largest[T Ord](items List[T]) T
     mut best := items[0]
     for item in items
@@ -69,7 +69,7 @@ implementation exists only for instances whose type arguments satisfy them.
 **gen.method.3** — A method MAY declare type parameters of its own, after its
 name: `fn Pair.with_first[C](self, c C) Pair[C, B]`. *(ADR 0128)*
 
-```ail
+```ail fragment
 struct Stack[T]
     items List[T]
 

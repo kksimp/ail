@@ -20,7 +20,7 @@ manifest opts in to unsafe code. *(ADR 0102)*
 **unsafe.block.4** — An implementation MUST be able to list every `unsafe`
 block and `unsafe fn` in a program. *(ADR 0102)*
 
-```ail
+```ail skip=bootstrap
 pub fn Buffer.read_u32(self, at int) u32
     if at + 4 > self.len()
         trap("out of range")

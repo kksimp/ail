@@ -66,7 +66,7 @@ a compile-time error. *(ADR 0096)*
 result. If the task trapped, `wait()` fails with a `Trapped` error carrying
 the trap's diagnostic. *(ADR 0096, ADR 0047)*
 
-```ail
+```ail skip=bootstrap
 a := spawn load_profile(1)
 b := spawn load_profile(2)
 print(a.wait()?)

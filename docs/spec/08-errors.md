@@ -23,7 +23,7 @@ add one. The names `panic`, `assert`, `fatalError` and `loop` get helps
 (`expr.name.2`) that point to `unreachable(message)` and `while true`.
 *(ADR 0045, ADR 0035, ADR 0139)*
 
-```ail
+```ail skip=context
 fn tag(k Kind) str
     match k
         A => "a"
@@ -44,7 +44,7 @@ error set. *(ADR 0120)*
 type `T ! E` is expected, a value of type `T` is the success value, and a
 value of an error type that is in `E` is the error. *(ADR 0120)*
 
-```ail
+```ail fragment
 error enum ParseError
     Empty
     BadNumber(text str)
@@ -74,7 +74,7 @@ ADR 0139)*
 **err.type.4** — An inferred error set is a closed union. Matching on it MUST
 be checked for exhaustiveness. *(ADR 0046)*
 
-```ail
+```ail skip=context
 fn read_config(path str) !Config
     text := read_file(path)?
     parse(text)?
@@ -102,7 +102,7 @@ function is a statement block. It succeeds when it completes normally or
 reaches a bare `return`, and it fails on `return e` (with `e` an error) or on
 `?`. *(ADR 0139, ADR 0046)*
 
-```ail
+```ail skip=context
 fn save(path str, text str) ! IoError
     file := open_file(path)?
     file.write(text)?
@@ -174,7 +174,7 @@ value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
 `T ! E` with a success value, statement `else` is a compile-time error whose
 help says to bind the value: `x := ... else ...`. *(ADR 0139)*
 
-```ail
+```ail skip=context
 port := env("PORT") else 8080
 user := find(id) else return NotFound
 data := read(path) else err
@@ -182,7 +182,7 @@ data := read(path) else err
     return Defaults
 ```
 
-```ail
+```ail skip=context
 save(path, text) else err
     print("save failed: {err}")       # completes normally; execution continues
 save(path, text) else return          # in a function with no success value, a bare return succeeds
@@ -200,7 +200,7 @@ loosely than every other operator and associates to the right
 statement form (`err.else.1–5`); at the start of a statement,
 `e else return ...` is the statement form. *(ADR 0144)*
 
-```ail
+```ail skip=context
 fn smallest(nums List[int]) int
     nums.min() else 0
 count := (m.get(k) else 0) + 1
@@ -220,7 +220,7 @@ then the fields as `(name: value, ...)` when there are any, with strings
 quoted: `ParseError.BadNumber(text: "x1")` (`trait.auto.2`). *(ADR 0122,
 ADR 0126)*
 
-```ail
+```ail skip=context
 cfg := parse(text)? "parsing config file"
 ```
 

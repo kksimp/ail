@@ -22,7 +22,7 @@ type. Its body is the indented block that follows. *(ADR 0042, ADR 0037, ADR 003
 separated by whitespace, with no colon. The return type, if present, follows
 the closing parenthesis, with no arrow. *(ADR 0037)*
 
-```ail
+```ail skip=bootstrap
 fn add(a i32, b i32) i32
     a + b
 ```
@@ -42,7 +42,7 @@ when the list spans several lines. *(ADR 0118)*
 in square brackets `[` `]`. Angle brackets are never used for generics.
 *(ADR 0041)*
 
-```ail
+```ail skip=context
 fn load(path str) Result[Map[str, User], DbError]
     ...
 ```
@@ -59,7 +59,7 @@ fn load(path str) Result[Map[str, User], DbError]
 line. The canonical formatter moves them to their own preceding line only when
 the line would otherwise exceed the line-length limit. *(ADR 0083)*
 
-```ail
+```ail skip=bootstrap
 @inline fn hash(x u64) u64
     x * 31
 ```

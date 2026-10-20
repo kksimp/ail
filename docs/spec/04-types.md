@@ -39,7 +39,7 @@ including in generic code through an `Eq` or `Ord` bound (an amendment of
 (`type.num.9`). `float` implements `Eq`, `Ord` and `ToStr`. It isn't `Hash`
 (`trait.auto.5`). *(ADR 0130)*
 
-```ail
+```ail fragment
 a := 0.1 + 0.2          # 0.30000000000000004
 b := 1.0 / 0.0          # inf: no trap
 c := 0.0 / 0.0          # nan; c == c is false
@@ -54,7 +54,7 @@ Otherwise use `d[.ddd]e±XX`: the sign is always written, the exponent has at
 least two digits, and the mantissa has no `.0`. The special forms are `inf`,
 `-inf`, `nan` (never `-nan`) and `-0.0`. *(ADR 0130)*
 
-```ail
+```ail fragment
 "{1000.0}"              # 1000.0
 "{0.0001}"              # 0.0001
 "{-0.0}"                # -0.0
@@ -75,7 +75,7 @@ underflow gives a subnormal or `±0.0`; `"-0"` gives `-0.0`. Float literals
 are correctly rounded too; a literal that overflows is a `lex.num.3` error.
 *(ADR 0130)*
 
-```ail
+```ail fragment
 "2.5E-3".to_float()     # 0.0025
 "1e999".to_float()      # inf
 "-0".to_float()         # -0.0
@@ -95,7 +95,7 @@ rounds to nearest, ties to even, and never traps. *(ADR 0130)*
 float literal. Only literals (and `-` applied to a literal) convert: an
 expression of type `int` never does. *(ADR 0130)*
 
-```ail
+```ail skip=context
 struct Stats
     total float
 
@@ -114,7 +114,7 @@ derived `Ord` on a struct with a `float` field) use this `cmp`, so their
 results are deterministic. For `float` alone, `a.cmp(b) == Equal` doesn't
 imply `a == b`. *(ADR 0130)*
 
-```ail
+```ail fragment
 n := 0.0 / 0.0
 [2.0, n, 1.0].sorted()  # [1.0, 2.0, nan]
 n < 1.0                 # false: the operator is IEEE
@@ -139,7 +139,7 @@ negation. Division and remainder have the checked forms only; wrapping and
 saturating division are deferred. `a.min(b)` and `a.max(b)` of two `int`
 values are the default methods of `Ord` (ADR 0137).
 
-```ail
+```ail fragment
 x := 9223372036854775807
 x.checked_add(1)        # none
 x.wrapping_add(1)       # -9223372036854775808
@@ -155,7 +155,7 @@ name, and an indented block containing one field declaration per line.
 **type.struct.2** — A field declaration is written `name Type`. *(ADR 0052,
 ADR 0037)*
 
-```ail
+```ail fragment
 struct User
     id i64
     name str
@@ -168,7 +168,7 @@ by a parenthesised, comma-separated list of arguments. An argument is named
 sets that field), or positional (any other expression). *(ADR 0058,
 ADR 0142)*
 
-```ail
+```ail skip=context
 u := User(id: 7, name: "Ada", email: none)
 ```
 
@@ -189,7 +189,7 @@ always a type error; two fields whose types are type parameters count as the
 same type. Otherwise it's a compile-time error whose help names the fields.
 *(ADR 0142)*
 
-```ail
+```ail error=type.struct.7
 struct Pos
     row int
     col int
@@ -209,7 +209,7 @@ name, and an indented block containing one variant per line. *(ADR 0053)*
 **type.enum.2** — A variant either carries no data or carries a parenthesised
 list of fields, each written `name Type`. *(ADR 0053)*
 
-```ail
+```ail fragment
 enum Shape
     Circle(r f64)
     Rect(w f64, h f64)
@@ -240,7 +240,7 @@ equivalent to `Option[T]`. *(ADR 0048)*
 **type.opt.3** — The canonical form of an optional type is `T?`.
 *(ADR 0048)*
 
-```ail
+```ail skip=context
 fn find(id i64) User?
     ...
 ```
@@ -303,7 +303,7 @@ take a `str` only. *(ADR 0135)*
 - `s.strip_prefix(p)` and `s.strip_suffix(p)` return the rest of `s` as a
   `str?`, or `none` when `s` doesn't start (end) with `p`.
 
-```ail
+```ail fragment
 "a\r\nb\n".lines()             # ["a", "b"]
 "a\n\n".lines()                # ["a", ""]
 "  hi ".trim()                # hi
@@ -322,13 +322,25 @@ characters (scalar values). A string already that wide, or any string when
 `width <= 0`, is returned unchanged. The fill is required: AIL has no default
 arguments. *(ADR 0135)*
 
-```ail
+```ail fragment
 "7".pad_left(3, '0')        # 007
 "ab".pad_right(4, ' ')      # "ab  "
 ```
 
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
+
+**type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
+exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
+is `2`); `nan` and `inf` print as `{x}` does. `x` formats an `int` in lowercase
+hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`).
+Using `.N` on a non-float or `x` on a non-int is a compile-time error. Width,
+fill and alignment apply to the text form of any value. *(ADR 0173)*
+
+```ail error=type.str.11
+n := 1
+print("{n:.2}")      # compile-time error: write {n.to_float():.2}
+```
 
 > **Note:** joining is `xs.join(sep)` on any list (`type.coll.9`). There is
 > no `str.from_chars`. `s.len()` is absent until bytes versus characters is
@@ -366,7 +378,7 @@ outside the scalar range. The diagnostics for `ord(c)`, `chr(n)` and
 `c.to_int()` suggest `c.code()`, `char.from_code(n)` and "`c.code()` or
 `c.to_digit(10)`". *(ADR 0134)*
 
-```ail
+```ail fragment
 c := 'f'
 c.is_alpha()            # true
 c.to_digit(16)          # 15
@@ -383,7 +395,7 @@ char.from_code(0x41)    # 'A'
 **type.coll.2** — `[a, b, ...]` is a list literal. `{k: v, ...}` is a map
 literal. `{a, b, ...}` is a set literal. *(ADR 0090)*
 
-```ail
+```ail fragment
 ports := {"http": 80, "https": 443}
 primes := [2, 3, 5, 7]
 ```
@@ -415,7 +427,7 @@ collection anywhere, with no expected type needed. `{}` where the expected
 type is a `Map` or `Set` is the empty map or set; with no expected type it is
 the error of `type.coll.3`. *(ADR 0131)*
 
-```ail
+```ail fragment
 seen := Set[int]()
 counts := Map[str, int]()
 names := List[str]()
@@ -433,7 +445,7 @@ names := List[str]()
   contributes its text form, with `str` and `char` elements unquoted at the
   top level and nested values in their quoted forms (`trait.auto.2`).
 
-```ail
+```ail fragment
 xs := ["a", "b"]
 xs.join(", ")           # a, b
 [1, 2, 3].join("")      # 123
@@ -468,7 +480,7 @@ a field's value. Any other use before then, or none at all, is a
 compile-time error whose help suggests `List[T]()`, `Map[K, V]()` or
 `Set[T]()`. *(ADR 0143)*
 
-```ail
+```ail fragment
 mut out := []
 out.push("a")          # out is List[str]
 ```
@@ -499,7 +511,7 @@ does it insert or replace. Every other use traps if `k` is missing:
 
 `k` is evaluated once, before the right-hand side. *(ADR 0131)*
 
-```ail
+```ail fragment
 mut m := Map[str, int]()
 m["a"] = 1              # inserts
 m["a"] = 2              # replaces; "a" keeps its position
@@ -537,7 +549,7 @@ both plausible readings. `for mut` over a set, or over `m.keys()` or
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `v := m.get(k) else d`, `contains`, and iterating `keys()` and indexing.
 
-```ail
+```ail fragment
 mut seen := Set[str]()
 first := seen.add("a")  # true
 again := seen.add("a")  # false: already there

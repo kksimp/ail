@@ -61,6 +61,8 @@ Results may be off by about one token per file.
 
 ## Corpus
 
+The language card has a budget of 4,000 tokens ([ADR 0174](../../docs/decisions/0174-language-card.md)); check it with `run.sh docs/language-card.md`.
+
 | Directory | Contents |
 |---|---|
 | `corpus/r1/` | Round-1 block-style samples (A–D) plus Rust and Go references, as measured in [syntax-measurements-r1.md](../../docs/design/syntax-measurements-r1.md). They use candidate syntax from before later decisions. |
@@ -68,4 +70,5 @@ Results may be off by about one token per file.
 | `corpus/r3/` | Operators, trait-typed parameters, dynamic dispatch, and attribute variants (ADRs 0077–0083). |
 | `corpus/r4/` | Printing, interpolation, collection types and literals, `elif`, optional wrapping, and ranges (ADRs 0088–0093). |
 | `corpus/r5/` | Concurrency (colorless vs. async/await), visibility (`pub` vs. capitalisation), and import styles. |
+| `corpus/r8/` | Format specifications (`{x:>8}`, `{r:.2}`) vs `pad_left`/`to_hex`/`to_fixed` calls on a table-and-money program (ADR 0173). |
 | `corpus/current/` | Samples in the syntax decided so far (as of 2026-10-04). `tokenize.ail` predates ADR 0089 (it still indexes a `str` directly) and also uses constructs that aren't decided yet: `while`, `char`, slicing, `+=`, `and`, methods that mutate a `mut` binding, and returning an error value. Corpus files hold no explanatory comments, because comments would distort the counts. |

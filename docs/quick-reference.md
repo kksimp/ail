@@ -334,7 +334,11 @@ t := """
 q := """say "hi""""        # on one line, for text with quotes: say "hi"
 r := r"C:\dir\{x}"         # raw: no escapes, no interpolation
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
+print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, hex
 ```
+
+- Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
+  align (numbers default right, others left); `.N` needs a float, `x` an int.
 
 - `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
