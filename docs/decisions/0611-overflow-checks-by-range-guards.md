@@ -48,8 +48,12 @@ fannkuch 383M → 271M, collatz 188M → 184M, mandelbrot 44.0M → 43.0M, sieve
 
 - A loop whose bound or fixed operands exceed 2^30 runs the original loop
   after a few compares per entry.
-- The a64 code generator doesn't yet get the immediate multiply or the
-  zero-compare forms; its results are the same.
+- On ARM64 a constant on the left of `+` uses the immediate form, and a
+  comparison with 0 was already `cmp x, #0`. A checked `3 * n` keeps
+  `smulh`/`mul` on purpose, not by oversight: A64 has no immediate multiply,
+  and `add x, n, n, lsl #1` can't carry the overflow check, since the flags
+  reflect only the final add (ADR 0008 asks for each ISA's best correct
+  form, not identical instructions).
 
 ## Rejected alternatives
 
