@@ -57,7 +57,13 @@ fn main()
     s2 := {n1, n2, n1}
     print(s2.len())
     # enums with and without payloads
-    s3 := {Shape.Dot, Shape.Circle(r: 1), Shape.Circle(r: 2), Shape.Circle(r: 1), Shape.Rect(w: 1, h: 1)}
+    s3 := {
+        Shape.Dot,
+        Shape.Circle(r: 1),
+        Shape.Circle(r: 2),
+        Shape.Circle(r: 1),
+        Shape.Rect(w: 1, h: 1),
+    }
     print(s3.len())
     # recursive enum through a list
     t := Tree.Node(left: [Tree.Leaf, Tree.Leaf], v: 1)
@@ -81,7 +87,11 @@ fn main()
     # bool, char, Ordering
     print({true, false}.len())
     print({'a', 'b'}.len())
-    fs := {Flags(on: true, c: 'x', o: Less), Flags(on: true, c: 'x', o: Less), Flags(on: true, c: 'x', o: Greater)}
+    fs := {
+        Flags(on: true, c: 'x', o: Less),
+        Flags(on: true, c: 'x', o: Less),
+        Flags(on: true, c: 'x', o: Greater),
+    }
     print(fs.len())
     print({Ordering.Less, Equal, Greater, Less}.len())
     # empty `impl Eq` derives Eq, so the type stays Hash

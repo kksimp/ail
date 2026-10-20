@@ -3,7 +3,7 @@
 > **Status:** the stage list below comes from the founding brief, as amended
 > by ADRs 0010, 0017–0024 and 0029–0032.
 > Stages 4, 6 and 7 were adjusted by ADRs [0010](decisions/0010-no-llvm-backend.md), [0017](decisions/0017-no-c-emission.md) and [0018](decisions/0018-optimizing-backend-from-start.md).
-> Remaining proposed refinement: #4 (formatter in Stage 2).
+> Refinement #4 (formatter in Stage 2) is done: `ail fmt` ([ADR 0169](decisions/0169-canonical-formatting-style.md), [ADR 0170](decisions/0170-ail-fmt-command.md)).
 
 ## Stages (from the founding brief)
 
@@ -34,6 +34,8 @@ These are recommendations only. Each will be put to the designer as a question.
    and rustc serve only as external comparison baselines.
 4. **Write the formatter in Stage 2.** Canonical formatting shapes the grammar,
    and every later example in the docs should already be canonical.
+   **Done** (2026-10-20): `ail fmt`, ADRs 0169–0170, style in
+   [design/formatting.md](design/formatting.md).
 
 ## Documentation roadmap
 

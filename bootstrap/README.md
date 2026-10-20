@@ -23,6 +23,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
 ./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols)
+./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
 ./ail selftest                     # the bootstrap's own tests
 ```
 
@@ -41,6 +42,7 @@ reported but don't stop a program from running.
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects` | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.str.4–5`, `type.str.11`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`) |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
+| `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
 | `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError` | `std.use.1`, `std.err.1` |
 | `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2` |
 | `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2` |
