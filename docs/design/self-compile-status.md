@@ -27,41 +27,45 @@ To reproduce, from the repository root:
 
     tools/self-compile/run.sh /path/to/outdir
 
-## Owners of what blocks it
+## Latest measurement: #183 + #190 + #197 merged locally
 
-Lane 120 measured 1,067 problems on the batch head plus #196 (its
-re-survey, 2026-10-20 20:26 UTC). Comprehensions are done in #191. The 29
-indexing reports should clear once enums and optionals land. Owners follow
-the split the coordinator recorded:
+Scratch merge of `origin/lane/120-native-comp` (8a73cc7, which contains
+the #183 work at 395e6df) with `claude/project-thread-u99dsn` (#190, enums,
+match and computed constants) and `lane/173-native-lists` (#197, list
+methods). Only doc files conflicted; the source merged cleanly.
 
-| Group | Problems (1079 on #183) | Owner (PR) |
+`ail build compiler/main.ail` exits 1 with **1054** problems.
+
+Lane 120 reported 1,067 on the batch head plus #196, and #190 alone raised
+the #183 total from 1,079 to 1,158 by exposing bodies that used to stop at
+their signature. This figure comes from a different base, so the numbers
+are not directly comparable.
+
+| Group | Problems | Owner (PR) |
 |---|---|---|
-| `str` equality `==` and `!=` | 140 | lane 172, #179 (strings) |
-| String interpolation as a value, `char`, `str` methods | 81 | lane 172, #179 (and #184 for Unicode tables) |
-| Enum types, enum declarations, `match`, values of functions that must end with one | 251 | lane 179, #190 (enums and match) |
-| Optional types, `if x := e`, `none`, `else` | 244 | lane 175, #177 (optionals and results) |
-| List methods (`.extend`, `.contains`, `.remove_at`, `.sorted`, ...) | 56 | lane 173, list methods (about 60 in lane 120's count) |
-| `List[T]` types and generics | 85 | lane 120 |
-| Non-local names and enum variants used as values | 23 | lane 174 (function values, about 25 in lane 120's count) |
-| Comprehensions | 63 | done in #191 |
-| Map and Set types and operations | 36 | lane 173 (maps and sets), #180 |
-| Indexing a list or map | 29 | #181 (lane 176) for lists; maps with #180 |
-| Non-literal top-level constants | 19 | lane 179 (announced) |
-| Other struct, generic and call forms | 19 | lane 120 |
-| Calls with more than 6 integer or 8 float parameters | 9 | lane 120 (calling convention) |
-| Calls of functions not in the subset, and type mismatch cascades | 19 | follow the types |
+| `str` `==` and `!=` | 281 | lane 172, #179 (strings) |
+| String interpolation as a value, `char`, `str` methods | 196 | lane 172, #179 (and #184) |
+| Optional types (`str?`, `Val?`, `int?`, ...) in parameters, results and fields | 200 | lane 175, #177 |
+| `if x := e`, `none`, `else` | 155 | lane 175, #177 |
+| Map and Set types and operations | 54 | lane 173, #180 |
+| Indexing a list or map | 30 | #181 (lists), #180 (maps) |
+| `List[T]` types and generics | 54 | lane 120 |
+| List method calls (`extend`, `contains`, `remove_at`, `sort`, ...) | 19 | #197 (lane 173) |
+| Enum types, `match`, and values of functions that must end with one | 16 | #190 (lane 179) |
+| Comprehensions | 4 | #191 (lane 120) |
+| Other forms: calls, generics, cascades | 45 | lane 120; non-local names go to lane 174 |
 
-Note that the list-method row and the maps row both name lane 173. The
-coordinator's split gives lane 173 list methods; #180 is its maps and sets
-PR.
+Ownership follows the split lane 120 recorded: strings to #179, enums and
+`match` to #190, optionals to #177, list methods to #197, and `List[T]` and
+generics to lane 120.
 
 ## What is left
 
-Once #177, #179, #190 and #191 land on the batch head, the groups above
-cover all but the lane 120 rows (lists and generics, about 90 problems, plus
-struct and call forms and the calling convention, about 30) and the
-cascades. The true count needs the rerun, because cascades can move the
-numbers.
+About 915 of the 1054 problems depend on #177, #179 and #180, which are not
+merged yet. Of the rest, about 100 are lane 120's (`List[T]`, generics and
+calls), and the remainder is #190, #197 and #191, which this merge already
+includes. Rerun the survey as #177, #179 and #180 land; cascades can move
+the groups.
 
 ## Notes
 
@@ -73,9 +77,9 @@ numbers.
 
 ## Next steps
 
-1. Rerun the survey as #177, #179, #190 and #191 land on the batch head,
-   and update the owners table.
-2. Lane 120 keeps `List[T]` and generics (about 90 problems).
+1. Rerun the survey as #177, #179 and #180 land on the batch head, and
+   update the tables.
+2. Lane 120 keeps `List[T]` and generics.
 3. When `ail build compiler/main.ail` succeeds, diff the native `mir` and
    `build` output against the interpreted compiler's on every perfbench
    program, and report the result here.
