@@ -1,0 +1,23 @@
+# `for v in ch` receives until the channel is closed and empty, and a
+# comprehension can collect a channel (conc.share.7).
+
+fn produce(out Channel[int], n int)
+    for i in 1..=n
+        out.send(i)
+    out.close()
+
+fn main() !
+    ch := Channel[int](2)
+    p := spawn produce(ch, 6)
+    for v in ch
+        if v == 3
+            break
+        print("got {v}")
+    rest := [v * 10 for v in ch if v != 5]
+    print(rest)
+    p.wait()?
+    empty := Channel[str](1)
+    empty.close()
+    for s in empty
+        print(s)
+    print([s for s in empty].len())

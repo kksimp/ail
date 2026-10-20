@@ -1,6 +1,7 @@
 # A three-stage pipeline over bounded channels (spec 11, conc.share.3): one
 # task produces numbers, one squares them, and `main` collects the results.
-# Each stage closes its output when its input runs dry.
+# Each stage closes its output when its input runs dry, which ends the
+# `for x in input` loop of the next (conc.share.7).
 
 fn produce(out Channel[int], n int)
     for i in 1..=n
@@ -8,8 +9,7 @@ fn produce(out Channel[int], n int)
     out.close()
 
 fn square(input Channel[int], out Channel[int])
-    while true
-        x := input.recv() else break
+    for x in input
         out.send(x * x)
     out.close()
 
@@ -20,8 +20,7 @@ fn main() !
     stages.add(spawn produce(numbers, 6))
     stages.add(spawn square(numbers, squares))
     mut total := 0
-    while true
-        s := squares.recv() else break
+    for s in squares
         print("square {s}")
         total += s
     stages.wait_all()?

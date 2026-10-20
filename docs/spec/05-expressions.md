@@ -126,7 +126,9 @@ next iteration. *(ADR 0091)*
 immutable binding scoped to the loop body. The loop iterates the value `e` had
 when the loop started. `e` MUST NOT be a `Map`: `for k in m` is a
 compile-time error, and its help says to iterate `m.keys()` (the habit is
-ambiguous between keys and pairs). *(ADR 0117, ADR 0131)*
+ambiguous between keys and pairs). `e` may also be a `Channel[T]`, giving `x`
+type `T`: the loop receives until the channel is closed and empty
+(`conc.share.7`). *(ADR 0117, ADR 0131, ADR 0300)*
 
 **expr.loop.5** — `break` and `continue` outside a loop are compile-time
 errors. *(ADR 0117)*
@@ -353,7 +355,8 @@ by `if condition`. The iterable is anything a `for` loop accepts
 (`expr.loop.3`). The name is a new immutable binding (`expr.bind.4`: it MUST
 NOT repeat a name already declared), visible in the condition, in later
 clauses and in the element; it ends with the comprehension. `for mut` is a
-compile-time error. *(ADR 0182)*
+compile-time error. A clause may be `par for` (`conc.par.12`). *(ADR 0182,
+ADR 0302)*
 
 **expr.comp.3** — The clauses run like nested `for` loops, outermost first.
 For each combination whose conditions are all `true`, the element (and, in a

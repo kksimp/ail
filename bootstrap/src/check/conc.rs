@@ -199,6 +199,36 @@ impl<'p> Checker<'p> {
         self.check_call(name, &sig, Vec::new(), args, None, pos, None)
     }
 
+    /// `with m as mut x` (conc.share.6): `m` is a `Mutex[T]` and `x` a `mut`
+    /// local of type `T` for the body, which can't name `m` again.
+    pub(super) fn with_stmt(&mut self, mutex: &'p Expr, var: &str, var_pos: Pos, body: &'p Block, pos: Pos) {
+        let inner = match self.expr(mutex, None, true) {
+            Ty::Conc(Conc::Mutex, inner) => *inner,
+            Ty::Err => Ty::Err,
+            t => {
+                let msg = format!("`with` holds a `Mutex`, but this is {}", self.show(&t));
+                self.error_help("conc.share.6", mutex.pos(), msg, "make it with `Mutex(value)`");
+                Ty::Err
+            }
+        };
+        // Holding a mutex synchronises with other tasks (conc.par.2).
+        self.resolved.handle_calls.insert(pos);
+        if let Some(at) = self.overlapping_use(mutex, body) {
+            self.error_help(
+                "conc.share.6",
+                at,
+                "the body of `with` can't use the mutex it holds",
+                format!("use `{var}`, which is stored back into the mutex when the block ends"),
+            );
+        }
+        let mark = self.locals.len();
+        if self.declare(var, var_pos) {
+            self.locals.push(super::Local { name: var.to_string(), ty: inner, mutable: true, kind: super::Kind::Binding, decl: None });
+        }
+        self.block(body, None, false);
+        self.end_scope(mark);
+    }
+
     /// `spawn f(args)` (conc.task.1): a `Task[T]` for a call of a named
     /// function that returns `T`.
     pub(super) fn spawn_expr(&mut self, operand: &'p Expr, pos: Pos) -> Ty {
@@ -303,7 +333,7 @@ fn stmt_spawns(s: &Stmt, diags: &mut Vec<Diagnostic>) {
             spawns(cond, diags);
             block(body, diags);
         }
-        Stmt::For { iter, body, .. } => {
+        Stmt::For { iter, body, .. } | Stmt::With { mutex: iter, body, .. } => {
             spawns(iter, diags);
             block(body, diags);
         }
@@ -494,6 +524,11 @@ fn stmt_uses(name: &str, s: &Stmt, cond: bool, u: &mut Uses) {
         Stmt::For { iter, body, .. } => {
             expr_uses(name, iter, cond, u);
             body.iter().for_each(|s| stmt_uses(name, s, true, u));
+        }
+        // conc.share.6: the body runs once, like a plain block.
+        Stmt::With { mutex, body, .. } => {
+            expr_uses(name, mutex, cond, u);
+            body.iter().for_each(|s| stmt_uses(name, s, cond, u));
         }
         Stmt::Return(Some(e), _) | Stmt::Expr(e) => expr_uses(name, e, cond, u),
         Stmt::Handle { value, otherwise } => {

@@ -83,7 +83,7 @@ pub fn stmt_word(word: &str) -> Option<Word> {
         ),
         "loop" => w("AIL has no `loop`", "write `while true`", Fix::None),
         "elseif" | "elsif" | "else_if" => w("AIL writes `elseif` as `elif`", "write `elif`", Fix::Replace("elif")),
-        "unless" | "until" | "with" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => w(
+        "unless" | "until" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => w(
             "this keyword from another language has no AIL form",
             "see the language card for the statements AIL has",
             Fix::None,
