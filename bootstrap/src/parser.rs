@@ -27,7 +27,6 @@ const NOT_YET: &[(&str, &str)] = &[
     ("move", "own.move.1"),
     ("ref", "own.ref.1"),
     ("defer", "own.defer.1"),
-    ("spawn", "conc.task.1"),
     ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
     ("as", "ffi.decl.1"),
@@ -104,7 +103,7 @@ pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// these, `[` starts type arguments rather than an index (gen.infer.2).
 fn generic_names(tokens: &[Token]) -> HashSet<String> {
     // The built-in collections: `List[int]()` (type.coll.8).
-    let mut names: HashSet<String> = ["List", "Map", "Set"].iter().map(|n| n.to_string()).collect();
+    let mut names: HashSet<String> = ["List", "Map", "Set", "Channel", "Mutex"].iter().map(|n| n.to_string()).collect();
     for w in tokens.windows(3) {
         if let [
             Token { tok: Tok::Kw("fn" | "struct" | "enum"), .. },
@@ -1298,6 +1297,12 @@ impl Parser {
             let pos = self.bump().pos;
             let operand = self.unary()?;
             return Some(Expr::Unary { op: UnOp::Neg, operand: Box::new(operand), pos });
+        }
+        // conc.task.1: `spawn f(args)`; the checker requires the call form.
+        if self.at_kw("spawn") {
+            let pos = self.bump().pos;
+            let operand = self.postfix()?;
+            return Some(Expr::Unary { op: UnOp::Spawn, operand: Box::new(operand), pos });
         }
         self.postfix()
     }

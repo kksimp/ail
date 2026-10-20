@@ -1,0 +1,6 @@
+# conc.share.4: sending on a closed channel traps.
+
+fn main()
+    ch := Channel[int](1)
+    ch.close()
+    ch.send(1)

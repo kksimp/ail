@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+pub mod conc;
 mod contracts;
 mod comprehension;
 mod stdlib;
@@ -76,6 +77,9 @@ pub enum Ty {
     Param(usize),
     /// `any Trait` (trait.any.1).
     Any(usize),
+    /// `Task[T]`, `TaskGroup` (with `Unit`), `Channel[T]` and `Mutex[T]`
+    /// (conc.task.1, conc.share.2-3, ADRs 0186-0189).
+    Conc(conc::Conc, Box<Ty>),
 }
 
 /// The error part of `T ! E`: an explicit set, or the inferred set of a
@@ -169,7 +173,7 @@ const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &[
     "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
-    "Map", "Set",
+    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex",
 ];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
@@ -244,6 +248,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
+    c.diags.extend(conc::check_handles(prog));
     c.diags.extend(effects::check_contracts(prog, &c.resolved));
     (c.diags, c.resolved)
 }
@@ -369,6 +374,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
         (Ty::Err, _) | (_, Ty::Err) => true,
         (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => same(x, y),
         (Ty::Map(k, v), Ty::Map(l, w)) => same(k, l) && same(v, w),
+        (Ty::Conc(a, x), Ty::Conc(b, y)) => a == b && same(x, y),
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) => {
             s == t && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y))
         }
@@ -380,7 +386,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
 fn has_err(t: &Ty) -> bool {
     match t {
         Ty::Err => true,
-        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) => has_err(x),
+        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) | Ty::Conc(_, x) => has_err(x),
         Ty::Map(k, v) => has_err(k) || has_err(v),
         Ty::Res(x, _) => has_err(x),
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(has_err),
@@ -1052,6 +1058,7 @@ impl<'p> Checker<'p> {
                 self.require_key(&first, t.pos);
                 return ty;
             }
+            n if conc::TYPE_NAMES.contains(&n) => return self.conc_type(n, args, t.pos),
             n if SPEC_TYPES_NOT_YET.contains(&n) => {
                 self.unsupported(t.pos, format!("type `{n}` is not supported by the bootstrap yet (spec 04-types)"));
                 return Ty::Err;
@@ -1349,6 +1356,8 @@ impl<'p> Checker<'p> {
             Ty::Union(m) => m.iter().map(|t| self.ty_name(t)).collect::<Vec<_>>().join(" | "),
             Ty::Param(p) => self.tparams[*p].name.clone(),
             Ty::Any(tr) => format!("any {}", self.prog.traits[*tr].name),
+            Ty::Conc(conc::Conc::Group, _) => "TaskGroup".into(),
+            Ty::Conc(k, t) => format!("{}[{}]", k.name(), self.ty_name(t)),
         }
     }
 
@@ -2659,6 +2668,9 @@ impl<'p> Checker<'p> {
         if n == "assert" || n == "assert_eq" {
             return self.assert_call(n, args, npos);
         }
+        if let Some(t) = self.conc_constructor(n, targs, args, npos, expect) {
+            return t;
+        }
         if let Some(t) = targs.and_then(|a| self.collection_constructor(n, a, npos)) {
             if !args.is_empty() {
                 self.args_only(args);
@@ -3268,6 +3280,9 @@ impl<'p> Checker<'p> {
             self.args_only(args);
             return Ty::Err;
         }
+        if let Ty::Conc(k, inner) = &rt {
+            return self.conc_method(*k, inner, name, pos, args);
+        }
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
@@ -3701,6 +3716,7 @@ impl<'p> Checker<'p> {
         let (want, rule, what) = match op {
             UnOp::Neg => (Ty::Int, "trait.op.1", "unary `-`"),
             UnOp::Not => (Ty::Bool, "type.bool.1", "`not`"),
+            UnOp::Spawn => return self.spawn_expr(operand, pos),
         };
         let t = self.expr(operand, Some(&want), true);
         if self.reject_unhandled(&t, operand.pos()) {
@@ -4365,7 +4381,7 @@ fn may_be_same(a: &Ty, b: &Ty) -> bool {
     fn has_param(t: &Ty) -> bool {
         match t {
             Ty::Param(_) => true,
-            Ty::List(e) | Ty::Opt(e) | Ty::Set(e) => has_param(e),
+            Ty::List(e) | Ty::Opt(e) | Ty::Set(e) | Ty::Conc(_, e) => has_param(e),
             Ty::Map(k, v) => has_param(k) || has_param(v),
             Ty::Struct(_, args) | Ty::Enum(_, args) => args.iter().any(has_param),
             _ => false,

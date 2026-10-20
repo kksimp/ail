@@ -27,6 +27,12 @@ trait ToStr
 
 ## Map keys and set elements. Automatic, with no methods (trait.auto.5).
 trait Hash
+
+## What `Task.wait()` fails with when the task trapped (conc.task.6, ADR 0187):
+## the trap's rule and its message.
+error struct Trapped
+    rule str
+    message str
 ## @module json
 ## `std.json` (lane 5, plan section 4): a JSON value, parser and printer. It
 ## is read only when the program names one of its public items and doesn't
