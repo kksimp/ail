@@ -105,3 +105,8 @@ loop only where the operands' values, tested before the loop, rule the
 overflow out; otherwise the loop with the check runs and traps as the
 interpreter does. A check on an operation that repeats an earlier identical
 one on every path may be removed. *(ADR 0611)*
+
+**native.bce.5** — The check on `r[j]`, with `r` a row of a list of lists
+`b`, may be removed where `j` is at most the length of the shortest row of
+`b`, taken before a loop in which the rows of `b` can't be replaced, and no
+operation in the program shortens a list. *(ADR 0611)*

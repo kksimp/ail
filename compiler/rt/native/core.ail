@@ -396,6 +396,19 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     store64(p + 8, need)
     store64(p + 16, data)
 
+## The shortest length among the rows of a list of lists (2^62 if there are
+## none), called before a loop nest that only reads them (ADR 0611).
+fn list_rows_min(xs List[int]) int
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    mut least := 4611686018427387904
+    for i in 0..n
+        k := load64(load64(data + 8 * i))
+        if k < least
+            least = k
+    least
+
 ## The slow paths of `push`: the code generator stores in place while the
 ## list has room, and calls these when it is full.
 fn list_push(xs List[int], v int)

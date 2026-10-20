@@ -242,6 +242,7 @@ RT_ROOTS := [
     "rt.list_pushf",
     "rt.list_pushb",
     "rt.list_reserve",
+    "rt.list_rows_min",
 ]
 
 ## Lower the runtime functions the program reaches, and those they reach

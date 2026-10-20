@@ -89,8 +89,8 @@ fannkuch 442M → 272M, matmul 223M → 142M, sieve 144M → 133M, binarytrees
 shared VM vary by 10–20% between runs: fannkuch ran 0.84–0.94 s before and
 0.51–0.61 s after, matmul 0.20 s before and 0.13–0.14 s after.
 
-What is left against C: the row of `b[k][j]` in matmul keeps its length
-check (the rows' lengths aren't known), the elements' address is
+What is left against C: (the row check of `b[k][j]` in matmul went away
+with the row-length floor, ADR 0611), the elements' address is
 kept in a register only inside versioned loops (`data`, `ldx`, `stx`),
 `n` still spills in matmul's inner loop, and binarytrees and fasta are
 allocation and call bound, not check bound. `ail build` takes about 0.1 s
@@ -184,3 +184,9 @@ out by a dominating bound, inline `push`, inlining of leaf functions. Left:
    uses on the paths that need them.
 4. **Division by a power of two** as a shift with a sign fix (collatz).
 5. Cache the runtime's machine code (compile time).
+
+## Row-length floors (ADR 0611)
+
+matmul at 400: 1,106M → 979M instructions (callgrind), 0.128 s → 0.098 s on
+this VM. `rt.list_rows_min(b)` runs once before the outermost loop nest that
+leaves `b` alone; the inner loop's guard tests `j` against it.

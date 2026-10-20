@@ -38,6 +38,17 @@ register before the `imul`, and `cmp r, 0`.
    behind it, and fannkuch had lost ADR 0579's sizing (383M → 271M
    instructions).
 5. **`copy_bytes` copies 32 bytes per iteration** while it can.
+6. **Row-length floors.** In a versioned loop, `r[j]` where `r` is a row
+   fetched from a list of lists `b` and `j` doesn't change loses its check
+   if `0 <= j < floor`, where `floor = rt.list_rows_min(b)`, the length of
+   the shortest row. The scan runs once, in the preheader of the outermost
+   enclosing loop where `b` is defined outside it and nothing in it gets
+   `b`, pushes to it or sets its elements; for as long as no operation
+   shortens a list (the same condition as ADR 0578), the rows' lengths can
+   only grow, so the floor holds for the whole nest. The inner guard tests
+   `j` against it (two compares). A ragged matrix fails the guard and runs
+   the checked loop, which traps as before. matmul at 400: 1.11G → 0.98G
+   instructions, 0.128 s → 0.098 s.
 
 Instructions at the `.args` sizes, before → after: spectralnorm 88M → 75M,
 fannkuch 383M → 271M, collatz 188M → 184M, mandelbrot 44.0M → 43.0M, sieve
@@ -56,6 +67,12 @@ fannkuch 383M → 271M, collatz 188M → 184M, mandelbrot 44.0M → 43.0M, sieve
   form, not identical instructions).
 
 ## Rejected alternatives
+
+- **Scanning the rows in each inner guard.** The scan costs as much as the
+  loop it guards (one load and compare per row), so the check saved is paid
+  back; hoisting it to the outer nest makes it once per matrix.
+- **A "rectangular" flag on the list.** Another header word to maintain on
+  every `push` and `set`, for all programs, to help one access pattern.
 
 - **A general value-range lattice over the whole function.** A far larger
   pass for a compiler that runs in the interpreter; loops are where the
