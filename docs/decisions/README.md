@@ -429,6 +429,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
+| [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0511](0511-pdf-pages-read-on-demand.md) | The PDF reader reads pages on demand; search streams page by page (designer direction) | Accepted | 2026-10-20 |
 | [0512](0512-pdf-ocr-by-nearest-shape.md) | OCR of scanned PDF pages by nearest reference shape, on demand; shapes from DejaVu and OFL fonts (designer direction) | Accepted | 2026-10-20 |
