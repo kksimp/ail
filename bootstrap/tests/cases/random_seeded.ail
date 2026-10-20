@@ -1,0 +1,33 @@
+use std.random
+
+fn roll(n int) List[int]
+    mut out := []
+    for i in 0..n
+        out.push(random.int(1, 6))
+    out
+
+fn main()
+    random.seed(7)
+    a := roll(20)
+    random.seed(7)
+    b := roll(20)
+    print(a == b)
+    print((a.min() else 0) >= 1)
+    print((a.max() else 9) <= 6)
+    print(random.int(5, 5))
+    f := random.float()
+    print(f >= 0.0 and f < 1.0)
+    mut xs := [1, 2, 3, 4, 5, 6, 7, 8]
+    random.shuffle(mut xs)
+    print(xs.sum())
+    print(xs.len())
+    mut none_to_shuffle := List[int]()
+    random.shuffle(mut none_to_shuffle)
+    print(none_to_shuffle.len())
+    random.seed(7)
+    mut ys := [1, 2, 3, 4, 5, 6, 7, 8]
+    random.shuffle(mut ys)
+    random.seed(7)
+    mut zs := [1, 2, 3, 4, 5, 6, 7, 8]
+    random.shuffle(mut zs)
+    print(ys == zs)

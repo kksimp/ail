@@ -1,0 +1,4 @@
+use nothing_here
+
+fn main()
+    print(nothing_here)

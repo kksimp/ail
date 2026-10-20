@@ -3,7 +3,7 @@
 Chapter key: `gram`
 
 > **Status:** Drafted (partial). Function-declaration shape, generic brackets,
-> and attributes are specified. The full grammar (in a machine-checkable form, per
+> and attributes (`@inline`, `@deprecated`, and those of other chapters) are specified. The full grammar (in a machine-checkable form, per
 > ADR 0002) will be written as the syntax decisions are completed.
 
 ## Syntax errors
@@ -22,7 +22,7 @@ type. Its body is the indented block that follows. *(ADR 0042, ADR 0037, ADR 003
 separated by whitespace, with no colon. The return type, if present, follows
 the closing parenthesis, with no arrow. *(ADR 0037)*
 
-```ail skip=bootstrap
+```ail fragment
 fn add(a i32, b i32) i32
     a + b
 ```
@@ -59,7 +59,22 @@ fn load(path str) Result[Map[str, User], DbError]
 line. The canonical formatter moves them to their own preceding line only when
 the line would otherwise exceed the line-length limit. *(ADR 0083)*
 
-```ail skip=bootstrap
+```ail fragment
 @inline fn hash(x u64) u64
     x * 31
+```
+
+**gram.attr.3** — `@inline` is a hint that the function is worth inlining. It
+takes no arguments and never changes behaviour; an implementation MAY ignore
+it. The bootstrap accepts it and ignores it. *(ADR 0196)*
+
+**gram.attr.4** — `@deprecated("reason")` marks a function as deprecated. The
+reason is one string literal and is required. Each call of the function is a
+warning that names the function and gives the reason; the program still runs.
+The attributes known to the bootstrap are `@test`, `@pure`, `@inline` and
+`@deprecated`; any other attribute is an error (`test.attr.1`). *(ADR 0197)*
+
+```ail fragment
+@deprecated("use hash") fn old_hash(x u64) u64
+    x * 17
 ```

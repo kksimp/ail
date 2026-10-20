@@ -1,0 +1,6 @@
+# Unknown attributes stay errors (test.attr.1).
+@hot fn f() int
+    1
+
+fn main()
+    print("{f()}")

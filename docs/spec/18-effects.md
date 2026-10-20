@@ -4,14 +4,14 @@ Chapter key: `eff`
 
 > **Status:** Drafted (partial). Specified: inferred effect sets, `@pure`, and
 > denying capabilities to a program. Not yet designed: effects written in
-> signatures, capability manifests for packages, and deterministic mode
-> ([ai-first-plan.md](../design/ai-first-plan.md) §3.3).
+> signatures and capability manifests for packages. Deterministic mode is
+> specified in the last section.
 
 ## Inference
 
 **eff.infer.1** — Every function has an *effect set*: the effects `io`,
 `fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
-`proc`, `clock` and `net`. The set is inferred; it is never written in
+`proc`, `clock`, `random`, `net` and `ui`. The set is inferred; it is never written in
 source. *(ADR 0163)*
 
 **eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
@@ -27,7 +27,8 @@ constant expression runs no code (`mod.const.2–3`). *(ADR 0163)*
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`, and
-`time.*` gives `clock`; an `unsafe` block gives `unsafe`; `spawn` gives
+`time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods of `ui.Window` give `ui`
+and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
 `spawn`. Nothing gives `net` yet. *(ADR 0163)*
 
 **eff.infer.5** — A call whose target is known from the types (a free
@@ -84,3 +85,22 @@ lists the capabilities. *(ADR 0165)*
 **eff.cap.3** — `io` and the other effects are not capabilities and can't be
 denied: printing is how a program reports, and failure and mutation are
 already in signatures. *(ADR 0165)*
+
+## Deterministic execution
+
+**eff.det.1** — A program whose `main` reaches none of the capabilities
+`clock`, `random`, `proc` and `net`, and has no `spawn`, produces the same
+output on every run given the same inputs: its arguments, environment
+variables, files and standard input. Map and set iteration is in insertion
+order (`type.map.1`), and hash values are never visible, so neither can vary
+a run. Programs with tasks are outside this rule until task scheduling is
+specified. *(ADR 0207)*
+
+**eff.det.2** — `ail run --deterministic FILE` and `ail check
+--deterministic FILE` are `--deny clock,net,proc,random` (`eff.cap.1`), and
+combine with `--deny`. `fs`, `env` and standard input are inputs, not
+sources of nondeterminism, so they stay allowed. *(ADR 0207)*
+
+**eff.det.3** — `ail run --seed S FILE` seeds `std.random` (`std.random.3`).
+A program that uses `random` and runs with a seed repeats without being
+denied the capability. *(ADR 0207)*

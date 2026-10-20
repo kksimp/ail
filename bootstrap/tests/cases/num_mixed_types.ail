@@ -1,0 +1,10 @@
+# Arithmetic is only between the same type; there is no implicit widening (type.num.14).
+fn add(a i32, b i64) i64
+    a + b
+
+fn want(x u8) u8
+    x
+
+fn main()
+    n := 5
+    print("{add(1, 2)} {want(n)}")

@@ -12,7 +12,13 @@ use std::process::ExitCode;
 use crate::ast::*;
 use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
-use crate::{docs, lexer, parser};
+use crate::docs;
+
+/// Whether `pos` is outside the file being outlined: in the prelude or in
+/// an imported module (`modules.rs`).
+fn is_prelude(pos: Pos) -> bool {
+    pos.line > FILE_LINES
+}
 
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
@@ -73,9 +79,9 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
 /// The outline of `src` as JSON (or text), or the diagnostics that stopped
 /// it: a rejected program has no reliable outline (api.out.5).
 pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<String, Vec<diag::Diagnostic>> {
-    let (tokens, mut diags) = lexer::lex(src);
-    let (mut prog, parse_diags) = parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
+    // The file and the modules it imports (mod.unit.3); only the file's own
+    // declarations are outlined.
+    let (mut prog, mut diags) = crate::modules::load_src(path, src);
     let mut resolved = Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&prog);
@@ -197,6 +203,16 @@ impl Item {
     fn text(&self, depth: usize, out: &mut String) {
         let indent = "    ".repeat(depth);
         writeln!(out, "{:>5}  {indent}{}", self.pos.line, self.signature).unwrap();
+        // Contracts are part of the signature (contract.api.1).
+        for (key, value) in self.extra.iter().filter(|(k, _)| matches!(*k, "requires" | "ensures")) {
+            if let Json::Arr(conds) = value {
+                for c in conds {
+                    if let Json::Str(c) = c {
+                        writeln!(out, "       {indent}    {key} {c}").unwrap();
+                    }
+                }
+            }
+        }
         if let Some(doc) = &self.doc {
             for line in doc.lines() {
                 writeln!(out, "       {indent}    ## {line}").unwrap();
@@ -368,6 +384,14 @@ impl<'p> Api<'p> {
         extra.push(("params", Json::Arr(params)));
         extra.push(("returns", Json::opt(f.ret.as_ref().map(type_text))));
         extra.push(("effects", Json::Arr(self.effects(f))));
+        // contract.api.1: the conditions as written, when there are any.
+        for (key, ensures) in [("requires", false), ("ensures", true)] {
+            let conds: Vec<Json> =
+                f.contracts.iter().filter(|c| c.ensures == ensures).map(|c| Json::Str(c.text.clone())).collect();
+            if !conds.is_empty() {
+                extra.push((key, Json::Arr(conds)));
+            }
+        }
         if matches!(f.within, Within::Trait(_)) {
             extra.push(("default", Json::Bool(f.body.is_some())));
         }
@@ -612,6 +636,9 @@ impl<'p> Refs<'p> {
             }
             if let Some(t) = &f.ret {
                 self.type_ref(t);
+            }
+            for c in &f.contracts {
+                self.expr(&c.cond);
             }
             if let Some(body) = &f.body {
                 self.block(body);

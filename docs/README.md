@@ -46,6 +46,8 @@ Design notes:
   write AIL from the quick reference.
 - [design/program-measurements-r2.md](design/program-measurements-r2.md):
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
+- [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
+  moves from the bootstrap's crate shim to platform APIs through `extern c`.
 
 Tools:
 - [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run

@@ -1,0 +1,4 @@
+use a
+
+pub fn g() int
+    1

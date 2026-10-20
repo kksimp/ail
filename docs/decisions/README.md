@@ -156,6 +156,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0150](0150-ail-api-outline.md) | `ail api` prints a program's declarations without bodies, as one-line JSON *(delegated)* | Accepted | 2026-10-20 |
 | [0151](0151-stable-symbol-ids-and-references.md) | Symbols have path ids; `--symbols` lists every reference by id *(delegated)* | Accepted | 2026-10-20 |
 | [0152](0152-doc-comment-attachment.md) | A doc comment is the run of `##` lines directly above a declaration *(delegated)* | Accepted | 2026-10-20 |
+| [0153](0153-package-root-and-loading.md) | A package is rooted at the directory run; imports load lazily and can't form cycles *(delegated)* | Accepted | 2026-10-20 |
+| [0154](0154-imports-per-file-at-the-top.md) | Imports come first, apply to their file, and need unique names *(delegated)* | Accepted | 2026-10-20 |
+| [0155](0155-member-visibility-and-method-placement.md) | Methods live in their type's module; private fields block outside construction *(delegated)* | Accepted | 2026-10-20 |
+| [0156](0156-bootstrap-modules-by-qualified-names.md) | The bootstrap gives every item its qualified name before checking *(delegated)* | Accepted | 2026-10-20 |
 | [0157](0157-standard-os-modules.md) | The machine is reached through five built-in standard modules, `use std.fs` and friends *(delegated)* | Accepted | 2026-10-20 |
 | [0158](0158-standard-io-errors.md) | Standard failures are `fs.IoError` and `proc.ProcError` with a short `kind` *(delegated)* | Accepted | 2026-10-20 |
 | [0159](0159-program-arguments.md) | `ail run FILE ARGS...` gives the program its arguments and its path *(delegated)* | Accepted | 2026-10-20 |
@@ -174,7 +178,32 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
+| [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
+| [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
+| [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
+| [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
 | [0186](0186-deterministic-task-scheduler.md) | Run tasks in the interpreter on a deterministic, one-at-a-time scheduler; deadlocks trap *(delegated)* | Accepted | 2026-10-20 |
 | [0187](0187-trapped-and-task-groups.md) | `wait()` fails with `Trapped`; groups hold tasks that return nothing *(delegated)* | Accepted | 2026-10-20 |
 | [0188](0188-channel-api.md) | Channels: `Channel[T](capacity)`, `send`, `recv() T?`, `close` *(delegated)* | Accepted | 2026-10-20 |
 | [0189](0189-mutex-access-form.md) | Mutex access: `get`, `set`, `swap`, and `lock`/`unlock` pairs *(delegated)* | Accepted | 2026-10-20 |
+| [0194](0194-sized-numeric-types.md) | Sized numeric types: contextual literals, same-type arithmetic, trapping overflow *(delegated)* | Accepted | 2026-10-20 |
+| [0195](0195-sized-numeric-conversions.md) | Sized numbers convert with `to_<type>()` methods *(delegated)* | Accepted | 2026-10-20 |
+| [0196](0196-inline-attribute.md) | `@inline` is accepted and recorded as a hint *(delegated)* | Accepted | 2026-10-20 |
+| [0197](0197-deprecated-attribute.md) | `@deprecated("reason")` warns at each use *(delegated)* | Accepted | 2026-10-20 |
+| [0198](0198-test-properties.md) | Run a test with parameters as a property *(delegated)* | Accepted | 2026-10-20 |
+| [0199](0199-property-seeds-and-shrinking.md) | Seed properties from the test name and shrink failures *(delegated)* | Accepted | 2026-10-20 |
+| [0200](0200-doc-examples-as-tests.md) | Run doc-comment examples as tests *(delegated)* | Accepted | 2026-10-20 |
+| [0201](0201-doc-example-output-comments.md) | Assert example output with `# => text` comments *(delegated)* | Accepted | 2026-10-20 |
+| [0202](0202-more-machine-applicable-fixes.md) | Offer fixes for five more common mistakes: `mut`, `elif`, `?`, missing match arms, `use std.x` *(delegated)* | Accepted | 2026-10-20 |
+| [0203](0203-ail-fix-command.md) | `ail fix` applies diagnostics' fixes until none are left *(delegated)* | Accepted | 2026-10-20 |
+| [0204](0204-anchored-fix-edits.md) | The checker names some fix positions by rule, and the tool resolves them *(delegated)* | Accepted | 2026-10-20 |
+| [0205](0205-related-notes-on-duplicates.md) | Duplicate declarations point at the first one *(delegated)* | Accepted | 2026-10-20 |
+| [0206](0206-std-random.md) | Add `std.random` with a process-wide seedable generator *(delegated)* | Accepted | 2026-10-20 |
+| [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
+| [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
+| [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0210](0210-contract-syntax.md) | Contracts are `requires` and `ensures` lines under the signature; `result` names the value *(delegated)* | Accepted | 2026-10-20 |
+| [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
+| [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
+| [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |

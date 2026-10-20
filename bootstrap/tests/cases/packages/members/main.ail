@@ -1,0 +1,10 @@
+use lib
+
+fn main()
+    a := lib.Account.open()
+    print(a.owner)
+    print(a.balance)
+    print(a.audit())
+    b := lib.Account(owner: "x", balance: 1)
+    mut c := lib.Account.open()
+    c.balance = 5

@@ -1,0 +1,5 @@
+fn lift(y int?) int??
+    y
+
+fn main()
+    print(lift(none))

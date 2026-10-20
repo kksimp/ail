@@ -1,7 +1,7 @@
 @bogus fn helper() int
     1
 
-@test fn takes(x int)
+@test fn takes(mut x int)
     assert(x == 1)
 
 @test fn returns() int

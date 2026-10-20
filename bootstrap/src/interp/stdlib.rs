@@ -8,7 +8,7 @@ use std::io::{BufRead, Read, Write};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use super::{Env, Exit, Failure, Flow, Interp, Trap, Value};
+use super::{random, slot_mut, Env, Exit, Failure, Flow, Interp, Trap, Value};
 use crate::ast::Arg;
 use crate::diag::Pos;
 use crate::stdlib::{StdCall, error_kind};
@@ -35,7 +35,18 @@ impl<'a, W: Write> Interp<'a, W> {
                 return Ok(Value::Struct(s, Rc::new(fields)));
             }
             StdCall::Fn(module, f) => (module, f),
+            StdCall::Method(_) => unreachable!("interp::method_call runs `ui.Window` methods"),
         };
+        if (module, f) == ("random", "shuffle") {
+            let p = self.place(&args[0].value, env)?;
+            let Value::List(items) = slot_mut(env, &p, false)? else { unreachable!("checked: a list") };
+            let items = Rc::make_mut(items);
+            // Fisher-Yates (std.random.4).
+            for i in (1..items.len()).rev() {
+                items.swap(i, random::below(i as u64 + 1) as usize);
+            }
+            return Ok(Value::Unit);
+        }
         let mut values = Vec::with_capacity(args.len());
         for a in args {
             values.push(self.eval(&a.value, env)?);
@@ -173,6 +184,18 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            ("random", "int") => {
+                let (lo, hi) = (values[0].int(), values[1].int());
+                if lo > hi {
+                    return stop("std.random.2", pos, format!("`int` needs lo <= hi, but lo is {lo} and hi is {hi}"));
+                }
+                Value::Int(random::range(lo, hi))
+            }
+            ("random", "float") => Value::Float(random::unit()),
+            ("random", "seed") => {
+                random::seed(values[0].int());
+                Value::Unit
+            }
             ("time", "now_ms") => {
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
                 Value::Int(now.map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)))
@@ -185,6 +208,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.flush(pos)?;
                 std::thread::sleep(std::time::Duration::from_millis(ms as u64));
                 Value::Unit
+            }
+            ("ui", "open") => {
+                let (title, cols, rows) = (str_arg(0), values[1].int(), values[2].int());
+                self.ui_open(&title, cols, rows, pos)
             }
             _ => unreachable!("checked: `{module}.{f}` is a standard function"),
         })
@@ -199,7 +226,7 @@ impl<'a, W: Write> Interp<'a, W> {
 
 /// An error value leaving a standard function: its failure, with the call
 /// as the first entry of the return trace (err.ctx.1).
-fn fail(error: Value, pos: Pos) -> Value {
+pub(super) fn fail(error: Value, pos: Pos) -> Value {
     Value::Fail(Rc::new(Failure { error, context: Vec::new(), trace: vec![pos] }))
 }
 

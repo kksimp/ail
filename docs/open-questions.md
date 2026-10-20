@@ -190,21 +190,10 @@ programs, so output never depends on the hash function. *Owner: AI under
 ADR 0076; decide when a real program needs it.*
 
 ## OQ-043 — `s.len()`: bytes or characters
-`str` has no `len()` yet; `s.chars().len()` counts characters
-([ADR 0135](decisions/0135-string-literals-and-methods.md)). Python counts
-code points, Rust and Go count bytes, Swift counts grapheme clusters. Options:
-`len()` in bytes plus `chars().len()` (fast and honest about cost, but
-surprising to Python users), `len()` in characters (O(n) unless cached), or
-no `len()` at all with named views (`bytes().len()`, `chars().len()`).
-Decide with `s.bytes()` and string slicing. *Owner: AI under ADR 0076.*
+**Resolved** by [ADR 0208](decisions/0208-str-len-counts-characters.md) (`len()` counts characters, `byte_len()` bytes).
 
 ## OQ-044 — Nested optionals
-`m.get(k)` on a `Map[K, V?]` has type `V??`, and `none` could mean either
-level. Options: nested optionals are distinct types and `none` is the outer
-one (Swift); optionals flatten (TypeScript's `undefined`; loses
-information); or `Map` values can't be optional (restrictive). Recommendation:
-the first, with a diagnostic when `none` is ambiguous. *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0209](decisions/0209-nested-optionals.md) (distinct nested types, `none` is the outermost).
 
 ## OQ-045 — Capability manifests for packages
 [ai-first-plan.md §3.2](design/ai-first-plan.md) gives every function an
@@ -220,14 +209,37 @@ on every call chain); (c) nothing at the package level. Waits on Topic 13
 (packages). *Owner: designer.*
 
 ## OQ-046 — Deterministic execution mode
-[ai-first-plan.md §3.3](design/ai-first-plan.md) proposes
-`ail run --deterministic`: deny `clock` and `random`, and make every
-remaining source of nondeterminism (map iteration order, task scheduling)
-fixed, so two runs give byte-identical output. Options: a flag only (cheap;
-programs opt in), or a language guarantee that safe code without `clock`,
-`random`, `proc` and `spawn` is deterministic by construction (stronger; it
-constrains the standard library's map order and the runtime forever).
-Recommendation: specify the guarantee for single-task programs now, since
-the bootstrap already iterates maps in insertion order, and keep the flag for
-the rest. *Owner: AI under ADR 0076, after the effects lane lands.*
+**Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).
 
+## OQ-047 — Inserting into and removing from lists
+`List` has `push`, `pop` and `swap` but no `insert(i, x)`, `remove(i)`,
+`extend(xs)` or concatenation, so the editor in `tools/edit/edit.ail`
+([ADR 0180](decisions/0180-editor-written-in-ail.md)) rebuilds its line list
+with a hand-written `splice` for every line edit. Options: (a) `insert`,
+`remove_at` and `extend` methods (recommended: one token each, the common
+names an agent reaches for, and the interpreter can do them in place);
+(b) `+` on lists (concise, but hides an O(n) copy); (c) a general
+`splice(from, to, items)` (one method, less obvious). *Owner: AI under ADR
+0076.*
+
+## OQ-048 — Editing text without string indexing
+`str` has no indexing, slicing or `len()` (OQ-043), and `to_lower` exists
+only on `char`. The editor goes through `s.chars()`, slices the list, and
+joins it back with `join("")`: 19 `chars()` and 10 `join("")` in about 1,000
+lines, a few tokens and an O(n) copy each. Options: (a) character slicing
+`s.slice(a, b)` and `s.char_count()` (explicit about counting characters);
+(b) decide OQ-043 and add `s[a..b]` in the unit it picks; (c) keep
+`chars()` and add `str.to_lower`/`to_upper` only. Recommendation: (a) now,
+since it doesn't prejudge OQ-043, plus `str.to_lower`. *Owner: AI under ADR
+0076.*
+
+## OQ-060 — Contracts beyond runtime checks
+[ADRs 0210–0213](decisions/0210-contract-syntax.md) add `requires` and
+`ensures`, checked at run time. Open: (1) `old(x)`, a parameter's value on
+entry, for `ensures` on `mut` parameters (recommended: add it, evaluated only
+when checks are on); (2) whether implementations inherit a trait method's
+contracts (recommended: yes, with Liskov rules: an implementation may weaken
+`requires` and strengthen `ensures`); (3) type invariants and loop
+invariants; (4) static proof, and whether an optimising build keeps the
+checks it can't prove (recommended: keep them, so `--no-contracts` stays an
+explicit choice). *Owner: AI under ADR 0076.*
