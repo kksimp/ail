@@ -394,6 +394,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
 | [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
 | [0398](0398-record-and-replay.md) | Record and replay: `--record R` writes every effect's result as JSON lines, `--replay R` answers effects from it *(delegated)* | Accepted | 2026-10-20 |
+| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
+| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
+| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
 | [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |
 | [0405](0405-native-traps.md) | Native traps print the interpreter's first line and exit 1 *(delegated)* | Accepted | 2026-10-20 |
 | [0406](0406-raw-syscalls-for-native-runtime.md) | Raw syscalls for the first native runtime, including on macOS *(delegated)* | Accepted | 2026-10-20 |
@@ -426,8 +429,14 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
+| [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
+| [0511](0511-pdf-pages-read-on-demand.md) | The PDF reader reads pages on demand; search streams page by page (designer direction) | Accepted | 2026-10-20 |
+| [0512](0512-pdf-ocr-by-nearest-shape.md) | OCR of scanned PDF pages by nearest reference shape, on demand; shapes from DejaVu and OFL fonts (designer direction) | Accepted | 2026-10-20 |
+| [0513](0513-image-decoders-and-font-rasterizer-in-ail.md) | Image decoders (CCITT fax, JPEG) and a TrueType rasterizer written in AIL *(delegated)* | Accepted | 2026-10-20 |
 | [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
+| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
+| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
@@ -438,6 +447,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
 | [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
 | [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
+| [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
@@ -459,7 +469,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0428](0428-wait-yields-and-time-limit-kills.md) | `proc.wait` lets other tasks run, and the time limit kills the child *(delegated)* | Accepted | 2026-10-20 |
 | [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
-| [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
 | [0438](0438-regex-engine-is-a-pike-vm.md) | `std.regex` is a linear-time Pike VM, without backreferences or lookaround *(delegated)* | Accepted | 2026-10-20 |
 | [0439](0439-regex-syntax-is-the-re2-subset.md) | `std.regex` syntax is the RE2 subset; Unicode classes are a documented subset *(delegated)* | Accepted | 2026-10-20 |
 | [0440](0440-regex-api-is-module-functions-and-values.md) | `std.regex` API: module functions over a `Regex` value; no `re"..."` literal yet *(delegated)* | Accepted | 2026-10-20 |
