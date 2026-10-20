@@ -148,3 +148,17 @@ fn libsys_write_file_runs_under_wine_when_installed() {
     assert_eq!(String::from_utf8_lossy(&run.stdout), line, "the printed text");
     assert_eq!(run.status.code(), Some(line.len() as i32), "written, which must equal the length");
 }
+
+// ADR 0607: until the Windows runtime lands, `ail build --target x86_64-windows`
+// refuses with a diagnostic that names the rule and the ADR.
+#[test]
+fn build_refuses_the_windows_target_until_the_runtime_lands() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["build", "examples/hello.ail", "--target", "x86_64-windows", "-o", "target/windows-refusal.exe"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("native.build.3") && err.contains("ADR 0607"), "{err}");
+}
