@@ -17,6 +17,7 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod keyfn;
 mod contracts;
 mod random;
 mod stdlib;
@@ -592,6 +593,13 @@ fn key_text(k: &Value) -> String {
     }
 }
 
+/// Whether `p` is `m[k]` with `k` not in `m` (type.map.7).
+fn missing_key(env: &Env<'_>, p: &Place) -> Result<bool, Trap> {
+    let Some((Step::Key(k, _), parent)) = p.path.split_last() else { return Ok(false) };
+    let parent = Place { slot: p.slot, path: parent.to_vec() };
+    Ok(matches!(peek(env, &parent)?, Value::Map(t) if t.get(k).is_none()))
+}
+
 fn load(env: &Env<'_>, p: &Place) -> Result<Value, Trap> {
     peek(env, p).cloned()
 }
@@ -713,7 +721,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn stmt(&mut self, s: &'a Stmt, env: &mut Env<'a>) -> Flow<Value> {
         match s {
             Stmt::Let { name, value, otherwise, .. } => {
-                let v = self.eval(value, env)?;
+                let v = if otherwise.is_some() { self.else_value(value, env)? } else { self.eval(value, env)? };
                 let v = match (otherwise, v) {
                     (Some(o), v @ (Value::None | Value::Fail(_))) => self.otherwise(o, v, env)?,
                     (Some(_), v) => Value::unwrap_present(v),
@@ -751,6 +759,15 @@ impl<'a, W: Write> Interp<'a, W> {
             }
         }
         Ok(Value::Unit)
+    }
+
+    /// The value of `e else ...`: an optional `?` inside it that finds
+    /// `none` makes the whole value `none` (err.prop.4, ADR 0252).
+    fn else_value(&mut self, value: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        match self.eval(value, env) {
+            Err(Exit::Return(Value::None, pos)) if self.resolved.else_try.contains(&pos) => Ok(Value::None),
+            r => r,
+        }
     }
 
     /// The `else` part of a binding whose value is absent or failed (err.else.1-3).
@@ -916,15 +933,26 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(());
         }
         let p = self.place(target, env)?;
+        let missing = op.is_some() && missing_key(env, &p)?;
         let v = match op {
             None => self.eval(value, env)?,
+            // type.map.7: `m[k] op= v` on a missing key starts from zero.
+            Some(op) if missing => {
+                let rhs = self.eval(value, env)?;
+                let zero = match rhs {
+                    Value::Float(_) => Value::Float(0.0),
+                    Value::Num(k, _) => Value::Num(k, 0),
+                    _ => Value::Int(0),
+                };
+                self.binop(op, zero, rhs, pos)?
+            }
             Some(op) => {
                 let old = load(env, &p)?;
                 let rhs = self.eval(value, env)?;
                 self.binop(op, old, rhs, pos)?
             }
         };
-        *slot_mut(env, &p, op.is_none())? = v;
+        *slot_mut(env, &p, op.is_none() || missing)? = v;
         Ok(())
     }
 
@@ -1029,7 +1057,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 })));
             }
             // err.else.6: the fallback runs only when the value is absent or failed.
-            Expr::Else { value, otherwise, .. } => match self.eval(value, env)? {
+            Expr::Else { value, otherwise, .. } => match self.else_value(value, env)? {
                 v @ (Value::None | Value::Fail(_)) => self.otherwise(otherwise, v, env)?,
                 v => Value::unwrap_present(v),
             },

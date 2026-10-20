@@ -195,6 +195,9 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
+        if let [Arg { param: Some((var, _)), value, .. }] = args {
+            return self.keyed(recv, name, var, value, pos, env);
+        }
         // Arguments are read before the receiver changes, so they are copies (own.excl.4).
         let mut a = Vec::with_capacity(args.len());
         for arg in args {
@@ -299,6 +302,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 "len" => Value::Int(items.len() as i64),
                 "last" => opt(items.last().cloned()),
                 "first" => opt(items.first().cloned()),
+                // type.coll.15: the first `n` elements, or all of them.
+                "take" => {
+                    let n = a[0].int();
+                    if n < 0 {
+                        return trap("type.coll.15", pos, format!("`take` needs a count of at least 0, not {n}"));
+                    }
+                    Value::List(Rc::new(items[..(n as usize).min(items.len())].to_vec()))
+                }
                 "contains" | "index_of" => {
                     let mut found = None;
                     for (i, x) in items.iter().enumerate() {

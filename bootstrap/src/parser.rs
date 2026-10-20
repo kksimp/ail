@@ -1012,7 +1012,9 @@ impl Parser {
                     self.unexpected("`in` after the loop variable", "expr.loop.1");
                     return None;
                 }
+                // err.else.6: `for x in xs else []` (ADR 0252).
                 let iter = self.range()?;
+                let iter = self.else_expr(iter)?;
                 let body = self.block("the `for` header", "expr.loop.1")?;
                 Some(Stmt::For { var, var_pos, mutable, iter, body, pos })
             }
@@ -1373,8 +1375,16 @@ impl Parser {
                 None
             };
             let mutable = self.eat_kw("mut");
+            // expr.key.1: `by: |x| e`, a key function.
+            let param = if self.eat_sym("|") {
+                let p = self.name("a parameter name after `|`", "expr.key.1")?;
+                self.expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?;
+                Some(p)
+            } else {
+                None
+            };
             let value = self.expression()?;
-            args.push(Arg { label, mutable, value });
+            args.push(Arg { label, mutable, value, param });
             if !self.eat_sym(",") {
                 break;
             }

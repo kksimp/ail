@@ -126,11 +126,29 @@ or returns absence. *(ADR 0045, ADR 0048)*
 
 **err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
 is a compile-time error unless the enclosing function's return type is an
-optional type. *(ADR 0051)*
+optional type, or the `?` is inside the value of an `else` (`err.prop.4`).
+*(ADR 0051, ADR 0252)*
 
 **err.prop.3** — If the enclosing function states its error type, every error
 type `e` can fail with MUST be a member of it. Otherwise `e?` is a
 compile-time error that names the missing types. *(ADR 0122)*
+
+**err.prop.4** — A `?` on an optional inside the value `e` of `e else ...`
+(`err.else.1`, `err.else.6`) goes to the nearest such `else` instead of
+leaving the function: when it finds `none`, the rest of `e` is skipped and the
+`else` part runs as if `e` were absent. If `e` contains such a `?` and its type
+`T` isn't optional or a result, `e` has type `T?` for the `else`. A result
+`?` inside `e` still leaves the function (`err.prop.1`). When `e` is a result
+and also contains such a `?`, `else err` is a compile-time error: an absent
+value has no error to bind. *(ADR 0252)*
+
+```ail
+fn label(j Json) str
+    j.get("user")?.str("name") else "anonymous"
+
+fn main()
+    print(label(Json.Null))   # anonymous
+```
 
 **err.use.1** — A value of type `T ! E` MUST be handled with `?` or `else`,
 or returned from a function whose result can hold it. Discarding it, or
@@ -198,7 +216,8 @@ is evaluated only when needed. `e else return x`, `else break` and
 loosely than every other operator and associates to the right
 (`expr.prec.1`). An `else` followed by an indented block is the binding or
 statement form (`err.else.1–5`); at the start of a statement,
-`e else return ...` is the statement form. *(ADR 0144)*
+`e else return ...` is the statement form. A `for` header's iterable may be
+`e else d`: `for x in j.arr("items") else []`. *(ADR 0144, ADR 0252)*
 
 ```ail skip=context
 fn smallest(nums List[int]) int

@@ -27,7 +27,7 @@ fn formatting_examples_keeps_their_output() {
         // ADR 0218: corpus programs find their fixtures and `ail` from their own
         // path, so a copy elsewhere can't run. Their layout must already be canonical.
         let source = fs::read(f).unwrap();
-        if String::from_utf8_lossy(&source).contains("data_dir()") || source.windows(7).any(|w| w == b"/../ail") {
+        if String::from_utf8_lossy(&source).contains("env.program()") || source.windows(7).any(|w| w == b"/../ail") {
             assert_eq!(formatted.stdout, source, "{}: not in canonical layout", f.display());
             checked += 1;
             continue;

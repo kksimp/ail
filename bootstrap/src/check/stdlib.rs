@@ -144,6 +144,8 @@ impl<'p> Checker<'p> {
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
+            ("path", "dir" | "base" | "ext") => (vec![Str], Str),
+            ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
             // std.io.4: `exit` never returns (ADR 0139).

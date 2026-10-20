@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.path`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -89,6 +89,34 @@ read, the program traps. *(ADR 0157)*
 
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
+
+## Paths: `std.path`
+
+**std.path.1** — `std.path` works on path text only: it never touches the
+file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
+
+**std.path.2** — A separator is `/`, and also `\` on Windows.
+`dir(p str) str` is the text before the last separator: `.` when there is
+none, and the separator itself for a path in the root (`dir("/x")` is `/`).
+`base(p str) str` is the text after the last separator. *(ADR 0253)*
+
+**std.path.3** — `ext(p str) str` is the text after the last `.` of
+`base(p)`, without the dot, and `""` when there is none or the only `.` is the
+first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
+
+**std.path.4** — `join(a str, b str) str` is `b` when `b` starts with a
+separator or `a` is empty; otherwise `a` and `b` with one `/` between.
+*(ADR 0253)*
+
+```ail
+use std.path
+
+fn main()
+    print(path.dir("examples/logscan.ail"))    # examples
+    print(path.base("examples/logscan.ail"))   # logscan.ail
+    print(path.ext("archive.tar.gz"))          # gz
+    print(path.join("examples", "data"))       # examples/data
+```
 
 ## Standard input and output: `std.io`
 

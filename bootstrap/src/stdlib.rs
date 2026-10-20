@@ -1,5 +1,5 @@
 //! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
-//! `std.random`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0206, 0177): their names, the functions
+//! `std.path`, `std.random`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0206, 0177): their names, the functions
 //! each provides, and the declarations of their types. The checker types
 //! calls to them in `check/stdlib.rs`; the interpreter runs them in
 //! `interp/stdlib.rs`.
@@ -12,6 +12,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("env", &["args", "cwd", "get", "program"]),
     ("fs", &["append_text", "exists", "list_dir", "make_dir", "read_text", "remove", "write_text"]),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
+    ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["run"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("time", &["now_ms", "sleep_ms"]),
@@ -124,5 +125,51 @@ pub fn error_kind(e: &std::io::Error) -> &'static str {
         K::DirectoryNotEmpty => "not_empty",
         K::InvalidData => "invalid_utf8",
         _ => "other",
+    }
+}
+
+/// std.path.2: a separator is `/`, and also `\\` on Windows.
+fn is_sep(c: char) -> bool {
+    c == '/' || (cfg!(windows) && c == '\\')
+}
+
+/// std.path.2: the text before and after the last separator; the part
+/// before is `None` when there is no separator.
+pub fn path_split(p: &str) -> (Option<&str>, &str) {
+    match p.rfind(is_sep) {
+        Some(i) => (Some(&p[..i]), &p[i + 1..]),
+        None => (None, p),
+    }
+}
+
+/// std.path.2: the directory part: `.` with no separator, the separator
+/// itself for a file in the root.
+pub fn path_dir(p: &str) -> String {
+    match path_split(p) {
+        (None, _) => ".".into(),
+        (Some(""), _) => p[..1].into(),
+        (Some(d), _) => d.into(),
+    }
+}
+
+/// std.path.3: the base name's text after its last `.`, or `""` when it has
+/// none (a leading `.` doesn't count).
+pub fn path_ext(p: &str) -> String {
+    let base = path_split(p).1;
+    match base.rfind('.') {
+        Some(i) if i > 0 => base[i + 1..].into(),
+        _ => String::new(),
+    }
+}
+
+/// std.path.4: `b` under `a` with one separator between; `b` alone when it
+/// is absolute or `a` is empty.
+pub fn path_join(a: &str, b: &str) -> String {
+    if a.is_empty() || b.starts_with(is_sep) {
+        b.into()
+    } else if a.ends_with(is_sep) {
+        format!("{a}{b}")
+    } else {
+        format!("{a}/{b}")
     }
 }

@@ -169,6 +169,11 @@ the programs side by side:
   `continue` is two to three lines where Python's `if x is None: continue`
   is two.
 
+Round 4 (lane 41, ADRs 0250–0255) took the corpus to 1731.4 tokens (−16.6%),
++6.9% over Python: key functions, `m[k] += 1` from zero, `?` before `else`,
+`std.path`, and `Json` getters and `set`. The per-change numbers are in
+[ADR 0255](../decisions/0255-round-4-token-measurements.md).
+
 Candidates for the token drive (lane 21): a sort-by-key method or `sorted`
 with a key function, `?` inside functions that return a result when the
 optional's `else` is wanted anyway, a `count`-style map update, and

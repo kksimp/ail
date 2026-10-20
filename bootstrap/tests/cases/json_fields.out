@@ -1,0 +1,8 @@
+t1
+2.0
+false
+[Json.Str(s: "a")]
+none
+none
+none
+{"id":"t1","hours":2.0,"done":true,"tags":["a"],"owner":"kim"}

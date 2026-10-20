@@ -21,6 +21,7 @@ mod builtins;
 pub mod conc;
 mod contracts;
 mod comprehension;
+mod keyfn;
 mod stdlib;
 pub mod effects;
 mod privacy;
@@ -152,6 +153,9 @@ pub struct Resolved {
     /// `e?` on an optional, which passes on `none` (err.prop.2); every other
     /// `?` passes on only a failure, so a successful `none` stays a value.
     pub optional_try: FastSet<Pos>,
+    /// `e?` on an optional inside the value of an `else`, which goes to that
+    /// `else` instead of leaving the function (err.prop.4, ADR 0252).
+    pub else_try: FastSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
     pub float_literals: FastSet<Pos>,
     /// Literals typed by context as a sized numeric type (type.num.13).
@@ -212,6 +216,8 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
         pending: Vec::new(),
         ret: Ty::Unit,
         loops: 0,
+        catching: 0,
+        caught: 0,
     };
     c.list_param = c.new_param("T", Vec::new());
     c.collect_traits();
@@ -366,6 +372,10 @@ struct Checker<'p> {
     pending: Vec<Pending>,
     ret: Ty,
     loops: usize,
+    /// How many `else` values enclose the expression being checked, and how
+    /// many optional `?` they caught (err.prop.4).
+    catching: u32,
+    caught: u32,
 }
 
 /// `a` and `b` are the same type, or an error already reported makes it moot.
@@ -1395,6 +1405,7 @@ impl<'p> Checker<'p> {
         self.locals.clear();
         self.pending.clear();
         self.loops = 0;
+        self.catching = 0;
         self.ret = sig.ret.clone();
         if f.receiver.is_some() {
             let ty = self.self_ty.clone().unwrap_or(Ty::Err);
@@ -1491,7 +1502,7 @@ impl<'p> Checker<'p> {
                     }
                     return Ty::Unit;
                 }
-                let vt = self.expr(value, None, true);
+                let vt = if otherwise.is_some() { self.else_value(value, otherwise.as_ref()) } else { self.expr(value, None, true) };
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => {
@@ -1589,6 +1600,31 @@ impl<'p> Checker<'p> {
                     self.mismatch("expr.block.2", v.pos(), &ret, &t);
                 }
             }
+        }
+    }
+
+    /// The value of `e else ...`. An optional `?` inside it goes to the
+    /// `else` (err.prop.4), which makes the value optional if it wasn't.
+    fn else_value(&mut self, value: &'p Expr, o: Option<&Else>) -> Ty {
+        let before = self.caught;
+        self.catching += 1;
+        let vt = self.expr(value, None, true);
+        self.catching -= 1;
+        if self.caught > before
+            && matches!(vt, Ty::Res(..))
+            && let Some(Else::Block { err: Some((name, pos)), .. }) = o
+        {
+            self.error_help(
+                "err.prop.4",
+                *pos,
+                format!("`{name}` would have no error when a `?` inside the value finds `none`"),
+                "handle the optional separately: `x := opt else ...`, then the result",
+            );
+        }
+        match vt {
+            Ty::Opt(_) | Ty::Res(..) | Ty::Err => vt,
+            t if self.caught > before => Ty::Opt(Box::new(t)),
+            t => t,
         }
     }
 
@@ -2165,7 +2201,7 @@ impl<'p> Checker<'p> {
             Expr::Try { expr, context, pos } => self.try_expr(expr, context.as_deref(), *pos),
             // err.else.6: the value, or the fallback when it's absent or failed.
             Expr::Else { value, otherwise, .. } => {
-                let vt = self.expr(value, None, true);
+                let vt = self.else_value(value, Some(otherwise));
                 self.else_part(&vt, value, otherwise)
             }
             Expr::Interp(parts, _) => {
@@ -2522,12 +2558,16 @@ impl<'p> Checker<'p> {
         match t {
             Ty::Opt(v) => {
                 self.resolved.optional_try.insert(pos);
-                if !matches!(ret, Ty::Opt(_)) {
+                if self.catching > 0 {
+                    // err.prop.4: an enclosing `else` handles the absence.
+                    self.resolved.else_try.insert(pos);
+                    self.caught += 1;
+                } else if !matches!(ret, Ty::Opt(_)) {
                     self.error_help(
                         "err.prop.2",
                         pos,
-                        "`?` on an optional only works in a function that returns an optional",
-                        "supply a fallback or leave: `x := value else return ...`",
+                        "`?` on an optional only works in a function that returns an optional, or before an `else`",
+                        "add a fallback: `x?.y else d`, or leave: `x := value else return ...`",
                     );
                 }
                 *v
@@ -2959,7 +2999,9 @@ impl<'p> Checker<'p> {
         expect: Option<&Ty>,
     ) -> Ty {
         for a in args {
-            if let Some((_, lpos)) = &a.label {
+            if let Some((_, ppos)) = &a.param {
+                self.key_misplaced(*ppos);
+            } else if let Some((_, lpos)) = &a.label {
                 self.unsupported(*lpos, "named arguments are not supported by the bootstrap yet (ADR 0058)");
             }
         }

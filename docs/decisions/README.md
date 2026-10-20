@@ -220,3 +220,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
 | [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
 | [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
+| [0250](0250-key-functions-and-take.md) | Sort and pick by key with `by: \|x\| key`, and `xs.take(n)` *(delegated)* | Accepted | 2026-10-20 |
+| [0251](0251-map-op-assign-starts-from-zero.md) | `m[k] += v` on a missing key starts from zero *(delegated)* | Accepted | 2026-10-20 |
+| [0252](0252-question-mark-goes-to-else.md) | A `?` on an optional inside an `else` value goes to that `else` *(delegated)* | Accepted | 2026-10-20 |
+| [0253](0253-std-path.md) | `std.path`: `dir`, `base`, `ext` and `join` on path text *(delegated)* | Accepted | 2026-10-20 |
+| [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
+| [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |

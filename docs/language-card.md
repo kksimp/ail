@@ -7,7 +7,7 @@
 ## Running programs
 
 ```sh
-./ail run FILE.ail           # check, then run; --deterministic forbids clock/random/proc
+./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ```
 
@@ -57,8 +57,7 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-`use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
-`random.seed(n)`, `random.shuffle(mut xs)`.
+`use std.random`: `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
 Constants: top-level `NAME := value` (no calls).
 
@@ -143,6 +142,7 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
+- `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
@@ -231,10 +231,9 @@ match ch             # literals and `|`; ints, strings and chars need `_`
   `if n != 0`, not `if n`.
 - `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
   `x.to_int()`. An int literal works where a float is expected.
-- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32`: literals take the type from
-  context; same-type operands only; overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`), `wrapping_add`,
-  `saturating_add`.
+- Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
+  overflow traps; `x.to_u8()` converts.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`).
 
 ## Strings and characters
 
@@ -251,7 +250,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `pad_right`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -262,7 +261,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 ```ail
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
-part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
+part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..], xs[..2]
 xs.push(4)             # push, pop, sort and swap need a `mut` variable
 xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
@@ -271,8 +270,9 @@ mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
 Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`; `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
-`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`. Slices don't clamp
-and negative indexes are errors.
+`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`. Slices
+don't clamp and negative indexes are errors. Order by a key (stable):
+`xs.sorted(by: |p| -p.age)`, also `sort`, `min`, `max`.
 
 Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
 `{k: v for ...}`.
@@ -285,7 +285,7 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 ```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
-ages["ann"] += 1                       # the key must exist, or the program stops
+ages["dan"] += 1                       # `op=` on a missing key starts at 0
 b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
 for name in ages.keys()                # `for k in m` is an error; also values()
     print("{name}: {ages[name]}")
