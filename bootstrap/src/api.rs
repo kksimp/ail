@@ -201,7 +201,8 @@ impl Item {
                 writeln!(out, "       {indent}    ## {line}").unwrap();
             }
         }
-        for (_, members) in &self.members {
+        // A variant's signature already shows its fields.
+        for (_, members) in self.members.iter().filter(|_| self.kind != "variant") {
             for m in members {
                 m.text(depth + 1, out);
             }

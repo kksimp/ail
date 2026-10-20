@@ -115,7 +115,8 @@ functions, methods and constants take docs; an `impl` block doesn't.
 **api.text.1** — `--text` prints one declaration per line: its line number
 right-aligned in five columns, two spaces, four spaces per nesting level,
 and its signature. Each doc line follows, indented one level deeper as
-`## text`.
+`## text`. A variant's fields are not repeated under it, since its
+signature shows them.
 
 ```text
     2  trait Shape

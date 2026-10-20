@@ -23,7 +23,7 @@ tokens in all):
 | Source | 8,956 | 100% |
 | JSON, two-space indent | 23,494 | 262% |
 | **JSON, one line (chosen default)** | **14,582** | 163% |
-| **`--text` outline** | **3,634** | 41% |
+| **`--text` outline** | **3,312** | 37% |
 
 ## Options considered
 
@@ -37,7 +37,7 @@ tokens in all):
 - **Cons:** 61% more tokens than one line when an agent reads it.
 
 ### Option C — the text outline by default
-- **Pros:** the fewest tokens, 41% of the source.
+- **Pros:** the fewest tokens, 37% of the source.
 - **Cons:** tools need a stable machine shape; the plan makes JSON the default.
 
 ## Decision
@@ -54,7 +54,7 @@ file without `main` does.
 
 Tokens decide (ADR 0076, criterion 1): the default form is the one an agent
 reads, and indentation costs 61% more for no information. `--text` is what
-an agent should read to understand a file (41% of the source); JSON is what
+an agent should read to understand a file (37% of the source); JSON is what
 a tool parses. Nesting members under their owner keeps each type's surface in
 one place, which is how an agent asks ("what can I do with a `Drawing`?").
 
