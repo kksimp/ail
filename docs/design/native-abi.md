@@ -94,6 +94,9 @@ Literals in read-only data have no header and are never freed.
 | 9 | bytes |
 | 10 | boxed optional or result |
 | 11 | pointer-free words |
+| 12 | task record (scanned word by word) |
+| 13 | environment record (scanned word by word) |
+| 14 | atomic cell (scanned word by word) |
 
 Strings, lists and structs all take their memory from `rt.alloc` (ADR 0562);
 `rt.obj_new(size, kind)` is `alloc` for compiled code. Kind 11 (pointer-free

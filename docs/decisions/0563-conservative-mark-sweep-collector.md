@@ -20,8 +20,7 @@ C: reference counting.
 
 ## Decision
 
-B. A collection stops the program (it runs inside `alloc`, so all tasks are at a
-call), saves the callee-saved registers with the primitive `gc_regs(buf)` (which also
+B. A collection stops the program, saves the callee-saved registers with the primitive `gc_regs(buf)` (which also
 returns the stack pointer), and scans every word from the stack pointer to the saved
 stack top (the `argv` address `rt.init` receives), those registers, and the global
 slots. A word that falls inside an allocated block, at any offset, marks that
@@ -30,6 +29,23 @@ bytes and pointer-free blocks not at all; everything else (list data, structs, e
 closures, maps, sets, boxed values) word by word, also conservatively. Interior
 pointers are accepted because the optimiser may keep only a derived pointer in a loop.
 A pointer one past an object's end is not accepted.
+
+## Tasks (amended with lane 178, native threads)
+
+With tasks on OS threads, a worker may run a loop that never allocates, so
+"all tasks are at a call" does not hold. The protocol (native-abi.md §10):
+`alloc` and the other runtime entry points that can collect hold `ALLOC_LOCK`;
+the collector sets `GC_REQ`; every other thread parks at its next `alloc`,
+lock wait or task wait, after `gc_regs(buf)` and publishing its stack pointer;
+`rt.gc_stop_world()` returns when all are parked and `rt.gc_start_world()`
+releases them. `gc_collect` scans, besides the main stack, each parked
+thread's range from its published stack pointer to its stack top (plus its
+saved registers) with `gc_scan_range`, then marks and sweeps as before.
+Without tasks both calls are no-ops. A non-allocating worker delays a
+collection until it next allocates or waits; that is accepted. Heap state
+(free lists, bump pointers, page table) is only touched under `ALLOC_LOCK`.
+Kinds 12 (task record), 13 (environment record) and 14 (atomic cell) are
+scanned word by word, like structs.
 
 ## Later: precise stack maps
 
