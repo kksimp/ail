@@ -22,7 +22,7 @@ per-call hashing of names and positions.
 
 ### Option A — more local fast paths and fewer allocations (chosen)
 - **Pros:** every change is local and falls back to the existing general code;
-  `interp.ail` runs 45% fewer instructions and `loops.ail` about 55% fewer; the
+  `interp.ail` runs 46% fewer instructions and `loops.ail` 46% fewer; the
   oracle keeps one evaluation model.
 - **Cons:** more special cases in `interp.rs`; each must keep the same traps and
   evaluation order as the general path, so each has a test.

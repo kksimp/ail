@@ -126,11 +126,20 @@ allocator (allocation is already down to 0.37 million calls).
 
 ### Results (Linux x86-64)
 
-RESULTS_TABLE
+| Program | Instructions before → after | Wall, AIL vs CPython (min of 15) | Ratio before → after |
+|---|---|---|---|
+| interp | 1,383M → 739M (−46.5%) | 0.097 s vs 0.096 s | 1.95 → 1.01 |
+| json | 42.2M → 28.5M (−32%) | 0.008 s vs 0.041 s | → 0.20 |
+| sheet | 130.5M → 82.7M (−37%) | 0.014 s vs 0.055 s | → 0.25 |
+| loops | 6,736M → 3,629M (−46%) | 0.249 s vs 0.244 s | 2.85 → 1.02 |
+
+Ratio is AIL min / CPython min; below 1.0 means AIL is faster. Instruction counts come from callgrind and are stable; wall time varies a few percent.
 
 ### Which programs beat CPython, and why not the rest
 
-RESULTS_PROSE
+json and sheet beat CPython clearly. interp and loops are at parity (within noise), not ahead.
+
+Where loops still loses: the map-update section (AIL about 0.027 s against CPython's 0.011 s) and the string-build section, where `s = "{s}x"` copies twice and CPython appends in place when it holds the only reference. The collatz section beats CPython (0.19 s against about 0.21 s) and list push/sum ties. The remaining profile is flat: name lookup is about 5% of instructions, so the name-based environment of ADR 0176 stays. Closing the last gap needs resolved local slots or a bytecode tier, which is a separate decision.
 
 ### Left alone
 
