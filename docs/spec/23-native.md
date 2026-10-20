@@ -27,9 +27,14 @@ value), `while`, `for` over a range or a list, `break`, `continue`,
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-and the bit operations of expr.bit.1. Any other construct is reported at its
+the bit operations of expr.bit.1, and `Map[K, V]` and `Set[T]` over
+`int`, `bool` and `str` keys: `Map[K, V]()`, `Set[T]()`, map and set
+literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`, `contains`,
+`remove` (a statement for a map), `len`, `keys`, `values`, `push(k, x)` on a
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table, and constants
+that are lists of constants. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390)*
+*(ADRs 0384, 0390, 0568, 0569, 0570)*
 
 ```ail
 fn steps(n int) int

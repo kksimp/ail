@@ -202,6 +202,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Trap stub** | Code at the end of a native function that a failed check branches to; it calls `rt.trap` with the check's kind, operands and constant source text (ADR 0385). |
 | **Trapped** | The prelude error `Trapped { rule, message }` that `Task.wait()` fails with when the task trapped (ADR 0187). |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |
+| **Table object** | The native runtime's `Map` or `Set`: an insertion-ordered entry array plus an open-addressing hash index, one allocation per table (ADR 0568). |
 | **Type argument inference** | Working out a generic call's type arguments from its arguments and expected type (ADR 0129). |
 | **Typed hole** | `todo` written where code isn't finished: it takes the expected type, the checker warns with what it needs and the names in scope, and running it traps (ADR 0147). |
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |

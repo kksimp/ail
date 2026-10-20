@@ -445,3 +445,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0568](0568-native-map-and-set-layout.md) | Native `Map` and `Set`: one insertion-ordered table with a hash index *(delegated)* | Accepted | 2026-10-20 |
+| [0569](0569-native-map-lowering.md) | Lowering `Map` and `Set` operations to runtime calls, with the interpreter's trap *(delegated)* | Accepted | 2026-10-20 |
+| [0570](0570-native-constant-lists.md) | Constant lists are built once, on first use, in a global slot *(delegated)* | Accepted | 2026-10-20 |

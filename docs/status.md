@@ -33,6 +33,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `compiler/x64/`, `compiler/codegen/`, `compiler/obj/`, `compiler/rt/native/`: x86-64 code generation (ADR 0385), linear-scan allocation (ADR 0386), static ELF executables with the runtime compiled from AIL (ADR 0387). `ail build FILE` works on Linux x86-64 (native.build.3); `bootstrap/tests/native.rs` builds each `tests/native/run/` program and compares it with `ail run`.
 - `compiler/a64/`, `compiler/obj/macho.ail`: ARM64 code generation (ADR 0388) and signed Mach-O executables (ADR 0389); `ail build --target aarch64-linux|aarch64-macos`. Linux ARM64 is tested under qemu where installed; macOS ARM64 in the designer's gate.
 - Native drag race (ADR 0390): eleven perfbench programs build natively and match the interpreter byte for byte; times against `clang -O2`, `gcc -O2` and Python, and the compiler's own speed, are in [native-performance.md](design/native-performance.md). First optimisations (ADR 0391): lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols.
+- Native `Map` and `Set` (ADRs 0568–0570, lane 173): an insertion-ordered table with a hash index (`compiler/rt/native/map.ail`, `compiler/mir/lower_map.ail`) for `int`, `bool` and `str` keys; `wordfreq` builds natively and prints the interpreter's bytes on x86-64 and ARM64 (qemu), 5x faster than CPython at 10 million words. `loops` waits for string interpolation (lane 172). Constant lists are built once in a global slot.
 
 ### Language (2026-10-20 batch)
 

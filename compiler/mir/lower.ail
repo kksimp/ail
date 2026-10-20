@@ -71,6 +71,11 @@ struct Lower
     var_vals Map[str, List[int]]
     nvars int
     loops List[Loop]
+    ## The program's path and source lines, for the trap texts of map reads.
+    path str
+    src_lines List[str]
+    ## Global slots of constant lists built on first use (ADR 0570).
+    const_slots Map[str, int]
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -124,6 +129,9 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
         var_vals: {},
         nvars: 0,
         loops: [],
+        path: path,
+        src_lines: text.lines(),
+        const_slots: {},
     )
     if r := rt
         l.declare_all(r, "rt.")
@@ -207,7 +215,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
-        if p.mutable and t.elem() == none
+        if p.mutable and t.elem() == none and not t.is_coll()
             problem(
                 p.pos,
                 "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
@@ -244,6 +252,7 @@ fn type_of(t ast.TypeRef) Ty?
                     if is_number(e) or e == Ty.Str or e.elem() != none
                         return Ty.List(e)
                     none
+                "Map" | "Set" => coll_type_of(name, args)
                 _ => none
         _ => none
 
@@ -261,9 +270,16 @@ fn is_literal(e ast.Expr) bool
 fn is_const_expr(e ast.Expr) bool
     match e
         Int | Float | Bool | Str | Name => true
+        ListLit(items, _) => all_const(items)
         Unary(_, x, _) => is_const_expr(x)
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
+
+fn all_const(items List[ast.Expr]) bool
+    for x in items
+        if not is_const_expr(x)
+            return false
+    true
 
 fn is_number(t Ty) bool
     match t
@@ -522,6 +538,12 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
+    if is_get_call(value)
+        got := lower_get_else(value, other, pos) else
+            declare(name, Ty.Unknown, -1)
+            return
+        declare(name, got.ty, got.id)
+        return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
@@ -607,6 +629,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
+    if v.ty.is_coll() and is_place(e)
+        return copy_coll(v)
     if v.ty.elem() == none or not is_place(e)
         return v.id
     copy_list(v)
@@ -647,6 +671,9 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
             write_var(key, cur, v)
         Index(recv, index, ipos) =>
             l := lower_value(recv, none) else return
+            if l.ty.is_coll()
+                lower_map_assign(l, index, op, value, pos, ipos)
+                return
             elem := l.ty.elem() else
                 problem(ipos, "indexing a `{l.ty.name()}` isn't in the native subset yet")
                 return
@@ -705,7 +732,8 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
             hi = y.id
             inclusive = incl
         _ =>
-            l := lower_value(iter, none) else return
+            l0 := lower_value(iter, none) else return
+            l := iter_coll(l0)
             e := l.ty.elem() else
                 problem(
                     expr_pos(iter),
@@ -714,7 +742,7 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
                 return
             elem = e
             list = l.id
-            if mutates(body, iter)
+            if mutates(body, iter) and l.id == l0.id
                 list = copy_list(l)
             lo = konst(0, Ty.Int)
             hi = op("len", [list], Ty.Int)
@@ -862,7 +890,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Name(name, pos) =>
             key := lookup(name) else
                 if c := consts.get("{prefix}{name}")
-                    return lower_expr(c, want)
+                    return lower_const(name, c, want)
                 problem(
                     pos,
                     "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
@@ -889,6 +917,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
         Index(recv, index, pos) =>
             l := lower_value(recv, none)?
+            if l.ty.is_coll()
+                return lower_coll_index(l, index, pos)
             elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
             if is_range(index)
                 return unsupported(pos, "list slices")
@@ -903,12 +933,15 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
         Member(_, _, pos) => unsupported(pos, "fields")
         Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
-        MapLit(_, pos) => unsupported(pos, "maps")
-        SetLit(_, pos) => unsupported(pos, "sets")
+        MapLit(entries, pos) => lower_map_lit(entries, pos, want)
+        SetLit(items, pos) => lower_set_lit(items, pos, want)
         Match(_, _, pos) => unsupported(pos, "`match`")
         Try(_, _, pos) => unsupported(pos, "`?`")
         Comp(_, _, _, _, pos) => unsupported(pos, "comprehensions")
-        OrElse(_, _, pos) => unsupported(pos, "`else`")
+        OrElse(value, otherwise, pos) =>
+            if is_get_call(value)
+                return lower_get_else(value, otherwise, pos)
+            unsupported(pos, "`else`")
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
@@ -1159,6 +1192,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
             Val(id: call(key, vs, sig.ret), ty: sig.ret)
         TypeArgs(name, targs, tpos) =>
+            if (name == "Map" or name == "Set") and args.len() == 0
+                return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
                     return unsupported(tpos, "this list type")
@@ -1227,6 +1262,8 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if v.ty.is_coll()
+        return out_coll(v, pos)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
@@ -1246,6 +1283,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         ))
         return none
     r := lower_value(recv, none)?
+    if r.ty.is_coll()
+        return lower_coll_method(r, name, npos, args)
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable

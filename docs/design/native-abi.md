@@ -49,6 +49,7 @@ one byte, 0 or 1 (ADR 0391).
 | `char` | `i64`, a Unicode scalar value |
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
+| `Map[K, V]`, `Set[T]` | pointer to a **table object** (kind 7, 8) |
 
 **String object** (immutable, 16-byte aligned):
 
@@ -72,6 +73,25 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 `data` is separate so `push` can grow without moving the header the caller
 holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
+
+**Table object** (`Map` and `Set`, ADR 0568; `compiler/rt/native/map.ail`):
+
+```text
++0   u64  len     live entries
++8   u64  used    entry-array slots used, live or dead
++16  u64  ecap    entry-array capacity (a power of two)
++24  u64  mask    index size - 1
++32  u64  kind    key kind: 0 int, 1 str, 2 bool
++40  ptr  ents    ecap * 24 bytes: hash (-1 when dead), key, value
++48  ptr  index   (mask + 1) * 8 bytes: 0 empty, else entry number + 1
++56  u64  vmode   copy mode of values: 0 plain, 1 lists, 2 tables
++64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
+```
+
+The entry array is in insertion order, which is iteration order
+(type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
+1. A set uses the same layout and ignores the value word. Constant lists
+(ADR 0570) live in global slots 16–63; the collector scans them as roots.
 
 **Heap object header.** None in this revision. A collector (ADR 0012's ladder)
 needs type information; the plan is a second ABI revision with an 8-byte word
