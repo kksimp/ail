@@ -52,9 +52,14 @@ proposal, not a decision.
 3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
    in-house TLS for `std.net`
    (ADR 0360, in progress).
-4. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
+4. **Rust-free check (designer, 2026-10-20):** when the shipped toolchain
+   no longer needs Rust (end of Stage 4), rebuild `tools/edit` with the
+   self-hosted toolchain and compare it with the Rust-bootstrap baseline in
+   [editor-baseline.md](design/editor-baseline.md) (start-up, `ail check`
+   time, test time, tokens, memory, and keystroke/redraw latency).
+5. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
    atomic orderings (OQ-097).
-5. **Open language questions:** safe member access and matching on error sets
+6. **Open language questions:** safe member access and matching on error sets
    (OQ-029), custom hashing (OQ-042), unique values in generic code (OQ-050),
    loop invariants and static proof (OQ-060), downcasting `any Trait`
    (OQ-094).
