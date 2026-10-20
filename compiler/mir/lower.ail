@@ -590,9 +590,12 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             declare(name, v.ty, copy_if_place(value, v))
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
-        For(_, var, _, mutable, iter, body, pos) =>
+        For(is_par, var, _, mutable, iter, body, pos) =>
             if mutable
                 problem(pos, "`for mut` isn't in the native subset yet")
+                return
+            if is_par
+                lower_par_for(var, iter, body, pos)
                 return
             lower_for(var, iter, body)
         Break(pos) =>
@@ -646,7 +649,7 @@ fn is_place(e ast.Expr) bool
         Name | Index => true
         _ => false
 
-fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
+fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     match target
         Name(name, npos) =>
             key := lookup(name) else

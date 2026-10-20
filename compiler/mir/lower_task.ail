@@ -9,21 +9,44 @@ use ast
 T_RESULT := 16
 T_ARGS := 80
 
-## One `spawn` site: the function it calls and that function's types.
+## One `spawn` site (`loop` -1): the function it calls and that function's
+## types; or a `par for` (`loop` indexes `TaskState.pars`), whose chunk
+## function `task.K` the compiler writes.
 struct TaskSite
     func str
     params List[Ty]
     ret Ty
+    loop int
+
+## A variable a parallel loop's body uses: the chunk gets its value.
+struct Cap
+    name str
+    ty Ty
+
+## A `par for` the compiler runs on the pool (conc.par.8).
+struct ParSite
+    var str
+    by_list bool
+    caps List[Cap]
+    ## `int` accumulators, each updated by one `+=` (conc.par.4).
+    accs List[str]
+    body List[ast.Stmt]
+    pos ast.Pos
 
 pub struct TaskState
     ## Whether the task runtime is linked (so `print` takes the output lock).
     on bool
     sites List[TaskSite]
+    pars List[ParSite]
     ## The result type of the task a handle variable holds, by variable key.
     rets Map[str, Ty]
+    ## While lowering a chunk function: no loop inside it goes parallel again,
+    ## and `+=` on these names also tracks the running sum's extremes.
+    in_chunk bool
+    accs Set[str]
 
 pub fn new_task_state() TaskState
-    TaskState(on: false, sites: [], rets: {})
+    TaskState(on: false, sites: [], pars: [], rets: {}, in_chunk: false, accs: Set[str]())
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
 ## task runtime is linked. A false positive only costs compile time.
@@ -92,7 +115,7 @@ fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
                         at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
                         prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
                     call("rt.task_start", [rec], Ty.Unit)
-                    tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret))
+                    tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
                     Val(id: rec, ty: Ty.Int)
                 _ => unsupported(cpos, "`spawn` of anything but a function")
         _ => unsupported(pos, "`spawn` of anything but a function call")
@@ -180,6 +203,9 @@ fn Lower.build_task_fns(mut self)
         return
     for k in 0..tk.sites.len()
         s := tk.sites[k]
+        if s.loop >= 0
+            build_par_fn(k, tk.pars[s.loop])
+            continue
         ps := synth_begin("task.{k}", [Ty.Int])
         rec := ps[0]
         mut vs := List[int]()
@@ -205,3 +231,395 @@ fn Lower.build_task_fns(mut self)
         cur = no
     finish(return_of(-1))
     synth_end(ps)
+
+# ---- parallel loops (conc.par.*, ADR 0601) ----
+
+## What a loop body does, for deciding whether its chunks can run apart.
+struct ParScan
+    ## Every name the body mentions, and those it declares itself.
+    names Set[str]
+    decls Set[str]
+    ## Reads of a name (not as the target of an assignment).
+    reads Map[str, int]
+    ## `x += e` statements outside nested loops, by name.
+    adds Map[str, int]
+    ## Names assigned in any other way.
+    other Set[str]
+    ## Names whose value a method call or `mut` argument may change.
+    mutated Set[str]
+    ## A construct the parallel version doesn't take.
+    bad bool
+
+fn new_scan() ParScan
+    ParScan(
+        names: Set[str](),
+        decls: Set[str](),
+        reads: {},
+        adds: {},
+        other: Set[str](),
+        mutated: Set[str](),
+        bad: false,
+    )
+
+## Methods that only read their receiver.
+READ_ONLY := ["len", "abs", "min", "max", "to_float", "to_int", "sqrt", "floor", "ceil", "bit_and", "bit_or", "bit_xor", "shl", "shr", "join", "chars"]
+
+fn is_add(op ast.BinOp?) bool
+    o := op else return false
+    match o
+        Add => true
+        _ => false
+
+fn root_name(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Index(r, _, _) => root_name(r)
+        _ => none
+
+fn scan_block(mut sc ParScan, body List[ast.Stmt], depth int)
+    for s in body
+        scan_stmt(mut sc, s, depth)
+
+fn bump(mut m Map[str, int], key str)
+    mut n := 1
+    if prev := m.get(key)
+        n = prev + 1
+    m[key] = n
+
+fn scan_stmt(mut sc ParScan, s ast.Stmt, depth int)
+    match s
+        Let(name, _, _, value, otherwise) =>
+            if otherwise != none
+                sc.bad = true
+            scan_expr(mut sc, value)
+            sc.decls.add(name)
+        Assign(target, op, value, _) =>
+            scan_expr(mut sc, value)
+            match target
+                Name(n, _) =>
+                    sc.names.add(n)
+                    if is_add(op) and depth == 0
+                        bump(mut sc.adds, n)
+                    else
+                        sc.other.add(n)
+                Index(r, i, _) =>
+                    scan_expr(mut sc, i)
+                    scan_place(mut sc, r)
+                _ => sc.bad = true
+        While(cond, body, _) =>
+            scan_expr(mut sc, cond)
+            scan_block(mut sc, body, depth + 1)
+        For(_, var, _, _, iter, body, _) =>
+            scan_expr(mut sc, iter)
+            sc.decls.add(var)
+            scan_block(mut sc, body, depth + 1)
+        Break(_) =>
+            if depth == 0
+                sc.bad = true
+        Continue(_) => return
+        Eval(e) => scan_expr(mut sc, e)
+        Return(_, _) => sc.bad = true
+        Handle(_, _) | Defer(_, _) | With(_, _, _, _, _) | Unsafe(_, _) => sc.bad = true
+
+## The place an element is stored into: the indexes are read, the list is
+## only named.
+fn scan_place(mut sc ParScan, e ast.Expr)
+    match e
+        Name(n, _) => sc.names.add(n)
+        Index(r, i, _) =>
+            scan_expr(mut sc, i)
+            scan_place(mut sc, r)
+        _ => sc.bad = true
+
+fn scan_expr(mut sc ParScan, e ast.Expr)
+    match e
+        Int | Float | Bool | Str => return
+        Name(n, _) =>
+            sc.names.add(n)
+            bump(mut sc.reads, n)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => scan_expr(mut sc, x)
+                    Fmt(x, _) => scan_expr(mut sc, x)
+        Call(callee, args, _) =>
+            match callee
+                Name => scan_args(mut sc, args)
+                _ => sc.bad = true
+        Method(recv, name, _, args) =>
+            if not READ_ONLY.contains(name)
+                r := root_name(recv) else
+                    sc.bad = true
+                    return
+                sc.mutated.add(r)
+            scan_expr(mut sc, recv)
+            scan_args(mut sc, args)
+        Index(r, i, _) =>
+            scan_expr(mut sc, r)
+            scan_expr(mut sc, i)
+        Unary(o, x, _) =>
+            match o
+                Spawn => sc.bad = true
+                Neg | Not => scan_expr(mut sc, x)
+        Binary(_, a, b, _) =>
+            scan_expr(mut sc, a)
+            scan_expr(mut sc, b)
+        ListLit(items, _) =>
+            for x in items
+                scan_expr(mut sc, x)
+        If(branches, els, _, _) =>
+            for b in branches
+                match b.cond
+                    Test(x) => scan_expr(mut sc, x)
+                    Bind => sc.bad = true
+                scan_block(mut sc, b.body, 1)
+            if body := els
+                scan_block(mut sc, body, 1)
+        _ => sc.bad = true
+
+fn scan_args(mut sc ParScan, args List[ast.Arg])
+    for a in args
+        if a.mutable
+            r := root_name(a.value) else
+                sc.bad = true
+                return
+            sc.mutated.add(r)
+        scan_expr(mut sc, a.value)
+
+## Whether a `par for` can run its iterations in chunks on the pool, and
+## what its chunks need (conc.par.8): it writes only list elements and `int`
+## accumulators, each updated by one `+=` outside nested loops.
+fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos) ParSite?
+    if not tk.on or tk.in_chunk
+        return none
+    mut by_list := false
+    match iter
+        Range(a, b, incl, _) =>
+            if a == none or b == none or incl
+                return none
+        Name(n, _) =>
+            key := lookup(n)?
+            e := var_ty[key].elem()?
+            if e.elem() != none or mutates(body, iter)
+                return none
+            by_list = true
+        _ => return none
+    mut sc := new_scan()
+    scan_block(mut sc, body, 0)
+    if sc.bad
+        return none
+    mut caps := List[Cap]()
+    mut accs := List[str]()
+    for n in sc.names.sorted()
+        if n == var
+            continue
+        key := lookup(n) else continue
+        ty := var_ty[key]
+        if sc.decls.contains(n)
+            return none
+        if ty.is_unknown() or ty.is_unit() or tk.rets.contains(key)
+            return none
+        if sc.mutated.contains(n) and ty.elem() != none
+            return none
+        n_adds := sc.adds.get(n) else 0
+        n_reads := sc.reads.get(n) else 0
+        if n_adds > 0
+            if ty != Ty.Int or n_adds != 1 or n_reads > 0 or sc.other.contains(n)
+                return none
+            accs.push(n)
+        elif sc.other.contains(n)
+            return none
+        caps.push(Cap(name: n, ty: ty))
+    if accs.len() > 3
+        return none
+    if by_list
+        key := lookup(root_of(iter))?
+        caps.push(Cap(name: "__plist", ty: var_ty[key]))
+    ParSite(var: var, by_list: by_list, caps: caps, accs: accs, body: body, pos: pos)
+
+fn root_of(e ast.Expr) str
+    match e
+        Name(n, _) => n
+        _ => ""
+
+## `par for`: chunks of the iterations on the pool when the loop is long
+## enough and nothing in a chunk traps; else the loop in order, which is its
+## meaning (conc.par.5) and, after a trap or an accumulator that would
+## overflow, the only way to report the sequential trap (conc.par.11).
+fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos)
+    plan := par_plan(var, iter, body, pos) else
+        lower_for(var, iter, body)
+        return
+    scopes.push(Map[str, str]())
+    mut lo := -1
+    mut hi := -1
+    mut seq_iter := iter
+    if plan.by_list
+        l := lower_value(iter, none) else
+            scopes.pop()
+            return
+        declare("__plist", l.ty, l.id)
+        lo = konst(0, Ty.Int)
+        hi = op("len", [l.id], Ty.Int)
+        seq_iter = ast.Expr.Name(name: "__plist", pos: pos)
+    else
+        match iter
+            Range(a, b, _, _) =>
+                x := lower_value(a else iter, Ty.Int) else
+                    scopes.pop()
+                    return
+                y := lower_value(b else iter, Ty.Int) else
+                    scopes.pop()
+                    return
+                lo = x.id
+                hi = y.id
+                declare("__plo", Ty.Int, lo)
+                declare("__phi", Ty.Int, hi)
+                seq_iter = ast.Expr.Range(
+                    lo: ast.Expr.Name(name: "__plo", pos: pos),
+                    hi: ast.Expr.Name(name: "__phi", pos: pos),
+                    inclusive: false,
+                    pos: pos,
+                )
+            _ => return
+    id := tk.sites.len()
+    tk.sites.push(TaskSite(func: "task.{id}", params: [], ret: Ty.Unit, loop: tk.pars.len()))
+    tk.pars.push(plan)
+    ncaps := plan.caps.len()
+    par_blk := new_block()
+    comb := new_block()
+    done := new_block()
+    seq := new_block()
+    join := new_block()
+    branch(call("rt.par_worth", [lo, hi], Ty.Bool), par_blk, [], seq, [])
+    seal(par_blk)
+    cur = par_blk
+    env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
+    for i in 0..ncaps
+        c := plan.caps[i]
+        key := lookup(c.name) else
+            problem(pos, "internal error: lost `{c.name}`")
+            continue
+        at := op("add", [env, konst(8 * i, Ty.Int)], Ty.Int)
+        prim_op(if c.ty.is_float() then "storef" else "store64", [at, read_var(key, cur)], Ty.Unit)
+    for a in 0..plan.accs.len()
+        key := lookup(plan.accs[a]) else continue
+        at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
+        prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
+    grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi], Ty.Int)
+    branch(call("rt.par_wait", [grp], Ty.Bool), comb, [], seq, [])
+    seal(comb)
+    cur = comb
+    all_ok := call(
+        "rt.par_combine",
+        [grp, env, konst(plan.accs.len(), Ty.Int), konst(ncaps, Ty.Int)],
+        Ty.Bool,
+    )
+    branch(all_ok, done, [], seq, [])
+    seal(done)
+    seal(seq)
+    cur = done
+    for a in 0..plan.accs.len()
+        key := lookup(plan.accs[a]) else continue
+        at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
+        write_var(key, cur, prim_op("load64", [at], Ty.Int))
+    jump(join, [])
+    cur = seq
+    lower_for(var, seq_iter, body)
+    jump(join, [])
+    seal(join)
+    cur = join
+    scopes.pop()
+
+## Word `n` of the arguments of the task record `rec`.
+fn Lower.rec_word(mut self, rec int, n int) int
+    at := op("add", [rec, konst(T_ARGS + 8 * n, Ty.Int)], Ty.Int)
+    prim_op("load64", [at], Ty.Int)
+
+## The chunk function of a parallel loop: `task.K(rec)` runs iterations
+## `lo` to `hi` of the body over the captured values and leaves each
+## accumulator's sum and the lowest and highest running sum in the record.
+fn Lower.build_par_fn(mut self, k int, p ParSite)
+    ps := synth_begin("task.{k}", [Ty.Int])
+    rec := ps[0]
+    tk.in_chunk = true
+    pos := p.pos
+    env := rec_word(rec, 0)
+    for i in 0..p.caps.len()
+        c := p.caps[i]
+        at := op("add", [env, konst(8 * i, Ty.Int)], Ty.Int)
+        declare(c.name, c.ty, prim_op(if c.ty.is_float() then "loadf" else "load64", [at], c.ty))
+    declare("__lo", Ty.Int, rec_word(rec, 1))
+    declare("__hi", Ty.Int, rec_word(rec, 2))
+    for a in p.accs
+        declare(a, Ty.Int, konst(0, Ty.Int))
+        declare("{a}#min", Ty.Int, konst(0, Ty.Int))
+        declare("{a}#max", Ty.Int, konst(0, Ty.Int))
+        tk.accs.add(a)
+    range := ast.Expr.Range(
+        lo: ast.Expr.Name(name: "__lo", pos: pos),
+        hi: ast.Expr.Name(name: "__hi", pos: pos),
+        inclusive: false,
+        pos: pos,
+    )
+    if p.by_list
+        take := ast.Stmt.Let(
+            name: p.var,
+            pos: pos,
+            mutable: false,
+            value: ast.Expr.Index(
+                recv: ast.Expr.Name(name: "__plist", pos: pos),
+                index: ast.Expr.Name(name: "__k", pos: pos),
+                pos: pos,
+            ),
+            otherwise: none,
+        )
+        mut body := [take]
+        body.extend(p.body)
+        lower_for("__k", range, body)
+    else
+        lower_for(p.var, range, p.body)
+    for a in 0..p.accs.len()
+        base := T_ARGS + 8 * (3 + 3 * a)
+        for part in 0..3
+            name := if part == 0 then p.accs[a] else if part == 1 then "{p.accs[a]}#min" else "{p.accs[a]}#max"
+            key := lookup(name) else continue
+            at := op("add", [rec, konst(base + 8 * part, Ty.Int)], Ty.Int)
+            prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
+    finish(return_of(-1))
+    tk.in_chunk = false
+    tk.accs = Set[str]()
+    synth_end(ps)
+
+## After `acc += e` in a chunk: keep the lowest and highest running sum, so
+## the sums of the chunks combine with the overflow checks the sequential
+## loop would make (conc.par.4).
+fn Lower.track_sum(mut self, target ast.Expr)
+    n := match target
+        Name(n, _) => n
+        _ => return
+    if not tk.accs.contains(n)
+        return
+    key := lookup(n) else return
+    v := read_var(key, cur)
+    for hi in [false, true]
+        suffix := if hi then "max" else "min"
+        ext := lookup("{n}#{suffix}") else return
+        old := read_var(ext, cur)
+        c := op(if hi then "gt" else "lt", [v, old], Ty.Bool)
+        upd := new_block()
+        join := new_block()
+        branch(c, upd, [], join, [])
+        seal(upd)
+        cur = upd
+        write_var(ext, cur, v)
+        jump(join, [])
+        seal(join)
+        cur = join
+
+## `lower_assign`, then the sum tracking of a chunk.
+fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
+    lower_assign_body(target, op, value, pos)
+    if tk.in_chunk
+        track_sum(target)

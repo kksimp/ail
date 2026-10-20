@@ -173,6 +173,13 @@ fn on_trap(kind int, a int, b int, head str, op str, tail str)
 ## trapped task ends the program as the interpreter's uncaught `Trapped`
 ## does (err.trace.1).
 fn task_wait(rec int) int
+    wait_done(rec)
+    if atomic_load(rec + T_STATE) == 3
+        report_trapped(rec)
+    load64(rec + T_RESULT)
+
+## Sleep until the task has ended, trapped or not.
+fn wait_done(rec int)
     if atomic_load(rec + T_STATE) == 0
         k := worker_index()
         if k >= 0
@@ -181,9 +188,6 @@ fn task_wait(rec int) int
             futex_wait(rec + T_STATE, 0)
         if k >= 0
             wait_leave()
-    if atomic_load(rec + T_STATE) == 3
-        report_trapped(rec)
-    load64(rec + T_RESULT)
 
 ## A worker is about to sleep in `wait`: it stops counting as running, and
 ## a replacement starts if work is queued and nobody could take it.
@@ -245,3 +249,67 @@ fn is_trap_mark(a int) bool
 ## site and parallel loop.
 fn dispatch(id int, rec int)
     todo
+
+# ---- parallel loops (ADR 0601) ----
+
+## Whether `par for lo..hi` goes to the pool: at least twice as many
+## iterations as workers (conc.par.8). A chunk function takes the environment
+## record, `lo` and `hi` from its task record's arguments 0 to 2, then
+## 3 words (sum, lowest and highest running sum) per accumulator.
+fn par_worth(lo int, hi int) bool
+    t := load64(pool() + P_TARGET)
+    hi > lo and hi - lo > 0 and hi - lo >= 2 * t
+
+## `n` zeroed words: the values a loop body reads and the accumulators.
+fn env_new(n int) int
+    alloc(8 * n + 8)
+
+## Split `lo..hi` into chunks, four per worker, queue them, and give back
+## the group: word 0 the chunk count, then the task records in order.
+fn par_start(id int, env int, lo int, hi int) int
+    t := load64(pool() + P_TARGET)
+    n := hi - lo
+    mut chunks := 4 * t
+    if chunks > n
+        chunks = n
+    size := (n + chunks - 1) / chunks
+    chunks = (n + size - 1) / size
+    grp := alloc(8 * chunks + 8)
+    store64(grp, chunks)
+    for c in 0..chunks
+        off := c * size
+        len := if size < n - off then size else n - off
+        rec := task_new(id)
+        store64(rec + T_ARGS, env)
+        store64(rec + T_ARGS + 8, lo + off)
+        store64(rec + T_ARGS + 16, lo + off + len)
+        store64(grp + 8 + 8 * c, rec)
+        task_start(rec)
+    grp
+
+## Wait for every chunk; whether none trapped.
+fn par_wait(grp int) bool
+    mut ok := true
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        wait_done(rec)
+        if atomic_load(rec + T_STATE) != 2
+            ok = false
+    ok
+
+## Combine the accumulators in chunk order, checking as the sequential sum
+## would: a running sum that would leave `int` anywhere makes the loop run
+## in order instead (conc.par.11). The totals go back into the environment.
+fn par_combine(grp int, env int, nacc int, first int) bool
+    least := -9223372036854775807 - 1
+    most := 9223372036854775807
+    for a in 0..nacc
+        mut total := load64(env + 8 * (first + a))
+        for c in 0..load64(grp)
+            rec := load64(grp + 8 + 8 * c)
+            w := rec + T_ARGS + 8 * (3 + 3 * a)
+            if total < least - load64(w + 8) or total > most - load64(w + 16)
+                return false
+            total += load64(w)
+        store64(env + 8 * (first + a), total)
+    true
