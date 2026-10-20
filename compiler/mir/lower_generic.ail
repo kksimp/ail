@@ -73,7 +73,10 @@ fn Lower.declare_generic_fn(mut self, f ast.FnDecl, pre str) bool
     if o := f.owner
         if o.params != none and gen.types.contains("{pre}{o.name}")
             if f.generics.len() > 0
-                problem(f.pos, "`{o.name}.{f.name}`: generic methods of generic types aren't in the native subset yet")
+                problem(
+                    f.pos,
+                    "`{o.name}.{f.name}`: generic methods of generic types aren't in the native subset yet",
+                )
                 return true
             gen.fns[fn_key(f, pre)] = GenFn(decl: f, file: file)
             return true
@@ -240,7 +243,13 @@ fn Lower.is_generic_callee(self, callee ast.Expr) bool
 
 ## `f(...)`, `f[T](...)`, `G(...)` or `G[T](...)` of a generic function or
 ## struct.
-fn Lower.lower_generic_callee(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+fn Lower.lower_generic_callee(
+    mut self,
+    callee ast.Expr,
+    args List[ast.Arg],
+    pos ast.Pos,
+    want Ty?,
+) Val?
     mut name := ""
     mut targs := List[ast.TypeRef]()
     match callee
@@ -255,7 +264,12 @@ fn Lower.lower_generic_callee(mut self, callee ast.Expr, args List[ast.Arg], pos
     generic_struct(g, targs, args, pos, want)
 
 ## The type arguments written in `f[A, B]`, bound to `params`.
-fn Lower.explicit_binds(mut self, params List[str], targs List[ast.TypeRef], pos ast.Pos) Map[str, Ty]?
+fn Lower.explicit_binds(
+    mut self,
+    params List[str],
+    targs List[ast.TypeRef],
+    pos ast.Pos,
+) Map[str, Ty]?
     mut binds := Map[str, Ty]()
     if targs.len() == 0
         return binds
@@ -293,7 +307,15 @@ fn Lower.all_bound(mut self, params List[str], binds Map[str, Ty], what str, pos
 
 ## A call of generic function `g` (gen.infer.1): bind its type parameters,
 ## then call the instance.
-fn Lower.generic_call(mut self, g str, shown str, targs List[ast.TypeRef], args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+fn Lower.generic_call(
+    mut self,
+    g str,
+    shown str,
+    targs List[ast.TypeRef],
+    args List[ast.Arg],
+    pos ast.Pos,
+    want Ty?,
+) Val?
     gf := gen.fns[g]
     f := gf.decl
     params := generic_names(f.generics)
@@ -379,7 +401,14 @@ fn Lower.instance_method(mut self, key str)
 
 ## `G(...)` or `G[T](...)` of a generic struct: bind its type parameters
 ## from the written types, the expected type or the fields' values.
-fn Lower.generic_struct(mut self, g str, targs List[ast.TypeRef], args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+fn Lower.generic_struct(
+    mut self,
+    g str,
+    targs List[ast.TypeRef],
+    args List[ast.Arg],
+    pos ast.Pos,
+    want Ty?,
+) Val?
     gt := gen.types[g]
     s := gt.sdecl else return unsupported(pos, "this call")
     mut binds := explicit_binds(gt.params, targs, pos)?
