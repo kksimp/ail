@@ -67,6 +67,9 @@ struct Stub
     site int
     op str
 
+## Integer arguments passed in x0-x7 (native-abi.md §1).
+INT_ARGS := 8
+
 struct Gen
     a Asm
     img codegen.Image
@@ -82,6 +85,9 @@ struct Gen
     saved List[int]
     slots int
     frame int
+    ## Bytes the stack pointer is below the frame for outgoing stack
+    ## arguments; spill slots are addressed from the stack pointer.
+    sp_shift int
     ## Caller-saved registers in use, which a `push`'s slow path saves.
     caller_used List[int]
 
@@ -145,6 +151,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         caller_used: codegen.caller_used(al, registers()),
         slots: al.slots,
         frame: 0,
+        sp_shift: 0,
     )
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
     g.prologue()
@@ -198,7 +205,7 @@ fn Gen.epilogue(mut self)
     a.ret()
 
 fn Gen.slot(self, l int) int
-    8 * (saved.len() + l - codegen.SLOT_BASE)
+    sp_shift + 8 * (saved.len() + l - codegen.SLOT_BASE)
 
 fn is_reg(l int) bool
     l >= 0 and l < codegen.SLOT_BASE
@@ -349,10 +356,20 @@ fn Gen.entry_moves(mut self)
         if f.vals[p].is_float()
             moves.push(Move(dst: loc[p], src: FB + nf, imm: 0, sym: "", float: true))
             nf += 1
-        else
+        elif ni < INT_ARGS
             moves.push(Move(dst: loc[p], src: ni, imm: 0, sym: "", float: false))
             ni += 1
     parallel(moves)
+    # Integer parameters after the eighth are on the stack above the frame
+    # record (native-abi.md §1).
+    mut k := 0
+    for p in f.params
+        if not f.vals[p].is_float()
+            if k >= INT_ARGS
+                d := out_gpr(p, S0)
+                a.ldr(d, FP, 16 + 8 * (k - INT_ARGS))
+                put_gpr(p, d)
+            k += 1
 
 # ---- blocks ----
 
@@ -701,15 +718,29 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
+    mut extra := List[int]()
     for v in i.args
         if f.vals[v].is_float()
             moves.push(move_of(FB + nf, v))
             nf += 1
-        else
+        elif ni < INT_ARGS
             moves.push(move_of(ni, v))
             ni += 1
+        else
+            extra.push(v)
+    # Integer arguments after the eighth go on the stack, the ninth lowest
+    # (native-abi.md §1); spill slots move with the stack pointer meanwhile.
+    room := (8 * extra.len() + 15) / 16 * 16
+    if room > 0
+        adjust_sp("sub", room)
+        sp_shift = room
+        for k in 0..extra.len()
+            a.str(gpr(extra[k], S0), SP, 8 * k)
     parallel(moves)
     a.bl(i.name)
+    if room > 0
+        adjust_sp("add", room)
+        sp_shift = 0
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_fpr(i.dst, 0)

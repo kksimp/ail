@@ -30,9 +30,10 @@ lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-and the bit operations of expr.bit.1. Any other construct is reported at its
+and the bit operations of expr.bit.1, in functions with at most eight `float`
+parameters (any number of others). Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393, 0532)*
+*(ADRs 0384, 0390, 0392, 0393, 0532, 0533)*
 
 ```ail
 fn steps(n int) int

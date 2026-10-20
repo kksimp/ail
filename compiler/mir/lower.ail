@@ -321,7 +321,6 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     for a in f.attrs
         if a.name != "inline" and a.name != "pure"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
-    mut ints := params.len()
     mut floats := 0
     for p in f.params
         t := type_of(p.ty) else
@@ -334,12 +333,11 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             )
         if t.is_float()
             floats += 1
-        else
-            ints += 1
         params.push(t)
-    # Primitives are not called through the ABI.
-    if (ints > 6 or floats > 8) and not (pre == "rt." and PRIMS.contains(f.name))
-        problem(f.pos, "`{f.name}` has more than 6 integer or 8 float parameters")
+    # Primitives are not called through the ABI. Integer arguments past the
+    # registers go on the stack; float ones don't yet.
+    if floats > 8 and not (pre == "rt." and PRIMS.contains(f.name))
+        problem(f.pos, "`{f.name}` has more than 8 float parameters")
     mut rty := Ty.Unit
     if r := f.ret
         t := type_of(r) else

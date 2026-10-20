@@ -22,7 +22,10 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
-registers go on the stack, 8 bytes each, in order. Callee-saved registers are
+registers go on the stack, 8 bytes each, in order, the first lowest; the
+caller reserves a 16-byte-aligned area below its frame for them and frees it
+after the call, and the callee reads them above its frame record (ADR 0533).
+Float arguments beyond the eighth aren't supported yet. Callee-saved registers are
 the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
 an `extern` call treats them as clobbered). No variadics. Structs are passed
 by pointer.
