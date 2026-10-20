@@ -47,6 +47,7 @@ pub fn check_program(p ast.Program) Report
     for i in 0..p.fns.len()
         c.check_fn(i)
     c.check_drop_impls()
+    c.diags.extend(check_handles(p))
     c.remap_generated()
     Report(
         diags: c.diags,

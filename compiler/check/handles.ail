@@ -1,0 +1,345 @@
+## Task handles (ADR 0377), as `conc::check_handles`: every task handle is
+## consumed exactly once, on every path, by `.wait()` or by `g.add(t)`, in
+## the block that spawned it; a `spawn` appears only where its handle is
+## bound, added or waited (conc.task.5).
+use ast
+
+TASK_HELP := "wait it with `t.wait()?`, or add it to a group with `g.add(t)`"
+
+pub fn check_handles(prog ast.Program) List[Diag]
+    mut diags := List[Diag]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        if body := f.body
+            handle_block(body, mut diags)
+    diags
+
+fn handle_block(stmts List[ast.Stmt], mut diags List[Diag])
+    for i in 0..stmts.len()
+        s := stmts[i]
+        if l := spawn_let(s)
+            spawns(l.operand, mut diags)
+            if o := l.otherwise
+                else_spawns(o, mut diags)
+            consumed(l.name, l.pos, stmts[i + 1..], mut diags)
+        else
+            stmt_spawns(s, mut diags)
+
+## `name := spawn f(...)`.
+struct SpawnLet
+    name str
+    pos ast.Pos
+    operand ast.Expr
+    otherwise ast.Else?
+
+@allow("expr.match.3") fn spawn_let(s ast.Stmt) SpawnLet?
+    match s
+        Let(n, p, _, value, o) =>
+            match value
+                Unary(op, operand, _) =>
+                    if op == ast.UnOp.Spawn then SpawnLet(
+                        name: n,
+                        pos: p,
+                        operand: operand,
+                        otherwise: o,
+                    ) else none
+                _ => none
+        _ => none
+
+## Check every `spawn` inside `s` is in an allowed place.
+fn stmt_spawns(s ast.Stmt, mut diags List[Diag])
+    match s
+        Let(_, _, _, value, o) =>
+            spawns(value, mut diags)
+            if e := o
+                else_spawns(e, mut diags)
+        Assign(target, _, value, _) =>
+            spawns(target, mut diags)
+            spawns(value, mut diags)
+        While(c, body, _) =>
+            spawns(c, mut diags)
+            handle_block(body, mut diags)
+        For(_, _, _, _, iter, body, _) =>
+            spawns(iter, mut diags)
+            handle_block(body, mut diags)
+        With(mutex, _, _, body, _) =>
+            spawns(mutex, mut diags)
+            handle_block(body, mut diags)
+        Return(v, _) =>
+            if e := v
+                spawns(e, mut diags)
+        Eval(e) => spawns(e, mut diags)
+        Handle(value, o) =>
+            spawns(value, mut diags)
+            else_spawns(o, mut diags)
+        Defer(inner, _) => stmt_spawns(inner, mut diags)
+        Break => return
+        Continue => return
+
+fn else_spawns(o ast.Else, mut diags List[Diag])
+    match o
+        Fallback(e) => spawns(e, mut diags)
+        Leave(s) => stmt_spawns(s, mut diags)
+        Handler(_, body, _) => handle_block(body, mut diags)
+
+## A subexpression, or a nested block.
+enum Node
+    NExpr(e ast.Expr)
+    NBlock(b List[ast.Stmt])
+
+## The subexpressions and nested blocks of `e` that the flow passes visit.
+@allow("expr.match.3") fn children(e ast.Expr) List[Node]
+    mut out := List[Node]()
+    match e
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => out = out
+                    Hole(x) => out.push(Node.NExpr(x))
+                    Fmt(x, _) => out.push(Node.NExpr(x))
+        ListLit(xs, _) => out = [Node.NExpr(x) for x in xs]
+        SetLit(xs, _) => out = [Node.NExpr(x) for x in xs]
+        MapLit(entries, _) =>
+            for en in entries
+                out.push(Node.NExpr(en.key))
+                out.push(Node.NExpr(en.value))
+        Call(x, args, _) =>
+            out.push(Node.NExpr(x))
+            for a in args
+                out.push(Node.NExpr(a.value))
+        Method(x, _, _, args) =>
+            out.push(Node.NExpr(x))
+            for a in args
+                out.push(Node.NExpr(a.value))
+        Member(recv, _, _) => out.push(Node.NExpr(recv))
+        Index(a, b, _) =>
+            out.push(Node.NExpr(a))
+            out.push(Node.NExpr(b))
+        Binary(_, a, b, _) =>
+            out.push(Node.NExpr(a))
+            out.push(Node.NExpr(b))
+        Unary(_, operand, _) => out.push(Node.NExpr(operand))
+        Range(lo, hi, _, _) =>
+            if x := lo
+                out.push(Node.NExpr(x))
+            if x := hi
+                out.push(Node.NExpr(x))
+        Try(x, context, _) =>
+            out.push(Node.NExpr(x))
+            if c := context
+                out.push(Node.NExpr(c))
+        OrElse(value, o, _) =>
+            out.push(Node.NExpr(value))
+            match o
+                Fallback(x) => out.push(Node.NExpr(x))
+                Leave(s) =>
+                    if x := returned(s)
+                        out.push(Node.NExpr(x))
+                Handler(_, body, _) => out.push(Node.NBlock(body))
+        If(branches, els, _, _) =>
+            for br in branches
+                out.push(Node.NExpr(cond_value(br.cond)))
+                out.push(Node.NBlock(br.body))
+            if b := els
+                out.push(Node.NBlock(b))
+        Match(scrutinee, arms, _) =>
+            out.push(Node.NExpr(scrutinee))
+            for a in arms
+                out.push(Node.NBlock(a.body))
+        _ => out = out
+    out
+
+## The value of `return e`.
+@allow("expr.match.3") fn returned(s ast.Stmt) ast.Expr?
+    match s
+        Return(v, _) => v
+        _ => none
+
+fn cond_value(c ast.Cond) ast.Expr
+    match c
+        Test(x) => x
+        Bind(_, _, x) => x
+
+## `spawn` is allowed only as `g.add(spawn f())` and `(spawn f()).wait()`
+## here; a bound one is handled by `handle_block`.
+@allow("expr.match.3") fn spawns(e ast.Expr, mut diags List[Diag])
+    match e
+        Unary(op, operand, at) =>
+            if op == ast.UnOp.Spawn
+                diags.push(
+                    new_diag(
+                        "conc.task.5",
+                        at,
+                        "a task handle must be bound to a name, added to a group, or waited",
+                    ).with_help("write `t := spawn f(x)` and later `t.wait()?`, or `g.add(spawn f(x))`"),
+                )
+                spawns(operand, mut diags)
+                return
+        Method(recv, n, _, args) =>
+            if n == "add" and args.len() == 1
+                spawns(recv, mut diags)
+                spawn_operand(args[0].value, mut diags)
+                return
+            if n == "wait" and args.len() == 0
+                spawn_operand(recv, mut diags)
+                return
+        _ => diags = diags
+    for c in children(e)
+        match c
+            NExpr(x) => spawns(x, mut diags)
+            NBlock(b) => handle_block(b, mut diags)
+
+@allow("expr.match.3") fn spawn_operand(e ast.Expr, mut diags List[Diag])
+    match e
+        Unary(op, operand, _) =>
+            if op == ast.UnOp.Spawn
+                spawns(operand, mut diags)
+                return
+        _ => diags = diags
+    spawns(e, mut diags)
+
+## Uses of a task in the statements after its `spawn`.
+struct Uses
+    ## Where it is waited or added, and whether that is on only some paths.
+    consumed List[Consumed]
+    ## Any other use.
+    other List[ast.Pos]
+
+struct Consumed
+    pos ast.Pos
+    cond bool
+
+fn consumed(n str, decl ast.Pos, rest List[ast.Stmt], mut diags List[Diag])
+    mut u := Uses(consumed: [], other: [])
+    for s in rest
+        stmt_uses(n, s, false, mut u)
+    for p in u.other
+        diags.push(
+            new_diag(
+                "conc.task.5",
+                p,
+                "task `{n}` can only be waited or added to a group; a task handle can't be copied or passed",
+            ).with_help(TASK_HELP),
+        )
+    if u.consumed.len() == 0
+        diags.push(
+            new_diag(
+                "conc.task.5",
+                decl,
+                "task `{n}` is never waited or added to a group",
+            ).with_help("add `{n}.wait()?` before the end of the block, or `g.add({n})`"),
+        )
+    elif u.consumed[0].cond
+        diags.push(
+            new_diag(
+                "conc.task.5",
+                u.consumed[0].pos,
+                "task `{n}` is waited on only some paths",
+            ).with_help("wait it, or add it to a group, outside the `if`, `match`, loop or `else`"),
+        )
+    else
+        for c in u.consumed[1..]
+            diags.push(
+                new_diag(
+                    "conc.task.5",
+                    c.pos,
+                    "task `{n}` was already waited or added to a group",
+                ).with_help("a task handle is consumed once; remove this use"),
+            )
+
+fn stmt_uses(n str, s ast.Stmt, cond bool, mut u Uses)
+    match s
+        Let(_, _, _, value, o) =>
+            expr_uses(n, value, cond, mut u)
+            if e := o
+                else_uses(n, e, mut u)
+        Assign(target, _, value, _) =>
+            expr_uses(n, target, cond, mut u)
+            expr_uses(n, value, cond, mut u)
+        While(c, body, _) =>
+            expr_uses(n, c, true, mut u)
+            for x in body
+                stmt_uses(n, x, true, mut u)
+        For(_, _, _, _, iter, body, _) =>
+            expr_uses(n, iter, cond, mut u)
+            for x in body
+                stmt_uses(n, x, true, mut u)
+        # conc.share.6: the body runs once, like a plain block.
+        With(mutex, _, _, body, _) =>
+            expr_uses(n, mutex, cond, mut u)
+            for x in body
+                stmt_uses(n, x, cond, mut u)
+        Return(v, _) =>
+            if e := v
+                expr_uses(n, e, cond, mut u)
+        Eval(e) => expr_uses(n, e, cond, mut u)
+        Handle(value, o) =>
+            expr_uses(n, value, cond, mut u)
+            else_uses(n, o, mut u)
+        Defer(inner, _) => stmt_uses(n, inner, true, mut u)
+        Break => return
+        Continue => return
+
+fn else_uses(n str, o ast.Else, mut u Uses)
+    match o
+        Fallback(e) => expr_uses(n, e, true, mut u)
+        Leave(s) => stmt_uses(n, s, true, mut u)
+        Handler(_, body, _) =>
+            for x in body
+                stmt_uses(n, x, true, mut u)
+
+@allow("expr.match.3") fn is_name(e ast.Expr, n str) bool
+    match e
+        Name(x, _) => x == n
+        _ => false
+
+@allow("expr.match.3") fn expr_uses(n str, e ast.Expr, cond bool, mut u Uses)
+    match e
+        Name(x, p) =>
+            if x == n
+                u.other.push(p)
+            return
+        Method(recv, m, name_pos, args) =>
+            if m == "wait" and args.len() == 0 and is_name(recv, n)
+                u.consumed.push(Consumed(pos: name_pos, cond: cond))
+                return
+            # conc.cancel.1: cancelling a task doesn't consume its handle.
+            if m == "cancel" and args.len() == 0 and is_name(recv, n)
+                return
+            if m == "add" and args.len() == 1 and is_name(args[0].value, n)
+                expr_uses(n, recv, cond, mut u)
+                u.consumed.push(Consumed(pos: expr_pos(args[0].value), cond: cond))
+                return
+        # The right of `and` / `or`, and every branch, runs on only some paths.
+        Binary(op, lhs, rhs, _) =>
+            if op == ast.BinOp.And or op == ast.BinOp.Or
+                expr_uses(n, lhs, cond, mut u)
+                expr_uses(n, rhs, true, mut u)
+                return
+        OrElse(value, o, _) =>
+            expr_uses(n, value, cond, mut u)
+            else_uses(n, o, mut u)
+            return
+        If(branches, els, _, _) =>
+            for i in 0..branches.len()
+                expr_uses(n, cond_value(branches[i].cond), cond or i > 0, mut u)
+                for x in branches[i].body
+                    stmt_uses(n, x, true, mut u)
+            if b := els
+                for x in b
+                    stmt_uses(n, x, true, mut u)
+            return
+        Match(scrutinee, arms, _) =>
+            expr_uses(n, scrutinee, cond, mut u)
+            for a in arms
+                for x in a.body
+                    stmt_uses(n, x, true, mut u)
+            return
+        _ => u = u
+    for c in children(e)
+        match c
+            NExpr(x) => expr_uses(n, x, cond, mut u)
+            NBlock(b) =>
+                for x in b
+                    stmt_uses(n, x, true, mut u)
