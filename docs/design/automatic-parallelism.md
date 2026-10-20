@@ -221,6 +221,10 @@ Metal).
 
 ### 6.2 Proposal: `std.tensor` with pluggable backends
 
+The CPU slice is built (eager, exact, AVX2/NEON, pooled `matmul`; ADRs
+0328–0329), and [ADR 0330](../decisions/0330-tensor-accelerator-backends-plug-in.md)
+fixes how a device backend plugs in.
+
 - A `Tensor[T]` type (dense, row-major by default, shape known at run time)
   with operations the NPU APIs all share: `matmul`, `conv2d`, elementwise
   arithmetic and activations, `sum`/`max` over axes, `reshape`,

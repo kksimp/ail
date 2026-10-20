@@ -297,3 +297,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
 | [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
 | [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |
+| [0328](0328-std-tensor-cpu-api.md) | `std.tensor`: an eager, value-typed `Tensor[T]` of `int` or `float` *(delegated)* | Accepted | 2026-10-20 |
+| [0329](0329-std-tensor-kernels-and-dispatch.md) | Tensor kernels: AVX2, NEON or scalar at run time, one specified summation order *(delegated)* | Accepted | 2026-10-20 |
+| [0330](0330-tensor-accelerator-backends-plug-in.md) | How an NPU or GPU backend plugs into `std.tensor` (design) *(delegated)* | Accepted | 2026-10-20 |

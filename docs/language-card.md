@@ -12,7 +12,7 @@
 ```
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
-standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `time`, `ui`)
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
 need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -62,6 +62,8 @@ update a `mut` variable in a loop, use `=`.
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
+
+`t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t.add(u)`, `t.mul(u)`, `t.dot(u)`, `t.sum()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
