@@ -284,6 +284,17 @@ fn qemu_aarch64() -> Option<&'static str> {
 /// first line. Programs the backend declines are counted and skipped.
 #[test]
 fn fuzz_native_differential() {
+    native_differential("pure", pure::program, true);
+}
+
+/// The same for programs that use `str` and `char` (native.str.1). Programs the backend
+/// declines are reported, not failed, until the feature has merged everywhere.
+#[test]
+fn fuzz_native_strings() {
+    native_differential("strings", pure::strings, false);
+}
+
+fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
     if !has_native() {
         eprintln!("fuzz-native: `ail build` is not available; skipped");
         return;
@@ -312,7 +323,7 @@ fn fuzz_native_differential() {
                         break;
                     }
                     let seed = first + k as u64;
-                    let src = pure::program(seed);
+                    let src = make(seed);
                     let p = r.write("n.ail", &src);
                     if r.exec(&["check"], &p, 20).code != Some(0) {
                         unchecked.fetch_add(1, Ordering::SeqCst);
@@ -346,7 +357,7 @@ fn fuzz_native_differential() {
                             .then(|| format!("aarch64 under qemu differs: exit {:?} against {:?}\n--- aarch64\n{}{}--- interpreter\n{}{}", a.code, walker.code, a.stdout, first_line(a), walker.stdout, first_line(&walker)))
                     });
                     if let Some(msg) = bad {
-                        let file = out_dir.join(format!("native-seed-{seed}.ail"));
+                        let file = out_dir.join(format!("native-{name}-seed-{seed}.ail"));
                         fs::write(&file, &src).unwrap();
                         failures.lock().unwrap().push(format!("seed {seed}: fuzz.mod.6 {msg}\n  program: {}", file.display()));
                     }
@@ -355,10 +366,10 @@ fn fuzz_native_differential() {
         }
     });
     let (built, declined, unchecked) = (built.into_inner(), declined.into_inner(), unchecked.into_inner());
-    eprintln!("fuzz-native: {n} pure programs from seed {first}: {built} built and compared ({} trapped; aarch64 under qemu: {}), {declined} declined by the backend, {unchecked} rejected by the checker", trapped.into_inner(), if qemu.is_some() { "yes" } else { "no emulator" });
+    eprintln!("fuzz-native {name}: {n} programs from seed {first}: {built} built and compared ({} trapped; aarch64 under qemu: {}), {declined} declined by the backend, {unchecked} rejected by the checker", trapped.into_inner(), if qemu.is_some() { "yes" } else { "no emulator" });
     let failures = failures.into_inner().unwrap();
     assert!(failures.is_empty(), "{} native differential failures (fuzz.policy.1)\n{}", failures.len(), failures.join("\n"));
-    assert!(built * 2 >= n, "only {built} of {n} generated pure programs built natively ({declined} declined, {unchecked} rejected): the generator and the subset have drifted apart");
+    assert!(!need_half || built * 2 >= n, "only {built} of {n} generated pure programs built natively ({declined} declined, {unchecked} rejected): the generator and the subset have drifted apart");
 }
 
 /// `AIL_FUZZ_PURE=SEED cargo test --test fuzz_modules dump_pure -- --nocapture` prints a pure program.

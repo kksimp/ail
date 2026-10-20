@@ -33,6 +33,11 @@ slow one, and the interpreter is the permanent oracle ([ADR 0032](0032-keep-rust
   it and is compared too. Programs the backend
   declines are counted, and the test fails if fewer than half build, so the
   generator and the subset cannot drift apart silently.
+- **`fuzz.nat.2`** `fuzz_native_strings` does the same for programs over `str` and `char`
+  (`fuzz/pure.rs::strings`: slicing, case, padding, replace, split, interpolation with
+  width and fill, character predicates). Programs the backend declines are reported,
+  not failed, until the feature has merged on every branch. Generators for maps, sets,
+  optionals, results, function values and enums follow the native PRs that add them.
 - **`fuzz.mod.6`** A module-fuzz template that carries `# fuzz-native: yes` is
   built and compared too. None do yet: module code uses strings, maps and
   optionals, which are outside the subset (ADR 0390).

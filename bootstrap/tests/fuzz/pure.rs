@@ -218,3 +218,108 @@ pub fn program(seed: u64) -> String {
     g.line("print(xs.len())");
     g.out
 }
+
+// ---- strings and chars (native.str.1, ADR 0565-0567) ----
+
+struct S {
+    r: Rng,
+    strs: Vec<String>,
+    out: String,
+}
+
+const LITS: [&str; 12] = ["", "a", "Hello", "  pad ", "x,y,,z", "é-ü", "ABC abc", "日本", "a\\tb", "{", "tail\\n", "0123456789"];
+
+impl S {
+    fn lit(&mut self) -> String {
+        let l = self.r.pick(&LITS);
+        // `{` must be escaped inside a literal (lex.str.1).
+        format!("\"{}\"", l.replace('{', "\\{"))
+    }
+
+    fn str_(&mut self, d: usize) -> String {
+        if d == 0 || self.r.chance(2, 5) {
+            if !self.strs.is_empty() && self.r.chance(1, 2) {
+                return self.r.pick(&self.strs.clone()).clone();
+            }
+            return self.lit();
+        }
+        let a = self.str_(d - 1);
+        match self.r.below(12) {
+            0 => format!("{a}.trim()"),
+            1 => format!("{a}.to_upper()"),
+            2 => format!("{a}.to_lower()"),
+            3 => format!("{a}.repeat({})", self.r.below(4)),
+            4 => format!("{a}.pad_left({}, '{}')", self.r.below(12), self.r.pick(&['*', ' ', '0'])),
+            5 => format!("{a}.pad_right({}, '{}')", self.r.below(12), self.r.pick(&['-', ' ', '.'])),
+            6 => {
+                let b = self.str_(d - 1);
+                format!("{a}.replace({b}, {})", self.lit())
+            }
+            7 => {
+                let b = self.str_(d - 1);
+                format!("\"{{{a}}}{{{b}}}\"")
+            }
+            8 => format!("{a}.slice({}, {})", self.r.below(3), 3 + self.r.below(4)), // may trap
+            9 => format!("\"[{{{a}:>{}}}]\"", self.r.below(10)),
+            10 => format!("\"[{{{a}:*^{}}}]\"", self.r.below(12)),
+            _ => format!("{a}.to_str()"),
+        }
+    }
+
+    fn int(&mut self, d: usize) -> String {
+        let a = self.str_(d);
+        match self.r.below(4) {
+            0 => format!("{a}.len()"),
+            1 => format!("{a}.byte_len()"),
+            2 => format!("{a}.chars().len()"),
+            _ => format!("{a}.split(\",\").len()"),
+        }
+    }
+
+    fn boolean(&mut self, d: usize) -> String {
+        let a = self.str_(d);
+        let b = self.str_(d);
+        match self.r.below(7) {
+            0 => format!("{a}.contains({b})"),
+            1 => format!("{a}.starts_with({b})"),
+            2 => format!("{a}.ends_with({b})"),
+            3 => format!("{a} == {b}"),
+            4 => format!("{a} < {b}"),
+            5 => format!("{a} >= {b}"),
+            _ => format!("{a} != {b}"),
+        }
+    }
+}
+
+pub fn strings(seed: u64) -> String {
+    let mut s = S { r: Rng::new(seed ^ 0x57A1), strs: vec![], out: String::new() };
+    s.out.push_str("fn main()\n");
+    for i in 0..4 + s.r.below(8) {
+        match s.r.below(6) {
+            0 | 1 => {
+                let e = s.str_(3);
+                s.out.push_str(&format!("    s{i} := {e}\n    print(s{i})\n"));
+                s.strs.push(format!("s{i}"));
+            }
+            2 => {
+                let e = s.int(2);
+                s.out.push_str(&format!("    print({e})\n"));
+            }
+            3 => {
+                let e = s.boolean(2);
+                s.out.push_str(&format!("    print({e})\n"));
+            }
+            4 => {
+                let a = s.str_(2);
+                let m = s.r.pick(&["code", "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower"]).to_string();
+                s.out.push_str(&format!("    for c in {a}.chars()\n        print(c.{m}())\n"));
+            }
+            _ => {
+                let a = s.str_(2);
+                let m = s.r.pick(&["to_upper", "to_lower"]).to_string();
+                s.out.push_str(&format!("    for c in {a}.chars()\n        print(c.{m}())\n"));
+            }
+        }
+    }
+    s.out
+}
