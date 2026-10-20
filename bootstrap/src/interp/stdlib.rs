@@ -253,7 +253,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 super::spawn::reap_all();
                 std::process::exit(code as i32);
             }
-            ("proc", "run") => {
+            ("proc", "run" | "run_bytes") => {
+                // std.proc.8: `run_bytes` takes `bytes` input and gives `bytes` output.
+                let raw = f == "run_bytes";
                 let cmd = str_arg(0);
                 let Value::List(list) = &values[1] else { unreachable!("checked: List[str]") };
                 let argv: Vec<String> = list
@@ -264,8 +266,9 @@ impl<'a, W: Write> Interp<'a, W> {
                     })
                     .collect();
                 // std.proc.2: optional input and time limit.
-                let input = match values.get(2) {
-                    Some(Value::Str(s)) => Some(s.clone()),
+                let input: Option<Vec<u8>> = match values.get(2) {
+                    Some(Value::Str(s)) => Some(s.as_bytes().to_vec()),
+                    Some(Value::Bytes(b)) => Some(b.to_vec()),
                     _ => None,
                 };
                 let timeout = match values.get(3) {
@@ -283,6 +286,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     return Ok(fail(error, pos));
                 }
                 match super::osext::run(&cmd, &argv, input.as_deref(), timeout) {
+                    Ok((status, out, err)) if raw => {
+                        let s = self.structs["proc.RawOutput"];
+                        let fields = vec![
+                            Value::Int(exit_status(&status)),
+                            super::bytes::bytes_value(out),
+                            super::bytes::bytes_value(err),
+                        ];
+                        Value::Struct(s, Rc::new(fields))
+                    }
                     Ok((status, out, err)) => {
                         let s = self.structs["proc.Output"];
                         let fields = vec![
@@ -386,18 +398,30 @@ impl<'a, W: Write> Interp<'a, W> {
                     text(""),
                     Value::Int(super::net::TIMEOUT.as_millis() as i64),
                     Value::Int(super::net::MAX_REDIRECTS as i64),
+                    super::bytes::bytes_value(Vec::new()),
                 ];
                 Value::Struct(s, Rc::new(fields))
             }
-            ("net", "get" | "post" | "request") => {
-                let url = str_arg(if f == "request" { 1 } else { 0 });
+            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => {
+                // std.net.16: the `_bytes` forms give the body undecoded.
+                let raw = f.ends_with("_bytes");
+                let method = f.trim_end_matches("_bytes");
+                let url = str_arg(if method == "request" { 1 } else { 0 });
                 super::netsock::set_yielder(self.yielder());
-                let result = match f {
+                let result = match method {
                     "get" => super::net::get(&url),
-                    "post" => super::net::post(&url, &str_arg(1), &str_arg(2)),
+                    "post" => {
+                        let body = match &values[1] {
+                            Value::Bytes(b) => b.to_vec(),
+                            Value::Str(s) => s.as_bytes().to_vec(),
+                            other => unreachable!("checked: str or bytes, found {other:?}"),
+                        };
+                        super::net::post(&url, &body, &str_arg(2))
+                    }
                     _ => {
                         let Value::Struct(_, o) = &values[2] else { unreachable!("checked: net.Options") };
                         let Value::Str(body) = &o[2] else { unreachable!("checked: str") };
+                        let Value::Bytes(data) = &o[5] else { unreachable!("checked: bytes") };
                         let (timeout_ms, redirects) = (o[3].int(), o[4].int());
                         if timeout_ms <= 0 || redirects < 0 {
                             return stop(
@@ -409,7 +433,8 @@ impl<'a, W: Write> Interp<'a, W> {
                         let opts = super::net::Opts {
                             headers: super::netsock::options_pairs(&o[0]),
                             query: super::netsock::options_pairs(&o[1]),
-                            body: body.to_string(),
+                            // std.net.16: `data`, when it isn't empty, is the body sent.
+                            body: if data.is_empty() { body.as_bytes().to_vec() } else { data.to_vec() },
                             content_type: None,
                             timeout: std::time::Duration::from_millis(timeout_ms as u64),
                             max_redirects: redirects as usize,
@@ -423,8 +448,15 @@ impl<'a, W: Write> Interp<'a, W> {
                         for (k, v) in r.headers {
                             headers.insert(text(k), Some(text(v)));
                         }
-                        let s = self.structs["net.Response"];
-                        Value::Struct(s, Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), text(r.body)]))
+                        if raw {
+                            let s = self.structs["net.RawResponse"];
+                            let fields = vec![Value::Int(r.status), Value::Map(Rc::new(headers)), super::bytes::bytes_value(r.body)];
+                            Value::Struct(s, Rc::new(fields))
+                        } else {
+                            let s = self.structs["net.Response"];
+                            let body = text(String::from_utf8_lossy(&r.body).into_owned());
+                            Value::Struct(s, Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), body]))
+                        }
                     }
                     Err(e) => {
                         let s = self.structs["net.NetError"];

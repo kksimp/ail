@@ -384,6 +384,14 @@ is waited or killed once. `kill(move c Child) int` ends the child at once
 status (137 on Unix). A child that is neither waited nor killed when the
 program ends is killed then, so no program leaves a process running. *(ADR 0425)*
 
+**std.proc.8** — `run_bytes(cmd str, args List[str], input bytes?, timeout_ms
+int?) RawOutput ! ProcError` is `run` with `bytes` in and out: `input` is
+written to the process's standard input as it is, and `struct RawOutput {
+status int, out bytes, err bytes }` holds what it wrote, undecoded. Everything
+else, including the trailing optional arguments, the time limit, the failure
+kinds and the effects, is that of `run`. `Output` is unchanged, with
+`out` and `err` as `str`. *(ADR 0417)*
+
 ```ail
 use std.proc
 
@@ -564,8 +572,8 @@ without its `\n` or `\r\n`, or absent at the end of the stream;
 how long a read, write or connect may make no progress before kind
 `timed_out`; `c.peer() str`; and `c.close()`. A `Conn` and a `Server`
 handle are used from one task at a time (`Server.accept` excepted). After
-`close`, every operation fails with kind `closed`. Text only until `bytes`
-(lane 123) lands; then `read_bytes` and `write_bytes` join. *(ADR 0421)*
+`close`, every operation fails with kind `closed`. `read_bytes` and
+`write_bytes` are the undecoded forms (`std.net.16`). *(ADR 0421)*
 
 **std.net.13** — `connect_tls(host str, port int) Conn ! NetError` connects
 and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
@@ -585,6 +593,23 @@ refuse both, and a package's `caps` list names `net.serve` separately
 over the platform's sockets. On Windows the sockets are the Rust standard
 library's (Winsock); the code uses nothing else, and it is untested there
 (ADR 0004, lane 153). *(ADR 0423)*
+
+**std.net.16** — Bodies as `bytes`. *(ADR 0416)*
+- `get_bytes(url str)`, `post_bytes(url str, data bytes, content_type str)`
+  and `request_bytes(method str, url str, opts Options)` act as `get`, `post`
+  and `request` but return `struct RawResponse { status int, headers
+  Map[str, str], data bytes } ! NetError`: the body undecoded. `Response.body`
+  stays a `str`, the same bytes with each invalid UTF-8 sequence as U+FFFD.
+- `Options` has a last field `data bytes`, empty from `options()`. A request
+  sends `data` as its body when it isn't empty, and `body` otherwise.
+- `Request` has a last field `data bytes`: the body the server received, as
+  it arrived (`body` is its lossy text).
+- `ex.respond_bytes(status int, headers Map[str, str], data bytes) !
+  NetError` answers an `Exchange` with `data` as the body; it checks the
+  status and headers as `respond` does.
+- `Conn.read_bytes(max int) bytes ! NetError` waits for at least one byte and
+  returns up to `max`, empty at the end of the stream; it fails as `read`
+  does, and `Conn.write_bytes(data bytes) ! NetError` writes all of `data`.
 
 ```ail
 use std.net
