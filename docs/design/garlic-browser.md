@@ -119,18 +119,30 @@ an agent sees is exactly what a person sees. The design follows `ail api`
 (versioned `"api":1`, byte-stable, one schema) and the editor's agent panel
 (ADR 0312): the program reports its own state instead of the agent scraping it.
 
-Next steps for the agent angle, in order:
+### Agent actions
 
-1. **Actions in, not only state out**: `--do follow:9`, `--do find:text`,
-   `--do scroll:20`, so an agent drives Garlic headless like the editor's
-   `--print --key=` (one process per step, deterministic).
-2. **A session mode**: JSON lines on stdin and stdout (`{"do":"follow","id":9}`
-   in, the new page model out), so an agent keeps one browser open.
-3. **Diffs**: after an action, report which nodes appeared, changed or left
-   the viewport, rather than the whole page; this saves tokens on long pages.
-4. **Token budgets**: `--budget N` trims the model (viewport first, then
+An agent drives Garlic headless, with no window:
+
+- `--do ACTION:ARG` (repeatable, in order) before `--json` or `--print`:
+  `follow:3` (link number), `click:12` (node id; follows a link), `open:URL`,
+  `back`, `find:TEXT`, `scroll:ROW`, `reload`.
+- `--session` keeps one browser open: one JSON action per line on stdin
+  (`{"do":"follow","link":3}`, `{"do":"find","text":"price"}`; the argument
+  is `link`, `id` or `row`, or `url` or `text`), answered with the page model
+  on one line. A failed action adds `"message"` to the model.
+- `--viewport` lists only the nodes in the viewport. On the Go specification
+  at 80 by 24 the model drops from 316 KB to 1.4 KB, which an agent can read
+  page by page with `scroll`.
+
+Next for the agent angle, in order:
+
+1. **Forms**: `type` and `press` actions on inputs and buttons, GET forms
+   now, POST once `net.request` lands (lane 124).
+2. **Diffs**: after an action, report which nodes appeared, changed or left
+   the viewport, rather than the whole page.
+3. **Token budgets**: `--budget N` trims the model (viewport first, then
    headings and links, then text) like `ail api --card --budget`.
-5. **Provenance**: each node keeps its source position in the HTML, so an
+4. **Provenance**: each node keeps its source position in the HTML, so an
    agent can tell markup from rendering problems.
 
 The same idea gives the designer's PDF viewer its "search without OCR": a

@@ -52,6 +52,8 @@ fn garlic_checks_clean_and_renders_headless() {
     assert!(json.starts_with("{\"api\":1,") && json.contains("\"role\":\"link\",\"name\":\"Second page\""), "--json:\n{json}");
     let second = run(&["--follow", "1", "--print"]);
     assert!(second.contains("# Second page"), "--follow 1:\n{second}");
+    let viewport = run(&["--height", "4", "--viewport", "--do", "find:the end", "--json"]);
+    assert!(viewport.contains("\"message\":\"found `the end`") && !viewport.contains("\"Second page\""), "--viewport:\n{viewport}");
 }
 
 /// Ctrl-Shift-H previews a replace across the directory's `.ail` files,
