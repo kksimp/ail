@@ -1,0 +1,34 @@
+# Nested structs and lists of structs are copied deeply; a field of a
+# struct in a list changes in place (ADR 0392, own.val.1).
+struct Inner
+    v List[int]
+
+struct Outer
+    a Inner
+    grid List[List[Inner]]
+    ok bool
+
+fn Outer.make(n int) Outer
+    mut g := List[List[Inner]]()
+    for i in 0..n
+        g.push([Inner(v: [i, i * 2])])
+    Outer(a: Inner(v: []), grid: g, ok: true)
+
+fn main()
+    mut o := Outer.make(3)
+    o.a.v.push(7)
+    c := o
+    o.a.v[0] = 8
+    o.grid[1][0].v.push(5)
+    print(c.a.v)
+    print(o.a.v)
+    print(o.grid[1][0].v)
+    print(c.grid[1][0].v)
+    print(o.ok)
+    mut k := 0
+    while o.ok
+        k += 1
+        if k > 3
+            o.ok = false
+    print(k)
+    print(o.grid[5][0].v)

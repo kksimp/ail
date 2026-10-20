@@ -1,0 +1,10 @@
+# Lists of lists and of strings print as the interpreter prints them, strings
+# quoted and escaped (trait.auto.2).
+fn main()
+    print([[1, 2], [3]])
+    print(["a", "b\"c"])
+    print([[1.5], []])
+    print([[true]])
+    print([["x"]])
+    s := "\u{1}\u{7f}\u{200b}"
+    print([s])
