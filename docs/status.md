@@ -43,6 +43,7 @@ Lane 31 (ADRs 0214–0215, resolves OQ-047, OQ-048): list `insert`, `remove_at`,
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
 Lane 28 added `requires`/`ensures` contracts, checked at run time (ADRs 0210–0213, `contract.*`).
+Lane 56 (ADRs 0288–0290, spec [21-trace](spec/21-trace.md) and [19-testing](spec/19-testing.md)): `ail test --coverage[=lines]` (lines and functions run, `--json`), `--timeout`, `--max-memory`, `--max-steps` for `run` and `test` (`run.limit.*`), and trap snapshots under failing tests.
 Lane 46 (ADRs 0265–0268, spec [21-trace](spec/21-trace.md)): `ail run --trace[=calls|effects|all]` with `--trace-limit`, `--watch NAME`, and trap snapshots (stack, locals, source line, contract values; `--verbose`, `--json`).
 Lane 41 (ADRs 0250–0255): key functions `sorted(by: |x| key)` (also `sort`, `min`, `max`) and `take`, `m[k] += v` starting from zero, `?` caught by an enclosing `else`, `std.path`, and `Json` getters (`str`, `num`, `bool`, `arr`) and `set`; the agent-tool corpus fell from +28.0% to +6.9% tokens over Python (−16.6%).
 

@@ -264,3 +264,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0282](0282-std-proc-input-timeout-which.md) | `proc.run` takes input and a time limit; `proc.which` and `env.vars` *(delegated)* | Accepted | 2026-10-20 |
 | [0283](0283-std-net-http-client.md) | `std.net`: a minimal HTTP/1.1 client, without TLS for now *(delegated)* | Accepted | 2026-10-20 |
 | [0284](0284-trailing-optional-std-parameters.md) | A standard function's trailing optional parameters may be left off *(delegated)* | Accepted | 2026-10-20 |
+| [0288](0288-run-limits-timeout-memory-steps.md) | `ail run` takes `--timeout`, `--max-memory` and `--max-steps` *(delegated)* | Accepted | 2026-10-20 |
+| [0289](0289-test-coverage.md) | `ail test --coverage` reports lines and functions run *(delegated)* | Accepted | 2026-10-20 |
+| [0290](0290-test-failure-shows-trap-snapshot.md) | `ail test` prints the trap snapshot under a failure *(delegated)* | Accepted | 2026-10-20 |

@@ -12,6 +12,8 @@
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
+./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
+./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot
 ./ail effects [--json] FILE.ail       # each function's inferred effects
 ./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
 ./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread

@@ -571,7 +571,7 @@ fn each_let<'a>(b: &'a Block, f: &mut dyn FnMut(&'a str, &'a Expr)) {
 }
 
 /// Calls `f` with each block directly inside `s` (not nested deeper).
-fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
+pub(crate) fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
     fn other<'a>(o: &'a Else, f: &mut dyn FnMut(&'a Block)) {
         match o {
             Else::Value(e) => expr_blocks(e, f),

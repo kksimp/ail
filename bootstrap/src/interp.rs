@@ -19,6 +19,7 @@ use std::cmp::Ordering;
 
 mod builtins;
 mod keyfn;
+pub mod limits;
 mod contracts;
 pub mod parallel;
 mod net;
@@ -326,6 +327,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         snap: None,
         par: None,
         pure: None,
+        hook: limits::active(),
+        steps: 0,
+        cov_last: 0,
     }
 }
 
@@ -364,6 +368,7 @@ fn has_defer(b: &Block) -> bool {
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let stdout = io::stdout();
     let mut it = build(prog, resolved, stdout.lock());
+    let _watch = limits::watch();
     // trace.snap.1: a trap that ends the program carries a snapshot.
     it.snap = Some(Box::default());
     it.par = parallel::plans(prog, resolved);
@@ -436,6 +441,10 @@ struct Interp<'a, W: Write> {
     par: Option<Rc<parallel::Plans>>,
     /// Which functions a task may run on the pool (conc.par.10), once needed.
     pure: Option<Rc<Vec<bool>>>,
+    /// A run limit or coverage is on (run.limit.1-3, test.cover.1); off costs one branch per statement.
+    hook: bool,
+    steps: u64,
+    cov_last: usize,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -1083,6 +1092,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn stmt(&mut self, s: &'a Stmt, env: &mut Env<'a>) -> Flow<Value> {
+        if self.hook {
+            self.hit(s.pos())?;
+        }
         match s {
             Stmt::Let { name, value, otherwise, mutable, pos } => {
                 let v = if otherwise.is_some() { self.else_value(value, env)? } else { self.eval(value, env)? };
@@ -1097,8 +1109,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             Stmt::Assign { target, op, value, pos } => self.assign(target, *op, value, *pos, env)?,
-            Stmt::While { cond, body, .. } => {
+            Stmt::While { cond, body, pos } => {
                 while self.eval(cond, env)?.bool() {
+                    if self.hook {
+                        self.hit(*pos)?;
+                    }
                     match self.block(body, env) {
                         Ok(_) | Err(Exit::Continue) => {}
                         Err(Exit::Break) => break,

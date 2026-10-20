@@ -1,3 +1,3 @@
 {"test":"tasks_in_a_test","status":"pass","line":10,"col":10,"message":""}
-{"test":"deadlock_fails_the_test","status":"fail","line":17,"col":5,"message":"trap[conc.task.7]: deadlock: the main task waits for a task to finish, and 1 other task is blocked"}
+{"test":"deadlock_fails_the_test","status":"fail","line":17,"col":5,"message":"trap[conc.task.7]: deadlock: the main task waits for a task to finish, and 1 other task is blocked","snapshot":"  17 |     g.add(spawn stuck(ch))\n     |     ^\n  at 17:5 in deadlock_fails_the_test()"}
 {"summary":true,"passed":1,"failed":1}

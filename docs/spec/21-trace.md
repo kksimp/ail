@@ -112,3 +112,27 @@ line, the condition's values, and the stack. *(ADR 0267)*
 
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
+
+## Run limits
+
+**run.limit.1** — `ail run --timeout MS` and `ail test --timeout MS` stop a
+run that has taken longer than `MS` milliseconds of wall-clock time, with
+`trap[run.limit.1]` at the statement about to run, and the trap's snapshot
+(trace.snap.1). `ail test` gives each test the whole allowance. The check
+happens between statements, so a single call that blocks (`sleep`, a read)
+ends only once it returns. *(ADR 0288)*
+
+**run.limit.2** — `--max-memory MB` stops a run whose process uses more than
+`MB` megabytes of resident memory, with `trap[run.limit.2]`, as for run.limit.1.
+A single statement that allocates past the limit may still exhaust the machine
+first. Not available on Windows, where it is rejected before the run. *(ADR 0288)*
+
+**run.limit.3** — `--max-steps N` stops a run that has run more than `N`
+steps, with `trap[run.limit.3]`. A step is one statement run, or one turn of
+a `while` loop. Steps count the same on every machine, so a limit found once
+reproduces the same trap. `ail test` counts per test. *(ADR 0288)*
+
+**run.limit.4** — The three options take a positive whole number. Any other
+value, a missing value, or use with a command other than `run` or `test`, is
+an error with exit code 2. With none of them given, a run is not checked.
+*(ADR 0288)*
