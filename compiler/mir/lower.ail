@@ -1231,6 +1231,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return a
     if is_enum(a.ty)
         return enum_compare(o, a, b, pos)
+    if a.ty.elem() != none or struct_name(a.ty) != none
+        return value_compare(o, a, b, pos)
     cmp := is_comparison(o)
     match a.ty
         Int =>
