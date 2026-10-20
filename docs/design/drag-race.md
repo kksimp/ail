@@ -7,10 +7,10 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 ## Environment
 
 - date: 2026-10-20
-- commit: fb8e4fb
+- commit: c1404e1
 - os: Linux x86_64
 - cpu: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores
-- runs per cell: 5
+- runs per cell: 3
 - clang: Ubuntu clang version 18.1.3 (1ubuntu1)
 - gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
 - python: 3.13.16
@@ -19,27 +19,33 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 
 | program | ail min | ail med | native min | native med | clang min | clang med | gcc min | gcc med | python min | python med | ail/clang | native/clang | ail/gcc | native/gcc | ail/python | native/python |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| interp | 0.091 | 0.101 | - | - | no twin | no twin | no twin | no twin | 0.108 | 0.149 | - | - | - | - | 0.84 | - |
-| json | 0.008 | 0.010 | - | - | no twin | no twin | no twin | no twin | 0.050 | 0.067 | - | - | - | - | 0.17 | - |
-| sheet | 0.020 | 0.023 | - | - | no twin | no twin | no twin | no twin | 0.062 | 0.082 | - | - | - | - | 0.32 | - |
-| loops | 0.164 | 0.188 | - | - | no twin | no twin | no twin | no twin | 0.305 | 0.327 | - | - | - | - | 0.54 | - |
-| logscan | 0.004 | 0.005 | - | - | no twin | no twin | no twin | no twin | 0.030 | 0.032 | - | - | - | - | 0.15 | - |
-| tasks | 0.024 | 0.029 | - | - | no twin | no twin | no twin | no twin | 0.044 | 0.049 | - | - | - | - | 0.54 | - |
-| build | 0.495 | 0.544 | - | - | no twin | no twin | no twin | no twin | 0.549 | 0.591 | - | - | - | - | 0.90 | - |
-| parsum | 0.197 | 0.216 | - | - | no twin | no twin | no twin | no twin | 1.014 | 1.099 | - | - | - | - | 0.19 | - |
-| tensor | 0.014 | 0.016 | - | - | no twin | no twin | no twin | no twin | 0.414 | 0.463 | - | - | - | - | 0.03 | - |
-| tensor_loops | 0.806 | 0.943 | - | - | no twin | no twin | no twin | no twin | 0.454 | 0.486 | - | - | - | - | 1.78 | - |
-| tensor_ops | 0.031 | 0.033 | - | - | no twin | no twin | no twin | no twin | 0.304 | 0.393 | - | - | - | - | 0.10 | - |
-| tensor_ops_loops | 0.640 | 0.707 | - | - | no twin | no twin | no twin | no twin | 0.396 | 0.461 | - | - | - | - | 1.62 | - |
-| race_smoke | 0.106 | 0.139 | - | - | 0.005 | 0.006 | 0.007 | 0.008 | 0.271 | 0.289 | 21.05 | - | 15.24 | - | 0.39 | - |
+| interp | 0.106 | 0.113 | - | - | no twin | no twin | no twin | no twin | 0.102 | 0.107 | - | - | - | - | 1.03 | - |
+| json | 0.008 | 0.010 | - | - | no twin | no twin | no twin | no twin | 0.046 | 0.049 | - | - | - | - | 0.18 | - |
+| sheet | 0.020 | 0.020 | - | - | no twin | no twin | no twin | no twin | 0.056 | 0.064 | - | - | - | - | 0.35 | - |
+| loops | 0.173 | 0.177 | - | - | no twin | no twin | no twin | no twin | 0.300 | 0.309 | - | - | - | - | 0.58 | - |
+| logscan | 0.003 | 0.004 | - | - | no twin | no twin | no twin | no twin | 0.028 | 0.030 | - | - | - | - | 0.12 | - |
+| tasks | 0.022 | 0.023 | - | - | no twin | no twin | no twin | no twin | 0.042 | 0.043 | - | - | - | - | 0.52 | - |
+| build | 0.501 | 0.518 | - | - | no twin | no twin | no twin | no twin | 0.504 | 0.532 | - | - | - | - | 0.99 | - |
+| parsum | 0.192 | 0.210 | - | - | no twin | no twin | no twin | no twin | 0.943 | 1.027 | - | - | - | - | 0.20 | - |
+| tensor | 0.015 | 0.019 | - | - | no twin | no twin | no twin | no twin | 0.490 | 0.523 | - | - | - | - | 0.03 | - |
+| tensor_loops | 0.804 | 0.904 | - | - | no twin | no twin | no twin | no twin | 0.453 | 0.468 | - | - | - | - | 1.78 | - |
+| tensor_ops | 0.038 | 0.043 | - | - | no twin | no twin | no twin | no twin | 0.367 | 0.377 | - | - | - | - | 0.10 | - |
+| tensor_ops_loops | 0.642 | 0.765 | - | - | no twin | no twin | no twin | no twin | 0.318 | 0.318 | - | - | - | - | 2.02 | - |
+| race_smoke | 0.117 | 0.117 | - | - | 0.006 | 0.006 | 0.007 | 0.007 | 0.261 | 0.279 | 19.91 | - | 17.12 | - | 0.45 | - |
+| collatz | 0.443 | 0.473 | - | - | 0.014 | 0.014 | 0.022 | 0.022 | 0.971 | 1.191 | 31.43 | - | 20.53 | - | 0.46 | - |
+| nbody | 0.955 | 0.992 | - | - | 0.006 | 0.006 | 0.005 | 0.005 | 0.435 | 0.448 | 168.94 | - | 197.65 | - | 2.20 | - |
+| spectralnorm | 0.805 | 0.946 | - | - | 0.005 | 0.005 | 0.005 | 0.005 | 0.520 | 0.536 | 154.59 | - | 157.32 | - | 1.55 | - |
+| mandelbrot | 0.686 | 0.786 | - | - | 0.010 | 0.010 | 0.010 | 0.010 | 0.290 | 0.293 | 67.47 | - | 71.01 | - | 2.36 | - |
+| fannkuch | 1.250 | 1.386 | - | - | 0.024 | 0.025 | 0.024 | 0.024 | 0.825 | 0.883 | 51.07 | - | 52.94 | - | 1.51 | - |
+| binarytrees | 2.248 | 2.340 | - | - | 0.017 | 0.022 | 0.014 | 0.014 | 0.596 | 0.608 | 130.16 | - | 161.16 | - | 3.77 | - |
+| fasta | 0.182 | 0.196 | - | - | 0.007 | 0.009 | 0.008 | 0.008 | 0.141 | 0.158 | 24.54 | - | 23.02 | - | 1.29 | - |
+| wordfreq | 0.306 | 0.335 | - | - | 0.006 | 0.006 | 0.007 | 0.007 | 0.193 | 0.200 | 51.08 | - | 43.58 | - | 1.58 | - |
+| matmul | 0.681 | 0.727 | - | - | 0.007 | 0.007 | 0.008 | 0.008 | 0.512 | 0.528 | 96.91 | - | 81.94 | - | 1.33 | - |
+| sieve | 1.207 | 1.228 | - | - | 0.013 | 0.014 | 0.015 | 0.015 | 0.567 | 0.612 | 89.90 | - | 81.21 | - | 2.13 | - |
 
 ## Notes
 
-- `race_smoke` is the harness check: integer-only code with C and Python twins.
-  Every other program waits for lane 143's C twins, so its C columns read `no twin`.
-- The `native` columns are empty until lane 120's `ail build` lands; the harness
-  fills them without a change (ADR 0460).
-- `ail` is the bytecode tier (`ail run`). Process start and the check pass are
-  inside the time, as they are for `python3`; for short programs that is most of it.
-- macOS ARM64 is run by the integrator with the same command:
-  `tools/perfbench/run.sh --all --md docs/design/drag-race.md`.
+- Each program gets the size in its `NAME.args` in every language; C is built with `-std=c11 -O2 -ffp-contract=off -lm`.
+- The `native` columns are empty until lane 120's `ail build FILE -o OUT` lands; the harness fills them without a change (ADR 0460).
+- `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.
+- Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.
