@@ -1,6 +1,6 @@
 # 0010. No LLVM (or other external) backend; existing compilers are for comparison only
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by [0381](0381-driver-compilers-are-platform.md): an OS accelerator driver compiling SPIR-V, MSL or a graph that AIL generated counts as platform)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 23 — Compiler architecture; 25 — Optimization strategy

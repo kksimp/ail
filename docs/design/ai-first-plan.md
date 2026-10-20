@@ -231,7 +231,7 @@ stretch goal: a windowed code editor written in AIL, ADR 0180).
 | 10 | 101 supertraits, trait functions without `self`, generic `FromJson`, `Default` (0348–0350); 102 cancel trees, `send` under cancellation, atomic orderings (0351–0352); 103 editor live problems, reviewable replace, tests on save (0353–0354); 104 git dependencies and `ail.lock` (0355–0357); 105 mistakes corpus for the new features (0358) | merged |
 
 Design-only items without a lane tonight: a package registry (OQ-049, the
-designer's call), accelerator drivers (OQ-090, reads ADR 0010), TLS for
+designer's call), accelerator drivers (OQ-090, reads ADR 0010; decided 2026-10-20 as ADR 0381), TLS for
 `std.net` (ADR 0283, a dependency and licence choice) and a bytecode tier
 in the interpreter (ADR 0297 keeps the tree walker; ADR 0032 makes a second
 evaluator the designer's call).

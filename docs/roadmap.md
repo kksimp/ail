@@ -52,7 +52,7 @@ proposal, not a decision.
 3. **Registry and lockfile:** git dependencies, `ail.lock`, then a package
    registry (OQ-049, the designer's call); in-house TLS for `std.net`
    (ADR 0360, in progress).
-4. **Hardware:** accelerator backends for `std.tensor` (OQ-090) and weaker
+4. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
    atomic orderings (OQ-097).
 5. **Open language questions:** safe member access and matching on error sets
    (OQ-029), custom hashing (OQ-042), unique values in generic code (OQ-050),
