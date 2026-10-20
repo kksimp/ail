@@ -56,6 +56,7 @@ reported but don't stop a program from running.
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel` | `conc.par.2–6` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–5` |
+| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires` and `ensures`: parsing, typing and `result`, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–2`, `contract.run.1–3`, `contract.api.1` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.coll.14`, `type.str.4–5`, `type.str.11`, `type.str.13–14`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`), `expr.comp.3–4`, `own.uniq.3–4`, `own.uniq.7`, `own.defer.1–2`, `own.ref.1–7` |
@@ -186,6 +187,14 @@ signature are checked at every call (`result` names the returned value);
 a failure traps `contract.req.1` at the call or `contract.ens.1` at the
 `ensures` line with the arguments' values. `--no-contracts` skips them. No
 `old(x)` yet.
+
+Traces (ADRs 0265–0268, `trace.*`): `ail run --trace[=calls|effects|all]`
+writes calls, returns, effects, tasks and contract checks to stderr (JSON
+lines with `--json`), up to `--trace-limit N` events plus a summary;
+`--watch NAME` shows assignments to a `mut` variable; a trap reports the
+source line and each frame's arguments and locals (ten lines; `--verbose`
+for all; one object with `--json`). Not yet: `ail test --trace`, watching
+mutations through methods and `mut` arguments, exact expression end columns.
 
 Effects (ADRs 0163–0165): every function's effect set is inferred and
 printed by `ail effects`; `@pure` and `--deny` are checked at compile time.

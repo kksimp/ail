@@ -22,6 +22,7 @@ mod contracts;
 mod random;
 mod stdlib;
 mod tasks;
+mod trace;
 
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
@@ -31,6 +32,7 @@ mod testing;
 mod ui;
 pub use prop::PropInfo;
 pub use testing::run_tests;
+pub use trace::{render_trap, take_options as take_trace_options, option_words as trace_option_words, take_snapshot};
 
 use builtins::{Key, Table, map_value};
 use tasks::Handle;
@@ -316,6 +318,8 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         has_moves: !resolved.moves.is_empty(),
         showing: Vec::new(),
         conc: None,
+        tracing: trace::mode(),
+        snap: None,
     }
 }
 
@@ -354,7 +358,15 @@ fn has_defer(b: &Block) -> bool {
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let stdout = io::stdout();
     let mut it = build(prog, resolved, stdout.lock());
+    // trace.snap.1: a trap that ends the program carries a snapshot.
+    it.snap = Some(Box::default());
     let result = run_main(&mut it, prog);
+    if let (Err(Stop::Trap(t)), Some(snap)) = (&result, it.snap.take()) {
+        trace::keep(prog, *snap, t);
+    }
+    if it.tracing != 0 {
+        trace::finish();
+    }
     if it.conc.is_some() {
         // What tasks printed before a trap still reaches standard output.
         it.task_print("");
@@ -409,6 +421,10 @@ struct Interp<'a, W: Write> {
     showing: Vec<*const RefCell<Value>>,
     /// The task scheduler, once the program uses tasks (conc.task.1).
     conc: Option<tasks::Ctx>,
+    /// What `--trace` and `--watch` report (trace.run.1, trace.watch.1); 0 when off.
+    tracing: u8,
+    /// The frames of a trap on its way out, when `run` keeps a snapshot (trace.snap.1).
+    snap: Option<Box<trace::Snap>>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -879,6 +895,9 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         env.extend(f.params.iter().map(|p| p.name.as_str()).zip(args));
         let n = env.len();
+        if self.tracing & trace::CALLS != 0 {
+            self.trace_call(f, &env, pos);
+        }
         let checked = contracts::active(f);
         if checked {
             self.check_requires(f, &mut env, pos)?;
@@ -897,15 +916,18 @@ impl<'a, W: Write> Interp<'a, W> {
         let (mut result, at) = match outcome {
             Ok(v) => (v, end),
             Err(Exit::Return(v, at)) => (v, at),
-            Err(Exit::Trap(t)) => return Err(*t),
+            Err(Exit::Trap(t)) => return Err(self.unwound(f, &env, pos, *t)),
             Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
         };
         // err.decl.3: an error value leaving a fallible function is its failure.
         if matches!(f.ret.as_ref().map(|t| &t.kind), Some(TypeKind::Fallible { .. })) && self.is_error(&result) {
             result = Value::Fail(Rc::new(Failure { error: result, context: Vec::new(), trace: vec![at] }));
         }
-        if checked {
-            self.check_ensures(f, &mut env, &result, at)?;
+        if checked && let Err(t) = self.check_ensures(f, &mut env, &result, at) {
+            return Err(self.unwound(f, &env, pos, t));
+        }
+        if self.tracing & trace::CALLS != 0 {
+            self.trace_return(f, &result);
         }
         self.depth -= 1;
         env.truncate(n);
@@ -927,6 +949,9 @@ impl<'a, W: Write> Interp<'a, W> {
         for s in stmts {
             result = self.stmt(s, env);
             if result.is_err() {
+                if matches!(result, Err(Exit::Trap(_))) && self.snap.is_some() {
+                    self.snap_block(env);
+                }
                 break;
             }
         }
@@ -1041,7 +1066,7 @@ impl<'a, W: Write> Interp<'a, W> {
 
     fn stmt(&mut self, s: &'a Stmt, env: &mut Env<'a>) -> Flow<Value> {
         match s {
-            Stmt::Let { name, value, otherwise, .. } => {
+            Stmt::Let { name, value, otherwise, mutable, pos } => {
                 let v = self.eval(value, env)?;
                 let v = match (otherwise, v) {
                     (Some(o), v @ (Value::None | Value::Fail(_))) => self.otherwise(o, v, env)?,
@@ -1049,6 +1074,9 @@ impl<'a, W: Write> Interp<'a, W> {
                     (_, v) => v,
                 };
                 env.push((name.as_str(), v));
+                if self.tracing & trace::WATCH != 0 && *mutable {
+                    self.trace_watch(name, env, *pos);
+                }
             }
             Stmt::Assign { target, op, value, pos } => self.assign(target, *op, value, *pos, env)?,
             Stmt::While { cond, body, .. } => {
@@ -1257,6 +1285,9 @@ impl<'a, W: Write> Interp<'a, W> {
             if self.has_unique {
                 self.release(old, pos)?;
             }
+            if self.tracing & trace::WATCH != 0 {
+                self.trace_watch(n, env, target.pos());
+            }
             return Ok(());
         }
         let p = self.place(target, env)?;
@@ -1269,6 +1300,11 @@ impl<'a, W: Write> Interp<'a, W> {
             }
         };
         self.replace_at(env, &p, op.is_none(), v)?;
+        if self.tracing & trace::WATCH != 0
+            && let Some((root, _)) = place_path(target)
+        {
+            self.trace_watch(root, env, target.pos());
+        }
         Ok(())
     }
 

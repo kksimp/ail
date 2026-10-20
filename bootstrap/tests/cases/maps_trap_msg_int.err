@@ -1,1 +1,4 @@
 $FILE:3:12: trap[type.map.3]: the map has no key -5
+  3 |     print(m[-5])
+    |            ^
+  at 3:12 in main(); m = {1: "a"}

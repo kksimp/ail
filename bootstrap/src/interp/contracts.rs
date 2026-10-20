@@ -32,7 +32,12 @@ impl<'a, W: Write> Interp<'a, W> {
     #[inline(never)]
     pub(super) fn check_requires(&mut self, f: &'a FnDecl, env: &mut Env<'a>, call: Pos) -> Result<(), Trap> {
         for c in f.contracts.iter().filter(|c| !c.ensures) {
-            if !self.holds(c, env)? {
+            let held = self.holds(c, env)?;
+            if self.tracing & super::trace::CALLS != 0 {
+                self.trace_contract(f, c, held);
+            }
+            if !held {
+                self.snap_condition(&c.cond, env);
                 let args = self.arguments(f, env, call)?;
                 let message = format!(
                     "`{}` requires `{}`, but it was called with {args} (contract at {})",
@@ -65,7 +70,12 @@ impl<'a, W: Write> Interp<'a, W> {
             env.push(("result", result.clone()));
         }
         for c in f.contracts.iter().filter(|c| c.ensures) {
-            if !self.holds(c, env)? {
+            let held = self.holds(c, env)?;
+            if self.tracing & super::trace::CALLS != 0 {
+                self.trace_contract(f, c, held);
+            }
+            if !held {
+                self.snap_condition(&c.cond, env);
                 env.truncate(n);
                 let value = if matches!(result, Value::Unit) {
                     String::new()

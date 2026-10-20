@@ -1,0 +1,14 @@
+# trace.snap.1-3: a trap shows the source line and each frame with its
+# arguments and locals, innermost first.
+
+fn average(xs List[int]) int
+    mut total := 0
+    for x in xs
+        total += x
+    count := xs.len()
+    total / count
+
+fn main()
+    scores := [3, 4]
+    print(average(scores))
+    print(average(List[int]()))

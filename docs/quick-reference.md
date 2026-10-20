@@ -22,6 +22,9 @@
 ./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms, use std.x); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
+./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N)
+./ail run --watch n FILE.ail # each assignment to `mut` variable n, with value and position
+./ail run --verbose FILE.ail # a trap shows every frame's values (default: 10 lines; --json: one object)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a

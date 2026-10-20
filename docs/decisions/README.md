@@ -246,3 +246,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0259](0259-api-type-query.md) | `ail api --type` gives the type of the expression at a position, and the callee for a call *(delegated)* | Accepted | 2026-10-20 |
 | [0260](0260-api-refs-query.md) | `ail api --refs` lists a symbol's definition and uses across user modules, and a local's uses in its scope *(delegated)* | Accepted | 2026-10-20 |
 | [0261](0261-checker-recording-hooks.md) | The checker records locals and expression types only when `ail api` asks *(delegated)* | Accepted | 2026-10-20 |
+| [0265](0265-runtime-trace-mode.md) | `ail run --trace` writes one event per line to standard error *(delegated)* | Accepted | 2026-10-20 |
+| [0266](0266-trace-budget-and-value-form.md) | Traces are budgeted, and show values structurally without user code *(delegated)* | Accepted | 2026-10-20 |
+| [0267](0267-trap-snapshots.md) | A trap carries a snapshot of the stack and its values *(delegated)* | Accepted | 2026-10-20 |
+| [0268](0268-watch-and-no-debugger-protocol.md) | `--watch NAME` shows a variable's assignments; no debugger protocol for now *(delegated)* | Accepted | 2026-10-20 |

@@ -1,0 +1,16 @@
+# trace.watch.1: `--watch NAME` shows the `mut` variable NAME after each
+# assignment, with its new value and position; other names stay quiet.
+
+struct Point
+    x int
+    y int
+
+fn main()
+    mut total := 0
+    mut other := 0
+    for i in 1..4
+        total += i
+        other += 1
+    mut p := Point(x: 1, y: 2)
+    p.x = total
+    print(total)
