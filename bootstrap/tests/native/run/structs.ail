@@ -1,0 +1,51 @@
+# Structs and methods (ADR 0392): fields, `self`, `mut self`, bare field
+# names, and copies that keep values independent (own.val.1).
+struct Point
+    x int
+    y float
+
+struct Shape
+    name str
+    pts List[Point]
+    tags List[str]
+
+fn Point.norm1(self) float
+    x.to_float() + y
+
+fn Point.shift(mut self, dx int)
+    x += dx
+    self.y = self.y * 2.0
+
+fn Shape.total(self) float
+    mut s := 0.0
+    for p in pts
+        s += p.norm1()
+    s
+
+fn Shape.add(mut self, p Point)
+    pts.push(p)
+
+fn first(s Shape) Point
+    s.pts[0]
+
+fn main()
+    mut p := Point(x: 1, y: 2.5)
+    q := p
+    p.shift(10)
+    print(p.x)
+    print(q.x)
+    print(p.y)
+    mut s := Shape(name: "tri", pts: [p, q], tags: ["a"])
+    s.add(Point(3, 0.5))
+    print(s.total())
+    mut f := first(s)
+    f.x = 99
+    print(s.pts[0].x)
+    s.pts[1].x += 5
+    print(s.pts[1].x)
+    t := s
+    s.pts[2].shift(1)
+    print(t.pts[2].x)
+    print(s.pts[2].x)
+    print(s.name)
+    print(s.pts.len())

@@ -1,0 +1,90 @@
+## Modules in the native backend (ADR 0393): every item's MIR name starts
+## with its module's import path (`ast.Pos`, `syntax.lex`), as the
+## runtime's start with `rt.`. Inside a module, names are its own; a
+## qualified name `m.x` goes through the file's imports (mod.use.1-2).
+use ast
+
+## The standard modules, which `use` doesn't load from the package
+## (std.use.1); the lowering knows their functions by name.
+STD_MODULES := ["env", "fs", "io", "net", "path", "proc", "random", "regex", "tensor", "time", "ui"]
+
+## The imports of a file: the name each makes available, to the module's
+## import path. Standard modules are left out.
+pub fn aliases_of(prog ast.Program) Map[str, str]
+    mut out := Map[str, str]()
+    for u in prog.uses
+        parts := [i.name for i in u.path]
+        if parts.len() == 0 or parts[0] == "std"
+            continue
+        name := if a := u.alias then a.name else parts[parts.len() - 1]
+        out[name] = parts.join(".")
+    out
+
+## The import paths a file names, standard modules aside.
+pub fn imports_of(prog ast.Program) List[str]
+    aliases_of(prog).values()
+
+## Lower from now on as file `k`: its module's names and its imports.
+fn Lower.enter_file(mut self, k int)
+    stamp_problems()
+    file = k
+    prefix = file_prefix[k]
+    aliases = file_aliases[k]
+
+## Record the current file for the problems reported since the last call.
+fn Lower.stamp_problems(mut self)
+    while problem_files.len() < problems.len()
+        problem_files.push(file)
+
+## The module an import name stands for in the current file, unless a
+## local hides it.
+fn Lower.module_of(self, name str) str?
+    if lookup(name) != none
+        return none
+    aliases.get(name)
+
+## `a.b.c` for a chain of names and fields, else `none`.
+fn path_of(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Member(recv, name, _) =>
+            p := path_of(recv)?
+            "{p}.{name}"
+        _ => none
+
+## The key of the struct a written name means here: `T` in this module or
+## `m.T` through an import (mod.use.2).
+fn Lower.type_key(self, name str) str?
+    parts := name.split(".")
+    if parts.len() > 1
+        m := aliases.get(parts[0])?
+        key := "{m}.{parts[1..].join(".")}"
+        return if structs.contains(key) then key else none
+    key := "{prefix}{name}"
+    if structs.contains(key) then key else none
+
+## The key a qualified name `m.x` has, when `m` is an import here.
+fn Lower.qualified(self, e ast.Expr) str?
+    p := path_of(e)?
+    parts := p.split(".")
+    if parts.len() < 2
+        return none
+    m := module_of(parts[0])?
+    "{m}.{parts[1..].join(".")}"
+
+## A constant's value, lowered where it is declared so its names are that
+## module's.
+fn Lower.lower_const(mut self, key str, want Ty?) Val?
+    home := const_home.get(key) else file
+    saved_file := file
+    saved_prefix := prefix
+    saved_aliases := aliases
+    if not is_rt
+        file = home
+        prefix = file_prefix[home]
+        aliases = file_aliases[home]
+    v := lower_expr(consts[key], want)
+    file = saved_file
+    prefix = saved_prefix
+    aliases = saved_aliases
+    v

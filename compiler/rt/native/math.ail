@@ -1,0 +1,17 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Float methods the native backend doesn't lower to one instruction
+## (ADR 0591). Written in the native subset over `floor` and `ceil`.
+
+## `x.round()` (type.num.9): the nearest integer, halves away from zero, as
+## Rust's `f64::round`. The truncation is exact, and so is `x - trunc`, so
+## the sign of zero, NaN and the infinities come out as type.num.9 says.
+fn float_round(x float) float
+    t := if x >= 0.0 then x.floor() else x.ceil()
+    d := x - t
+    if d >= 0.5
+        return t + 1.0
+    if d <= -0.5
+        return t - 1.0
+    t

@@ -568,6 +568,23 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(r, 0))
             put_gpr(i.dst, d)
+        "load" =>
+            r := gpr(i.args[0], S0)
+            if f.vals[i.dst].is_float()
+                d := out_xmm(i.dst, X0)
+                a.vmovsd_rm(d, at(r, i.imm))
+                put_xmm(i.dst, d)
+            else
+                d := out_gpr(i.dst, S1)
+                a.mov_rm(d, at(r, i.imm))
+                put_gpr(i.dst, d)
+        "store" =>
+            r := gpr(i.args[0], S0)
+            v := i.args[1]
+            if f.vals[v].is_float()
+                a.vmovsd_mr(at(r, i.imm), xmm(v, X0))
+            else
+                a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
             parallel([move_of(loc[i.dst], i.args[0])])
         _ => unreachable("x64: no code for `{i.op}`")

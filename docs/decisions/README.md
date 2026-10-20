@@ -373,19 +373,23 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0456](0456-calling-function-values.md) | Calling a function value, and its effects *(delegated)* | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
-| [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
-| [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
-| [0396](0396-ail-diff-semantic-diff.md) | `ail diff`: a semantic diff of declarations, diagnostics and test outcomes, also against a git revision *(delegated)* | Accepted | 2026-10-20 |
 | [0384](0384-mir-shape-and-native-subset.md) | MIR: flat instructions, block parameters, built on the fly; the native subset *(delegated)* | Accepted | 2026-10-20 |
 | [0385](0385-x86-64-code-generation.md) | x86-64 code generation: the C convention, scratch registers, checks that branch to trap stubs *(delegated)* | Accepted | 2026-10-20 |
 | [0386](0386-linear-scan-register-allocation.md) | Register allocation by linear scan over reverse postorder, one location per value *(delegated)* | Accepted | 2026-10-20 |
 | [0387](0387-static-executables-and-ail-build.md) | `ail build`: static executables with the runtime compiled from AIL, checked first *(delegated)* | Accepted | 2026-10-20 |
 | [0388](0388-arm64-code-generation.md) | ARM64 code generation: AAPCS64, the same allocator, checks through the flags *(delegated)* | Accepted | 2026-10-20 |
 | [0389](0389-mach-o-signed-by-the-backend.md) | Mach-O executables, dynamically loaded but importing nothing, signed ad hoc by the backend *(delegated)* | Accepted | 2026-10-20 |
-| [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
-| [0397](0397-ail-edit-structured-edits-by-id.md) | `ail edit`: structured edits by declaration id, formatted and checked *(delegated)* | Accepted | 2026-10-20 |
 | [0390](0390-native-subset-for-the-drag-race.md) | The native subset grows to the drag-race programs: arguments, `to_int() else`, constant expressions, `{x:.N}`, strings and nested lists *(delegated)* | Accepted | 2026-10-20 |
 | [0391](0391-native-backend-optimisations.md) | First optimisations in the native backend: lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols *(delegated)* | Accepted | 2026-10-20 |
+| [0392](0392-native-structs-and-methods.md) | Structs and methods in the native subset: heap header word, slots, copies at the boundary, `T.m` methods *(delegated)* | Accepted | 2026-10-20 |
+| [0393](0393-native-modules.md) | Modules in the native backend: package loading, module-prefixed names, files in problems and traps *(delegated)* | Accepted | 2026-10-20 |
+| [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
+| [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
+| [0396](0396-ail-diff-semantic-diff.md) | `ail diff`: a semantic diff of declarations, diagnostics and test outcomes, also against a git revision *(delegated)* | Accepted | 2026-10-20 |
+| [0397](0397-ail-edit-structured-edits-by-id.md) | `ail edit`: structured edits by declaration id, formatted and checked *(delegated)* | Accepted | 2026-10-20 |
+| [0398](0398-record-and-replay.md) | Record and replay: `--record R` writes every effect's result as JSON lines, `--replay R` answers effects from it *(delegated)* | Accepted | 2026-10-20 |
+| [0583](0583-native-coverage-tracker.md) | A native coverage tracker: which programs `ail build` handles, and why the rest fail *(delegated)* | Accepted | 2026-10-20 |
+| [0584](0584-native-coverage-classification.md) | Native coverage: status rules, construct keys and counting *(delegated)* | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
@@ -394,6 +398,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
 | [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
 | [0398](0398-record-and-replay.md) | Record and replay: `--record R` writes every effect's result as JSON lines, `--replay R` answers effects from it *(delegated)* | Accepted | 2026-10-20 |
+| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
+| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
+| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
 | [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |
 | [0405](0405-native-traps.md) | Native traps print the interpreter's first line and exit 1 *(delegated)* | Accepted | 2026-10-20 |
 | [0406](0406-raw-syscalls-for-native-runtime.md) | Raw syscalls for the first native runtime, including on macOS *(delegated)* | Accepted | 2026-10-20 |
@@ -426,8 +433,14 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
+| [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
+| [0511](0511-pdf-pages-read-on-demand.md) | The PDF reader reads pages on demand; search streams page by page (designer direction) | Accepted | 2026-10-20 |
+| [0512](0512-pdf-ocr-by-nearest-shape.md) | OCR of scanned PDF pages by nearest reference shape, on demand; shapes from DejaVu and OFL fonts (designer direction) | Accepted | 2026-10-20 |
+| [0513](0513-image-decoders-and-font-rasterizer-in-ail.md) | Image decoders (CCITT fax, JPEG) and a TrueType rasterizer written in AIL *(delegated)* | Accepted | 2026-10-20 |
 | [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
+| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
+| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
@@ -437,6 +450,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0521](0521-tensor-conv2d.md) | `conv2d` on 2-D float tensors: valid, stride 1, no padding (AI, delegated) | Accepted | 2026-10-20 |
 | [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
 | [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
+| [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
@@ -458,7 +472,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0428](0428-wait-yields-and-time-limit-kills.md) | `proc.wait` lets other tasks run, and the time limit kills the child *(delegated)* | Accepted | 2026-10-20 |
 | [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
-| [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
 | [0438](0438-regex-engine-is-a-pike-vm.md) | `std.regex` is a linear-time Pike VM, without backreferences or lookaround *(delegated)* | Accepted | 2026-10-20 |
 | [0439](0439-regex-syntax-is-the-re2-subset.md) | `std.regex` syntax is the RE2 subset; Unicode classes are a documented subset *(delegated)* | Accepted | 2026-10-20 |
 | [0440](0440-regex-api-is-module-functions-and-values.md) | `std.regex` API: module functions over a `Regex` value; no `re"..."` literal yet *(delegated)* | Accepted | 2026-10-20 |
@@ -467,9 +480,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
-| [0571](0571-key-functions-inline.md) | Key functions are lowered inline in native code, with no closure object *(delegated)* | Accepted | 2026-10-20 |
-| [0572](0572-native-stable-sort.md) | Native stable sort: a merge sort over a list of indices *(delegated)* | Accepted | 2026-10-20 |
-| [0573](0573-native-function-values.md) | Function values in native code: the address of a declared function, `fnaddr` and `icall` *(delegated)* | Accepted | 2026-10-20 |
+| [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
+| [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
 | [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
 | [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
 | [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |

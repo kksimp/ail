@@ -60,3 +60,14 @@ loop in the type; designing it before `bytes` exists would fix a shape that
   connection pool are not needed for the measured agent corpus (one request
   per call) and are deferred.
 - Tokens: `net.get(url)` is unchanged; a header costs three lines.
+
+## Addendum (2026-10-20): repeated headers
+
+A `Response` joins a repeated header's values with `, `, which loses the
+boundary of a `Set-Cookie` whose `Expires` has a comma. Both response types
+gain a last field `all_headers Map[str, List[str]]` with each value
+separately (`std.net.17`); `net.Response(...)` may leave it out, so the
+server-side `Response(status:, headers:, body:)` costs no extra tokens. A
+required field would have added `all_headers: {}` to every reply. Rejected: a
+method needing hidden state (no place to keep it), and a list of pairs (a
+second shape next to `headers`). Asked for by the Garlic browser thread.
