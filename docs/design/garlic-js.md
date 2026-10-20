@@ -16,11 +16,11 @@ did.
 ## Slices
 
 1. **Lexer and parser** (done): scripts to an ESTree-shaped tree.
-2. **Interpreter**: values (undefined, null, boolean, number as `float`,
-   string, object with a prototype chain, function with closures), property
-   lookup, `this`, `new`, exceptions, and the core built-ins (`Object`,
-   `Function`, `Array`, `String`, `Number`, `Math`, `JSON`, the `Error` types).
-   It has run limits like `ail run --max-steps`.
+2. **Interpreter** (done): values, objects with prototype chains, closures,
+   `this`, `new`, classes, exceptions, destructuring, and the core built-ins
+   (`Object`, `Function`, `Array`, `String`, `Number`, `Boolean`, `Math`,
+   `JSON`, the `Error` types, `Map`, `Set`, `Date`, `RegExp`, `console`).
+   It has a step limit like `ail run --max-steps`.
 3. **DOM bindings** to Garlic's document tree: `getElementById`,
    `querySelector` with simple selectors, `textContent`, `createElement`,
    `appendChild`, `setAttribute`, the `click` and `DOMContentLoaded` events,
@@ -33,7 +33,7 @@ did.
 
 ```
 tools/garlic/js/
-  main.ail          command line: --tokens, --ast [--loc], --check, --test, --test262
+  main.ail          command line: --tokens, --ast [--loc], --check, --run, --test, --test262, --test-run
   suite.ail         runs the packed test262 parser tests
   syntax/           module `syntax`: lexer, tree, parser, dumps
     lex.ail         ECMA-262 §12 (lexical grammar)
@@ -42,6 +42,19 @@ tools/garlic/js/
     parse.ail       §13-§16 (expressions, statements, functions, classes, scripts)
     dump.ail        ESTree JSON
     text.ail        Number::toString and JSON string quoting
+  vm/               module `vm`: the interpreter
+    value.ail       values, properties, scopes, conversions that need no calls
+    object.ail      [[Get]], [[Set]], keys, arrays and strings as objects
+    interp.ail      statements, expressions, functions, classes
+    builtins.ail    the global object, Object, Function, Map, Set, Math, ...
+    array.ail       Array.prototype
+    string.ail      String.prototype and Number.prototype
+    numfmt.ail      toFixed, toPrecision, toExponential, toString(radix)
+    jsmath.ail      exp, log, sin, atan, pow, ... (AIL's float has none)
+    json.ail        JSON.parse and JSON.stringify
+    regexp.ail      RegExp on std.regex
+    date.ail        Date, in UTC
+    inspect.ail     console.log's layout, as Node's util.inspect
   testdata/
     syntax/         NAME.js with NAME.ast (tree) or NAME.err (SyntaxError)
     tokens/         a lexer sample and its tokens
@@ -55,6 +68,7 @@ Garlic itself imports the parser as `use js.syntax` from `tools/garlic/`.
 ./ail run tools/garlic/js --ast --loc page.js    # with "loc":"LINE:COL" on each node
 ./ail run tools/garlic/js --check a.js b.js      # "ok" or the SyntaxError, per file
 ./ail run tools/garlic/js --tokens page.js       # LINE:COL KIND TEXT per token
+./ail run tools/garlic/js --run [--max-steps N] page.js   # run it; console.log to stdout
 ```
 
 ## Design choices
@@ -108,10 +122,62 @@ them up by binary search.
 Number::toString (§6.1.6.1.20) on top of AIL's shortest round-trip float
 printing. The interpreter will use it too.
 
+## The interpreter
+
+**It walks the tree.** Slice 4 adds a bytecode compiler; walking the tree
+first gave a correct reference to test that compiler against, the way the
+Rust interpreter is AIL's oracle (ADR 0032).
+
+**Objects are `ref` cells.** A `Value` is `Undef`, `Null`, `Bool`, `Num`
+(a `float`), `Str` or `Obj(ref JsObject)`, so copies of a value share the
+object and `==` on `Value` is JavaScript's `===`. An object keeps its named
+properties in an insertion-ordered `Map` and an array's elements in a list.
+Key order follows §10.1.11.1: indexes ascending, then strings in creation
+order. Scopes are `ref Env` cells with a parent, so closures share them.
+
+**Strings stay AIL strings.** `length`, indexes and `charCodeAt` count UTF-16
+code units by converting on demand (`units`, `from_units`); a lone surrogate
+becomes U+FFFD. Pages almost never rely on lone surrogates, and keeping
+AIL's `str` keeps every string operation in AIL's own (fast) library. This
+closes the question left open in slice 1.
+
+**A throw is an AIL error.** Every evaluation function returns
+`T ! Thrown`, so a JavaScript exception unwinds with `?`, and `try` is an
+`if ... else err`. A run limit is a `Thrown` with `limit` set, which no
+`catch` or `finally` stops.
+
+**Runs repeat exactly.** `Math.random` is a seeded xorshift, `Date.now()`
+reads a clock the host sets (fixed at 2026-01-01T00:00:00Z when run alone),
+and the local time zone is UTC. An agent replaying a page gets the same page.
+
+**Messages and output match V8 and Node.** Error messages use V8's wording
+(`Cannot read properties of null (reading 'x')`), and `console.log` lays out
+values as Node's `util.inspect` does, including its column grouping of long
+arrays, so tests compare against Node byte for byte.
+
+**Numbers print exactly.** `toFixed`, `toPrecision` and `toExponential`
+work from the double's exact decimal value (a big integer in base 10^9), so
+`(1.005).toFixed(2)` is `"1.00"`, as in V8. `toString(radix)` follows V8's
+algorithm. `Math`'s functions are written in AIL by range reduction and
+series; they are within an ulp or two of V8, not always the same last bit.
+
+**RegExp uses std.regex.** Patterns are translated to RE2 syntax
+(`(?<name>` to `(?P<name>`, `\uXXXX`, `[^]`) with the flags as inline
+groups. Backreferences and lookaround are a SyntaxError until a JavaScript
+regex engine is written.
+
 ## Not yet
 
 - Generators, `async` functions and `await`, `for await`: a clear
-  "not supported yet" SyntaxError (slice 4).
+  "not supported yet" SyntaxError (slice 4). Symbols and iterators come
+  with them; until then `for-of` and spread work on arrays, strings,
+  `arguments`, `Map`, `Set` and array-likes, and `keys()`, `values()` and
+  `entries()` return arrays.
+- Holes in arrays are `undefined`; property attributes on array elements
+  only as a whole (`Object.freeze`).
+- Recursion is limited to 350 JavaScript calls: each one takes about 25
+  frames of the bootstrap interpreter, whose limit is 10,000. The bytecode
+  compiler (slice 4) removes this.
 - Modules (`import`, `export`): scripts only, as in a classic `<script>`.
 - BigInt literals (`10n`).
 - Regular expression pattern syntax (§22.2.1): the literal's body and flags
@@ -135,8 +201,17 @@ printing. The interpreter will use it too.
   exception and why: an unsupported feature, a twin that is not the same
   script, a test made stale by a later edition, or a gap. A listed test that
   starts to behave is reported, so the list only shrinks.
-- `bootstrap/tests/tools.rs` (`garlic_js_parses_its_suites`) runs all of these
-  in `./ail selftest`.
+- `testdata/run`: 12 programs (operators, functions, classes, control flow,
+  built-ins, numbers, JSON, collections, errors, strings, console layout),
+  each with `NAME.out`, the output Node 22 gave (an uncaught error is the
+  last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
+- `vm/jsmath.ail` has `@test`s for the math functions.
+- `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
+  all of these in `./ail selftest`.
+
+As a larger check, acorn 8.14 (6,300 lines of JavaScript) runs in the
+interpreter, and its JSON tree with locations for a 240-character script
+was byte-identical to Node's (2026-10-20, outside the repository).
 
 Before `trees.txt` was written, every tree was compared node for node with
 acorn 8.14 (ECMAScript 2022, script goal), outside the repository. Results on
@@ -153,12 +228,19 @@ acorn 8.14 (ECMAScript 2022, script goal), outside the repository. Results on
 
 On the bootstrap interpreter (bytecode tier), Linux x86-64: acorn's own
 238 KB `acorn.js` parses in 1.7 s, about 140 KB/s. Acorn on V8 takes 0.1 s.
-The interpreter work (slice 2) and the native backend will move this. The
-parser does no I/O and allocates mostly in lists, so it should compile well.
+The native backend will move this. The parser does no I/O and allocates
+mostly in lists, so it should compile well.
+
+The interpreter on the bootstrap's bytecode tier costs about 1 µs per AIL
+call, and a JavaScript loop step takes about 30 of them: a
+100,000-iteration `for` loop with `t += i % 7` runs in 2.8 s (Node: under
+0.1 s), and loading acorn takes 6.6 s. Arithmetic on two numbers and blocks
+without declarations have fast paths. Running pages at speed needs the
+bytecode compiler (slice 4) and AIL's native backend.
 
 ## Notes on writing it in AIL
 
-What a 3,700-line AIL program ran into, for the language's designers:
+What a 9,900-line AIL program ran into, for the language's designers:
 
 - A variant whose fields share a type can't be built by position
   (`Binary(op, l, r, p)`), so tree constructors are written with names.
@@ -167,5 +249,12 @@ What a 3,700-line AIL program ran into, for the language's designers:
   `match` per enum, to avoid `_` arms that the checker warns about.
 - `use` is per file, and a local named like a standard module (`path`) hides
   it.
+- `x := f() else err`, where `f` gives `T? ! E` and succeeds with `none`,
+  panics in the bootstrap interpreter (issue #163). `json.ail` returns a
+  sentinel string instead.
+- `if a then b elif c then d else e` isn't an expression; nest it in
+  parentheses or use `match`.
+- A `match` arm can't do nothing (`{}` has no type), so "do nothing for these
+  variants" is written with a helper that returns an optional.
 - The rest was direct: `T ! E` with `?` makes "first error stops the parse"
   a one-character cost per call.
