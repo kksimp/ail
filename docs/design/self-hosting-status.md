@@ -10,21 +10,50 @@
 |---|---|---|
 | `compiler/ast/` | The syntax tree, shared; its derived JSON is the shape of `ail api --ast` | [0376](../decisions/0376-syntax-tree-in-ail-and-its-json.md) |
 | `compiler/syntax/` | Lexer and parser (lane 113) | 0371–0375 |
-| `compiler/check/` | Checker (lane 114) | [0377](../decisions/0377-checker-in-ail-ported-pass-for-pass.md), [0378](../decisions/0378-checker-gaps-are-skipped-not-guessed.md) |
+| `compiler/check/` | Checker (lane 114) | [0377](../decisions/0377-checker-in-ail-ported-pass-for-pass.md), [0378](../decisions/0378-checker-gaps-are-skipped-not-guessed.md), [0380](../decisions/0380-self-hosted-checker-parity-gate.md) |
 
 ## Checker agreement
 
-Diagnostics of `ail check` (Rust) and the AIL checker on every program and
-corpus mistake the front end accepts: same rule, file, line and column, in
-order, over the rules and lines the AIL checker covers so far
-(`compiler/check/coverage.ail`, ADR 0377). The selftest
-`self_hosted_check` requires full agreement.
+Diagnostics of `ail check` (Rust) and the AIL checker on every program the
+front end accepts: same rule, file, line and column, in order. Slices 1–3
+compared only the rules and lines the AIL checker covered
+(`compiler/check/coverage.ail`, ADR 0377). Since slice 4 the selftest
+`self_hosted_check` compares with nothing skipped, except the package
+manifest checks eff.cap.4–5 (ADR 0380).
 
 | Slice | Scope | Agreement |
 |---|---|---|
 | 1 | Names, types, prelude: the declaration passes, 42 rules outside function bodies | 491 of 491 programs (2026-10-20) |
 | 2 | Expressions and statements: every function body, minus gaps (ADR 0378) | 495 of 495 programs; types 1,819 of 1,848 bodies, 98.4% (2026-10-20) |
 | 3 | Flow passes: use after move, task handles, effects (`@pure`, pure contracts, constants), parallel loops and `par for` comprehensions | 495 of 495 programs, 156 rules (2026-10-20) |
+| 4 | Differential report, nothing skipped: `std.tensor`, `std.ui` and named colors ported, and the corpus widened to perfbench, the agent corpus, `tools/edit` and `compiler` | 522 of 522 programs; 2,615 of 2,615 bodies; 536 of 536 diagnostics, all 536 messages identical (2026-10-20) |
+
+### Slice 4 report (2026-10-20)
+
+| Corpus | Programs |
+|---|---|
+| `examples/` | every `.ail` |
+| `bootstrap/tests/cases/`, including `packages/` | every case the front end accepts |
+| `bootstrap/tests/mistakes/` (the `ail fix` corpus) | 140 |
+| `tools/perfbench/programs/` | 6 |
+| `tools/tokbench/corpus/programs/` (agent corpus) | 20 |
+| `tools/edit`, `compiler` | 2 |
+
+- **Agreement:** 100% of programs (522), bodies (2,615) and diagnostics
+  (536), with every message identical.
+- **Gaps left:** none. The last ones were `std.tensor` (functions, methods,
+  operators, `tensor.Tensor(...)`), `std.ui` window methods and named
+  colors, the hidden-module check std.use.4, and `print`'s wording for a
+  function with no result.
+- **Outside the checker:** eff.cap.4–5 (`bootstrap/src/packages.rs`), which
+  come from package manifests and aren't in the AST dump; 5 diagnostics, all
+  in `packages/caps_denied`.
+- **Size:** `compiler/check/` is 11,000 lines of AIL, against 11,551 lines of
+  Rust in `bootstrap/src/check*`.
+- **Speed:** checking `compiler` and `tools/edit` (7 MB of AST JSON) takes
+  about 15 s under the tree-walking interpreter, against under 1 s for
+  `ail check`. This is the next thing to bring down, through the bytecode
+  tier (ADR 0359) and then native code.
 
 ## Language gaps found writing the compiler in AIL
 

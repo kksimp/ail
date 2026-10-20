@@ -55,9 +55,15 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
             )
             return Ty.Unknown
         return none
-    if module == "tensor"
+    if module == "tensor" and n == "Tensor"
         args_only(args)
-        return gap("a std.tensor function")
+        err_help(
+            "std.tensor.1",
+            at,
+            "a tensor isn't built from fields",
+            "use `{head}.from(xs, shape)` or `{head}.zeros(shape)`",
+        )
+        return Ty.Unknown
     if s := struct_named("{module}.{n}")
         std_any.add(pos_key(at))
         return struct_literal(s, none, args, at, expect)
@@ -73,6 +79,8 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return Ty.Unknown
     std_fns[pos_key(at)] = module
     std_any.add(pos_key(at))
+    if module == "tensor"
+        return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
         return eprint_call(args, at)
     if module == "random" and n == "shuffle"

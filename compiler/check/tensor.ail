@@ -1,0 +1,228 @@
+## `std.tensor` (spec 17-std, std.tensor.1-11, ADR 0328), as
+## `check/tensor.rs`: `tensor.from(xs, shape)`, `tensor.zeros(shape)` and
+## the methods and operators of a `tensor.Tensor[T]`, where `T` is `int` or
+## `float`. A tensor has no fields (std.tensor.1).
+use ast
+
+TENSOR_METHODS := [
+    "add",
+    "dot",
+    "len",
+    "map",
+    "matmul",
+    "max",
+    "mean",
+    "mul",
+    "reshape",
+    "shape",
+    "sum",
+    "to_list",
+    "transpose",
+]
+
+fn Checker.tensor_ty(self, elem Ty) Ty
+    s := struct_named("tensor.Tensor") else return Ty.Unknown
+    Ty.Struct(s, [elem])
+
+## The element type of `t` when it is a `tensor.Tensor[T]`.
+@allow("expr.match.3") fn Checker.tensor_elem(self, t Ty) Ty?
+    match t
+        Struct(s, args) =>
+            if prog.structs[s].name == "tensor.Tensor"
+                if args.len() > 0
+                    return args[0]
+                return Ty.Unknown
+        _ => return none
+    none
+
+fn is_number(t Ty) bool
+    t == Ty.Int or t == Ty.Float
+
+## `tensor.f(args)` (std.tensor.2).
+@allow("expr.match.3")
+fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
+    shape := Ty.ListOf(Ty.Int)
+    mut wanted := no_ty()
+    if t := expect
+        if e := tensor_elem(t)
+            if is_number(e)
+                wanted = e
+    if f == "zeros"
+        elem := wanted else Ty.Float
+        sig := plain_sig(none, [shape], tensor_ty(elem))
+        return check_call("tensor.zeros", sig, [], args, none, at, expect)
+    # `from(xs)` is 1-D; `from(xs, shape)` gives the shape.
+    mut elem := Ty.Float
+    if w := wanted
+        elem = w
+    elif args.len() > 0
+        a := args[0]
+        t := quiet_type(a.value)
+        mut ok := true
+        match t
+            ListOf(e) =>
+                if is_number(e)
+                    elem = e
+                elif e != Ty.Unknown
+                    ok = false
+            Unknown => ok = true
+            _ => ok = false
+        if not ok
+            args_only(args)
+            err_help(
+                "std.tensor.1",
+                expr_pos(a.value),
+                "a tensor holds `int` or `float` elements, not {show(t)}",
+                "pass a `List[int]` or `List[float]`, e.g. `tensor.from([1.0, 2.0])`",
+            )
+            return Ty.Unknown
+    mut params := [Ty.ListOf(elem)]
+    if args.len() != 1
+        params.push(shape)
+    check_call("tensor.from", plain_sig(none, params, tensor_ty(elem)), [], args, none, at, expect)
+
+## `t.n(args)` on a tensor `t` (std.tensor.3-8).
+fn Checker.tensor_method(
+    mut self,
+    recv ast.Expr,
+    rt Ty,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    elem := tensor_elem(rt) else Ty.Unknown
+    if not TENSOR_METHODS.contains(n)
+        args_only(args)
+        mut d := new_diag("std.tensor.3", at, "`tensor.Tensor` has no method `{n}`")
+        if s := suggest(n, TENSOR_METHODS)
+            d = d.did_you_mean(s)
+        else
+            d = d.with_help("a tensor's methods are {list_names(TENSOR_METHODS)}")
+        diags.push(d)
+        return Ty.Unknown
+    std_any.add(pos_key(at))
+    if n == "map"
+        return tensor_map(rt, elem, args, at)
+    if n == "mean" and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.11",
+            at,
+            "`mean` is on `float` tensors, and this one holds `int`",
+            "convert first: `t.map(|x| x.to_float()).mean()`",
+        )
+        return Ty.Unknown
+    mut params := List[Ty]()
+    mut ret := rt
+    if n == "shape"
+        ret = Ty.ListOf(Ty.Int)
+    elif n == "len"
+        ret = Ty.Int
+    elif n == "to_list"
+        ret = Ty.ListOf(elem)
+    elif n == "sum" or n == "max" or n == "mean"
+        # std.tensor.11: over every element, or over one axis.
+        if args.len() == 0
+            ret = elem
+        else
+            params = [Ty.Int]
+    elif n == "dot"
+        params = [rt]
+        ret = elem
+    elif n == "add" or n == "mul" or n == "matmul"
+        params = [rt]
+    elif n == "reshape"
+        params = [Ty.ListOf(Ty.Int)]
+    check_call("tensor.Tensor.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)
+
+## std.tensor.8: `t.map(|x| e)`: `x` is each element, and `e` is an `int`
+## or `float`, the new tensor's element type.
+fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) Ty
+    if args.len() != 1
+        args_only(args)
+        err_help(
+            "std.tensor.8",
+            at,
+            "`map` takes one function, but {was_were(args.len())} given",
+            "write `t.map(|x| x * 2.0)`",
+        )
+        return rt
+    a := args[0]
+    p := a.param else
+        expr(a.value, none, true)
+        err_help(
+            "std.tensor.8",
+            expr_pos(a.value),
+            "`map` takes a function of each element",
+            "write `t.map(|x| x * 2.0)`",
+        )
+        return rt
+    mark := locals.len()
+    if declare(p.name, p.pos)
+        locals.push(Local(
+            name: p.name,
+            ty: elem,
+            mutable: false,
+            how: LocalKind.LoopVar,
+            decl: none,
+        ))
+    out := expr(a.value, elem, true)
+    end_scope(mark)
+    if is_number(out)
+        return tensor_ty(out)
+    if out != Ty.Unknown
+        err_help(
+            "std.tensor.8",
+            expr_pos(a.value),
+            "`map`'s function gives {show(out)}, but a tensor holds `int` or `float`",
+            "return a number from the function",
+        )
+    Ty.Unknown
+
+## type.num.10 for std.tensor.10: an `int` literal `scalar` beside a
+## `Tensor[float]` `t` is a `float`.
+fn Checker.float_tensor_scalar(mut self, t Ty, st Ty, scalar ast.Expr) bool
+    st == Ty.Int and tensor_elem(t) == Ty.Float and float_literal(scalar)
+
+## std.tensor.10: `+`, `-` and `*` with a tensor operand: two tensors of one
+## element type, or a tensor and a scalar of its element type, either side.
+## `none` when neither operand is a tensor.
+fn Checker.tensor_operator(mut self, sym str, arith bool, lt Ty, rt Ty, at ast.Pos) Ty?
+    le := tensor_elem(lt)
+    re := tensor_elem(rt)
+    if le == none and re == none
+        return none
+    if not arith or not ["+", "-", "*"].contains(sym)
+        if not arith
+            return none
+        mut help := "use `t.map(|x| ...)`"
+        if sym == "/"
+            help = "divide each element with `t.map(|x| x / d)`"
+        err_help("std.tensor.10", at, "`{sym}` is not defined for tensors", help)
+        return Ty.Unknown
+    mut ok := false
+    if a := le
+        if b := re
+            ok = a == b
+        else
+            ok = a == rt
+    elif b := re
+        ok = b == lt
+    if ok
+        if le != none
+            return lt
+        return rt
+    other := if le != none then rt else lt
+    mut help := "a tensor combines with a tensor or a number of its element type"
+    if le != none and re != none
+        help = "convert one with `t.map(|x| x.to_float())`"
+    elif is_number(other)
+        help = "convert the number to the element type: `x.to_float()` or `x.to_int()`"
+    err_help(
+        "std.tensor.10",
+        at,
+        "`{sym}` needs two tensors of one element type, or a tensor and a scalar of its element type, found {show(lt)} and {show(rt)}",
+        help,
+    )
+    Ty.Unknown

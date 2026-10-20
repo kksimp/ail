@@ -27,7 +27,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 - `ail api --tokens` and `ail api --ast [--program]` print the Rust lexer's tokens and parser's tree, the targets the AIL front end is compared with (ADR 0371); a name is letters, ASCII digits and `_` (ADR 0372).
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
-- `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slices 1 (declarations), 2 (function bodies, ADR 0378) and 3 (flow passes: moves, task handles, effects, parallel loops) agree with `ail check` on every corpus program, and type 1,819 of 1,848 bodies; the selftest `self_hosted_check` holds it there. `@allow("expr.match.3")` (ADR 0379) keeps `ail check compiler` warning-free. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
+- `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slices 1 (declarations), 2 (function bodies, ADR 0378) and 3 (flow passes: moves, task handles, effects, parallel loops) are done. Slice 4 is the differential report: with nothing skipped, the AIL checker agrees with `ail check` on all 522 corpus programs (including `tools/edit` and `compiler`), all 2,615 function bodies and all 536 diagnostics, with identical messages. Only the package manifest checks eff.cap.4–5 are outside it. The selftest `self_hosted_check` gates on this (ADR 0380). `@allow("expr.match.3")` (ADR 0379) keeps `ail check compiler` warning-free. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 
 ### Language (2026-10-20 batch)
 

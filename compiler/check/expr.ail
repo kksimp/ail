@@ -630,8 +630,11 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
     # type.num.10: `2 * x` with a float `x`.
     if lt == Ty.Int and rt == Ty.Float and float_literal(lhs)
         lt = Ty.Float
-    if is_tensor(lt) or is_tensor(rt)
-        return gap("a tensor operator")
+    # std.tensor.10: `t * 2` and `2 * t` with a float tensor `t`.
+    if float_tensor_scalar(lt, rt, rhs)
+        rt = Ty.Float
+    elif float_tensor_scalar(rt, lt, lhs)
+        lt = Ty.Float
     # type.num.13: `1 + x` with a sized `x`.
     if lt == Ty.Int
         if k := num_name(rt)
@@ -647,7 +650,7 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
         )
     operator(op, lt, rt, at)
 
-## A `std.tensor` value, which this checker doesn't type yet.
+## A `std.tensor` value.
 @allow("expr.match.3") fn Checker.is_tensor(self, t Ty) bool
     match t
         Struct(s, _) => prog.structs[s].name == "tensor.Tensor"
@@ -666,8 +669,8 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
     if lt == Ty.Unit or rt == Ty.Unit
         err("trait.op.1", at, "an operand of `{sym}` produces no value")
         return Ty.Unknown
-    if is_tensor(lt) or is_tensor(rt)
-        return gap("a tensor operator")
+    if t := tensor_operator(sym, arith, lt, rt, at)
+        return t
     # expr.cmp.1: the right operand converts to the left's type.
     if not same(lt, rt) and (arith or not accepts(lt, rt))
         text := "`{sym}` needs operands of one type, found {show(lt)} and {show(rt)}"

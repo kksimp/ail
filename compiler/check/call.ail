@@ -498,7 +498,15 @@ fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     v := args[0].value
     t := expr(v, none, true)
     if t == Ty.Unit
-        err("mod.main.3", expr_pos(v), "this expression produces no value to print")
+        if f := called_fn(v)
+            err_help(
+                "mod.main.3",
+                expr_pos(v),
+                "`{f}` returns nothing, so there is no value to print",
+                "if `{f}` should give a value, declare its type after the `)`: `fn {f}(...) int`",
+            )
+        else
+            err("mod.main.3", expr_pos(v), "this expression produces no value to print")
     else
         text_form(t, expr_pos(v), "mod.main.3")
     Ty.Unit
@@ -760,12 +768,10 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             return conc_method(k, inner, n, at, args)
         Struct(s, _) =>
             sn := prog.structs[s].name
-            if sn == "ui.Window" or sn == "tensor.Tensor"
-                if sn == "ui.Window"
-                    std_methods.add(pos_key(at))
-                std_any.add(pos_key(at))
-                args_only(args)
-                return gap("std.ui or std.tensor method")
+            if sn == "ui.Window"
+                return ui_method(recv, n, at, args, expect)
+            if sn == "tensor.Tensor"
+                return tensor_method(recv, rt, n, at, args, expect)
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0
@@ -1010,12 +1016,18 @@ fn enum_of_def(d Def) int?
         d = d.did_you_mean(s)
     diags.push(d)
 
-## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`.
+## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
+## which has a function `f`. Reports it and returns true.
 fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
     x := name_of(recv) else return false
-    if local(x) == none or not STD_MODULES.contains(x)
+    if local(x) == none or not std_functions(x).contains(n)
         return false
-    gap("a local hides a standard module")
+    err_help(
+        "std.use.4",
+        at,
+        "the local `{x}` hides the standard module `std.{x}`, so `{x}.{n}` isn't found",
+        "rename the local, or import the module under another name: `use std.{x} as {x}_mod`",
+    )
     true
 
 @allow("expr.match.3") fn Checker.field(mut self, recv ast.Expr, n str, at ast.Pos, expect Ty?) Ty
@@ -1031,8 +1043,9 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             targs = a
             has_targs = true
         _ => head = ""
-    if head != "" and not has_targs and std_module(head) != none
-        return gap("a standard module's field")
+    # std.ui.17: `ui.RED`.
+    if head != "" and not has_targs and std_module(head) == "ui"
+        return ui_color(head, n, at)
     # `Enum.Variant` and `Enum[int].Variant` (type.enum.3).
     if head != ""
         if d := types.get(head)
@@ -1080,7 +1093,13 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
         err_help("expr.op.3", at, "`{n}` is a method, so calling it needs `()`", "write `.{n}()`")
         return Ty.Unknown
     if is_tensor(rt)
-        return gap("a tensor's field")
+        err_help(
+            "std.tensor.1",
+            at,
+            "a tensor has no field `{n}`; its elements live in the runtime",
+            "read it with a method: {list_names(TENSOR_METHODS)}",
+        )
+        return Ty.Unknown
     match rt
         Struct(s, args) =>
             decl := prog.structs[s]
@@ -1359,3 +1378,15 @@ fn Checker.comp_part(mut self, e ast.Expr, hint Ty?) Ty
     if not accepts(w, t)
         err("expr.comp.3", expr_pos(e), "the elements here are {show(w)}, but this is {show(t)}")
     w
+
+## `f` when `e` is a call `f(...)` of a declared function.
+@allow("expr.match.3") fn Checker.called_fn(self, e ast.Expr) str?
+    match e
+        Call(callee, _, _) =>
+            match callee
+                Name(f, _) =>
+                    if fns.contains(f)
+                        return f
+                _ => return none
+        _ => return none
+    none

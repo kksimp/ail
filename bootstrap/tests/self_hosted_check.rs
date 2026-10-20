@@ -3,7 +3,9 @@
 //! checker's diagnostics must equal `ail check --json`'s (rule, file, line,
 //! column, in order), counting on both sides only the rules it reports and
 //! the lines it checks so far. It prints those with each program's
-//! diagnostics.
+//! diagnostics. With nothing skipped (slice 4), the two must also agree on
+//! every diagnostic except the package manifest's capability checks, which
+//! `ail` makes before the checker runs and the AST dump doesn't carry.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,7 +36,7 @@ fn programs() -> Vec<String> {
     let r = root();
     let rel = |p: PathBuf| p.strip_prefix(&r).unwrap().to_string_lossy().into_owned();
     let mut out: Vec<String> = Vec::new();
-    for dir in ["examples", "bootstrap/tests/cases", "bootstrap/tests/mistakes"] {
+    for dir in ["examples", "bootstrap/tests/cases", "bootstrap/tests/mistakes", "tools/perfbench/programs"] {
         out.extend(with_ext(&r.join(dir), "ail").into_iter().map(rel));
     }
     let mut pkgs: Vec<PathBuf> = fs::read_dir(r.join("bootstrap/tests/cases/packages"))
@@ -44,7 +46,16 @@ fn programs() -> Vec<String> {
         .collect();
     pkgs.sort();
     out.extend(pkgs.into_iter().map(rel));
+    // The agent corpus: one directory per program.
+    let mut agent: Vec<PathBuf> = fs::read_dir(r.join("tools/tokbench/corpus/programs"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.is_dir())
+        .collect();
+    agent.sort();
+    out.extend(agent.into_iter().map(rel));
     out.push("tools/edit".into());
+    out.push("compiler".into());
     out
 }
 
@@ -78,12 +89,17 @@ fn num_field(line: &str, key: &str) -> usize {
 /// (rule, file, line, column) of each diagnostic line.
 type Key = (String, String, usize, usize);
 
+/// eff.cap.4-5 come from `bootstrap/src/packages.rs`, before checking.
+const MANIFEST_RULES: &[&str] = &["eff.cap.4", "eff.cap.5"];
+
 fn key(line: &str) -> Key {
     (str_field(line, "rule"), str_field(line, "file"), num_field(line, "line"), num_field(line, "col"))
 }
 
 struct Section {
     diags: Vec<Key>,
+    /// Each diagnostic's message, beside `diags`.
+    messages: Vec<String>,
     rules: Vec<String>,
     skips: Vec<(String, usize, usize)>,
 }
@@ -144,7 +160,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
         }
         if let Some(p) = line.strip_prefix("== ") {
             current = p.to_string();
-            sections.insert(current.clone(), Section { diags: Vec::new(), rules: Vec::new(), skips: Vec::new() });
+            sections.insert(current.clone(), Section { diags: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() });
         } else if let Some(r) = line.strip_prefix("rules ") {
             sections.get_mut(&current).unwrap().rules = r.split(' ').map(String::from).collect();
         } else if let Some(s) = line.strip_prefix("skip ") {
@@ -154,11 +170,15 @@ fn ail_checker_agrees_with_the_bootstrap() {
             let file = w.next().unwrap_or("").to_string();
             sections.get_mut(&current).unwrap().skips.push((file, first, last));
         } else if line.starts_with('{') {
-            sections.get_mut(&current).unwrap().diags.push(key(line));
+            let sec = sections.get_mut(&current).unwrap();
+            sec.diags.push(key(line));
+            sec.messages.push(str_field(line, "message"));
         }
     }
     let mut agree = 0;
     let mut failures = Vec::new();
+    let (mut agree_all, mut total_diags, mut matched_diags, mut same_text) = (0usize, 0usize, 0usize, 0usize);
+    let mut differ_all: Vec<String> = Vec::new();
     for (prog, path) in &dumps {
         let sec = sections.get(&path.to_string_lossy().into_owned()).expect("a section per dump");
         let out = ail().args(["check", "--json", prog]).output().unwrap();
@@ -173,9 +193,36 @@ fn ail_checker_agrees_with_the_bootstrap() {
         } else {
             failures.push(format!("{prog}\n  ail check: {want:?}\n  AIL:       {got:?}"));
         }
+        // The slice 4 report: every rule and line, nothing skipped.
+        let lines: Vec<&str> = std::str::from_utf8(&out.stderr)
+            .unwrap()
+            .lines()
+            .filter(|l| l.starts_with('{') && !MANIFEST_RULES.contains(&str_field(l, "rule").as_str()))
+            .collect();
+        let all: Vec<Key> = lines.iter().map(|l| key(l)).collect();
+        total_diags += all.len();
+        matched_diags += all.iter().filter(|k| sec.diags.contains(k)).count();
+        if all == sec.diags {
+            agree_all += 1;
+            // Wording isn't gated: the report counts the messages that match.
+            same_text += lines.iter().zip(&sec.messages).filter(|(l, m)| str_field(l, "message") == **m).count();
+        } else {
+            differ_all.push(format!("{prog}\n  ail check: {all:?}\n  AIL:       {:?}", sec.diags));
+        }
     }
     let _ = fs::remove_dir_all(&dir);
     println!("self-hosted checker agrees on {agree} of {} programs", dumps.len());
     println!("it types {checked} of {bodies} function bodies");
+    println!(
+        "with nothing skipped, it agrees on {agree_all} of {} programs and reports {matched_diags} of {total_diags} diagnostics",
+        dumps.len()
+    );
+    println!("{same_text} of those {total_diags} diagnostics have the same message");
     assert!(failures.is_empty(), "{} disagreements:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        differ_all.is_empty(),
+        "{} disagreements with nothing skipped:\n{}",
+        differ_all.len(),
+        differ_all.join("\n")
+    );
 }
