@@ -26,7 +26,7 @@ All verified on Linux x86-64 and macOS ARM64.
 ### Stage 3: self-hosting (started 2026-10-20)
 
 - `ail api --tokens` and `ail api --ast [--program]` print the Rust lexer's tokens and parser's tree, the targets the AIL front end is compared with (ADR 0371); a name is letters, ASCII digits and `_` (ADR 0372).
-- `compiler/syntax/`: the lexer in AIL, identical to `ail api --tokens` on all 770 repository files; diagnostics are rule and position (ADR 0373).
+- `compiler/syntax/`: the lexer and parser in AIL, identical to `ail api --tokens` and `ail api --ast` on all 770 repository files; diagnostics are rule and position (ADR 0373).
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
 - `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slice 1 (declarations) agrees with `ail check` on every corpus program; the selftest `self_hosted_check` holds it there. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 

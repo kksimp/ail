@@ -14,15 +14,15 @@
 
 ## Front-end agreement
 
-`ail run compiler tokens FILE...` against `ail api --tokens`
-(and, for the parser, `ail api --ast`) on every `.ail` file in the repository, byte for byte;
-diagnostics are a rule and a position (ADR 0373). The selftest runs them
+`ail run compiler tokens|parse FILE...` against `ail api --tokens`
+and `ail api --ast` on every `.ail` file in the repository, byte for byte;
+diagnostics are a rule and a position (ADR 0373). The selftest runs both
 (`bootstrap/tests/self_hosting.rs`).
 
 | Stage | Source | Files | Agreement |
 |---|---|---|---|
 | Lexer | `compiler/syntax/lex.ail` | 770, and 700 fuzzed | all identical |
-| Parser | `compiler/syntax/parse.ail` | — | in progress |
+| Parser | `compiler/syntax/parse.ail`, `recover.ail` | 770, and 1,000 fuzzed | all identical |
 
 ## Checker agreement
 
