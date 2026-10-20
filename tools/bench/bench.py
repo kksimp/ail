@@ -15,6 +15,7 @@ import argparse
 import json
 import math
 import re
+import shlex
 import statistics
 import subprocess
 import sys
@@ -36,6 +37,12 @@ def programs(root):
     for p in sorted((root / "tools/perfbench/programs").glob("*.ail")):
         found.append(("perf/" + p.stem, p.relative_to(root), True))
     return found
+
+
+def program_args(ail):
+    """Arguments from NAME.args next to NAME.ail (passed after the file, ADR 0175)."""
+    args_file = ail.with_suffix(".args")
+    return shlex.split(args_file.read_text()) if args_file.exists() else []
 
 
 def count_tokens(tokbench, root, paths):
@@ -152,13 +159,14 @@ def main():
             row = {"program": key, "before_s": None, "after_s": None, "walk_s": None,
                    "py_s": None, "c_s": None, "output": "-"}
             if (before_root / rel).exists():
-                bmin, _, brc, bout = timed([str(before_bin), "run", str(before_root / rel)],
-                                           before_root, args.runs)
+                bmin, _, brc, bout = timed([str(before_bin), "run", str(before_root / rel),
+                                            *program_args(ail)], before_root, args.runs)
                 row["before_s"] = bmin
-            amin, _, arc, aout = timed([str(after_bin), "run", str(ail)], root, args.runs)
+            pargs = program_args(ail)
+            amin, _, arc, aout = timed([str(after_bin), "run", str(ail), *pargs], root, args.runs)
             row["after_s"] = amin
             if walk_ok:
-                row["walk_s"] = timed([str(after_bin), "run", "--no-bytecode", str(ail)],
+                row["walk_s"] = timed([str(after_bin), "run", "--no-bytecode", str(ail), *pargs],
                                       root, args.runs)[0]
             if row["before_s"] is not None:
                 if brc != 0 or arc != 0:
@@ -167,12 +175,12 @@ def main():
                     row["output"] = "same" if bout == aout else "DIFF"
             py = ail.with_suffix(".py")
             if py.exists():
-                row["py_s"] = timed([sys.executable, str(py)], root, args.runs)[0]
+                row["py_s"] = timed([sys.executable, str(py), *pargs], root, args.runs)[0]
             c_src = ail.with_suffix(".c")
             if c_src.exists():
                 c_exe = compile_c(c_src, workdir)
                 if c_exe is not None:
-                    row["c_s"] = timed([str(c_exe)], root, args.runs)[0]
+                    row["c_s"] = timed([str(c_exe), *pargs], root, args.runs)[0]
             speed_rows.append(row)
 
     # Summaries: total tokens, geometric-mean time ratios.
