@@ -47,6 +47,9 @@ Design notes:
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
 
 Tools:
+- [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run
+  `tools/perfbench/run.sh [RUNS]`; results in
+  [design/interpreter-performance.md](design/interpreter-performance.md).
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.
   Run `tools/tokbench/run.sh` (macOS/Linux) or `tools\tokbench\run.ps1`
   (Windows), and it sets itself up.
