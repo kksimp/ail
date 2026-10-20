@@ -597,7 +597,7 @@ fn compilable(b: &Block) -> bool {
     }
     fn stmt(s: &Stmt) -> bool {
         match s {
-            Stmt::With { .. } | Stmt::Defer(..) => false,
+            Stmt::With { .. } | Stmt::Defer(..) | Stmt::Unsafe { .. } => false,
             Stmt::For { par: true, .. } => false,
             Stmt::Let { value, otherwise, .. } => expr(value) && otherwise.as_ref().is_none_or(other),
             Stmt::Assign { target, value, .. } => expr(target) && expr(value),

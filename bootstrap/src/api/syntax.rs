@@ -418,6 +418,8 @@ fn function(f: &FnDecl) -> J {
         }),
         ("contracts", arr(&f.contracts, contract)),
         ("inherits", opt(&f.inherits, |i| n(*i))),
+        ("unsafe_fn", J::Bool(f.unsafe_fn)),
+        ("ext", opt(&f.ext, |e| J::Obj(vec![("lib", opt(&e.lib, |l| s(l)))]))),
     ])
 }
 
@@ -498,6 +500,7 @@ fn stmt(st: &Stmt) -> J {
             variant("Handle", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise))])
         }
         Stmt::Defer(inner, p) => variant("Defer", vec![("stmt", stmt(inner)), ("pos", pos(*p))]),
+        Stmt::Unsafe { body, pos: p } => variant("Unsafe", vec![("body", block(body)), ("pos", pos(*p))]),
         Stmt::With { mutex, var, var_pos, body, pos: p } => variant(
             "With",
             vec![

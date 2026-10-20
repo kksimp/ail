@@ -34,6 +34,7 @@ mod moves;
 mod ownership;
 mod privacy;
 mod testing;
+mod unsafety;
 mod traits;
 mod ui;
 
@@ -283,6 +284,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         ret: Ty::Unit,
         assoc: None,
         loops: 0,
+        unsafe_depth: 0,
         record: false,
         anchored: 0,
         anchors: HashMap::default(),
@@ -475,6 +477,8 @@ struct Checker<'p> {
     /// parameters, and the owner's field names (gram.rec.2).
     assoc: Option<(Pos, bool, Vec<String>)>,
     loops: usize,
+    /// How many `unsafe` blocks enclose the code being checked (unsafe.block.1).
+    unsafe_depth: usize,
     /// Record `resolved.facts` (api.loc.1); on for the final pass only.
     record: bool,
     /// The locals below this index already have an anchor (`anchors`).
@@ -1578,6 +1582,10 @@ impl<'p> Checker<'p> {
         self.anchored = 0;
         self.anchors.clear();
         self.loops = 0;
+        self.unsafe_depth = 0;
+        if f.unsafe_fn {
+            self.unsafe_opt_in(f.pos);
+        }
         self.catching = 0;
         self.ret = sig.ret.clone();
         self.assoc = f.owner.as_ref().filter(|_| f.receiver.is_none()).and_then(|o| {
@@ -1752,6 +1760,13 @@ impl<'p> Checker<'p> {
                 self.loops -= 1;
                 self.end_scope(mark);
                 Ty::Unit
+            }
+            Stmt::Unsafe { body, pos } => {
+                self.unsafe_opt_in(*pos);
+                self.unsafe_depth += 1;
+                let ty = self.block(body, expect, need);
+                self.unsafe_depth -= 1;
+                ty
             }
             Stmt::With { mutex, var, var_pos, body, pos } => {
                 self.with_stmt(mutex, var, *var_pos, body, *pos);
@@ -2453,6 +2468,7 @@ impl<'p> Checker<'p> {
                 Else::Block { body, .. } => self.overlapping_use(target, body),
             }),
             Stmt::Return(None, _) | Stmt::Break(_) | Stmt::Continue(_) => None,
+            Stmt::Unsafe { body, .. } => self.overlapping_use(target, body),
             Stmt::Defer(st, _) => self.overlap_in_stmt(target, st),
         }
     }
@@ -3142,6 +3158,7 @@ impl<'p> Checker<'p> {
         if let Some(&i) = self.fns.get(n.as_str()) {
             self.reject_test_call(i, npos);
             self.note_deprecated(i, npos);
+            self.note_unsafe_call(i, npos);
             self.resolved.symbols.insert(npos, format!("fn:{n}"));
             let mut sig = self.sigs[i].clone();
             // A test can fail (test.attr.4), but calling it is already an
@@ -3851,6 +3868,7 @@ impl<'p> Checker<'p> {
                         }
                         self.resolved.targets.insert(pos, *i);
                         self.note_deprecated(*i, pos);
+                        self.note_unsafe_call(*i, pos);
                         self.move_receiver(*i, recv);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
@@ -4031,6 +4049,7 @@ impl<'p> Checker<'p> {
         };
         self.resolved.targets.insert(pos, i);
         self.note_deprecated(i, pos);
+        self.note_unsafe_call(i, pos);
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 
