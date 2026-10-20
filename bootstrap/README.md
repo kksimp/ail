@@ -56,6 +56,7 @@ reported but don't stop a program from running.
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–5` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires` and `ensures`: parsing, typing and `result`, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–2`, `contract.run.1–3`, `contract.api.1` |
+| `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–11` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.coll.14`, `type.str.4–5`, `type.str.11`, `type.str.13–14`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`), `expr.comp.3–4` |
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
@@ -193,8 +194,11 @@ traps (`conc.task.7`). `spawn` takes a call of a declared function, without
 Parallel loops (ADRs 0236–0239): `ail effects --parallel` reports, per `for`
 loop, whether its iterations are independent (`conc.par.2–4`) and the first
 write or effect that blocks it; `par for` asserts independence, and a
-provable conflict is a `conc.par.5` error. The interpreter runs every loop in
-order, which `conc.par.1` allows. Float `xs.sum()` adds in the fixed tree of
+provable conflict is a `conc.par.5` error. A `par for` (and, with
+`ail run --parallel`, every proven loop) runs on a pool of `min(cores, 8)`
+threads (`AIL_THREADS=N`; `AIL_PAR_LOG=1` reports it), and tasks that touch
+no handle run on their own threads (ADRs 0272–0275); the result is always
+the sequential one. Float `xs.sum()` adds in the fixed tree of
 `type.coll.12`.
 
 Sized numbers (ADRs 0194–0195): `i8 i16 i32 u8 u16 u32 u64 f32` with literals typed by

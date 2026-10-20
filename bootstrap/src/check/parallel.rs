@@ -866,10 +866,8 @@ struct Context<'a> {
     fns: HashMap<&'a str, usize>,
 }
 
-/// The verdict on every `for` loop of the program's own functions, in
-/// source order (conc.par.6).
-pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
-    let fx = Effects::infer(prog, resolved);
+/// Free functions by name, and which functions synchronise through a handle.
+fn context<'a>(prog: &'a Program, resolved: &'a Resolved, fx: &'a Effects<'a>) -> Context<'a> {
     let fns: HashMap<&str, usize> = prog
         .fns
         .iter()
@@ -877,7 +875,7 @@ pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
         .filter(|(_, f)| f.owner.is_none() && f.top_level())
         .map(|(i, f)| (f.name.as_str(), i))
         .collect();
-    let mut cx = Context { prog, resolved, fx: &fx, sync: vec![false; prog.fns.len()], fns };
+    let mut cx = Context { prog, resolved, fx, sync: vec![false; prog.fns.len()], fns };
     // A function synchronises if its body calls a handle's method, or it
     // calls a function that does: a fixed point over the call graph.
     let direct: Vec<bool> = prog
@@ -912,6 +910,22 @@ pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
         }
         add.into_iter().for_each(|i| cx.sync[i] = true);
     }
+    cx
+}
+
+/// conc.par.10: the functions a task may run on the pool: no ordering
+/// effect (conc.par.2) and no handle, through every call.
+pub fn pure_fns(prog: &Program, resolved: &Resolved) -> Vec<bool> {
+    let fx = Effects::infer(prog, resolved);
+    let cx = context(prog, resolved, &fx);
+    (0..prog.fns.len()).map(|i| !cx.sync[i] && !fx.of(i).iter().any(|e| ordering(e))).collect()
+}
+
+/// The verdict on every `for` loop of the program's own functions, in
+/// source order (conc.par.6).
+pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
+    let fx = Effects::infer(prog, resolved);
+    let cx = context(prog, resolved, &fx);
     let mut out = Vec::new();
     for f in prog.fns.iter().filter(|f| !is_prelude(f.pos)) {
         let Some(body) = &f.body else { continue };

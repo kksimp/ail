@@ -282,6 +282,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         consts: HashMap::default(),
         conc: None,
         par: None,
+        pure: None,
     }
 }
 
@@ -338,6 +339,8 @@ struct Interp<'a, W: Write> {
     conc: Option<tasks::Ctx>,
     /// The loops that run on the thread pool (conc.par.8).
     par: Option<Rc<parallel::Plans>>,
+    /// Which functions a task may run on the pool (conc.par.10), once needed.
+    pure: Option<Rc<Vec<bool>>>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {

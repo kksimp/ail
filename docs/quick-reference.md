@@ -14,7 +14,8 @@
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
 ./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
-./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output
+./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread
+./ail run --parallel FILE.ail      # also pool loops proven independent; AIL_THREADS=N sets the pool size
 ./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example

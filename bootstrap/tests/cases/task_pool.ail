@@ -1,0 +1,35 @@
+# conc.par.10: tasks whose functions have no effect and touch no handle run
+# on their own threads; the others keep the one-at-a-time scheduler. The
+# output is the same either way.
+fn work(seed int) int
+    mut x := seed
+    mut total := 0
+    for _ in 0..20000
+        x = (x * 1103515245 + 12345) % 2147483648
+        total += x % 1000
+    total
+
+fn checked(n int) int
+    if n == 3
+        assert(false)
+    n
+
+fn report(m Mutex[int], n int)
+    x := m.lock()
+    m.unlock(x + n)
+
+fn main() !
+    a := spawn work(1)
+    b := spawn work(2)
+    print(a.wait()? + b.wait()?)
+    m := Mutex(0)
+    g := TaskGroup()
+    for i in 1..=8
+        g.add(spawn report(m, i))
+    g.wait_all()?
+    print(m.get())
+    t := spawn checked(3)
+    v := t.wait() else err
+        print("trapped: {err.rule}")
+        return
+    print(v)

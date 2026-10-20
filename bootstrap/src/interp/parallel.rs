@@ -18,10 +18,10 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering as AtomicOrdering};
 
-use super::{Env, Failure, Flow, Interp, Table, Value, build};
-use crate::ast::{Block, Expr, Program, Stmt};
+use super::{Env, Failure, Flow, Interp, Table, Trap, Value, build};
+use crate::ast::{Block, Expr, FnDecl, Program, Stmt};
 use crate::check::Resolved;
-use crate::check::parallel::{Outcome, Plan, analyze};
+use crate::check::parallel::{Outcome, Plan, analyze, pure_fns};
 use crate::diag::Pos;
 use crate::fasthash::FastMap as HashMap;
 use crate::num::Num;
@@ -77,7 +77,7 @@ pub fn threads() -> usize {
 fn log(pos: Pos, what: &str) {
     static ON: OnceLock<bool> = OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("AIL_PAR_LOG").is_some()) {
-        eprintln!("par: loop at line {}: {what}", pos.line);
+        eprintln!("par: line {}: {what}", pos.line);
     }
 }
 
@@ -123,7 +123,7 @@ fn has_par(prog: &Program) -> bool {
 /// A value with no `Rc`, so it can cross threads. Floats are kept as bits
 /// so a round trip is exact.
 #[derive(Debug, Clone, PartialEq)]
-enum Plain {
+pub(super) enum Plain {
     Unit,
     Int(i64),
     Float(u64),
@@ -261,10 +261,10 @@ impl<'a, W: io::Write> Interp<'a, W> {
         if items.len() >= 2 * threads
             && let Some(done) = self.on_pool(&plan, threads, var, &items, body, env)
         {
-            log(pos, &format!("{} iterations on {threads} threads", items.len()));
+            log(pos, &format!("loop: {} iterations on {threads} threads", items.len()));
             return done.map(|()| true);
         }
-        log(pos, &format!("{} iterations in order", items.len()));
+        log(pos, &format!("loop: {} iterations in order", items.len()));
         // conc.par.11: in order, from the same iteration values.
         for item in items {
             if !self.loop_body(var, item, body, env)? {
@@ -444,4 +444,58 @@ fn chunk<'a>(
         }
     }
     Some(Chunk { elements, sums })
+}
+
+/// A task that runs on its own thread outside the scheduler (conc.par.10):
+/// its result, or its trap.
+pub(super) type Pooled = std::thread::JoinHandle<Result<Plain, Trap>>;
+
+/// A pooled task's outcome as a value.
+pub(super) fn unpool(task: Pooled, pos: Pos) -> Result<Value, Trap> {
+    match task.join() {
+        Ok(r) => r.map(|p| value(&p)),
+        Err(_) => Err(Trap { rule: "conc.par.10", pos, message: "a pooled task's thread failed".into() }),
+    }
+}
+
+impl<'a, W: io::Write> Interp<'a, W> {
+    /// conc.par.10: start `spawn f(args)` on its own thread, outside the
+    /// one-at-a-time scheduler, when `f` has no ordering effect and touches
+    /// no handle, so when it runs can't be observed. `None` if it must go
+    /// to the scheduler.
+    pub(super) fn pool_task(&mut self, f: &'a FnDecl, args: &[Value], pos: Pos) -> Option<Pooled> {
+        if mode() == Mode::Off || threads() < 2 {
+            return None;
+        }
+        let (prog, resolved) = (self.prog, self.resolved);
+        let pure = self.pure.get_or_insert_with(|| Rc::new(pure_fns(prog, resolved)));
+        let i = prog.fns.iter().position(|g| std::ptr::eq(g, f))?;
+        if !pure[i] {
+            return None;
+        }
+        let args: Vec<Plain> = args.iter().map(plain).collect::<Option<_>>()?;
+        // SAFETY: as for the scheduler's tasks (`tasks::spawn`): every
+        // pooled thread is joined, by `wait`, the end of its block, or
+        // `tasks::shutdown`, before the program and facts are dropped.
+        let (prog, resolved, f) = unsafe {
+            (
+                std::mem::transmute::<&Program, &'static Program>(prog),
+                std::mem::transmute::<&Resolved, &'static Resolved>(resolved),
+                std::mem::transmute::<&FnDecl, &'static FnDecl>(f),
+            )
+        };
+        log(pos, &format!("task `{}` on its own thread", f.full_name()));
+        std::thread::Builder::new()
+            .stack_size(WORKER_STACK)
+            .spawn(move || {
+                let mut it = build(prog, resolved, io::sink());
+                let (v, _) = it.call(f, None, args.iter().map(value).collect(), pos)?;
+                plain(&v).ok_or_else(|| Trap {
+                    rule: "conc.par.10",
+                    pos,
+                    message: "a task on the pool returned a task, channel or mutex handle".into(),
+                })
+            })
+            .ok()
+    }
 }

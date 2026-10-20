@@ -161,12 +161,15 @@ runtime chooses scheduling, and a clause would let a program depend on it.
   in parallel, their chunk counts, and the active SIMD level, so speed
   differences between machines are explainable.
 
-The **bootstrap interpreter runs every loop in order**. Its values are
-`Rc` (lane 22 hit the same wall), so a parallel interpreter would deep-copy
-every captured value per chunk; on the perfbench programs that copy costs
-more than the loop bodies, so `ail run --parallel` isn't offered. The
-analysis half (`ail effects --parallel`) is what the native backend will
-consume.
+The **bootstrap interpreter runs `par for` on a thread pool** (ADRs
+0272–0275). Its values are `Rc`, so each worker gets a copy of the captured
+values once per run and returns only the list elements it changed and its
+partial sums; the main thread applies them in chunk order, and any trap
+reruns the loop in order. `ail run --parallel` also pools loops the analysis
+proves independent. A compute-bound loop (perfbench `parsum`) runs 3.1×
+faster on 4 threads; loops over large captured values gain less, because the
+copy is per worker. The analysis half (`ail effects --parallel`) is what the
+native backend will consume.
 
 ## 5. SIMD (ADR 0246)
 
