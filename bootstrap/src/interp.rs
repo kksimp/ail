@@ -31,7 +31,7 @@ use builtins::{Key, Table, map_value};
 
 use crate::ast::{
     Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt, TypeKind, UnOp,
-    place_path,
+    place_root,
 };
 use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
@@ -287,6 +287,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     }
     let structs = prog.structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
     let enums = prog.enums.iter().enumerate().map(|(i, e)| (e.name.as_str(), i)).collect();
+    let mut mutating: crate::fasthash::FastSet<&str> =
+        ["push", "swap", "pop", "sort", "remove", "add"].into_iter().collect();
+    mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
     Interp {
         prog,
         resolved,
@@ -301,6 +304,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         env_pool: Vec::new(),
         returned: None,
         ops_pool: Vec::new(),
+        mutating,
         field_slots: HashMap::default(),
         str_lits: HashMap::default(),
     }
@@ -349,6 +353,9 @@ struct Interp<'a, W: Write> {
     /// The value of the `return` being carried out, and where it was returned.
     returned: Option<(Value, Pos)>,
     ops_pool: Vec<Vec<Prepared>>,
+    /// Names of methods that may change their receiver: the built-in mutators and every
+    /// user method with a `mut` receiver. A call to any other method needs only the receiver's value.
+    mutating: crate::fasthash::FastSet<&'a str>,
     /// The field each argument of a struct or variant construction sets, by the address of its arguments.
     field_slots: HashMap<usize, Rc<[usize]>>,
     /// String literals as shared text, by the address of the literal in the program.
@@ -973,7 +980,7 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// Evaluate a call operand: a place (rooted in a local) stays a place.
     fn operand(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Operand> {
-        if place_path(e).is_some_and(|(root, _)| lookup(env, root).is_some()) {
+        if place_root(e).is_some_and(|root| lookup(env, root).is_some()) {
             Ok(Operand::Place(self.place(e, env)?))
         } else {
             Ok(Operand::Value(self.eval(e, env)?))
@@ -1773,7 +1780,11 @@ impl<'a, W: Write> Interp<'a, W> {
             let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
         }
-        let recv = self.operand(recv, env)?;
+        let recv = if self.mutating.contains(name) {
+            self.operand(recv, env)?
+        } else {
+            Operand::Value(self.eval(recv, env)?)
+        };
         if let Some(Call::Trait(tr)) = call {
             return self.trait_method(tr, name, recv, args, pos, env);
         }
@@ -1845,13 +1856,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 None => {}
             }
             for (a, param) in args.iter().zip(&f.params) {
-                let v = match &a.value {
-                    Expr::Name(n, _) if let Some(v) = lookup(env, n) => v.clone(),
-                    e => match self.operand(e, env)? {
-                        Operand::Place(p) => load(env, &p)?,
-                        Operand::Value(v) => v,
-                    },
-                };
+                // A read-only operand is its value: reading a place and evaluating it agree.
+                let v = self.eval(&a.value, env)?;
                 callee.push((param.name.as_str(), v));
             }
             let result = self.run_body(f, &mut callee, pos)?;
