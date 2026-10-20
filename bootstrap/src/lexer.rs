@@ -25,6 +25,26 @@ pub const SYMBOLS: &[&str] = &[
 /// A line ending in one of these continues on the next line (lex.stmt.2).
 const BINARY_SYMBOLS: &[&str] = &["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="];
 
+/// Whether a line starts with a binary operator that cannot begin a statement, so it
+/// continues the previous one (lex.stmt.2 (5)): `and`, `or`, `+ * / % == != < <= > >=`.
+fn leading_operator(rest: &[char]) -> bool {
+    let word = |w: &str| {
+        rest.len() >= w.len()
+            && rest.iter().zip(w.chars()).all(|(a, b)| *a == b)
+            && rest.get(w.len()).is_none_or(|c| !(c.is_alphanumeric() || *c == '_'))
+    };
+    if word("and") || word("or") {
+        return true;
+    }
+    let two = rest.get(1).copied();
+    match rest[0] {
+        '=' | '!' => two == Some('='),
+        '<' | '>' => true,
+        '+' | '*' | '/' | '%' => two != Some('='),
+        _ => false,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
     Ident(String),
@@ -166,6 +186,14 @@ pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment
     }
 }
 
+/// The keyword spelled by `word`, if any (lex.kw.1), without building a `String`.
+fn keyword(word: &[char]) -> Option<&'static str> {
+    if word.len() > 9 || !word[0].is_ascii_lowercase() {
+        return None;
+    }
+    KEYWORDS.iter().copied().find(|k| k.len() == word.len() && k.chars().zip(word).all(|(a, b)| a == *b))
+}
+
 fn gcd(a: usize, b: usize) -> usize {
     if b == 0 { a } else { gcd(b, a % b) }
 }
@@ -207,8 +235,8 @@ fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comm
         // (a chained call); the statement's newline is taken back.
         if lx.open.is_empty()
             && !continuing
-            && line[lead] == '.'
-            && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+            && (line[lead] == '.' && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+                || leading_operator(&line[lead..]))
             && matches!(lx.tokens.last().map(|t| &t.tok), Some(Tok::Newline))
             && lx.tokens.len() >= 2
             && !matches!(lx.tokens[lx.tokens.len() - 2].tok, Tok::Indent | Tok::Dedent)
@@ -537,6 +565,12 @@ impl Lexer {
                 c if c.is_ascii_digit() => i = self.number(line, i, line_no),
                 c if c.is_alphabetic() || c == '_' => {
                     let end = i + line[i..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').count();
+                    // A keyword is matched on the characters, so only a name allocates.
+                    if let Some(k) = keyword(&line[i..end]) {
+                        self.push(Tok::Kw(k), pos);
+                        i = end;
+                        continue;
+                    }
                     let word: String = line[i..end].iter().collect();
                     if matches!(word.as_str(), "f" | "u") && line.get(end) == Some(&'"') {
                         self.diags.push(
@@ -547,16 +581,12 @@ impl Lexer {
                         i = end;
                         continue;
                     }
-                    let tok = match KEYWORDS.iter().find(|k| **k == word) {
-                        Some(k) => Tok::Kw(k),
-                        None => Tok::Ident(word),
-                    };
-                    self.push(tok, pos);
+                    self.push(Tok::Ident(word), pos);
                     i = end;
                 }
                 _ => {
-                    let rest: String = line[i..line.len().min(i + 3)].iter().collect();
-                    match SYMBOLS.iter().find(|s| rest.starts_with(**s)) {
+                    let rest = &line[i..line.len().min(i + 3)];
+                    match SYMBOLS.iter().find(|s| s.len() <= rest.len() && s.chars().zip(rest).all(|(a, b)| a == *b)) {
                         Some(sym) => {
                             self.symbol(sym, pos);
                             i += sym.len();
@@ -1151,6 +1181,14 @@ mod tests {
                 Eof
             ]
         );
+    }
+
+    #[test]
+    fn a_line_may_start_with_a_binary_operator() {
+        assert_eq!(rules("x := a\n    and b\n"), Vec::<&str>::new());
+        assert_eq!(toks("x := a\n    + b\n").iter().filter(|t| **t == Tok::Newline).count(), 1);
+        // `-` can start a statement, so it does not continue one.
+        assert_eq!(toks("x := a\n-b\n").iter().filter(|t| **t == Tok::Newline).count(), 2);
     }
 
     #[test]

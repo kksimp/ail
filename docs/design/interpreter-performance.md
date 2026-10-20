@@ -182,3 +182,56 @@ faster by wall time, `interp` 8% slower, so no net win).
 
 Kept: a one-word mask over the lines that hold sized or float-typed literals,
 so the common int literal skips two table probes ([ADR 0297](../decisions/0297-no-bytecode-tier-in-the-oracle.md)).
+
+## Front end (lane 81)
+
+Agents and the editor run `ail check`, `ail api` and `ail effects` after
+nearly every edit, so their latency matters more than one long run
+([ADR 0332](../decisions/0332-front-end-allocator.md)–[0334](../decisions/0334-fast-hashing-and-lexing-in-the-front-end.md)).
+Wall time: best of 15, base and new binaries run alternately, directly (not
+through `./ail`), Linux x86-64, plan branch at c9799b5. Instructions:
+callgrind on a release build with debug info.
+
+| Command | Before ms | After ms | Speed-up |
+|---|---|---|---|
+| `ail check tools/edit/edit.ail` (4,800 lines) | 33.0 | 26.4 | 1.25x |
+| `ail api --symbols tools/edit/edit.ail` | 40.4 | 33.5 | 1.20x |
+| `ail api tools/edit/edit.ail` | 38.6 | 29.8 | 1.29x |
+| `ail effects tools/edit/edit.ail` | 35.4 | 27.3 | 1.29x |
+| `ail check examples/sheet.ail` | 5.0 | 4.6 | 1.08x |
+| `ail check examples/json.ail` | 3.6 | 3.3 | 1.08x |
+| `ail check examples/hello.ail` | 1.7 | 1.8 | 0.95x |
+| `ail version` (process start) | 1.3 | 1.3 | 1.00x |
+| `ail test tools/edit/edit.ail` (system allocator) | 86.6 | 82.7 | 1.05x (noise) |
+
+Where `ail check tools/edit/edit.ail` spent its instructions (inclusive):
+
+| Phase | Before | After |
+|---|---|---|
+| Total | 163.3M | 106.3M (-35%) |
+| Lex (edit.ail, `std.ui.widgets`, `themes`) | 45.1M | about 31M |
+| Lex the prelude, std declarations | 4.6M | about 3M |
+| Parse | 37.0M | 24.6M |
+| Resolve modules | 26.9M | 12.7M |
+| Check | 43.8M | 32.2M |
+| Process start (`ail version`) | about 0.4M | same |
+
+Before the change, `malloc` and `free` took 25%, SipHash 8%, and the lexer's
+keyword and symbol search (a `String` per word, compared with every keyword)
+about 6%. Wall time was a third kernel: about 3,350 page faults on fresh heap.
+After: page faults about 150 (huge pages), no SipHash in the front end.
+
+The prelude and the standard modules cost about 0.3 ms of a 1.7 ms `ail check
+hello`, so an on-disk cache of them would save little
+([ADR 0333](../decisions/0333-no-front-end-disk-cache-yet.md)). The target
+was 2x on the editor check; this round reached 1.25x wall and 1.54x
+instructions. Next costs, in order: the lexer turns each line into a
+`Vec<char>` (lexing is a third of what remains), the checker clones `Ty`
+values, and every name is a `String`; each needs a change across `lexer.rs`,
+`parser.rs` and `check.rs`.
+
+Run programs (`ail run`, system allocator) are unchanged within noise:
+interp 120 → 116 ms, json 6.6 → 6.6, sheet 13.7 → 14.2, loops 277 → 288.
+`bootstrap/tests/front_end_alloc.rs` checks that `ail check` and `ail api
+--symbols` print the same bytes with and without the front-end allocator
+(`AIL_SYSTEM_ALLOC=1`) on every example and test case.

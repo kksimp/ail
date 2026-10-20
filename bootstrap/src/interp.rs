@@ -1725,7 +1725,7 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.tracing & trace::WATCH != 0
             && let Some((root, _)) = place_path(target)
         {
-            self.trace_watch(root, env, target.pos());
+            self.watch_element(root, env, &p, target.pos());
         }
         Ok(())
     }
@@ -2251,6 +2251,11 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// Integer arithmetic traps instead of overflowing (expr.arith.1, expr.arith.3, expr.arith.5).
     fn binop(&mut self, op: BinOp, l: Value, r: Value, pos: Pos) -> Result<Value, Trap> {
+        if (matches!(l, Value::Tensor(_)) || matches!(r, Value::Tensor(_)))
+            && let Some(v) = Self::tensor_binop(op, &l, &r, pos)
+        {
+            return v;
+        }
         let sym = op.symbol();
         Ok(match (l, r) {
             (Value::Int(a), Value::Int(b)) if op.is_arithmetic() => {

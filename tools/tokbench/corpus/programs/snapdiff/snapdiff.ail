@@ -12,7 +12,7 @@ fn main() !
     old := snapshot("{data}/snap_old")?
     new := snapshot("{data}/snap_new")?
     mut changed := 0
-    for name in {n for keys in [old.keys(), new.keys()] for n in keys}.sorted()
+    for name in old.keys().union(new.keys()).sorted()
         before := old.get(name) else
             print("added {name} ({new[name].len()} lines)")
             continue

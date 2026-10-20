@@ -3,7 +3,7 @@
 //! this pass rewrites `x` to `self.x` and `f(...)` to `self.f(...)`, and
 //! reports locals and parameters that would hide a member.
 
-use std::collections::HashSet;
+use crate::fasthash::FastSet as HashSet;
 
 use crate::ast::{Block, Cond, Else, Expr, InterpPart, Pattern, Program, Stmt, Within};
 use crate::diag::{Diagnostic, Pos};
@@ -70,12 +70,12 @@ fn members(prog: &Program, i: usize) -> (String, HashSet<String>, HashSet<String
     let ty = match f.within {
         Within::Trait(t) => {
             let methods = method_names(&prog.traits[t].methods).into_iter().collect();
-            return (prog.traits[t].name.clone(), HashSet::new(), methods);
+            return (prog.traits[t].name.clone(), HashSet::default(), methods);
         }
         Within::Impl(k) => prog.impls[k].target.name.clone(),
         Within::TopLevel => match &f.owner {
             Some(o) => o.name.clone(),
-            None => return (String::new(), HashSet::new(), HashSet::new()),
+            None => return (String::new(), HashSet::default(), HashSet::default()),
         },
     };
     type_members(prog, &ty)

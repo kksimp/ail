@@ -8,7 +8,8 @@ use std::rc::Rc;
 use super::{Env, Flow, Interp, Trap, Value, float_text};
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
-use crate::tensor::{Data, Fault, Sum, Tensor};
+use crate::ast::BinOp;
+use crate::tensor::{Data, Fault, Op, Reduce, Scalar, Sum, Tensor};
 
 fn trapped(f: Fault, pos: Pos) -> super::Exit {
     Trap { rule: f.rule, pos, message: f.message }.into()
@@ -111,9 +112,24 @@ impl<'a, W: Write> Interp<'a, W> {
                 Data::F(v) => list_of(v.iter().map(|&x| Value::Float(x))),
                 Data::I(v) => list_of(v.iter().map(|&x| Value::Int(x))),
             },
-            "sum" => sum_value(t.sum().map_err(|e| trapped(e, pos))?),
+            "sum" if other.is_none() => sum_value(t.sum().map_err(|e| trapped(e, pos))?),
+            "sum" | "max" | "mean" => {
+                let kind = match m {
+                    "sum" => Reduce::Sum,
+                    "max" => Reduce::Max,
+                    _ => Reduce::Mean,
+                };
+                let r = t.reduce(kind, other.as_ref().map(Value::int)).map_err(|e| trapped(e, pos))?;
+                match (other, r.data) {
+                    (Some(_), data) => Value::Tensor(Rc::new(Tensor { shape: r.shape, data })),
+                    (None, Data::F(v)) => Value::Float(v[0]),
+                    (None, Data::I(v)) => Value::Int(v[0]),
+                }
+            }
+            "transpose" => wrap(t.transpose())?,
             "dot" => sum_value(t.dot(&tensor_arg()).map_err(|e| trapped(e, pos))?),
-            "add" | "mul" => wrap(t.zip(&tensor_arg(), m == "mul"))?,
+            "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
+            "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,
             "matmul" => wrap(t.matmul(&tensor_arg()))?,
             "reshape" => {
                 let shape = ints(other.as_ref().expect("checked: a shape"));
@@ -122,6 +138,29 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),
         })
+    }
+
+    /// std.tensor.10: `a + b`, `a - b` and `a * b` with a tensor operand;
+    /// `None` when neither operand is a tensor.
+    pub(super) fn tensor_binop(op: BinOp, l: &Value, r: &Value, pos: Pos) -> Option<Result<Value, Trap>> {
+        let op = match op {
+            BinOp::Add => Op::Add,
+            BinOp::Sub => Op::Sub,
+            BinOp::Mul => Op::Mul,
+            _ => return None,
+        };
+        let scalar = |v: &Value| match v {
+            Value::Float(x) => Scalar::F(*x),
+            Value::Int(n) => Scalar::I(*n),
+            other => unreachable!("checked: a tensor's element, found {other:?}"),
+        };
+        let r = match (l, r) {
+            (Value::Tensor(a), Value::Tensor(b)) => a.zip(b, op),
+            (Value::Tensor(a), s) => a.with_scalar(scalar(s), op, false),
+            (s, Value::Tensor(b)) => b.with_scalar(scalar(s), op, true),
+            _ => return None,
+        };
+        Some(r.map(|t| Value::Tensor(Rc::new(t))).map_err(|f| Trap { rule: f.rule, pos, message: f.message }))
     }
 
     /// std.tensor.8: `t.map(|x| e)`, `e` evaluated once per element, in order.

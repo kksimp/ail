@@ -16,13 +16,13 @@ fn scan(root str) !List[Found]
 fn main() !
     found := scan("{path.dir(env.program())}/data")?
     mut by_ext := {}
-    mut shown := Set[str]()
+    mut by_hash := {}
     for f in found
         by_ext[path.ext(f.name)] += f.lines
+        by_hash.push(f.hash, f.name)
     for ext in by_ext.keys().sorted()
         print("{ext:<5}{by_ext[ext]:>5} lines")
-    for f in found
-        same := [g.name for g in found if g.hash == f.hash]
-        if same.len() > 1 and shown.add(f.hash)
-            print("duplicate {f.hash}: {same.join(", ")}")
+    for hash in by_hash.keys()
+        if by_hash[hash].len() > 1
+            print("duplicate {hash}: {by_hash[hash].join(", ")}")
     print("{found.len()} files, {[f.lines for f in found].sum()} lines")

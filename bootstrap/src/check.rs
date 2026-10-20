@@ -36,7 +36,7 @@ mod testing;
 mod traits;
 mod ui;
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 
 use builtins::builtin;
 pub use errpaths::FailPath;
@@ -235,25 +235,25 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     let mut c = Checker {
         prog,
         diags: Vec::new(),
-        types: HashMap::new(),
-        traits: HashMap::new(),
+        types: HashMap::default(),
+        traits: HashMap::default(),
         tparams: Vec::new(),
         struct_params: Vec::new(),
         enum_params: Vec::new(),
         list_param: 0,
         trait_self: Vec::new(),
         impl_info: Vec::new(),
-        impl_of: HashMap::new(),
+        impl_of: HashMap::default(),
         std: Std::default(),
         field_types: Vec::new(),
         variant_types: Vec::new(),
-        fns: HashMap::new(),
-        methods: HashMap::new(),
+        fns: HashMap::default(),
+        methods: HashMap::default(),
         sigs: Vec::new(),
         fn_scopes: Vec::new(),
         fn_self: Vec::new(),
         inferred: vec![Vec::new(); prog.fns.len()],
-        consts: HashMap::new(),
+        consts: HashMap::default(),
         const_types: vec![None; prog.consts.len()],
         const_busy: vec![false; prog.consts.len()],
         resolved: Resolved::default(),
@@ -267,8 +267,8 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         loops: 0,
         record: false,
         anchored: 0,
-        anchors: HashMap::new(),
-        bound: HashMap::new(),
+        anchors: HashMap::default(),
+        bound: HashMap::default(),
         catching: 0,
         caught: 0,
         cur_fn: 0,
@@ -3703,6 +3703,18 @@ impl<'p> Checker<'p> {
                 _ => {}
             }
         }
+        // type.coll.13: `m.push(k, x)` makes a pending `{}` a `Map[K, List[X]]`.
+        if let Expr::Name(n, _) = recv
+            && name == "push"
+            && let Some(k) = self.pending_of(n)
+            && self.pending[k].brace
+            && let [key, val] = args
+        {
+            let (kt, vt) = (self.quiet_type(&key.value), self.quiet_type(&val.value));
+            if let Some(k) = self.pending_of(n) {
+                self.settle(k, Ty::Map(Box::new(kt), Box::new(Ty::List(Box::new(vt)))));
+            }
+        }
         // `Type.name(...)` and `Type[int].name(...)`: an associated function
         // (trait.method.4) or a variant; `Trait.name(x, ...)`: a qualified
         // trait method call (trait.res.1).
@@ -4160,12 +4172,13 @@ impl<'p> Checker<'p> {
             Ty::List(t) => *t,
             Ty::Err => Ty::Err,
             Ty::Str => {
-                self.error_help(
-                    "type.str.2",
-                    recv.pos(),
-                    "a `str` can't be indexed",
-                    "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
-                );
+                let mut d = Diagnostic::new("type.str.2", recv.pos(), "a `str` can't be indexed")
+                    .help("index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part");
+                if let Expr::Name(n, _) = recv {
+                    let tail = if slice { ".join(\"\")" } else { "" };
+                    d = d.fix("index the characters", vec![Edit::call_with(recv.pos(), n.clone(), format!("{n}.chars()[$1]{tail}"))]);
+                }
+                self.diags.push(d);
                 Ty::Err
             }
             t => {
@@ -4267,9 +4280,15 @@ impl<'p> Checker<'p> {
         }
         // expr.cmp.1: the right operand's expected type is the left's.
         let mut lt = self.expr(lhs, None, true);
-        let rt = self.expr(rhs, Some(&lt), true);
+        let mut rt = self.expr(rhs, Some(&lt), true);
         // type.num.10: `2 * x` with a float `x`.
         if lt == Ty::Int && rt == Ty::Float && self.float_literal(lhs) {
+            lt = Ty::Float;
+        }
+        // std.tensor.10: `t * 2` and `2 * t` with a float tensor `t`.
+        if self.float_tensor_scalar(&lt, &rt, rhs) {
+            rt = Ty::Float;
+        } else if self.float_tensor_scalar(&rt, &lt, lhs) {
             lt = Ty::Float;
         }
         // type.num.13: `1 + x` with a sized `x`.
@@ -4308,16 +4327,31 @@ impl<'p> Checker<'p> {
             self.error("trait.op.1", pos, format!("an operand of `{sym}` produces no value"));
             return Ty::Err;
         }
+        if let Some(t) = self.tensor_operator(sym, op.is_arithmetic(), lt, rt, pos) {
+            return t;
+        }
         // expr.cmp.1: the right operand converts to the left's type, as an
         // argument would (`opt == 1`, type.opt.5).
         if !same(lt, rt) && (op.is_arithmetic() || !self.accepts(lt, rt)) {
             let msg = format!("`{sym}` needs operands of one type, found {} and {}", self.show(lt), self.show(rt));
             if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
-                self.error_help("trait.op.3", pos, msg, "build text with interpolation: \"{a}{b}\"");
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("build text with interpolation: \"{a}{b}\"")
+                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp\"")]),
+                );
             } else if *lt == Ty::Str && op == BinOp::Rem {
-                self.error_help("trait.op.3", pos, msg, "AIL has no `%` formatting; interpolate the values: \"n is {n}\"");
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("AIL has no `%` formatting; interpolate the values: \"n is {n}\"")
+                        .fix("interpolate", vec![Edit::operands(pos, "%", "$f")]),
+                );
             } else if *lt == Ty::Str && op == BinOp::Mul {
-                self.error_help("trait.op.3", pos, msg, "repeat a string with `s.repeat(n)`");
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("repeat a string with `s.repeat(n)`")
+                        .fix("write `.repeat`", vec![Edit::operands(pos, "*", "$l.repeat($r)")]),
+                );
             } else {
                 self.error("trait.op.3", pos, msg);
             }
@@ -4332,7 +4366,8 @@ impl<'p> Checker<'p> {
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
-                        .help("build text with interpolation: \"{a}{b}\""),
+                        .help("build text with interpolation: \"{a}{b}\"")
+                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp\"")]),
                 ),
                 t => {
                     let msg = format!("`{sym}` is not defined for {}", self.show(t));

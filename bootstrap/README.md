@@ -32,6 +32,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
+./ail explain                     # every rule, its chapter, and whether `ail fix` repairs it (--json too)
 ./ail api --card [--budget N] DIR|FILE  # a program's own card: modules, entry, tests, manifest, examples, trimmed to a token budget
 ./ail api FILE|DIR                 # declarations as JSON (--pretty, --text, --symbols); a DIR outlines the whole package with module-prefixed ids; `fails_with` per fallible fn
 ./ail check --errors FILE          # each function's error types and failure paths, JSON
@@ -61,7 +62,7 @@ reported but don't stop a program from running.
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel`; `par for` comprehensions | `conc.par.2–6`, `conc.par.12` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `Atomic`, `with`, `cancel`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6`, `conc.atomic.3–5`, `conc.cancel.1` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
-| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–3`, `trace.test.1–2`, `trace.snap.1–4` |
+| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–4`, `trace.test.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186) or a seeded random one; channels, `for v in ch`, mutexes, `with`, groups, cancellation, deadlock traps | `conc.task.1–9`, `conc.share.1–7`, `conc.cancel.1–2`, `conc.sched.1` |
 | `src/interp/atomic.rs` | `Atomic[int]` and `Atomic[bool]` as shared hardware atomics | `conc.atomic.3–6` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
@@ -69,7 +70,8 @@ reported but don't stop a program from running.
 | `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, `par for` comprehensions, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–12` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.coll.14`, `type.str.4–5`, `type.str.11`, `type.str.13–14`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`), `expr.comp.3–4`, `own.uniq.3–4`, `own.uniq.7`, `own.defer.1–2`, `own.ref.1–7` |
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
-| `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
+| `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables, and the checker's, resolver's and parser's (ADR 0334) | ADR 0175 |
+| `src/bump.rs` | Front-end allocator for `check`, `api` and `effects`: size-class free lists in one reserved region with huge pages; `AIL_SYSTEM_ALLOC=1` turns it off | ADR 0332 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
 | `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `fs.Metadata`, `proc.Output`, `proc.ProcError`, `net.Response`, `net.NetError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
 | `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8`, `std.ui.13` |
@@ -81,13 +83,14 @@ reported but don't stop a program from running.
 | `src/interp/net.rs` | The HTTP/1.1 client of `std.net` (no TLS) | `std.net.2–4` |
 | `src/interp/keyfn.rs` | Key functions: `sorted`, `sort`, `min`, `max` with `by: \|x\| key` | `expr.key.3–4` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
-| `src/check/tensor.rs` | Types of `tensor.from`, `tensor.zeros` and the tensor methods | `std.tensor.1–4`, `std.tensor.8` |
-| `src/interp/tensor.rs` | Builds tensors, runs their methods, text form | `std.tensor.1–9` |
-| `src/tensor.rs` | Tensor buffers and kernels: AVX2, NEON and scalar, picked at run time; `matmul` on the thread pool | `std.tensor.5–7` |
+| `src/check/tensor.rs` | Types of `tensor.from`, `tensor.zeros`, the tensor methods and `+ - *` with a tensor | `std.tensor.1–4`, `std.tensor.8`, `std.tensor.10–12` |
+| `src/interp/tensor.rs` | Builds tensors, runs their methods and operators, text form | `std.tensor.1–12` |
+| `src/tensor.rs` | Tensor buffers and kernels: AVX2, NEON and scalar, picked at run time; axis reductions and `transpose`; `matmul` on the thread pool | `std.tensor.5–7`, `std.tensor.10–12` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
+| `src/diag/rewrite.rs` | Fixes that read the source line: operands of an operator, a C-style `for`, a typed empty collection, `printf` | `fix.edit.6`, ADR 0335 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
-| `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
+| `src/explain.rs`, `src/fixable.txt`, `build.rs` | `ail explain [RULE]`, from the spec embedded at build time; the rules that have a fix | ADRs 0146, 0335–0336, `explain.*` |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/derive.rs`, `src/parser/derive.rs`, `src/interp/generate.rs`, `src/api/expanded.rs` | Derive generators: `@derive(f) trait`; while loading, runs each empty `impl`'s generator on a wrapper program and splices its text in as a `gen:impl:T.Trait` file; reports generated-code problems at the `impl`; `ail api --expanded` | `ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3` (ADRs 0306–0309) |
 | `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
@@ -158,7 +161,7 @@ package's are reported file by file.
   `mut` arguments, method calls, fields, indexing `xs[i]` and `m[k]`, slices
   `xs[a..b]`, `xs[a..]`, `xs[..b]`; struct and variant literals
   `Type(field: value)`, with shorthand (`Pos(row, col)`) and positional
-  arguments when no two fields filled share a type; list, map and set literals; list, set and map comprehensions (`[e for x in xs if c]`, ADR 0182); key functions `xs.sorted(by: |x| key)` and `take(n)` (ADR 0250); `m[k] += v` from zero on a missing key (ADR 0251); `?` before an `else` (ADR 0252); `List[T]()`,
+  arguments when no two fields filled share a type; list, map and set literals; list, set and map comprehensions (`[e for x in xs if c]`, ADR 0182); key functions `xs.sorted(by: |x| key)` and `take(n)` (ADR 0250); `m[k] += v` from zero on a missing key (ADR 0251); `Set` and `keys()` `union`/`intersect`/`difference` (ADR 0340); `m.push(k, x)` on `Map[K, List[T]]` (ADR 0341); `?` before an `else` (ADR 0252); `List[T]()`,
   `Map[K, V]()`, `Set[T]()`; float and char literals; multi-line,
   one-line `"""..."""` and raw strings; operators
   by ADR 0112's precedence; string interpolation `"{expr}"` with format specs `"{x:>8}"`, `"{r:.2}"`, `"{n:0>4x}"` (ADR 0173); bare enum
@@ -176,7 +179,8 @@ package's are reported file by file.
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Standard modules:** `fs`, `env`, `io`, `proc`, `net` (HTTP/1.1 `get` and
   `post`, no TLS; ADR 0283), `path`, `random`, `tensor` (`Tensor[int|float]`
-  on AVX2/NEON kernels; ADRs 0328–0329), `time` and `ui` (a window of
+  on AVX2/NEON kernels, `+ - *`, axis reductions, `transpose`; ADRs
+  0328–0329, 0344–0345), `time` and `ui` (a window of
   text cells; ADR 0177), in scope without `use` unless something else has the
   name (ADR 0277; `use std.NAME as d` also works), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
@@ -231,8 +235,8 @@ lines with `--json`), up to `--trace-limit N` events plus a summary;
 source line and each frame's arguments and locals (ten lines; `--verbose`
 for all; one object with `--json`). `ail test --trace` keeps a failing test's
 events (`"trace"` in its JSON entry, ADR 0326) and `--watch` follows `mut`
-arguments and `mut self` calls (ADR 0327). Not yet: watching builtin mutating
-methods (`push`), exact expression end columns.
+arguments and `mut self` calls (ADR 0327) and shows builtin mutating methods
+and `xs[i] = e` as element writes (ADR 0347). Not yet: exact expression end columns.
 
 Effects (ADRs 0163–0165): every function's effect set is inferred and
 printed by `ail effects`; `@pure` and `--deny` are checked at compile time.
@@ -307,6 +311,9 @@ implement correctly.
    habit from Python or Rust) also goes in `tests/mistakes/` as `NAME.ail` +
    `NAME.rules` (+ `NAME.fixed` when `ail fix` should resolve it); the first
    diagnostic must name the mistake and carry a `help` (ADR 0262).
+   A new rule ID must be defined in `docs/spec` (`tests/explain_coverage.rs`
+   fails otherwise), and a rule that gains its first fix goes in
+   `src/fixable.txt` (the same test says which rule is missing).
 4. Keep the code formatted with `rustfmt` (settings in `rustfmt.toml`) and free
    of `clippy` warnings. Neither is in the minimal toolchain the designer
    uses, so agents add them locally (`rustup component add rustfmt clippy`).

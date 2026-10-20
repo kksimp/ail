@@ -315,7 +315,10 @@ fn opens_block(s str) bool
         first = words[1]
     if BLOCK_WORDS.split(" ").contains(first) or t.ends_with("=>")
         return true
-    n >= 2 and (words[n - 1] == "else" or words[n - 2] == "else" or words[n - 2] == ":=" and (words[n - 1] == "match" or words[n - 1] == "if")) or t.contains(":= if ") or t.contains(":= match ")
+    n >= 2
+        and (words[n - 1] == "else" or words[n - 2] == "else" or words[n - 2] == ":=" and (words[n - 1] == "match" or words[n - 1] == "if"))
+        or t.contains(":= if ")
+        or t.contains(":= match ")
 
 fn Editor.newline(mut self)
     head := lines[line].slice(0, col)
@@ -411,7 +414,10 @@ fn Editor.cut_selection(mut self) bool
 ## The background of a selected character, else `bg`.
 fn sel_bg(sel Range?, l int, c int, bg int) int
     r := sel else return bg
-    if l < r.line or l > r.end_line or l == r.line and c < r.col or l == r.end_line and c >= r.end_col
+    if l < r.line
+        or l > r.end_line
+        or l == r.line and c < r.col
+        or l == r.end_line and c >= r.end_col
         return bg
     SELECT_BG
 
@@ -797,7 +803,9 @@ fn Editor.candidates(self) List[Completion]
             mut j := i
             while j < ls.len() and is_word(ls[j])
                 j += 1
-            if j - i >= 3 and j - i > prefix.chars().len() and (not member or i > 0 and ls[i - 1] == '.')
+            if j - i >= 3
+                and j - i > prefix.chars().len()
+                and (not member or i > 0 and ls[i - 1] == '.')
                 w := ls[i..j].join("")
                 if w.starts_with(prefix) and seen.add(w)
                     out.push(Completion(text: w, detail: ""))
@@ -1365,7 +1373,9 @@ fn Editor.diag_here(self) Diag?
     mut found := List[Diag]()
     for d in diags
         if d.line - 1 <= line and line <= d.end_line - 1
-            if d.line - 1 == line and col + 1 >= d.col and (col + 1 < d.end_col or d.end_line - 1 > line)
+            if d.line - 1 == line
+                and col + 1 >= d.col
+                and (col + 1 < d.end_col or d.end_line - 1 > line)
                 return d
             found.push(d)
     found.pop()
@@ -2810,12 +2820,9 @@ TYPE_JSON := "\{\"api\":1,\"file\":\"t.ail\",\"line\":10,\"col\":11,\"text\":\"a
         match key_event(r.spec)
             Key(k, ctrl, alt, shift) =>
                 assert(
-                    key_command(
-                        k,
-                        ctrl,
-                        alt,
-                        shift,
-                    ) != none or extra_key(k, ctrl, alt, shift) != none or workspace_key(k, ctrl, shift) != none,
+                    key_command(k, ctrl, alt, shift) != none
+                        or extra_key(k, ctrl, alt, shift) != none
+                        or workspace_key(k, ctrl, shift) != none,
                 )
             Resize(_, _) | Close | Mouse(_, _, _, _) | Scroll(_) => assert(false)
     assert_eq(key_table()[0], "| Key | Does |")
@@ -3803,6 +3810,20 @@ fn base_name(path str) str
     parts := path.split("/")
     parts[parts.len() - 1]
 
+## `path` as a list row shows it: relative to `root` when it lies inside,
+## unchanged when it is already relative, else its base name.
+fn shown_path(root str, path str) str
+    if rel := path.strip_prefix("{root}/")
+        return rel
+    if path.starts_with("/")
+        return base_name(path)
+    path
+
+@test fn shown_paths_stay_short()
+    assert_eq(shown_path("/w", "/w/src/a.ail"), "src/a.ail")
+    assert_eq(shown_path("/w", "/var/folders/x/T/ail-edit-1/agent.ail"), "agent.ail")
+    assert_eq(shown_path("/w", "src/a.ail"), "src/a.ail")
+
 ## Opens `path` in a new tab, or switches to it if it is open.
 fn Workspace.open(mut self, path str)
     for i in 0..eds.len()
@@ -4005,7 +4026,9 @@ fn Editor.word_places(self, name str) List[Range]
         cs := lines[l].chars()
         mut c := 0
         while c + n <= cs.len()
-            if cs[c..c + n].join("") == name and (c == 0 or not is_word(cs[c - 1])) and (c + n == cs.len() or not is_word(cs[c + n]))
+            if cs[c..c + n].join("") == name
+                and (c == 0 or not is_word(cs[c - 1]))
+                and (c + n == cs.len() or not is_word(cs[c + n]))
                 out.push(Range(line: l, col: c, end_line: l, end_col: c + n))
                 c += n
             else
@@ -4232,7 +4255,9 @@ fn search_text(path str, text str, query str) List[Hit]
 fn Workspace.search_project(self, q str, limit int) List[Hit]
     mut out := List[Hit]()
     for f in list_files(".", 8, 5000)
-        if not f.ends_with(".ail") or f.ends_with(".edit-check.ail") or f.ends_with(".edit-query.ail")
+        if not f.ends_with(".ail")
+            or f.ends_with(".edit-check.ail")
+            or f.ends_with(".edit-query.ail")
             continue
         mut text := ""
         mut open := false
@@ -4553,7 +4578,8 @@ fn declared_at(sources List[Source], signature str) Loc?
         name := signature.slice(0, at)
         for src in sources
             for i in 0..src.lines.len()
-                if src.lines[i].starts_with("{name} := ") or src.lines[i].starts_with("pub {name} := ")
+                if src.lines[i].starts_with("{name} := ")
+                    or src.lines[i].starts_with("pub {name} := ")
                     return Loc(path: src.path, line: i + 1, col: 1)
     none
 
@@ -4701,8 +4727,11 @@ fn Workspace.apply_replace(mut self)
 
 ## The rows of `ail check --json` output (standard error), one per
 ## diagnostic not already in `seen`: `FILE:LINE:COL: severity[rule]
-## message`. A check copy of an unsaved buffer counts as its file.
-fn problem_hits(err str, mut seen Set[str]) List[Hit]
+## message`. A check copy of an unsaved buffer counts as its file. The
+## row shows the file relative to `root` (the working directory), or its
+## base name when it lies elsewhere, so a long absolute path (macOS's
+## temporary directory, say) doesn't push the message off the row.
+fn problem_hits(root str, err str, mut seen Set[str]) List[Hit]
     mut hits := List[Hit]()
     for l in err.lines()
         j := parse_json(l) else continue
@@ -4712,7 +4741,7 @@ fn problem_hits(err str, mut seen Set[str]) List[Hit]
         if f := file.strip_suffix(".edit-check.ail")
             file = f
         at := Loc(path: file, line: jint(j, "line"), col: jint(j, "col"))
-        row := "{file}:{at.line}:{at.col}: {jstr(j, "severity")}[{jstr(j, "rule")}] {jstr(j, "message")}"
+        row := "{shown_path(root, file)}:{at.line}:{at.col}: {jstr(j, "severity")}[{jstr(j, "rule")}] {jstr(j, "message")}"
         if seen.contains(row)
             continue
         seen.add(row)
@@ -4728,7 +4757,7 @@ fn Workspace.problems(mut self)
     mut others := List[Hit]()
     for i in 0..eds.len()
         r := eds[i].ail_on_buffer(["check", "--json"]) else continue
-        for h in problem_hits(r.err, mut seen)
+        for h in problem_hits(env.cwd(), r.err, mut seen)
             if h.text.contains(": error[")
                 errors.push(h)
             else
@@ -4756,11 +4785,11 @@ fn Workspace.problems(mut self)
 @test fn problem_rows_from_check_json()
     out := "\{\"severity\":\"error\",\"rule\":\"expr.name.1\",\"file\":\"a.ail.edit-check.ail\",\"line\":3,\"col\":5,\"message\":\"unknown name\"}\nnot json\n"
     mut seen := Set[str]()
-    hits := problem_hits(out, mut seen)
+    hits := problem_hits("/w", out, mut seen)
     assert_eq(hits.len(), 1)
     assert_eq(hits[0].text, "a.ail:3:5: error[expr.name.1] unknown name")
     assert_eq(hits[0].loc.line, 3)
-    assert_eq(problem_hits(out, mut seen).len(), 0)
+    assert_eq(problem_hits("/w", out, mut seen).len(), 0)
 
 # ---- The file picker (Ctrl-P) ---------------------------------------------
 

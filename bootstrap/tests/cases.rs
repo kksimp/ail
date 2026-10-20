@@ -208,9 +208,9 @@ fn explain_prints_rules() {
     let out = ail().args(["explain", "expr.hole.2"]).output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0));
-    assert!(stdout.starts_with("expr.hole.2 (docs/spec/05-expressions.md:"), "{stdout}");
+    assert!(stdout.starts_with("expr.hole.2 (05-expressions.md:"), "{stdout}");
     assert!(stdout.contains("Evaluating a hole MUST trap"), "{stdout}");
-    assert!(stdout.contains("ADR 0147: Typed holes"), "{stdout}");
+    assert!(stdout.contains("(ADR 0147)"), "{stdout}");
 
     let out = ail().args(["explain", "--json", "expr.bind.4"]).output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);

@@ -47,6 +47,38 @@ impl Key {
     }
 }
 
+/// type.coll.16: `union`, `intersect` and `difference` of the receiver's
+/// elements `xs` with the argument (a set or a list), as a new set. The
+/// result keeps the receiver's order, then the argument's new elements.
+fn set_op<'v>(name: &str, xs: impl Iterator<Item = &'v Value>, other: &Value) -> Value {
+    let mut other_set = Table::default();
+    let other_items: Vec<&Value> = match other {
+        Value::Set(t) => t.keys().collect(),
+        Value::List(l) => l.iter().collect(),
+        v => unreachable!("checked: a set or list, found {v:?}"),
+    };
+    for x in &other_items {
+        other_set.insert((*x).clone(), None);
+    }
+    let mut out = Table::default();
+    for x in xs {
+        let keep = match name {
+            "union" => true,
+            "intersect" => other_set.get(x).is_some(),
+            _ => other_set.get(x).is_none(),
+        };
+        if keep {
+            out.insert(x.clone(), None);
+        }
+    }
+    if name == "union" {
+        for x in other_items {
+            out.insert(x.clone(), None);
+        }
+    }
+    Value::Set(Rc::new(out))
+}
+
 /// Keys in insertion order, with their values for a map (type.map.1). A
 /// removed key leaves a gap, so removal is O(1); gaps are compacted away
 /// once they outnumber the keys.
@@ -208,7 +240,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let mutating = |v: &Value| match v {
             Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
-            Value::Map(_) => name == "remove",
+            Value::Map(_) => matches!(name, "remove" | "push"),
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
         };
@@ -237,6 +269,11 @@ impl<'a, W: Write> Interp<'a, W> {
             };
             put(env, &p, false, Value::List(Rc::new(restored)))?;
             sorted?;
+            if self.tracing & super::trace::WATCH != 0
+                && let Some(before) = self.watch_before(env, &p, name, &a)
+            {
+                self.watch_after(env, &p, name, before, pos);
+            }
             return Ok(Value::Unit);
         }
         if name == "clear" && self.has_unique {
@@ -247,6 +284,7 @@ impl<'a, W: Write> Interp<'a, W> {
             self.release(old, pos)?;
             return Ok(Value::Unit);
         }
+        let watching = if self.tracing & super::trace::WATCH != 0 { self.watch_before(env, &p, name, &a) } else { None };
         let result = with_slot(env, &p, false, |slot| -> Result<Value, Trap> {
             Ok(match (slot, name) {
             (Value::List(items), "push") => {
@@ -293,6 +331,18 @@ impl<'a, W: Write> Interp<'a, W> {
                 Rc::make_mut(items).reverse();
                 Value::Unit
             }
+            // type.map.8: append to the list at `k`, starting an empty one.
+            (Value::Map(t), "push") => {
+                let x = a.pop().expect("checked: two arguments");
+                let table = Rc::make_mut(t);
+                let i = match table.get(&a[0]) {
+                    Some(i) => i,
+                    None => table.insert(a[0].clone(), Some(Value::List(Rc::new(Vec::new())))),
+                };
+                let Value::List(items) = table.val_mut(i) else { unreachable!("checked: a list value") };
+                Rc::make_mut(items).push(x);
+                Value::Unit
+            }
             (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
             (Value::Set(t), "add") => {
                 let x = a.pop().expect("checked: one argument");
@@ -304,6 +354,9 @@ impl<'a, W: Write> Interp<'a, W> {
             (other, _) => unreachable!("checked: `{name}` on {other:?}"),
         })
         })??;
+        if let Some(before) = watching {
+            self.watch_after(env, &p, name, before, pos);
+        }
         a.clear();
         self.arg_pool.push(a);
         Ok(result)
@@ -329,6 +382,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     Value::List(Rc::new(items[..(n as usize).min(items.len())].to_vec()))
                 }
+                "union" | "intersect" | "difference" => set_op(name, items.iter(), &a[0]),
                 "contains" | "index_of" => {
                     let mut found = None;
                     for (i, x) in items.iter().enumerate() {
@@ -419,6 +473,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 "len" => Value::Int(t.len() as i64),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
                 "sorted" => Value::List(Rc::new(self.sorted(t.key_list(), pos)?)),
+                "union" | "intersect" | "difference" => set_op(name, t.keys(), &a[0]),
                 "is_subset" => {
                     let Value::Set(other) = a.pop().expect("checked: one argument") else {
                         unreachable!("checked: set")

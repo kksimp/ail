@@ -25,6 +25,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
 | **Error message** | A string written after an error struct's name or an error variant (`BadName(text str) "bad name {text}"`); it is the type's display text and defines its `impl ToStr` (ADR 0278, `err.msg.1`). |
+| **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **Dependency** | A package another package declares with a `dep` line in its `ail.pkg` and imports by that name (`use geo.shapes`) (ADR 0231). |
@@ -142,7 +143,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
-| **Tensor** | `tensor.Tensor[T]`: a value holding a shape and a contiguous buffer of `int` or `float`, whose methods run as vector kernels (`std.tensor.*`, ADRs 0328–0330). |
+| **Tensor** | `tensor.Tensor[T]`: a value holding a shape and a contiguous buffer of `int` or `float`, whose methods and `+ - *` operators run as vector kernels (`std.tensor.*`, ADRs 0328–0330, 0344–0345). |
+| **Axis reduction** | `t.sum(axis)`, `t.max(axis)`, `t.mean(axis)`: a tensor reduced along one axis, whose shape drops that axis (`std.tensor.11`, ADR 0345). |
 | **Target** | An OS + ISA combination the compiler generates code for, e.g. `linux-arm64`. See spec `plat.target.1`. |
 | **Task** | A function call running concurrently, started by `spawn f(x)`. Its handle, `Task[T]`, must be consumed once by `.wait()` or `g.add(t)` (ADRs 0095-0096, 0187). |
 | **Task group** | `TaskGroup()`, which owns tasks that return nothing and waits for them when its block ends, or at `wait_all()` (ADR 0096, ADR 0187). |

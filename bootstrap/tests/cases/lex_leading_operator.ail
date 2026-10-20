@@ -1,0 +1,9 @@
+# lex.stmt.2 (5): a line may start with a binary operator that cannot start a statement.
+
+fn main()
+    a := 3
+    b := 4
+    ok := a < b and a + b == 7 and a * b >= 12
+    total := a + b * 2
+    print(ok)
+    print(total)

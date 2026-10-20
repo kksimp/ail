@@ -1,0 +1,15 @@
+## type.coll.16: union, intersect and difference make a new set.
+fn main()
+    a := {1, 2, 3}
+    b := {3, 4}
+    print(a.union(b).sorted())
+    print(a.intersect(b).sorted())
+    print(a.difference(b).sorted())
+    print(b.difference(a).sorted())
+    old := {"x": 1, "y": 2}
+    new := {"y": 3, "z": 4}
+    print(old.keys().union(new.keys()).sorted())
+    print(old.keys().intersect(new.keys()).sorted())
+    print(old.keys().difference(new.keys()).sorted())
+    print([1, 1, 2].union([2, 2, 3]).len())
+    print(a.len())

@@ -41,8 +41,8 @@ config fixtures for `merge` sit in `examples/configs/`, apart from
 
 Tokens decide first (ADR 0076): the new five are 146.2 tokens (8.6%) under
 Python, so the earlier parity holds on newer code. Where AIL still costs more
-(`snapdiff`, `logscan`, `csvreport`) the cause is recorded as OQ-110 to
-OQ-112 instead of being fixed tonight.
+(`snapdiff`, `logscan`, `csvreport`) the cause was recorded as OQ-110 to
+OQ-112 and resolved in ADRs 0340–0342.
 
 ## Consequences
 
