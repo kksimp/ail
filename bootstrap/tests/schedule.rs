@@ -40,3 +40,19 @@ fn a_bad_schedule_is_a_usage_error() {
     let (code, _) = test(&["--schedule=sometimes"]);
     assert_eq!(code, Some(2));
 }
+
+/// conc.cancel.3-4 and conc.atomic.7 (ADRs 0351-0352): cancel trees, a
+/// cancelled `send`, and weaker orderings pass under every seed tried.
+#[test]
+fn cancel_trees_and_orderings_pass_every_schedule() {
+    for seed in 1..=24 {
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .args(["test", &format!("--schedule=random:{seed}"), "bootstrap/tests/schedule/cancel.ail"])
+            .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(out.status.code(), Some(0), "seed {seed}: {text}");
+        assert!(text.ends_with("4 passed, 0 failed\n"), "seed {seed}: {text}");
+    }
+}

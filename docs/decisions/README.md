@@ -343,3 +343,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0355](0355-fetch-git-dependencies-with-system-git.md) | Fetch git dependencies with the system `git` into a read-only cache *(delegated)* | Accepted | 2026-10-20 |
 | [0356](0356-ail-lock-pins-commits.md) | `ail.lock` pins each git dependency to a commit; `run` and `test` write it *(delegated)* | Accepted | 2026-10-20 |
 | [0357](0357-ail-pkg-update.md) | `ail pkg update [NAME...]` re-resolves git dependencies *(delegated)* | Accepted | 2026-10-20 |
+| [0351](0351-cancel-trees-and-cancelled-send.md) | Cancel trees; `send` in a cancelled task drops its value *(delegated)* | Accepted | 2026-10-20 |
+| [0352](0352-weaker-atomic-orderings.md) | Weaker atomic orderings as a trailing `order:` argument *(delegated)* | Accepted | 2026-10-20 |

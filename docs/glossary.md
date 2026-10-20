@@ -15,14 +15,14 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Arena (scoped allocation)** | A region where many objects with a shared lifetime are allocated, then freed together in one operation. |
 | **Asserted loop** | A `par for` loop that the checker can't prove independent but finds no conflict in; it relies on the programmer's assertion (`conc.par.5`, ADR 0237). |
 | **Associated function** | A function declared `fn Type.name(...)` without `self`, called `Type.name(...)` (ADR 0082). |
-| **Atomic** | `Atomic[int]` or `Atomic[bool]`, a cell shared by every copy, so tasks and `par for` iterations update it without a lock: `load`, `store`, `cas`, and `add` on an `int`, each one sequentially consistent step (`conc.atomic.3–6`, ADR 0320). |
+| **Atomic** | `Atomic[int]` or `Atomic[bool]`, a cell shared by every copy, so tasks and `par for` iterations update it without a lock: `load`, `store`, `cas`, and `add` on an `int`, each one indivisible step, sequentially consistent unless `order:` names a weaker one (`conc.atomic.3–7`, ADRs 0320, 0352). |
 | **Attribute** | `@name` or `@name(args)` metadata placed before a declaration (ADR 0083). |
 | **Automatic implementation** | `Eq`, `ToStr` and `Hash`, which every type implements without an `impl` when its parts do; an explicit `impl Eq` or `impl ToStr` replaces it (ADR 0126, ADR 0133). |
 | **Axis reduction** | `t.sum(axis)`, `t.max(axis)`, `t.mean(axis)`: a tensor reduced along one axis, whose shape drops that axis (`std.tensor.11`, ADR 0345). |
 | **Bare variant pattern** | A variant with data written without parentheses in a pattern, `Rect =>`: it matches any fields and binds none (ADR 0183). |
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
-| **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early; the scope still waits for it (`conc.cancel.1–2`, ADR 0321). |
+| **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early (a `send` on a full channel drops its value); a cancel reaches every task the task started; the scope still waits for it (`conc.cancel.1–4`, ADRs 0321, 0351). |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |

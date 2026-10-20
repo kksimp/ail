@@ -31,6 +31,9 @@ impl Conc {
 }
 
 /// The names of the handle types, for `BUILTIN_TYPES`.
+/// The prelude's `enum AtomicOrder` (conc.atomic.7, ADR 0352).
+const ATOMIC_ORDERS: &[&str] = &["SeqCst", "Acquire", "Release", "AcqRel", "Relaxed"];
+
 pub(super) const TYPE_NAMES: &[&str] = &["Task", "TaskGroup", "Channel", "Mutex", "Atomic"];
 
 const TASK_HELP: &str = "wait it with `t.wait()?`, or add it to a group with `g.add(t)`";
@@ -155,6 +158,14 @@ impl<'p> Checker<'p> {
     /// `ch.send(v)`, `ch.recv()`, `ch.close()`, `m.get()`, `m.set(v)`,
     /// `m.swap(v)`, `m.lock()`, `m.unlock(v)`.
     pub(super) fn conc_method(&mut self, kind: Conc, inner: &Ty, name: &str, pos: Pos, args: &'p [Arg]) -> Ty {
+        // conc.atomic.7: a trailing `order:` names a weaker ordering.
+        let args = match args.split_last() {
+            Some((o, rest)) if kind == Conc::Atomic && o.label.as_ref().is_some_and(|(l, _)| l == "order") => {
+                self.atomic_order(name, o);
+                rest
+            }
+            _ => args,
+        };
         let trapped = self.trapped();
         let t = inner.clone();
         let (rule, params, ret): (&str, Vec<Ty>, Ty) = match (kind, name) {
@@ -302,6 +313,42 @@ impl<'p> Checker<'p> {
             "wrap the work in a function and spawn a call of it; to wait at once, bind it: `t := spawn work(x)`",
         );
         Ty::Err
+    }
+
+    /// conc.atomic.7 (ADR 0352): `order: O` on an atomic method, where `O`
+    /// is a prelude ordering the method can use.
+    fn atomic_order(&mut self, method: &str, arg: &'p Arg) {
+        let expect = match self.types.get("AtomicOrder") {
+            Some(super::Def::Enum(i)) => Some(Ty::Enum(*i, Vec::new())),
+            _ => None,
+        };
+        if self.expr(&arg.value, expect.as_ref(), true) == Ty::Err {
+            return;
+        }
+        let o = match &arg.value {
+            Expr::Name(o, _) if ATOMIC_ORDERS.contains(&o.as_str()) => o.as_str(),
+            e => {
+                return self.error_help(
+                    "conc.atomic.7",
+                    e.pos(),
+                    "an atomic's ordering is written as its name, so the checker can see it",
+                    "write `order: Relaxed`, `Acquire`, `Release`, `AcqRel` or `SeqCst`",
+                );
+            }
+        };
+        let (allowed, why) = match method {
+            "load" => ("`SeqCst`, `Acquire` or `Relaxed`", "a load only reads"),
+            "store" => ("`SeqCst`, `Release` or `Relaxed`", "a store only writes"),
+            _ => return,
+        };
+        if !allowed.contains(&format!("`{o}`")) {
+            self.error_help(
+                "conc.atomic.7",
+                arg.value.pos(),
+                format!("`{method}` can't use `{o}`: {why}"),
+                format!("use {allowed}"),
+            );
+        }
     }
 
     /// conc.atomic.3: an atomic holds an `int` or a `bool`.
