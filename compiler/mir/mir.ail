@@ -13,7 +13,7 @@ pub enum Ty
     Str
     ## A list of numbers; `elem` is `Unknown` until the first use types it.
     List(elem Ty)
-    ## A struct object (native-abi.md §3): one 8-byte slot per field.
+    ## A struct object (native-abi.md §2): one 8-byte slot per field.
     Struct(name str)
     Unknown
     Unit
