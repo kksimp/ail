@@ -24,7 +24,7 @@ order, over the rules and lines the AIL checker covers so far
 |---|---|---|
 | 1 | Names, types, prelude: the declaration passes, 42 rules outside function bodies | 491 of 491 programs (2026-10-20) |
 | 2 | Expressions and statements: every function body, minus gaps (ADR 0378) | 495 of 495 programs; types 1,819 of 1,848 bodies, 98.4% (2026-10-20) |
-| 3 | Ownership and effects | not started |
+| 3 | Flow passes: use after move, task handles, effects (`@pure`, pure contracts, constants), parallel loops and `par for` comprehensions | 495 of 495 programs, 160 rules (2026-10-20) |
 
 ## Language gaps found writing the compiler in AIL
 

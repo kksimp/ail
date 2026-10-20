@@ -41,7 +41,9 @@ Option A. Two more rules keep the comparison exact while slice 3 is open:
 1. Rules that both the typing pass and slice 3's flow passes report
    (`own.move.2`, `own.move.6`, `own.uniq.2`, `own.defer.3`, `conc.par.12`,
    `conc.task.5`) stay out of `COVERED_RULES` until slice 3 ports the flow
-   passes.
+   passes. Slice 3 ported them, with the facts typing records for them
+   (call targets, handle and atomic calls, standard calls, writes through
+   a `ref`).
 2. Both sides are filtered by the same rules and lines before comparing.
 
 At the end of slice 2 the AIL checker types 1,819 of the 1,848 function
