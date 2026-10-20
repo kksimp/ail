@@ -19,6 +19,7 @@ use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 mod contracts;
+mod mistakes;
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
@@ -223,16 +224,28 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 );
                 p.skip_statement();
             }
-            Tok::Ident(word) if ["const", "let", "var", "static"].contains(&word.as_str()) => {
+            Tok::Ident(word) if ["const", "let", "var"].contains(&word.as_str()) && matches!(p.peek_at(1), Tok::Ident(_)) => {
                 let pos = p.pos();
-                p.error_help(
+                let mut d = Diagnostic::new(
                     "mod.const.1",
                     pos,
                     format!("AIL has no `{word}`; a constant is declared `NAME := value`"),
-                    "remove the keyword",
-                );
+                )
+                .help("remove the keyword and write `NAME := value`");
+                if matches!(p.peek_at(2), Tok::Sym("=")) {
+                    let eq = p.tokens[p.i + 2].pos;
+                    d = d.fix(
+                        "declare the constant with `:=`",
+                        vec![
+                            Edit::delete(pos, p.tokens[p.i + 1].pos),
+                            Edit::span(eq, Pos { col: eq.col + 1, ..eq }, ":="),
+                        ],
+                    );
+                }
+                p.diags.push(d);
                 p.skip_statement();
             }
+            Tok::Ident(word) if p.foreign_decl(&word) => {}
             _ => {
                 p.unexpected(
                     "a declaration (`fn`, `struct`, `enum`, `error`, `unique`, `trait`, `impl` or a constant)",
@@ -359,7 +372,27 @@ impl Parser {
     fn for_loop(&mut self, par: bool, pos: Pos) -> Option<Stmt> {
         self.bump();
         let mutable = self.eat_kw("mut");
+        if self.at_sym("(") {
+            let at = self.pos();
+            self.error_help(
+                "expr.loop.1",
+                at,
+                "AIL has no C-style `for`",
+                "loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions",
+            );
+            return None;
+        }
         let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
+        if self.at_sym(",") {
+            let at = self.pos();
+            self.error_help(
+                "expr.loop.1",
+                at,
+                "a `for` loop has one variable",
+                "for the index and the item, loop over the indexes: `for i in 0..xs.len()` then `xs[i]`; for a map, `for k in m.keys()` then `m[k]`",
+            );
+            return None;
+        }
         if !self.eat_kw("in") {
             self.unexpected("`in` after the loop variable", "expr.loop.1");
             return None;
@@ -454,8 +487,14 @@ impl Parser {
     /// NEWLINE INDENT statement+ DEDENT, after a line that opens a block.
     fn block(&mut self, after: &str, rule: &'static str) -> Option<Block> {
         if !self.eat(&Tok::Newline) {
-            self.unexpected(&format!("end of line after {after}"), rule);
-            return None;
+            match self.header_tail(after) {
+                mistakes::Header::Continue => {}
+                mistakes::Header::Reported => return None,
+                mistakes::Header::No => {
+                    self.unexpected(&format!("end of line after {after}"), rule);
+                    return None;
+                }
+            }
         }
         if !self.eat(&Tok::Indent) {
             let pos = self.pos();
@@ -612,11 +651,14 @@ impl Parser {
                 let (pname, ppos) = self.name("a parameter name", "gram.fn.2")?;
                 if self.at_sym(":") {
                     let pos = self.pos();
-                    self.error_help(
+                    let end = self.tokens.get(self.i + 1).filter(|t| t.pos.line == pos.line).map_or(pos, |t| t.pos);
+                    self.error_fix(
                         "gram.fn.2",
                         pos,
                         "parameters are written `name Type`, without a colon",
                         format!("write `{pname} <Type>`"),
+                        "remove the `:`",
+                        vec![Edit::span(pos, end, " ")],
                     );
                     self.i += 1;
                 }
@@ -628,13 +670,17 @@ impl Parser {
             }
         }
         self.expect_sym(")", "`)` or `,` in the parameter list", "gram.fn.2")?;
-        if self.at_sym("->") {
+        if self.at_sym("->") || (self.at_sym(":") && !matches!(self.peek_at(1), Tok::Newline)) {
             let pos = self.pos();
-            self.error_help(
+            let sym = if self.at_sym("->") { "->" } else { ":" };
+            let end = self.tokens.get(self.i + 1).filter(|t| t.pos.line == pos.line).map_or(Pos { col: pos.col + sym.len(), ..pos }, |t| t.pos);
+            self.error_fix(
                 "gram.fn.2",
                 pos,
-                "there is no `->`; the return type follows `)` directly",
-                "remove the `->`",
+                format!("there is no `{sym}`; the return type follows `)` directly"),
+                format!("remove the `{sym}`"),
+                format!("remove the `{sym}`"),
+                vec![Edit::delete(pos, end)],
             );
             self.i += 1;
         }
@@ -730,7 +776,17 @@ impl Parser {
         let parsed = (|| {
             let (trait_name, trait_pos) = self.dotted_name("a trait name after `impl`", "trait.impl.1")?;
             if !self.eat_kw("for") {
-                self.unexpected("`for` after the trait name", "trait.impl.1");
+                if matches!(self.peek(), Tok::Newline) {
+                    let at = self.tokens[self.i - 1].pos;
+                    self.error_help(
+                        "trait.impl.1",
+                        at,
+                        format!("`impl {trait_name}` needs `for Type`: `impl` implements a trait"),
+                        format!("methods of a struct are plain functions: `fn {trait_name}.name(self) T`"),
+                    );
+                } else {
+                    self.unexpected("`for` after the trait name", "trait.impl.1");
+                }
                 return None;
             }
             let (name, tpos) = self.dotted_name("the implementing type after `for`", "trait.impl.1")?;
@@ -874,14 +930,27 @@ impl Parser {
     /// `name Type`, a field of a struct or of a variant (type.struct.2, type.enum.2).
     fn field_decl(&mut self, rule: &'static str) -> Option<Field> {
         self.field_pub(rule);
-        let (fname, fpos) = self.name("a field name", rule)?;
-        if self.at_sym(":") {
+        if self.at_kw("fn") {
             let at = self.pos();
             self.error_help(
                 rule,
                 at,
+                "methods aren't declared inside a struct",
+                "declare the method after the struct, with the type's name: `fn Name.method(self) T`",
+            );
+            return None;
+        }
+        let (fname, fpos) = self.name("a field name", rule)?;
+        if self.at_sym(":") {
+            let at = self.pos();
+            let end = self.tokens.get(self.i + 1).filter(|t| t.pos.line == at.line).map_or(at, |t| t.pos);
+            self.error_fix(
+                rule,
+                at,
                 "fields are written `name Type`, without a colon",
                 format!("write `{fname} <Type>`"),
+                "remove the `:`",
+                vec![Edit::span(at, end, " ")],
             );
             self.i += 1;
         }
@@ -1004,10 +1073,13 @@ impl Parser {
             return None;
         }
         let errors_before = self.diags.len();
+        let start = self.i;
         match self.statement_inner() {
             Some(stmt) if self.after_block() || self.eat(&Tok::Newline) => Some(stmt),
             Some(_) => {
-                self.unexpected("end of line after the statement", "lex.stmt.1");
+                if !self.stray_after_statement(start) {
+                    self.unexpected("end of line after the statement", "lex.stmt.1");
+                }
                 self.skip_statement();
                 None
             }
@@ -1047,12 +1119,25 @@ impl Parser {
             Tok::Ident(word)
                 if ["let", "var", "const"].contains(&word.as_str()) && matches!(self.peek_at(1), Tok::Ident(_)) =>
             {
-                self.error_help(
+                let mut d = Diagnostic::new(
                     "expr.bind.1",
                     pos,
                     format!("AIL has no `{word}`; bindings are declared with `:=`"),
-                    "write `name := value`, or `mut name := value` to allow reassignment",
-                );
+                )
+                .help("write `name := value`, or `mut name := value` to allow reassignment");
+                if matches!(self.peek_at(2), Tok::Sym("=")) {
+                    let eq = self.tokens[self.i + 2].pos;
+                    let first = if word == "var" {
+                        Edit::span(pos, Pos { col: pos.col + 3, ..pos }, "mut")
+                    } else {
+                        Edit::delete(pos, self.tokens[self.i + 1].pos)
+                    };
+                    d = d.fix(
+                        "declare it with `:=`",
+                        vec![first, Edit::span(eq, Pos { col: eq.col + 1, ..eq }, ":=")],
+                    );
+                }
+                self.diags.push(d);
                 None
             }
             Tok::Kw("while") => {
@@ -1106,6 +1191,9 @@ impl Parser {
                 None
             }
             _ => {
+                if self.foreign_stmt() {
+                    return None;
+                }
                 let target = self.expression_plain()?;
                 // `f(x) else ...` handles a failure with no success value
                 // (err.else.5); `e else d` gives a value (err.else.6).
@@ -1245,7 +1333,17 @@ impl Parser {
             return false;
         }
         let pos = self.pos();
-        self.error_help("expr.op.1", pos, format!("AIL writes `{sym}` as `{word}`"), format!("write `{word}`"));
+        // `!x` becomes `not x`; the others replace the symbol.
+        let text = if sym == "!" { "not ".to_string() } else { word.to_string() };
+        let end = Pos { col: pos.col + sym.len(), ..pos };
+        self.error_fix(
+            "expr.op.1",
+            pos,
+            format!("AIL writes `{sym}` as `{word}`"),
+            format!("write `{word}`"),
+            format!("write `{word}`"),
+            vec![Edit::span(pos, end, text)],
+        );
         true
     }
 
@@ -1293,15 +1391,43 @@ impl Parser {
             return Some(lhs);
         };
         let pos = self.bump().pos;
+        if op == BinOp::Lt && self.at_sym(">") && self.adjacent(self.i - 1) {
+            self.error_fix(
+                "gram.foreign.1",
+                pos,
+                "AIL writes `<>` as `!=`",
+                "write `!=`",
+                "write `!=`",
+                vec![Edit::span(pos, Pos { col: pos.col + 2, ..pos }, "!=")],
+            );
+            return None;
+        }
         let rhs = self.additive()?;
         let expr = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
         if self.comparison_op().is_some() {
             let at = self.pos();
-            self.error_help(
-                "expr.prec.2",
-                at,
-                "comparisons can't be chained",
-                "combine them with `and`, e.g. `a < b and b < c`",
+            // `List<int>()`: type arguments use `[]`.
+            if let Expr::Binary { op: BinOp::Lt, lhs: name, .. } = &expr
+                && matches!(&**name, Expr::Name(n, _) if n.chars().next().is_some_and(char::is_uppercase))
+                && self.at_sym(">")
+            {
+                self.error_fix(
+                    "gram.foreign.1",
+                    pos,
+                    "type arguments are written in `[]`, not `<>`",
+                    "write `List[int]()`",
+                    "use brackets",
+                    vec![
+                        Edit::span(pos, Pos { col: pos.col + 1, ..pos }, "["),
+                        Edit::span(at, Pos { col: at.col + 1, ..at }, "]"),
+                    ],
+                );
+                return None;
+            }
+            self.diags.push(
+                Diagnostic::new("expr.prec.2", at, "comparisons can't be chained")
+                    .help("combine them with `and`, e.g. `a < b and b < c`")
+                    .fix("repeat the middle operand with `and`", vec![Edit::chain(pos, at)]),
             );
             return None;
         }
@@ -1317,6 +1443,22 @@ impl Parser {
                 _ => return Some(lhs),
             };
             let pos = self.bump().pos;
+            // `n++` and `n--`
+            if matches!((&op, self.peek()), (BinOp::Add, Tok::Sym("+")) | (BinOp::Sub, Tok::Sym("-")))
+                && self.adjacent(self.i - 1)
+                && self.line_ends_at(self.i)
+            {
+                let (sym, assign) = if op == BinOp::Add { ("++", "+=") } else { ("--", "-=") };
+                self.error_fix(
+                    "gram.foreign.1",
+                    pos,
+                    format!("AIL has no `{sym}`"),
+                    format!("write `n {assign} 1`"),
+                    format!("write `{assign} 1`"),
+                    vec![Edit::span(pos, Pos { col: pos.col + 2, ..pos }, format!(" {assign} 1"))],
+                );
+                return None;
+            }
             let rhs = self.multiplicative()?;
             lhs = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), pos };
         }
@@ -1406,6 +1548,18 @@ impl Parser {
             } else if self.at_sym("[") {
                 let pos = self.bump().pos;
                 let index = self.range()?;
+                if self.at_sym(":") {
+                    let at = self.pos();
+                    self.error_fix(
+                        "type.coll.4",
+                        at,
+                        "a slice is written with `..`, not `:`",
+                        "write `xs[a..b]`, `xs[a..]` or `xs[..b]`",
+                        "write `..`",
+                        vec![Edit::span(at, Pos { col: at.col + 1, ..at }, "..")],
+                    );
+                    return None;
+                }
                 self.expect_sym("]", "`]` after the index", "type.coll.4")?;
                 expr = Expr::Index { recv: Box::new(expr), index: Box::new(index), pos };
             } else if self.at_sym("?") {
@@ -1592,11 +1746,16 @@ impl Parser {
                 Part::Lit(s) => out.push(InterpPart::Lit(s)),
                 // lex.str.2: `{{` isn't an escape; `\{` is.
                 Part::Code(tokens) if matches!(tokens.first().map(|t| &t.tok), Some(Tok::Sym("{"))) => {
-                    self.error_help(
-                        "lex.str.2",
-                        tokens[0].pos,
-                        "`{{` in a string isn't an escaped brace",
-                        "write `\\{` for a literal `{`, or use a raw string `r\"...\"`",
+                    let inner = tokens[0].pos;
+                    let mut edits = vec![Edit::span(Pos { col: inner.col - 1, ..inner }, Pos { col: inner.col + 1, ..inner }, "\\{")];
+                    // `{{x}}`: the last token is the inner `}`, then the outer one.
+                    if let Some(Token { tok: Tok::Sym("}"), pos: last }) = tokens.iter().rev().nth(1) {
+                        edits.push(Edit::delete(Pos { col: last.col + 1, ..*last }, Pos { col: last.col + 2, ..*last }));
+                    }
+                    self.diags.push(
+                        Diagnostic::new("lex.str.2", inner, "`{{` in a string isn't an escaped brace")
+                            .help("write `\\{` for a literal `{`, or use a raw string `r\"...\"`")
+                            .fix("escape the brace with a backslash", edits),
                     );
                     ok = false;
                 }
@@ -1717,11 +1876,22 @@ impl Parser {
         if !self.eat_sym("=>") {
             if self.at_sym(":") || self.at_sym("->") {
                 let at = self.pos();
-                self.error_help("expr.match.1", at, "arms are written `pattern => result`", "write `=>`");
+                let len = if self.at_sym(":") { 1 } else { 2 };
+                // `Red: 1` needs a blank before the arrow; `Red -> 1` has one.
+                let attached = self.tok_end(self.i - 1) == Some(at);
+                self.error_fix(
+                    "expr.match.1",
+                    at,
+                    "arms are written `pattern => result`",
+                    "write `=>`",
+                    "write `=>`",
+                    vec![Edit::span(at, Pos { col: at.col + len, ..at }, if attached { " =>" } else { "=>" })],
+                );
+                self.i += 1; // go on as if it were `=>`
+            } else {
+                self.unexpected("`=>` after the pattern", "expr.match.1");
                 return None;
             }
-            self.unexpected("`=>` after the pattern", "expr.match.1");
-            return None;
         }
         if matches!(self.peek(), Tok::Newline) {
             let body = self.block("`=>`", "expr.match.1")?;

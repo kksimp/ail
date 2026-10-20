@@ -23,7 +23,7 @@
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
 ./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
-./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms, use std.x); --dry-run: diff
+./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N)
 ./ail run --watch n FILE.ail # each assignment to `mut` variable n, with value and position

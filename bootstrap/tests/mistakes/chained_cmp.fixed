@@ -1,0 +1,4 @@
+fn main()
+    n := 3
+    if 0 < n and n < 5
+        print("in")

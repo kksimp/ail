@@ -190,6 +190,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0242](0242-std-ui-modifiers-method.md) | `Window.modifiers()` reports the modifiers of the last event *(delegated)* | Accepted | 2026-10-20 |
 | [0243](0243-std-ui-font-size.md) | `Window.set_font_size` picks from fixed bitmap sizes and keeps the window's pixels *(delegated)* | Accepted | 2026-10-20 |
 | [0244](0244-editor-rename-symbol.md) | Editor F2 renames through `ail api` references, else by whole word, after a confirming prompt *(delegated)* | Accepted | 2026-10-20 |
+| [0262](0262-report-foreign-syntax-once-with-help.md) | Report foreign syntax once, give every error a help, measure with a mistakes corpus *(delegated)* | Accepted | 2026-10-20 |
+| [0263](0263-one-diagnostic-per-mistake-recovery.md) | One diagnostic per mistake: line-level recovery and whole-file re-indentation *(delegated)* | Accepted | 2026-10-20 |
+| [0264](0264-anchored-call-rewrite-fixes.md) | Fixes that rewrite a call, a bracket form or a chained comparison are anchored to the source line *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
 | [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |

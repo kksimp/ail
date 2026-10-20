@@ -1,0 +1,3 @@
+fn main()
+    x := True
+    print(x)
