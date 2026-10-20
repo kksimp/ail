@@ -92,3 +92,29 @@ font file; `NOTICE` lists the fonts and their licences.
 - Next: page-adaptive shapes (re-learn confident glyphs on the page),
   word-level correction against the document's own vocabulary, skew
   correction, and touching-glyph splitting.
+
+## Amendment 2026-10-20: background reading in the viewer
+
+The designer asked that the viewer OCR in the background, the page on
+screen first and then the pages around it, so a reader never notices.
+Details decided by the AI (delegated, ADR 0076):
+
+- OCR of a page is a `Job` of short steps: decode an image, find its lines,
+  describe and classify glyphs 120 at a time, place the words. `Ocr.page`
+  runs all steps at once (headless commands); the window runs steps in
+  slices of about 60 ms whenever no event is waiting, in the order of
+  `nearest_first` (shown page, next, previous, then outwards), resuming a
+  half-done page and re-ranking after every page change. A scan not read
+  yet shows "scan, reading..." and fills in when its last step ends.
+- **Rejected: a task per page.** The bootstrap's scheduler runs one task
+  at a time until it blocks (ADR 0186), and the window's event wait doesn't
+  hand the turn on, so a worker task would either never run or freeze the
+  window. **Rejected: `par for` over pages.** It runs on real threads but
+  the caller waits for all of them. Cooperative slices need neither and
+  move to real tasks once the native runtime runs them in parallel.
+- Cost: a step that can't be split yet (decoding a whole image: 0.3 s for
+  a 300 dpi fax page, 1.7 s for a 200 dpi JPEG page) delays a key press
+  pressed during it by up to that long. A resumable decoder is the fix.
+- `view --idle` runs the background to completion before `--keys`,
+  `--print` or `--json`, so agents and tests see what a window left open
+  would show.

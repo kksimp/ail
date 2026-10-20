@@ -129,6 +129,12 @@ eight per character (`pdf train`). Touching pairs (fi, ff, ti, rn...) are
 shapes of their own. Accuracy on unseen fonts is in ADR 0512: 0.4% to 3.3%
 character errors on 300 dpi fax scans, 2.4% to 3.9% on 200 dpi JPEG.
 
+In the window, OCR runs in the background (ADR 0512, amendment): a
+page's OCR is a job of steps of about a tenth of a second, and between
+events the viewer runs them for the page on screen first, then the next,
+the previous, and outwards, resuming a half-done page whenever the reader
+moves. `view --idle` does the same headless.
+
 `pdf images FILE --page N --out F.pgm` and `pdf layout FILE` show the
 decoded image and the lines and glyph boxes found, for checking a scan
 that reads badly.
@@ -158,7 +164,7 @@ with the window-layer owner) once the API settles; an RGB bitmap joins
 | the same, one page: `text --page 30`, `view --page 30 --print` | 0.18-0.23 s | 0.02 s |
 | the same, `grep --first` (hit on page 1) | 0.18 s | n/a |
 | OCR of a 300 dpi Group 4 page (931 glyphs), `pdf text` | 2.3 s: shapes 0.25, ink 0.28, layout 0.16, features 0.9, classify 0.6 | Tesseract: not installed here |
-| OCR of a 200 dpi JPEG page | ~6 s, of which JPEG decoding ~4 s | |
+| OCR of a 200 dpi JPEG page | ~4.9 s, of which JPEG decoding 1.7 s | |
 | Decoding a 1654 by 2339 Group 4 page | 0.27 s | |
 
 Text output matches `pdftotext` on the LibreOffice fixtures and on a

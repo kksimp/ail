@@ -681,10 +681,14 @@ fn idct_plane(f List[float], rows int, stride int) List[float]
     a := tensor.from(f, [r8 * stride, 8]).matmul(c)
     # Along y: rows (block column, x, block row), columns u.
     t := a.reshape([r8, w8]).transpose().reshape([w8 * rows, 8]).matmul(c)
-    (t.reshape([w8, r8]).transpose() + 128.0).reshape([r8 * w8]).to_list()
+    # Level shift, clamp to 0..255 (relu(x) - relu(x - 255)) and add the
+    # half that makes truncation round, all as tensor operations.
+    px := t.reshape([w8, r8]).transpose() + 128.0
+    (px.relu() - (px - 255.0).relu() + 0.5).reshape([r8 * w8]).to_list()
 
+## A plane value (already clamped, plus a half) as a grey level.
 fn clamp(v float) int
-    v.round().to_int().max(0).min(255)
+    v.to_int().max(0).min(255)
 
 fn to_gray(
     comps List[Comp],
@@ -704,7 +708,7 @@ fn to_gray(
         # Luma at full resolution: whole rows at a time.
         pw := strides[0] * 8
         for y in 0..h
-            px.extend([clamp(v) for v in planes[0][y * pw..y * pw + w]])
+            px.extend([v.to_int() for v in planes[0][y * pw..y * pw + w]])
         return Gray(width: w, height: h, px: px)
     for y in 0..h
         for x in 0..w

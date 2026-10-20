@@ -8,6 +8,7 @@
 use std.ui
 use std.ui.widgets
 use std.io
+use std.time
 use ocr
 use reader
 
@@ -33,6 +34,12 @@ pub struct Viewer
     pages reader.Pages
     ## Scanned pages are read by OCR when shown or searched.
     reader_ocr ocr.Ocr
+    ## In a window, OCR runs between key presses, the page shown first and
+    ## then its neighbours (`background_step`); a scan not read yet shows
+    ## as such until then. Headless, a page is read when shown.
+    pub background bool
+    jobs Map[int, ocr.Job]
+    bg_done bool
     pub page int
     pub top int
     pub cols int
@@ -53,6 +60,9 @@ pub fn with_ocr(path str, pages reader.Pages, cols int, rows int, o ocr.Ocr) Vie
         path: path,
         pages: pages,
         reader_ocr: o,
+        background: false,
+        jobs: {},
+        bg_done: false,
         page: 0,
         top: 0,
         cols: cols,
@@ -145,10 +155,44 @@ fn overlaps(spans List[List[int]], a int, b int) bool
             return true
     false
 
+## Page `i` as the viewer shows it: read by OCR now when headless, as it
+## stands when OCR runs in the background.
+fn Viewer.shown(self, i int) reader.Page
+    if background then pages.get(i) else reader_ocr.page(pages, i)
+
+## One slice of background OCR, at most about `budget_ms`: the shown page
+## first, then pages outwards from it (each read, and recognized if it is a
+## scan), resuming any page left half done. True when the shown page
+## changed and needs drawing again.
+pub fn Viewer.background_step(mut self, budget_ms int) bool
+    if not reader_ocr.on or bg_done
+        return false
+    t0 := time.now_ms()
+    for i in ocr.nearest_first(page, pages.count())
+        if time.now_ms() - t0 >= budget_ms
+            return false
+        p := pages.get(i)
+        if not reader_ocr.wants(p)
+            continue
+        mut job := jobs.remove(i) else ocr.job_for(i, p)
+        while not job.done and time.now_ms() - t0 < budget_ms
+            ocr.step(mut job, pages, reader_ocr)
+        if not job.done
+            jobs[i] = job
+            return false
+        layouts.remove(i)
+        return i == page
+    bg_done = true
+    false
+
+## Whether background OCR has work left.
+pub fn Viewer.busy(self) bool
+    background and reader_ocr.on and not bg_done
+
 fn Viewer.layout_of(mut self, i int) Layout
     if l := layouts.get(i)
         return l
-    l := layout(reader_ocr.page(pages, i), cols - 2)
+    l := layout(shown(i), cols - 2)
     layouts[i] = l
     l
 
@@ -276,11 +320,13 @@ fn Viewer.hit_at(self, pi int, li int, ci int) int
 pub fn Viewer.render(mut self) List[widgets.Run]
     mut runs := List[widgets.Run]()
     l := layout_of(page)
-    pm := reader_ocr.page(pages, page).model
+    pm := shown(page).model
     title := " {base(path)}  page {page + 1}/{pages.count()}"
     mut note := if pm.image_only then "  image-only page: a scan, no text without OCR" else ""
     if pm.ocr
         note = "  scan, read by OCR"
+    elif pm.image_only and reader_ocr.on
+        note = "  scan, reading..."
     runs.push(bar(0, "{title}{note}", cols))
     body := body_rows()
     left := ((cols - l.width) / 2).max(0)
@@ -351,8 +397,8 @@ fn base(path str) str
 ## its hits, and the visible text rows.
 pub fn Viewer.state_json(mut self) Json
     l := layout_of(page)
-    pm := reader_ocr.page(pages, page).model
-    shown := [l.rows[i] for i in top..(top + body_rows()).min(l.rows.len())]
+    pm := shown(page).model
+    rows_shown := [l.rows[i] for i in top..(top + body_rows()).min(l.rows.len())]
     mut m := List[JsonMember]()
     m.push(JsonMember(key: "file", value: Json.Str(path)))
     m.push(JsonMember(key: "page", value: Json.Num((page + 1).to_float())))
@@ -361,7 +407,7 @@ pub fn Viewer.state_json(mut self) Json
     m.push(JsonMember(key: "query", value: Json.Str(query)))
     m.push(JsonMember(key: "hit", value: Json.Num((hit + 1).to_float())))
     m.push(JsonMember(key: "hits", value: Json.Arr([h.to_json() for h in hits])))
-    m.push(JsonMember(key: "screen", value: Json.Arr([Json.Str(s) for s in shown])))
+    m.push(JsonMember(key: "screen", value: Json.Arr([Json.Str(s) for s in rows_shown])))
     m.push(JsonMember(key: "visible", value: Json.Arr([
         pm.lines[i].to_json()
         for i in visible_lines(l)
@@ -400,13 +446,23 @@ pub fn start(path str, pages reader.Pages, flags Map[str, str])
         return
     o := ocr.Ocr.new(not flags.contains("--no-ocr"))
     start_page := ((flags.get("--page") else "1").to_int() else 1).max(1).min(pages.count()) - 1
-    need := (natural_width(o.page(pages, start_page)) + 2).max(20)
+    # A window opens at once and reads a scan behind it; a headless view
+    # reads the page it shows first.
+    headless := flags.contains("--json") or flags.contains("--print")
+    first := if headless then o.page(pages, start_page) else pages.get(start_page)
+    need := (natural_width(first) + 2).max(20)
     cols := (flags.get("--cols") else "").to_int() else need.min(180)
     rows := (flags.get("--rows") else "40").to_int() else 40
     mut v := with_ocr(path, pages, cols, rows, o)
     v.go_page(start_page)
     if q := flags.get("--find")
         v.find(q)
+    # `--idle`: as in a window left alone, OCR runs in the background, from
+    # the shown page outwards, until every scan is read; keys come after.
+    if flags.contains("--idle")
+        v.background = true
+        while v.busy()
+            v.background_step(60)
     for k in (flags.get("--keys") else "").split(" ")
         if k != ""
             spec := press(k)
@@ -424,11 +480,28 @@ fn window(mut v Viewer)
     mut w := ui.open("pdf: {base(v.path)}", v.cols, v.rows) else err
         io.eprint("pdf: can't open a window ({err}); try --print")
         return
+    v.background = true
+    v.layouts = {}
+    mut dirty := true
     while not v.quit
-        w.clear(EDGE_BG)
-        widgets.draw_runs(mut w, v.render())
-        w.present()
-        match w.next_event()
+        if dirty
+            w.clear(EDGE_BG)
+            widgets.draw_runs(mut w, v.render())
+            w.present()
+            dirty = false
+        # Between events, OCR runs in slices short enough that a key press
+        # waits at most one slice.
+        mut ev := w.poll_event()
+        while ev == none and v.busy()
+            if v.background_step(60)
+                dirty = true
+                break
+            ev = w.poll_event()
+        if dirty and ev == none
+            continue
+        e := ev else w.next_event()
+        dirty = true
+        match e
             Key(key, ctrl, _, shift) => v.on_key(key, ctrl, shift)
             Resize(c, r) =>
                 v.cols = c

@@ -38,7 +38,7 @@ struct Args
 ## Words and `--flag [value]` options; `--case`, `--json` and `--print`
 ## take no value.
 fn parse_args(raw List[str]) Args
-    bare := {"--case", "--json", "--print", "--first", "--no-ocr"}
+    bare := {"--case", "--json", "--print", "--first", "--no-ocr", "--idle"}
     mut a := Args(words: [], flags: {})
     mut i := 0
     while i < raw.len()

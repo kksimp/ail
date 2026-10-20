@@ -27,7 +27,9 @@ text) is read by OCR written in AIL, only when it is shown or searched
 ## Scans
 
 `text`, `grep`, `json` and `view` read a scanned page by OCR the first time
-they need it; `--no-ocr` skips it. `json` marks such pages `"ocr": true`
+they need it; `--no-ocr` skips it. The viewer's window does it in the
+background between key presses, the page on screen first and then the
+pages around it; `view --idle` does the same before printing. `json` marks such pages `"ocr": true`
 with a `confidence` (mean per word, 0 to 1), and the viewer's title bar says
 "scan, read by OCR". Fax (CCITT Group 3 and 4), baseline JPEG and Flate or
 raw images are decoded; JBIG2 and JPEG 2000 are not yet. Expect about 1% to

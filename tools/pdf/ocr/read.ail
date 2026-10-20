@@ -55,7 +55,10 @@ pub fn read_runs(runs List[List[Run]], shapes Shapes) List[TextRow]
         for b in l.glyphs
             glyphs.push(b)
             owners.push(l)
-    guesses := shapes.classify(features_of(glyphs, owners))
+    rows_of(lines, shapes.classify(features_of(glyphs, owners)))
+
+## Lines of glyphs and their guesses, in order, as words.
+fn rows_of(lines List[GlyphLine], guesses List[Guess]) List[TextRow]
     mut out := List[TextRow]()
     mut k := 0
     for l in lines
@@ -145,63 +148,156 @@ pub fn in_context(labels List[str]) List[str]
 ## kept in the page cache, so each page is recognized once.
 pub fn Ocr.page(self, ps reader.Pages, i int) reader.Page
     p := ps.get(i)
-    if not on or not p.model.image_only or p.model.ocr
+    if not wants(p)
         return p
-    q := recognize(ps.doc, p, shapes())
-    ps.put(i, q)
-    q
+    mut job := job_for(i, p)
+    while not job.done
+        step(mut job, ps, self)
+    ps.get(i)
 
-## Runs OCR over every image on the page and maps the words to page
-## space through the matrix each image was painted with.
-pub fn recognize(doc reader.Doc, p reader.Page, shapes Shapes) reader.Page
-    mut glyphs := List[reader.Glyph]()
-    mut sure := 0.0
-    mut words := 0
-    for pl in p.placed
-        g := ink_of(doc, pl.obj) else continue
+## Whether OCR is on and page `p` is a scan not read yet.
+pub fn Ocr.wants(self, p reader.Page) bool
+    on and needs_ocr(p)
+
+fn needs_ocr(p reader.Page) bool
+    p.model.image_only and not p.model.ocr
+
+## Glyphs per feature or classify step: about a tenth of a second each on
+## the interpreter, so a viewer stepping OCR between events stays
+## responsive.
+CHUNK := 120
+
+## OCR of one page in steps (ADR 0512): decode an image, find its lines,
+## describe and classify its glyphs a chunk at a time, place its words;
+## then the next image; then the page goes into the cache. `Ocr.page` runs
+## every step at once; the viewer runs them while it waits for keys.
+pub struct Job
+    pub page int
+    base reader.Page
+    img int
+    stage int
+    ink Ink
+    lines List[GlyphLine]
+    glyphs List[Blob]
+    owners List[GlyphLine]
+    feats List[List[float]]
+    guesses List[Guess]
+    out List[reader.Glyph]
+    sure float
+    words int
+    pub done bool
+
+pub fn job_for(i int, p reader.Page) Job
+    Job(
+        page: i,
+        base: p,
+        img: 0,
+        stage: 0,
+        ink: Ink(width: 0, height: 0, rows: []),
+        lines: [],
+        glyphs: [],
+        owners: [],
+        feats: [],
+        guesses: [],
+        out: [],
+        sure: 0,
+        words: 0,
+        done: false,
+    )
+
+## Does one step of `job`; the last one puts the page in `ps`'s cache.
+pub fn step(mut job Job, ps reader.Pages, o Ocr)
+    if job.done
+        return
+    if job.img >= job.base.placed.len()
+        ps.put(job.page, finish(job.base, job.out, job.sure, job.words))
+        job.done = true
+        return
+    if job.stage == 0
+        # Decode the image; too small to hold text, or unreadable: skip it.
+        g := ink_of(ps.doc, job.base.placed[job.img].obj) else Ink(width: 0, height: 0, rows: [])
         if g.width < 64 or g.height < 32
-            continue
-        m := pl.ctm
-        fw := g.width.to_float()
-        fh := g.height.to_float()
-        # Pixel (x, y) is (x / w, 1 - y / h) in the image's unit square.
-        for row in read_runs(g.rows, shapes)
-            for w in row.words
-                v := 1.0 - row.base.to_float() / fh
-                # Tall letters stand about 0.7 em above the baseline.
-                size := (m[3] * row.size.to_float() / fh).abs() / 0.7
-                cs := w.text.chars()
-                for c in 0..cs.len()
-                    u0 := w.starts[c].to_float() / fw
-                    u1 := w.ends[c].to_float() / fw
-                    x0 := m[0] * u0 + m[2] * v + m[4]
-                    x1 := m[0] * u1 + m[2] * v + m[4]
-                    y := m[1] * u0 + m[3] * v + m[5]
-                    # Each glyph reaches the next one, so only word gaps
-                    # read as spaces.
-                    nx := if c
-                        + 1 < cs.len() then m[0] * w.starts[c + 1].to_float() / fw
-                        + m[2] * v
-                        + m[4] else x1
-                    glyphs.push(reader.Glyph(
-                        text: "{cs[c]}",
-                        x: x0,
-                        y: y,
-                        w: nx - x0,
-                        size: size,
-                        known: true,
-                    ))
-                ux := w.x1.to_float() / fw
-                glyphs.push(reader.Glyph(
-                    text: " ",
-                    x: m[0] * ux + m[2] * v + m[4],
-                    y: m[1] * ux + m[3] * v + m[5],
-                    w: size * 0.25,
+            job.img += 1
+            return
+        job.ink = g
+        job.stage = 1
+    elif job.stage == 1
+        job.lines = lines_of(blobs_of(job.ink.rows))
+        job.glyphs = []
+        job.owners = []
+        for l in job.lines
+            for b in l.glyphs
+                job.glyphs.push(b)
+                job.owners.push(l)
+        job.feats = []
+        job.guesses = []
+        job.stage = 2
+    elif job.stage == 2
+        a := job.feats.len()
+        z := (a + CHUNK).min(job.glyphs.len())
+        job.feats.extend(features_of(job.glyphs[a..z], job.owners[a..z]))
+        if z == job.glyphs.len()
+            job.stage = 3
+    elif job.stage == 3
+        a := job.guesses.len()
+        z := (a + CHUNK).min(job.feats.len())
+        job.guesses.extend(o.shapes().classify(job.feats[a..z]))
+        if z == job.feats.len()
+            job.stage = 4
+    else
+        place(mut job, rows_of(job.lines, job.guesses))
+        job.img += 1
+        job.stage = 0
+        job.ink = Ink(width: 0, height: 0, rows: [])
+
+## Page `x` of the image's pixel coordinate (`u` across, at height `v` in
+## its unit square) through the matrix it was painted with.
+fn px_x(m List[float], u float, v float) float
+    m[0] * u + m[2] * v + m[4]
+
+fn px_y(m List[float], u float, v float) float
+    m[1] * u + m[3] * v + m[5]
+
+## Maps an image's words to page space (pixel (x, y) is (x / w, 1 - y / h)
+## in the image's unit square) as glyphs for the line builder.
+fn place(mut job Job, rows List[TextRow])
+    m := job.base.placed[job.img].ctm
+    fw := job.ink.width.to_float()
+    fh := job.ink.height.to_float()
+    for row in rows
+        v := 1.0 - row.base.to_float() / fh
+        # Tall letters stand about 0.7 em above the baseline.
+        size := (m[3] * row.size.to_float() / fh).abs() / 0.7
+        for w in row.words
+            cs := w.text.chars()
+            for c in 0..cs.len()
+                u0 := w.starts[c].to_float() / fw
+                # Each glyph reaches the next one, so only word gaps read
+                # as spaces.
+                u1 := (if c + 1 < cs.len() then w.starts[c + 1] else w.ends[c]).to_float() / fw
+                x0 := px_x(m, u0, v)
+                job.out.push(reader.Glyph(
+                    text: "{cs[c]}",
+                    x: x0,
+                    y: px_y(m, u0, v),
+                    w: px_x(m, u1, v) - x0,
                     size: size,
                     known: true,
                 ))
-                sure += w.sure
-                words += 1
+            ux := w.x1.to_float() / fw
+            job.out.push(reader.Glyph(
+                text: " ",
+                x: px_x(m, ux, v),
+                y: px_y(m, ux, v),
+                w: size * 0.25,
+                size: size,
+                known: true,
+            ))
+            job.sure += w.sure
+            job.words += 1
+
+## The page with OCR's glyphs as its lines.
+fn finish(p reader.Page, glyphs List[reader.Glyph], sure float, words int) reader.Page
     lines := reader.lines_of(glyphs)
     mut model := p.model
     model.lines = [
@@ -217,3 +313,18 @@ pub fn recognize(doc reader.Doc, p reader.Page, shapes Shapes) reader.Page
     model.ocr = true
     model.confidence = if words > 0 then reader.r2(sure / words.to_float()) else 0.0
     reader.Page(model: model, lines: lines, placed: p.placed)
+
+## The order pages are read in the background from page `at` of `count`:
+## that page, then its neighbours outwards, next before previous.
+pub fn nearest_first(at int, count int) List[int]
+    mut out := [at]
+    for d in 1..count
+        if at + d < count
+            out.push(at + d)
+        if at - d >= 0
+            out.push(at - d)
+    out
+
+@test fn reads_outwards_from_the_page_shown()
+    assert_eq(nearest_first(2, 6), [2, 3, 1, 4, 0, 5])
+    assert_eq(nearest_first(0, 3), [0, 1, 2])

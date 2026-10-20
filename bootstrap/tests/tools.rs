@@ -250,6 +250,9 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     assert!(code == Some(0) && out.starts_with("1: the growth came"), "pdf grep on a scan:\n{out}");
     let (code, _, _) = pdf(&["grep", "--no-ocr", "western", &scan]);
     assert_eq!(code, Some(1), "pdf grep --no-ocr finds nothing on a scan");
+    // Background OCR (ADR 0512): left idle, the viewer reads the scan it shows.
+    let (_, out, _) = pdf(&["view", &scan, "--idle", "--print", "--rows", "8"]);
+    assert!(out.contains("scan, read by OCR") && out.contains("Quarterly review of the shipping office"), "pdf view --idle:\n{out}");
     let (_, out, _) = pdf(&["json", &scan]);
     assert!(out.contains("\"image_only\":true,\"ocr\":true,\"confidence\":"), "pdf json on a scan:\n{out}");
 }
