@@ -7,9 +7,9 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 ## Environment
 
 - date: 2026-10-20
-- commit: c1404e1
+- commit: 9aae6cf3
 - os: Linux x86_64
-- cpu: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores
+- cpu: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores
 - runs per cell: 3
 - clang: Ubuntu clang version 18.1.3 (1ubuntu1)
 - gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
@@ -19,29 +19,29 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 
 | program | ail min | ail med | native min | native med | clang min | clang med | gcc min | gcc med | python min | python med | ail/clang | native/clang | ail/gcc | native/gcc | ail/python | native/python |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| interp | 0.106 | 0.113 | - | - | no twin | no twin | no twin | no twin | 0.102 | 0.107 | - | - | - | - | 1.03 | - |
-| json | 0.008 | 0.010 | - | - | no twin | no twin | no twin | no twin | 0.046 | 0.049 | - | - | - | - | 0.18 | - |
-| sheet | 0.020 | 0.020 | - | - | no twin | no twin | no twin | no twin | 0.056 | 0.064 | - | - | - | - | 0.35 | - |
-| loops | 0.173 | 0.177 | - | - | no twin | no twin | no twin | no twin | 0.300 | 0.309 | - | - | - | - | 0.58 | - |
-| logscan | 0.003 | 0.004 | - | - | no twin | no twin | no twin | no twin | 0.028 | 0.030 | - | - | - | - | 0.12 | - |
-| tasks | 0.022 | 0.023 | - | - | no twin | no twin | no twin | no twin | 0.042 | 0.043 | - | - | - | - | 0.52 | - |
-| build | 0.501 | 0.518 | - | - | no twin | no twin | no twin | no twin | 0.504 | 0.532 | - | - | - | - | 0.99 | - |
-| parsum | 0.192 | 0.210 | - | - | no twin | no twin | no twin | no twin | 0.943 | 1.027 | - | - | - | - | 0.20 | - |
-| tensor | 0.015 | 0.019 | - | - | no twin | no twin | no twin | no twin | 0.490 | 0.523 | - | - | - | - | 0.03 | - |
-| tensor_loops | 0.804 | 0.904 | - | - | no twin | no twin | no twin | no twin | 0.453 | 0.468 | - | - | - | - | 1.78 | - |
-| tensor_ops | 0.038 | 0.043 | - | - | no twin | no twin | no twin | no twin | 0.367 | 0.377 | - | - | - | - | 0.10 | - |
-| tensor_ops_loops | 0.642 | 0.765 | - | - | no twin | no twin | no twin | no twin | 0.318 | 0.318 | - | - | - | - | 2.02 | - |
-| race_smoke | 0.117 | 0.117 | - | - | 0.006 | 0.006 | 0.007 | 0.007 | 0.261 | 0.279 | 19.91 | - | 17.12 | - | 0.45 | - |
-| collatz | 0.443 | 0.473 | - | - | 0.014 | 0.014 | 0.022 | 0.022 | 0.971 | 1.191 | 31.43 | - | 20.53 | - | 0.46 | - |
-| nbody | 0.955 | 0.992 | - | - | 0.006 | 0.006 | 0.005 | 0.005 | 0.435 | 0.448 | 168.94 | - | 197.65 | - | 2.20 | - |
-| spectralnorm | 0.805 | 0.946 | - | - | 0.005 | 0.005 | 0.005 | 0.005 | 0.520 | 0.536 | 154.59 | - | 157.32 | - | 1.55 | - |
-| mandelbrot | 0.686 | 0.786 | - | - | 0.010 | 0.010 | 0.010 | 0.010 | 0.290 | 0.293 | 67.47 | - | 71.01 | - | 2.36 | - |
-| fannkuch | 1.250 | 1.386 | - | - | 0.024 | 0.025 | 0.024 | 0.024 | 0.825 | 0.883 | 51.07 | - | 52.94 | - | 1.51 | - |
-| binarytrees | 2.248 | 2.340 | - | - | 0.017 | 0.022 | 0.014 | 0.014 | 0.596 | 0.608 | 130.16 | - | 161.16 | - | 3.77 | - |
-| fasta | 0.182 | 0.196 | - | - | 0.007 | 0.009 | 0.008 | 0.008 | 0.141 | 0.158 | 24.54 | - | 23.02 | - | 1.29 | - |
-| wordfreq | 0.306 | 0.335 | - | - | 0.006 | 0.006 | 0.007 | 0.007 | 0.193 | 0.200 | 51.08 | - | 43.58 | - | 1.58 | - |
-| matmul | 0.681 | 0.727 | - | - | 0.007 | 0.007 | 0.008 | 0.008 | 0.512 | 0.528 | 96.91 | - | 81.94 | - | 1.33 | - |
-| sieve | 1.207 | 1.228 | - | - | 0.013 | 0.014 | 0.015 | 0.015 | 0.567 | 0.612 | 89.90 | - | 81.21 | - | 2.13 | - |
+| interp | 0.084 | 0.087 | build | build | no twin | no twin | no twin | no twin | 0.084 | 0.092 | - | - | - | - | 1.00 | - |
+| json | 0.007 | 0.008 | build | build | no twin | no twin | no twin | no twin | 0.041 | 0.052 | - | - | - | - | 0.17 | - |
+| sheet | 0.014 | 0.015 | build | build | no twin | no twin | no twin | no twin | 0.048 | 0.049 | - | - | - | - | 0.30 | - |
+| loops | 0.150 | 0.153 | build | build | no twin | no twin | no twin | no twin | 0.241 | 0.248 | - | - | - | - | 0.62 | - |
+| logscan | 0.003 | 0.003 | build | build | no twin | no twin | no twin | no twin | 0.022 | 0.024 | - | - | - | - | 0.14 | - |
+| tasks | 0.017 | 0.018 | build | build | no twin | no twin | no twin | no twin | 0.033 | 0.034 | - | - | - | - | 0.53 | - |
+| build | 0.603 | 0.637 | build | build | no twin | no twin | no twin | no twin | 0.642 | 0.659 | - | - | - | - | 0.94 | - |
+| parsum | 0.148 | 0.168 | 0.029 | 0.030 | no twin | no twin | no twin | no twin | 0.765 | 0.778 | - | - | - | - | 0.19 | 0.04 |
+| tensor | 0.012 | 0.013 | build | build | no twin | no twin | no twin | no twin | 0.282 | 0.305 | - | - | - | - | 0.04 | - |
+| tensor_loops | 0.650 | 0.670 | 0.005 | 0.005 | no twin | no twin | no twin | no twin | 0.290 | 0.296 | - | - | - | - | 2.24 | 0.02 |
+| tensor_ops | 0.031 | 0.031 | build | build | no twin | no twin | no twin | no twin | 0.162 | 0.166 | - | - | - | - | 0.19 | - |
+| tensor_ops_loops | 0.417 | 0.470 | 0.012 | 0.013 | no twin | no twin | no twin | no twin | 0.182 | 0.187 | - | - | - | - | 2.30 | 0.07 |
+| race_smoke | 0.098 | 0.117 | 0.008 | 0.008 | 0.005 | 0.005 | 0.006 | 0.006 | 0.217 | 0.230 | 21.58 | 1.81 | 16.32 | 1.37 | 0.45 | 0.04 |
+| collatz | 0.369 | 0.392 | 0.030 | 0.037 | 0.015 | 0.016 | 0.024 | 0.026 | 0.836 | 0.837 | 24.32 | 2.01 | 15.62 | 1.29 | 0.44 | 0.04 |
+| nbody | 0.784 | 0.798 | 0.005 | 0.005 | 0.004 | 0.005 | 0.004 | 0.004 | 0.282 | 0.282 | 190.88 | 1.13 | 218.92 | 1.29 | 2.78 | 0.02 |
+| spectralnorm | 0.699 | 0.701 | 0.004 | 0.004 | 0.004 | 0.004 | 0.004 | 0.005 | 0.354 | 0.399 | 160.50 | 1.02 | 164.14 | 1.05 | 1.98 | 0.01 |
+| mandelbrot | 0.617 | 0.635 | 0.007 | 0.008 | 0.006 | 0.006 | 0.006 | 0.006 | 0.209 | 0.234 | 107.03 | 1.18 | 105.72 | 1.17 | 2.95 | 0.03 |
+| fannkuch | 1.036 | 1.037 | 0.054 | 0.054 | 0.023 | 0.025 | 0.023 | 0.026 | 0.724 | 0.810 | 45.67 | 2.36 | 45.14 | 2.34 | 1.43 | 0.07 |
+| binarytrees | 1.757 | 1.881 | 0.077 | 0.085 | 0.020 | 0.020 | 0.016 | 0.017 | 0.444 | 0.449 | 89.68 | 3.91 | 111.88 | 4.88 | 3.95 | 0.17 |
+| fasta | 0.143 | 0.145 | 0.020 | 0.021 | 0.006 | 0.006 | 0.007 | 0.007 | 0.104 | 0.105 | 23.18 | 3.30 | 21.46 | 3.06 | 1.37 | 0.19 |
+| wordfreq | 0.251 | 0.257 | build | build | 0.005 | 0.005 | 0.006 | 0.007 | 0.139 | 0.140 | 49.55 | - | 40.43 | - | 1.80 | - |
+| matmul | 0.668 | 0.688 | 0.010 | 0.011 | 0.004 | 0.004 | 0.005 | 0.005 | 0.391 | 0.395 | 165.25 | 2.56 | 134.23 | 2.08 | 1.71 | 0.03 |
+| sieve | 0.989 | 0.996 | 0.017 | 0.017 | 0.010 | 0.011 | 0.013 | 0.014 | 0.348 | 0.364 | 95.91 | 1.69 | 75.98 | 1.34 | 2.84 | 0.05 |
 
 ## Notes
 
