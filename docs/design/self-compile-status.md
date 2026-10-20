@@ -59,6 +59,15 @@ Ownership follows the split lane 120 recorded: strings to #179, enums and
 `match` to #190, optionals to #177, list methods to #197, and `List[T]` and
 generics to lane 120.
 
+Lane 174 reran the self-host harness at the batch head (82f0f194) and got
+1169 problems at stage 1. The log is in that lane's container, not in this
+repository. Its owner split matches the table above: `==` on `str` 276, and
+interpolation 188 (lane 172); `if x := e`, `none` and `?` indexing (lane
+175); optional, `char?` and `!` types about 320 (lanes 175 and 172); maps
+and sets about 35 (lane 173); list methods about 60 (lane 173, #197). Lane
+174 takes `unreachable` calls (in #170), `.cmp()` on numbers and number
+methods.
+
 ## What is left
 
 About 915 of the 1054 problems depend on #177, #179 and #180, which are not
