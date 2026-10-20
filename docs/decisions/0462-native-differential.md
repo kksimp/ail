@@ -28,7 +28,9 @@ slow one, and the interpreter is the permanent oracle ([ADR 0032](0032-keep-rust
   integers, `if`, `for`, `while`, functions; arithmetic may overflow or divide
   by zero on purpose). Each runs on the walker, on the bytecode tier and as
   `ail build FILE -o OUT` output, and must print the same stdout, exit the same,
-  and trap with the same first stderr line (ADR 0405). Programs the backend
+  and trap with the same first stderr line (ADR 0405). With a `qemu-aarch64` emulator
+  installed (`apt install qemu-user`), the `--target aarch64-linux` build runs under
+  it and is compared too. Programs the backend
   declines are counted, and the test fails if fewer than half build, so the
   generator and the subset cannot drift apart silently.
 - **`fuzz.mod.6`** A module-fuzz template that carries `# fuzz-native: yes` is

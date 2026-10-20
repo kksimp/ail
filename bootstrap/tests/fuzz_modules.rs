@@ -80,9 +80,17 @@ fn env_num(name: &str, default: u64) -> u64 {
 
 /// The bootstrap binary's `build` command, if lane 120 has landed it: `ail build FILE -o OUT`.
 fn native(r: &Runner, p: &Path) -> Option<PathBuf> {
-    let out = r.dir.join(if cfg!(windows) { "native.exe" } else { "native" });
+    build_for(r, p, None)
+}
+
+/// `ail build --target T`; `None` is the host's.
+fn build_for(r: &Runner, p: &Path, target: Option<&str>) -> Option<PathBuf> {
+    let out = r.dir.join(format!("native{}", target.unwrap_or("")));
     let _ = fs::remove_file(&out);
-    let args = ["build", p.to_str()?, "-o", out.to_str()?];
+    let mut args = vec!["build", p.to_str()?, "-o", out.to_str()?];
+    if let Some(t) = target {
+        args.extend(["--target", t]);
+    }
     let b = exec_program(Path::new(env!("CARGO_BIN_EXE_ail")), &args, 60);
     (b.code == Some(0) && out.exists()).then_some(out)
 }
@@ -263,6 +271,14 @@ fn fuzz_module_inputs() {
     assert!(failures.is_empty(), "{} module fuzz failures (fuzz.policy.1: each becomes a case)\n{}", failures.len(), failures.join("\n"));
 }
 
+/// The ARM64 Linux user-mode emulator, when installed (`apt install qemu-user`).
+fn qemu_aarch64() -> Option<&'static str> {
+    if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        return None;
+    }
+    ["qemu-aarch64-static", "qemu-aarch64"].into_iter().find(|q| std::process::Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()))
+}
+
 /// fuzz.nat.1 (ADR 0462): generated pure-subset programs run on the walker, the bytecode tier
 /// and as `ail build` output, and print the same bytes, exit the same, and trap with the same
 /// first line. Programs the backend declines are counted and skipped.
@@ -281,10 +297,11 @@ fn fuzz_native_differential() {
     let next = AtomicUsize::new(0);
     let (built, declined, unchecked, trapped) = (AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0));
     let failures: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let qemu = qemu_aarch64();
     let first_line = |o: &Out| o.stderr.lines().next().unwrap_or("").to_string();
     std::thread::scope(|s| {
         for w in 0..workers {
-            let (next, built, declined, unchecked, trapped, failures, root, out_dir) = (&next, &built, &declined, &unchecked, &trapped, &failures, &root, &out_dir);
+            let (next, built, declined, unchecked, trapped, failures, root, out_dir, qemu) = (&next, &built, &declined, &unchecked, &trapped, &failures, &root, &out_dir, &qemu);
             s.spawn(move || {
                 let dir = root.join(format!("w{w}"));
                 fs::create_dir_all(&dir).unwrap();
@@ -309,6 +326,7 @@ fn fuzz_native_differential() {
                     let walker = r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10);
                     let tier = r.exec(&["run", "--no-contracts", "--deny", "clock,random,proc,net"], &p, 10);
                     let nat = exec_program(&exe, &[], 10);
+                    let arm = qemu.and_then(|q| build_for(&r, &p, Some("aarch64-linux")).map(|e| exec_program(Path::new(q), &[e.to_str().unwrap()], 20)));
                     if walker.code == Some(1) {
                         trapped.fetch_add(1, Ordering::SeqCst);
                     }
@@ -322,6 +340,11 @@ fn fuzz_native_differential() {
                     } else {
                         None
                     };
+                    let bad = bad.or_else(|| {
+                        let a = arm.as_ref()?;
+                        (a.code != walker.code || a.stdout != walker.stdout || first_line(a) != first_line(&walker))
+                            .then(|| format!("aarch64 under qemu differs: exit {:?} against {:?}\n--- aarch64\n{}{}--- interpreter\n{}{}", a.code, walker.code, a.stdout, first_line(a), walker.stdout, first_line(&walker)))
+                    });
                     if let Some(msg) = bad {
                         let file = out_dir.join(format!("native-seed-{seed}.ail"));
                         fs::write(&file, &src).unwrap();
@@ -332,7 +355,7 @@ fn fuzz_native_differential() {
         }
     });
     let (built, declined, unchecked) = (built.into_inner(), declined.into_inner(), unchecked.into_inner());
-    eprintln!("fuzz-native: {n} pure programs from seed {first}: {built} built and compared ({} trapped), {declined} declined by the backend, {unchecked} rejected by the checker", trapped.into_inner());
+    eprintln!("fuzz-native: {n} pure programs from seed {first}: {built} built and compared ({} trapped; aarch64 under qemu: {}), {declined} declined by the backend, {unchecked} rejected by the checker", trapped.into_inner(), if qemu.is_some() { "yes" } else { "no emulator" });
     let failures = failures.into_inner().unwrap();
     assert!(failures.is_empty(), "{} native differential failures (fuzz.policy.1)\n{}", failures.len(), failures.join("\n"));
     assert!(built * 2 >= n, "only {built} of {n} generated pure programs built natively ({declined} declined, {unchecked} rejected): the generator and the subset have drifted apart");
