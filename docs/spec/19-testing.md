@@ -18,6 +18,11 @@ is `gram.attr.2`. *(ADR 0083, ADR 0167)*
 type parameters. Its return type is absent or `!`. Its parameters make it a
 property (`test.prop.1`). *(ADR 0167, ADR 0198)*
 
+**test.attr.4** — A `@test` function written with no return type can fail
+as if it were declared `!` (its errors are inferred), so `?` works in it on
+results and on optionals (`err.prop.5`); a failure ends the test as
+`test.run.2` says. *(ADR 0279)*
+
 **test.attr.3** — A `@test` function can't be called from code. `ail run`
 ignores tests, so a program's output is the same with or without them.
 *(ADR 0167)*

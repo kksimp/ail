@@ -19,14 +19,25 @@ The standard modules are `env`, `fs`, `io`, `proc`, `random`, `time` and `ui`. I
 compile-time error that lists the modules. *(ADR 0157)*
 
 **std.use.2** — A standard module's functions and types are referred to by
-qualified name, `fs.read_text(path)` and `fs.IoError` (`mod.use.2`). Using
-one without importing its module is a compile-time error whose help gives
-the `use` line. A module is not a value, and naming a function or type the
+qualified name, `fs.read_text(path)` and `fs.IoError` (`mod.use.2`). A
+module is not a value, and naming a function or type the
 module doesn't have is a compile-time error. *(ADR 0157)*
 
 **std.use.3** — Two imports in one file MUST NOT make modules available under
-the same name. A local MUST NOT reuse an imported module's name
-(`expr.bind.5`). *(ADR 0157)*
+the same name. A local MUST NOT reuse the name of a module imported with
+`use` (`expr.bind.5`). *(ADR 0157)*
+
+**std.use.4** — Every standard module is in scope under its own name without
+a `use` line, unless the program declares a type, trait, function or constant
+with that name, or imports something else under it. A local with the name
+hides the module in its scope: calling one of the module's functions through
+it is a compile-time error that says so. `use std.NAME` stays valid and
+behaves as `std.use.1`. *(ADR 0277)*
+
+```ail
+fn main()
+    print(path.ext("notes.txt"))   # txt
+```
 
 ## Errors
 

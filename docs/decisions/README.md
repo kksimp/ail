@@ -260,3 +260,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0253](0253-std-path.md) | `std.path`: `dir`, `base`, `ext` and `join` on path text *(delegated)* | Accepted | 2026-10-20 |
 | [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
 | [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |
+| [0277](0277-standard-modules-without-use.md) | Standard modules are in scope without `use` *(delegated)* | Accepted | 2026-10-20 |
+| [0278](0278-messages-on-error-types.md) | Error types carry their messages *(delegated)* | Accepted | 2026-10-20 |
+| [0279](0279-question-mark-on-optionals-fails-with-absent.md) | `?` on an optional fails with `Absent` where errors are inferred, and tests can fail *(delegated)* | Accepted | 2026-10-20 |
+| [0280](0280-one-line-if-and-round-5-measurements.md) | One-line `if c then a else b`, `{}` typed by `m[k] op= n`, and the round-5 measurements *(delegated)* | Accepted | 2026-10-20 |
