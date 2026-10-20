@@ -1,0 +1,5 @@
+fn main()
+    mut xs := [0]
+    while true
+        for i in 0..1000
+            xs.push(i)
