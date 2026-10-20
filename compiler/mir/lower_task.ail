@@ -30,6 +30,9 @@ struct ParSite
     caps List[Cap]
     ## `int` accumulators, each updated by one `+=` (conc.par.4).
     accs List[str]
+    ## The body updates an atomic: iterations that ran can't be undone, so a
+    ## trap is reported as it is instead of running the loop again.
+    atomic bool
     body List[ast.Stmt]
     pos ast.Pos
 
@@ -411,6 +414,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         return none
     mut caps := List[Cap]()
     mut accs := List[str]()
+    mut atomic := false
     for n in sc.names.sorted()
         if n == var
             continue
@@ -430,13 +434,15 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
             accs.push(n)
         elif sc.other.contains(n)
             return none
+        if ty.elem() == none and atomic_elem(ty) != none
+            atomic = true
         caps.push(Cap(name: n, ty: ty))
-    if accs.len() > 3
+    if accs.len() > 3 or atomic and accs.len() > 0
         return none
     if by_list
         key := lookup(root_of(iter))?
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
-    ParSite(var: var, by_list: by_list, caps: caps, accs: accs, body: body, pos: pos)
+    ParSite(var: var, by_list: by_list, caps: caps, accs: accs, atomic: atomic, body: body, pos: pos)
 
 fn root_of(e ast.Expr) str
     match e
@@ -508,7 +514,16 @@ fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], po
         at := op("add", [env, konst(8 * (ncaps + a), Ty.Int)], Ty.Int)
         prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
     grp := call("rt.par_start", [konst(id, Ty.Int), env, lo, hi], Ty.Int)
-    branch(call("rt.par_wait", [grp], Ty.Bool), comb, [], seq, [])
+    waited := call("rt.par_wait", [grp], Ty.Bool)
+    if plan.atomic
+        broke := new_block()
+        branch(waited, comb, [], broke, [])
+        seal(broke)
+        cur = broke
+        call("rt.par_fail", [grp], Ty.Unit)
+        finish(unreachable_term())
+    else
+        branch(waited, comb, [], seq, [])
     seal(comb)
     cur = comb
     all_ok := call(
@@ -623,3 +638,70 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
     lower_assign_body(target, op, value, pos)
     if tk.in_chunk
         track_sum(target)
+
+# ---- atomics (conc.atomic.*, ADR 0600) ----
+
+fn atomic_elem(t Ty) Ty?
+    match t
+        Atomic(e) => e
+        _ => none
+
+## `Atomic(v)` or `Atomic[T](v)`: an 8-byte cell holding `v`. A copy of the
+## handle is the same cell (conc.atomic.3).
+fn Lower.lower_atomic_new(mut self, targs List[ast.TypeRef]?, args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != 1 or args[0].label != none
+        return unsupported(pos, "this `Atomic`")
+    mut want := Ty.Unknown
+    if ts := targs
+        if ts.len() != 1
+            return unsupported(pos, "this `Atomic`")
+        want = type_of(ts[0]) else return unsupported(pos, "this `Atomic`")
+    v := lower_value(args[0].value, if want.is_unknown() then none else want)?
+    if v.ty != Ty.Int and v.ty != Ty.Bool
+        return unsupported(pos, "`Atomic` of `{v.ty.name()}`")
+    if not want.is_unknown() and want != v.ty
+        return unsupported(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
+    cell := call("rt.alloc", [konst(8, Ty.Int)], Ty.Int)
+    prim_op("atomic_store", [cell, v.id], Ty.Unit)
+    Val(id: cell, ty: Ty.Atomic(v.ty))
+
+## `load`, `store`, `cas` and `add` on an atomic; an `order:` argument is
+## accepted and every operation is sequentially consistent, which is at
+## least as strong (conc.atomic.2, conc.atomic.7).
+fn Lower.lower_atomic_method(mut self, cell int, elem Ty, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    mut vs := List[int]()
+    for a in args
+        if a.mutable
+            return unsupported(npos, "this method call")
+        if l := a.label
+            if l.name == "order"
+                continue
+            return unsupported(npos, "this method call")
+        v := lower_value(a.value, elem)?
+        vs.push(convert(v, elem, expr_pos(a.value)))
+    if name == "load" and vs.len() == 0
+        return Val(id: prim_op("atomic_load", [cell], elem), ty: elem)
+    if name == "store" and vs.len() == 1
+        prim_op("atomic_store", [cell, vs[0]], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
+    if name == "cas" and vs.len() == 2
+        got := prim_op("atomic_cas", [cell, vs[0], vs[1]], Ty.Int)
+        return Val(id: op("eq", [got, vs[0]], Ty.Bool), ty: Ty.Bool)
+    if name == "add" and vs.len() == 1 and elem == Ty.Int
+        # Retry until no other thread changed the cell between the read and
+        # the swap; an overflow traps before the swap, leaving the cell as
+        # it was (conc.atomic.5).
+        head := new_block()
+        exit := new_block()
+        jump(head, [])
+        cur = head
+        old := prim_op("atomic_load", [cell], Ty.Int)
+        site := site("conc.atomic.5", "arith", "+", npos)
+        next := checked("add", [old, vs[0]], site, Ty.Int)
+        got := prim_op("atomic_cas", [cell, old, next], Ty.Int)
+        branch(op("eq", [got, old], Ty.Bool), exit, [], head, [])
+        seal(head)
+        seal(exit)
+        cur = exit
+        return Val(id: old, ty: Ty.Int)
+    unsupported(npos, "`.{name}()` on `{Ty.Atomic(elem).name()}`")

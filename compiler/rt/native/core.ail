@@ -501,6 +501,12 @@ fn trap_body(kind int, a int, b int, op str)
         out_str("shift count `")
         out_int(a)
         out_str("` is outside `0..=63`")
+    elif kind == 7
+        out_str("atomic add overflows: ")
+        out_int(a)
+        out_str(" + ")
+        out_int(b)
+        out_str(" is outside int")
 
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)

@@ -15,6 +15,8 @@ pub enum Ty
     List(elem Ty)
     Unknown
     Unit
+    ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
+    Atomic(elem Ty)
 
 pub fn Ty.is_float(self) bool
     match self
@@ -46,6 +48,7 @@ pub fn Ty.name(self) str
         List(e) => "List[{e.name()}]"
         Unknown => "?"
         Unit => "unit"
+        Atomic(e) => "Atomic[{e.name()}]"
 
 ## One instruction: `dst` is the value it defines (-1 for none), `args`
 ## the values it reads. The operations (`op`):

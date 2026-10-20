@@ -258,6 +258,13 @@ fn type_of(t ast.TypeRef) Ty?
                     if is_number(e) or e == Ty.Str or e.elem() != none
                         return Ty.List(e)
                     none
+                "Atomic" =>
+                    if args.len() != 1
+                        return none
+                    e := type_of(args[0])?
+                    if e == Ty.Int or e == Ty.Bool
+                        return Ty.Atomic(e)
+                    none
                 _ => none
         _ => none
 
@@ -1162,6 +1169,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
+            if name == "Atomic" and tk.on and not is_rt
+                return lower_atomic_new(none, args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
             key := "{prefix}{name}"
@@ -1179,6 +1188,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
             Val(id: call(key, vs, sig.ret), ty: sig.ret)
         TypeArgs(name, targs, tpos) =>
+            if name == "Atomic" and tk.on and not is_rt
+                return lower_atomic_new(targs, args, pos)
             if name == "List" and targs.len() == 1 and args.len() == 0
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
                     return unsupported(tpos, "this list type")
@@ -1239,6 +1250,7 @@ fn out_fn(t Ty) str
         Float => "rt.out_float"
         Bool => "rt.out_bool"
         Str => "rt.out_str"
+        Atomic(e) => if e == Ty.Bool then "rt.out_atomic_bool" else "rt.out_atomic_int"
         List(e) =>
             match e
                 Float => "rt.out_list_float"
@@ -1266,6 +1278,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         ))
         return none
     r := lower_value(recv, none)?
+    if e := atomic_elem(r.ty)
+        return lower_atomic_method(r.id, e, name, npos, args)
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable

@@ -456,7 +456,9 @@ fn Gen.compare(mut self, i mir.Inst) int
 
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
     l := a.label()
-    stubs.push(Stub(label: l, kind: kind, a: x, b: y, site: site, op: op, undo: 0))
+    # An atomic add's overflow has its own message (conc.atomic.5).
+    k := if kind == 0 and m.sites[site].rule == "conc.atomic.5" then 7 else kind
+    stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op, undo: 0))
     l
 
 fn Gen.gen_inst(mut self, i mir.Inst)
