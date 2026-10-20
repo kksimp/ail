@@ -23,6 +23,34 @@ leaves it unattached.
 load is an error, reported under this rule with exit code 2
 ([ADR 0325](../decisions/0325-ail-api-on-package-directories.md)).
 
+**api.tok.1** — `ail api --tokens FILE` lists the tokens the lexer makes of
+`FILE`, one per line, then its comments, then its lexical diagnostics, in
+the order found. It is the comparison target of the lexer written in AIL
+([ADR 0371](../decisions/0371-self-hosted-front-end-compared-by-dumps.md)).
+
+**api.tok.2** — A token's line is `LINE:COL KIND`, with a value after a
+space for `id`, `kw`, `sym` (the text), `str`, `char` (a JSON string),
+`int` and `float` (as AIL prints the number); the other kinds are `intmin`,
+`nl`, `indent`, `dedent` and `eof`. An interpolated string is `interp`,
+then for each part `lit TEXT`, or `code` or `fmt SPEC` followed by that
+part's tokens through their `eof`, then `end`.
+
+**api.tok.3** — A comment is `LINE:COL comment TEXT` and a diagnostic
+`LINE:COL diag RULE`. Strings are quoted as `Json.to_text` quotes them.
+
+**api.ast.1** — `ail api --ast FILE` prints the parse of `FILE` alone (no
+prelude, imports or later passes) as one line of JSON, then one
+`LINE:COL diag RULE` line per lexical and syntax diagnostic, in the order
+found ([ADR 0371](../decisions/0371-self-hosted-front-end-compared-by-dumps.md)).
+
+**api.ast.2** — The JSON is what the derived `ToJson` of `compiler/ast/`
+writes for an `ast.Program`, so `Program.from_json` reads it back
+([ADR 0376](../decisions/0376-syntax-tree-in-ail-and-its-json.md)).
+
+**api.ast.3** — `ail api --ast --program FILE|DIR` prints the program the
+checker sees: the prelude (lines from 2^30), every imported module (lines
+from each file's `base`), the derive output and the standard declarations.
+
 ## Fixes
 
 **fix.edit.1** — A fix is a titled list of edits to the source, each replacing

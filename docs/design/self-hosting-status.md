@@ -41,3 +41,4 @@ order, over the rules and lines the AIL checker covers so far
 | A catch-all `_` over an enum always warns (expr.match.3), with no way to suppress it (ADR 0056 left the syntax open); the checker's code has dozens | Open |
 | No literal for an empty optional of a given type (`Ty?()` isn't valid) | Open; a helper `fn no_ty() Ty?` |
 | No bit shifts (`<<`) | Open; constants instead |
+| The Rust lexer continued names with any Unicode numeric (`x٣`); AIL's `is_alnum` takes ASCII digits only | Fixed: names are letters, ASCII digits, `_` (ADR 0372) |

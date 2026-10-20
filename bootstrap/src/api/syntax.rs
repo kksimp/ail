@@ -2,14 +2,14 @@
 //! the parser's syntax tree for one file, as text the self-hosted front end
 //! (`compiler/`, ADR 0371) reproduces byte for byte.
 //!
-//! Spec rules: api.tok.1-3 (the token listing), api.ast.1-7 (the tree's
-//! JSON shape). See `docs/design/syntax-dump.md`.
+//! Spec rules: api.tok.1-3 (the token listing), api.ast.1-3 (the tree as
+//! JSON). See `docs/design/semantic-api.md` and ADR 0371.
 //!
 //! Both read the file alone: no prelude, no imported modules, and none of
 //! the passes after parsing (implicit `self`, inherited contracts, derive
 //! output, the standard declarations). The diagnostics are the lexer's,
 //! then the parser's, in the order they were found, before
-//! one-per-line filtering (api.tok.3, api.ast.6).
+//! one-per-line filtering (api.tok.3, api.ast.1).
 
 use std::fmt::Write as _;
 use std::process::ExitCode;
@@ -246,7 +246,7 @@ fn format_spec(f: &FormatSpec) -> J {
 }
 
 /// `ail api --ast FILE`: the parse of one file as one line of JSON, then
-/// its diagnostics (api.ast.1, api.ast.6).
+/// its diagnostics (api.ast.1).
 pub fn ast_text(src: &str) -> String {
     let (tokens, mut diags) = lexer::lex(src);
     let (prog, parse_diags) = crate::parser::parse(tokens);
@@ -258,7 +258,7 @@ pub fn ast_text(src: &str) -> String {
 }
 
 /// `ail api --ast --program FILE|DIR`: the program as the checker sees it,
-/// with the prelude, the imported modules and the derive output (api.ast.7).
+/// with the prelude, the imported modules and the derive output (api.ast.3).
 pub fn program_text(path: &str) -> Result<String, String> {
     let (prog, diags) = if std::path::Path::new(path).is_dir() {
         crate::modules::load(path)?
@@ -421,7 +421,7 @@ fn function(f: &FnDecl) -> J {
     ])
 }
 
-/// A type as written (api.ast.3).
+/// A type as written (api.ast.2).
 fn ty(t: &TypeRef) -> J {
     let shape = match &t.kind {
         TypeKind::Named { name, args } => variant("Named", vec![("name", s(name)), ("args", arr(args, ty))]),
@@ -458,7 +458,7 @@ fn bin_op(op: BinOp) -> J {
     })
 }
 
-/// A statement (api.ast.5).
+/// A statement (api.ast.2).
 fn stmt(st: &Stmt) -> J {
     match st {
         Stmt::Let { name, pos: p, mutable, value, otherwise } => variant(
@@ -531,7 +531,7 @@ fn arg(a: &Arg) -> J {
     ])
 }
 
-/// An expression (api.ast.4).
+/// An expression (api.ast.2).
 fn expr(e: &Expr) -> J {
     match e {
         Expr::Str(v, p) => variant("Str", vec![("value", s(v)), ("pos", pos(*p))]),
@@ -663,7 +663,7 @@ fn cond(c: &Cond) -> J {
     }
 }
 
-/// A pattern (api.ast.5).
+/// A pattern (api.ast.2).
 fn pattern(p: &Pattern) -> J {
     match p {
         Pattern::Wildcard(at) => variant("Wildcard", vec![("pos", pos(*at))]),
