@@ -1,0 +1,60 @@
+# `match` (ADR 0603) on `int`, `str` and `bool`: literals, `|`, ranges,
+# guards, `_`, as a value and as a statement, and functions that end with
+# a `match` value.
+fn grade(score int) str
+    match score
+        90..=100 => "A"
+        _ if score >= 60 => "pass"
+        0..60 => "fail"
+        _ => "?"
+
+fn command(word str) int
+    match word
+        "check" | "c" => 1
+        "build" => 2
+        "" => 3
+        _ => 0
+
+fn sign(n int) int
+    match n
+        0 => 0
+        -9223372036854775808 => -2
+        _ if n < 0 => -1
+        _ => 1
+
+fn flag(b bool) str
+    match b
+        true => "yes"
+        false => "no"
+
+fn half(n int) float
+    match n % 2
+        0 => n.to_float() / 2.0
+        _ => 0
+
+fn main()
+    for s in [100, 95, 89, 60, 59, 0, -1, 101]
+        print(grade(s))
+    for w in ["check", "c", "build", "", "run", "checks"]
+        print(command(w))
+    print(sign(5) + sign(0) + sign(-7))
+    print(sign(-9223372036854775807 - 1))
+    print(flag(1 < 2))
+    print(flag(false))
+    print(half(10))
+    print(half(7))
+    mut total := 0
+    for i in 0..20
+        match i % 5
+            0 => continue
+            1 | 2 => total += i
+            3 => total += 100
+            _ =>
+                if i > 15
+                    break
+                total -= 1
+    print(total)
+    x := match total > 100
+        true => total * 2
+        false => total
+    print(x)
