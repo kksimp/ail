@@ -16,6 +16,7 @@ use crate::docs;
 use crate::modules;
 
 pub mod card;
+pub mod diff;
 pub mod errors;
 mod expanded;
 mod query;

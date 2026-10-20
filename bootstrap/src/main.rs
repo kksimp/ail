@@ -51,6 +51,9 @@ commands:
                 indented; --text: an outline; --symbols: every reference)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
+  diff OLD NEW  what changed between two versions of a file or package:
+                declarations (signature, pub, effects, errors, contracts, docs),
+                diagnostics, and test outcomes (--no-tests: skip them) (diff.out.1)
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
@@ -209,6 +212,7 @@ fn main() -> ExitCode {
         ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
+        ["diff", rest @ ..] => api::diff::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
