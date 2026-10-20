@@ -1,12 +1,12 @@
-{"trace":"call","fn":"main","depth":1,"args":{},"line":9,"col":4}
-{"trace":"call","fn":"fact","depth":2,"args":{"n":"3"},"line":10,"col":11}
-{"trace":"contract","fn":"fact","kind":"requires","cond":"n >= 0","held":true,"line":4,"col":5}
-{"trace":"call","fn":"fact","depth":3,"args":{"n":"2"},"line":7,"col":9}
-{"trace":"contract","fn":"fact","kind":"requires","cond":"n >= 0","held":true,"line":4,"col":5}
-{"trace":"call","fn":"fact","depth":4,"args":{"n":"1"},"line":7,"col":9}
-{"trace":"contract","fn":"fact","kind":"requires","cond":"n >= 0","held":true,"line":4,"col":5}
-{"trace":"return","fn":"fact","depth":4,"value":"1"}
-{"trace":"return","fn":"fact","depth":3,"value":"2"}
-{"trace":"return","fn":"fact","depth":2,"value":"6"}
-{"trace":"return","fn":"main","depth":1,"value":"()"}
-{"trace":"summary","shown":11,"dropped":0,"call":4,"return":4,"contract":3}
+{"api":1,"trace":"call","fn":"main","depth":1,"args":{},"line":9,"col":4}
+{"api":1,"trace":"call","fn":"fact","depth":2,"args":{"n":"3"},"line":10,"col":11}
+{"api":1,"trace":"contract","fn":"fact","kind":"requires","cond":"n >= 0","held":true,"line":4,"col":5}
+{"api":1,"trace":"call","fn":"fact","depth":3,"args":{"n":"2"},"line":7,"col":9}
+{"api":1,"trace":"contract","fn":"fact","kind":"requires","cond":"n >= 0","held":true,"line":4,"col":5}
+{"api":1,"trace":"call","fn":"fact","depth":4,"args":{"n":"1"},"line":7,"col":9}
+{"api":1,"trace":"contract","fn":"fact","kind":"requires","cond":"n >= 0","held":true,"line":4,"col":5}
+{"api":1,"trace":"return","fn":"fact","depth":4,"value":"1"}
+{"api":1,"trace":"return","fn":"fact","depth":3,"value":"2"}
+{"api":1,"trace":"return","fn":"fact","depth":2,"value":"6"}
+{"api":1,"trace":"return","fn":"main","depth":1,"value":"()"}
+{"api":1,"trace":"summary","shown":11,"dropped":0,"call":4,"return":4,"contract":3}

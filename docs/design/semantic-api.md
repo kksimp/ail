@@ -128,6 +128,90 @@ An unknown rule exits 2 with, on stderr, `error: unknown rule ...` and a
 `help:` listing known rules nearby; with `--json`, one object
 `{"api":1,"severity":"error","message":...,"help":...}`.
 
+## Runtime traces: `ail run --trace` (ADR 0265)
+
+Spec chapter [21-trace](../spec/21-trace.md) (`trace.*`) says what is traced;
+this section is the format. `--trace` (or `--trace=all`), `--trace=calls` or
+`--trace=effects` writes one event per line to **stderr**; standard output
+stays the program's. Human lines:
+
+```
+trace: call main() at 9:4
+trace:   call fact(n = 3) at 10:11
+trace:   contract fact requires `n >= 0`: held
+trace:   fact returned 6
+trace: effect fs.exists("data.txt") at 9:11
+trace: spawn square(7) at 11:10
+trace: wait Task#1 at 12:13
+watch: total = 3 at 12:9
+trace: summary: 11 events shown, 0 dropped (call 4, return 4, contract 3)
+```
+
+Calls indent two spaces per depth. Positions in the program's first file are
+`LINE:COL`; other files are `FILE:LINE:COL`. With `--json`, one object per
+event, keys in this order:
+
+| `trace` | Other keys |
+|---|---|
+| `call` | `fn`, `depth` (`main` is 1), `args` (object: name to value text), position |
+| `return` | `fn`, `depth`, `value` |
+| `contract` | `fn`, `kind` (`requires`/`ensures`), `cond`, `held` (bool), position of the contract |
+| `effect` | `call` (`fs.read_text`), `args` (array of value texts), position |
+| `spawn` | `task` (`f(args)`), position |
+| `wait` | `task` (`Task#N`), position |
+| `watch` | `name`, `value`, position |
+| `summary` | `shown`, `dropped`, then one count per kind that occurred |
+
+Every object starts `"api":1,"trace":KIND`. A position is `"line","col"`,
+preceded by `"file"` outside the first file. Values are text forms built
+without user code (`trace.val.1`), cut at 60 characters (1,000 for `watch`)
+with `…` (`trace.val.2`). `--trace-limit N` (default 1,000) caps the events
+shown; the summary counts the rest.
+
+```json
+{"api":1,"trace":"call","fn":"fact","depth":2,"args":{"n":"3"},"line":10,"col":11}
+{"api":1,"trace":"summary","shown":11,"dropped":0,"call":4,"return":4,"contract":3}
+```
+
+`--watch NAME` adds a `watch` event after each assignment rooted in a variable
+`NAME` and each `mut NAME := e` (ADR 0268). It works with or without `--trace`.
+
+## Trap snapshots (ADR 0267)
+
+A trap that ends `ail run` keeps its first line and adds a snapshot, at most
+ten lines (`trace.snap.3`):
+
+```
+x.ail:9:11: trap[expr.arith.3]: division by zero in `0 / 0`
+  9 |     total / count
+    |           ^
+  values: amount = 25, balance = 10        (failed contracts only)
+  at 9:11 in average(xs = []); total = 0, count = 0
+  at 14:11 in main(); scores = [3, 4]
+  … 16 more frames (--verbose shows every frame and value)
+```
+
+Each frame line is `at POSITION in FUNCTION(PARAMETERS); OTHER LOCALS`,
+innermost first. `--verbose` prints every kept frame (up to 64) and each local
+on its own line at the 1,000-character budget. With `--json`, the trap is one
+object on stderr:
+
+```json
+{"api":1,"severity":"trap","rule":"expr.arith.3","file":"x.ail","line":9,"col":11,"message":"division by zero in `0 / 0`","source":"    total / count","stack":[{"fn":"average","file":"x.ail","line":9,"col":11,"args":{"xs":"[]"},"locals":{"total":"0","count":"0"}},{"fn":"main","file":"x.ail","line":14,"col":11,"args":{},"locals":{"scores":"[3, 4]"}}],"omitted_frames":0}
+```
+
+| Key | Always | Meaning |
+|---|---|---|
+| `severity` | yes | `"trap"` |
+| `rule`, `file`, `line`, `col`, `message` | yes | As in the human first line |
+| `source` | no | The text of the trap's line (absent in the prelude) |
+| `condition` | no | A failed contract's names and values |
+| `stack` | yes | Frames innermost first: `fn`, position, `args`, `locals` (objects: name to value text) |
+| `omitted_frames` | yes | Frames past the 64 kept |
+
+The editor (ADR 0241) can run `ail run --json --trace` and show these
+objects in its run panel.
+
 ## Typed holes (ADR 0147)
 
 `todo` in an expression is reported as a warning `expr.hole.1` whose message

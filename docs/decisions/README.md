@@ -220,3 +220,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
 | [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
 | [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
+| [0265](0265-runtime-trace-mode.md) | `ail run --trace` writes one event per line to standard error *(delegated)* | Accepted | 2026-10-20 |
+| [0266](0266-trace-budget-and-value-form.md) | Traces are budgeted, and show values structurally without user code *(delegated)* | Accepted | 2026-10-20 |
+| [0267](0267-trap-snapshots.md) | A trap carries a snapshot of the stack and its values *(delegated)* | Accepted | 2026-10-20 |
+| [0268](0268-watch-and-no-debugger-protocol.md) | `--watch NAME` shows a variable's assignments; no debugger protocol for now *(delegated)* | Accepted | 2026-10-20 |

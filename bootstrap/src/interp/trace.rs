@@ -152,7 +152,7 @@ pub(super) fn finish() {
     let st = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let kinds: Vec<(&str, u64)> = KINDS.iter().copied().zip(st.kinds).filter(|(_, n)| *n > 0).collect();
     if cfg.json {
-        let mut s = format!("{{\"trace\":\"summary\",\"shown\":{},\"dropped\":{}", st.shown, st.dropped);
+        let mut s = format!("{{\"api\":1,\"trace\":\"summary\",\"shown\":{},\"dropped\":{}", st.shown, st.dropped);
         for (k, n) in kinds {
             let _ = write!(s, ",\"{k}\":{n}");
         }
@@ -506,7 +506,7 @@ impl<'a, W: Write> Interp<'a, W> {
             let args = locals(env, SHORT);
             if json {
                 format!(
-                    "{{\"trace\":\"call\",\"fn\":{},\"depth\":{depth},\"args\":{},{}}}",
+                    "{{\"api\":1,\"trace\":\"call\",\"fn\":{},\"depth\":{depth},\"args\":{},{}}}",
                     json_str(&f.full_name()),
                     pairs(&args, true),
                     at_json(prog, pos)
@@ -529,7 +529,7 @@ impl<'a, W: Write> Interp<'a, W> {
             let value = show(result, SHORT);
             if json {
                 format!(
-                    "{{\"trace\":\"return\",\"fn\":{},\"depth\":{depth},\"value\":{}}}",
+                    "{{\"api\":1,\"trace\":\"return\",\"fn\":{},\"depth\":{depth},\"value\":{}}}",
                     json_str(&f.full_name()),
                     json_str(&value)
                 )
@@ -549,7 +549,7 @@ impl<'a, W: Write> Interp<'a, W> {
             if json {
                 let list: Vec<String> = args.iter().map(|a| json_str(a)).collect();
                 format!(
-                    "{{\"trace\":\"effect\",\"call\":\"{module}.{f}\",\"args\":[{}],{}}}",
+                    "{{\"api\":1,\"trace\":\"effect\",\"call\":\"{module}.{f}\",\"args\":[{}],{}}}",
                     list.join(","),
                     at_json(prog, pos)
                 )
@@ -572,7 +572,7 @@ impl<'a, W: Write> Interp<'a, W> {
             };
             let what = what.as_str();
             if json {
-                format!("{{\"trace\":\"{kind}\",\"task\":{},{}}}", json_str(what), at_json(prog, pos))
+                format!("{{\"api\":1,\"trace\":\"{kind}\",\"task\":{},{}}}", json_str(what), at_json(prog, pos))
             } else {
                 format!("trace: {kind} {what} at {}", at_text(prog, pos))
             }
@@ -588,7 +588,7 @@ impl<'a, W: Write> Interp<'a, W> {
         emit(5, |json| {
             if json {
                 format!(
-                    "{{\"trace\":\"contract\",\"fn\":{},\"kind\":\"{kind}\",\"cond\":{},\"held\":{held},{}}}",
+                    "{{\"api\":1,\"trace\":\"contract\",\"fn\":{},\"kind\":\"{kind}\",\"cond\":{},\"held\":{held},{}}}",
                     json_str(&f.full_name()),
                     json_str(&c.text),
                     at_json(prog, c.pos)
@@ -613,7 +613,7 @@ impl<'a, W: Write> Interp<'a, W> {
         emit(6, |json| {
             let value = show(v, LONG);
             if json {
-                format!("{{\"trace\":\"watch\",\"name\":{},\"value\":{},{}}}", json_str(name), json_str(&value), at_json(prog, pos))
+                format!("{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{},{}}}", json_str(name), json_str(&value), at_json(prog, pos))
             } else {
                 format!("watch: {name} = {value} at {}", at_text(prog, pos))
             }

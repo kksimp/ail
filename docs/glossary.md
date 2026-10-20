@@ -116,7 +116,10 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Total order (float)** | Float's `cmp`: numeric order with NaN after every number and `-0.0` equal to `0.0`, used for sorting; the operators `<` and `==` stay IEEE (ADR 0130). |
 | **Trait** | A named set of method signatures that types implement explicitly with `impl Trait for Type` (ADR 0073). |
 | **Trap** | The response to a bug (overflow, out-of-bounds access, failed assertion). It stops the current task, runs its deferred cleanup, and is reported to the parent task. In the main task it ends the program (ADR 0035, ADR 0047). |
+| **Trace** | The events `ail run --trace` writes to stderr: calls, returns, effects, tasks and contract checks, with values, up to a budget (ADR 0265–0266). |
+| **Trap snapshot** | The source line and the stack, each frame with its arguments and locals, reported with a trap that ends `ail run` (ADR 0267). |
 | **Trapped** | The prelude error `Trapped { rule, message }` that `Task.wait()` fails with when the task trapped (ADR 0187). |
+| **Watch** | `ail run --watch NAME`: each assignment to a `mut` variable `NAME`, with its new value and position (ADR 0268). |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |
 | **Type argument inference** | Working out a generic call's type arguments from its arguments and expected type (ADR 0129). |
 | **Typed hole** | `todo` written where code isn't finished: it takes the expected type, the checker warns with what it needs and the names in scope, and running it traps (ADR 0147). |
