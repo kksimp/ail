@@ -35,11 +35,10 @@ impl<'a, W: Write> Interp<'a, W> {
             if !self.holds(c, env)? {
                 let args = self.arguments(f, env, call)?;
                 let message = format!(
-                    "`{}` requires `{}`, but it was called with {args} (contract at {}:{})",
+                    "`{}` requires `{}`, but it was called with {args} (contract at {})",
                     f.full_name(),
                     c.text,
-                    c.pos.line,
-                    c.pos.col
+                    self.where_is(c.pos, call)
                 );
                 return trap("contract.req.1", call, message);
             }
@@ -75,11 +74,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 };
                 let args = self.arguments(f, env, c.pos)?;
                 let message = format!(
-                    "`{}` ensures `{}`, but it returned{value} at {}:{} with {args}",
+                    "`{}` ensures `{}`, but it returned{value} at {} with {args}",
                     f.full_name(),
                     c.text,
-                    at.line,
-                    at.col
+                    self.where_is(at, c.pos)
                 );
                 return trap("contract.ens.1", c.pos, message);
             }
@@ -97,6 +95,17 @@ impl<'a, W: Write> Interp<'a, W> {
             Ok(v) => Ok(v.bool()),
             Err(Exit::Trap(t)) => Err(*t),
             Err(_) => trap("contract.decl.2", c.pos, "the condition left the function".into()),
+        }
+    }
+
+    /// `LINE:COL` of `pos`, or `PATH:LINE:COL` when it is in another file
+    /// of the package than `from`.
+    fn where_is(&self, pos: Pos, from: Pos) -> String {
+        let Some(file) = self.prog.file_at(pos) else { return format!("{}:{}", pos.line, pos.col) };
+        let line = pos.line - file.base;
+        match self.prog.file_at(from) {
+            Some(other) if other.base == file.base => format!("{line}:{}", pos.col),
+            _ => format!("{}:{line}:{}", file.path, pos.col),
         }
     }
 

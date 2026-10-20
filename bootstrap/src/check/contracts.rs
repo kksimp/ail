@@ -21,7 +21,13 @@ impl<'p> Checker<'p> {
                     );
                 } else {
                     let ty = Self::ok_type(ret);
-                    self.locals.push(Local { name: "result".into(), ty, mutable: false, kind: Kind::Binding });
+                    self.locals.push(Local {
+                        name: "result".into(),
+                        ty,
+                        mutable: false,
+                        kind: Kind::Binding,
+                        decl: None,
+                    });
                 }
             }
             let got = self.expr(&c.cond, Some(&Ty::Bool), true);
