@@ -1,0 +1,14 @@
+# fuzz-input: text
+# fuzz-needs:
+# std.tensor: a shape that doesn't match the data traps with a rule id and never crashes;
+# a matching shape keeps its element count through transpose and reductions.
+
+fn main()
+    r := {{INT}} % 9
+    c := {{TEXT}}.len() % 9
+    xs := [(i % 7).to_float() for i in 0..12]
+    t := tensor.from(xs, [r, c])
+    print(t.sum())
+    u := t.transpose()
+    if u.sum() != t.sum()
+        print("FAIL transpose changed the sum")
