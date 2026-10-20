@@ -92,6 +92,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(e) => self.io_error(&path, dir_kind(&path, &e), pos),
                 }
             }
+            // std.fs.13
             ("fs", "read_bytes") => {
                 let path = str_arg(0);
                 let result = if std::fs::metadata(&*path).is_ok_and(|m| m.is_dir()) {
@@ -104,6 +105,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(kind) => self.io_error(&path, kind, pos),
                 }
             }
+            // std.fs.14
             ("fs", "write_bytes" | "append_bytes") => {
                 let path = str_arg(0);
                 let Value::Bytes(contents) = &values[1] else { unreachable!("checked: bytes") };
@@ -221,6 +223,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 text(String::from_utf8_lossy(&bytes).into_owned())
             }
+            // std.io.5: the rest of standard input, undecoded.
             ("io", "read_bytes") => {
                 self.flush(pos)?;
                 let mut bytes = Vec::new();
