@@ -21,6 +21,7 @@
 ./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
+./ail explain                # all rules, with chapter and whether `ail fix` repairs them
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
 ./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
 ./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)

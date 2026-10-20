@@ -32,6 +32,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
+./ail explain                     # every rule, its chapter, and whether `ail fix` repairs it (--json too)
 ./ail api --card [--budget N] DIR|FILE  # a program's own card: modules, entry, tests, manifest, examples, trimmed to a token budget
 ./ail api FILE|DIR                 # declarations as JSON (--pretty, --text, --symbols); a DIR outlines the whole package with module-prefixed ids; `fails_with` per fallible fn
 ./ail check --errors FILE          # each function's error types and failure paths, JSON
@@ -69,7 +70,8 @@ reported but don't stop a program from running.
 | `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, `par for` comprehensions, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–12` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.coll.14`, `type.str.4–5`, `type.str.11`, `type.str.13–14`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`), `expr.comp.3–4`, `own.uniq.3–4`, `own.uniq.7`, `own.defer.1–2`, `own.ref.1–7` |
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
-| `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
+| `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables, and the checker's, resolver's and parser's (ADR 0334) | ADR 0175 |
+| `src/bump.rs` | Front-end allocator for `check`, `api` and `effects`: size-class free lists in one reserved region with huge pages; `AIL_SYSTEM_ALLOC=1` turns it off | ADR 0332 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
 | `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `fs.Metadata`, `proc.Output`, `proc.ProcError`, `net.Response`, `net.NetError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
 | `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8`, `std.ui.13` |
@@ -86,8 +88,9 @@ reported but don't stop a program from running.
 | `src/tensor.rs` | Tensor buffers and kernels: AVX2, NEON and scalar, picked at run time; axis reductions and `transpose`; `matmul` on the thread pool | `std.tensor.5–7`, `std.tensor.10–12` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
+| `src/diag/rewrite.rs` | Fixes that read the source line: operands of an operator, a C-style `for`, a typed empty collection, `printf` | `fix.edit.6`, ADR 0335 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
-| `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
+| `src/explain.rs`, `src/fixable.txt`, `build.rs` | `ail explain [RULE]`, from the spec embedded at build time; the rules that have a fix | ADRs 0146, 0335–0336, `explain.*` |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/derive.rs`, `src/parser/derive.rs`, `src/interp/generate.rs`, `src/api/expanded.rs` | Derive generators: `@derive(f) trait`; while loading, runs each empty `impl`'s generator on a wrapper program and splices its text in as a `gen:impl:T.Trait` file; reports generated-code problems at the `impl`; `ail api --expanded` | `ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3` (ADRs 0306–0309) |
 | `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
@@ -306,6 +309,9 @@ implement correctly.
    habit from Python or Rust) also goes in `tests/mistakes/` as `NAME.ail` +
    `NAME.rules` (+ `NAME.fixed` when `ail fix` should resolve it); the first
    diagnostic must name the mistake and carry a `help` (ADR 0262).
+   A new rule ID must be defined in `docs/spec` (`tests/explain_coverage.rs`
+   fails otherwise), and a rule that gains its first fix goes in
+   `src/fixable.txt` (the same test says which rule is missing).
 4. Keep the code formatted with `rustfmt` (settings in `rustfmt.toml`) and free
    of `clippy` warnings. Neither is in the minimal toolchain the designer
    uses, so agents add them locally (`rustup component add rustfmt clippy`).

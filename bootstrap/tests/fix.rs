@@ -67,7 +67,7 @@ fn dry_run_prints_a_diff_and_leaves_the_file() {
 fn unfixable_errors_exit_1() {
     let tmp = scratch("unfixable");
     let work = tmp.join("x.ail");
-    fs::write(&work, "fn main()\n    print(1 + \"a\")\n").unwrap();
+    fs::write(&work, "fn main()\n    print(y)\n").unwrap();
     let out = ail().args(["fix", "--json"]).arg(&work).output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{stdout}");
