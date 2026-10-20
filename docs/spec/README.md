@@ -95,13 +95,8 @@ aren't run.
 | 15 | [Compile-time execution and metaprogramming](15-compile-time.md) | `ct` | Drafted (partial) |
 | 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
 | 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace` | Drafted (partial) |
-| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget` | Drafted (partial) |
-| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `snap` | Drafted (partial) |
-| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `diff` | Drafted (partial) |
+| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay` | Drafted (partial) |
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
-| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `edit` | Drafted (partial) |
-| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff` | Drafted (partial) |
-| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `replay` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
