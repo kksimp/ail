@@ -423,3 +423,68 @@ fn twice(xs List[int], i int) int ! Empty\n    v := first(xs)?\n    w := lookup(
     o.push_str("    print(\"done\")\n");
     o
 }
+
+// ---- function values and key sorts (native.fn, ADR 0571-0573) ----
+
+pub fn funcs(seed: u64) -> String {
+    let mut r = Rng::new(seed ^ 0xF00C);
+    let mut o = String::new();
+    let nf = 2 + r.below(3);
+    for i in 0..nf {
+        let (a, b) = (1 + r.below(9), r.below(20));
+        let body = match r.below(5) {
+            0 => format!("n * {a} + {b}"),
+            1 => format!("n % {} - {b}", 2 + a),
+            2 => format!("(n - {b}) * (n - {b})"),
+            3 => format!("if n > {b} then n - {a} else n + {a}"),
+            _ => format!("n / {} + {a}", 1 + a),
+        };
+        o.push_str(&format!("fn f{i}(n int) int\n    {body}\n\n"));
+    }
+    o.push_str("fn apply(f fn(int) int, x int) int\n    f(x)\n\nfn twice(f fn(int) int, x int) int\n    f(f(x))\n\n");
+    o.push_str(&format!("fn pick(which int) fn(int) int\n    if which % 2 == 0\n        f0\n    else\n        f{}\n\n", nf - 1));
+    o.push_str("fn each(f fn(int), n int)\n    for i in 0..n\n        f(i)\n\nfn show(n int)\n    print(\"show {n}\")\n\nfn mix(a int, b float, c int) float\n    a.to_float() * b + c.to_float()\n\nfn many(f fn(int, float, int) float, a int) float\n    f(a, 1.5, a + 1)\n\n");
+    o.push_str("fn main()\n");
+    let list = |r: &mut Rng, lo: i64| -> String {
+        let n = 1 + r.below(8);
+        format!("[{}]", (0..n).map(|_| (r.below(40) as i64 + lo).to_string()).collect::<Vec<_>>().join(", "))
+    };
+    for u in 0..5 + r.below(8) {
+        let n = r.below(50) as i64 - 10;
+        let fi = r.below(nf);
+        let l = list(&mut r, -10);
+        let sh = r.below(10);
+        let b = match r.below(16) {
+            0 => format!("print(apply(f{fi}, {n}))"),
+            1 => format!("print(twice(f{fi}, {n}))"),
+            2 => format!("print(pick({n})({n}))"),
+            3 => format!("g{u} := f{fi}\n    print(g{u}({n}))"),
+            4 => format!("each(show, {})", r.below(4)),
+            5 => format!("print(many(mix, {n}))"),
+            6 => format!("mut total{u} := 0\n    for k in 0..{}\n        h := if k % 2 == 0 then f0 else f{fi}\n        total{u} += h(k)\n    print(total{u})", 1 + r.below(8)),
+            7 => format!("print({l}.sorted())"),
+            8 => format!("print({l}.sorted(by: |x| -x))"),
+            9 => format!("shift{u} := {sh}\n    print({l}.sorted(by: |x| (x - shift{u}) * (x - shift{u})))"),
+            10 => format!("print({l}.sorted(by: |x| x % {}))", 2 + r.below(5)), // ties: stability
+            11 => format!("mut ys{u} := {l}\n    ys{u}.sort()\n    print(ys{u})\n    ys{u}.sort(by: |y| -y)\n    print(ys{u})"),
+            12 => format!("print([2.5, -1.0, {n}.25, 9.0].sorted(by: |f| f.to_int() * -1))"),
+            13 => "print([\"pear\", \"fig\", \"banana\", \"kiwi\", \"apple\", \"date\"].sorted(by: |w| w.len()).join(\",\"))".to_string(),
+            14 => {
+                // Known native bug (found by this generator, reported on PR 170): printing the
+                // `List[str]` that `sorted(by:)` returns prints addresses. Joined text is fine,
+                // so the str arm joins until it is fixed; then print the list itself again.
+                let (l, key) = *r.pick(&[("[\"b\", \"a\", \"é\", \"\", \"ab\"]", "v.len()"), ("[3.5, -2.0, 0.0, 1.25]", "v.to_int()")]);
+                if l.starts_with("[\"") {
+                    format!("print({l}.sorted(by: |v| {key}).join(\"|\"))")
+                } else {
+                    format!("print({l}.sorted(by: |v| {key}))")
+                }
+            }
+            _ => format!("print(List[int]().sorted(by: |x| x))"),
+        };
+        o.push_str("    ");
+        o.push_str(&b);
+        o.push('\n');
+    }
+    o
+}
