@@ -69,7 +69,7 @@ followed (ADR 0240, `std.ui.10–13`), and the editor's window front end got
 tabs, a Ctrl-P file picker, mouse selection, wheel scrolling, the system
 clipboard and F5/F6 runs (ADR 0241). Shift-click (ADR 0242,
 `std.ui.14`) and font sizes (ADR 0243, `std.ui.15`: `--font N`, Ctrl-+,
-Ctrl--) came next, then F2 rename through `ail api` references (ADR 0244). A command palette (Ctrl-Shift-P) and the README key table now come from one list (ADR 0291). Project search (Ctrl-Shift-F, F4) fills the pane with jumpable matches (ADR 0292). A file tree (Ctrl-B) and a check of every open tab on save, with error and warning counts on the tab labels, followed (ADR 0293). Then text styles, named colors and caret shapes (ADR 0294, `std.ui.16–18`).
+Ctrl--) came next, then F2 rename through `ail api` references (ADR 0244). A command palette (Ctrl-Shift-P) and the README key table now come from one list (ADR 0291). Project search (Ctrl-Shift-F, F4) fills the pane with jumpable matches (ADR 0292). A file tree (Ctrl-B) and a check of every open tab on save, with error and warning counts on the tab labels, followed (ADR 0293). Then text styles, named colors and caret shapes (ADR 0294, `std.ui.16–18`). Editor themes are remembered in `~/.ail-edit` (ADRs 0295–0296, `std.env.6`).
 
 Lane 37 (ADRs 0222–0229) designed topics 16–19: four compiler tiers (AST, HIR, MIR, machine IR), constants computed at compile time by calling compile-time-safe functions (implemented: `ct.const.1–3`), derive generators whose output `ail api --expanded` shows, and compile-time-only reflection.
 

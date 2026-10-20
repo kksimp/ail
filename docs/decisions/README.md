@@ -283,3 +283,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0292](0292-editor-project-search.md) | Editor project search: Ctrl-Shift-F, matches in the pane, F4 for the next *(delegated)* | Accepted | 2026-10-20 |
 | [0293](0293-editor-file-tree-and-check-all-tabs.md) | Editor file tree (Ctrl-B) and checking every tab on save, counts on tab labels *(delegated)* | Accepted | 2026-10-20 |
 | [0294](0294-std-ui-styles-colors-caret.md) | `std.ui` text styles, named colors and caret shapes *(delegated)* | Accepted | 2026-10-20 |
+| [0295](0295-editor-themes.md) | Editor themes recolor the default colors by kind, from an AIL module *(delegated)* | Accepted | 2026-10-20 |
+| [0296](0296-env-home-and-editor-settings.md) | `env.home()`, and editor settings in `~/.ail-edit` *(delegated)* | Accepted | 2026-10-20 |

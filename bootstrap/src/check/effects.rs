@@ -59,7 +59,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             ],
             &["fs", "io"],
         ),
-        "env" => (&["args", "get", "cwd", "program", "vars"], &["env"]),
+        "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run", "which"], &["proc", "io"]),
         // std.net.1: every request reaches the network.

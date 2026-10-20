@@ -152,6 +152,7 @@ impl<'p> Checker<'p> {
             ("fs", "rename" | "copy") => (vec![Str, Str], io(Unit)),
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
+            ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),

@@ -137,6 +137,10 @@ given to `ail run`. *(ADR 0159)*
 whose names and values are UTF-8, in order of their names' bytes.
 *(ADR 0282)*
 
+**std.env.6** — `home() str?` returns the user's home directory: `HOME`,
+else `USERPROFILE` (Windows), or `none` when neither is set or one is
+empty. *(ADR 0296)*
+
 ## Paths: `std.path`
 
 **std.path.1** — `std.path` works on path text only: it never touches the
