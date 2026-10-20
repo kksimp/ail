@@ -10,7 +10,7 @@
 | Stage | Goal | Exit criteria (proposed) | State |
 |---|---|---|---|
 | 1 | Language specification and design | All 28 design topics have accepted ADRs. The spec chapters are drafted. The token benchmark corpus (layers 1–2) exists and is used for syntax decisions. | **Core done** (2026-10-04, ADR 0086). Remaining topics continue alongside Stage 2. |
-| 2 | **Entry criteria ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)):** concurrency model, modules and packages core, strings/collections/loops/literals, entry point and printing, and the unsafe/FFI core model are decided. **First milestone:** `./ail run examples/hello.ail` on macOS. Then: lexer, parser, AST, type checker, **first semantic API** (bootstrap in Rust: [ADR 0023](decisions/0023-rust-bootstrap.md); API: [ADR 0024](decisions/0024-semantic-api-from-stage-2.md)) | All spec examples parse and type-check. Diagnostics are structured. Conformance harness running. Semantic API v1 published. | **In progress** (started 2026-10-04). Milestone 1 (Hello World) done: Linux x86-64 and macOS ARM64 pass. Milestone 2 (gradebook: structs, enums, methods, `match`, loops, lists, `mut`, interpolation) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 3 (command parser: error types, `?`, `else`, optionals, variants with data, `for mut`) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). If-binding conditions (ADR 0125) done and verified on both (2026-10-05). Milestone 4 (traits and generics, ADRs 0126–0129) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 5 (three 500–800 line programs: interpreter, JSON tool, spreadsheet; ADRs 0130–0140) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 6 (Python parity: implicit `self`, positional constructor arguments, empty literals typed by use; ADRs 0141–0143) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). **Milestone 7 (AI-first buildout, 2026-10-20) done on Linux; macOS verification pending:** the semantic API (`ail api`, `explain`, `fix`, `effects`, schema v1, typed holes), effects and capabilities, standard modules (`fs`, `env`, `io`, `proc`, `time`, `random`, `json`, `ui`), user modules and packages, `ail test` with property and doc tests, `ail fmt`, contracts, tasks and channels, the spec conformance harness, and an editor written in AIL. See [status.md](status.md). |
+| 2 | **Entry criteria ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)):** concurrency model, modules and packages core, strings/collections/loops/literals, entry point and printing, and the unsafe/FFI core model are decided. **First milestone:** `./ail run examples/hello.ail` on macOS. Then: lexer, parser, AST, type checker, **first semantic API** (bootstrap in Rust: [ADR 0023](decisions/0023-rust-bootstrap.md); API: [ADR 0024](decisions/0024-semantic-api-from-stage-2.md)) | All spec examples parse and type-check. Diagnostics are structured. Conformance harness running. Semantic API v1 published. | **In progress** (started 2026-10-04). Milestone 1 (Hello World) done: Linux x86-64 and macOS ARM64 pass. Milestone 2 (gradebook: structs, enums, methods, `match`, loops, lists, `mut`, interpolation) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 3 (command parser: error types, `?`, `else`, optionals, variants with data, `for mut`) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). If-binding conditions (ADR 0125) done and verified on both (2026-10-05). Milestone 4 (traits and generics, ADRs 0126–0129) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 5 (three 500–800 line programs: interpreter, JSON tool, spreadsheet; ADRs 0130–0140) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). Milestone 6 (Python parity: implicit `self`, positional constructor arguments, empty literals typed by use; ADRs 0141–0143) done: Linux x86-64 and macOS ARM64 pass (2026-10-05). **Milestone 7 (AI-first buildout, 2026-10-20) done on Linux; macOS verification pending:** the semantic API (`ail api`, `explain`, `fix`, `effects`, schema v1, typed holes), effects and capabilities, standard modules (`fs`, `env`, `io`, `proc`, `time`, `random`, `json`, `ui`), user modules and packages, `ail test` with property and doc tests, `ail fmt`, contracts, tasks and channels, the spec conformance harness, an editor written in AIL, and (rounds 4–9) ownership (`unique`, `move`, `ref`, `defer`), `par for` and a thread pool, derive generators and compile-time reflection, `std.tensor`, tracing and coverage, and a ten-program agent corpus under Python in tokens. See [status.md](status.md). |
 | 3 | Interpreter: the **semantic reference implementation** and differential-testing oracle ([ADR 0018](decisions/0018-optimizing-backend-from-start.md)) | Semantics validated by running the conformance suite. | Not started |
 | 4 | **Optimising native backend, written in AIL** ([ADR 0022](decisions/0022-staged-self-hosting.md)), run on the interpreter until it compiles itself; then the front end is ported to AIL. Built on AIL's own toolchain ([ADR 0010](decisions/0010-no-llvm-backend.md): no LLVM; [ADR 0017](decisions/0017-no-c-emission.md): no C; [ADR 0018](decisions/0018-optimizing-backend-from-start.md): optimising from the start; [ADR 0015](decisions/0015-always-whole-program-incremental.md)/[0016](decisions/0016-optimized-and-observable-debugging.md): single-mode WPO with full observability) | All 5 Tier 1 targets produce working binaries with AIL's own encoder and linker. Differential tests match the interpreter. Every host can build for every target ([ADR 0031](decisions/0031-hosts-and-cross-compilation.md)). The drag-race harness runs, and first results against clang and gcc are published ([ADR 0030](decisions/0030-performance-benchmarks.md)). | Not started |
 | 5 | Custom runtime and GC | Runtime and GC pass stress tests on all targets, gated on ARM64 for weak-memory correctness. | Not started |
@@ -42,18 +42,20 @@ These are recommendations only. Each will be put to the designer as a question.
 Drawn from what is still open after the overnight buildout; the order is a
 proposal, not a decision.
 
-1. **Ownership:** `unique`, `ref` and move parameters in the checker and
-   interpreter (ADRs 0066–0069).
-2. **Speed:** the interpreter against Python on the benchmark programs
-   (`tools/perfbench/run.sh`); then the compile-time and IR design that
-   Stage 4 builds on (topics 18 and 19).
-3. **Parallelism:** automatic parallelism where provable and a `par` keyword,
-   on at least four cores.
-4. **Registry:** git dependencies, `ail.lock` and a package registry (OQ-049,
-   the designer's call).
+1. **Verify on macOS ARM64:** run `tools/verify.sh` on the whole 2026-10-20
+   batch (the strict-lockstep rule, ADR 0008).
+2. **Stage 3 and 4 groundwork:** build the tiers designed in
+   [ir-architecture.md](design/ir-architecture.md) (AST, HIR, MIR, machine IR)
+   and the first native code for the hot loops the interpreter shows
+   (`tools/perfbench/run.sh`).
+3. **Registry and lockfile:** git dependencies, `ail.lock`, then a package
+   registry (OQ-049, the designer's call); TLS for `std.net`.
+4. **Hardware:** accelerator backends for `std.tensor` (OQ-090) and weaker
+   atomic orderings (OQ-097).
 5. **Open language questions:** safe member access and matching on error sets
-   (OQ-029), custom hashing (OQ-042), contracts beyond runtime checks
-   (OQ-060), standard modules without `use` (OQ-071).
+   (OQ-029), custom hashing (OQ-042), unique values in generic code (OQ-050),
+   loop invariants and static proof (OQ-060), downcasting `any Trait`
+   (OQ-094).
 
 ## Documentation roadmap
 
