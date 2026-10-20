@@ -14,7 +14,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **AoS / SoA** | Array of Structs vs. Struct of Arrays: two memory layouts for collections of records. SoA often vectorises and caches better. |
 | **Arena (scoped allocation)** | A region where many objects with a shared lifetime are allocated, then freed together in one operation. |
 | **Asserted loop** | A `par for` loop that the checker can't prove independent but finds no conflict in; it relies on the programmer's assertion (`conc.par.5`, ADR 0237). |
-| **Associated function** | A function declared `fn Type.name(...)` without `self`, called `Type.name(...)` (ADR 0082). |
+| **Associated function** | A function declared `fn Type.name(...)` without `self`, called `Type.name(...)` (ADR 0082). In a trait, `fn zero() Self`, called `T.zero()` on a bounded type parameter (ADR 0349). |
 | **Atomic** | `Atomic[int]` or `Atomic[bool]`, a cell shared by every copy, so tasks and `par for` iterations update it without a lock: `load`, `store`, `cas`, and `add` on an `int`, each one sequentially consistent step (`conc.atomic.3–6`, ADR 0320). |
 | **Attribute** | `@name` or `@name(args)` metadata placed before a declaration (ADR 0083). |
 | **Automatic implementation** | `Eq`, `ToStr` and `Hash`, which every type implements without an `impl` when its parts do; an explicit `impl Eq` or `impl ToStr` replaces it (ADR 0126, ADR 0133). |
@@ -144,6 +144,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Standard module** | A built-in module imported with `use std.NAME` (`fs`, `env`, `io`, `proc`, `time`) whose functions reach the operating system with typed failures (ADR 0157). |
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
+| **Supertrait** | A trait another trait requires: `trait Ord Eq`. Implementing the subtrait needs the supertrait's `impl`, and a bound on the subtrait provides it (ADR 0348). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
 | **Target** | An OS + ISA combination the compiler generates code for, e.g. `linux-arm64`. See spec `plat.target.1`. |

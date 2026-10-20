@@ -1,0 +1,38 @@
+## A supertrait's methods and `==` come with a bound on the subtrait
+## (trait.super.1-3, ADR 0348).
+trait Named Eq
+    fn name(self) str
+
+trait Titled Named
+    fn title(self) str
+
+## A marker trait with only supertraits needs no methods.
+trait Key Hash + ToStr
+
+impl Key for str
+
+struct Book
+    t str
+
+impl Named for Book
+    fn name(self) str
+        t
+
+impl Titled for Book
+    fn title(self) str
+        "The {name()}"
+
+fn heading[T Titled](x T, y T) str
+    if x == y
+        return "{x.title()} ({x.name()}), twice"
+    x.title()
+
+fn label[K Key](k K) str
+    s := {k}
+    "{k} in {s.len()}"
+
+fn main()
+    b := Book(t: "Sea")
+    print(heading(b, b))
+    print(heading(b, Book(t: "Sky")))
+    print(label("k"))

@@ -84,20 +84,23 @@ as an object `{"kind": "Name", fields...}`. Fields of type `Map[str, T]`,
 bounds on the `impl`: `impl ToJson for Pair[A ToJson, B ToJson]`.
 *(ADR 0308, ADR 0343)*
 
-**json.derive.2** — `trait FromJson` has no methods; its generator
-`derive_from_json` adds the associated function `T.from_json(j Json) T !
-JsonError` (`ct.gen.1`). A struct reads each field from the member of its
-name with `need` and the `need_*` of its type, so a missing or mistyped
-member fails with its message; a field of another type `U` calls
-`U.from_json`, which `U` derives too. A field may nest `List[T]`,
-`Map[str, T]` (read from an object) and `T?` (missing or `null` gives
-`none`) to any depth. An enum reads a variant's name, or, when a variant has
-fields, an object whose member `kind` names the variant and whose other
-members are its fields; a variant field named `kind` is a `ct.derive.4`
-error. A generic type, a map whose key isn't `str`, and any other type
-(`Set[T]`, tuples) are a `ct.derive.4` error naming the type: generic code
-can't call `from_json` of a type parameter until OQ-039. *(ADR 0308,
-ADR 0343)*
+**json.derive.2** — `trait FromJson` has the associated function
+`fn from_json(j Json) Self ! JsonError` (`trait.assoc.1`); its generator
+`derive_from_json` fills an empty `impl` with it, and `str`, `int`,
+`float`, `bool`, `Json` and `List[T FromJson]` implement it. It is called as
+`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`). A
+struct reads each field from the member of its name with `need` and the
+`need_*` of its type, so a missing or mistyped member fails with its
+message; a field of another type `U` calls `U.from_json`, which `U` derives
+or implements too. A field may nest `List[T]`, `Map[str, T]` (read from an
+object) and `T?` (missing or `null` gives `none`) to any depth. An enum
+reads a variant's name, or, when a variant has fields, an object whose
+member `kind` names the variant and whose other members are its fields; a
+variant field named `kind` is a `ct.derive.4` error. A generic type derives
+it through bounds on the `impl`, `impl FromJson for Pair[A FromJson, B
+FromJson]`; without them the generated `A.from_json` is a `trait.assoc.2`
+error. A map whose key isn't `str` and any other type (`Set[T]`, tuples) are
+a `ct.derive.4` error naming the type. *(ADR 0308, ADR 0343, ADR 0350)*
 
 **json.derive.3** — A failure of a derived `from_json` names its path from
 the document root: `missing items[2].kind` for a missing member, and

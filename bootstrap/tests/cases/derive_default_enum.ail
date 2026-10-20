@@ -1,0 +1,9 @@
+## An enum has no default variant to derive (ct.derive.4, trait.assoc.1).
+enum Mode
+    Fast
+    Slow
+
+impl Default for Mode
+
+fn main()
+    print(Mode.Fast)

@@ -18,6 +18,7 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod absent;
+mod assoc;
 mod atomic;
 mod builtins;
 mod keyfn;
@@ -268,6 +269,8 @@ struct MethodSite<'a> {
     std: Option<crate::stdlib::StdCall>,
     mutating: bool,
     last: Option<(bool, usize, &'a FnDecl)>,
+    /// A trait's associated function (trait.assoc.2, trait.assoc.4).
+    assoc: bool,
 }
 
 /// The most `mut` operands (receiver and parameters) the local-move call path handles.
@@ -415,6 +418,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         arg_pool: Vec::new(),
         no_fields: Rc::new(Vec::new()),
         method_sites: HashMap::default(),
+        tyenv: Vec::new(),
         call_targets: HashMap::default(),
         user_std,
         mutating,
@@ -537,6 +541,8 @@ struct Interp<'a, W: Write> {
     no_fields: Rc<Vec<Value>>,
     /// What each method-call site resolves to, by the address of its receiver expression.
     method_sites: HashMap<usize, MethodSite<'a>>,
+    /// The type parameters bound by the running calls, innermost last (trait.assoc.3).
+    tyenv: Vec<(usize, crate::check::Ty)>,
     /// What each call site names, by the address of its callee expression.
     call_targets: HashMap<usize, Target<'a>>,
     /// Whether the program implements, or gives a default body to, `eq`, `cmp` and `to_str`.
@@ -2722,6 +2728,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     },
                     mutating: self.mutating.contains(name),
                     last: None,
+                    assoc: self.resolved.assoc_calls.contains_key(&pos),
                 };
                 self.method_sites.insert(key, site);
                 site
@@ -2733,6 +2740,9 @@ impl<'a, W: Write> Interp<'a, W> {
             let (first, rest) = args.split_first().expect("checked: a receiver argument");
             let op = self.operand(&first.value, env)?;
             return self.trait_method(tr, name, op, rest, pos, env);
+        }
+        if site.assoc {
+            return self.assoc_call(name, args, pos, env);
         }
         // `Type.Variant(field: value)` (type.enum.6), or an associated
         // function `Type.name(args)` (trait.method.4).
@@ -2859,6 +2869,16 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => None,
             };
             self.watch_call(f, root, args);
+        }
+        // trait.assoc.3: a call that binds type parameters the callee needs at run time.
+        if !self.resolved.type_args.is_empty()
+            && let Some(binds) = self.call_type_args(pos)
+        {
+            let mark = self.tyenv.len();
+            self.tyenv.extend(binds);
+            let result = self.invoke_inner(f, recv, args, pos, env);
+            self.tyenv.truncate(mark);
+            return result;
         }
         self.invoke_inner(f, recv, args, pos, env)
     }

@@ -1,9 +1,26 @@
-## FromJson can't be derived for a generic type until OQ-039 (json.derive.2, ct.derive.4).
+## `FromJson` derives for a generic type through bounds on the `impl`: the
+## derived `from_json` calls `A.from_json` (json.derive.2, trait.assoc.2,
+## ADR 0350).
 struct Pair[A, B]
     first A
     second B
 
-impl FromJson for Pair[A, B]
+struct Item
+    id str
+    n int
+
+impl FromJson for Item
+impl FromJson for Pair[A FromJson, B FromJson]
 
 fn main()
-    print(1)
+    j := parse_json("\{\"first\": 3, \"second\": \{\"id\": \"a\", \"n\": 2}}") else return
+    p := Pair[int, Item].from_json(j) else return
+    print(p)
+    k := parse_json("\{\"first\": [[1], [2, 3]], \"second\": \"x\"}") else return
+    q := Pair[List[List[int]], str].from_json(k) else return
+    print(q)
+    m := parse_json("\{\"first\": [1, \"two\"], \"second\": \{\"id\": \"a\"}}") else return
+    r := Pair[List[int], Item].from_json(m) else e
+        print(e.message)
+        return
+    print(r)

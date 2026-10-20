@@ -1,0 +1,20 @@
+## An `impl` of a trait needs its supertraits' impls (trait.super.2), and
+## supertraits must not form a cycle (trait.super.1).
+trait Named
+    fn name(self) str
+
+trait Titled Named
+    fn title(self) str
+
+trait Loop Back
+trait Back Loop
+
+struct Book
+    t str
+
+impl Titled for Book
+    fn title(self) str
+        t
+
+fn main()
+    print(Book(t: "x").title())

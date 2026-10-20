@@ -21,7 +21,7 @@ pub fn wanted(tokens: &[Token]) -> bool {
     tokens.iter().any(|t| matches!(t.tok, Tok::Kw("impl")))
         && tokens.windows(2).any(|w| match (&w[0].tok, &w[1].tok) {
             (Tok::Sym("@"), Tok::Ident(n)) => n == "derive",
-            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson",
+            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson" || n == "Default",
             _ => false,
         })
 }

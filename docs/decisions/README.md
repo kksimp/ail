@@ -338,3 +338,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0343](0343-json-derives-maps-optionals-enum-payloads.md) | `ToJson`/`FromJson` derives for maps, any optional, enum payloads as `{"kind": ...}`, and error paths; generic `FromJson` waits for OQ-039 *(delegated)* | Accepted | 2026-10-20 |
 | [0346](0346-formatter-splits-at-binary-operators.md) | The formatter splits long lines before binary operators *(delegated)* | Accepted | 2026-10-20 |
 | [0347](0347-watch-shows-collection-writes.md) | `--watch` shows writes to a collection's elements *(delegated)* | Accepted | 2026-10-20 |
+| [0348](0348-supertraits.md) | Supertraits written like bounds, `trait Ord Eq` (OQ-039) *(delegated)* | Accepted | 2026-10-20 |
+| [0349](0349-associated-functions-in-traits.md) | Associated functions in traits, called as `T.name()` (OQ-039) *(delegated)* | Accepted | 2026-10-20 |
+| [0350](0350-default-and-generic-fromjson.md) | `Default` and generic `FromJson` through associated functions *(delegated)* | Accepted | 2026-10-20 |
