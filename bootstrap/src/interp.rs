@@ -173,22 +173,31 @@ const MAX_DEPTH: usize = 10_000;
 /// Locals of one call, innermost last.
 type Env<'a> = Vec<(&'a str, Value)>;
 
-/// A place (own.place.1) resolved to a local slot and a path of steps, or
-/// to a path inside a `ref` cell when the place goes through one (own.ref.3).
+/// A place (own.place.1) resolved to a local slot and a path of steps, or,
+/// when the place goes through a `ref` (own.ref.3), to `IN_CELL` and a path
+/// that starts with `Step::Cell`.
 #[derive(Clone, Debug)]
 struct Place {
     slot: usize,
     path: Vec<Step>,
-    cell: Option<Rc<RefCell<Value>>>,
 }
+
+const IN_CELL: usize = usize::MAX;
 
 impl Place {
     fn local(slot: usize) -> Self {
-        Place { slot, path: Vec::new(), cell: None }
+        Place { slot, path: Vec::new() }
     }
 
     fn in_cell(cell: Rc<RefCell<Value>>) -> Self {
-        Place { slot: 0, path: Vec::new(), cell: Some(cell) }
+        Place { slot: IN_CELL, path: vec![Step::Cell(cell)] }
+    }
+
+    fn cell(&self) -> Option<&Rc<RefCell<Value>>> {
+        match (self.slot, self.path.first()) {
+            (IN_CELL, Some(Step::Cell(c))) => Some(c),
+            _ => None,
+        }
     }
 }
 
@@ -198,6 +207,8 @@ enum Step {
     Index(i64, Pos),
     /// `m[k]` (type.map.3)
     Key(Value, Pos),
+    /// The root of a place in a `ref` cell; only first in a path (own.ref.3).
+    Cell(Rc<RefCell<Value>>),
 }
 
 /// Type and field names, for showing a map key in a trap message without
@@ -400,8 +411,9 @@ fn element(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
 /// The storage a place refers to, copying shared storage first (own.val.2).
 /// With `insert`, a missing map key at the end of the path is added, for
 /// `m[k] = v` (type.map.3).
+#[inline]
 fn slot_mut<'e>(env: &'e mut Env<'_>, p: &Place, insert: bool) -> Result<&'e mut Value, Trap> {
-    debug_assert!(p.cell.is_none(), "a place in a `ref` cell goes through `with_slot`");
+    debug_assert!(p.slot != IN_CELL, "a place in a `ref` cell goes through `with_slot`");
     slot_in(&mut env[p.slot].1, &p.path, insert)
 }
 
@@ -450,8 +462,9 @@ enum Operand {
 }
 
 /// The value at a place, without copying it.
+#[inline]
 fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<&'e Value, Trap> {
-    debug_assert!(p.cell.is_none(), "a place in a `ref` cell goes through `view`");
+    debug_assert!(p.slot != IN_CELL, "a place in a `ref` cell goes through `view`");
     peek_in(&env[p.slot].1, &p.path)
 }
 
@@ -522,6 +535,7 @@ fn key_text(k: &Value) -> String {
     }
 }
 
+#[inline(always)]
 fn load(env: &Env<'_>, p: &Place) -> Result<Value, Trap> {
     view(env, p, Value::clone)
 }
@@ -543,44 +557,48 @@ fn place_pos(p: &Place) -> Pos {
         .iter()
         .find_map(|s| match s {
             Step::Index(_, pos) | Step::Key(_, pos) => Some(*pos),
-            Step::Field(_) => None,
+            Step::Field(_) | Step::Cell(_) => None,
         })
         .unwrap_or(Pos { line: 0, col: 0 })
 }
 
 /// Look at the value at a place, which may be in a `ref` cell.
+#[inline(always)]
 fn view<R>(env: &Env<'_>, p: &Place, f: impl FnOnce(&Value) -> R) -> Result<R, Trap> {
-    match &p.cell {
+    match p.cell() {
         None => Ok(f(peek(env, p)?)),
         Some(c) => {
             let Ok(b) = c.try_borrow() else { return busy(place_pos(p)) };
             if matches!(*b, Value::Unit) {
                 return busy(place_pos(p));
             }
-            Ok(f(peek_in(&b, &p.path)?))
+            Ok(f(peek_in(&b, &p.path[1..])?))
         }
     }
 }
 
 /// Change the value at a place, which may be in a `ref` cell (own.ref.4).
+#[inline(always)]
 fn with_slot<R>(env: &mut Env<'_>, p: &Place, insert: bool, f: impl FnOnce(&mut Value) -> R) -> Result<R, Trap> {
-    match &p.cell {
+    match p.cell() {
         None => Ok(f(slot_mut(env, p, insert)?)),
         Some(c) => {
             let Ok(mut b) = c.try_borrow_mut() else { return busy(place_pos(p)) };
             if matches!(*b, Value::Unit) {
                 return busy(place_pos(p));
             }
-            Ok(f(slot_in(&mut b, &p.path, insert)?))
+            Ok(f(slot_in(&mut b, &p.path[1..], insert)?))
         }
     }
 }
 
 /// Move the value out of a place for a `mut` access; `put` returns it.
+#[inline(always)]
 fn take(env: &mut Env<'_>, p: &Place) -> Result<Value, Trap> {
     with_slot(env, p, false, |v| std::mem::replace(v, Value::Unit))
 }
 
+#[inline(always)]
 fn put(env: &mut Env<'_>, p: &Place, insert: bool, v: Value) -> Result<(), Trap> {
     with_slot(env, p, insert, |slot| *slot = v)
 }
@@ -588,11 +606,15 @@ fn put(env: &mut Env<'_>, p: &Place, insert: bool, v: Value) -> Result<(), Trap>
 /// own.ref.7: for a call, the contents of each `ref` cell that a `mut`
 /// operand reaches are moved to a hidden local, so that another copy of the
 /// reference can't see them half-changed: it finds the cell empty and traps.
+#[inline(never)]
 fn hoist(env: &mut Env<'_>, ops: &mut [Prepared], pos: Pos) -> Result<Vec<(usize, Rc<RefCell<Value>>)>, Trap> {
     let mut hoisted: Vec<(usize, Rc<RefCell<Value>>)> = Vec::new();
     for (place, _, mutable) in ops.iter_mut() {
-        let Some(p) = place.as_mut().filter(|_| *mutable) else { continue };
-        let Some(c) = p.cell.take() else { continue };
+        if !*mutable || !p_in_cell(place) {
+            continue;
+        }
+        let Some(p) = place.as_mut() else { continue };
+        let Step::Cell(c) = p.path.remove(0) else { unreachable!("a place in a cell") };
         let slot = match hoisted.iter().find(|(_, h)| Rc::ptr_eq(h, &c)) {
             Some((slot, _)) => *slot,
             None => {
@@ -611,19 +633,15 @@ fn hoist(env: &mut Env<'_>, ops: &mut [Prepared], pos: Pos) -> Result<Vec<(usize
     Ok(hoisted)
 }
 
+fn p_in_cell(p: &Option<Place>) -> bool {
+    p.as_ref().is_some_and(|p| p.slot == IN_CELL)
+}
+
 /// Put hoisted cell contents back, last first.
 fn unhoist(env: &mut Env<'_>, hoisted: Vec<(usize, Rc<RefCell<Value>>)>) {
     for (_, c) in hoisted.into_iter().rev() {
         let (_, v) = env.pop().expect("a hoisted cell");
         *c.borrow_mut() = v;
-    }
-}
-
-/// A place holding a `ref` is the place of the cell's contents (own.ref.3).
-fn through_ref(env: &Env<'_>, p: Place) -> Result<Place, Trap> {
-    match view(env, &p, |v| if let Value::Ref(c) = v { Some(c.clone()) } else { None })? {
-        Some(c) => Ok(Place::in_cell(c)),
-        None => Ok(p),
     }
 }
 
@@ -635,6 +653,7 @@ fn move_out(env: &mut Env<'_>, n: &str) -> Value {
 }
 
 /// The contents of a `ref` cell (own.ref.3), or the value itself.
+#[inline]
 fn deref(v: Value, pos: Pos) -> Result<Value, Trap> {
     match v {
         Value::Ref(c) => {
@@ -684,13 +703,9 @@ fn check_overlap(ops: &[Prepared], pos: Pos) -> Result<(), Trap> {
 /// Two places overlap when one is the other or contains it (own.excl.1);
 /// places in the same `ref` cell have the same root (own.ref.7).
 fn overlaps(a: &Place, b: &Place) -> bool {
-    let same_root = match (&a.cell, &b.cell) {
-        (None, None) => a.slot == b.slot,
-        (Some(x), Some(y)) => Rc::ptr_eq(x, y),
-        _ => false,
-    };
-    same_root
+    a.slot == b.slot
         && a.path.iter().zip(&b.path).all(|(x, y)| match (x, y) {
+            (Step::Cell(i), Step::Cell(j)) => Rc::ptr_eq(i, j),
             (Step::Field(i), Step::Field(j)) => i == j,
             (Step::Index(i, _), Step::Index(j, _)) => i == j,
             (Step::Key(i, _), Step::Key(j, _)) => Key::of(i) == Key::of(j),
@@ -749,6 +764,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
     }
 
+    #[inline]
     fn block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
         if self.has_unique || self.has_defer {
             return self.owning_block(stmts, env);
@@ -768,6 +784,7 @@ impl<'a, W: Write> Interp<'a, W> {
     /// A block whose exit releases unique values (own.uniq.3-4) and runs
     /// deferred statements (own.defer.1-2): in reverse order of their
     /// declarations and `defer`s, by any exit, including a trap.
+    #[inline(never)]
     fn owning_block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
         let mark = env.len();
         let pos = stmts.first().map_or(Pos { line: 0, col: 0 }, Stmt::pos);
@@ -1043,17 +1060,26 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Expr::Field { recv, name, .. } => {
                 let mut p = self.place(recv, env)?;
-                p = through_ref(env, p)?;
-                let s = view(env, &p, |v| match v {
-                    Value::Struct(s, _) => *s,
+                let s = match view(env, &p, |v| match v {
+                    Value::Struct(s, _) => Ok(*s),
+                    Value::Ref(c) => Err(c.clone()),
                     other => unreachable!("checked: struct, found {other:?}"),
-                })?;
+                })? {
+                    Ok(s) => s,
+                    // own.ref.3: the field of the struct in the cell.
+                    Err(c) => {
+                        p = Place::in_cell(c);
+                        view(env, &p, |v| match v {
+                            Value::Struct(s, _) => *s,
+                            other => unreachable!("checked: struct, found {other:?}"),
+                        })?
+                    }
+                };
                 p.path.push(Step::Field(self.field_index(s, name)));
                 Ok(p)
             }
             Expr::Index { recv, index, pos } => {
                 let mut p = self.place(recv, env)?;
-                p = through_ref(env, p)?;
                 let is_map = view(env, &p, |v| matches!(v, Value::Map(_)))?;
                 let i = self.eval(index, env)?;
                 p.path.push(if is_map { Step::Key(i, *pos) } else { Step::Index(i.int(), *pos) });
@@ -1181,7 +1207,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 Value::Str(Rc::from(s))
             }
-            Expr::Name(n, pos) if self.resolved.moves.contains_key(pos) => move_out(env, n),
+            Expr::Name(n, pos) if self.has_moves && self.resolved.moves.contains_key(pos) => move_out(env, n),
             Expr::Name(n, pos) => match lookup(env, n) {
                 Some(v) => v.clone(),
                 None if self.prog.consts.iter().any(|c| c.name == *n) => self.constant(n, *pos)?,
@@ -1790,23 +1816,30 @@ impl<'a, W: Write> Interp<'a, W> {
             let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
         }
-        let recv = self.operand(recv, env)?;
-        // own.ref.3: a method of a `ref` runs on the cell's contents.
-        let recv = match recv {
-            Operand::Place(p) => Operand::Place(through_ref(env, p)?),
-            Operand::Value(Value::Ref(c)) => Operand::Place(Place::in_cell(c)),
-            v => v,
+        let mut recv = self.operand(recv, env)?;
+        let (mut type_name, cell) = match &recv {
+            Operand::Place(p) => view(env, p, |v| self.type_name_or_cell(v))?,
+            Operand::Value(v) => self.type_name_or_cell(v),
         };
+        // own.ref.3: a method of a `ref` runs on the cell's contents.
+        if let Some(c) = cell {
+            let p = Place::in_cell(c);
+            type_name = view(env, &p, |v| self.type_name_of(v))?;
+            recv = Operand::Place(p);
+        }
         if let Some(Call::Trait(tr)) = call {
             return self.trait_method(tr, name, recv, args, pos, env);
         }
-        let type_name = match &recv {
-            Operand::Place(p) => view(env, p, |v| self.type_name_of(v))?,
-            Operand::Value(v) => self.type_name_of(v),
-        };
         let Some(type_name) = type_name else { return self.builtin(recv, name, args, pos, env) };
         let f = self.methods[type_name][name];
         self.invoke(f, Some(recv), args, pos, env)
+    }
+
+    fn type_name_or_cell(&self, v: &Value) -> (Option<&'a str>, Option<Rc<RefCell<Value>>>) {
+        match v {
+            Value::Ref(c) => (None, Some(c.clone())),
+            v => (self.type_name_of(v), None),
+        }
     }
 
     fn type_name_of(&self, v: &Value) -> Option<&'a str> {
@@ -1872,7 +1905,8 @@ impl<'a, W: Write> Interp<'a, W> {
             ops.push(prepare(op, param.mutable, env)?);
         }
         check_overlap(&ops, pos)?;
-        let hoisted = hoist(env, &mut ops, pos)?;
+        let in_cell = ops.iter().any(|(p, _, m)| *m && p_in_cell(p));
+        let hoisted = if in_cell { hoist(env, &mut ops, pos)? } else { Vec::new() };
         let mut values = Vec::with_capacity(ops.len());
         for (place, value, _) in &mut ops {
             values.push(match value.take() {
@@ -1881,16 +1915,24 @@ impl<'a, W: Write> Interp<'a, W> {
             });
         }
         let recv_value = if has_recv { Some(values.remove(0)) } else { None };
-        let called = self.call(f, recv_value, values, pos);
-        if let Ok((_, finals)) = &called {
-            for ((place, _, mutable), v) in ops.into_iter().zip(finals.iter().cloned()) {
-                if mutable {
-                    put(env, &place.expect("checked: `mut` operands are places"), false, v)?;
+        let (result, finals) = match self.call(f, recv_value, values, pos) {
+            Ok(r) => r,
+            Err(t) => {
+                if !hoisted.is_empty() {
+                    unhoist(env, hoisted);
                 }
+                return Err(t.into());
+            }
+        };
+        for ((place, _, mutable), v) in ops.into_iter().zip(finals) {
+            if mutable {
+                put(env, &place.expect("checked: `mut` operands are places"), false, v)?;
             }
         }
-        unhoist(env, hoisted);
-        Ok(called?.0)
+        if !hoisted.is_empty() {
+            unhoist(env, hoisted);
+        }
+        Ok(result)
     }
 
     fn print(&mut self, v: &Value, pos: Pos) -> Result<(), Trap> {
