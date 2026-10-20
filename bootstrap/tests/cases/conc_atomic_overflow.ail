@@ -1,0 +1,6 @@
+# conc.atomic.5: an atomic add that would leave `int` traps.
+
+fn main()
+    a := Atomic(9223372036854775800)
+    print(a.add(7))
+    print(a.add(1))

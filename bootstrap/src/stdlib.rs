@@ -23,6 +23,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("proc", &["run", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("tensor", &["from", "zeros"]),
+    ("task", &["cancelled", "check"]),
     ("time", &["now_ms", "sleep_ms"]),
     ("ui", &["clipboard_get", "clipboard_set", "open"]),
 ];
