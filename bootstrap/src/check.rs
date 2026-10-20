@@ -312,6 +312,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     c.diags.extend(effects::check_contracts(prog, &c.resolved));
     c.diags.extend(effects::check_constants(prog, &c.resolved));
     c.diags.extend(parallel::check_par(prog, &c.resolved));
+    crate::derive::remap(prog, &mut c.diags);
     (c.diags, c.resolved)
 }
 
