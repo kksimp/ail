@@ -46,6 +46,7 @@ impl<'p> Checker<'p> {
         use Ty::{Int, Str, Unit};
         let (params, ret) = match m {
             "size" => (vec![], ty("ui.Size")),
+            "modifiers" => (vec![], ty("ui.Modifiers")),
             "clear" => (vec![Int], Unit),
             "put" => (vec![Int, Int, Str, Int, Int], Unit),
             "cursor" => (vec![Int, Int], Unit),
