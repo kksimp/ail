@@ -301,7 +301,7 @@ fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
     }
     let n = if smoke() { 6 } else { (env_num("AIL_FUZZ_N", 40) as usize / 5).max(6) };
     let first = env_num("AIL_FUZZ_SEED", 1);
-    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-native");
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("fuzz-native-{name}"));
     let out_dir = std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("failures"));
     fs::create_dir_all(&out_dir).unwrap();
     let workers = std::thread::available_parallelism().map_or(2, |p| p.get()).clamp(1, 4);
