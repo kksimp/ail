@@ -1,0 +1,8 @@
+pub struct Point
+    pub x int
+    pub y int
+
+pub fn Point.dist2(self) int
+    x * x + y * y
+
+pub SCALE := 10

@@ -38,7 +38,11 @@ impl<'a, W: Write> Interp<'a, W> {
     pub(super) fn std_call(&mut self, call: StdCall, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
         let (module, f) = match call {
             StdCall::Type(s) => {
-                let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
+                let mut fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
+                // std.net.17: a `net.Response` built without `all_headers` has none.
+                if self.prog.structs[s].name == "net.Response" && matches!(fields[3], Value::Unit) {
+                    fields[3] = Value::Map(Rc::new(Table::default()));
+                }
                 return Ok(Value::Struct(s, Rc::new(fields)));
             }
             StdCall::Fn(module, f) => (module, f),
@@ -458,14 +462,20 @@ impl<'a, W: Write> Interp<'a, W> {
                         for (k, v) in r.headers {
                             headers.insert(text(k), Some(text(v)));
                         }
+                        let mut all = Table::default();
+                        for (k, vs) in r.all {
+                            let items: Vec<Value> = vs.into_iter().map(text).collect();
+                            all.insert(text(k), Some(Value::List(Rc::new(items))));
+                        }
+                        let all = Value::Map(Rc::new(all));
                         if raw {
                             let s = self.structs["net.RawResponse"];
-                            let fields = vec![Value::Int(r.status), Value::Map(Rc::new(headers)), super::bytes::bytes_value(r.body)];
+                            let fields = vec![Value::Int(r.status), Value::Map(Rc::new(headers)), super::bytes::bytes_value(r.body), all];
                             Value::Struct(s, Rc::new(fields))
                         } else {
                             let s = self.structs["net.Response"];
                             let body = text(String::from_utf8_lossy(&r.body).into_owned());
-                            Value::Struct(s, Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), body]))
+                            Value::Struct(s, Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), body, all]))
                         }
                     }
                     Err(e) => {

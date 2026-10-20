@@ -1,0 +1,10 @@
+# `xs[i + 1]` on the last iteration is out of range (type.coll.4).
+fn pairs(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[i + 1] - xs[i]
+    s
+
+fn main()
+    print(pairs([1, 4, 9, 16], 3))
+    print(pairs([1, 4, 9, 16], 4))

@@ -1,0 +1,59 @@
+# std.fs.1-7, std.fs.11, std.fs.4: files and directories through system calls,
+# in the scratch paths the test harness puts in the environment.
+fn write(path str, text str) bool
+    fs.write_text(path, text) else return false
+    true
+
+fn remove(path str) bool
+    fs.remove(path) else return false
+    true
+
+fn make(path str) bool
+    fs.make_dir(path) else return false
+    true
+
+fn main()
+    a := env.get("AIL_TEST_A") else return
+    b := env.get("AIL_TEST_B") else return
+    dir := env.get("AIL_TEST_DIR") else return
+    mid := env.get("AIL_TEST_MID") else return
+    deep := env.get("AIL_TEST_DEEP") else return
+    inner := env.get("AIL_TEST_IN") else return
+    print(fs.exists(a))
+    print(write(a, "héllo\nworld\n"))
+    print(fs.exists(a))
+    fs.append_text(a, "more\n") else return
+    text := fs.read_text(a) else "unreadable"
+    print(text.len())
+    print(text)
+    print(write(a, "replaced"))
+    print(fs.read_text(a) else "unreadable")
+    fs.rename(a, b) else return
+    print(fs.exists(a))
+    print(fs.read_text(b) else "unreadable")
+    gone := fs.read_text(a) else "gone"
+    print(gone)
+    print(remove(b))
+    print(fs.exists(b))
+    print(remove(b))
+    print(make(deep))
+    print(make(deep))
+    print(fs.exists(deep))
+    print(write(deep, "x"))
+    print(write(inner, ""))
+    names := fs.list_dir(dir) else return
+    print(names.len())
+    for n in names
+        print(n)
+    print(fs.read_text(dir) else "a directory is not text")
+    print(fs.read_text(inner) else "unreadable")
+    print(remove(dir))
+    print(remove(inner))
+    print(remove(deep))
+    print(remove(mid))
+    print(remove(dir))
+    print(fs.exists(dir))
+    missing := fs.list_dir(dir) else
+        print("no such directory")
+        return
+    print(missing.len())

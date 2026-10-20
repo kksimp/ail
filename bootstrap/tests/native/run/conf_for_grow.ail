@@ -1,0 +1,23 @@
+# A `for` loop iterates the value its list had when the loop started
+# (expr.loop.4): pushes to the original list do not extend the loop.
+fn main()
+    mut xs := [1, 2]
+    snapshot := xs
+    for x in snapshot
+        xs.push(x * 10)
+    print(xs)
+    print(snapshot)
+    mut total := 0
+    mut ys := [4, 5]
+    for y in ys
+        total += y
+    ys.push(6)
+    print(total)
+    print(ys)
+    mut k := 0
+    mut count := 0
+    for i in 0..3
+        k += i
+        count += 1
+    print(k)
+    print(count)
