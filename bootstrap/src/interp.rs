@@ -1128,7 +1128,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let body = f.body.as_ref().expect("checked: the function has a body");
         let mut outcome = self.block(body, env);
-        // own.uniq.3: a `move` parameter owns its value until the call ends.
+        // own.uniq.3: a `move` parameter, or a `move self` receiver
+        // (own.move.6), owns its value until the call ends.
+        if self.has_unique && f.receiver.is_some_and(|r| r.moved) {
+            let v = std::mem::replace(&mut env[0].1, Value::Unit);
+            keep_first(&mut outcome, self.release(v, pos).map_err(Exit::from));
+        }
         if self.has_unique && f.params.iter().any(|p| p.moved) {
             let first = usize::from(f.receiver.is_some());
             for (k, _) in f.params.iter().enumerate().filter(|(_, p)| p.moved) {
@@ -1255,11 +1260,15 @@ impl<'a, W: Write> Interp<'a, W> {
         result
     }
 
-    /// Whether a value is unique and so needs releasing (own.uniq.3).
+    /// Whether a value is unique and so needs releasing (own.uniq.3). A
+    /// list or map is when its elements are (own.uniq.8); they all have one
+    /// type, so the first present one decides.
     fn is_unique(&self, v: &Value) -> bool {
         match v {
             Value::Struct(s, _) => self.prog.structs[*s].unique,
             Value::Enum(e, _, _) => self.prog.enums[*e].unique,
+            Value::List(items) => items.iter().find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
+            Value::Map(t) => t.entries().map(|(_, x)| x).find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
             _ => false,
         }
     }
@@ -1271,9 +1280,22 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(());
         }
         let mut v = v;
-        let con = match &v {
-            Value::Struct(s, _) => Con::Struct(*s),
-            Value::Enum(e, _, _) => Con::Enum(*e),
+        let con = match v {
+            Value::Struct(s, _) => Con::Struct(s),
+            Value::Enum(e, _, _) => Con::Enum(e),
+            // own.uniq.8: a list's elements, or a map's values, last first.
+            Value::List(items) => {
+                for x in Rc::unwrap_or_clone(items).into_iter().rev() {
+                    self.release(x, pos)?;
+                }
+                return Ok(());
+            }
+            Value::Map(t) => {
+                for x in t.val_list().into_iter().rev() {
+                    self.release(x, pos)?;
+                }
+                return Ok(());
+            }
             _ => unreachable!("a unique value"),
         };
         if let Some(drop) = self.resolved.std.drop

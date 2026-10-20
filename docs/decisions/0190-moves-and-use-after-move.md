@@ -61,7 +61,7 @@ second-class (ADR 0062).
 - `bootstrap/src/check/moves.rs` walks each function once after type
   checking; the checker records each moving use in `Resolved::moves`, which
   the interpreter also uses to take the value out of its binding.
-- Moving out of a field, and `move self` receivers, are open (OQ-050).
+- Moving out of a field, and `move self` receivers, are open (OQ-050). `move self` is decided by [ADR 0317](0317-move-self-receivers.md).
 
 ## Rejected alternatives
 

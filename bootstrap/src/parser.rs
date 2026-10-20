@@ -657,9 +657,11 @@ impl Parser {
         let mut receiver = None;
         let mut params = Vec::new();
         while !self.at_sym(")") {
-            let is_self = self.at_kw("self") || (self.at_kw("mut") && matches!(self.peek_at(1), Tok::Kw("self")));
+            let is_self = self.at_kw("self")
+                || ((self.at_kw("mut") || self.at_kw("move")) && matches!(self.peek_at(1), Tok::Kw("self")));
             if is_self {
                 let mutable = self.eat_kw("mut");
+                let moved = !mutable && self.eat_kw("move");
                 let pos = self.bump().pos;
                 if owner.is_none() && within == Within::TopLevel {
                     self.error_help(
@@ -670,18 +672,17 @@ impl Parser {
                     );
                 } else if receiver.is_some() || !params.is_empty() {
                     self.error("trait.method.1", pos, "`self` must be the first parameter");
+                } else if moved && within != Within::TopLevel {
+                    self.error_help(
+                        UNSUPPORTED,
+                        pos,
+                        "`move self` in a trait or `impl` block is not supported by the bootstrap yet (spec own.move.6, OQ-050)",
+                        format!("declare it as an inherent method, `fn Type.{name}(move self)`"),
+                    );
+                    return None;
                 } else {
-                    receiver = Some(Receiver { mutable });
+                    receiver = Some(Receiver { mutable, moved });
                 }
-            } else if self.at_kw("move") && matches!(self.peek_at(1), Tok::Kw("self")) {
-                let pos = self.pos();
-                self.error_help(
-                    UNSUPPORTED,
-                    pos,
-                    "`move self` receivers are not supported by the bootstrap yet (spec own.move.1)",
-                    "take the value as a parameter instead: `fn close(move f File)`",
-                );
-                return None;
             } else {
                 let mutable = self.eat_kw("mut");
                 let moved = !mutable && self.eat_kw("move");

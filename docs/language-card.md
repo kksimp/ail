@@ -324,7 +324,7 @@ bump(mut q)            # `mut` again at the call, on a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
-`ref x` is a cell copies share. `unique` types move: `f(move x)`.
+`ref x` is a cell copies share. `unique` types move: `f(move x)`; `fn T.close(move self)` consumes `x.close()`; lists of them move in with `xs.push(move x)`, out with `pop`, and `xs[i]` borrows.
 
 ## Tasks
 

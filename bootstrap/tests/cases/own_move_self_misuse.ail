@@ -1,0 +1,30 @@
+# own.move.3, own.move.4, own.move.6: misuses of a `move self` method.
+unique struct Conn
+    id int
+
+struct Wrap
+    n int
+
+fn Conn.finish(move self) int
+    id
+
+fn Conn.peek(self) int
+    self.finish()
+
+fn Conn.twice(move self) int
+    a := self.finish()
+    a + id
+
+fn main()
+    c := Conn(id: 1)
+    n := c.finish()
+    print(c.id)
+    d := Conn(id: 2)
+    if n > 0
+        d.finish()
+    print(d.id)
+    e := Conn(id: 3)
+    for i in 0..2
+        e.finish()
+    for k in [Conn(id: 4)]
+        k.finish()

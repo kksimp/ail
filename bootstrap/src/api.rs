@@ -464,7 +464,7 @@ impl<'p> Api<'p> {
         let method = owner_name(self.prog, f).is_some();
         let mut extra = Vec::new();
         if method {
-            let receiver = f.receiver.map(|r| if r.mutable { "mut self" } else { "self" }.to_string());
+            let receiver = f.receiver.map(|r| receiver_text(r).to_string());
             extra.push(("receiver", Json::opt(receiver)));
         }
         extra.push(("params", Json::Arr(params)));
@@ -622,7 +622,7 @@ fn fn_signature(f: &FnDecl) -> String {
     s.push_str(&generics_text(&f.generics));
     let mut parts: Vec<String> = Vec::new();
     if let Some(r) = f.receiver {
-        parts.push(if r.mutable { "mut self" } else { "self" }.to_string());
+        parts.push(receiver_text(r).to_string());
     }
     for p in &f.params {
         let mode = if p.mutable {
@@ -1249,5 +1249,16 @@ fn main()
                 }
             }
         }
+    }
+}
+
+/// `self`, `mut self` or `move self` (trait.method.1, own.move.6).
+fn receiver_text(r: crate::ast::Receiver) -> &'static str {
+    if r.mutable {
+        "mut self"
+    } else if r.moved {
+        "move self"
+    } else {
+        "self"
     }
 }
