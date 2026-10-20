@@ -164,3 +164,17 @@ fn list_sort(xs List[int], kind int)
     # The sorted words are in `src`; the list's own data may be `dst`.
     if src != load64(p + 16)
         copy_bytes(load64(p + 16), src, 8 * n)
+
+## `xs == ys`: the same length and equal elements (`kind` as for `list_contains`).
+fn list_eq(xs List[int], ys List[int], kind int, size int) bool
+    p := list_addr(xs)
+    q := list_addr(ys)
+    n := load64(p)
+    if n != load64(q)
+        return false
+    a := load64(p + 16)
+    b := load64(q + 16)
+    for i in 0..n
+        if not list_word_eq(kind, list_get_word(a, size, i), list_get_word(b, size, i))
+            return false
+    true

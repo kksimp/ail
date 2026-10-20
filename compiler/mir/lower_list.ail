@@ -169,3 +169,15 @@ fn is_pop_call(e ast.Expr) bool
     match e
         Method(_, n, _, a) => n == "pop" and a.len() == 0
         _ => false
+
+## `xs == ys` and `xs != ys` on lists of `int`, `float`, `bool` or `str`
+## (type.coll.*, trait.auto.1): the same length and equal elements.
+fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
+    e := a.ty.elem()?
+    k := eq_kind(e)
+    if k < 0 or not (op_name(o) == "eq" or op_name(o) == "ne")
+        return none
+    same := call("rt.list_eq", [a.id, b.id, konst(k, Ty.Int), konst(elem_bytes(e), Ty.Int)], Ty.Bool)
+    if op_name(o) == "ne"
+        return Val(id: op("not", [same], Ty.Bool), ty: Ty.Bool)
+    Val(id: same, ty: Ty.Bool)
