@@ -187,7 +187,12 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free.
+flag), 40-47 `fmt.ail` (the byte builder), 48-63 free. Each slot is a
+constant `NAME := N` read as `global(NAME)`; two names may share a slot only
+if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
+`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
+past `Image.globals`, an undeclared name, or a code generator constant of
+the same name with another value.
 
 **Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
 after `main` and by `io.exit`); every trap; before reading standard input;
