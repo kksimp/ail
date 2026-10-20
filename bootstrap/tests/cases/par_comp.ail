@@ -1,0 +1,22 @@
+# `[f(x) par for x in xs]` computes the elements on the thread pool, in
+# order; a short list runs in order (conc.par.12).
+
+fn steps(n int) int
+    mut x := n
+    mut count := 0
+    while x != 1
+        x = if x % 2 == 0
+            x / 2
+        else
+            3 * x + 1
+        count += 1
+    count
+
+fn main()
+    xs := [n for n in 1..=40]
+    lens := [steps(x) par for x in xs]
+    print(lens)
+    odd := [steps(n) * 2 par for n in 1..=40 if n % 2 == 1]
+    print(odd.len())
+    few := [x + 1 par for x in [1, 2]]
+    print(few)

@@ -1,0 +1,10 @@
+# An element that traps on the pool: the elements are computed again in
+# order, so the trap is the sequential one (conc.par.11, conc.par.12).
+
+fn inverse(x int) int
+    100 / (x - 50)
+
+fn main()
+    print("start")
+    xs := [inverse(x) par for x in 0..100]
+    print(xs.len())

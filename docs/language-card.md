@@ -331,7 +331,12 @@ g := TaskGroup()            # tasks returning nothing; waited at block end
 g.add(spawn work(2))
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
-m := Mutex(0)               # get, set, swap; x := m.lock() then m.unlock(x + 1)
+for v in ch                 # receives until closed and empty
+    print(v)
+m := Mutex(0)               # get, set, swap
+with m as mut x             # holds m; stores x back on any exit
+    x += 1
+ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
 Wait or `add` each task exactly once, on every path. A deadlock traps.

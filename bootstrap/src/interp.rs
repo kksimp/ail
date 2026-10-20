@@ -446,7 +446,7 @@ fn has_defer(b: &Block) -> bool {
     }
     b.iter().any(|s| match s {
         Stmt::Defer(..) => true,
-        Stmt::While { body, .. } | Stmt::For { body, .. } => has_defer(body),
+        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } => has_defer(body),
         Stmt::Let { value, otherwise, .. } => {
             in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
         }
@@ -1335,6 +1335,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.for_loop(var, iter, body, env)?;
                 }
             }
+            Stmt::With { mutex, var, body, pos, .. } => self.with_block(mutex, var, body, *pos, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
             Stmt::Return(value, pos) => {
@@ -1440,6 +1441,15 @@ impl<'a, W: Write> Interp<'a, W> {
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
             Value::Set(t) => Rc::new(t.key_list()),
+            // conc.share.7: each value received, until the channel is closed and empty.
+            Value::Handle(Handle::Channel(c)) => {
+                while let Some(v) = self.chan_next(c, iter.pos())? {
+                    if !self.loop_body(var, v, body, env)? {
+                        break;
+                    }
+                }
+                return Ok(());
+            }
             other => unreachable!("checked: iterable, found {other:?}"),
         };
         for item in items.iter() {
@@ -1485,11 +1495,46 @@ impl<'a, W: Write> Interp<'a, W> {
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
+                Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
         };
         for item in items.iter() {
             env.push((&c.var, item.clone()));
+            let r = match &c.cond {
+                Some(cond) => match self.eval(cond, env) {
+                    Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
+                    Ok(_) => Ok(true),
+                    Err(e) => Err(e),
+                },
+                None => self.comp(rest, elem, value, set, env, acc),
+            };
+            env.pop();
+            match r {
+                Ok(true) | Err(Exit::Continue) => {}
+                Ok(false) | Err(Exit::Break) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
+    }
+
+    /// A comprehension clause over a channel: one element per value
+    /// received, until it is closed and empty (conc.share.7, expr.comp.3).
+    #[allow(clippy::too_many_arguments)]
+    fn comp_channel(
+        &mut self,
+        ch: usize,
+        c: &'a CompFor,
+        rest: &'a [CompFor],
+        elem: &'a Expr,
+        value: Option<&'a Expr>,
+        set: bool,
+        env: &mut Env<'a>,
+        acc: &mut (Vec<Value>, Table),
+    ) -> Flow<bool> {
+        while let Some(item) = self.chan_next(ch, c.iter.pos())? {
+            env.push((&c.var, item));
             let r = match &c.cond {
                 Some(cond) => match self.eval(cond, env) {
                     Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
@@ -2057,6 +2102,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 } else {
                     Value::Map(Rc::new(t))
                 }
+            }
+            Expr::Comp { elem, clauses, .. }
+                if clauses.len() == 1
+                    && clauses[0].par
+                    && let Some(v) = self.par_comp(elem, &clauses[0], env)? =>
+            {
+                v
             }
             Expr::Comp { kind, elem, value, clauses, .. } => {
                 let mut acc = (Vec::new(), Table::default());

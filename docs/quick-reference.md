@@ -483,7 +483,9 @@ iteration's own locals, to `out[i]` in a `for i in a..b` loop, or to an
 float totals use `xs.sum()` (a fixed tree) rather than `+=`. When you know
 the iterations are independent but the checker can't see it (writes to
 `out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
-(it prints, or breaks out) is an error:
+(it prints, or breaks out) is an error. A parallel map is a comprehension
+with `par for`: `lens := [steps(x) par for x in xs]` (one clause, a list;
+the element must not print, use a handle or write outside itself):
 
 ```ail
 fn main()
@@ -718,10 +720,13 @@ g.wait_all()?
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty
+for v in ch                   # receives until closed and empty
+    print(v)
+all := [v for v in ch]        # also in comprehensions
 ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
-x := m.lock()                 # read-modify-write:
-m.unlock(x + 1)
+with m as mut x               # read-modify-write: holds m, stores x back
+    x += 1                    # on any exit; a trap keeps the old value
 ```
 
 Each task handle must be waited or added to a group exactly once, on every
