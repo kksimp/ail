@@ -488,4 +488,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0492](0492-bench-automation.md) | One command produces the before/after benchmark table for tokens and speed (`tools/bench/run.sh`) *(delegated)* | Accepted | 2026-10-20 |
 | [0416](0416-net-bodies-as-bytes.md) | `std.net` bodies as `bytes`: new functions and last fields, `body` stays `str` *(delegated)* | Accepted | 2026-10-20 |
 | [0417](0417-proc-run-bytes.md) | `proc.run_bytes`: bytes in, bytes out, `Output` unchanged *(delegated)* | Accepted | 2026-10-20 |
-| [0605](0605-win64-calls-to-system-dlls.md) | Win64 calls to system DLL functions: `libsys.NAME` through the PE import table *(delegated)* | Accepted | 2026-10-20 |
+| [0606](0606-win64-calls-to-system-dlls.md) | Win64 calls to system DLL functions: `libsys.NAME` through the PE import table *(delegated)* | Accepted | 2026-10-20 |

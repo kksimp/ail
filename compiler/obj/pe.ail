@@ -294,7 +294,9 @@ pub fn pe_sample() List[int]
     img.code.extend([72, 137, 193])
     img.code.extend([72, 141, 21, 0, 0, 0, 0])
     img.relocs.push(codegen.Reloc(at: img.code.len() - 4, kind: "rel32", sym: "d:msg", tail: 0))
-    img.code.extend([65, 184, 6, 0, 0, 0])
+    msg := codegen.utf8("hello from AIL on Windows\n")
+    img.code.extend([65, 184])
+    put(mut img.code, msg.len(), 4)
     img.code.extend([76, 141, 76, 36, 40])
     img.code.extend([72, 199, 68, 36, 32, 0, 0, 0, 0])
     pe_call_import(mut img, "WriteFile")
@@ -303,7 +305,7 @@ pub fn pe_sample() List[int]
     # After ExitProcess, so it never runs: its import puts WS2_32.dll in the table.
     pe_call_import(mut img, "closesocket")
     img.data_syms["d:msg"] = img.data.len()
-    img.data.extend(codegen.utf8("hello from AIL on Windows\n"))
+    img.data.extend(msg)
     pe_image(img)
 
 ## `call qword ptr [rip + slot]` through the import `name`: FF 15 and a rel32.

@@ -1,4 +1,4 @@
-# 0605. Win64 calls to system DLL functions: `libsys.NAME` through the PE import table
+# 0606. Win64 calls to system DLL functions: `libsys.NAME` through the PE import table
 
 - **Status:** Accepted
 - **Date:** 2026-10-20

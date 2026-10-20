@@ -93,3 +93,26 @@ fn pe_sample_reads_back_in_an_external_tool() {
     assert!(text.contains("DLL Name: WS2_32.dll"), "{text}");
     assert!(text.contains("closesocket"), "{text}");
 }
+
+// ADR 0597, ADR 0598: the sample runs under Wine when it is installed: it
+// prints its line, and exits 0. Without Wine the test passes without checking.
+#[test]
+fn pe_sample_runs_under_wine_when_installed() {
+    if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+        return;
+    }
+    let b = sample();
+    let dir = std::env::temp_dir().join(format!("ail-pe-run-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("sample.exe");
+    std::fs::write(&exe, &b).unwrap();
+    let out = Command::new("wine")
+        .arg(&exe)
+        .env("WINEDEBUG", "-all")
+        .env("WINEPREFIX", dir.join("prefix"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(out.status.success(), "wine exited with {:?}", out.status);
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "hello from AIL on Windows\n");
+}

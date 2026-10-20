@@ -1,4 +1,4 @@
-## Win64 calls to system DLL functions (ADR 0605): `libsys.NAME` calls on
+## Win64 calls to system DLL functions (ADR 0606): `libsys.NAME` calls on
 ## the x86-64 target. Each argument goes in the register its position names
 ## (rcx rdx r8 r9, or xmm0-3 for a float), the caller reserves 32 bytes of
 ## shadow space, and arguments beyond four go on the stack above it. The call
@@ -18,7 +18,7 @@ pub fn Asm.call_import(mut self, name str)
 
 ## The `libsys.NAME` call `i`: stack room for the shadow space and the
 ## stack arguments, the arguments in place, the indirect call, and the
-## room given back. The result is rax, or xmm0 for a float (ADR 0605).
+## room given back. The result is rax, or xmm0 for a float (ADR 0606).
 fn Gen.libsys_call(mut self, i mir.Inst)
     n := i.args.len()
     extra := if n > 4 then n - 4 else 0
