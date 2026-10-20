@@ -268,6 +268,24 @@ fn list_grow(p int, size int)
     store64(p + 8, cap)
     store64(p + 16, data)
 
+## Room for `(hi - lo) * per` more elements of `size` bytes, at most
+## 2^20 of them, called before a loop that pushes that many (ADR 0578).
+## Only the capacity changes.
+fn list_reserve(xs List[int], lo int, hi int, per int, size int)
+    if hi <= lo
+        return
+    p := list_addr(xs)
+    mut want := hi - lo
+    if want > 1048576
+        want = 1048576
+    need := load64(p) + want * per
+    if need <= load64(p + 8)
+        return
+    data := alloc(size * need)
+    copy_bytes(data, load64(p + 16), size * load64(p))
+    store64(p + 8, need)
+    store64(p + 16, data)
+
 ## The slow paths of `push`: the code generator stores in place while the
 ## list has room, and calls these when it is full.
 fn list_push(xs List[int], v int)

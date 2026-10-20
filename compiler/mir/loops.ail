@@ -1,0 +1,147 @@
+## LoopInfo analysis for the optimiser (ADR 0577): natural loops from the
+## dominators (`dominators` in verify.ail), and the counted loops the
+## bounds-check pass (bce.ail) works on: `i` starts at a constant and
+## steps by 1 while `i < hi`.
+
+## Where a value is defined: its block, and the index of its instruction
+## there, or -1 for a block parameter.
+pub struct Def
+    pub block int
+    pub at int
+
+pub fn defs_of(f Func) List[Def]
+    mut out := [Def(block: -1, at: -1) for _ in 0..f.vals.len()]
+    for b in 0..f.blocks.len()
+        for p in f.blocks[b].params
+            out[p] = Def(block: b, at: -1)
+        for k in 0..f.blocks[b].insts.len()
+            d := f.blocks[b].insts[k].dst
+            if d >= 0
+                out[d] = Def(block: b, at: k)
+    out
+
+## The instruction that defines `v`, or `none` for a block parameter.
+pub fn inst_of(f Func, defs List[Def], v int) Inst?
+    d := defs[v]
+    if d.at < 0
+        return none
+    f.blocks[d.block].insts[d.at]
+
+## The value of a constant `int`.
+pub fn const_of(f Func, defs List[Def], v int) int?
+    i := inst_of(f, defs, v)?
+    if i.op == "const" then i.imm else none
+
+pub struct LoopInfo
+    pub header int
+    ## `member[b]`: block `b` is in the loop.
+    pub member List[bool]
+    pub blocks List[int]
+    ## The one block outside the loop that jumps to the header, else -1.
+    pub pre int
+    ## The blocks that jump back to the header.
+    pub latches List[int]
+    ## How many edges leave the loop.
+    pub exits int
+
+pub fn find_loops(f Func) List[LoopInfo]
+    n := f.blocks.len()
+    dom := dominators(f)
+    mut preds := [List[int]() for _ in 0..n]
+    for b in 0..n
+        for t in f.blocks[b].term.targets
+            preds[t].push(b)
+    mut out := List[LoopInfo]()
+    mut at := Map[int, int]()
+    for b in 0..n
+        for h in f.blocks[b].term.targets
+            if not dom[b][h]
+                continue
+            mut k := out.len()
+            if seen := at.get(h)
+                k = seen
+            else
+                at[h] = k
+                mut m := [false for _ in 0..n]
+                m[h] = true
+                out.push(LoopInfo(header: h, member: m, blocks: [], pre: -1, latches: [], exits: 0))
+            out[k].latches.push(b)
+            mut stack := [b]
+            while stack.len() > 0
+                x := stack.pop() else break
+                if out[k].member[x]
+                    continue
+                out[k].member[x] = true
+                for p in preds[x]
+                    stack.push(p)
+    for k in 0..out.len()
+        h := out[k].header
+        out[k].blocks = [b for b in 0..n if out[k].member[b]]
+        mut outside := List[int]()
+        for p in preds[h]
+            if not out[k].member[p]
+                outside.push(p)
+        if outside.len() == 1 and f.blocks[outside[0]].term.kind == "jump"
+            out[k].pre = outside[0]
+        mut exits := 0
+        for b in out[k].blocks
+            for t in f.blocks[b].term.targets
+                if not out[k].member[t]
+                    exits += 1
+        out[k].exits = exits
+    out
+
+## Whether `lp` has no loop inside it.
+pub fn is_innermost(loops List[LoopInfo], lp LoopInfo) bool
+    for other in loops
+        if other.header != lp.header and lp.member[other.header]
+            return false
+    true
+
+## A loop `while p < hi` that adds 1 to `p` on every path back, and leaves
+## only from its header, on the false edge.
+pub struct Counted
+    ## The header parameter, its index, and its start (a constant >= 0).
+    pub p int
+    pub k int
+    pub lo int
+    ## The bound, defined outside the loop.
+    pub hi int
+    pub body int
+    pub exit int
+    ## The edge of the header's branch that leaves.
+    pub exit_edge int
+
+pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
+    if lp.pre < 0 or lp.exits != 1
+        return none
+    h := f.blocks[lp.header]
+    t := h.term
+    if t.kind != "branch" or not lp.member[t.targets[0]] or lp.member[t.targets[1]]
+        return none
+    cmp := inst_of(f, defs, t.cond)?
+    if cmp.op != "lt" or defs[t.cond].block != lp.header
+        return none
+    p := cmp.args[0]
+    hi := cmp.args[1]
+    if lp.member[defs[hi].block]
+        return none
+    mut k := -1
+    for j in 0..h.params.len()
+        if h.params[j] == p
+            k = j
+    if k < 0
+        return none
+    lo := f.blocks[lp.pre].term.args[0][k]
+    start := const_of(f, defs, lo)?
+    if start < 0
+        return none
+    for l in lp.latches
+        lt := f.blocks[l].term
+        for e in 0..lt.targets.len()
+            if lt.targets[e] != lp.header
+                continue
+            step := inst_of(f, defs, lt.args[e][k])?
+            if step.op != "add" or step.args[0] != p or const_of(f, defs, step.args[1]) != 1
+                return none
+    Counted(p: p, k: k, lo: lo, hi: hi, body: t.targets[0], exit: t.targets[1], exit_edge: 1)
