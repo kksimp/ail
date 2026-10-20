@@ -356,8 +356,11 @@ inferred error set, `fails with`, and the first line of its doc after `##`.
 **api.card.2** — With `--json` (or the global `--json`) the same content is
 one JSON line: `api`, `card`, `entry`, `tests`, `test_count`, `manifest`,
 `examples`, `modules` (each `module`, `count`, `items` with `kind`, `name`,
-`pub`, `signature`, `doc`, `effects`, `requires`, `ensures`, `fails_with`,
-`members`), `budget` and `dropped`.
+`pub`, `file`, `line`, `col`, `signature`, `doc`, `effects`, `requires`,
+`ensures`, `fails_with`, `members`), `budget` and `dropped`. `file`, `line`
+and `col` are where the declaration's name is, the file as the program
+loaded it ([ADR 0338](../decisions/0338-card-json-positions.md)); the text
+form doesn't show them.
 
 **api.card.3** — The card fits `--budget` estimated tokens (default 4,000).
 If the full card is over, it drops in this order until it fits: private
