@@ -236,4 +236,9 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     assert!(out.contains("image-only pages (scans; these need OCR): 1"), "pdf info on a scan:\n{out}");
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
     assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
+    // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
+    let (_, out, _) = pdf(&["view", &report, "--json", "--page", "2"]);
+    assert!(out.contains("\"pages_read\":1.0") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
+    let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
+    assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
 }

@@ -30,14 +30,14 @@ Two limits are real and no window awareness changes them:
 tools/pdf/
   pdf.ail            CLI: text, grep, json, info, outline, bench, view
   reader/            the reader module (no effects except read_file)
-    source.ail       bytes (List[int]) and PdfError; read_file (stopgap)
+    source.ail       bytes (List[int]) and PdfError; read_file (fs.read_bytes)
     inflate.ail      RFC 1950/1951 inflate (stopgap)
     lex.ail          tokens and objects (7.2-7.3)
     doc.ail          xref tables and streams, object streams, repair, pages (7.5, 7.7)
     filters.ail      Flate, LZW, ASCII85, ASCIIHex, RunLength, PNG/TIFF predictors (7.4)
     fonts.ail        codes, ToUnicode CMaps, encodings, glyph names, widths (9.5-9.10)
     content.ail      text state machine to glyphs, glyphs to lines (8.4, 9.3, 9.4)
-    model.ail        the page model, links, outline, text strings (7.9, 12.3, 12.5)
+    model.ail        the page model, lazy `Pages`, links, outline, text strings (7.9, 12.3, 12.5)
     search.ail       normalised search with boxes
   view/view.ail      headless viewer core plus the std.ui window
 ```
@@ -75,16 +75,32 @@ machine form:
   Search ignores case and runs of whitespace, crosses line breaks, and joins
   a word hyphenated at a line end. Exit status 1 when nothing matches.
 - `pdf view FILE --print` and `--json`: the viewer's screen as text, and its
-  state (page, scroll, query, hits, the rows on screen). This is the "window
-  awareness": the viewer knows which document character is in every cell,
-  so what it reports is exactly what a person sees, not a recognition of it.
+  state (page, scroll, query, hits, the rows on screen, `visible`: the
+  page's lines with a character on screen, with positions, and
+  `pages_read`). This is the "window awareness": the viewer knows which
+  document character is in every cell, so what it reports is exactly what a
+  person sees, not a recognition of it.
+
+## Only what is asked for is read (ADR 0511)
+
+Readers that parse the whole document before showing page one pay for
+pages nobody looks at. `tools/pdf` opens a file by reading the
+cross-reference data and the page tree only. `Pages.get(i)` reads a page's
+content the first time it is needed and keeps it. `text --page N` and
+`json --page N` read one page; the viewer reads the pages it shows; its
+search reads forward page by page and stops at the first page with a match
+(`n` reads on from there); `grep` prints each page's hits as soon as that
+page is read, and `--first` stops at the first page with a match. Only
+`info`, `outline` and a whole-document `text` or `grep` read every page.
 
 ## Measurements (2026-10-20, Linux x86-64, release bootstrap)
 
 | Input | AIL reader | `pdftotext` (C++) |
 |---|---|---|
 | 2-page LibreOffice report, 29 KB | 125 ms for `pdf text`, process start included | 12 ms |
-| 53-page LibreOffice document, 231 KB, 252,529 glyphs | 2.9 s (read 0.1 s, pages 2.8 s, search 0.2 s) | 0.08 s |
+| 53-page LibreOffice document, 231 KB, 252,529 glyphs: every page | 3.0 s (`grep`; read 4 ms, pages 2.8 s) | 0.08 s |
+| the same, one page: `text --page 30`, `view --page 30 --print` | 0.18-0.23 s | 0.02 s |
+| the same, `grep --first` (hit on page 1) | 0.18 s | n/a |
 
 Text output matches `pdftotext` on the LibreOffice fixtures and on a
 10-page ReportLab PDF, apart from line order on the ReportLab one (content
@@ -99,7 +115,7 @@ the rest comes from; `pdf bench FILE` tracks it. The source is 3,249 lines,
 
 | Need | Today | Replaced by |
 |---|---|---|
-| Binary file reads | `read_file` runs POSIX `od` (ADR 0520) | `fs.read_bytes` (lane 123, ADRs 0412-0417) |
+| Binary file reads | done: `fs.read_bytes` (lane 123); the `od` stopgap is gone (19 ms to 4 ms on the report) | |
 | Flate | `inflate_zlib` in AIL, behind one function | `std.compress.unzlib` once it returns `bytes` (lane 128 returns `str` today, which fails on binary streams) |
 | Byte strings | `List[int]` | `bytes` (lane 123) |
 | Regex search | plain substring | `std.regex` (lane 127, merged) as `pdf grep --regex` |
@@ -140,8 +156,12 @@ the same page model, so search hits and agent queries keep working on it.
 
 ## Next slices
 
-1. Swap the stopgaps when lanes 123 and 128 land bytes.
+1. Swap `inflate_zlib` for `std.compress` once it returns `bytes`; read pages
+   on several cores (a `par` comprehension needs the object cache out of the
+   page reader's `ref`).
 2. Decryption with an empty user password (RC4, AES-128, AES-256).
 3. `--regex` through `std.regex`; MacRoman; predefined CJK CMaps.
 4. Tagged-PDF reading order; form fields and annotation text.
 5. Pixel rendering once the window layer has a surface (above).
+6. OCR on demand for scanned pages, in AIL (the designer's goal,
+   2026-10-20): only the scanned pages shown or searched are recognised.
