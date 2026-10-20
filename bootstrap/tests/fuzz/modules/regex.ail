@@ -1,0 +1,28 @@
+# fuzz-input: regex
+# fuzz-needs: std.regex
+# std.regex on hostile patterns and haystacks: a bad pattern is an error, never a crash;
+# matching ends in linear time (fuzz.mod.2 catches an exponential one); the pieces agree.
+use std.regex
+
+fn main()
+    pat := {{TEXT}}
+    hay := {{TEXT2}}
+    re := regex.compile(pat) else err
+        print("rejected {err.message.len() > 0}")
+        return
+    hit := regex.is_match(re, hay)
+    all := regex.find_all(re, hay)
+    if hit != (all.len() > 0)
+        print("FAIL is_match disagrees with find_all")
+    if f := regex.find(re, hay)
+        if not hit
+            print("FAIL find found what is_match did not")
+        if not hay.contains(f.text)
+            print("FAIL a match is not part of the haystack")
+    print(regex.split(re, hay).len() >= 1)
+    print(regex.replace(re, hay, "").len() <= hay.len() or not hit)
+    lit := regex.compile(regex.escape(hay)) else e2
+        print("FAIL escaped text does not compile: {e2.message}")
+        return
+    if not regex.is_match(lit, hay)
+        print("FAIL escaped text does not match itself")
