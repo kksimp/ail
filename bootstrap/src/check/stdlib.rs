@@ -235,8 +235,6 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
             ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
-            ("net", "get" | "post") => (
-                if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
             ("net", "get" | "post" | "request") => (
                 match f {
                     "get" => vec![Str],
