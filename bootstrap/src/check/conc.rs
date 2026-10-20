@@ -309,6 +309,7 @@ fn stmt_spawns(s: &Stmt, diags: &mut Vec<Diagnostic>) {
             spawns(value, diags);
             else_spawns(otherwise, diags);
         }
+        Stmt::Defer(inner, _) => stmt_spawns(inner, diags),
         Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
     }
 }
@@ -496,6 +497,7 @@ fn stmt_uses(name: &str, s: &Stmt, cond: bool, u: &mut Uses) {
             expr_uses(name, value, cond, u);
             else_uses(name, otherwise, u);
         }
+        Stmt::Defer(inner, _) => stmt_uses(name, inner, true, u),
         Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
     }
 }

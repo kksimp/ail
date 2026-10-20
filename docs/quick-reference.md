@@ -515,6 +515,41 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 
 Two `mut` arguments of one call can't refer to the same value.
 
+## Shared cells, resources and `move`
+
+`ref T` is the one way to share a value: copies of a reference see each
+other's changes, and fields and methods reach the contents directly.
+
+```ail
+root := ref Node(value: 1, children: [])
+alias := root
+alias.value = 2        # root.value is 2; any copy may change the cell
+print(root == alias)   # true: same cell (`==` on refs is identity)
+```
+
+A `unique` type can't be copied: binding, assigning, returning or storing it
+moves it, and using the old name afterwards (on any path) is an error. Its
+`impl Drop` runs once, when its last owner's block ends, even on a trap.
+`defer S` runs `S` when the block ends; cleanups and defers run last first.
+
+```ail
+unique struct File
+    fd int
+
+impl Drop for File
+    fn drop(mut self)
+        print("closing {fd}")
+
+fn close(move f File)  # takes ownership; the caller writes `move` too
+    print("bye {f.fd}")
+
+f := File(fd: 3)
+close(move f)          # f can't be used after this
+```
+
+A unique value can't be a list element, map value, `ref` contents or type
+argument yet (OQ-050).
+
 ## Modules
 
 A module is a directory of `.ail` files sharing one namespace. `use a.b`

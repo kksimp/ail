@@ -251,6 +251,20 @@ every manifest); (c) a registry that only maps names to git URLs and commits
 (no solver; small service). Involves hosting and publishing, so it is the
 designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
 
+## OQ-050 — Unique values in collections, generic code, and `move self`
+[ADR 0191](decisions/0191-cleanup-with-drop.md) keeps unique values out of
+lists, maps, `ref` cells and type arguments, because generic code and the
+collections copy their values. Options: (a) a `Copy`-like bound that every
+generic parameter has unless it opts out (`[T unique]`), with collection
+methods that move (`xs.push(move f)`, `xs.take(i)`); (b) collections of
+unique values only through a dedicated `UniqueList[T]`; (c) keep the
+restriction. Related: `fn File.close(move self)` receivers and moving out of
+a field (destructuring), both rejected by the bootstrap today
+([ADR 0190](decisions/0190-moves-and-use-after-move.md)). Recommendation:
+(a), designed with the standard library's resource types (files, sockets,
+task groups, conc.task.5), since a server holding many connections needs it.
+*Owner: AI under ADR 0076, with the standard-library resource types.*
+
 ## OQ-090 — May accelerator drivers compile AIL-generated code?
 ADR 0010 forbids external backends. GPUs and NPUs can't be reached without
 the OS driver compiling what AIL hands it: SPIR-V (Vulkan), MSL (Metal), a

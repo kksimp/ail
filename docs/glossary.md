@@ -39,12 +39,14 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Contract** | `requires` and `ensures` lines under a function's signature: what callers must satisfy and what the function promises, checked at run time (ADR 0210). |
 | **Copy-on-write (COW)** | Values share storage until one of them is mutated, at which point that one gets its own copy. Unobservable to programs (`own.val.2`). |
 | **Deadlock** | Every unfinished task is blocked, so none can continue. The program traps with `conc.task.7` instead of hanging (ADR 0186). |
+| **`defer`** | `defer S` runs statement `S` when the enclosing block exits by any path, including a trap; with the block's cleanups, last first (ADR 0066, ADR 0191). |
 | **Delegated decision** | A routine design decision made by the AI using the designer's priority order (ADR 0076). |
 | **Derive generator** | A compile-time function `fn(TypeInfo) str ! DeriveError` that a trait names with `@derive(f)`; an empty `impl` of the trait runs it and checks the AIL text it returns as the impl's body (`ct.derive.*`, ADR 0227). |
 | **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). |
 | **Diagnostics schema** | The versioned JSON form of `ail check --json`: one object per line, tagged `"api":1`, with span, notes and fixes; see [semantic-api.md](design/semantic-api.md) (ADR 0145). |
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
 | **Doc comment** | A run of `##` lines directly above a declaration, with no blank line between; it documents that declaration (lex.comment.2, ADR 0152). |
+| **`Drop`** | The prelude trait whose `fn drop(mut self)` is a unique type's cleanup; it runs once when the value's last owner goes out of scope and is never called directly (ADR 0191). |
 | **Drag race** | A head-to-head benchmark: the same small program in AIL, idiomatic C and tuned C, built and run automatically with identical outputs checked (ADR 0030, ADR 0036). |
 | **Effect set** | What a function may do to the world outside its arguments: `io`, `fail`, `mutates`, `unsafe`, `spawn`, plus capabilities. Inferred over the call graph, never written; shown by `ail effects` (ADR 0163). |
 | **Error return trace** | The list of source locations an error passed through via `?`, recorded automatically and shown in error reports (ADR 0050). |
@@ -76,6 +78,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Manifest** | A package's `ail.pkg` file: its `package` line and one `dep` line per dependency (ADR 0230). |
 | **MIR** | Mid-level IR: per body instance, a control-flow graph in SSA form with explicit allocations, copies, traps, dispatch and effects; the unit of the query compiler; internal and unversioned (ADR 0222, ADR 0223). |
 | **Module** | A directory of `.ail` files sharing one namespace (ADR 0097). |
+| **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190). |
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `lock`/`unlock` bracket a read-modify-write (ADR 0189). |
@@ -133,6 +136,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Type argument inference** | Working out a generic call's type arguments from its arguments and expected type (ADR 0129). |
 | **Typed hole** | `todo` written where code isn't finished: it takes the expected type, the checker warns with what it needs and the names in scope, and running it traps (ADR 0147). |
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
+| **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |

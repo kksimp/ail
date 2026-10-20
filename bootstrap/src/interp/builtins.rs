@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
 
-use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, peek, slot_mut, trap};
+use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, load, put, take, trap, view, with_slot};
 use crate::ast::Arg;
 use crate::diag::Pos;
 use crate::num::Num;
@@ -200,37 +200,38 @@ impl<'a, W: Write> Interp<'a, W> {
         for arg in args {
             a.push(self.eval(&arg.value, env)?);
         }
-        let current = match &recv {
-            Operand::Place(p) => peek(env, p)?,
-            Operand::Value(v) => v,
-        };
-        let mutating = match current {
+        let mutating = |v: &Value| match v {
             Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
             Value::Map(_) => name == "remove",
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
         };
-        if !mutating {
-            let v = current.clone();
+        let is_mutating = match &recv {
+            Operand::Place(p) => view(env, p, mutating)?,
+            Operand::Value(v) => mutating(v),
+        };
+        if !is_mutating {
+            let v = match recv {
+                Operand::Place(p) => load(env, &p)?,
+                Operand::Value(v) => v,
+            };
             return Ok(self.read_only(v, name, a, pos)?);
         }
         let Operand::Place(p) = recv else { unreachable!("checked: `{name}` needs a mutable place") };
         if name == "sort" {
             // Sorting may call `cmp` implementations, so the list is moved out first.
-            let Value::List(items) = std::mem::replace(slot_mut(env, &p, false)?, Value::Unit) else {
-                unreachable!("checked: a list")
-            };
+            let Value::List(items) = take(env, &p)? else { unreachable!("checked: a list") };
             let sorted = self.sorted(Rc::unwrap_or_clone(items), pos);
             let restored = match &sorted {
                 Ok(xs) => xs.clone(),
                 Err(_) => Vec::new(),
             };
-            *slot_mut(env, &p, false)? = Value::List(Rc::new(restored));
+            put(env, &p, false, Value::List(Rc::new(restored)))?;
             sorted?;
             return Ok(Value::Unit);
         }
-        let slot = slot_mut(env, &p, false)?;
-        Ok(match (slot, name) {
+        Ok(with_slot(env, &p, false, |slot| -> Result<Value, Trap> {
+            Ok(match (slot, name) {
             (Value::List(items), "push") => {
                 Rc::make_mut(items).push(a.pop().expect("checked: one argument"));
                 Value::Unit
@@ -285,6 +286,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Set(t), "remove") => Value::Bool(Rc::make_mut(t).remove(&a[0]).is_some()),
             (other, _) => unreachable!("checked: `{name}` on {other:?}"),
         })
+        })??)
     }
 
     fn read_only(&mut self, v: Value, name: &str, mut a: Vec<Value>, pos: Pos) -> Result<Value, Trap> {
