@@ -38,6 +38,10 @@ pub struct PageModel
     pub unreadable int
     ## True when the page paints images and no text: a scan, which needs OCR.
     pub image_only bool
+    ## True when the lines were read from the page's images by OCR.
+    pub ocr bool
+    ## OCR's mean confidence per word, 0 to 1 (0 without OCR).
+    pub confidence float
 
 impl ToJson for PageModel
 
@@ -56,6 +60,8 @@ pub fn r2(x float) float
 pub struct Page
     pub model PageModel
     pub lines List[Line]
+    ## The images the page paints, not decoded until OCR asks.
+    pub placed List[Placed]
 
 ## PDFDocEncoding codes 0x80..0xA0 (Annex D.2); the rest is Latin-1.
 PDFDOC_HIGH := [
@@ -259,12 +265,60 @@ fn Doc.outline_items(
 
 ## Every page, read (1-based numbers). A page that fails to read is empty.
 pub fn Doc.read_pages(self) List[Page] ! PdfError
-    pages := pages()?
-    nums := page_numbers(pages)
-    mut out := List[Page]()
-    for i in 0..pages.len()
-        out.push(read_page(pages[i], i + 1, nums))
-    out
+    ps := lazy_pages()?
+    [ps.get(i) for i in 0..ps.count()]
+
+struct PageCache
+    pages Map[int, Page]
+
+## The pages of a document, each read the first time it is asked for
+## (ADR 0511): opening costs the page tree only, and a viewer or a search
+## that stops early never reads the rest.
+pub struct Pages
+    pub doc Doc
+    dicts List[Map[str, Obj]]
+    nums Map[int, int]
+    cache ref PageCache
+
+pub fn Doc.lazy_pages(self) Pages ! PdfError
+    dicts := pages()?
+    Pages(doc: self, dicts: dicts, nums: page_numbers(dicts), cache: ref PageCache(pages: {}))
+
+pub fn Pages.count(self) int
+    dicts.len()
+
+## Page `i` (0-based), read once.
+pub fn Pages.get(self, i int) Page
+    if p := cache.pages.get(i)
+        return p
+    p := doc.read_page(dicts[i], i + 1, nums)
+    cache.pages[i] = p
+    p
+
+## Replaces page `i` in the cache, as OCR does once it has read it.
+pub fn Pages.put(self, i int, p Page)
+    cache.pages[i] = p
+
+## Pages already read, for tests and tools that build pages themselves.
+pub fn pages_of(list List[Page]) Pages
+    doc := Doc(buf: [], xref: {}, trailer: {}, cache: ref Cache(objs: {}), repaired: false)
+    mut m := Map[int, Page]()
+    for i in 0..list.len()
+        m[i] = list[i]
+    Pages(
+        doc: doc,
+        dicts: [Map[str, Obj]() for _ in list],
+        nums: {},
+        cache: ref PageCache(pages: m),
+    )
+
+## How many pages have been read so far.
+pub fn Pages.read_count(self) int
+    cache.pages.len()
+
+## Whether page `i` has been read.
+pub fn Pages.is_read(self, i int) bool
+    cache.pages.contains(i)
 
 ## A line in page coordinates: from the crop box's lower left corner.
 fn shift(l Line, dx float, dy float) Line
@@ -283,7 +337,7 @@ pub fn Doc.read_page(self, p Map[str, Obj], number int, nums Map[int, int]) Page
         for x in (key(p, "CropBox").as_arr() else (key(p, "MediaBox").as_arr() else []))
     ]
     box := if mb.len() == 4 then mb else [0.0, 0.0, 612.0, 792.0]
-    pt := page_glyphs(p) else PageText(glyphs: [], images: 0)
+    pt := page_glyphs(p) else PageText(glyphs: [], images: 0, placed: [])
     lines := [shift(l, box[0], box[1]) for l in lines_of(pt.glyphs)]
     mut unreadable := 0
     for g in pt.glyphs
@@ -303,8 +357,10 @@ pub fn Doc.read_page(self, p Map[str, Obj], number int, nums Map[int, int]) Page
         images: pt.images,
         unreadable: unreadable,
         image_only: pt.images > 0 and pt.glyphs.len() == 0,
+        ocr: false,
+        confidence: 0,
     )
-    Page(model: model, lines: lines)
+    Page(model: model, lines: lines, placed: pt.placed)
 
 ## A US Letter page of left-aligned 10 pt lines 14 pt apart from the top,
 ## 5 pt per character: for tests of what reads pages.
@@ -332,8 +388,10 @@ pub fn text_page(number int, texts List[str]) Page
         images: 0,
         unreadable: 0,
         image_only: false,
+        ocr: false,
+        confidence: 0,
     )
-    Page(model: m, lines: lines)
+    Page(model: m, lines: lines, placed: [])
 
 @test fn decodes_text_strings()
     assert_eq(text_string([0xfe, 0xff, 0, 0x48, 0, 0xe9]), "H\u{e9}")

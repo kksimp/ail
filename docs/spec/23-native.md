@@ -41,7 +41,7 @@ call that can fail is in the subset only as the value of `else` with a
 fallback value, a statement that leaves, or a block without a binding
 (err.else.1-2); `else err` and `?` are not yet. Any other construct is
 reported at its position under this rule, all of them at once, and nothing
-is built. *(ADRs 0384, 0390, 0392, 0393, 0580, 0582)*
+is built. *(ADRs 0384, 0390, 0392, 0393, 0580, 0582, 0591)*
 
 ```ail
 fn steps(n int) int
@@ -73,6 +73,8 @@ name without `.ail`, in the current directory). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
+
+**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
 
 ```text
 $ ail build examples/hello.ail
