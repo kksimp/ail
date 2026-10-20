@@ -109,7 +109,7 @@ def compile_c(src, workdir):
     """Compile a C twin with cc -O2; None when there is no compiler or it fails."""
     exe = Path(workdir) / (src.stem + "_c")
     try:
-        p = subprocess.run(["cc", "-O2", "-o", str(exe), str(src)], capture_output=True)
+        p = subprocess.run(["cc", "-O2", "-o", str(exe), str(src), "-lm"], capture_output=True)
     except FileNotFoundError:
         return None
     return exe if p.returncode == 0 else None
