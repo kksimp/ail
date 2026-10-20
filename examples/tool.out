@@ -1,5 +1,5 @@
 file: tool.ail
-lines: 40 (4 blank, 2 comments)
+lines: 37 (4 blank, 2 comments)
 functions: measure, base_name, main
 echo said: measured tool.ail (status 0)
 a missing file is not_found

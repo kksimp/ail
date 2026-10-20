@@ -11,7 +11,9 @@
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ```
 
-Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
+Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `time`, `ui`)
+need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
 
@@ -57,11 +59,11 @@ update a `mut` variable in a loop, use `=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-`use std.random`: `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
-`use std.fs`: `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
-`use std.proc`: `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
-`use std.net`: `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
+`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
@@ -118,8 +120,8 @@ fn find(names List[str], wanted str) int?   # an int, or `none`
     none
 
 error enum ParseError                       # only `error` types can be errors
-    Empty
-    BadNumber(text str)
+    Empty "empty input"                     # optional message: its display text
+    BadNumber(text str) "bad number {text}"
 
 fn parse(s str) int ! ParseError            # an int, or a ParseError
     if s == ""
@@ -137,7 +139,7 @@ fn main() !                                 # main can fail; the error is report
     i := find(["a", "b"], "b") else -1      # `else`: a fallback value...
     n := parse("12") else return            # ...or leave...
     t := total(["1", "x"]) else err         # ...or handle the error
-        print("bad input: {err}")           # ParseError.BadNumber(text: "x")
+        print("bad input: {err}")           # bad input: bad number x
         0
     print("{i} {n} {t}")
     if v := parse("7")                      # handle both outcomes, then go on
@@ -147,6 +149,8 @@ fn main() !                                 # main can fail; the error is report
 ```
 
 - `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
+- In a function with inferred errors (`!T`, `!`) and in `@test` functions,
+  `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
@@ -203,6 +207,7 @@ kind := if n < 0     # `if` used as a value needs `else`;
     "negative"       # elif/else line up with the line the `if` starts on
 else
     "non-negative"
+sign := if n < 0 then "-" else "+"   # the one-line form
 
 while n > 0
     n -= 1
@@ -290,6 +295,7 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
+mut counts := {}                       # typed by first use: counts[w] += 1
 b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
 for name in ages.keys()                # `for k in m` is an error; also values()
     print("{name}: {ages[name]}")

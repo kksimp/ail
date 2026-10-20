@@ -1,0 +1,12 @@
+## type.coll.13: `m[k] += n` on a local declared from `{}` makes it a map.
+fn main()
+    mut m := {}
+    m["a"] += 1
+    m["a"] += 2
+    mut f := {}
+    f[3] -= 0.5
+    mut s := {}
+    s.add("x")
+    print(m)
+    print(f)
+    print(s)

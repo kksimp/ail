@@ -337,6 +337,44 @@ signature shows them.
    40      fn Drawing.add(mut self, s any Shape)
 ```
 
+### Program card
+
+`ail api --card [--budget N] [--json] DIR|FILE` prints a program's own card
+(ADRs 0310–0311).
+
+**api.card.1** — The card of a package directory or a file has, in this
+order: its name; `entry:` the `main` of the root module and its file;
+`tests:` the `@test` functions' names, sorted; the lines of `ail.pkg`;
+`examples:` the `.ail` files under `DIR/examples`, each with the first line
+of its first `##` comment; then one block per module, the root module
+first, then by import path, listing the module's declarations in source
+order as `ail api --text` does (signatures, with `pub` where written),
+each function's effects in `[...]`, its `requires`/`ensures` and, for an
+inferred error set, `fails with`, and the first line of its doc after `##`.
+`@test` functions are not in the module blocks.
+
+**api.card.2** — With `--json` (or the global `--json`) the same content is
+one JSON line: `api`, `card`, `entry`, `tests`, `test_count`, `manifest`,
+`examples`, `modules` (each `module`, `count`, `items` with `kind`, `name`,
+`pub`, `signature`, `doc`, `effects`, `requires`, `ensures`, `fails_with`,
+`members`), `budget` and `dropped`.
+
+**api.card.3** — The card fits `--budget` estimated tokens (default 4,000).
+If the full card is over, it drops in this order until it fits: private
+items; doc comments; parameters' names; fields, variants, contracts, error
+sets and test names; signatures (kind and name only, then module names
+with counts). A trimmed card's last line is `trimmed to fit N tokens (~M);
+dropped: LIST`.
+
+**api.card.4** — A program the checker rejects has no card: the
+diagnostics are printed and the exit code is 2, as for api.out.5. A missing
+path or a bad option is exit code 2.
+
+**api.card.5** — `docs/design/cards/edit.md` and `std.md` are the output for
+`tools/edit` and `bootstrap/src/std`; `cargo test --test api_card` fails
+when either differs from the command's output. Regenerate with
+`./ail api --card tools/edit > docs/design/cards/edit.md`.
+
 ### Position queries: `--locals`, `--type`, `--refs`
 
 `ail api --locals FILE LINE COL`, `ail api --type FILE LINE COL` and

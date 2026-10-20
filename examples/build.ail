@@ -1,9 +1,4 @@
 ## An agent-style build script: check every example and summarize the diagnostics.
-use std.env
-use std.fs
-use std.io
-use std.path
-use std.proc
 
 struct Finding
     severity str
@@ -14,7 +9,7 @@ fn to_finding(doc Json) Finding?
     severity := doc.str("severity")?
     rule := doc.str("rule")?
     at := doc.num("line")?
-    Finding(severity: severity, rule: rule, line: at.to_int())
+    Finding(severity, rule, line: at.to_int())
 
 fn parse_findings(report str) List[Finding]
     [to_finding(parse_json(line) else continue) else continue for line in report.lines()]

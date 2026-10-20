@@ -1,0 +1,47 @@
+
+struct Sale
+    region str
+    product str
+    units int
+    price float
+
+fn parse_row(line str) Sale?
+    cells := line.split(",")
+    if cells.len() != 4
+        return none
+    Sale(
+        region: cells[0],
+        product: cells[1],
+        units: cells[2].to_int()?,
+        price: cells[3].to_float()?,
+    )
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/data/sales.csv")?
+    mut revenue := {}
+    mut units := {}
+    mut by_product := {}
+    mut bad := 0
+    for line in text.lines()[1..]
+        sale := parse_row(line) else
+            bad += 1
+            continue
+        amount := sale.units.to_float() * sale.price
+        revenue[sale.region] += amount
+        units[sale.region] += sale.units
+        by_product[sale.product] += amount
+    print("{"region":<8}{"units":>6}{"revenue":>10}")
+    for region in revenue.keys().sorted()
+        print("{region:<8}{units[region]:>6}{revenue[region]:>10.2}")
+    best := by_product.keys().sorted(by: |p| -by_product[p])[0]
+    print("total {revenue.values().sum():.2}, best {best}, {bad} bad rows")
+
+@test fn parses_rows()
+    assert_eq(parse_row("north,widget,2,1.5")?, Sale(
+        region: "north",
+        product: "widget",
+        units: 2,
+        price: 1.5,
+    ))
+    assert(parse_row("north,widget,two,1.5") == none)
+    assert(parse_row("north") == none)

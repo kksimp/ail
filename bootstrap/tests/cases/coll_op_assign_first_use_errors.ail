@@ -1,0 +1,6 @@
+## type.coll.13: `m[k] += v` fixes the type only for a number; a string
+## doesn't, so the local's type is still unknown.
+fn main()
+    mut m := {}
+    m["a"] += "x"
+    print(m)

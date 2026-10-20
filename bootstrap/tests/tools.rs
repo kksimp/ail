@@ -75,3 +75,40 @@ fn editor_key_table_matches_the_readme() {
     let readme = std::fs::read_to_string(tool("tools/edit/README.md")).unwrap();
     assert!(readme.contains(table.trim_end()), "tools/edit/README.md's key table differs from `--keys`; paste its output:\n{table}");
 }
+
+/// The agent panel against the real `ail` outputs (ADRs 0312–0313): Ctrl-I
+/// info, Shift-F5 trace with a trap, Ctrl-Shift-E failure paths and
+/// Ctrl-Shift-C coverage on a fixture, so an output change breaks a test.
+#[test]
+fn editor_agent_panel_reads_the_real_outputs() {
+    let dir = std::env::temp_dir().join(format!("ail-edit-agent-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("agent.ail");
+    std::fs::copy(tool("tools/edit/testdata/agent.ail"), &file).unwrap();
+    let file = file.display().to_string();
+    let screen = |flags: &[&str]| {
+        let mut args = vec!["run".to_string(), tool("tools/edit/edit.ail"), "--print".to_string()];
+        args.extend(flags.iter().map(|f| f.to_string()));
+        args.push(file.clone());
+        let out = ail().args(&args).env("AIL", env!("CARGO_BIN_EXE_ail")).output().unwrap();
+        assert!(out.status.success(), "{flags:?}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let info = screen(&["--at=12:10", "--key=ctrl+i"]);
+    for want in [" half: int ! HalfError\n", "     requires n >= 0\n", "     effects: fail\n", "     fails with HalfError\n", " ## Halves an even number.\n", " fn:half: 2 uses in this file"] {
+        assert!(info.contains(want), "info lacks {want:?}:\n{info}");
+    }
+    let trace = screen(&["--key=shift+f5"]);
+    for want in ["   call half(n = 4)  12:10", " requires n >= 0 held  6:5", " trap[type.coll.4] index 2 is out of bounds", "   in main 15:12  locals: x = 2, v = [1, 2]", " > 2"] {
+        assert!(trace.contains(want), "trace lacks {want:?}:\n{trace}");
+    }
+    let jumped = screen(&["--key=shift+f5", "--key=down", "--key=enter"]);
+    assert!(jumped.contains("Ln 12, Col 10"), "trace jump:\n{jumped}");
+    let paths = screen(&["--key=ctrl+shift+e"]);
+    for want in [" fn half fails with HalfError", "   8:16 return: HalfError", "   12:17 propagate half(): HalfError", "   18:15 handle (default) half(): HalfError"] {
+        assert!(paths.contains(want), "failure paths lack {want:?}:\n{paths}");
+    }
+    let covered = screen(&["--key=ctrl+shift+c"]);
+    assert!(covered.contains("\n  8!        return Odd(n)\n") && covered.contains("\n  9     n / 2\n") && covered.contains("| coverage: lines 2/7"), "coverage:\n{covered}");
+    std::fs::remove_dir_all(&dir).ok();
+}
