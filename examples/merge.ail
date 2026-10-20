@@ -18,13 +18,14 @@ impl FromJson for Config
 fn overlay(base Json, over Json) Json
     mut out := base
     for m in over.as_obj() else []
-        out.set(m.key, if m.value.as_obj() != none then overlay(base.get(m.key) else m.value, m.value) else m.value)
+        nested := m.value.as_obj() != none
+        out.set(m.key, if nested then overlay(base.get(m.key) else m.value, m.value) else m.value)
     out
 
 fn main() !
-    dir := "{path.dir(env.program())}/data"
-    base := parse_json(fs.read_text("{dir}/config_base.json")?)? "base"
-    local := parse_json(fs.read_text("{dir}/config_local.json")?)? "local"
+    dir := "{path.dir(env.program())}/configs"
+    base := parse_json(fs.read_text("{dir}/base.json")?)? "base"
+    local := parse_json(fs.read_text("{dir}/local.json")?)? "local"
     cfg := Config.from_json(overlay(base, local))? "merged"
     print("{cfg.name}:{cfg.port} debug={cfg.debug} tags={cfg.tags.join("+")}")
     print("limits {cfg.limits.memory_mb}MB {cfg.limits.timeout_ms}ms")

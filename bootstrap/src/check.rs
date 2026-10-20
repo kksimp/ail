@@ -2241,7 +2241,10 @@ impl<'p> Checker<'p> {
             && self.pending[k].brace
         {
             let (kt, vt) = (self.quiet_type(index), self.quiet_type(value));
-            if op.is_none() || matches!(vt, Ty::Int | Ty::Float) {
+            // The value may itself have settled the local (`m[k] = m.get(k) ...`).
+            if (op.is_none() || matches!(vt, Ty::Int | Ty::Float))
+                && let Some(k) = self.pending_of(n)
+            {
                 self.settle(k, Ty::Map(Box::new(kt), Box::new(vt)));
             }
         }

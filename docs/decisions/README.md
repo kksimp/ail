@@ -319,3 +319,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0328](0328-std-tensor-cpu-api.md) | `std.tensor`: an eager, value-typed `Tensor[T]` of `int` or `float` *(delegated)* | Accepted | 2026-10-20 |
 | [0329](0329-std-tensor-kernels-and-dispatch.md) | Tensor kernels: AVX2, NEON or scalar at run time, one specified summation order *(delegated)* | Accepted | 2026-10-20 |
 | [0330](0330-tensor-accelerator-backends-plug-in.md) | How an NPU or GPU backend plugs into `std.tensor` (design) *(delegated)* | Accepted | 2026-10-20 |
+| [0337](0337-agent-corpus-round-two.md) | The agent corpus grows to ten programs with Python twins; the five new ones use the round 5–7 features *(delegated)* | Accepted | 2026-10-20 |

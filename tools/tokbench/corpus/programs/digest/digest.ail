@@ -1,0 +1,25 @@
+
+fn load(url str) !str
+    r := net.get(url) else err
+        print("offline ({err.kind}), using the local copy")
+        return fs.read_text("{path.dir(env.program())}/data/{path.base(url)}")?
+    if r.status != 200
+        return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
+    r.body
+
+fn totals(csv str) Map[str, int]
+    mut units := {}
+    for line in csv.lines()[1..]
+        cells := line.split(",")
+        units[cells[1]] += cells[2].to_int() else 0
+    units
+
+fn main() !
+    url := env.args().first() else "http://127.0.0.1:1/sales.csv"
+    units := totals(load(url)?)
+    for p in units.keys().sorted(by: |p| -units[p])
+        print("{p:<8}{units[p]:>4}")
+    print("{units.len()} products, {units.values().sum()} units")
+
+@test fn sums_units()
+    assert_eq(totals("p,q,u\na,x,2\nb,x,3\nc,y,4"), {"x": 5, "y": 4})

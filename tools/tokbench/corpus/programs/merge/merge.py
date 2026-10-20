@@ -28,9 +28,9 @@ def overlay(base, over):
 
 
 def main():
-    data = Path(__file__).resolve().parents[5] / "examples/data"
-    base = json.loads((data / "config_base.json").read_text())
-    local = json.loads((data / "config_local.json").read_text())
+    data = Path(__file__).resolve().parents[5] / "examples/configs"
+    base = json.loads((data / "base.json").read_text())
+    local = json.loads((data / "local.json").read_text())
     merged = overlay(base, local)
     cfg = Config(**{k: merged[k] for k in Config.__dataclass_fields__})
     cfg.limits = Limits(**cfg.limits)
