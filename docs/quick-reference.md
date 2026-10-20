@@ -704,6 +704,8 @@ fn main() !
 | Module | Functions |
 |---|---|
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
+| `std.compress` | `gzip(s) List[int]`, `deflate(s)`: bytes as ints 0-255; `gunzip(b)`, `inflate(b)`: `str ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)`: `! CompressError`, effects `fs`, `io`; others no effects |
+| `std.hash` | `sha256(s)`, `sha384(s)`, `sha512(s)` (hex `str`), `hmac_sha256(key, s)` (hex), `crc32(s) int`, `hash64(s) int` (fast, not secure); no effects |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |

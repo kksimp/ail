@@ -1,0 +1,7 @@
+## std.compress.1: `inflate` takes the bytes as a list of ints, not text,
+## and its failure must be handled.
+use std.compress
+
+fn main()
+    print(compress.inflate("text"))
+    n := compress.gunzip([1, 2])

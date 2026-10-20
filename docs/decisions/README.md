@@ -367,3 +367,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
+| [0442](0442-std-hash.md) | `std.hash`: digests over `str` now, `bytes` when it lands *(delegated)* | Accepted | 2026-10-20 |
+| [0443](0443-std-compress-api.md) | `std.compress` API: `str` and `List[int]` now, one error type *(delegated)* | Accepted | 2026-10-20 |
+| [0444](0444-hash64-choice.md) | `hash64` is a wyhash-style multiply-fold hash, written from scratch *(delegated)* | Accepted | 2026-10-20 |
+| [0445](0445-deflate-gzip-in-house.md) | DEFLATE, gzip and CRC-32 are written in-house; measured throughput *(delegated)* | Accepted | 2026-10-20 |
+| [0446](0446-zip-archives.md) | Zip archives: store and deflate, deterministic, no zip64, no escaping the target *(delegated)* | Accepted | 2026-10-20 |

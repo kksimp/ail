@@ -20,7 +20,7 @@
 `todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
-standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
+standard modules (`compress`, `fs`, `env`, `hash`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
 need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.

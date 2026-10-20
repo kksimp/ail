@@ -9,6 +9,9 @@ struct Metadata  ## std.fs.10 (ADR 0281)
     size int
     modified_ms int
     is_dir bool
+error struct CompressError  ## std.compress (ADR 0443)
+    kind str
+    message str
 struct Output  ## std.proc
     status int
     out str

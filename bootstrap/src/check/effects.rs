@@ -59,6 +59,13 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             ],
             &["fs", "io"],
         ),
+        // std.hash.1: values only. std.compress.1: the byte functions are
+        // values only; the file and directory ones read and write files.
+        "hash" => (&["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"], &[]),
+        "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
+            (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
+        }
+        "compress" => (&["deflate", "gunzip", "gzip", "inflate"], &[]),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run", "which"], &["proc", "io"]),

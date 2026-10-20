@@ -28,6 +28,7 @@ mod contracts;
 pub mod parallel;
 mod net;
 mod osext;
+mod codec;
 mod random;
 mod stdlib;
 mod tasks;

@@ -197,4 +197,45 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// `cargo test --release codec::tests::throughput -- --ignored --nocapture`
+    /// prints MB/s for the numbers recorded in ADR 0445.
+    #[test]
+    #[ignore]
+    fn throughput() {
+        use std::time::Instant;
+        let text: Vec<u8> = {
+            let src = std::fs::read_to_string("../docs/spec/17-std.md").unwrap();
+            src.bytes().cycle().take(32 << 20).collect()
+        };
+        let mixed = sample(32 << 20, 3);
+        let mb = |n: usize, t: Instant| n as f64 / 1e6 / t.elapsed().as_secs_f64();
+        let t = Instant::now();
+        std::hint::black_box(super::crc32::crc32(&text));
+        println!("crc32      {:8.0} MB/s", mb(text.len(), t));
+        let t = Instant::now();
+        std::hint::black_box(super::hash64::hash64(&text));
+        println!("hash64     {:8.0} MB/s", mb(text.len(), t));
+        use crate::net::crypto::sha2::{Hash, Sha256, Sha512};
+        let t = Instant::now();
+        std::hint::black_box(Sha256::digest(&text));
+        println!("sha256     {:8.0} MB/s", mb(text.len(), t));
+        let t = Instant::now();
+        std::hint::black_box(Sha512::digest(&text));
+        println!("sha512     {:8.0} MB/s", mb(text.len(), t));
+        for (name, data) in [("text", &text), ("mixed", &mixed)] {
+            for level in [1, 6, 9] {
+                let t = Instant::now();
+                let z = super::deflate::deflate(data, level);
+                let c = mb(data.len(), t);
+                let t = Instant::now();
+                std::hint::black_box(inflate(&z, BIG).unwrap());
+                println!(
+                    "{name:5} L{level} deflate {c:6.0} MB/s  inflate {:6.0} MB/s  ratio {:.3}",
+                    mb(data.len(), t),
+                    z.len() as f64 / data.len() as f64
+                );
+            }
+        }
+    }
 }
