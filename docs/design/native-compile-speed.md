@@ -42,28 +42,35 @@ program, but the current pipeline lowers the runtime and the program into
 one `Module`, runs `inline_module` over the whole thing, and only then
 generates code. So the cache can't be a plain copy of the final bytes.
 
-Options, in order of expected gain for the work:
+Options, after measuring the first one:
 
-1. **Lazy lowering of runtime functions.** Lower a runtime function only
-   when the program (or another reached runtime function) calls it. Most
-   programs use a few of the 65. This removes most of the 330 ms with no
-   new file format. It is a change to `compiler/mir/lower.ail` (lane 120's
-   file), so it needs lane 120's agreement.
+1. **Lazy lowering of runtime functions: tried, no measurable gain.** The
+   worklist lowered a runtime function only when a lowered function calls
+   it, plus `rt.init`, `rt.exit`, and `rt.trap` when the program has checks.
+   It reached 35 of the 50 runtime functions for collatz, because the
+   reachable set is large: `rt.trap` and the output routines pull in the
+   float printing and bignum code. Full `ail build collatz`, five runs each,
+   median 1178 ms eager against 1172 ms lazy. The output was byte-identical
+   to the eager build. The change was reverted, not merged, because it adds
+   a lowering pass to lane 120's file for no gain.
 2. **Per-function machine code with fixups.** Generate each runtime function
-   once, keyed by a hash of `compiler/rt/native/` and the target, and store
-   the bytes with symbolic relocations for `rt.*` calls and string
+   once, keyed by a hash of `compiler/rt/native/*.ail` and the target, and
+   store the bytes with symbolic relocations for `rt.*` calls and string
    constants. The link step patches them. This removes the parse, the
-   lowering and most of the code generation (about 0.5 s) but needs the
-   x86-64 and a64 generators to emit per function, which is lane 120's code.
-3. **Cache the parsed runtime as JSON.** `ail api --ast --program` and
+   lowering and most of the code generation, but needs per-function emission
+   from the x86-64 and a64 generators. Lane 120 has said it is not planning
+   that, so it is not started.
+3. **Cache the lowered runtime MIR** keyed by the same hash, read back by a
+   MIR text reader. Saves the lowering only, not the 200 ms parse, and the
+   reader is a new parser on the interpreter. Not started.
+4. **Cache the parsed runtime as JSON.** `ail api --ast --program` and
    `ast.Program.from_json` already exist. This saves only the 200 ms parse,
-   and the JSON parse on the interpreter is itself unmeasured. Not
-   recommended on its own.
+   and the JSON parse on the interpreter is unmeasured. Not started.
 
-Option 1 first, then option 2 when lane 120's per-function emission lands.
-The cache key for option 2 is the SHA-256 of `compiler/rt/native/*.ail`
-(`compiler/obj/sha256.ail` already exists), the target name, and the
-compiler version string.
+The measured lazy result shows the runtime's lowering is a smaller share than
+the table suggests. Before choosing between options 2 to 4, measure the
+parse and the post-lowering passes (`inline_module`, `verify`) on the full
+module separately.
 
 ## Not in this lane
 
