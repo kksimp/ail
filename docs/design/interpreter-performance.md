@@ -235,3 +235,46 @@ interp 120 → 116 ms, json 6.6 → 6.6, sheet 13.7 → 14.2, loops 277 → 288.
 `bootstrap/tests/front_end_alloc.rs` checks that `ail check` and `ail api
 --symbols` print the same bytes with and without the front-end allocator
 (`AIL_SYSTEM_ALLOC=1`) on every example and test case.
+
+## Bytecode tier, slice 1 (lane 111)
+
+[ADR 0359](../decisions/0359-bytecode-tier-in-the-bootstrap.md) added a
+second evaluator; [ADR 0361](../decisions/0361-bytecode-tier-design.md)
+records its design. A function's body compiles on its first call to register
+code over the walker's own environment; anything outside the compiled subset
+is handed to the walker. Slice 1 compiles locals, int and comparison
+operators (any other operand types go through the walker's `binop`), `and`,
+`or`, `not`, unary `-`, `if` with `if name := e` branches, `while`, `for`
+over ranges, lists, sets and channels, `break`, `continue`, `return`, calls
+of functions without `mut` parameters, `print`, field reads, list and map
+reads, and `local[i] = v` and `local[i] op= v`.
+
+Stack and register code were compared first on the collatz section of
+`loops` in a standalone prototype (instructions, callgrind): walker 2,765M,
+stack code 2,707M, register code 1,062M, register code with immediates 900M.
+The table is in ADR 0361.
+
+Results (Linux x86-64, 4 cores, shared machine). Wall: min of 11 runs of
+the release binary; walker is `--no-bytecode`. Instructions: callgrind, stable.
+`collatz` is `loops`'s first section alone; its Python twin is the same loop.
+
+| Program | Walker s | Tier s | CPython s | Walker / CPython | Tier / CPython | Walker instr | Tier instr | Gain |
+|---|---|---|---|---|---|---|---|---|
+| interp | 0.125 | 0.128 | 0.109 | 1.15 | 1.17 | 812.8M | 764.3M | 1.06x |
+| json | 0.009 | 0.010 | 0.048 | 0.19 | 0.21 | 30.9M | 30.9M | 1.00x |
+| sheet | 0.017 | 0.019 | 0.069 | 0.25 | 0.28 | 83.8M | 83.2M | 1.01x |
+| loops | 0.303 | 0.180 | 0.291 | 1.04 | 0.62 | 3,947.9M | 2,204.3M | 1.79x |
+| collatz | 0.235 | 0.107 | 0.452 | 0.52 | 0.24 | 2,765.4M | 1,083.8M | 2.55x |
+
+What runs on the tier (`AIL_BYTECODE_STATS=1`): all of `loops` (30,000 calls,
+320,000 hand-offs for its method calls, `else` and interpolation); `interp`
+89,263 calls on the tier and 135,591 on the walker, with 290,000 hand-offs.
+`interp`, `json` and `sheet` are mostly method calls, struct construction,
+`match` and interpolation, which slice 3 compiles. In the collatz loop the
+remaining cost is operand decoding and bounds checks (about 20% each).
+
+Byte-identical check: every example, test case, corpus program, perfbench
+program and package (715 runs of `ail run` and `ail test --json`) prints the
+same stdout and stderr and exits the same with the tier as `main` did
+without it, except the two programs that print the clock and unseeded random
+numbers.

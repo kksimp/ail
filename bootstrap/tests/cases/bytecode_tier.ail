@@ -1,0 +1,107 @@
+# Constructs the bytecode tier compiles (ADR 0361), and hand-offs to the tree
+# walker in the middle of them. The output must not depend on the tier.
+
+error struct Bad
+    n int
+
+fn halve(n int) int ! Bad
+    if n % 2 != 0
+        return Bad(n)
+    n / 2
+
+fn steps(start int) int ! Bad
+    mut n := start
+    mut count := 0
+    while n > 1
+        n = halve(n)?
+        count += 1
+    count
+
+fn find(xs List[int], want int) int?
+    for i in 0..xs.len()
+        if xs[i] == want
+            return i
+    none
+
+fn classify(n int) str
+    if n < 0
+        "negative"
+    elif n == 0
+        "zero"
+    elif n < 10 and n % 2 == 0
+        "small even"
+    elif not (n < 10) or n == 7
+        "big or seven"
+    else
+        "small odd"
+
+fn nested(limit int) int
+    mut total := 0
+    for i in 0..=limit
+        if i == 3
+            continue
+        mut j := 0
+        while true
+            j += 1
+            if j > i
+                break
+            k := i * j
+            if k % 5 == 0
+                continue
+            total += k
+        if total > 200
+            break
+    total
+
+fn reuse(x int) int
+    if x > 2
+        y := x * 10
+        z := y + 1
+        return z + y
+    else
+        y := x + 1
+        y
+
+fn first_word(words List[str], lengths Map[str, int]) str
+    for w in words
+        n := lengths.get(w) else continue
+        if n > 3
+            return w
+    "none"
+
+fn main()
+    print(steps(64) else -1)
+    print(steps(12) else -1)
+    xs := [5, 3, 9, 1]
+    print(find(xs, 9) else -1)
+    print(find(xs, 4) else -1)
+    for n in [-3, 0, 4, 7, 9, 12]
+        print(classify(n))
+    print(nested(10))
+    print(reuse(1))
+    print(reuse(5))
+    print(first_word(["a", "to", "tree", "forest"], {"to": 2, "forest": 6}))
+    mut seen := {0: 0}
+    for i in 0..20
+        seen[i % 4] = i
+    print(seen)
+    mut list := [0, 0, 0]
+    for i in 0..9
+        list[i % 3] += i
+    print(list)
+    mut count := 0
+    for c in {"x", "y", "z"}
+        if c != "y"
+            count += 1
+    print(count)
+    if v := find(xs, 1)
+        print("found at {v}")
+    mut flag := 3 > 2 and 2 > 1
+    flag = flag or false
+    print(flag)
+    print(-xs[0])
+    big := 9223372036854775806
+    mut last := 0
+    for i in big..=9223372036854775807
+        last = i
+    print(last)

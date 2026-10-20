@@ -21,6 +21,7 @@ mod absent;
 mod assoc;
 mod atomic;
 mod builtins;
+mod bytecode;
 mod keyfn;
 pub mod limits;
 mod contracts;
@@ -33,6 +34,7 @@ mod tasks;
 mod tensor;
 mod trace;
 
+pub use bytecode::set_enabled as set_bytecode;
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
 pub use stdlib::set_program;
@@ -401,6 +403,8 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
+    let has_unique = prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique);
+    let has_defer = prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b));
     Interp {
         prog,
         resolved,
@@ -425,9 +429,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         field_slots: HashMap::default(),
         str_lits: HashMap::default(),
         lit_mask: resolved.float_literals.iter().chain(resolved.sized_literals.keys()).fold(0, |m, p| m | 1 << (p.line & 63)),
-        has_unique: prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique),
+        has_unique,
         has_invariants: prog.structs.iter().any(|s| !s.invariants.is_empty()),
-        has_defer: prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b)),
+        has_defer,
         has_moves: !resolved.moves.is_empty(),
         showing: Vec::new(),
         conc: None,
@@ -438,6 +442,10 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
+        tier: bytecode::usable(prog, trace::mode(), limits::active(), has_unique, has_defer),
+        codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
+        reg_pool: Vec::new(),
+        stats: bytecode::Stats::default(),
     }
 }
 
@@ -487,6 +495,7 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     if it.tracing != 0 {
         trace::finish();
     }
+    it.report_stats();
     if it.conc.is_some() {
         // What tasks printed before a trap still reaches standard output.
         it.task_print("");
@@ -581,6 +590,14 @@ struct Interp<'a, W: Write> {
     hook: bool,
     steps: u64,
     cov_last: usize,
+    /// The bytecode tier runs this program's functions (ADR 0361).
+    tier: bool,
+    /// Each function's compiled body, by index in `prog.fns`, once tried.
+    codes: Vec<bytecode::Slot<'a>>,
+    /// Spare register files for compiled bodies.
+    reg_pool: Vec<Vec<Value>>,
+    /// What ran on the tier, for `AIL_BYTECODE_STATS=1`.
+    stats: bytecode::Stats,
 }
 
 /// Name equality without a `memcmp` call: names are short, and `lookup` is
@@ -1157,7 +1174,16 @@ impl<'a, W: Write> Interp<'a, W> {
             olds = self.entry_olds(f, env)?;
         }
         let body = f.body.as_ref().expect("checked: the function has a body");
-        let mut outcome = self.block(body, env);
+        let mut outcome = match self.compiled(f) {
+            Some(code) => {
+                self.stats.calls[1] += 1;
+                self.run_code(&code, env)
+            }
+            None => {
+                self.stats.calls[0] += 1;
+                self.block(body, env)
+            }
+        };
         // own.uniq.3: a `move` parameter, or a `move self` receiver
         // (own.move.6), owns its value until the call ends.
         if self.has_unique && f.receiver.is_some_and(|r| r.moved) {
