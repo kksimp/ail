@@ -694,6 +694,12 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
+    if is_pop_call(value)
+        got := lower_pop_else(value, other, pos) else
+            declare(name, Ty.Unknown, -1)
+            return
+        declare(name, got.ty, got.id)
+        return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
@@ -1110,7 +1116,10 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Match(_, _, pos) => unsupported(pos, "`match`")
         Try(_, _, pos) => unsupported(pos, "`?`")
         Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
-        OrElse(_, _, pos) => unsupported(pos, "`else`")
+        OrElse(value, otherwise, pos) =>
+            if is_pop_call(value)
+                return lower_pop_else(value, otherwise, pos)
+            unsupported(pos, "`else`")
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
@@ -1538,6 +1547,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             # type.coll.9
             if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
                 return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+            if is_list_edit(name)
+                return lower_list_edit(r, e, name, npos, args, vs)
             if name == "push" and vs.len() == 1
                 mut el := e
                 if e.is_unknown()

@@ -28,11 +28,14 @@ value), `while`, `for` over a range or a list, `break`, `continue`,
 field names in a method), method calls, `print` of numbers, strings and
 lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
+`chars`, `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
+statement or with `else`), `contains`, `sort` and `sorted` on lists of
+`int`, `float`, `bool` or `str` (not `by:` keys), `env.args()`,
+`s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 and the bit operations of expr.bit.1. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393, 0532)*
+*(ADRs 0384, 0390, 0392, 0393, 0532, 0599)*
 
 ```ail
 fn steps(n int) int
