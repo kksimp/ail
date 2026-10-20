@@ -69,10 +69,6 @@ pub fn command(args: &[&str]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if !(cfg!(target_os = "linux") && cfg!(target_arch = "x86_64")) {
-        eprintln!("error[native.build.3]: `ail build` makes Linux x86-64 executables so far; this is another target");
-        return ExitCode::from(2);
-    }
     let Some(dir) = compiler_dir() else {
         eprintln!("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
         return ExitCode::from(2);
@@ -88,6 +84,12 @@ pub fn command(args: &[&str]) -> ExitCode {
         Ok(text) => text,
         Err(code) => return code,
     };
+    // The program's subset problems are reported on every host; only the
+    // executable is Linux x86-64 so far.
+    if !(cfg!(target_os = "linux") && cfg!(target_arch = "x86_64")) {
+        eprintln!("error[native.build.3]: `ail build` makes Linux x86-64 executables so far; this is another target");
+        return ExitCode::from(2);
+    }
     let Some(bytes) = decode(&hex) else {
         eprintln!("error[native.build.3]: the native backend printed something other than hexadecimal");
         return ExitCode::from(2);
