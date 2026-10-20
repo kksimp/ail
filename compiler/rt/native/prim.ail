@@ -58,3 +58,50 @@ fn bits_float(n int) float
 ## The target: 0 Linux x86-64, 1 Linux ARM64, 2 macOS ARM64.
 fn target() int
     todo
+
+## Atomic operations on the 8 bytes at address `a`, sequentially consistent
+## (ADR 0600): load, store, exchange (the old value), add (the old value),
+## and compare-and-swap (the value found: `old` means it swapped).
+fn atomic_load(a int) int
+    todo
+
+fn atomic_store(a int, v int)
+    todo
+
+fn atomic_xchg(a int, v int) int
+    todo
+
+fn atomic_add(a int, n int) int
+    todo
+
+fn atomic_cas(a int, old int, new int) int
+    todo
+
+## The stack pointer.
+fn sp() int
+    todo
+
+## A new thread (ADR 0599): runs `rt.worker_main(arg)` on the stack whose
+## 16-byte aligned top is `top`, shares memory with its creator, and returns
+## in the creator its thread id (negative on failure). Linux only.
+fn clone(top int, arg int) int
+    todo
+
+## Continue this thread as `rt.worker_main(arg)` on a fresh stack at `top`,
+## abandoning its frames. Never returns.
+fn restart(top int, arg int)
+    todo
+
+## Call the libSystem function `sym` (a string literal, with its leading
+## underscore) with integer arguments through a pointer the loader binds;
+## gives its result (native-abi.md §11). Declared with four arguments, but the
+## lowering takes any count: call sites pass what the function needs (the
+## generators place arguments as for any call, so as many as they support).
+## Targets without the library trap, so guard it with `target() == 2`
+## (or the Windows target).
+fn import_call(sym str, a int, b int, c int, d int) int
+    todo
+
+## The address of the function named by the string literal `sym`.
+fn fn_addr(sym str) int
+    todo

@@ -16,8 +16,22 @@ CHUNK := 4
 ARGC := 5
 ARGV := 6
 PARSE_OK := 7
+# Threads (ADR 0599): the pool block, a flag that is 1 once a second thread
+# can exist, the allocator's and the output buffer's locks, and the
+# reentrant output lock's owner and depth.
+TASKS := 40
+MULTI := 41
+ALLOC_LOCK := 42
+OUT_LOCK := 43
+OUT_OWNER := 44
+OUT_DEPTH := 45
+STACKS := 46
 
 OUT_CAP := 65536
+
+# Worker threads run on 8 MiB stacks carved from one region, at most 64.
+STACK_SZ := 8388608
+MAXW := 64
 
 # ---- system calls (native-abi.md §4) ----
 
@@ -44,6 +58,83 @@ fn sys_mmap(n int) int
     flags := if t == 2 then 4098 else 34
     syscall(k, 0, n, 3, flags, -1, 0)
 
+## A thread-stack region: `n` bytes that need no commit up front.
+fn sys_mmap_lazy(n int) int
+    t := target()
+    k := if t == 0 then 9 else if t == 1 then 222 else 197
+    flags := if t == 2 then 4098 else 16418
+    syscall(k, 0, n, 3, flags, -1, 0)
+
+# ---- locks and threads (ADR 0599, 0600) ----
+
+## macOS has no futex: `__ulock_wait` and `__ulock_wake` of libSystem do the
+## same on a 32-bit word (UL_COMPARE_AND_WAIT is 1, ULF_WAKE_ALL 0x100).
+fn futex_wait(a int, v int)
+    if target() == 2
+        import_call("___ulock_wait", 1, a, v, 0)
+        return
+    k := if target() == 0 then 202 else 98
+    syscall(k, a, 128, v, 0, 0, 0)
+
+fn futex_wake(a int, n int)
+    if target() == 2
+        op := if n > 1 then 257 else 1
+        import_call("___ulock_wake", op, a, 0, 0)
+        return
+    k := if target() == 0 then 202 else 98
+    syscall(k, a, 129, n, 0, 0, 0)
+
+## A lock word: 0 free, 1 held, 2 held and someone waits (Drepper's mutex,
+## "Futexes Are Tricky", written here from the description).
+fn lock(a int)
+    mut c := atomic_cas(a, 0, 1)
+    while c != 0
+        mut wait := c == 2
+        if not wait
+            wait = atomic_cas(a, 1, 2) != 0
+        if wait
+            futex_wait(a, 2)
+        c = atomic_cas(a, 0, 2)
+
+fn unlock(a int)
+    if atomic_add(a, -1) != 1
+        atomic_store(a, 0)
+        futex_wake(a, 1)
+
+## The worker thread this code runs on (0 to 63), or -1 for the main thread
+## or before any worker exists. A worker's stack lies in the `STACKS` region.
+fn worker_index() int
+    base := load64(global(STACKS))
+    if base == 0
+        return -1
+    s := sp()
+    if s >= base and s < base + MAXW * STACK_SZ
+        return (s - base) / STACK_SZ
+    -1
+
+## A number for the running thread: 1 for the main thread, 2 and up for
+## workers.
+fn thread_id() int
+    worker_index() + 2
+
+## Hold the output buffer for one `print` (reentrant: an interpolated call
+## may print).
+fn out_lock()
+    me := thread_id()
+    if atomic_load(global(OUT_OWNER)) == me
+        store64(global(OUT_DEPTH), load64(global(OUT_DEPTH)) + 1)
+        return
+    lock(global(OUT_LOCK))
+    atomic_store(global(OUT_OWNER), me)
+    store64(global(OUT_DEPTH), 1)
+
+fn out_unlock()
+    d := load64(global(OUT_DEPTH)) - 1
+    store64(global(OUT_DEPTH), d)
+    if d == 0
+        atomic_store(global(OUT_OWNER), 0)
+        unlock(global(OUT_LOCK))
+
 # ---- memory (ADR 0407) ----
 
 ## Called by the entry with the process's argument count and vector.
@@ -57,6 +148,9 @@ fn init(argc int, argv int)
 ## `n` zeroed bytes, 16-byte aligned, never freed.
 fn alloc(n int) int
     size := (n + 15) / 16 * 16
+    multi := load64(global(MULTI))
+    if multi != 0
+        lock(global(ALLOC_LOCK))
     mut p := load64(global(HEAP_NEXT))
     if p == 0 or p + size > load64(global(HEAP_END))
         mut chunk := load64(global(CHUNK))
@@ -68,6 +162,8 @@ fn alloc(n int) int
         store64(global(HEAP_END), p + chunk)
         store64(global(CHUNK), chunk * 2)
     store64(global(HEAP_NEXT), p + size)
+    if multi != 0
+        unlock(global(ALLOC_LOCK))
     p
 
 fn copy_bytes(dst int, src int, n int)
@@ -471,8 +567,18 @@ fn parse_ok() bool
 ## the source excerpt; `kind` picks the message, finished with `a`, `b`
 ## and the operator `op` (native-abi.md §7).
 fn trap(kind int, a int, b int, head str, op str, tail str)
+    # In a task a trap ends the task, not the process (conc.task.6).
+    on_trap(kind, a, b, head, op, tail)
     flush()
     out_str(head)
+    trap_body(kind, a, b, op)
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
+
+## The message of a trap, after `head`.
+fn trap_body(kind int, a int, b int, op str)
     if kind == 0
         # `a OP b` overflows `int` (expr.arith.1)
         out_byte(96)
@@ -511,10 +617,12 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("shift count `")
         out_int(a)
         out_str("` is outside `0..=63`")
-    out_byte(10)
-    out_str(tail)
-    flush_to(2)
-    sys_exit(1)
+    elif kind == 7
+        out_str("atomic add overflows: ")
+        out_int(a)
+        out_str(" + ")
+        out_int(b)
+        out_str(" is outside int")
 
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)

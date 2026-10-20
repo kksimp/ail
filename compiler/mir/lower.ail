@@ -73,6 +73,8 @@ struct Lower
     var_vals Map[str, List[int]]
     nvars int
     loops List[Loop]
+    ## Tasks (lower_task.ail, ADR 0599).
+    tk TaskState
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
     ## The struct whose method is being lowered, else "".
@@ -115,6 +117,16 @@ PRIMS := {
     "float_bits": "int",
     "bits_float": "float",
     "target": "int",
+    "atomic_load": "int",
+    "atomic_store": "unit",
+    "atomic_xchg": "int",
+    "atomic_add": "int",
+    "atomic_cas": "int",
+    "sp": "int",
+    "clone": "int",
+    "restart": "unit",
+    "import_call": "int",
+    "fn_addr": "int",
 }
 
 ## The `int` methods of two operands that are one instruction (expr.bit.1).
@@ -164,6 +176,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         var_vals: {},
         nvars: 0,
         loops: [],
+        tk: new_task_state(),
         structs: {},
         self_ty: "",
         borrowed: Set[str](),
@@ -182,6 +195,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
     if r := rt
         l.declare_all(r, "rt.")
+    l.tk.on = l.sigs.contains("rt.task_new")
     l.problem_files = [0 for _ in l.problems]
     for k in 0..srcs.len()
         l.enter_file(k)
@@ -200,6 +214,8 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         l.stamp_problems()
     l.enter_file(0)
     l.gen_copies()
+    l.stamp_problems()
+    l.build_task_fns()
     l.stamp_problems()
     if r := rt
         l.lower_rt(r)
@@ -244,7 +260,8 @@ fn Lower.lower_rt(mut self, r ast.Program)
     is_rt = true
     mut decls := Map[str, ast.FnDecl]()
     for f in r.fns
-        if not PRIMS.contains(f.name)
+        # `dispatch` is generated from the program's tasks (lower_task.ail).
+        if not PRIMS.contains(f.name) and not (f.name == "dispatch" and tk.on)
             decls["rt.{f.name}"] = f
     mut done := Set[str]()
     mut queue := RT_ROOTS
@@ -255,6 +272,12 @@ fn Lower.lower_rt(mut self, r ast.Program)
                 for i in blk.insts
                     if i.op == "call" and decls.contains(i.name)
                         queue.push(i.name)
+                    # Code the generator calls or takes the address of: the
+                    # thread entry points (native-abi.md §10, §11).
+                    if i.op == "prim" and (i.name == "clone" or i.name == "restart")
+                        queue.push("rt.worker_main")
+                    if i.op == "prim" and i.name.starts_with("fn_addr:")
+                        queue.push(i.name.replace("fn_addr:", ""))
             scanned += 1
         if queue.len() == 0
             break
@@ -342,10 +365,11 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         problem(f.pos, "`{f.name}` has more than 6 integer or 8 float parameters")
     mut rty := Ty.Unit
     if r := f.ret
-        t := type_of(r) else
-            problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
-            Ty.Unknown
-        rty = t
+        if not (pre == "" and f.name == "main" and bare_fallible(r))
+            t := type_of(r) else
+                problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
+                Ty.Unknown
+            rty = t
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty)
 
 ## A function's name in MIR: `T.m` for a method of `T`.
@@ -369,6 +393,13 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                     e := type_of(args[0])?
                     if is_number(e) or e == Ty.Str or needs_copy(e)
                         return Ty.List(e)
+                    none
+                "Atomic" =>
+                    if args.len() != 1
+                        return none
+                    e := type_of(args[0])?
+                    if e == Ty.Int or e == Ty.Bool
+                        return Ty.Atomic(e)
                     none
                 _ =>
                     if args.len() == 0
@@ -732,6 +763,9 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
 fn Lower.lower_stmt(mut self, s ast.Stmt)
     match s
         Let(name, pos, _, value, otherwise) =>
+            if is_spawn(value)
+                lower_spawn_let(name, pos, value)
+                return
             if other := otherwise
                 lower_let_else(name, pos, value, other)
                 return
@@ -742,9 +776,12 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             declare(name, v.ty, copy_if_place(value, v))
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
-        For(_, var, _, mutable, iter, body, pos) =>
+        For(is_par, var, _, mutable, iter, body, pos) =>
             if mutable
                 problem(pos, "`for mut` isn't in the native subset yet")
+                return
+            if is_par
+                lower_par_for(var, iter, body, pos)
                 return
             lower_for(var, iter, body)
         Break(pos) =>
@@ -807,7 +844,7 @@ fn is_place(e ast.Expr) bool
         Name | Index | Member => true
         _ => false
 
-fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
+fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     match target
         Name(name, npos) =>
             key := lookup(name) else
@@ -1100,7 +1137,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         MapLit(_, pos) => unsupported(pos, "maps")
         SetLit(_, pos) => unsupported(pos, "sets")
         Match(_, _, pos) => unsupported(pos, "`match`")
-        Try(_, _, pos) => unsupported(pos, "`?`")
+        Try(inner, _, pos) => lower_try(inner, pos)
         Comp(_, _, _, _, pos) => unsupported(pos, "comprehensions")
         OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
@@ -1336,6 +1373,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
+            if name == "Atomic" and tk.on and not is_rt
+                return lower_atomic_new(none, args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
             if lookup(name) == none
@@ -1371,6 +1410,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return new_struct(k, args, pos)
             unsupported(pos, "this call")
         TypeArgs(name, targs, tpos) =>
+            if name == "Atomic" and tk.on and not is_rt
+                return lower_atomic_new(targs, args, pos)
             if name == "List" and targs.len() == 1 and args.len() == 0
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
                     return unsupported(tpos, "this list type")
@@ -1380,9 +1421,21 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     mut vs := List[int]()
-    for a in args
-        v := lower_value(a.value, none)?
+    mut sym := ""
+    for k in 0..args.len()
+        # `import_call` and `fn_addr` name a symbol in their first argument,
+        # which must be a string literal (native-abi.md §11).
+        if k == 0 and (name == "import_call" or name == "fn_addr")
+            match args[0].value
+                Str(s, _) => sym = s
+                _ => return unsupported(expr_pos(args[0].value), "a computed symbol name")
+            continue
+        v := lower_value(args[k].value, none)?
         vs.push(v.id)
+    # An import is an ordinary call whose name carries the `libsys.` prefix
+    # (native-abi.md §11); the code generator calls it through its GOT slot.
+    if name == "import_call"
+        return Val(id: call("libsys.{sym}", vs, Ty.Int), ty: Ty.Int)
     t := match PRIMS[name]
         "int" => Ty.Int
         "float" => Ty.Float
@@ -1390,7 +1443,8 @@ fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
         "str" => Ty.Str
         _ => Ty.Unit
     mut i := inst(-1, "prim", vs)
-    i.name = name
+    # The symbol rides in the name: `fn_addr:rt.f`.
+    i.name = if sym == "" then name else "{name}:{sym}"
     if t.is_unit()
         emit_void(i)
         return Val(id: -1, ty: t)
@@ -1398,7 +1452,7 @@ fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
 
 ## `print(x)`: a number, `bool`, string literal, list of numbers, or an
 ## interpolation of those (17-std, native-abi.md §8).
-fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
+fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() != 1
         return unsupported(pos, "this `print`")
     match args[0].value
@@ -1424,6 +1478,7 @@ fn out_fn(t Ty) str
         Float => "rt.out_float"
         Bool => "rt.out_bool"
         Str => "rt.out_str"
+        Atomic(e) => if e == Ty.Bool then "rt.out_atomic_bool" else "rt.out_atomic_int"
         List(e) =>
             match e
                 Int => "rt.out_list_int"
@@ -1477,6 +1532,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if e := atomic_elem(r.ty)
+        return lower_atomic_method(r.id, e, name, npos, args)
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     mut vs := List[Val]()

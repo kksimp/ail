@@ -331,8 +331,29 @@ pub fn Asm.bl(mut self, sym str)
 pub fn Asm.ret(mut self)
     word(3596551104)
 
+pub fn Asm.blr(mut self, n int)
+    word(3594452992 + n * 32)
+
 pub fn Asm.svc(mut self, imm int)
     word(3556769793 + imm * 32)
+
+## ARMv8.1 LSE atomics and acquire/release accesses on a 64-bit location
+## (ADR 0600): `swpal`, `ldaddal` and `casal` put the old value in `t`
+## (`casal` in `s`, which also holds the expected value); `ldar`/`stlr`.
+pub fn Asm.swpal(mut self, s int, t int, n int)
+    word(4175462400 + s * 65536 + n * 32 + t)
+
+pub fn Asm.ldaddal(mut self, s int, t int, n int)
+    word(4175429632 + s * 65536 + n * 32 + t)
+
+pub fn Asm.casal(mut self, s int, t int, n int)
+    word(3370187776 + s * 65536 + n * 32 + t)
+
+pub fn Asm.ldar(mut self, t int, n int)
+    word(3370122240 + n * 32 + t)
+
+pub fn Asm.stlr(mut self, t int, n int)
+    word(3365927936 + n * 32 + t)
 
 pub fn Asm.brk(mut self)
     word(3558866944)

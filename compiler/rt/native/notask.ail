@@ -1,0 +1,8 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Stands in for `task.ail` in a program that starts no tasks (ADR 0599):
+## a trap there always ends the process.
+
+fn on_trap(kind int, a int, b int, head str, op str, tail str)
+    return

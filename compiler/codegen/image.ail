@@ -23,9 +23,12 @@ pub struct Image
     pub globals int
     ## The entry point's offset in `code`.
     pub entry int
+    ## The libSystem symbols the code calls (`import_call`, native-abi.md
+    ## §11), in the order of their pointer slots, which follow the globals.
+    pub imports List[str]
 
 pub fn new_image() Image
-    Image(code: [], funcs: {}, relocs: [], data: [], data_syms: {}, globals: 64, entry: 0)
+    Image(code: [], funcs: {}, relocs: [], data: [], data_syms: {}, globals: 64, entry: 0, imports: [])
 
 ## A string object (native-abi.md §2) in the read-only data, once per symbol.
 pub fn add_str(mut img Image, sym str, s str)
@@ -47,6 +50,14 @@ pub fn add_f64(mut img Image, x float) str
         img.data_syms[sym] = img.data.len()
         push64(mut img.data, bits)
     sym
+
+## The slot of import `sym`, added on first use.
+pub fn import_slot(mut img Image, sym str) int
+    for k in 0..img.imports.len()
+        if img.imports[k] == sym
+            return k
+    img.imports.push(sym)
+    img.imports.len() - 1
 
 pub fn align(mut bytes List[int], n int)
     while bytes.len() % n != 0

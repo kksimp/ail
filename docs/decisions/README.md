@@ -483,6 +483,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0599](0599-native-threads-and-task-pool.md) | Native threads: `clone` and futex on Linux, one pool, replacement workers *(delegated)* | Accepted | 2026-10-20 |
+| [0600](0600-native-atomics.md) | Native atomics: sequentially consistent cells, LSE on ARM64, `add` as a compare-and-swap loop *(delegated)* | Accepted | 2026-10-20 |
+| [0601](0601-native-par-for.md) | Native `par for`: the body becomes a chunk function with exact accumulators *(delegated)* | Accepted | 2026-10-20 |
 | [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
 | [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
 | [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |

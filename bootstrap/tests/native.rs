@@ -119,7 +119,8 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
             None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
         };
         let snapshot = |l: &&str| {
-            !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"))
+            // Frame lines after an error's first line may be absent (native.build.1).
+            !(l.starts_with("  at ") || l.starts_with("note:") || l.starts_with("help:"))
         };
         let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
         let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();
@@ -173,4 +174,26 @@ fn build_refuses_programs_outside_the_subset() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success() && !tmp.exists(), "built a program outside the subset");
     assert!(err.contains("error[native.subset.1]"), "{err}");
+}
+
+/// A task program builds for macOS: its threads come from libSystem, so the
+/// Mach-O file carries a bind table naming `pthread_create` (native.task.1,
+/// ADR 0599); a program with no threads imports nothing.
+#[test]
+fn tasks_build_for_macos_with_imports() {
+    let tmp = std::env::temp_dir().join(format!("ail-native-macos-{}", std::process::id()));
+    let build = |name: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["build", &format!("bootstrap/tests/native/run/{name}.ail"), "--target", "aarch64-macos", "-o"])
+            .arg(&tmp)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        fs::read(&tmp).unwrap()
+    };
+    let has = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    assert!(has(&build("task_basic"), b"_pthread_create\0"));
+    assert!(!has(&build("arith"), b"_pthread_create\0"));
+    let _ = fs::remove_file(&tmp);
 }

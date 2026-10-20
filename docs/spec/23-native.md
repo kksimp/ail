@@ -48,6 +48,7 @@ fallback value, a statement that leaves, or a block without a binding
 (err.else.1-2); `else err` and `?` are not yet. Any other construct is
 reported at its position under this rule, all of them at once, and nothing
 is built. *(ADRs 0384, 0390, 0392, 0393, 0580, 0582)*
+Tasks and atomics are in the subset too: `t := spawn f(args)` and `t.wait()?` in `fn main() !`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`, `store`, `cas` and `add` (`native.task.1`, ADRs 0599–0601).
 
 ```ail
 fn steps(n int) int
@@ -61,6 +62,23 @@ fn steps(n int) int
 fn main()
     print("27 takes {steps(27)} steps")
 ```
+
+**native.task.1** — Native code runs tasks and `par for` iterations in
+parallel on a pool of threads, at most 8 and no more than the cores the
+process may use (`conc.par.9`, `conc.par.7`). `spawn f(args)` takes a free
+function of the subset's types and copies a list argument (`conc.share.1`);
+`t.wait()?` is the task's result, and if the task trapped it ends the
+program as an uncaught `Trapped` does: `error: Trapped(rule: "R", message:
+"L:C: M")` on standard error, exit status 1. A `par for` gives the
+sequential result (`conc.par.1`): a chunk that traps, or a sum that would
+leave `int` at any point, makes it run in order (`conc.par.4`,
+`conc.par.11`), except in a loop that updates an atomic, which reports the
+trap it met (`conc.atomic.6`). Atomic operations are sequentially consistent
+whatever `order:` says (`conc.atomic.2`). The program's output is the
+interpreter's wherever the interpreter defines it (`conc.task.9`); `print`
+holds a lock for one statement, so lines from different tasks don't mix.
+On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
+0599–0601)*
 
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first

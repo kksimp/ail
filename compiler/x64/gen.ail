@@ -460,7 +460,9 @@ fn Gen.compare(mut self, i mir.Inst) int
 
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
     l := a.label()
-    stubs.push(Stub(label: l, kind: kind, a: x, b: y, site: site, op: op, undo: 0))
+    # An atomic add's overflow has its own message (conc.atomic.5).
+    k := if kind == 0 and m.sites[site].rule == "conc.atomic.5" then 7 else kind
+    stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op, undo: 0))
     l
 
 fn Gen.gen_inst(mut self, i mir.Inst)
@@ -810,7 +812,12 @@ fn Gen.call_out(mut self, i mir.Inst)
             moves.push(move_of(INT_ARGS[ni], v))
             ni += 1
     parallel(moves)
-    a.call_sym(i.name)
+    if i.name.starts_with("libsys.")
+        # An import exists only on macOS; the runtime guards it with
+        # `target() == 2`, so on x86-64 Linux it is never reached.
+        a.ud2()
+    else
+        a.call_sym(i.name)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_xmm(i.dst, 0)
@@ -818,6 +825,13 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_gpr(i.dst, RAX)
 
 fn Gen.prim(mut self, i mir.Inst)
+    if i.name.starts_with("fn_addr:")
+        # The function's address is only used with an import: never reached.
+        a.ud2()
+        d := out_gpr(i.dst, S1)
+        a.mov_ri(d, 0)
+        put_gpr(i.dst, d)
+        return
     match i.name
         "load64" =>
             r := gpr(i.args[0], S0)
@@ -850,6 +864,61 @@ fn Gen.prim(mut self, i mir.Inst)
             k := imm(i.args[0]) else 0
             a.lea(d, at_sym("globals", 8 * k))
             put_gpr(i.dst, d)
+        # Threads and atomics (ADRs 0599, 0600). The atomic operations are
+        # sequentially consistent: x86-64 loads are acquire, stores are `xchg`.
+        "atomic_load" =>
+            r := gpr(i.args[0], S0)
+            d := out_gpr(i.dst, S1)
+            a.mov_rm(d, at(r, 0))
+            put_gpr(i.dst, d)
+        "atomic_store" | "atomic_xchg" =>
+            cell := at(gpr(i.args[0], S0), 0)
+            parallel([move_of(RAX, i.args[1])])
+            a.xchg_mr(cell, RAX)
+            if i.dst >= 0
+                put_gpr(i.dst, RAX)
+        "atomic_add" =>
+            cell := at(gpr(i.args[0], S0), 0)
+            parallel([move_of(RAX, i.args[1])])
+            a.lock_xadd(cell, RAX)
+            put_gpr(i.dst, RAX)
+        "atomic_cas" =>
+            cell := at(gpr(i.args[0], S0), 0)
+            new := gpr(i.args[2], S1)
+            parallel([move_of(RAX, i.args[1])])
+            a.lock_cmpxchg(cell, new)
+            put_gpr(i.dst, RAX)
+        "sp" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RSP)
+            put_gpr(i.dst, d)
+        "clone" =>
+            # clone(CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM, stack, 0, 0, arg):
+            # the child resumes here on the new stack with rax 0 and runs
+            # `rt.worker_main(arg)`; the argument rides in r8 (unused as tls).
+            parallel([move_of(RSI, i.args[0]), move_of(R8, i.args[1])])
+            a.mov_ri(RDI, 331520)
+            a.mov_ri(RDX, 0)
+            a.mov_ri(S0, 0)
+            a.mov_ri(RAX, 56)
+            a.syscall()
+            parent := a.label()
+            a.test_rr(RAX, RAX)
+            a.jcc(CC_NE, parent)
+            a.mov_rr(RDI, R8)
+            a.alu_rr("xor", RBP, RBP)
+            a.call_sym("rt.worker_main")
+            a.ud2()
+            a.bind(parent)
+            put_gpr(i.dst, RAX)
+        "restart" =>
+            # Abandon this thread's frames: run `rt.worker_main(arg)` on a
+            # fresh stack at `top`.
+            parallel([move_of(RAX, i.args[0]), move_of(RDI, i.args[1])])
+            a.mov_rr(RSP, RAX)
+            a.alu_rr("xor", RBP, RBP)
+            a.call_sym("rt.worker_main")
+            a.ud2()
         "target" =>
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, if win then 3 else 0)
