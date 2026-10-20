@@ -719,7 +719,7 @@ same element type (checked). `add`, `mul` and the operators broadcast
 NumPy-style (std.tensor.10): the shapes line up from the right, and per axis
 the sizes are equal or one is 1, which stretches to the other; a missing
 leading axis counts as 1. The result has the broadcast shape. `dot` needs
-equal shapes. Shapes that don't broadcast trap. *(ADR 0328, amended by ADR 0512)*
+equal shapes. Shapes that don't broadcast trap. *(ADR 0328, amended by ADR 0522)*
 
 **std.tensor.5** — On `float` tensors, `add`, `mul` and `/` round each element
 as `+`, `*` and `/` do. `sum` and `dot` add in this order: element `i` (or
@@ -811,7 +811,7 @@ padding: the result is `(h - kh + 1)` by `(w - kw + 1)`. Each output adds
 its products in the kernel's row-major order, one at a time, so the sum is
 the same on every target. Both operands must be 2-D, and the kernel must
 fit the image; otherwise the call traps. `conv2d` on a `Tensor[int]` is a
-compile-time error. *(ADR 0511)*
+compile-time error. *(ADR 0521)*
 
 ```ail
 fn main()

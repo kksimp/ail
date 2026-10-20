@@ -1,4 +1,4 @@
-# 0511. `conv2d` on 2-D tensors: valid, stride 1, no padding
+# 0521. `conv2d` on 2-D tensors: valid, stride 1, no padding
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
@@ -6,7 +6,7 @@
 - **Topic:** 11 — Operators; standard library (`std.tensor`)
 - **Spec rules:** `std.tensor.16` (new)
 - **Extends:** [ADR 0328](0328-std-tensor-cpu-api.md), [ADR 0345](0345-tensor-axis-reductions-and-transpose.md)
-- **Note:** lane 154's block (0507–0509) was used up by slices 1–3. The plan allocates no numbers after 0509 and 0510 is the licence, so this is the next free number. The coordinator has been asked to confirm it.
+- **Note:** lane 154's block (0507–0509) was used up by slices 1–3. The batch plan's block for this lane ended at 0509. The coordinator assigned 0520–0525 for the rest of the lane; 0520 went to another PR, so this is 0521.
 
 ## Context
 

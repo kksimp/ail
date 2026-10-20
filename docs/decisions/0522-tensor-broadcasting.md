@@ -1,4 +1,4 @@
-# 0512. Tensor broadcasting: NumPy-style, in `+ - * /` and `add`/`mul`
+# 0522. Tensor broadcasting: NumPy-style, in `+ - * /` and `add`/`mul`
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
@@ -6,7 +6,7 @@
 - **Topic:** 11 — Operators; standard library (`std.tensor`)
 - **Spec rules:** `std.tensor.4` and `std.tensor.10` amended
 - **Amends:** [ADR 0344](0344-tensor-operators-and-scalar-broadcast.md) (equal shapes → broadcast shapes)
-- **Note:** the lane's block (0507–0509) was used up; this is the next free number.
+- **Note:** the lane's block ended at 0509; numbers come from the coordinator's 0520–0525 range.
 
 ## Context
 
