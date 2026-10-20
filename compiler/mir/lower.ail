@@ -838,6 +838,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             Val(id: konst(n, Ty.Int), ty: Ty.Int)
         Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
+        Bytes(_, pos) => unsupported(pos, "`bytes` literals")
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
         Name(name, pos) =>
             key := lookup(name) else
@@ -1330,6 +1331,7 @@ fn Lower.int_minmax(mut self, name str, a int, b int) int
 pub fn expr_pos(e ast.Expr) ast.Pos
     match e
         Str(_, p) => p
+        Bytes(_, p) => p
         Interp(_, p) => p
         Int(_, p) => p
         Float(_, p) => p
