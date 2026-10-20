@@ -28,11 +28,12 @@ fn parse_pos(text str) Pos?
     Pos(col, row)
 
 fn cells_in(first Pos, last Pos) List[Pos]
-    mut out := []
-    for r in first.row.min(last.row)..=first.row.max(last.row)
-        for c in first.col.min(last.col)..=first.col.max(last.col)
-            out.push(Pos(col: c, row: r))
-    out
+    [
+        Pos(
+            col: c,
+            row: r,
+        ) for r in first.row.min(last.row)..=first.row.max(last.row) for c in first.col.min(last.col)..=first.col.max(last.col),
+    ]
 
 enum Op
     Add
@@ -422,11 +423,7 @@ fn Sheet.snapshot(mut self) Map[Pos, str]
     shot
 
 fn Sheet.formulas(self) List[Pos]
-    mut out := []
-    for pos in cells.keys()
-        if cells[pos].is_formula()
-            out.push(pos)
-    out.sorted()
+    [pos for pos in cells.keys() if cells[pos].is_formula()].sorted()
 
 fn Sheet.deps(self, pos Pos) List[Pos]
     content := cells.get(pos) else return []
@@ -438,24 +435,14 @@ fn Sheet.deps(self, pos Pos) List[Pos]
 
 fn Sheet.eval_order(self) Order
     formulas := formulas()
-    mut waits := {}
-    for pos in formulas
-        mut need := {}
-        for d in deps(pos)
-            if formulas.contains(d)
-                need.add(d)
-        waits[pos] = need
+    waits := {pos: {d for d in deps(pos) if formulas.contains(d)} for pos in formulas}
     mut order := []
     mut done := {}
     while true
         ready := first_ready(formulas, waits, done) else break
         order.push(ready)
         done.add(ready)
-    mut blocked := []
-    for pos in formulas
-        if not done.contains(pos)
-            blocked.push(pos)
-    Order(order, blocked)
+    Order(order, [pos for pos in formulas if not done.contains(pos)])
 
 fn first_ready(formulas List[Pos], waits Map[Pos, Set[Pos]], done Set[Pos]) Pos?
     for pos in formulas
@@ -464,26 +451,19 @@ fn first_ready(formulas List[Pos], waits Map[Pos, Set[Pos]], done Set[Pos]) Pos?
     none
 
 fn Sheet.table(mut self) List[str]
-    mut col_set := {}
-    mut row_set := {}
-    for pos in cells.keys()
-        col_set.add(pos.col)
-        row_set.add(pos.row)
-    cols := col_set.sorted()
+    cols := {pos.col for pos in cells.keys()}.sorted()
     mut header := [""]
     for c in cols
         header.push(col_name(c))
     mut grid := [header]
-    for r in row_set.sorted()
+    for r in {pos.row for pos in cells.keys()}.sorted()
         mut row := [r.to_str()]
         for c in cols
             row.push(display(Pos(col: c, row: r)))
         grid.push(row)
     mut dashes := []
     for i in 0..header.len()
-        mut w := 0
-        for g in grid
-            w = w.max(g[i].chars().len())
+        w := [g[i].chars().len() for g in grid].max() else 0
         dashes.push("-".repeat(w))
         for mut g in grid
             g[i] = g[i].pad_left(w, ' ')

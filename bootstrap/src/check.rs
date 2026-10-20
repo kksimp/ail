@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod comprehension;
 mod stdlib;
 pub mod effects;
 mod testing;
@@ -869,6 +870,7 @@ impl<'p> Checker<'p> {
             Expr::Match { pos, .. } => reject(self, *pos, "`match`"),
             Expr::Try { pos, .. } => reject(self, *pos, "`?`"),
             Expr::Else { pos, .. } => reject(self, *pos, "`else`"),
+            Expr::Comp { pos, .. } => reject(self, *pos, "a comprehension"),
             Expr::TypeArgs { pos, .. } => reject(self, *pos, "a type"),
         }
     }
@@ -2011,6 +2013,11 @@ impl<'p> Checker<'p> {
             Expr::Range { lo, hi, .. } => lo.as_deref().and_then(e).or_else(|| hi.as_deref().and_then(e)),
             Expr::Map(pairs, _) => pairs.iter().find_map(|(k, v)| e(k).or_else(|| e(v))),
             Expr::Set(items, _) => items.iter().find_map(e),
+            Expr::Comp { elem, value, clauses, .. } => clauses
+                .iter()
+                .find_map(|c| e(&c.iter).or_else(|| c.cond.as_ref().and_then(e)))
+                .or_else(|| e(elem))
+                .or_else(|| value.as_deref().and_then(e)),
             Expr::If { branches, els, .. } => branches
                 .iter()
                 .find_map(|(c, b)| {
@@ -2099,6 +2106,9 @@ impl<'p> Checker<'p> {
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
             Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
             Expr::Set(items, pos) => self.set_literal(items, *pos, expect),
+            Expr::Comp { kind, elem, value, clauses, .. } => {
+                self.comprehension(*kind, elem, value.as_deref(), clauses, expect)
+            }
             Expr::Range { lo, hi, pos, .. } => {
                 self.range_bounds(lo.as_deref(), hi.as_deref());
                 self.unsupported(

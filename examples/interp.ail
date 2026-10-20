@@ -476,11 +476,7 @@ fn Interp.eval(mut self, e Expr) Value ! MiniError
             if op == "and" or op == "or"
                 return logical(pos, op, left, right)
             binary(pos, op, eval(left)?, eval(right)?)
-        Call(pos, name, args) =>
-            mut values := []
-            for arg in args
-                values.push(eval(arg)?)
-            call(pos, name, values)
+        Call(pos, name, args) => call(pos, name, [eval(arg)? for arg in args])
 
 fn Interp.logical(mut self, pos Pos, op str, left Expr, right Expr) Value ! MiniError
     a := eval(left)?

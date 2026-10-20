@@ -396,6 +396,18 @@ impl Walker<'_, '_> {
                 }
             }
             Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&c.iter);
+                    if let Some(cond) = &c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(pairs, _) => {
                 for (k, v) in pairs {
                     self.expr(k);

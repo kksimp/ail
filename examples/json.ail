@@ -309,15 +309,9 @@ fn compact(v Json) str
         Int(n) => "{n}"
         Float(x) => "{x}"
         Str(s) => quote(s)
-        Arr(items) =>
-            mut parts := []
-            for item in items
-                parts.push(compact(item))
-            "[{parts.join(",")}]"
+        Arr(items) => "[{[compact(item) for item in items].join(",")}]"
         Obj(members) =>
-            mut parts := []
-            for m in members
-                parts.push("{quote(m.key)}:{compact(m.value)}")
+            parts := ["{quote(m.key)}:{compact(m.value)}" for m in members]
             "\{{parts.join(",")}}"
 
 fn pretty(v Json, level int) str
@@ -327,16 +321,12 @@ fn pretty(v Json, level int) str
         Arr(items) =>
             if items.len() == 0
                 return "[]"
-            mut lines := []
-            for item in items
-                lines.push("{pad}{pretty(item, level + 1)}")
+            lines := ["{pad}{pretty(item, level + 1)}" for item in items]
             "[\n{lines.join(",\n")}\n{close}]"
         Obj(members) =>
             if members.len() == 0
                 return "\{}"
-            mut lines := []
-            for m in members
-                lines.push("{pad}{quote(m.key)}: {pretty(m.value, level + 1)}")
+            lines := ["{pad}{quote(m.key)}: {pretty(m.value, level + 1)}" for m in members]
             "\{\n{lines.join(",\n")}\n{close}}"
         Null | Bool(_) | Int(_) | Float(_) | Str(_) => compact(v)
 
