@@ -52,6 +52,7 @@ All verified on Linux x86-64 and macOS ARM64.
 ### Tooling
 
 - **Semantic API:** diagnostics schema v1 (ADR 0145), `ail explain` covering every emitted rule (ADRs 0146, 0335), typed holes `todo` (ADR 0147), `ail api` with ids, references, doc comments, contracts and effects (ADRs 0150–0152, 0213), `ail api --locals|--type|--refs`, `--card` and package directories (ADRs 0258–0261, 0310–0311, 0325–0327), `ail check --errors` (ADR 0286), `ail effects`, and `ail fix` with anchored fixes for 88 of 140 corpus programs (ADRs 0202–0205, 0264, 0285, 0335). Foreign syntax is reported once with a help (ADR 0262). See [semantic-api.md](design/semantic-api.md).
+- **Token budgets:** `--budget [N]` and `--from K` on every command: most severe records first, a note counting the rest (ADR 0394).
 - **Run and trace:** `ail run --trace`, `--watch NAME`, trap snapshots, `--timeout`, `--max-memory`, `--max-steps` (ADRs 0265–0268, 0288–0290, 0326).
 - **Tests:** `@test`, `assert`, `ail test` (ADRs 0167–0168); property tests with `--cases`, `--seed`, shrinking; doc examples as tests (ADRs 0198–0201); `--coverage`, `--trace`.
 - **Formatter:** `ail fmt` (ADRs 0169–0170) with chained-call lines, own-line attributes and long-line splitting (ADRs 0323–0324, 0346–0347); examples and test cases are canonical.
