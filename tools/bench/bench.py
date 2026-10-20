@@ -42,6 +42,8 @@ PERF_EXAMPLES = {"interp", "json", "sheet", "logscan", "tasks", "build"}
 CLASSICS = {"binarytrees", "collatz", "fannkuch", "fasta", "mandelbrot", "matmul",
             "nbody", "sieve", "spectralnorm", "wordfreq"}
 GROUPS = ["agent", "compute", "micro", "examples"]
+# Programs counted for tokens only: their run time is not the AIL program's.
+NO_TIMING = {"build"}
 
 
 def programs(root):
@@ -51,8 +53,9 @@ def programs(root):
         found.append({"key": "examples/" + p.stem, "rel": p.relative_to(root),
                       "group": "examples", "speed": p.stem in PERF_EXAMPLES})
     for p in sorted((root / "tools/tokbench/corpus/programs").glob("*/*.ail")):
+        # agent/build runs the repo's own ail binary, so its time is not the program's.
         found.append({"key": "agent/" + p.stem, "rel": p.relative_to(root),
-                      "group": "agent", "speed": True})
+                      "group": "agent", "speed": p.stem not in NO_TIMING})
     for p in sorted((root / "tools/perfbench/programs").glob("*.ail")):
         group = "compute" if p.stem in CLASSICS else "micro"
         found.append({"key": group + "/" + p.stem, "rel": p.relative_to(root),
