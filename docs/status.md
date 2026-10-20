@@ -41,6 +41,9 @@ Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
 interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
 implemented and tested on Linux x86-64; examples and test cases are canonical.
+Lane 12 added `tools/edit/edit.ail`, a code editor written in AIL with a
+headless, tested core that drives `ail check --json`, fixes, `ail explain` and
+`ail api`; its window front end waits for `std.ui` (ADRs 0180–0181).
 
 ## Design topics
 
@@ -101,4 +104,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-046).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-048).
