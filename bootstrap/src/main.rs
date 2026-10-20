@@ -12,6 +12,7 @@ mod implicit_self;
 mod interp;
 mod lexer;
 mod parser;
+mod stdlib;
 
 use std::process::ExitCode;
 
@@ -19,7 +20,9 @@ const USAGE: &str = "\
 usage: ail <command> [--json] [args]
 
 commands:
-  run FILE      check and run an AIL program
+  run FILE [ARGS...]
+                check and run an AIL program; ARGS are the program's
+                (std.env.1: `env.args()`)
   check FILE    check a program without running it
   test FILE     run the program's `@test` functions
   effects FILE  print each function's inferred effects (eff.infer.6)
@@ -37,6 +40,22 @@ const STACK_BYTES: usize = 256 * 1024 * 1024;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // std.env.1: the words after `run FILE` belong to the program; `ail`'s
+    // own options come before FILE.
+    let mut words = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => {}
+            "--deny" => i += 1,
+            _ => words.push(i),
+        }
+        i += 1;
+    }
+    let (args, program_args) = match words.as_slice() {
+        [cmd, file, ..] if args[*cmd] == "run" => (args[..=*file].to_vec(), args[*file + 1..].to_vec()),
+        _ => (args, Vec::new()),
+    };
     let json = args.iter().any(|a| a == "--json");
     let mut rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
     let deny = match take_deny(&mut rest) {
@@ -47,7 +66,10 @@ fn main() -> ExitCode {
         }
     };
     match rest.as_slice() {
-        ["run", file] => run_file(file, json, true, &deny),
+        ["run", file] => {
+            interp::set_program(file, program_args);
+            run_file(file, json, true, &deny)
+        }
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => run_tests(file, json),
         ["effects", file] if deny.is_empty() => effects_file(file, json),

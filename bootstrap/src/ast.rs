@@ -12,6 +12,23 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub consts: Vec<ConstDecl>,
+    /// `use a.b.c` and `use a.b.c as d` at the top level (mod.use.1).
+    pub uses: Vec<Use>,
+}
+
+/// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
+#[derive(Debug)]
+pub struct Use {
+    pub path: Vec<(String, Pos)>,
+    pub alias: Option<(String, Pos)>,
+    pub pos: Pos,
+}
+
+impl Use {
+    /// The name the module is available under: the alias, or the last segment.
+    pub fn name(&self) -> &(String, Pos) {
+        self.alias.as_ref().unwrap_or_else(|| self.path.last().expect("a use path has a segment"))
+    }
 }
 
 /// `NAME := expr` at the top level: a constant (mod.const.1).

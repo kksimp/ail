@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use crate::ast::{
     Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
     InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
-    TypeRef, UnOp, Variant, Within, is_prelude,
+    TypeRef, UnOp, Use, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
@@ -22,7 +22,6 @@ use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
     ("pub", "mod.vis.1"),
-    ("use", "mod.use.1"),
     ("unique", "own.uniq.1"),
     ("move", "own.move.1"),
     ("ref", "own.ref.1"),
@@ -87,6 +86,7 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     shift(&mut all);
     all.extend(tokens);
     let (mut prog, mut diags) = parse(all);
+    crate::stdlib::add_declarations(&mut prog);
     crate::implicit_self::rewrite(&mut prog, &mut diags);
     (prog, diags)
 }
@@ -126,6 +126,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                     prog.fns.push(f);
                 }
             }
+            Tok::Kw("use") => p.use_decl(&mut prog),
             // `@name fn ...` (gram.attr.1-2)
             Tok::Sym("@") => {
                 if let Some(f) = p.attributed_function() {
@@ -593,6 +594,34 @@ impl Parser {
         Some(params)
     }
 
+    /// `use a.b.c` or `use a.b.c as d` (mod.use.1).
+    fn use_decl(&mut self, prog: &mut Program) {
+        let pos = self.bump().pos;
+        let mut path = Vec::new();
+        loop {
+            match self.name("a module path after `use`, e.g. `use std.fs`", "mod.use.1") {
+                Some(seg) => path.push(seg),
+                None => return self.skip_statement(),
+            }
+            if !self.eat_sym(".") {
+                break;
+            }
+        }
+        let alias = if self.eat_kw("as") {
+            match self.name("a name after `as`", "mod.use.1") {
+                Some(a) => Some(a),
+                None => return self.skip_statement(),
+            }
+        } else {
+            None
+        };
+        if !self.eat(&Tok::Newline) {
+            self.unexpected("end of line after the import", "mod.use.1");
+            return self.skip_statement();
+        }
+        prog.uses.push(Use { path, alias, pos });
+    }
+
     /// `trait Name` followed by an indented block of functions (trait.decl.1).
     fn trait_decl(&mut self, prog: &mut Program) {
         self.bump(); // trait
@@ -743,9 +772,15 @@ impl Parser {
         Some(TypeRef { kind: TypeKind::Optional(Box::new(t)), pos })
     }
 
-    /// `Name` or `Name[Arg, ...]` (gram.generic.1).
+    /// `Name` or `Name[Arg, ...]` (gram.generic.1), or a module's type
+    /// `m.Name`, kept as the dotted name (mod.use.2, std.use.2).
     fn named_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
-        let (name, pos) = self.name(expected, rule)?;
+        let (mut name, pos) = self.name(expected, rule)?;
+        if self.at_sym(".") && matches!(self.peek_at(1), Tok::Ident(_)) {
+            self.i += 1;
+            let (item, _) = self.name(expected, rule)?;
+            name = format!("{name}.{item}");
+        }
         let mut args = Vec::new();
         if self.at_sym("<") {
             let at = self.pos();
