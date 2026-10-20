@@ -78,7 +78,7 @@ Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
-`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`get_bytes`/`post_bytes`/`request_bytes` give `.data` as `bytes`; `proc.run_bytes`) (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 

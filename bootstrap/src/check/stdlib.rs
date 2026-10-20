@@ -165,7 +165,7 @@ impl<'p> Checker<'p> {
             return Some(self.select_call(args, pos));
         }
         let (mut params, ret) = self.std_signature(module, f);
-        if (module, f) == ("proc", "run") {
+        if matches!((module, f), ("proc", "run" | "run_bytes")) {
             // std.proc.2: `input str?` and `timeout_ms int?` may be left off
             // from the end.
             params.truncate(args.len().clamp(2, 4));
@@ -228,6 +228,11 @@ impl<'p> Checker<'p> {
                 vec![Str, list(Str), opt(Str), opt(Int)],
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
+            // std.proc.8 (ADR 0417)
+            ("proc", "run_bytes") => (
+                vec![Str, list(Str), opt(Ty::Bytes), opt(Int)],
+                Ty::Res(Box::new(std_ty("proc.RawOutput")), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
             ("proc", "which") => (vec![Str], opt(Str)),
             // std.proc.4-7 (ADR 0424)
             ("proc", "start") => (
@@ -239,13 +244,17 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
             ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
-            ("net", "get" | "post" | "request") => (
+            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => (
                 match f {
-                    "get" => vec![Str],
+                    "get" | "get_bytes" => vec![Str],
                     "post" => vec![Str, Str, Str],
+                    "post_bytes" => vec![Str, Ty::Bytes, Str],
                     _ => vec![Str, Str, std_ty("net.Options")],
                 },
-                Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
+                Ty::Res(
+                    Box::new(std_ty(if f.ends_with("_bytes") { "net.RawResponse" } else { "net.Response" })),
+                    Errs::Set(vec![std_ty("net.NetError")]),
+                ),
             ),
             ("net", "options") => (vec![], std_ty("net.Options")),
             ("net", "serve" | "listen" | "connect" | "connect_tls") => {

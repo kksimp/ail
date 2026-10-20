@@ -437,3 +437,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0416](0416-net-bodies-as-bytes.md) | `std.net` bodies as `bytes`: new functions and last fields, `body` stays `str` *(delegated)* | Accepted | 2026-10-20 |
+| [0417](0417-proc-run-bytes.md) | `proc.run_bytes`: bytes in, bytes out, `Output` unchanged *(delegated)* | Accepted | 2026-10-20 |

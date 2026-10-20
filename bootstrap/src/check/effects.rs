@@ -69,16 +69,16 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         }
         "compress" => (&["deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib"], &[]),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
-        "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
-        "proc" => (&["run", "which", "start", "wait", "kill"], &["proc", "io"]),
+        "proc" => (&["run", "run_bytes", "which", "start", "wait", "kill"], &["proc", "io"]),
         "io" => (&["read_line", "read_all", "read_bytes", "eprint", "exit"], &["io"]),
-        "proc" => (&["run", "which"], &["proc", "io"]),
         // std.net.1: every request reaches the network.
         "net" if matches!(name, "serve" | "listen") => {
             // std.net.14: a server needs the narrower capability as well.
             return Some(&["net", "net.serve", "io"]);
         }
-        "net" => (&["get", "post", "request", "options", "connect", "connect_tls"], &["net", "io"]),
+        "net" => {
+            (&["get", "post", "request", "get_bytes", "post_bytes", "request_bytes", "options", "connect", "connect_tls"], &["net", "io"])
+        }
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
