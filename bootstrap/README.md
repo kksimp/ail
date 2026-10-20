@@ -32,6 +32,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
+./ail explain                     # every rule, its chapter, and whether `ail fix` repairs it (--json too)
 ./ail api --card [--budget N] DIR|FILE  # a program's own card: modules, entry, tests, manifest, examples, trimmed to a token budget
 ./ail api FILE|DIR                 # declarations as JSON (--pretty, --text, --symbols); a DIR outlines the whole package with module-prefixed ids; `fails_with` per fallible fn
 ./ail check --errors FILE          # each function's error types and failure paths, JSON
@@ -82,8 +83,9 @@ reported but don't stop a program from running.
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
+| `src/diag/rewrite.rs` | Fixes that read the source line: operands of an operator, a C-style `for`, a typed empty collection, `printf` | `fix.edit.6`, ADR 0335 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
-| `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
+| `src/explain.rs`, `src/fixable.txt`, `build.rs` | `ail explain [RULE]`, from the spec embedded at build time; the rules that have a fix | ADRs 0146, 0335–0336, `explain.*` |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/derive.rs`, `src/parser/derive.rs`, `src/interp/generate.rs`, `src/api/expanded.rs` | Derive generators: `@derive(f) trait`; while loading, runs each empty `impl`'s generator on a wrapper program and splices its text in as a `gen:impl:T.Trait` file; reports generated-code problems at the `impl`; `ail api --expanded` | `ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3` (ADRs 0306–0309) |
 | `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
@@ -292,6 +294,9 @@ implement correctly.
    habit from Python or Rust) also goes in `tests/mistakes/` as `NAME.ail` +
    `NAME.rules` (+ `NAME.fixed` when `ail fix` should resolve it); the first
    diagnostic must name the mistake and carry a `help` (ADR 0262).
+   A new rule ID must be defined in `docs/spec` (`tests/explain_coverage.rs`
+   fails otherwise), and a rule that gains its first fix goes in
+   `src/fixable.txt` (the same test says which rule is missing).
 4. Keep the code formatted with `rustfmt` (settings in `rustfmt.toml`) and free
    of `clippy` warnings. Neither is in the minimal toolchain the designer
    uses, so agents add them locally (`rustup component add rustfmt clippy`).

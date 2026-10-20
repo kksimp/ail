@@ -316,3 +316,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0317](0317-move-self-receivers.md) | `move self` receivers consume the receiver; the call site is unmarked *(delegated)* | Accepted | 2026-10-20 |
 | [0318](0318-unique-values-in-lists-and-maps.md) | Lists and maps may hold unique values; such a collection is unique *(delegated)* | Accepted | 2026-10-20 |
 | [0319](0319-copying-methods-on-unique-collections.md) | Methods that copy elements are errors on unique collections; task handles stay out of lists *(delegated)* | Accepted | 2026-10-20 |
+| [0335](0335-explain-and-fix-coverage.md) | Every emitted rule has an explain entry, and ten more mistakes have fixes *(delegated)* | Accepted | 2026-10-20 |
+| [0336](0336-explain-listing-and-length.md) | `ail explain` lists every rule with its fix, and entries average under 120 tokens *(delegated)* | Accepted | 2026-10-20 |
