@@ -25,13 +25,19 @@ pub const SYMBOLS: &[&str] = &[
 /// A line ending in one of these continues on the next line (lex.stmt.2).
 const BINARY_SYMBOLS: &[&str] = &["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="];
 
+/// A character that continues a name (lex.name.1, ADR 0372): a letter
+/// (Unicode `Alphabetic`), an ASCII digit or `_`, as `char.is_alnum()`.
+fn name_char(c: char) -> bool {
+    c.is_alphabetic() || c.is_ascii_digit() || c == '_'
+}
+
 /// Whether a line starts with a binary operator that cannot begin a statement, so it
 /// continues the previous one (lex.stmt.2 (5)): `and`, `or`, `+ * / % == != < <= > >=`.
 fn leading_operator(rest: &[char]) -> bool {
     let word = |w: &str| {
         rest.len() >= w.len()
             && rest.iter().zip(w.chars()).all(|(a, b)| *a == b)
-            && rest.get(w.len()).is_none_or(|c| !(c.is_alphanumeric() || *c == '_'))
+            && rest.get(w.len()).is_none_or(|c| !name_char(*c))
     };
     if word("and") || word("or") {
         return true;
@@ -564,7 +570,7 @@ impl Lexer {
                 }
                 c if c.is_ascii_digit() => i = self.number(line, i, line_no),
                 c if c.is_alphabetic() || c == '_' => {
-                    let end = i + line[i..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').count();
+                    let end = i + line[i..].iter().take_while(|c| name_char(**c)).count();
                     // A keyword is matched on the characters, so only a name allocates.
                     if let Some(k) = keyword(&line[i..end]) {
                         self.push(Tok::Kw(k), pos);

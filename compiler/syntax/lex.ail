@@ -1,0 +1,1000 @@
+## The AIL lexer, in AIL (Stage 3, ADR 0371): source text to tokens,
+## including the layout tokens (indent, dedent, newline), as the
+## bootstrap's `lexer.rs` makes them. `compiler/tokens.ail` prints the
+## tokens in the form of `ail api --tokens` (api.tok.1-3), and the selftest
+## compares the two on every `.ail` file in the repository.
+##
+## Spec rules: lex.block.1-4, lex.stmt.1-3, lex.kw.1, lex.comment.1-3,
+## lex.str.1-7, lex.num.1-3, gram.foreign.1. A diagnostic carries its rule
+## and position; the messages are the bootstrap's (ADR 0373).
+
+## Reserved words (lex.kw.1). `c` is deliberately absent (lex.kw.2).
+KEYWORDS := {
+    "and", "any", "as", "break", "continue", "defer", "elif", "else", "ensures", "enum", "error", "extern",
+    "false", "fn", "for", "if", "impl", "in", "invariant", "match", "move", "mut", "none", "not", "or", "par",
+    "pub", "ref", "requires", "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe",
+    "use", "while", "with",
+}
+
+## Symbols, longest first so that `..=` wins over `..` and `.`.
+SYMBOLS := [
+    "..=", "..", "->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||", ".", ":",
+    ",", "(", ")", "[", "]", "\{", "}", "=", "<", ">", "+", "-", "*", "/", "%", "!", "?", "@", "|",
+]
+
+## A line ending in one of these continues on the next line (lex.stmt.2).
+BINARY_SYMBOLS := {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="}
+
+## The indentation unit is exactly four spaces (lex.block.2, ADR 0040).
+UNIT := 4
+
+## Largest width or precision a format specification accepts (lex.str.7).
+MAX_FORMAT_WIDTH := 1000
+
+## A source position, 1-based; columns count characters.
+pub struct Pos
+    pub line int
+    pub col int
+
+## A token's kind and value.
+pub enum Tok
+    Ident(name str)
+    Kw(word str)
+    Sym(text str)
+    Str(value str)
+    ## A string literal containing `{expression}` parts (lex.str.2).
+    Interp(parts List[Part])
+    ## `'a'` (lex.str.4)
+    Char(value char)
+    Int(value int)
+    ## `9223372036854775808`, which fits only after a `-` (lex.num.3).
+    IntMin
+    ## `1.5`, `1e3` (lex.num.2)
+    Float(value float)
+    Newline
+    Indent
+    Dedent
+    Eof
+
+## A piece of an interpolated string: literal text, or the tokens of one
+## embedded expression (ending in `Eof`), with its format specification
+## if it has one (lex.str.7).
+pub enum Part
+    Lit(text str)
+    Code(tokens List[Token])
+    Fmt(tokens List[Token], spec FormatSpec)
+
+pub struct Token
+    pub tok Tok
+    pub pos Pos
+
+## `[[fill]align][width][.precision][x]` after the `:` in `{expression:spec}` (lex.str.7).
+pub struct FormatSpec
+    pub fill char?
+    ## `<`, `>` or `^`.
+    pub align char?
+    pub width int?
+    ## Decimal places of a float (`.N`).
+    pub precision int?
+    ## `x`: lowercase hexadecimal for an int.
+    pub hex bool
+
+## A lexical mistake: the rule it breaks and where.
+pub struct Diag
+    pub rule str
+    pub pos Pos
+
+## A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
+pub struct Comment
+    pub pos Pos
+    pub text str
+
+## The tokens of a file, its diagnostics in the order found, and its comments.
+pub struct Lexed
+    pub tokens List[Token]
+    pub diags List[Diag]
+    pub comments List[Comment]
+
+## An unclosed `(`, `[` or `{`.
+struct Open
+    c char
+    pos Pos
+
+## A statement-starting line: its number, the characters of its leading
+## whitespace and their width (a tab counts as one unit).
+struct Lead
+    line int
+    chars int
+    width int
+
+## Where a multi-line string starts on a line (lex.str.3): the column of
+## its `"""` (or `r"""`), and whether it is raw.
+struct Opening
+    col int
+    raw bool
+
+## A line and column, 0-based, to carry on from.
+struct Resume
+    line int
+    col int
+
+## An escape's character, if it is valid, and the index after it.
+struct Escaped
+    ch char?
+    next int
+
+struct Lexer
+    tokens List[Token]
+    diags List[Diag]
+    ## Unclosed brackets: newlines inside them don't end statements.
+    open List[Open]
+    ## Depth of string interpolation being lexed.
+    in_interp int
+    comments List[Comment]
+    ## Spaces per indentation level in this run (1 = the standard 4).
+    scale int
+    logical List[Lead]
+    ## The part of `logical` indented with a tab.
+    tabs List[Lead]
+
+## The result of one run at one indentation unit, and the unit to run
+## again with (0 for none).
+struct Scaled
+    lexed Lexed
+    unit int
+
+## Lex `src` (lex.*). A file that indents by 2 or 3 spaces is lexed again
+## at that unit, so one diagnostic covers the whole file (lex.block.2, ADR 0263).
+pub fn lex(src str) Lexed
+    first := lex_scaled(src, 1)
+    if first.unit > 0
+        return lex_scaled(src, first.unit).lexed
+    first.lexed
+
+## `line[i]`, or `'\0'` past its end.
+fn at(line List[char], i int) char
+    if i < line.len() then line[i] else '\0'
+
+## A character of a name: a letter, a digit or `_`.
+fn name_char(c char) bool
+    c.is_alnum() or c == '_'
+
+fn ascii_alnum(c char) bool
+    k := c.code()
+    k >= 48 and k <= 57 or k >= 65 and k <= 90 or k >= 97 and k <= 122
+
+fn hex_digit(c char) bool
+    c.is_digit() or c.code() >= 97 and c.code() <= 102 or c.code() >= 65 and c.code() <= 70
+
+fn blank(line List[char], from int, to int) bool
+    for k in from..to
+        if line[k] != ' ' and line[k] != '\t'
+            return false
+    true
+
+fn text_of(line List[char], from int, to int) str
+    line[from..to].join("")
+
+## Whether `w` is spelled at `line[at..]`, ending there as a word.
+fn word_at(line List[char], start int, w str) bool
+    ws := w.chars()
+    if line.len() - start < ws.len()
+        return false
+    for k in 0..ws.len()
+        if line[start + k] != ws[k]
+            return false
+    end := start + ws.len()
+    end >= line.len() or not name_char(line[end])
+
+## Whether a line starts with a binary operator that cannot begin a statement,
+## so it continues the previous one (lex.stmt.2 (5)): `and`, `or`,
+## `+ * / % == != < <= > >=`.
+fn leading_operator(line List[char], start int) bool
+    if word_at(line, start, "and") or word_at(line, start, "or")
+        return true
+    two := at(line, start + 1)
+    match line[start]
+        '=' | '!' => two == '='
+        '<' | '>' => true
+        '+' | '*' | '/' | '%' => two != '='
+        _ => false
+
+fn gcd(a int, b int) int
+    if b == 0 then a else gcd(b, a % b)
+
+fn is_newline(t Tok) bool
+    t == Tok.Newline
+
+fn is_layout(t Tok) bool
+    t == Tok.Indent or t == Tok.Dedent
+
+## Lex with one indentation unit of `scale` spaces.
+fn lex_scaled(src str, scale int) Scaled
+    mut lx := Lexer(tokens: [], diags: [], open: [], in_interp: 0, comments: [], scale: scale, logical: [], tabs: [])
+    mut indents := [0]
+    # The previous line ended in a way that continues the statement.
+    mut continuing := false
+    mut lines := List[List[char]]()
+    for raw in src.split("\n")
+        mut cs := raw.chars()
+        if cs.len() > 0 and cs[cs.len() - 1] == '\r'
+            cs.remove_at(cs.len() - 1)
+        lines.push(cs)
+    mut last_line := 1
+    mut li := 0
+    while li < lines.len()
+        line_no := li + 1
+        last_line = line_no
+        line := lines[li]
+        mut lead := 0
+        while lead < line.len() and (line[lead] == ' ' or line[lead] == '\t')
+            lead += 1
+        if lead == line.len() or line[lead] == '#'
+            # Blank and comment-only lines don't affect blocks (lex.block note).
+            lx.comment(line, lead, line_no)
+            li += 1
+            continue
+        # lex.stmt.2 (4): a line starting with `.name` continues the previous
+        # statement (a chained call); the statement's newline is taken back.
+        dot_name := line[lead] == '.' and (at(line, lead + 1).is_alpha() or at(line, lead + 1) == '_')
+        n := lx.tokens.len()
+        if lx.open.len() == 0 and not continuing and (dot_name or leading_operator(line, lead)) and n >= 2
+            and is_newline(lx.tokens[n - 1].tok) and not is_layout(lx.tokens[n - 2].tok)
+            lx.tokens.remove_at(n - 1)
+            continuing = true
+        if lx.open.len() == 0 and not continuing
+            width := lx.indent_width(line, lead, line_no)
+            top := indents[indents.len() - 1]
+            pos := Pos(line: line_no, col: 1)
+            if width > top
+                if width != top + UNIT
+                    lx.diag("lex.block.3", Pos(line: line_no, col: width + 1))
+                indents.push(width)
+                lx.push(Indent, pos)
+            else
+                while width < indents[indents.len() - 1]
+                    indents.remove_at(indents.len() - 1)
+                    lx.push(Dedent, pos)
+                if width != indents[indents.len() - 1]
+                    lx.diag("lex.block.1", Pos(line: line_no, col: width + 1))
+                    indents.push(width)
+        # A multi-line string continues the line onto later lines (lex.str.3).
+        before := lx.tokens.len()
+        mut from := lead
+        while true
+            o := lx.lex_line(lines[li], from, li + 1) else break
+            r := lx.multiline(lines, li, o.col, o.raw)
+            li = r.line
+            from = r.col
+        produced := lx.tokens.len() > before
+        end_col := lines[li].len() + 1
+        last_line = li + 1
+        if lx.open.len() == 0
+            # lex.stmt.2: a line ending in a comma or a binary operator continues.
+            mut continues := false
+            if lx.tokens.len() > 0
+                continues = match lx.tokens[lx.tokens.len() - 1].tok
+                    Sym(s) => s == "," or BINARY_SYMBOLS.contains(s)
+                    Kw(k) => k == "and" or k == "or"
+                    Ident(_) | Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false
+            if produced and continues
+                continuing = true
+            else
+                if produced or continuing
+                    lx.push(Newline, Pos(line: li + 1, col: end_col))
+                continuing = false
+        li += 1
+    end := Pos(line: last_line, col: 1)
+    if lx.open.len() > 0
+        lx.diag("lex.stmt.2", lx.open[lx.open.len() - 1].pos)
+        # Close them for the parser too, so one report isn't followed by another.
+        mut k := lx.open.len() - 1
+        while k >= 0
+            sym := match lx.open[k].c
+                '(' => ")"
+                '[' => "]"
+                _ => "}"
+            lx.push(Sym(sym), end)
+            k -= 1
+        lx.push(Newline, end)
+    while indents.len() > 1
+        indents.remove_at(indents.len() - 1)
+        lx.push(Dedent, end)
+    lx.push(Eof, end)
+    unit := lx.indent_diags()
+    Scaled(lexed: Lexed(tokens: lx.tokens, diags: lx.diags, comments: lx.comments), unit: unit)
+
+fn Lexer.push(mut self, tok Tok, pos Pos)
+    tokens.push(Token(tok: tok, pos: pos))
+
+fn Lexer.diag(mut self, rule str, pos Pos)
+    diags.push(Diag(rule: rule, pos: pos))
+
+## Record the comment at `line[start..]`, if there is one.
+fn Lexer.comment(mut self, line List[char], start int, line_no int)
+    if at(line, start) == '#' and start < line.len()
+        mut end := line.len()
+        while end > start and line[end - 1].is_space()
+            end -= 1
+        comments.push(Comment(pos: Pos(line: line_no, col: start + 1), text: text_of(line, start, end)))
+
+## Stand-in for a literal that was reported as an error, so the parser
+## doesn't report the same mistake again.
+fn Lexer.placeholder(mut self, pos Pos)
+    push(Int(0), pos)
+
+## Width of leading whitespace in indentation units of four. Tabs and
+## other units are collected and reported once per file (`indent_diags`).
+fn Lexer.indent_width(mut self, line List[char], lead int, line_no int) int
+    mut tabbed := false
+    mut width := 0
+    for k in 0..lead
+        if line[k] == '\t'
+            tabbed = true
+            width += UNIT
+        else
+            width += 1
+    logical.push(Lead(line: line_no, chars: lead, width: width))
+    if tabbed
+        tabs.push(Lead(line: line_no, chars: lead, width: width))
+    elif scale > 1
+        return width / scale * UNIT
+    if not tabbed and width % UNIT != 0 and scale == 1
+        diag("lex.block.2", Pos(line: line_no, col: 1))
+    width / UNIT * UNIT
+
+## The indentation unit of a file that doesn't use 4: the common divisor
+## of its statements' indentation, when that is 2 or 3 spaces; 0 otherwise.
+fn Lexer.unit_guess(self) int
+    mut g := 0
+    mut odd := false
+    mut first := 0
+    for l in logical
+        if l.width > 0
+            g = gcd(g, l.width)
+            if first == 0 or l.width < first
+                first = l.width
+        if l.width % UNIT != 0
+            odd = true
+    if (g == 2 or g == 3) and odd and first == g and tabs.len() == 0 then g else 0
+
+## The file-level indentation diagnostics (lex.block.2, lex.block.4): one
+## per file. Returns the unit to lex again with when the file doesn't
+## indent by 4, or 0.
+fn Lexer.indent_diags(mut self) int
+    if tabs.len() > 0
+        diag("lex.block.4", Pos(line: tabs[0].line, col: 1))
+    if scale == 1
+        return unit_guess()
+    for l in logical
+        if l.width > 0
+            diag("lex.block.2", Pos(line: l.line, col: 1))
+            return 0
+    0
+
+## Lex `line[start..]`. Stops at a multi-line string's opening `"""`
+## (lex.str.3), giving its column and whether it is raw, so the caller can
+## read the following lines.
+fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
+    mut i := start
+    while i < line.len()
+        c := line[i]
+        pos := Pos(line: line_no, col: i + 1)
+        if c == ' ' or c == '\t'
+            i += 1
+        elif c == '#' and in_interp > 0
+            diag("lex.str.2", pos)
+            i += 1
+        elif c == '#'
+            # Comment to the end of the line (lex.comment.1, lex.comment.2).
+            comment(line, i, line_no)
+            break
+        elif c == '"' and starts_triple(line, i)
+            if in_interp > 0
+                diag("lex.str.3", pos)
+                return none
+            return Opening(col: i, raw: false)
+        elif c == '"'
+            i = string(line, i, line_no)
+        elif c == 'r' and at(line, i + 1) == '"'
+            # lex.str.6: `r"..."` and `r"""..."""` are raw strings.
+            if starts_triple(line, i + 1) and in_interp == 0
+                return Opening(col: i, raw: true)
+            i = raw_string(line, i, line_no)
+        elif c == '\''
+            i = char_literal(line, i, line_no)
+        elif c == ';'
+            diag("lex.stmt.3", pos)
+            # Recover as if the line ended here, so the parser doesn't report it again.
+            if open.len() == 0 and in_interp == 0
+                push(Newline, pos)
+            i += 1
+        elif c == '/' and at(line, i + 1) == '/'
+            diag("gram.foreign.1", pos)
+            break
+        elif c == '/' and at(line, i + 1) == '*'
+            diag("gram.foreign.1", pos)
+            break
+        elif c == '\\' and rest_is_space(line, i + 1)
+            diag("gram.foreign.1", pos)
+            i += 1
+        elif c == '&' and at(line, i + 1) != '&'
+            diag("gram.foreign.1", pos)
+            i += 1
+        elif c.is_digit()
+            i = number(line, i, line_no)
+        elif c.is_alpha() or c == '_'
+            mut end := i
+            while end < line.len() and name_char(line[end])
+                end += 1
+            word := text_of(line, i, end)
+            if KEYWORDS.contains(word)
+                push(Kw(word), pos)
+            elif (word == "f" or word == "u") and at(line, end) == '"'
+                diag("gram.foreign.1", pos)
+            else
+                push(Ident(word), pos)
+            i = end
+        else
+            sym := symbol_at(line, i) else ""
+            if sym == ""
+                diag("bootstrap.unsupported", pos)
+                i += 1
+            else
+                symbol(sym, pos)
+                i += sym.len()
+    none
+
+fn rest_is_space(line List[char], from int) bool
+    for k in from..line.len()
+        if not line[k].is_space()
+            return false
+    true
+
+## The longest symbol spelled at `line[i..]`.
+fn symbol_at(line List[char], i int) str?
+    for sym in SYMBOLS
+        cs := sym.chars()
+        if i + cs.len() <= line.len()
+            mut same := true
+            for k in 0..cs.len()
+                if line[i + k] != cs[k]
+                    same = false
+                    break
+            if same
+                return sym
+    none
+
+fn Lexer.symbol(mut self, sym str, pos Pos)
+    if sym == "(" or sym == "[" or sym == "\{"
+        open.push(Open(c: sym.chars()[0], pos: pos))
+    elif sym == ")" or sym == "]" or sym == "}"
+        if open.len() > 0
+            open.remove_at(open.len() - 1)
+    push(Sym(sym), pos)
+
+## String literal starting at `line[start] == '"'`; returns the index after it.
+fn Lexer.string(mut self, line List[char], start int, line_no int) int
+    pos := Pos(line: line_no, col: start + 1)
+    mut value := List[char]()
+    mut parts := List[Part]()
+    if close := content(line, start + 1, line.len(), line_no, true, mut value, mut parts)
+        push(string_token(value, parts), pos)
+        return close + 1
+    diag("lex.str.1", pos)
+    forget_brackets(line_no)
+    line.len()
+
+## After a string error, the brackets opened on its line don't continue
+## the statement, so the error isn't followed by others about them.
+fn Lexer.forget_brackets(mut self, line_no int)
+    open = [o for o in open if o.pos.line != line_no]
+
+## `r"..."`: no escapes and no interpolation (lex.str.6). `line[start]` is the `r`.
+fn Lexer.raw_string(mut self, line List[char], start int, line_no int) int
+    pos := Pos(line: line_no, col: start + 1)
+    for k in start + 2..line.len()
+        if line[k] == '"'
+            push(Str(text_of(line, start + 2, k)), pos)
+            return k + 1
+    diag("lex.str.1", pos)
+    forget_brackets(line_no)
+    line.len()
+
+## The text of a string in `line[from..to]`, with escapes and `{...}`
+## interpolation (lex.str.1-2), appended to `value` and `parts`. When
+## `quoted`, it stops at an unescaped `"` and gives its index.
+fn Lexer.content(mut self, line List[char], from int, to int, line_no int, quoted bool, mut value List[char], mut parts List[Part]) int?
+    mut i := from
+    while i < to
+        here := Pos(line: line_no, col: i + 1)
+        c := line[i]
+        if c == '"' and quoted
+            return i
+        if c == '\\'
+            e := escape(line, i, line_no)
+            if ch := e.ch
+                value.push(ch)
+            i = e.next
+        elif c == '{'
+            # lex.str.2: `{expression}` interpolates.
+            close := find_close(line, to, i)
+            if close < 0
+                diag("lex.str.2", here)
+                forget_brackets(line_no)
+                if quoted
+                    return to
+                return none
+            colon := spec_colon(line, close, i + 1)
+            code := sub_lex(line, i + 1, if colon >= 0 then colon else close, line_no)
+            spec := if colon >= 0 then parse_spec(line[colon + 1..close]) else none
+            if colon >= 0 and spec == none
+                diag("lex.str.7", Pos(line: line_no, col: colon + 2))
+            if code.len() == 1
+                diag("lex.str.2", here)
+            else
+                if value.len() > 0
+                    parts.push(Lit(value.join("")))
+                    value.clear()
+                if f := spec
+                    parts.push(Fmt(code, f))
+                else
+                    parts.push(Code(code))
+            i = close + 1
+        else
+            value.push(c)
+            i += 1
+    none
+
+## A multi-line string whose opening `"""` (or `r"""`) is at
+## `lines[first][col]` (lex.str.3, lex.str.6). Gives the line and column
+## just after the closing `"""`.
+fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw bool) Resume
+    pos := Pos(line: first + 1, col: col + 1)
+    open_end := if raw then col + 4 else col + 3
+    opening := lines[first]
+    # `"""text"""` on one line: no dedenting (lex.str.3).
+    one := find_triple(opening, open_end, raw)
+    if one >= 0
+        mut value := List[char]()
+        mut parts := List[Part]()
+        if raw
+            value.extend(opening[open_end..one])
+        else
+            _ := content(opening, open_end, one, first + 1, false, mut value, mut parts)
+        push(string_token(value, parts), pos)
+        return Resume(line: first, col: one + 3)
+    for k in open_end..opening.len()
+        if opening[k] != ' '
+            diag("lex.str.3", Pos(line: first + 1, col: open_end + 1))
+            break
+    # Find the closing `"""`.
+    mut li := first + 1
+    mut close := -1
+    while close < 0
+        if li >= lines.len()
+            diag("lex.str.3", pos)
+            push(Str(""), pos)
+            return Resume(line: lines.len() - 1, col: lines[lines.len() - 1].len())
+        close = find_triple(lines[li], 0, raw)
+        if close < 0
+            li += 1
+    last := li
+    closing := lines[last]
+    alone := blank_spaces(closing, 0, close)
+    # Only spaces indent a multi-line string's text (lex.str.3).
+    for k in first + 1..last + 1
+        whole := lines[k]
+        upto := if k == last then close else whole.len()
+        mut lead := 0
+        while lead < upto and (whole[lead] == ' ' or whole[lead] == '\t')
+            lead += 1
+        if (k == last or not blank(whole, 0, upto)) and has_tab(whole, lead)
+            diag("lex.str.3", Pos(line: k + 1, col: 1))
+    # The common indentation of the text lines (and of the closing line when
+    # it holds only the delimiter) is removed.
+    mut common := if alone then close else spaces(closing, close)
+    for k in first + 1..last
+        if not blank(lines[k], 0, lines[k].len())
+            common = common.min(spaces(lines[k], lines[k].len()))
+    mut value := List[char]()
+    mut parts := List[Part]()
+    mut text_lines := [Lead(line: k, chars: common.min(lines[k].len()), width: lines[k].len()) for k in first + 1..last]
+    if not alone
+        text_lines.push(Lead(line: last, chars: common.min(close), width: close))
+    n := text_lines.len()
+    for j in 0..n
+        t := text_lines[j]
+        line := lines[t.line]
+        if blank(line, t.chars, t.width) and t.line != last
+            # A line of only whitespace is an empty line of text.
+            value.extend([])
+        elif raw
+            value.extend(line[t.chars..t.width])
+        else
+            _ := content(line, t.chars, t.width, t.line + 1, false, mut value, mut parts)
+        # The text ends with its last line: a closing delimiter on a line of
+        # its own adds no newline (lex.str.3).
+        if j + 1 < n
+            value.push('\n')
+    push(string_token(value, parts), pos)
+    Resume(line: last, col: close + 3)
+
+## Whether `line[from..to]` is only spaces.
+fn blank_spaces(line List[char], from int, to int) bool
+    for k in from..to
+        if line[k] != ' '
+            return false
+    true
+
+## The number of spaces starting `line[..to]`.
+fn spaces(line List[char], to int) int
+    mut n := 0
+    while n < to and line[n] == ' '
+        n += 1
+    n
+
+fn has_tab(line List[char], to int) bool
+    for k in 0..to
+        if line[k] == '\t'
+            return true
+    false
+
+## `'a'` or `'\n'` (lex.str.4); gives the index after it.
+fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
+    pos := Pos(line: line_no, col: start + 1)
+    e := if start + 1 < line.len() and line[start + 1] == '\\'
+        escape(line, start + 1, line_no)
+    elif start + 1 < line.len() and line[start + 1] != '\''
+        Escaped(ch: line[start + 1], next: start + 2)
+    else
+        Escaped(ch: none, next: start + 1)
+    ch := e.ch
+    next := e.next
+    if next < line.len() and line[next] == '\'' and next > start + 1
+        if c := ch
+            push(Char(c), pos)
+        else
+            placeholder(pos)
+        return next + 1
+    if start + 2 < line.len() and line[start + 1] == '\'' and line[start + 2] == '\''
+        diag("lex.str.4", pos)
+        placeholder(pos)
+        return start + 3
+    mut end := line.len()
+    for k in start + 1..line.len()
+        if line[k] == '\''
+            end = k + 1
+            break
+    diag("lex.str.4", pos)
+    placeholder(pos)
+    end
+
+## Tokens of the expression in `line[start..end]`, keeping real columns.
+fn Lexer.sub_lex(mut self, line List[char], start int, end int, line_no int) List[Token]
+    saved_tokens := tokens
+    saved_open := open
+    tokens = []
+    open = []
+    in_interp += 1
+    _ := lex_line(line[0..end], start, line_no)
+    in_interp -= 1
+    open = saved_open
+    mut code := tokens
+    tokens = saved_tokens
+    code.push(Token(tok: Eof, pos: Pos(line: line_no, col: end + 1)))
+    code
+
+## Escape sequence at `line[i] == '\\'` (lex.str.1): its character and the index after it.
+fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
+    pos := Pos(line: line_no, col: i + 1)
+    if i + 1 < line.len()
+        simple := match line[i + 1]
+            'n' => '\n'
+            't' => '\t'
+            'r' => '\r'
+            '0' => '\0'
+            '\\' => '\\'
+            '"' => '"'
+            '\'' => '\''
+            '{' => '{'
+            _ => ' '
+        if simple != ' '
+            return Escaped(ch: simple, next: i + 2)
+    if at(line, i + 1) == 'u' and at(line, i + 2) == '{' and i + 2 < line.len()
+        for k in i + 3..line.len()
+            if line[k] == '}'
+                next := k + 1
+                ch := hex_char(line, i + 3, k)
+                if ch == none
+                    diag("lex.str.1", pos)
+                return Escaped(ch: ch, next: next)
+    diag("lex.str.1", pos)
+    Escaped(ch: none, next: (i + 2).min(line.len()))
+
+## The character whose hexadecimal code is `line[from..to]`, if it is one.
+fn hex_char(line List[char], from int, to int) char?
+    if from == to
+        return none
+    mut v := 0
+    for k in from..to
+        d := line[k].to_digit(16) else return none
+        if v > 0x10FFFF
+            return none
+        v = v * 16 + d
+    char.from_code(v)
+
+## Integer or floating-point literal (lex.num.1-3).
+fn Lexer.number(mut self, line List[char], start int, line_no int) int
+    pos := Pos(line: line_no, col: start + 1)
+    fe := float_end(line, start)
+    if fe >= 0
+        text := [c for c in line[start..fe] if c != '_'].join("")
+        v := text.to_float() else 1.0 / 0.0
+        if v - v == 0.0
+            push(Float(v), pos)
+        else
+            diag("lex.num.3", pos)
+            placeholder(pos)
+        return fe
+    mut radix := 10
+    mut digits_start := start
+    if line[start] == '0'
+        match at(line, start + 1)
+            'x' => radix = 16
+            'b' => radix = 2
+            'o' => radix = 8
+            _ => radix = 10
+        if radix != 10
+            digits_start = start + 2
+    mut end := digits_start
+    while end < line.len() and (ascii_alnum(line[end]) or line[end] == '_')
+        end += 1
+    digits := [c for c in line[digits_start..end] if c != '_']
+    match parse_int(digits, radix)
+        IntOk(v) => push(Int(v), pos)
+        TooBig => push(IntMin, pos)
+        Overflow =>
+            diag("lex.num.3", pos)
+            placeholder(pos)
+        Invalid =>
+            diag("lex.num.1", pos)
+            placeholder(pos)
+    end
+
+## How the digits of an integer literal read (lex.num.1, lex.num.3).
+enum IntRead
+    IntOk(v int)
+    ## Exactly 2^63: the magnitude of the minimum `int`.
+    TooBig
+    Overflow
+    Invalid
+
+## Digits in `radix`, read left to right as the bootstrap does: the first
+## digit that is invalid, or that overflows, decides.
+fn parse_int(digits List[char], radix int) IntRead
+    if digits.len() == 0
+        return Invalid
+    mut v := 0
+    mut over := false
+    # The value as a negative number, which reaches -2^63.
+    mut neg := 0
+    mut neg_over := false
+    for c in digits
+        d := c.to_digit(radix) else return if over then Overflow else Invalid
+        if not over
+            if w := v.checked_mul(radix)
+                if x := w.checked_add(d)
+                    v = x
+                else
+                    over = true
+            else
+                over = true
+        if not neg_over
+            if w := neg.checked_mul(radix)
+                if x := w.checked_sub(d)
+                    neg = x
+                else
+                    neg_over = true
+            else
+                neg_over = true
+    if not over
+        return IntOk(v)
+    if not neg_over and neg == -9223372036854775807 - 1
+        return TooBig
+    Overflow
+
+## The end of a decimal floating-point literal starting at `line[start]`,
+## or -1 if it's an integer (lex.num.2): digits, then `.` and digits, an
+## exponent, or both.
+fn float_end(line List[char], start int) int
+    if line[start] == '0' and (at(line, start + 1) == 'x' or at(line, start + 1) == 'b' or at(line, start + 1) == 'o')
+        return -1
+    mut end := digits_end(line, start)
+    mut is_float := false
+    if at(line, end) == '.' and at(line, end + 1).is_digit()
+        end = digits_end(line, end + 1)
+        is_float = true
+    if at(line, end) == 'e' or at(line, end) == 'E'
+        sign := if at(line, end + 1) == '+' or at(line, end + 1) == '-' then 1 else 0
+        if at(line, end + 1 + sign).is_digit()
+            end = digits_end(line, end + 1 + sign)
+            is_float = true
+    if is_float then end else -1
+
+fn digits_end(line List[char], from int) int
+    mut i := from
+    while i < line.len() and (line[i].is_digit() or line[i] == '_')
+        i += 1
+    i
+
+## The token for a string's text: plain, or with interpolated parts.
+fn string_token(value List[char], parts List[Part]) Tok
+    if parts.len() == 0
+        return Str(value.join(""))
+    mut all := parts
+    if value.len() > 0
+        all.push(Lit(value.join("")))
+    Interp(all)
+
+fn starts_triple(line List[char], i int) bool
+    i + 2 < line.len() and line[i] == '"' and line[i + 1] == '"' and line[i + 2] == '"'
+
+## Index of the closing `"""` of a multi-line string in `line[from..]`,
+## skipping escapes and interpolations unless the string is raw; -1 if none.
+fn find_triple(line List[char], from int, raw bool) int
+    mut i := from
+    while i < line.len()
+        c := line[i]
+        if c == '\\' and not raw
+            i += 2
+        elif c == '{' and not raw
+            close := find_close(line, line.len(), i)
+            i = if close < 0 then line.len() else close + 1
+        elif c == '"' and starts_triple(line, i)
+            # In a run of more than three quotes, the last three close it.
+            mut end := i
+            while at(line, end + 3) == '"'
+                end += 1
+            return end
+        else
+            i += 1
+    -1
+
+## The `:` that starts a format specification (lex.str.7) in the
+## interpolation whose expression begins at `from`, within `line[..n]`: the
+## first one outside brackets, strings and character literals; -1 if none.
+fn spec_colon(line List[char], n int, from int) int
+    mut depth := 0
+    mut i := from
+    while i < n
+        c := line[i]
+        if c == '(' or c == '[' or c == '{'
+            depth += 1
+        elif c == ')' or c == ']' or c == '}'
+            depth -= 1
+        elif c == '"'
+            i = skip_string(line, n, i)
+            if i < 0
+                return -1
+            continue
+        elif c == '\'' and i + 1 < n and line[i + 1] == '\\'
+            end := index_of(line, n, i + 3, '\'')
+            if end >= 0
+                i = end + 1
+                continue
+        elif c == '\'' and i + 2 < n and line[i + 2] == '\''
+            i += 3
+            continue
+        elif c == ':' and depth == 0 and not (i + 1 < n and line[i + 1] == '=')
+            return i
+        i += 1
+    -1
+
+## The index of `c` in `line[from..n]`, or -1.
+fn index_of(line List[char], n int, from int, c char) int
+    for k in from..n
+        if line[k] == c
+            return k
+    -1
+
+## Index of the `}` matching the `{` at `line[open]`, within `line[..n]`,
+## skipping nested strings; -1 if none.
+fn find_close(line List[char], n int, open int) int
+    mut depth := 0
+    mut i := open
+    while i < n
+        c := line[i]
+        if c == '{'
+            depth += 1
+        elif c == '}'
+            depth -= 1
+            if depth == 0
+                return i
+        elif c == '"'
+            i = skip_string(line, n, i)
+            if i < 0
+                return -1
+            continue
+        elif c == '\'' and i + 1 < n and line[i + 1] == '\\'
+            # A character literal such as '{' or '\'' (lex.str.4).
+            end := index_of(line, n, i + 3, '\'')
+            if end >= 0
+                i = end + 1
+                continue
+        elif c == '\'' and i + 2 < n and line[i + 2] == '\''
+            i += 3
+            continue
+        i += 1
+    -1
+
+## Index just after the string literal starting at `line[start] == '"'`,
+## within `line[..n]`; -1 if it doesn't end.
+fn skip_string(line List[char], n int, start int) int
+    mut i := start + 1
+    while i < n
+        c := line[i]
+        if c == '\\'
+            i += 2
+        elif c == '"'
+            return i + 1
+        elif c == '{'
+            close := find_close(line, n, i)
+            if close < 0
+                return -1
+            i = close + 1
+        else
+            i += 1
+    -1
+
+## A format specification, the text after the `:`, or `none` when it is
+## invalid (lex.str.7).
+fn parse_spec(c List[char]) FormatSpec?
+    mut f := FormatSpec(fill: none, align: none, width: none, precision: none, hex: false)
+    mut i := 0
+    if c.len() >= 2 and is_align(c[1])
+        f.fill = c[0]
+        f.align = c[1]
+        i = 2
+    elif c.len() > 0 and is_align(c[0])
+        f.align = c[0]
+        i = 1
+    if at(c, i) == '0' and at(c, i + 1).is_digit()
+        return none
+    start := i
+    while i < c.len() and c[i].is_digit()
+        i += 1
+    if i > start
+        f.width = spec_number(c, start, i)
+        if f.width == none
+            return none
+    if at(c, i) == '.' and i < c.len()
+        i += 1
+        from := i
+        while i < c.len() and c[i].is_digit()
+            i += 1
+        if i == from
+            return none
+        f.precision = spec_number(c, from, i)
+        if f.precision == none
+            return none
+    if at(c, i) == 'x' and i < c.len()
+        f.hex = true
+        i += 1
+    if i < c.len()
+        return none
+    if f.hex and f.precision != none
+        return none
+    f
+
+fn is_align(c char) bool
+    c == '<' or c == '>' or c == '^'
+
+## The number in `c[from..to]`, if it is at most the largest width.
+fn spec_number(c List[char], from int, to int) int?
+    mut v := 0
+    for k in from..to
+        v = v * 10 + c[k].to_digit(10)?
+        if v > MAX_FORMAT_WIDTH
+            return none
+    v
