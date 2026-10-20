@@ -13,6 +13,7 @@
 #![allow(dead_code)]
 
 pub mod aes;
+pub mod bignum;
 pub mod chacha20;
 pub mod ct;
 pub mod gcm;
@@ -21,6 +22,7 @@ pub mod hmac;
 pub mod poly1305;
 pub mod rand;
 pub mod sha2;
+pub mod sig;
 pub mod x25519;
 
 /// An AEAD failure: the tag didn't match, so nothing was decrypted.

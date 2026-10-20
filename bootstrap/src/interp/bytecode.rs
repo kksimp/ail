@@ -11,6 +11,7 @@
 //! not change output, exit codes or trap text, and `--no-bytecode` turns it
 //! off (ADR 0361).
 
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
@@ -24,14 +25,14 @@ pub fn set_enabled(on: bool) {
 }
 
 /// Whether the tier runs for this program: only where nothing it doesn't
-/// carry yet is on (tracing, watching, run limits, coverage, unique values,
-/// `defer`, contracts).
-pub(super) fn usable(prog: &Program, tracing: u8, hook: bool, unique: bool, defer: bool) -> bool {
+/// carry yet is on (`--watch`, unique values, `defer`, contracts). Call and
+/// effect traces come from code the walker and the tier share; run limits
+/// and coverage take a `Hit` per statement (ADR 0364).
+pub(super) fn usable(prog: &Program, tracing: u8, unique: bool, defer: bool) -> bool {
     let contracts = prog.fns.iter().any(|f| !f.contracts.is_empty() || f.inherits.is_some())
         || prog.structs.iter().any(|s| !s.invariants.is_empty());
     ENABLED.load(AtomicOrdering::Relaxed)
-        && tracing == 0
-        && !hook
+        && tracing & trace::WATCH == 0
         && !unique
         && !defer
         && !(contracts && contracts::enabled())
@@ -41,10 +42,46 @@ pub(super) fn usable(prog: &Program, tracing: u8, hook: bool, unique: bool, defe
 /// run` when `AIL_BYTECODE_STATS` is set (ADR 0361).
 #[derive(Default)]
 pub(super) struct Stats {
+    /// `AIL_BYTECODE_STATS` is set: instructions are counted too.
+    pub on: bool,
     /// Calls run on the walker and on the tier.
     pub calls: [u64; 2],
+    /// Instructions the tier ran, hand-offs included.
+    pub ins: u64,
     /// Expressions and statements a compiled body handed to the walker.
     pub handoffs: u64,
+    /// With `AIL_BYTECODE_STATS=2`: hand-offs by kind of node.
+    pub kinds: Option<HashMap<Cow<'static, str>, u64>>,
+}
+
+/// The kind of a handed-off node, for `AIL_BYTECODE_STATS=2`.
+fn kind_of_expr(e: &Expr) -> Cow<'static, str> {
+    Cow::Borrowed(match e {
+        Expr::Method { name, .. } => return Cow::Owned(format!("method call .{name}")),
+        Expr::Call { .. } => "call",
+        Expr::Interp(..) => "interpolation",
+        Expr::Match { .. } => "match",
+        Expr::Try { .. } => "?",
+        Expr::Else { .. } => "else",
+        Expr::List(..) => "list literal",
+        Expr::Map(..) | Expr::Set(..) => "map or set literal",
+        Expr::Comp { .. } => "comprehension",
+        Expr::Field { .. } => "field (variant or constant)",
+        Expr::Index { .. } => "slice",
+        Expr::Name(..) => "name (constant or variant)",
+        Expr::If { .. } => "if with else err",
+        _ => "other expression",
+    })
+}
+
+fn kind_of_stmt(s: &Stmt) -> &'static str {
+    match s {
+        Stmt::Let { .. } => "let with else",
+        Stmt::Assign { .. } => "assignment to a field or element",
+        Stmt::For { .. } => "for mut or parallel for",
+        Stmt::Handle { .. } => "call else",
+        _ => "other statement",
+    }
 }
 
 /// An operand: a local slot (relative to the frame's first parameter), a
@@ -72,6 +109,8 @@ pub(super) struct Code<'a> {
     params: usize,
     exits: Vec<ExitInfo>,
     loops: Vec<LoopInfo>,
+    /// `==` on strings is plain: no `Eq` implementation for `str` (trait.res.1).
+    str_eq: bool,
 }
 
 /// The blocks around a point in the code, outermost first, each as its
@@ -169,6 +208,95 @@ enum Ins<'a> {
         src: Opnd,
         pos: Pos,
     },
+    /// `e?` (err.prop.1-5, err.ctx.2): leave with the failure or `none`, or keep the value.
+    Try {
+        dst: Opnd,
+        src: Opnd,
+        context: Option<&'a Expr>,
+        absent: bool,
+        optional: bool,
+        pos: Pos,
+        exit: u32,
+    },
+    /// `e else ...` (err.else.1-6): jump to `t` when `src` is absent or failed,
+    /// else keep its content.
+    ElseTest {
+        src: Opnd,
+        t: u32,
+    },
+    /// Jump to `t` unless the local holds a struct.
+    IfNotStruct {
+        slot: u32,
+        t: u32,
+    },
+    /// `local.name = val`, or `local.name op= val` (type.struct.6, expr.op.2).
+    SetField {
+        slot: u32,
+        name: &'a str,
+        val: Opnd,
+        op: Option<BinOp>,
+        pos: Pos,
+    },
+    /// One `match` arm (expr.match.4-8): jump to `t` unless `src` matches,
+    /// else bind the variant's fields.
+    Arm {
+        src: Opnd,
+        pat: &'a Pattern,
+        t: u32,
+    },
+    /// A part of an interpolated string: the value in `r` becomes its text
+    /// (type.str.3, type.str.11).
+    Text {
+        r: Opnd,
+        spec: Option<&'a crate::lexer::FormatSpec>,
+        pos: Pos,
+    },
+    /// An interpolated string (lex.str.2, lex.str.7) whose parts' texts are
+    /// in the registers from `args`, in order.
+    Interp {
+        dst: Opnd,
+        parts: &'a [InterpPart],
+        args: u32,
+    },
+    /// A struct or variant built from the registers from `args`, each into
+    /// its field slot (type.struct.3, type.enum.6).
+    Build {
+        dst: Opnd,
+        what: Built,
+        slots: Rc<[usize]>,
+        args: u32,
+    },
+    /// `[a, b, ...]` (type.coll.2).
+    List {
+        dst: Opnd,
+        args: u32,
+        n: u32,
+    },
+    /// `local.f.g.name(args)`, or `name(args)` on a register or constant
+    /// receiver with no path (trait.method.2): jump to `t`, the walker's
+    /// path, unless the receiver is a value whose method the tier calls
+    /// (ADR 0363).
+    MethodGuard {
+        recv: Opnd,
+        path: Box<[&'a str]>,
+        name: &'a str,
+        t: u32,
+        /// The last user method it allowed, by the receiver's type.
+        cache: Cell<Option<(bool, usize, &'a FnDecl)>>,
+    },
+    /// The call the `MethodGuard` at `guard` allowed, with the arguments in
+    /// the registers from `args`.
+    MethodRun {
+        recv: Opnd,
+        path: Box<[&'a str]>,
+        name: &'a str,
+        mutating: bool,
+        args: u32,
+        n: u32,
+        dst: Opnd,
+        pos: Pos,
+        guard: u32,
+    },
     /// `recv[idx]` on a list or map (type.coll.4, type.map.3).
     Index {
         dst: Opnd,
@@ -199,6 +327,47 @@ enum Ins<'a> {
         at: Pos,
         pos: Pos,
     },
+    /// `{k: v, ...}` from `n` key and value pairs in the registers from
+    /// `args`, or `{}` as a set where the checker typed it one (type.coll.2).
+    Map {
+        dst: Opnd,
+        args: u32,
+        n: u32,
+        set: bool,
+    },
+    /// `recv.name(args)` through trait `tr` with the receiver in `recv`: jump
+    /// to `t` unless the tier can call the implementation `dispatch` picks,
+    /// which is left in `now` (`None`: the built-in `eq`, `cmp` or `to_str`).
+    /// `cache` keeps the last pick, by the type `dispatch` looks at.
+    TraitGuard {
+        recv: Opnd,
+        tr: usize,
+        name: &'a str,
+        t: u32,
+        cache: Cell<Option<(u8, usize, Option<&'a FnDecl>)>>,
+        now: Cell<Option<&'a FnDecl>>,
+    },
+    /// The call the `TraitGuard` at `guard` allowed.
+    TraitRun {
+        recv: Opnd,
+        tr: usize,
+        args: u32,
+        n: u32,
+        dst: Opnd,
+        pos: Pos,
+        guard: u32,
+    },
+    /// `MethodGuard`'s fallback for a receiver already evaluated into
+    /// `recv`: the walker's method call from there on (ADR 0363).
+    MethodOn {
+        recv: Opnd,
+        e: &'a Expr,
+        dst: Opnd,
+        exit: u32,
+    },
+    /// The walker's `hit` before a statement or a `while` turn, with run
+    /// limits or coverage on (run.limit.1-3, test.cover.1).
+    Hit(Pos),
     /// An expression run on the tree walker.
     Expr {
         e: &'a Expr,
@@ -320,21 +489,57 @@ fn done(o: Opnd, regs: &mut [Value]) {
 /// `move` argument, a method (which may mutate its receiver), a move, or a
 /// block. An operand read from a local before such a sibling is copied first.
 fn writes_locals(e: &Expr, moves: &crate::fasthash::FastMap<Pos, &'static str>) -> bool {
+    writes(e, None, moves)
+}
+
+/// The local a place expression starts from.
+fn root(e: &Expr) -> Option<&str> {
+    match e {
+        Expr::Name(n, _) => Some(n),
+        Expr::Field { recv, .. } | Expr::Index { recv, .. } => root(recv),
+        _ => None,
+    }
+}
+
+/// Whether evaluating `e` may change the local `t`, or any local when `t`
+/// is `None`. Values are independent (own.val.1), so a call changes only
+/// its receiver's and its `mut` arguments' locals.
+fn writes(e: &Expr, t: Option<&str>, moves: &crate::fasthash::FastMap<Pos, &'static str>) -> bool {
+    let w = |e: &Expr| writes(e, t, moves);
+    // A place a call may change: a temporary changes no local.
+    let hits = |e: &Expr| match t {
+        None => true,
+        Some(t) => root(e) == Some(t),
+    };
+    let arg = |a: &Arg| ((a.mutable || a.moved) && hits(&a.value)) || (t.is_none() && a.param.is_some()) || w(&a.value);
     match e {
         Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => false,
-        Expr::Name(_, pos) => moves.contains_key(pos),
-        Expr::Binary { lhs, rhs, .. } => writes_locals(lhs, moves) || writes_locals(rhs, moves),
-        Expr::Unary { op: UnOp::Neg | UnOp::Not, operand, .. } => writes_locals(operand, moves),
-        Expr::Field { recv, .. } => writes_locals(recv, moves),
-        Expr::Index { recv, index, .. } => writes_locals(recv, moves) || writes_locals(index, moves),
-        Expr::Call { callee, args, .. } => {
-            !matches!(**callee, Expr::Name(..))
-                || args.iter().any(|a| a.mutable || a.moved || a.param.is_some() || writes_locals(&a.value, moves))
+        Expr::Name(n, pos) => moves.contains_key(pos) && t.is_none_or(|t| t == n),
+        Expr::Binary { lhs, rhs, .. } => w(lhs) || w(rhs),
+        Expr::Unary { op: UnOp::Neg | UnOp::Not, operand, .. } => w(operand),
+        Expr::Field { recv, .. } => w(recv),
+        Expr::Index { recv, index, .. } => w(recv) || w(index),
+        Expr::Call { callee, args, .. } => !matches!(**callee, Expr::Name(..)) || args.iter().any(arg),
+        Expr::Method { recv, args, .. } => t.is_none() || hits(recv) || w(recv) || args.iter().any(arg),
+        Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(w),
+        Expr::Map(pairs, _) => pairs.iter().any(|(k, v)| w(k) || w(v)),
+        // An early exit leaves before any later read, so only the values count.
+        Expr::Try { expr, context, .. } => w(expr) || context.as_deref().is_some_and(w),
+        Expr::Else { value, otherwise, .. } => {
+            w(value)
+                || match &**otherwise {
+                    Else::Value(d) => w(d),
+                    Else::Leave(s) => match &**s {
+                        Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => false,
+                        Stmt::Return(Some(x), _) => w(x),
+                        _ => true,
+                    },
+                    Else::Block { .. } => true,
+                }
         }
-        Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(|x| writes_locals(x, moves)),
         Expr::Interp(parts, _) => parts.iter().any(|p| match p {
             InterpPart::Lit(_) => false,
-            InterpPart::Expr(x) | InterpPart::Fmt(x, _) => writes_locals(x, moves),
+            InterpPart::Expr(x) | InterpPart::Fmt(x, _) => w(x),
         }),
         _ => true,
     }
@@ -407,6 +612,43 @@ fn compilable(b: &Block) -> bool {
     b.iter().all(stmt)
 }
 
+/// What a `Build` makes: a struct, a variant (shared empty field list when
+/// it has none, as the walker's call does), or a variant through its enum.
+#[derive(Clone, Copy)]
+enum Built {
+    Struct(usize),
+    Variant(usize, usize),
+    Qualified(usize, usize),
+}
+
+/// Whether an expression has a `?`: inside `e else ...` one that finds
+/// `none` makes the whole value `none` (err.prop.4), which the walker's
+/// `else_value` handles.
+fn has_try(e: &Expr) -> bool {
+    match e {
+        Expr::Try { .. } => true,
+        Expr::Binary { lhs, rhs, .. } => has_try(lhs) || has_try(rhs),
+        Expr::Unary { operand, .. } => has_try(operand),
+        Expr::Field { recv, .. } => has_try(recv),
+        Expr::Index { recv, index, .. } => has_try(recv) || has_try(index),
+        Expr::Call { args, .. } => args.iter().any(|a| has_try(&a.value)),
+        Expr::Method { recv, args, .. } => has_try(recv) || args.iter().any(|a| has_try(&a.value)),
+        Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(has_try),
+        Expr::Interp(parts, _) => parts.iter().any(|p| match p {
+            InterpPart::Lit(_) => false,
+            InterpPart::Expr(x) | InterpPart::Fmt(x, _) => has_try(x),
+        }),
+        Expr::Int(..)
+        | Expr::Float(..)
+        | Expr::Str(..)
+        | Expr::Char(..)
+        | Expr::Bool(..)
+        | Expr::None(_)
+        | Expr::Name(..) => false,
+        _ => true,
+    }
+}
+
 struct Compiler<'c, 'a, W: Write> {
     it: &'c mut Interp<'a, W>,
     ins: Vec<Ins<'a>>,
@@ -428,8 +670,15 @@ struct Compiler<'c, 'a, W: Write> {
 
 impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     fn emit(&mut self, i: Ins<'a>) -> u32 {
-        if !matches!(i, Ins::Expr { .. } | Ins::Stmt { .. } | Ins::EndBlock { .. } | Ins::Truncate(_) | Ins::End { .. })
-        {
+        if !matches!(
+            i,
+            Ins::Expr { .. }
+                | Ins::Stmt { .. }
+                | Ins::EndBlock { .. }
+                | Ins::Truncate(_)
+                | Ins::End { .. }
+                | Ins::Hit(_)
+        ) {
             self.native += 1;
         }
         self.ins.push(i);
@@ -478,6 +727,11 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             | Ins::BrCmp { t: x, .. }
             | Ins::BrCmpK { t: x, .. }
             | Ins::IfNotListMap { t: x, .. }
+            | Ins::MethodGuard { t: x, .. }
+            | Ins::TraitGuard { t: x, .. }
+            | Ins::ElseTest { t: x, .. }
+            | Ins::IfNotStruct { t: x, .. }
+            | Ins::Arm { t: x, .. }
             | Ins::Bind { t: x, .. }
             | Ins::RangeTest { end: x, .. }
             | Ins::IterNext { end: x, .. } => *x = t,
@@ -526,7 +780,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         let mut out = [NONE; N];
         for i in 0..N {
             let mut o = self.operand(es[i]);
-            if o & KIND == LOCAL && es[i + 1..].iter().any(|e| writes_locals(e, &self.it.resolved.moves)) {
+            if o & KIND == LOCAL && es[i + 1..].iter().any(|e| writes(e, root(es[i]), &self.it.resolved.moves)) {
                 let r = self.reg();
                 self.emit(Ins::Move { dst: r, src: o });
                 o = r;
@@ -567,7 +821,13 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 Some(slot) => {
                     self.emit(Ins::Move { dst, src: LOCAL | slot });
                 }
-                None => self.delegate(e, dst),
+                // mod.const.1, type.enum.3: constants are computed before `main`, and unit variants are fixed.
+                None => match self.fixed(n, *pos) {
+                    Some(k) => {
+                        self.emit(Ins::Move { dst, src: k });
+                    }
+                    None => self.delegate(e, dst),
+                },
             },
             Expr::Binary { op: BinOp::And | BinOp::Or, .. } => {
                 let t = if dst & KIND == LOCAL { self.reg() } else { dst };
@@ -604,9 +864,108 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 self.emit(Ins::Neg { dst, src, pos: *pos });
             }
             Expr::Call { callee, args, pos } => self.call(e, callee, args, *pos, dst),
+            Expr::Method { recv, name, name_pos, args } => self.method(e, recv, name, args, *name_pos, dst),
+            Expr::Try { expr, context, pos } if !self.it.resolved.else_try.contains(pos) => {
+                let src = self.operand(expr);
+                let r = &self.it.resolved;
+                let (absent, optional) = (r.absent_try.contains(pos), r.optional_try.contains(pos));
+                let exit = self.exit();
+                self.emit(Ins::Try { dst, src, context: context.as_deref(), absent, optional, pos: *pos, exit });
+            }
+            Expr::Else { value, otherwise, .. }
+                if !has_try(value) && !matches!(**otherwise, Else::Block { err: Some(_), .. }) =>
+            {
+                let t = if dst & KIND == REG { dst } else { self.reg() };
+                self.else_to(value, otherwise, t);
+                if t != dst && dst != NONE {
+                    self.emit(Ins::Move { dst, src: t });
+                }
+            }
+            Expr::Match { scrutinee, arms, .. } => {
+                let t = if dst & KIND == LOCAL { self.reg() } else { dst };
+                let src = self.reg();
+                self.expr_to(scrutinee, src);
+                let mut ends = Vec::new();
+                for arm in arms {
+                    let test = self.emit(Ins::Arm { src, pat: &arm.pat, t: 0 });
+                    let mark = self.depth();
+                    // expr.match.6: fields bind by position; `_` skips one.
+                    if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
+                        self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
+                    }
+                    self.block(&arm.body, t);
+                    if self.depth() > mark {
+                        self.scope.truncate(mark as usize);
+                        self.emit(Ins::Truncate(mark));
+                    }
+                    ends.push(self.emit(Ins::Jump(0)));
+                    let next = self.here();
+                    self.patch(test, next);
+                }
+                let end = self.here();
+                for j in ends {
+                    self.patch(j, end);
+                }
+                let unit = self.konst(Value::Unit);
+                self.emit(Ins::Move { dst: src, src: unit });
+                if t != dst {
+                    self.emit(Ins::Move { dst, src: t });
+                }
+            }
+            Expr::Interp(parts, _) => {
+                let first = self.next_reg;
+                let exprs: Vec<&'a Expr> = parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        InterpPart::Lit(_) => None,
+                        InterpPart::Expr(x) | InterpPart::Fmt(x, _) => Some(x),
+                    })
+                    .collect();
+                let regs: Vec<Opnd> = exprs.iter().map(|_| self.reg()).collect();
+                // Each part's text is made right after its value, as the walker does: a `to_str` may run.
+                let specs = parts.iter().filter_map(|p| match p {
+                    InterpPart::Lit(_) => None,
+                    InterpPart::Expr(_) => Some(None),
+                    InterpPart::Fmt(_, spec) => Some(Some(spec)),
+                });
+                for ((x, r), spec) in exprs.into_iter().zip(regs).zip(specs) {
+                    self.expr_to(x, r);
+                    self.emit(Ins::Text { r, spec, pos: x.pos() });
+                }
+                self.emit(Ins::Interp { dst, parts, args: first });
+            }
+            Expr::List(items, _) => {
+                let first = self.next_reg;
+                let regs: Vec<Opnd> = items.iter().map(|_| self.reg()).collect();
+                for (x, r) in items.iter().zip(regs) {
+                    self.expr_to(x, r);
+                }
+                self.emit(Ins::List { dst, args: first, n: items.len() as u32 });
+            }
+            Expr::Map(pairs, pos) => {
+                let first = self.next_reg;
+                let regs: Vec<Opnd> = pairs.iter().flat_map(|_| [self.reg(), self.reg()]).collect();
+                for ((k, v), r) in pairs.iter().zip(regs.chunks(2)) {
+                    self.expr_to(k, r[0]);
+                    self.expr_to(v, r[1]);
+                }
+                let set = pairs.is_empty() && self.it.resolved.empty_sets.contains(pos);
+                self.emit(Ins::Map { dst, args: first, n: pairs.len() as u32, set });
+            }
             Expr::Index { recv, index, pos } if !matches!(**index, Expr::Range { .. }) => {
                 let [recv, idx] = self.operands([&**recv, &**index]);
                 self.emit(Ins::Index { dst, recv, idx, pos: *pos });
+            }
+            Expr::Field { recv, name, name_pos }
+                if !self.it.resolved.std_calls.contains_key(name_pos)
+                    && let Expr::Name(tn, _) = &**recv
+                    && self.local(tn).is_none()
+                    && !self.it.prog.consts.iter().any(|c| c.name == *tn)
+                    && let Some(&en) = self.it.enums.get(tn.as_str()) =>
+            {
+                let v = self.it.variant_index(en, name);
+                let k = self.konst(Value::Enum(en, v, Rc::clone(&self.it.no_fields)));
+                self.emit(Ins::Move { dst, src: k });
             }
             Expr::Field { recv, name, name_pos } if self.plain_field(recv, *name_pos) => {
                 let recv = self.operand(recv);
@@ -621,6 +980,35 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             }
             _ => self.delegate(e, dst),
         }
+    }
+
+    /// The value of a name that isn't a local: a constant, or a unit variant.
+    fn fixed(&mut self, n: &str, pos: Pos) -> Option<Opnd> {
+        let v = match self.it.consts.get(n) {
+            Some(v) => v.clone(),
+            None if self.it.prog.consts.iter().any(|c| c.name == n) => return None,
+            None => {
+                let &(e, v) = self.it.resolved.variants.get(&pos)?;
+                Value::Enum(e, v, Rc::clone(&self.it.no_fields))
+            }
+        };
+        Some(self.konst(v))
+    }
+
+    /// `e else d`, `e else return ...`, or `e else` and a block, into `dst` (err.else.1-6).
+    fn else_to(&mut self, value: &'a Expr, otherwise: &'a Else, dst: Opnd) {
+        self.expr_to(value, dst);
+        let test = self.emit(Ins::ElseTest { src: dst, t: 0 });
+        let j = self.emit(Ins::Jump(0));
+        let at = self.here();
+        self.patch(test, at);
+        match otherwise {
+            Else::Value(d) => self.expr_to(d, dst),
+            Else::Leave(s) => self.stmt(s, NONE),
+            Else::Block { body, .. } => self.block(body, dst),
+        }
+        let end = self.here();
+        self.patch(j, end);
     }
 
     /// `recv.name` reads a field of a value: not a standard-module constant
@@ -650,6 +1038,23 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             return;
         }
         let it = &*self.it;
+        let special =
+            matches!(n.as_str(), "unreachable" | "assert" | "assert_eq" | "Atomic" | "TaskGroup" | "Channel" | "Mutex");
+        // type.struct.3, type.enum.6: a struct or variant built from its arguments.
+        if !special && self.local(n).is_none() && args.iter().all(|a| a.param.is_none() && !a.mutable) {
+            let built = if let Some(&st) = it.structs.get(n.as_str()) {
+                let has_inv = !it.prog.structs[st].invariants.is_empty();
+                (!has_inv).then(|| (Built::Struct(st), &it.prog.structs[st].fields))
+            } else {
+                it.resolved
+                    .variants
+                    .get(&callee.pos())
+                    .map(|&(en, v)| (Built::Variant(en, v), &it.prog.enums[en].variants[v].fields))
+            };
+            if let Some((what, fields)) = built {
+                return self.build(what, fields, args, dst);
+            }
+        }
         let plain = !matches!(
             n.as_str(),
             "unreachable" | "assert" | "assert_eq" | "Atomic" | "TaskGroup" | "Channel" | "Mutex"
@@ -674,6 +1079,19 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             self.expr_to(&a.value, r);
         }
         self.emit(Ins::Call { f, dst, args: first, pos: callee.pos() });
+    }
+
+    fn build(&mut self, what: Built, fields: &'a [crate::ast::Field], args: &'a [Arg], dst: Opnd) {
+        let slots: Rc<[usize]> = crate::ast::field_slots(fields, args)
+            .into_iter()
+            .map(|(slot, _)| slot.expect("checked: field exists"))
+            .collect();
+        let first = self.next_reg;
+        let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+        for (a, r) in args.iter().zip(regs) {
+            self.expr_to(&a.value, r);
+        }
+        self.emit(Ins::Build { dst, what, slots, args: first });
     }
 
     /// Jumps taken when `e` is `when`, to be patched to their target.
@@ -817,7 +1235,36 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     fn stmt(&mut self, s: &'a Stmt, dst: Opnd) {
         let mark = self.next_reg;
+        // run.limit.3, test.cover.1: a step, as the walker's `stmt` takes one.
+        if self.it.hook {
+            self.emit(Ins::Hit(s.pos()));
+        }
         match s {
+            Stmt::Let { name, value, otherwise: Some(o), .. }
+                if !has_try(value) && !matches!(o, Else::Block { err: Some(_), .. }) =>
+            {
+                let r = self.reg();
+                self.else_to(value, o, r);
+                self.emit(Ins::Push { name, src: r });
+                self.scope.push(name);
+            }
+            Stmt::Assign { target: Expr::Field { recv, name, .. }, op, value, pos }
+                if let Expr::Name(n, _) = &**recv
+                    && let Some(slot) = self.local(n)
+                    && (op.is_none() || self.effect_free(value)) =>
+            {
+                // The walker's path for a local struct; any other value takes its general path.
+                let guard = self.emit(Ins::IfNotStruct { slot, t: 0 });
+                let val = self.operand(value);
+                self.emit(Ins::SetField { slot, name, val, op: *op, pos: *pos });
+                let j = self.emit(Ins::Jump(0));
+                let general = self.here();
+                self.patch(guard, general);
+                let exit = self.exit();
+                self.emit(Ins::Stmt { s, exit });
+                let end = self.here();
+                self.patch(j, end);
+            }
             Stmt::Let { name, value, otherwise: None, .. } => {
                 let src = self.operand(value);
                 self.emit(Ins::Push { name, src });
@@ -878,6 +1325,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 let l = self.loop_start(depth);
                 self.loops[l as usize].cont = top;
                 let out = self.cond_jump(cond, false);
+                if self.it.hook {
+                    // A turn of a `while` is a step too.
+                    self.emit(Ins::Hit(s.pos()));
+                }
                 self.block(body, NONE);
                 self.emit(Ins::Jump(top));
                 self.loop_end();
@@ -950,6 +1401,138 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     /// An expression whose evaluation has no effect and can't trap, so it
     /// may run before a read the walker does first.
+    /// `recv.name(args)` where `recv` is a local or a chain of its fields:
+    /// a built-in method, or a user method without `mut` parameters, decided
+    /// at run time; trait, associated, standard-module and generic calls,
+    /// and receivers in a `ref` cell or a handle, take the walker's path.
+    fn method(&mut self, e: &'a Expr, recv: &'a Expr, name: &'a str, args: &'a [Arg], pos: Pos, dst: Opnd) {
+        let r = &self.it.resolved;
+        let mut path = Vec::new();
+        let mut at = recv;
+        while let Expr::Field { recv, name, name_pos } = at {
+            if r.std_calls.contains_key(name_pos) {
+                return self.delegate(e, dst);
+            }
+            path.push(name.as_str());
+            at = recv;
+        }
+        path.reverse();
+        if path.is_empty()
+            && let Expr::Name(tn, _) = at
+            && self.local(tn).is_none()
+            && !r.std_calls.contains_key(&pos)
+            && !self.it.prog.consts.iter().any(|c| c.name == *tn)
+            && let Some(&en) = self.it.enums.get(tn.as_str())
+            && let Some(v) = self.it.prog.enums[en].variants.iter().position(|v| v.name == name)
+            && args.iter().all(|a| a.param.is_none() && !a.mutable)
+        {
+            let fields = &self.it.prog.enums[en].variants[v].fields;
+            return self.build(Built::Qualified(en, v), fields, args, dst);
+        }
+        let slot = match at {
+            Expr::Name(n, p) if !r.moves.contains_key(p) => self.local(n),
+            _ => None,
+        };
+        // Any other receiver of a method that doesn't mutate it is evaluated
+        // here, and the guard's fallback hands the walker its value.
+        let mutating = self.it.mutating.contains(name);
+        let chosen = match slot {
+            Some(slot) => Some(LOCAL | slot),
+            None if mutating || matches!(at, Expr::TypeArgs { .. }) => None,
+            None => Some(NONE),
+        };
+        let Some(mut recv_op) = chosen else { return self.delegate(e, dst) };
+        let plain = |a: &Arg| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved;
+        if let Some(&Call::Trait(tr)) = r.calls.get(&pos)
+            && !mutating
+            && !r.assoc_calls.contains_key(&pos)
+            && !r.std_calls.contains_key(&pos)
+            && !r.type_args.contains_key(&pos)
+            && args.iter().all(plain)
+            && (slot.is_some() || !matches!(at, Expr::Name(..)))
+        {
+            return self.trait_call(e, recv, tr, name, args, pos, dst);
+        }
+        if r.calls.contains_key(&pos)
+            || r.assoc_calls.contains_key(&pos)
+            || r.std_calls.contains_key(&pos)
+            || r.type_args.contains_key(&pos)
+            || args.iter().any(|a| a.label.is_some() || a.param.is_some() || a.mutable || a.moved)
+            || (slot.is_some() && args.iter().any(|a| writes(&a.value, root(recv), &r.moves)))
+        {
+            return self.delegate(e, dst);
+        }
+        let path: Box<[&'a str]> = if recv_op == NONE {
+            recv_op = match recv {
+                Expr::Name(n, p) if self.local(n).is_none() => match self.fixed(n, *p) {
+                    Some(k) => k,
+                    None => return self.delegate(e, dst),
+                },
+                _ => {
+                    let t = self.reg();
+                    self.expr_to(recv, t);
+                    t
+                }
+            };
+            Box::new([])
+        } else {
+            path.into()
+        };
+        let guard =
+            self.emit(Ins::MethodGuard { recv: recv_op, path: path.clone(), name, t: 0, cache: Cell::new(None) });
+        let first = self.next_reg;
+        let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+        for (a, r) in args.iter().zip(regs) {
+            self.expr_to(&a.value, r);
+        }
+        let n = args.len() as u32;
+        self.emit(Ins::MethodRun { recv: recv_op, path, name, mutating, args: first, n, dst, pos, guard });
+        let j = self.emit(Ins::Jump(0));
+        let general = self.here();
+        self.patch(guard, general);
+        if recv_op & KIND == LOCAL {
+            self.delegate(e, dst);
+        } else {
+            let exit = self.exit();
+            self.emit(Ins::MethodOn { recv: recv_op, e, dst, exit });
+        }
+        let end = self.here();
+        self.patch(j, end);
+    }
+
+    /// `recv.name(args)` through a trait (trait.res.1): the receiver is
+    /// evaluated first, as the walker does, then the guard picks the
+    /// implementation the walker's `dispatch` picks (ADR 0363).
+    #[allow(clippy::too_many_arguments)]
+    fn trait_call(
+        &mut self,
+        e: &'a Expr,
+        recv: &'a Expr,
+        tr: usize,
+        name: &'a str,
+        args: &'a [Arg],
+        pos: Pos,
+        dst: Opnd,
+    ) {
+        let t = self.reg();
+        self.expr_to(recv, t);
+        let guard =
+            self.emit(Ins::TraitGuard { recv: t, tr, name, t: 0, cache: Cell::new(None), now: Cell::new(None) });
+        let first = self.next_reg;
+        let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+        for (a, r) in args.iter().zip(regs) {
+            self.expr_to(&a.value, r);
+        }
+        self.emit(Ins::TraitRun { recv: t, tr, args: first, n: args.len() as u32, dst, pos, guard });
+        let j = self.emit(Ins::Jump(0));
+        let general = self.here();
+        self.patch(guard, general);
+        let exit = self.exit();
+        self.emit(Ins::MethodOn { recv: t, e, dst, exit });
+        let end = self.here();
+        self.patch(j, end);
+    }
+
     fn effect_free(&self, e: &Expr) -> bool {
         match e {
             Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => true,
@@ -1015,8 +1598,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if c.native == 0 {
             return Slot::Walker;
         }
-        let code =
-            Code { ins: c.ins, consts: c.consts, nregs: c.nregs as usize, params, exits: c.exits, loops: c.loops };
+        let (ins, consts, nregs, exits, loops) = (c.ins, c.consts, c.nregs as usize, c.exits, c.loops);
+        let str_eq = self.dispatch(self.resolved.std.eq, "eq", &Value::Str(Rc::from(""))).is_none();
+        let code = Code { ins, consts, nregs, params, exits, loops, str_eq };
         Slot::Code(Rc::new(code))
     }
 
@@ -1028,10 +1612,17 @@ impl<'a, W: Write> Interp<'a, W> {
         let compiled = self.codes.iter().filter(|c| matches!(c, Slot::Code(_))).count();
         let tried = self.codes.iter().filter(|c| !matches!(c, Slot::Untried)).count();
         let [walker, tier] = self.stats.calls;
+        let (ins, handoffs) = (self.stats.ins, self.stats.handoffs);
+        let native = if ins == 0 { 0.0 } else { 100.0 * (ins - handoffs) as f64 / ins as f64 };
         eprintln!(
-            "bytecode: {compiled} of {tried} functions called compiled; calls {tier} on the tier, {walker} on the walker; {} hand-offs",
-            self.stats.handoffs
+            "bytecode: {compiled} of {tried} functions called compiled; calls {tier} on the tier, {walker} on the walker; \
+             {ins} instructions, {handoffs} hand-offs ({native:.1}% native)"
         );
+        let mut kinds: Vec<_> = self.stats.kinds.iter().flatten().collect();
+        kinds.sort_by(|a, b| b.1.cmp(a.1));
+        for (k, n) in kinds {
+            eprintln!("  {n:>9} {k}");
+        }
     }
 
     /// Run a compiled body in `env`, which holds its receiver and
@@ -1041,7 +1632,11 @@ impl<'a, W: Write> Interp<'a, W> {
         let base = entry - code.params;
         let mut regs = self.reg_pool.pop().unwrap_or_default();
         regs.resize(code.nregs, Value::Unit);
-        let result = self.exec(code, env, base, &mut regs);
+        let result = if self.stats.on {
+            self.exec::<true>(code, env, base, &mut regs)
+        } else {
+            self.exec::<false>(code, env, base, &mut regs)
+        };
         // trace.snap.1: a trap keeps the frame's locals as `block` does.
         if matches!(result, Err(Exit::Trap(_))) && self.snap.is_some() {
             self.snap_block(env);
@@ -1096,7 +1691,65 @@ impl<'a, W: Write> Interp<'a, W> {
         }
     }
 
-    fn exec(&mut self, code: &Code<'a>, env: &mut Env<'a>, base: usize, regs: &mut [Value]) -> Flow<Value> {
+    /// The value at a local and a chain of struct fields, unless a step
+    /// isn't a struct (a `ref` cell takes the walker's path).
+    fn recv_at<'e>(&self, env: &'e Env<'a>, at: usize, path: &[&str]) -> Option<&'e Value> {
+        let mut v = &env[at].1;
+        for name in path {
+            let Value::Struct(s, fields) = v else { return None };
+            v = &fields[self.field_index(*s, name)];
+        }
+        Some(v)
+    }
+
+    /// The user method a receiver of this type calls, when the tier can run it.
+    fn user_method(&self, is_enum: bool, index: usize, name: &str, path_len: usize) -> Option<&'a FnDecl> {
+        let prog = self.prog;
+        let type_name = if is_enum { &prog.enums[index].name } else { &prog.structs[index].name };
+        let f = *self.methods.get(type_name.as_str())?.get(name)?;
+        let ok = f.params.iter().all(|p| !p.mutable) && (path_len == 0 || f.receiver.is_none_or(|r| !r.mutable));
+        ok.then_some(f)
+    }
+
+    /// Whether `MethodRun` can make this call (ADR 0363), keeping the user
+    /// method it calls in `cache`. A receiver that isn't a local's place
+    /// can't take `mut self`, so it counts as a path.
+    #[inline]
+    fn method_allowed(
+        &self,
+        recv: Option<&Value>,
+        name: &str,
+        path_len: usize,
+        cache: &Cell<Option<(bool, usize, &'a FnDecl)>>,
+    ) -> bool {
+        let (is_enum, index) = match recv {
+            None | Some(Value::Ref(_) | Value::Handle(_) | Value::Atomic(_)) => return false,
+            Some(Value::Struct(s, _)) => (false, *s),
+            Some(Value::Enum(e, _, _)) => (true, *e),
+            Some(_) => return true,
+        };
+        if let Some((e, i, _)) = cache.get()
+            && e == is_enum
+            && i == index
+        {
+            return true;
+        }
+        match self.user_method(is_enum, index, name, path_len) {
+            Some(f) => {
+                cache.set(Some((is_enum, index, f)));
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn exec<const COUNT: bool>(
+        &mut self,
+        code: &Code<'a>,
+        env: &mut Env<'a>,
+        base: usize,
+        regs: &mut [Value],
+    ) -> Flow<Value> {
         let consts = &code.consts[..];
         let mut pc = 0usize;
         macro_rules! get {
@@ -1110,6 +1763,9 @@ impl<'a, W: Write> Interp<'a, W> {
             };
         }
         loop {
+            if COUNT {
+                self.stats.ins += 1;
+            }
             match &code.ins[pc] {
                 Ins::BinK { op, dst, a, k, pos } => {
                     pc += 1;
@@ -1140,6 +1796,14 @@ impl<'a, W: Write> Interp<'a, W> {
                         }
                         continue;
                     }
+                    if let (Value::Str(x), Value::Str(y)) = (get!(*a), get!(*b))
+                        && code.str_eq
+                        && matches!(op, BinOp::Eq | BinOp::Ne)
+                    {
+                        let v = (x == y) == (*op == BinOp::Eq);
+                        put(*dst, Value::Bool(v), env, base, regs);
+                        continue;
+                    }
                     let x = take!(*a);
                     let y = take!(*b);
                     let v = self.binop(*op, x, y, *pos)?;
@@ -1158,6 +1822,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 Ins::BrCmp { op, a, b, when, t, pos } => {
                     let c = match (get!(*a), get!(*b)) {
                         (Value::Int(x), Value::Int(y)) => int_cmp(*op, *x, *y).expect("a comparison"),
+                        // expr.cmp.1: strings are equal when their bytes are.
+                        (Value::Str(x), Value::Str(y)) if code.str_eq && matches!(op, BinOp::Eq | BinOp::Ne) => {
+                            (x == y) == (*op == BinOp::Eq)
+                        }
                         _ => {
                             let x = take!(*a);
                             let y = take!(*b);
@@ -1295,8 +1963,315 @@ impl<'a, W: Write> Interp<'a, W> {
                     };
                     *slot_mut_at(env, slot, &steps, op.is_none() || missing)? = v;
                 }
+                Ins::Try { dst, src, context, absent, optional, pos, exit } => match take!(*src) {
+                    Value::None if *absent => {
+                        let how = self.absent(*context, *pos, env)?;
+                        pc = self.leave(code, *exit, how, env, base)?;
+                    }
+                    Value::None if *optional => {
+                        self.returned = Some((Value::None, *pos));
+                        pc = self.leave(code, *exit, Exit::Return, env, base)?;
+                    }
+                    Value::Fail(f) => {
+                        let mut context_list = f.context.clone();
+                        if let Some(c) = context {
+                            let Value::Str(msg) = self.eval(c, env)? else { unreachable!("checked: str") };
+                            context_list.push(msg.to_string());
+                        }
+                        let mut trace = f.trace.clone();
+                        trace.push(*pos);
+                        let failure = Failure { error: f.error.clone(), context: context_list, trace };
+                        self.returned = Some((Value::Fail(Rc::new(failure)), *pos));
+                        pc = self.leave(code, *exit, Exit::Return, env, base)?;
+                    }
+                    v => {
+                        pc += 1;
+                        let v = if *optional { Value::unwrap_present(v) } else { v };
+                        put(*dst, v, env, base, regs);
+                    }
+                },
+                Ins::ElseTest { src, t } => {
+                    let r = (*src & !KIND) as usize;
+                    if matches!(regs[r], Value::None | Value::Fail(_)) {
+                        pc = *t as usize;
+                    } else {
+                        pc += 1;
+                        let v = std::mem::replace(&mut regs[r], Value::Unit);
+                        regs[r] = Value::unwrap_present(v);
+                    }
+                }
+                Ins::IfNotStruct { slot, t } => {
+                    pc = if matches!(env[base + *slot as usize].1, Value::Struct(..)) { pc + 1 } else { *t as usize };
+                }
+                Ins::SetField { slot, name, val, op, pos } => {
+                    pc += 1;
+                    let at = base + *slot as usize;
+                    let Value::Struct(s, fields) = &env[at].1 else { unreachable!("checked by the guard") };
+                    let index = self.field_index(*s, name);
+                    let v = match op {
+                        None => take!(*val),
+                        Some(op) => {
+                            let old = fields[index].clone();
+                            let rhs = take!(*val);
+                            self.binop(*op, old, rhs, *pos)?
+                        }
+                    };
+                    let Value::Struct(_, fields) = &mut env[at].1 else { unreachable!("checked: struct") };
+                    Rc::make_mut(fields)[index] = v;
+                }
+                Ins::Arm { src, pat, t } => {
+                    let v = &regs[(*src & !KIND) as usize];
+                    if !self.matches(pat, v) {
+                        pc = *t as usize;
+                    } else {
+                        pc += 1;
+                        if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (pat, v) {
+                            for ((n, _), value) in names.iter().zip(fields.iter()) {
+                                if n != "_" {
+                                    env.push((n.as_str(), value.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+                Ins::Interp { dst, parts, args } => {
+                    pc += 1;
+                    let mut text = String::new();
+                    let mut k = *args as usize;
+                    for part in parts.iter() {
+                        match part {
+                            InterpPart::Lit(t) => text.push_str(t),
+                            InterpPart::Expr(_) | InterpPart::Fmt(..) => {
+                                let Value::Str(t) = &regs[k] else { unreachable!("a part's text") };
+                                text.push_str(t);
+                                regs[k] = Value::Unit;
+                                k += 1;
+                            }
+                        }
+                    }
+                    put(*dst, Value::Str(Rc::from(text)), env, base, regs);
+                }
+                Ins::Text { r, spec, pos } => {
+                    pc += 1;
+                    let r = (*r & !KIND) as usize;
+                    if spec.is_some() || !matches!(regs[r], Value::Str(_)) {
+                        let v = std::mem::replace(&mut regs[r], Value::Unit);
+                        let t = match spec {
+                            None => self.text(&v, *pos)?,
+                            Some(spec) => self.formatted(&v, spec, *pos)?,
+                        };
+                        regs[r] = Value::Str(Rc::from(t));
+                    }
+                }
+                Ins::Build { dst, what, slots, args } => {
+                    pc += 1;
+                    let first = *args as usize;
+                    let n = match what {
+                        Built::Struct(s) => self.prog.structs[*s].fields.len(),
+                        Built::Variant(e, v) | Built::Qualified(e, v) => self.prog.enums[*e].variants[*v].fields.len(),
+                    };
+                    let mut values = vec![Value::Unit; n];
+                    for (k, &slot) in slots.iter().enumerate() {
+                        values[slot] = std::mem::replace(&mut regs[first + k], Value::Unit);
+                    }
+                    let v = match what {
+                        Built::Struct(s) => Value::Struct(*s, Rc::new(values)),
+                        Built::Variant(e, v) if values.is_empty() => Value::Enum(*e, *v, Rc::clone(&self.no_fields)),
+                        Built::Variant(e, v) | Built::Qualified(e, v) => Value::Enum(*e, *v, Rc::new(values)),
+                    };
+                    put(*dst, v, env, base, regs);
+                }
+                Ins::Map { dst, args, n, set } => {
+                    pc += 1;
+                    let first = *args as usize;
+                    let mut t = Table::default();
+                    for kv in regs[first..first + 2 * *n as usize].chunks_mut(2) {
+                        let k = std::mem::replace(&mut kv[0], Value::Unit);
+                        t.insert(k, Some(std::mem::replace(&mut kv[1], Value::Unit)));
+                    }
+                    let v = if *set { Value::Set(Rc::new(t)) } else { Value::Map(Rc::new(t)) };
+                    put(*dst, v, env, base, regs);
+                }
+                Ins::List { dst, args, n } => {
+                    pc += 1;
+                    let first = *args as usize;
+                    let items: Vec<Value> = regs[first..first + *n as usize]
+                        .iter_mut()
+                        .map(|r| std::mem::replace(r, Value::Unit))
+                        .collect();
+                    put(*dst, Value::List(Rc::new(items)), env, base, regs);
+                }
+                Ins::MethodGuard { recv, path, name, t, cache } => {
+                    let ok = if *recv & KIND == LOCAL {
+                        self.method_allowed(self.recv_at(env, base + *recv as usize, path), name, path.len(), cache)
+                    } else {
+                        self.method_allowed(Some(get!(*recv)), name, 1, cache)
+                    };
+                    pc = if ok { pc + 1 } else { *t as usize };
+                }
+                Ins::MethodRun { recv, path, name, mutating, args, n, dst, pos, guard } => {
+                    pc += 1;
+                    let place = *recv & KIND == LOCAL;
+                    let at = base + (*recv & !KIND) as usize;
+                    // A register receiver is moved out; a local's is read in place.
+                    let owned = if place { None } else { Some(take!(*recv)) };
+                    let me = match &owned {
+                        Some(v) => v,
+                        None => self.recv_at(env, at, path).expect("checked by the guard"),
+                    };
+                    let user = match me {
+                        Value::Struct(s, _) => Some((false, *s)),
+                        Value::Enum(e, _, _) => Some((true, *e)),
+                        _ => None,
+                    };
+                    let (first, n) = (*args as usize, *n as usize);
+                    let result = match user {
+                        // trait.method.2: the receiver's type's method, as `invoke` calls it.
+                        Some((is_enum, index)) => {
+                            let Ins::MethodGuard { cache, .. } = &code.ins[*guard as usize] else {
+                                unreachable!("a guard")
+                            };
+                            let Some((e, i, f)) = cache.get() else { unreachable!("set by the guard") };
+                            debug_assert!(e == is_enum && i == index);
+                            let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                            let moved = f.receiver.is_some_and(|r| r.mutable);
+                            let me = match owned {
+                                Some(v) => v,
+                                None if moved => Value::Unit,
+                                None => self.recv_at(env, at, path).expect("checked by the guard").clone(),
+                            };
+                            callee.push(("self", me));
+                            for (k, p) in f.params.iter().enumerate() {
+                                callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
+                            }
+                            // trait.method.3: a `mut self` receiver moves into the call and back.
+                            if moved {
+                                callee[0].1 = std::mem::replace(&mut env[at].1, Value::Unit);
+                            }
+                            let result = self.run_body(f, &mut callee, *pos)?;
+                            if moved {
+                                env[at].1 = std::mem::replace(&mut callee[0].1, Value::Unit);
+                            }
+                            callee.clear();
+                            self.env_pool.push(callee);
+                            result
+                        }
+                        None => {
+                            let mut a = self.arg_pool.pop().unwrap_or_default();
+                            a.extend(regs[first..first + n].iter_mut().map(|r| std::mem::replace(r, Value::Unit)));
+                            let recv = match owned {
+                                Some(v) => Operand::Value(v),
+                                None if *mutating => {
+                                    let mut p = Place::local(at);
+                                    let mut v = &env[at].1;
+                                    for name in path.iter() {
+                                        let Value::Struct(s, fields) = v else { unreachable!("checked by the guard") };
+                                        let i = self.field_index(*s, name);
+                                        p.path.push(Step::Field(i));
+                                        v = &fields[i];
+                                    }
+                                    Operand::Place(p)
+                                }
+                                None => {
+                                    Operand::Value(self.recv_at(env, at, path).expect("checked by the guard").clone())
+                                }
+                            };
+                            self.builtin_with(recv, name, a, *pos, env)?
+                        }
+                    };
+                    put(*dst, result, env, base, regs);
+                }
+                Ins::TraitGuard { recv, tr, name, t, cache, now } => {
+                    let v = get!(*recv);
+                    // What `dispatch` decides by: the value's type constructor.
+                    let key = match v {
+                        Value::Ref(_) | Value::Handle(_) | Value::Atomic(_) => None,
+                        Value::Struct(s, _) => Some((0, *s)),
+                        Value::Enum(e, _, _) => Some((1, *e)),
+                        Value::Int(_) => Some((2, 0)),
+                        Value::Float(_) => Some((3, 0)),
+                        Value::Str(_) => Some((4, 0)),
+                        Value::Char(_) => Some((5, 0)),
+                        Value::Bool(_) => Some((6, 0)),
+                        Value::List(_) => Some((7, 0)),
+                        _ => Some((8, 0)),
+                    };
+                    let pick = key.map(|(k, i)| match cache.get() {
+                        Some((ck, ci, f)) if ck == k && ci == i => f,
+                        _ => {
+                            let f = self.dispatch(*tr, name, v);
+                            cache.set(Some((k, i, f)));
+                            f
+                        }
+                    });
+                    // A `mut` receiver or parameter takes the walker's path.
+                    let ok = pick.is_some_and(|f| {
+                        f.is_none_or(|f| f.receiver.is_none_or(|r| !r.mutable) && f.params.iter().all(|p| !p.mutable))
+                    });
+                    if ok {
+                        now.set(pick.flatten());
+                        pc += 1;
+                    } else {
+                        pc = *t as usize;
+                    }
+                }
+                Ins::TraitRun { recv, tr, args, n, dst, pos, guard } => {
+                    pc += 1;
+                    let Ins::TraitGuard { now, .. } = &code.ins[*guard as usize] else { unreachable!("a guard") };
+                    let me = take!(*recv);
+                    let first = *args as usize;
+                    let result = match now.get() {
+                        // trait.method.2: the implementation, as `invoke` calls it.
+                        Some(f) => {
+                            let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                            callee.push(("self", me));
+                            for (k, p) in f.params.iter().enumerate() {
+                                callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
+                            }
+                            let result = self.run_body(f, &mut callee, *pos)?;
+                            callee.clear();
+                            self.env_pool.push(callee);
+                            result
+                        }
+                        // trait.std.1-3: the built-in `to_str`, `eq` and `cmp`, as `trait_method` makes them.
+                        None => {
+                            let std = self.resolved.std;
+                            if *tr == std.to_str {
+                                Value::Str(Rc::from(self.text(&me, *pos)?))
+                            } else {
+                                debug_assert!(*n == 1);
+                                let other = std::mem::replace(&mut regs[first], Value::Unit);
+                                if *tr == std.eq {
+                                    Value::Bool(self.equal(&me, &other, *pos)?)
+                                } else {
+                                    let o = self.compare(&me, &other, *pos)?;
+                                    self.ordering_value(o)
+                                }
+                            }
+                        }
+                    };
+                    put(*dst, result, env, base, regs);
+                }
+                Ins::MethodOn { recv, e, dst, exit } => match {
+                    self.stats.handoffs += 1;
+                    if let Some(k) = &mut self.stats.kinds {
+                        *k.entry(kind_of_expr(e)).or_default() += 1;
+                    }
+                    let Expr::Method { recv: r, name, name_pos, args } = e else { unreachable!("a method call") };
+                    let v = take!(*recv);
+                    self.method_with_value(r, v, name, args, *name_pos, env)
+                } {
+                    Ok(v) => {
+                        pc += 1;
+                        put(*dst, v, env, base, regs);
+                    }
+                    Err(how) => pc = self.leave(code, *exit, how, env, base)?,
+                },
                 Ins::Expr { e, dst, exit } => match {
                     self.stats.handoffs += 1;
+                    if let Some(k) = &mut self.stats.kinds {
+                        *k.entry(kind_of_expr(e)).or_default() += 1;
+                    }
                     self.eval(e, env)
                 } {
                     Ok(v) => {
@@ -1305,8 +2280,19 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     Err(how) => pc = self.leave(code, *exit, how, env, base)?,
                 },
+                Ins::Hit(pos) => {
+                    pc += 1;
+                    self.hit(*pos)?;
+                }
                 Ins::Stmt { s, exit } => match {
                     self.stats.handoffs += 1;
+                    if let Some(k) = &mut self.stats.kinds {
+                        *k.entry(Cow::Borrowed(kind_of_stmt(s))).or_default() += 1;
+                    }
+                    // The statement's `Hit` ran; the walker's `stmt` takes the step again.
+                    if self.hook {
+                        self.unhit();
+                    }
                     self.stmt(s, env)
                 } {
                     Ok(_) => pc += 1,

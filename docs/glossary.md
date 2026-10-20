@@ -77,7 +77,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Glob** | A path pattern with `*` and `?` inside a component and `**` for any number of directories; `fs.glob` returns the matching paths, sorted (`std.fs.9`, ADR 0281). |
 | **`Hash`** | The standard trait of map keys and set elements. Automatic for every type whose `==` is automatic or derived and whose parts are `Hash`; has no methods (ADR 0133). |
 | **HIR** | High-level IR: the resolved, typed, expanded program, named by stable ids; what `ail api` serves and the interpreter runs ([ir-architecture.md](design/ir-architecture.md), ADR 0222). |
-| **Hand-off (bytecode tier)** | An expression or statement a compiled body leaves to the tree walker, which runs it on the same environment (ADR 0361). |
+| **Hand-off (bytecode tier)** | An expression or statement a compiled body leaves to the tree walker, which runs it on the same environment (ADR 0361). A method call whose receiver fails its guard is handed off with the receiver already evaluated (ADR 0363). |
 | **Hot/cold splitting** | Placing rarely used fields (or code) away from frequently used ones to improve cache use. |
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
@@ -110,7 +110,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
 | **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
-| **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). |
+| **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
 | **Or-pattern** | `p1 | p2` in a `match` arm: matches when any alternative does; binds no names (ADR 0138). |
 | **Outline** | A program's declarations with signatures, doc comments, positions and ids but no bodies, printed by `ail api` (ADR 0150). |
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
@@ -136,6 +136,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Reference (semantic API)** | A use of a declared name, listed by `ail api --symbols` as the declaration's symbol id and a position (ADR 0151). |
 | **Region inference** | Compiler inference of arenas (regions) for groups of allocations with a shared lifetime. See ADR 0012. |
 | **Root module** | The module that declares `main`: the `.ail` files directly in the package root for `ail run DIR`, or the single file for `ail run FILE` (ADR 0153). |
+| **Root store** | The set of root certificates a TLS client trusts as the end of a certificate chain: the platform's (or `SSL_CERT_FILE`'s) for `std.net` (ADR 0368). |
 | **Rule ID** | A stable identifier for a normative spec rule, formatted `<chapter>.<section>.<n>` (e.g. `plat.ptr.1`). See ADR 0002. |
 | **Run limit** | `--timeout`, `--max-memory` or `--max-steps`: a run that exceeds one traps with `run.limit.*` and a snapshot (ADR 0288). |
 | **Runtime dispatch** | Choosing among code paths at run time based on detected CPU features. |

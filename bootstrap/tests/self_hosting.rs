@@ -94,3 +94,38 @@ fn ast_dumps_read_back_through_the_ail_syntax_tree() {
     assert_eq!(out, format!("checked {n}\n"));
     assert!(n > 700, "{n} files");
 }
+
+/// Runs the AIL front end (`ail run compiler COMMAND`) once over the
+/// whole corpus and compares each file's output with `ail api FLAG FILE`.
+fn compare_with_bootstrap(command: &str, flag: &str) {
+    let files = corpus();
+    let mut expected = String::new();
+    for f in &files {
+        expected.push_str(&format!("== {}\n", f.display()));
+        expected.push_str(&run(ail().args(["api", flag]).arg(f)));
+    }
+    let actual = run(ail().arg("run").arg(root().join("compiler")).arg(command).args(&files));
+    if actual != expected {
+        // Report the first file whose output differs.
+        let split = |s: &str| s.split("\n== ").map(str::to_string).collect::<Vec<_>>();
+        for (a, e) in split(&actual).iter().zip(split(&expected).iter()) {
+            assert_eq!(a, e, "`ail run compiler {command}` differs from `ail api {flag}`");
+        }
+        panic!("`ail run compiler {command}` gave {} bytes, `ail api {flag}` {}", actual.len(), expected.len());
+    }
+    assert!(files.len() > 700, "{} files", files.len());
+}
+
+/// The AIL lexer lists the same tokens, comments and diagnostics as the
+/// bootstrap's on every file (ADR 0371).
+#[test]
+fn ail_lexer_matches_the_bootstrap() {
+    compare_with_bootstrap("tokens", "--tokens");
+}
+
+/// The AIL parser builds the same tree, with diagnostics naming the same
+/// rules at the same places, as the bootstrap's on every file (ADR 0371).
+#[test]
+fn ail_parser_matches_the_bootstrap() {
+    compare_with_bootstrap("parse", "--ast");
+}

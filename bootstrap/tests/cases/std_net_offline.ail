@@ -1,19 +1,21 @@
-## std.net.2-4: failures that need no network: TLS, a bad URL, a refused connection.
+## std.net.2-5: failures that need no network: bad URLs and refused
+## connections, over http and https.
 use std.net
 
 fn main()
     for url in [
-        "https://example.com/",
+        "https://127.0.0.1:1/",
         "ftp://example.com/",
         "example.com",
         "http://:80/",
+        "https://:443/",
         "http://127.0.0.1:1/",
     ]
         r := net.get(url) else err
             print("{err.kind}: {err.url}")
             continue
         print(r.status)
-    r := net.post("https://example.com/", "a=1", "text/plain") else err
+    r := net.post("https://example.com:44x/", "a=1", "text/plain") else err
         print(err.message)
         return
     print(r.body)

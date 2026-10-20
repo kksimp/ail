@@ -442,10 +442,14 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
-        tier: bytecode::usable(prog, trace::mode(), limits::active(), has_unique, has_defer),
+        tier: bytecode::usable(prog, trace::mode(), has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
         reg_pool: Vec::new(),
-        stats: bytecode::Stats::default(),
+        stats: bytecode::Stats {
+            on: std::env::var_os("AIL_BYTECODE_STATS").is_some(),
+            kinds: (std::env::var_os("AIL_BYTECODE_STATS").is_some_and(|v| v == "2")).then(HashMap::default),
+            ..Default::default()
+        },
     }
 }
 
@@ -2741,25 +2745,7 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
-        // What a call site says about itself doesn't change, so it is worked out once.
-        let key = recv as *const Expr as usize;
-        let site = match self.method_sites.get(&key) {
-            Some(&site) => site,
-            None => {
-                let site = MethodSite {
-                    call: self.resolved.calls.get(&pos).copied(),
-                    std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
-                        _ => None,
-                    },
-                    mutating: self.mutating.contains(name),
-                    last: None,
-                    assoc: self.resolved.assoc_calls.contains_key(&pos),
-                };
-                self.method_sites.insert(key, site);
-                site
-            }
-        };
+        let (key, site) = self.method_site(recv, name, pos);
         let call = site.call;
         // `Trait.name(x, ...)` (trait.res.1).
         if let Some(Call::Qualified(tr)) = call {
@@ -2797,7 +2783,63 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
-        let mut recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
+        let recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
+        self.method_on(key, site, recv, name, args, pos, env)
+    }
+
+    /// What a call site says about itself doesn't change, so it is worked out once.
+    #[inline(always)]
+    fn method_site(&mut self, recv: &'a Expr, name: &str, pos: Pos) -> (usize, MethodSite<'a>) {
+        let key = recv as *const Expr as usize;
+        let site = match self.method_sites.get(&key) {
+            Some(&site) => site,
+            None => {
+                let site = MethodSite {
+                    call: self.resolved.calls.get(&pos).copied(),
+                    std: match self.resolved.std_calls.get(&pos) {
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
+                        _ => None,
+                    },
+                    mutating: self.mutating.contains(name),
+                    last: None,
+                    assoc: self.resolved.assoc_calls.contains_key(&pos),
+                };
+                self.method_sites.insert(key, site);
+                site
+            }
+        };
+        (key, site)
+    }
+
+    /// `recv.name(args)` with the receiver's value already evaluated (ADR 0363).
+    pub(super) fn method_with_value(
+        &mut self,
+        recv: &'a Expr,
+        value: Value,
+        name: &'a str,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        let (key, site) = self.method_site(recv, name, pos);
+        self.method_on(key, site, Operand::Value(value), name, args, pos, env)
+    }
+
+    /// The rest of `method_call` once the receiver is evaluated; the
+    /// bytecode tier enters here with a receiver it evaluated (ADR 0363).
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn method_on(
+        &mut self,
+        key: usize,
+        site: MethodSite<'a>,
+        mut recv: Operand,
+        name: &'a str,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        let call = site.call;
         let (mut kind, cell) = match &recv {
             Operand::Place(p) => view(env, p, |v| kind_or_cell(v))?,
             Operand::Value(v) => kind_or_cell(v),

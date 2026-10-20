@@ -306,3 +306,25 @@ tree; the value is dropped and `send` returns).
 
 ## OQ-113 — A matrix product operator
 **Resolved** by [ADR 0382](decisions/0382-no-matrix-product-operator.md) (keep `a.matmul(b)`).
+
+## OQ-114 — A mutable local that starts as `none`
+
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
+(option a: a `mut` local that starts as `none` takes its type from its first
+assignment, type.opt.9).
+
+## OQ-115 — `if c then x else none` where `x` is a plain `T`
+
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
+(option a: the `if` has type `T?`, type.opt.10).
+
+## OQ-116 — Locals named like an item of their module
+
+**Resolved** by [ADR 0469](decisions/0469-locals-may-shadow-functions.md)
+(option a: a local may shadow a function; a call of it in the local's block is
+expr.call.1).
+
+## OQ-117 — `if` as an operand
+
+**Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md)
+(option a: an `if` operand is written in parentheses, expr.if.8).

@@ -237,6 +237,10 @@ fn main() !                                 # main can fail; the error is report
   may then have no fields. Without messages, write `impl ToStr`.
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
+- `mut best := none` has no type until its first assignment: `best = 3`
+  makes it an `int?`. `x := if c then 4 else none` is an `int?`.
+- A local may have the name of a function (it shadows it); calling that name
+  inside the local's block is an error.
 - Several error types: `fn load() Config ! IoError | ParseError`.
 - No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
   As a statement, `save() else err` + block handles the failure and goes on;
@@ -351,6 +355,7 @@ kind := if n < 0     # `if` used as a value needs `else`;
 else
     "non-negative"
 sign := if n < 0 then "-" else "+"   # one line: `then` and `else`, no `elif`
+pad := 2 + (if n < 0 then 1 else 0)  # a one-line `if` as an operand: in parentheses
 
 while n > 0
     n -= 1
@@ -708,7 +713,7 @@ fn main() !
 | `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` only (no TLS yet: kind `tls`) |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`) |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b` (elementwise, or with a scalar on either side: `t * 2.0`); methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |

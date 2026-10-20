@@ -352,10 +352,16 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0359](0359-bytecode-tier-in-the-bootstrap.md) | Add a bytecode tier to the bootstrap interpreter (designer) | Accepted | 2026-10-20 |
 | [0360](0360-in-house-tls-for-std-net.md) | `https` in `std.net` through an in-house TLS implementation, not a crate (designer) | Accepted | 2026-10-20 |
 | [0361](0361-bytecode-tier-design.md) | The bytecode tier: register code over the tree walker's environment, with hand-offs *(delegated)* | Accepted | 2026-10-20 |
+| [0362](0362-differential-harness-for-the-bytecode-tier.md) | `./ail selftest` runs every program on both tiers; `fuzz.prop.5` compares them *(delegated)* | Accepted | 2026-10-20 |
+| [0363](0363-bytecode-tier-methods-and-data.md) | The bytecode tier compiles method and trait calls, data construction, `match`, interpolation and `?` *(delegated)* | Accepted | 2026-10-20 |
+| [0364](0364-bytecode-tier-limits-coverage-and-traces.md) | Run limits, coverage and call and effect traces run on the bytecode tier *(delegated)* | Accepted | 2026-10-20 |
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0367](0367-tls13-client-handshake.md) | The TLS 1.3 client handshake and record layer, tested on a recorded trace and live OpenSSL *(delegated)* | Accepted | 2026-10-20 |
+| [0368](0368-tls-certificate-verification.md) | TLS certificate verification: X.509 chains to the platform's roots *(delegated)* | Accepted | 2026-10-20 |
+| [0369](0369-https-in-std-net.md) | `https` in `std.net` over the in-house TLS 1.3 client, always verified *(delegated)* | Accepted | 2026-10-20 |
 | [0371](0371-self-hosted-front-end-compared-by-dumps.md) | Compare the self-hosted lexer and parser with the bootstrap through text dumps *(delegated)* | Accepted | 2026-10-20 |
 | [0372](0372-identifier-characters.md) | A name is letters, ASCII digits and `_` *(delegated)* | Accepted | 2026-10-20 |
+| [0373](0373-self-hosted-diagnostics-are-rule-and-position.md) | The self-hosted front end reports a rule and a position, and runs the corpus in one process *(delegated)* | Accepted | 2026-10-20 |
 | [0376](0376-syntax-tree-in-ail-and-its-json.md) | The syntax tree in AIL, `compiler/ast/`, and its JSON is the derived shape *(delegated)* | Accepted | 2026-10-20 |
 | [0377](0377-checker-in-ail-ported-pass-for-pass.md) | The checker in AIL is ported pass for pass, and says what it covers *(delegated)* | Accepted | 2026-10-20 |
 | [0378](0378-checker-gaps-are-skipped-not-guessed.md) | The AIL checker skips what it can't type yet, and the comparison skips it too *(delegated)* | Accepted | 2026-10-20 |
@@ -364,3 +370,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
+| [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
+| [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
+| [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |

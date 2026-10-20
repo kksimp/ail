@@ -76,7 +76,8 @@ operands and immediates was chosen.
 - The tier is off for a program that uses something it doesn't carry yet:
   `--trace`, `--watch`, run limits and coverage, unique types, `defer`, and
   contracts (while they are checked); and for `--deterministic` and
-  `--schedule`. A function with `spawn`, a task, channel or mutex
+  `--schedule`. (Run limits, coverage and `--trace` run on the tier from
+  [ADR 0364](0364-bytecode-tier-limits-coverage-and-traces.md).) A function with `spawn`, a task, channel or mutex
   constructor, `with`, or a `par for` stays on the walker. `--no-bytecode`
   turns the tier off. `AIL_BYTECODE_STATS=1` prints how many calls ran on it.
 
@@ -92,7 +93,8 @@ The register form is the only measured option near ADR 0359's 2–3x.
 - Slice 1 results (Linux x86-64, [interpreter-performance.md](../design/interpreter-performance.md)):
   `loops` 1.79x fewer instructions and 0.62x of CPython's time (was 1.04x);
   its collatz section 2.55x; `interp`, `json` and `sheet` gain little until
-  method calls, structs, `match` and interpolation compile (slice 3).
+  method calls, structs, `match` and interpolation compile (slice 3,
+  [ADR 0363](0363-bytecode-tier-methods-and-data.md)).
 - Every example, test case, corpus program and package prints the same bytes
   with and without the tier; slice 2 makes that check part of `./ail selftest`.
 - Two evaluators must stay in step; the hand-off keeps the second one small.

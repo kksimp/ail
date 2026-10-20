@@ -24,8 +24,14 @@ macOS ARM64 (Kaleb's Mac), same binary built there:
 
 | Measure | Value |
 |---|---|
-| Start-up to first frame (`ail run tools/edit`) | to be measured on the next Mac run |
-| `ail check tools/edit/edit.ail` | to be measured on the next Mac run |
+| `ail check tools/edit/edit.ail`, best of 5 | 19 ms |
+| Start-up, `ail run tools/edit/edit.ail examples/hello.ail` to the window being on screen, warm, best of 5 | 191 ms (cold first run 610 ms) |
+| Start-up, opening `tools/edit/edit.ail` itself (5,249 lines), best of 5 | 467 ms |
+
+Start-up was measured with a helper that polls the window server every 5 ms
+for an on-screen window owned by the editor process, so it is time to the
+window being on screen, close to but not exactly the first painted frame.
+Re-measure the same way.
 
 Keystroke and redraw latency are not measured yet: the editor is a headless
 `Editor` value plus a pure render, so a timing test over `Command`s and

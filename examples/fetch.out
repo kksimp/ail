@@ -1,3 +1,2 @@
-tls: `https` needs TLS, which the bootstrap doesn't have yet (ADR 0283); use an `http://` URL
 tasks.json: 8 lines, 427 characters
 {"tasks": [
