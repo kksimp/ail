@@ -18,6 +18,7 @@ use std::cmp::Ordering;
 
 mod builtins;
 mod contracts;
+pub mod parallel;
 mod random;
 mod stdlib;
 mod tasks;
@@ -280,12 +281,14 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         closed: false,
         consts: HashMap::default(),
         conc: None,
+        par: None,
     }
 }
 
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let stdout = io::stdout();
     let mut it = build(prog, resolved, stdout.lock());
+    it.par = parallel::plans(prog, resolved);
     let result = run_main(&mut it, prog);
     if it.conc.is_some() {
         // What tasks printed before a trap still reaches standard output.
@@ -333,6 +336,8 @@ struct Interp<'a, W: Write> {
     consts: HashMap<&'a str, Value>,
     /// The task scheduler, once the program uses tasks (conc.task.1).
     conc: Option<tasks::Ctx>,
+    /// The loops that run on the thread pool (conc.par.8).
+    par: Option<Rc<parallel::Plans>>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -732,7 +737,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             Stmt::For { var, mutable: true, iter, body, .. } => self.for_mut(var, iter, body, env)?,
-            Stmt::For { var, iter, body, .. } => self.for_loop(var, iter, body, env)?,
+            Stmt::For { var, iter, body, pos, .. } => {
+                if !self.par_for(*pos, var, iter, body, env)? {
+                    self.for_loop(var, iter, body, env)?;
+                }
+            }
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
             Stmt::Return(value, pos) => {
