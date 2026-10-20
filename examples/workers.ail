@@ -12,10 +12,7 @@ fn steps(n int) int
     mut x := n
     mut count := 0
     while x != 1
-        x = if x % 2 == 0
-            x / 2
-        else
-            3 * x + 1
+        x = if x % 2 == 0 then x / 2 else 3 * x + 1
         count += 1
     count
 
