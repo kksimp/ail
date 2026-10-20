@@ -1,0 +1,6 @@
+fn f(n int?) int
+    retries := n else 2.0
+    retries + 1
+
+fn main()
+    print(f(none))
