@@ -47,7 +47,7 @@ url ─► fetch (std.net) ─► bytes ─► decode ─► HTML tokenizer ─�
 
 | Stage | Module | First milestone | Later |
 |---|---|---|---|
-| Fetch | `std.net` | `net.get` over in-house TLS 1.3 (ADR 0360), redirects followed by Garlic (status 301/302/303/307/308 + `location`) | methods, headers, cookies and POST forms (lane 124), `Accept-Encoding: gzip` (lane 128), bytes bodies for images (lane 123), HTTP/2 |
+| Fetch | `std.net` | `net.get` over in-house TLS 1.3 (ADR 0360), which follows redirects | methods, headers, cookies and POST forms (lane 124), `Accept-Encoding: gzip` (lane 128), bytes bodies for images (lane 123), HTTP/2 |
 | Decode | `str` | UTF-8 only (std.net bodies are `str`) | charset sniffing once bodies are bytes |
 | Tokenize | `html` | WHATWG tokenizer: data, tags, attributes (quoted, unquoted, bare), comments, doctype, raw text (`script`, `style`), escapable raw text (`title`, `textarea`), character references (numeric and a named subset) | the full named-reference table, every parse-error state |
 | Tree | `html` | simplified tree construction: implied `html`/`head`/`body`, void elements, implied end tags (`p`, `li`, `dt`, `dd`, `option`, `tr`, `td`, `th`), end tags close up to the matching open element | adoption agency, foster parenting, templates, foreign content (SVG, MathML) |
@@ -69,16 +69,26 @@ way the editor's screen does (ADR 0181).
 
 `./ail run tools/garlic URL|FILE`:
 
-- **Fetch and follow**: `http`, `https` and local files; up to 5 redirects;
-  relative links resolved against the page URL (RFC 3986 merge).
+- **Fetch and follow**: `http`, `https` and local files (redirects followed
+  by `std.net`); relative links resolved against the page URL (RFC 3986).
 - **Read**: headings, paragraphs, lists, block quotes, `pre`, horizontal
   rules, simple tables and inline emphasis, wrapped to the window width.
   Links are numbered `[3]`, and the title is in the window title.
-- **Navigate**: Tab and Shift-Tab move between links, Enter follows,
-  Backspace goes back, Up/Down/PageUp/PageDown/Home/End scroll, `g` opens
-  a URL, `/` finds text, `q` quits.
+- **Navigate**: Tab and Shift-Tab move between links, Enter or a click
+  follows, Backspace goes back, Up/Down/PageUp/PageDown/Home/End and the
+  wheel scroll, `g` opens a URL, `/` finds text (`n` again), `r` reloads,
+  `q` quits.
 - **Headless**: `--print` writes the rendered page as text; `--json` writes
-  the page model (below); `--width N` sets the width. Tests run headless.
+  the page model (below); `--links` lists the links; `--follow N` and
+  `--find TEXT` act first; `--width N` and `--height N` set the size. Tests
+  run headless.
+- **Speed**: the Go specification (290 KB of HTML) parses and lays out in
+  1.1 s on the bytecode tier (Linux x86-64).
+
+Known limits: `std.net` follows redirects itself but doesn't report the
+final URL, so relative links on a redirected page resolve against the URL
+asked for; bodies are UTF-8 text; `std.ui` draws Latin-1, so other
+characters show as `?` in the window (not in `--print` or `--json`).
 
 ## The page model for agents
 
@@ -87,21 +97,21 @@ the DOM reduced to what a user perceives, like an accessibility tree, plus
 where each thing was drawn:
 
 ```json
-{"api":1,"url":"https://example.com/","title":"Example Domain","width":80,"height":24,"scroll":0,"rows":31,
+{"api":1,"url":"https://example.com/","title":"Example Domain","width":80,"height":23,"scroll":0,"rows":7,
  "nodes":[
-  {"id":4,"role":"heading","level":1,"name":"Example Domain","row":0,"col":0,"w":14,"h":1,"visible":true},
-  {"id":9,"role":"link","name":"More information...","href":"https://www.iana.org/domains/example","row":5,"col":0,"w":24,"h":1,"visible":true,"actions":["follow"]}
+  {"id":6,"role":"heading","name":"Example Domain","level":1,"row":0,"col":2,"end_row":1,"end_col":16,"visible":true},
+  {"id":11,"role":"link","name":"More information...","href":"https://www.iana.org/domains/example","row":4,"col":0,"end_row":5,"end_col":22,"visible":true,"link":1,"actions":["follow"]}
  ]}
 ```
 
 | Key | Meaning |
 |---|---|
 | `id` | the DOM node's index; stable for one load of a page |
-| `role` | `heading`, `paragraph`, `link`, `list`, `listitem`, `blockquote`, `code`, `table`, `row`, `cell`, `image`, `button`, `textbox`, `separator` (ARIA role names where one exists; an explicit `role=` attribute wins) |
-| `name` | the accessible name: text content, `aria-label`, `alt` or `title` |
-| `row`, `col`, `w`, `h` | where it is in the rendered document, in cells; 0-based |
-| `visible` | whether any of it is in the current viewport |
-| `href`, `level` | links' resolved targets; headings' levels |
+| `role` | `heading`, `paragraph`, `link`, `list`, `listitem`, `blockquote`, `code`, `table`, `row`, `cell`, `image`, `button`, `textbox`, `combobox`, `navigation`, `separator` (ARIA role names; an explicit `role=` attribute wins) |
+| `name` | the accessible name: `aria-label`, `alt`, else the text content (cut to 40 characters for paragraphs, items and cells, whose text is on the page anyway; none for lists, tables and rows); `title`, `placeholder` or `value` when there is no text |
+| `row`, `col`, `end_row`, `end_col` | the cells it was drawn in, 0-based, ends exclusive as in `ail api` spans; `end_col` is the end on the last row |
+| `visible` | whether any of it is in the viewport (`height` rows from `scroll`) |
+| `href`, `level`, `link` | links' resolved targets and numbers (the `[n]` drawn after them); headings' levels |
 | `actions` | what an agent can do: `follow` (links), later `type`, `press`, `select` |
 
 The same model drives the window (Tab goes to the next `link` node), so what
