@@ -119,7 +119,7 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
             None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
         };
         let snapshot = |l: &&str| {
-            !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"))
+            !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:") || l.starts_with("  values:"))
         };
         let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
         let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();

@@ -92,9 +92,15 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
 
 ## A declared function used as a value (type.fn.2): its address. `none` if
 ## `name` isn't a function of the program.
-fn Lower.fn_value(mut self, name str) Val?
+fn Lower.fn_value(mut self, name str, pos ast.Pos) Val?
     key := "{prefix}{name}"
     sig := sigs.get(key) else return none
+    if contracted.contains(key)
+        problem(
+            pos,
+            "`{name}` has contracts: a function value of it isn't in the native subset yet",
+        )
+        return Val(id: konst(0, Ty.Int), ty: Ty.Int)
     mut i := inst(-1, "fnaddr", [])
     i.name = key
     t := Ty.Fn(params: sig.params, ret: sig.ret)
