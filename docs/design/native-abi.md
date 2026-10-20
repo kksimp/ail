@@ -18,7 +18,7 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 | Linux x86-64 | ELF | rdi rsi rdx rcx r8 r9 | xmm0-7 | rax, xmm0 | 16-byte aligned at call |
 | Linux ARM64 | ELF | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
 | macOS ARM64 | Mach-O | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
-| Windows x86-64 | PE | stub, `plat.win.1` | | | not built yet |
+| Windows x86-64 | PE | Win64: rcx rdx r8 r9, 32-byte shadow space (ADR 0598) | xmm0-3 | rax, xmm0 | 16-byte aligned at call |
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
