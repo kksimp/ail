@@ -18,6 +18,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let error = Value::Struct(self.structs["Absent"], Rc::new(Vec::new()));
         let failure = Failure { error, context: context_list, trace: vec![pos] };
-        Ok(Exit::Return(Value::Fail(Rc::new(failure)), pos))
+        self.returned = Some((Value::Fail(Rc::new(failure)), pos));
+        Ok(Exit::Return)
     }
 }
