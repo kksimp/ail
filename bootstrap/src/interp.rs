@@ -237,6 +237,9 @@ struct MethodSite<'a> {
     last: Option<(bool, usize, &'a FnDecl)>,
 }
 
+/// The most `mut` operands (receiver and parameters) the local-move call path handles.
+const MAX_LOCAL_MOVES: usize = 6;
+
 /// What a call expression names.
 #[derive(Clone, Copy)]
 enum Target<'a> {
@@ -2026,6 +2029,65 @@ impl<'a, W: Write> Interp<'a, W> {
                 callee.push((param.name.as_str(), v));
             }
             let result = self.run_body(f, &mut callee, pos)?;
+            callee.clear();
+            self.env_pool.push(callee);
+            return Ok(result);
+        }
+        // `mut` operands that are plain locals (the usual `mut p` and `mut self`): each is moved out of
+        // its slot and back, with no places or overlap tables; same steps and order as below.
+        let recv_slot = match &recv {
+            Some(Operand::Place(p)) if f.receiver.is_some_and(|r| r.mutable) && p.path.is_empty() => Some(Some(p.slot)),
+            _ if f.receiver.is_some_and(|r| r.mutable) => None,
+            _ => Some(None),
+        };
+        if let Some(recv_slot) = recv_slot
+            && f.params.len() <= MAX_LOCAL_MOVES
+            && args
+                .iter()
+                .zip(&f.params)
+                .all(|(a, p)| !p.mutable || matches!(&a.value, Expr::Name(n, _) if lookup(env, n).is_some()))
+        {
+            let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+            let mut moves = [(0usize, 0usize); MAX_LOCAL_MOVES + 1]; // (index in `callee`, slot in `env`)
+            let mut count = 0;
+            match recv {
+                Some(Operand::Place(p)) => match recv_slot {
+                    Some(slot) => {
+                        moves[count] = (callee.len(), slot);
+                        count += 1;
+                        callee.push(("self", Value::Unit));
+                    }
+                    None => callee.push(("self", load(env, &p)?)),
+                },
+                Some(Operand::Value(v)) => callee.push(("self", v)),
+                None => {}
+            }
+            for (a, param) in args.iter().zip(&f.params) {
+                if param.mutable {
+                    let Expr::Name(n, _) = &a.value else { unreachable!("checked above") };
+                    let slot = env.iter().rposition(|(m, _)| name_eq(m, n)).expect("checked above");
+                    moves[count] = (callee.len(), slot);
+                    count += 1;
+                    callee.push((param.name.as_str(), Value::Unit));
+                } else {
+                    let v = self.operand_value(&a.value, env)?;
+                    callee.push((param.name.as_str(), v));
+                }
+            }
+            // own.excl.3: `mut` operands that overlap trap before the call.
+            for j in 1..count {
+                if moves[..j].iter().any(|m| m.1 == moves[j].1) {
+                    return Ok(trap("own.excl.3", pos, "two `mut` arguments of this call overlap".into())?);
+                }
+            }
+            for &(at, slot) in &moves[..count] {
+                callee[at].1 = std::mem::replace(&mut env[slot].1, Value::Unit);
+            }
+            let result = self.run_body(f, &mut callee, pos)?;
+            // Only `mut` receivers and parameters are written back (own.param.2).
+            for &(at, slot) in &moves[..count] {
+                env[slot].1 = std::mem::replace(&mut callee[at].1, Value::Unit);
+            }
             callee.clear();
             self.env_pool.push(callee);
             return Ok(result);
