@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod privacy;
 mod traits;
 
 use std::collections::HashMap;
@@ -2871,6 +2872,7 @@ impl<'p> Checker<'p> {
         let mut binds = explicit.unwrap_or_else(|| self.expected_binds(Def::Struct(s), expect));
         let types = self.field_types[s].clone();
         let before = self.diags.len();
+        self.private_literal(s, pos);
         self.fields_literal(&decl.name, &decl.fields, &types, &params, &mut binds, args, pos);
         let quiet = self.diags.len() > before;
         self.finish(&decl.name, &params, &mut binds, pos, quiet);
@@ -3046,6 +3048,7 @@ impl<'p> Checker<'p> {
             }
             [Cand::Builtin] => self.builtin_call(recv, &rt, name, pos, args),
             [Cand::Inherent(i)] => {
+                self.private_fn(*i, pos);
                 let sig = self.sigs[*i].clone();
                 let tn = self.type_name(&rt).unwrap_or_default();
                 match sig.receiver {
@@ -3201,6 +3204,7 @@ impl<'p> Checker<'p> {
             self.error("expr.name.1", pos, format!("`{tn}` has no associated function `{name}`"));
             return Ty::Err;
         };
+        self.private_fn(i, pos);
         let sig = self.sigs[i].clone();
         if sig.receiver.is_some() {
             self.args_only(args);
@@ -3317,6 +3321,7 @@ impl<'p> Checker<'p> {
             Ty::Struct(s, args) => {
                 let decl = &self.prog.structs[*s];
                 if let Some(i) = decl.fields.iter().position(|f| f.name == name) {
+                    self.private_field(*s, i, pos);
                     let binds: Vec<(usize, Ty)> =
                         self.struct_params[*s].iter().copied().zip(args.iter().cloned()).collect();
                     return subst(&self.field_types[*s][i], &binds);
@@ -4050,7 +4055,7 @@ fn was_were(n: usize) -> String {
 }
 
 /// Closest candidate by edit distance, if it's close enough to be a likely typo.
-fn suggest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
+pub(crate) fn suggest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
     let limit = (name.chars().count() / 3).max(1);
     candidates.iter().map(|c| (edit_distance(name, c), *c)).filter(|(d, _)| *d <= limit).min().map(|(_, c)| c)
 }

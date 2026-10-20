@@ -10,6 +10,9 @@
 //! - `NAME.ail` + `NAME.err`: `main` must fail (exit 1) with exactly this
 //!   error report on stderr, where `$FILE` stands for the program's path,
 //!   after printing exactly `NAME.out` if that exists.
+//! - `bootstrap/tests/cases/packages/NAME/`: a package (mod.unit.5), run as
+//!   `ail run NAME`, with the same expectations in `NAME/expected.out`,
+//!   `expected.rules`, `expected.trap` or `expected.err`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,10 +33,16 @@ fn ail_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn check_case(path: &Path) -> Result<(), String> {
-    let out_file = path.with_extension("out");
-    let rules_file = path.with_extension("rules");
-    let trap_file = path.with_extension("trap");
-    let err_file = path.with_extension("err");
+    check_run(path, &|ext| path.with_extension(ext))
+}
+
+/// Run `path`, a file or a package directory, against the expectation
+/// files that `expect` names by extension.
+fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String> {
+    let out_file = expect("out");
+    let rules_file = expect("rules");
+    let trap_file = expect("trap");
+    let err_file = expect("err");
     let name = path.display();
     if err_file.exists() {
         let out = ail().arg("run").arg(path).output().unwrap();
@@ -110,6 +119,17 @@ fn examples() {
 #[test]
 fn cases() {
     run_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases"));
+}
+
+#[test]
+fn packages() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases/packages");
+    let mut dirs: Vec<PathBuf> =
+        fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
+    dirs.sort();
+    let failures: Vec<String> =
+        dirs.iter().filter_map(|d| check_run(d, &|ext| d.join(format!("expected.{ext}"))).err()).collect();
+    assert!(failures.is_empty(), "{} package(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
 }
 
 #[test]

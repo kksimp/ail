@@ -9,6 +9,7 @@ mod diag;
 mod implicit_self;
 mod interp;
 mod lexer;
+mod modules;
 mod parser;
 
 use std::process::ExitCode;
@@ -17,8 +18,9 @@ const USAGE: &str = "\
 usage: ail <command> [--json] [args]
 
 commands:
-  run FILE      check and run an AIL program
-  check FILE    check a program without running it
+  run FILE      check and run an AIL program (with the modules it imports)
+  run DIR       check and run the package whose root module is DIR
+  check FILE    check a program (or package directory) without running it
   version       print the version
 
 options:
@@ -47,17 +49,14 @@ fn main() -> ExitCode {
 }
 
 fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
-    let src = match std::fs::read_to_string(path) {
-        Ok(s) => s,
+    // A single file, or a package of modules (mod.unit.1-5).
+    let (program, mut diags) = match modules::load(path) {
+        Ok(loaded) => loaded,
         Err(e) => {
-            eprintln!("error: can't read {path}: {e}");
+            eprintln!("error: {e}");
             return ExitCode::from(2);
         }
     };
-
-    let (tokens, mut diags) = lexer::lex(&src);
-    let (program, parse_diags) = parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
     // A string literal with an error throws off the rest of its line, so
     // report only the string's own errors there.
     let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
@@ -68,7 +67,7 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
-        diag::report(&mut diags, path, &src, json);
+        modules::report(&program.files, diags, json);
     }
     if rejected {
         return ExitCode::from(2);
@@ -77,13 +76,16 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let file = path.to_string();
     let result = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
         .spawn(move || {
+            let at = |pos| {
+                let (file, p) = modules::locate(&program.files, pos);
+                format!("{file}:{}:{}", p.line, p.col)
+            };
             interp::run(&program, &resolved).map_err(|stop| match stop {
-                interp::Stop::Trap(t) => format!("{file}:{t}"),
-                interp::Stop::Failed(report) => report.render(&file),
+                interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
+                interp::Stop::Failed(report) => report.render_with(at),
             })
         })
         .expect("spawn interpreter thread")

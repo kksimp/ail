@@ -1,0 +1,16 @@
+use lib
+use nowhere
+use lib
+use other.lib
+use std.nothing
+
+fn helper() int
+    1
+
+use late
+
+fn main()
+    lib := 3
+    x := lib
+    print(lib.missng())
+    print(fmt.thing())
