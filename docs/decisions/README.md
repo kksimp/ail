@@ -297,3 +297,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
 | [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
 | [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |
+| [0331](0331-editor-program-card-view.md) | Editor program card view (Ctrl-Shift-I) from `ail api --card --json` *(delegated)* | Accepted | 2026-10-20 |

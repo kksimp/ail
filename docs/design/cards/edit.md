@@ -1,6 +1,6 @@
 # edit
 entry: main in edit.ail
-tests: 50 (`ail test` lists them)
+tests: 51 (`ail test` lists them)
 
 ## (root)
 ```
@@ -129,6 +129,10 @@ fn json_pairs(Json) str
 fn trace_hits(str, str, str) List[Hit]
 fn failure_hits(str, str) List[Hit]
 fn parse_coverage(str) Set[int]
+struct Source
+fn declared_at(List[Source], str) Loc?
+fn card_hits(Json, List[Source]) List[Hit]
+fn card_item(mut List[Hit], Json, List[Source], int, Loc) [mutates]
 fn list_files(str, int, int) List[str] [fs io]
 fn fuzzy(str, str) bool
 fn window_main(mut Editor, List[str]) [env fs io mutates proc ui]
@@ -144,4 +148,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~2990); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3055); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
