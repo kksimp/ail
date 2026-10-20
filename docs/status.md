@@ -39,6 +39,9 @@ are implemented; `docs/language-card.md` is the whole language in under 4,000
 tokens. Linux selftest passes; macOS verification is pending.
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
+Lane 12 added `tools/edit/edit.ail`, a code editor written in AIL with a
+headless, tested core that drives `ail check --json`, fixes, `ail explain` and
+`ail api`; its window front end waits for `std.ui` (ADRs 0180–0181).
 
 ## Design topics
 
@@ -99,4 +102,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-046).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-048).
