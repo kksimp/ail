@@ -31,6 +31,8 @@ progress on ten parallel lanes (semantic API, effects and capabilities,
 standard modules, user modules, tests, formatter, conformance harness,
 interpreter performance). Lane 5 added `std.json` (`Json`, `parse_json`,
 `to_text`, accessors) to the prelude, read on demand (ADR 0161–0162).
+Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
+capability denial with `ail run --deny` (ADRs 0163–0165).
 
 ## Design topics
 
@@ -60,7 +62,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 17 | Metaprogramming | — | | |
 | 18 | Compile-time execution | — | | |
 | 19 | AST/IR architecture | — | | |
-| 20 | AI semantic API | D (timing) + Q | [0024](decisions/0024-semantic-api-from-stage-2.md) | |
+| 20 | AI semantic API | D (timing, effects) + Q; I+T (effects, `@pure`, `--deny`) | [0024](decisions/0024-semantic-api-from-stage-2.md), [0163](decisions/0163-inferred-effect-sets.md), [0164](decisions/0164-pure-functions.md), [0165](decisions/0165-capability-denial.md) | `eff.*` |
 | 21 | Standard library architecture | D (collections, strings, print) + Q | [0088](decisions/0088-entry-point-and-print.md), [0089](decisions/0089-strings.md), [0090](decisions/0090-collections.md), [0116](decisions/0116-core-library-basics.md), [0124](decisions/0124-string-split-and-to-int.md), [0131](decisions/0131-maps-and-sets.md), [0134](decisions/0134-characters.md), [0135](decisions/0135-string-literals-and-methods.md), [0136](decisions/0136-list-methods-and-slices.md), [0137](decisions/0137-integer-methods-and-min-max.md), [0143](decisions/0143-empty-literals-typed-by-use.md) | `type.str.*`, `type.coll.*` |
 | 22 | Runtime architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0020](decisions/0020-linux-no-libc.md), [0026](decisions/0026-hardware-feature-acceleration.md) | |
 | 23 | Compiler architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0010](decisions/0010-no-llvm-backend.md), [0015](decisions/0015-always-whole-program-incremental.md), [0017](decisions/0017-no-c-emission.md), [0018](decisions/0018-optimizing-backend-from-start.md), [0022](decisions/0022-staged-self-hosting.md), [0023](decisions/0023-rust-bootstrap.md) | |

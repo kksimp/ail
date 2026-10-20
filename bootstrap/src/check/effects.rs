@@ -11,9 +11,9 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-// The effects (eff.infer.1) are `io`, `fail`, `mutates`, `unsafe` and
-// `spawn`; the bootstrap doesn't parse `unsafe` or `spawn` yet, so nothing
-// gives those two.
+/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` or
+/// `spawn` yet, so nothing gives those two.
+const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
@@ -53,18 +53,18 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
 /// The inferred effects of a whole program.
 pub struct Effects<'p> {
     prog: &'p Program,
-    /// Per node (functions, then constants): each effect it has directly,
+    /// Per function: each effect it has directly,
     /// with the source that gives it (`print`, `fs.write_text`, `T ! E`).
     direct: Vec<BTreeMap<&'static str, String>>,
-    /// Per node: the functions and constants it calls, in order.
+    /// Per function: the functions it may call, in order.
     calls: Vec<Vec<usize>>,
-    /// Per node: the closed effect set (eff.infer.3).
+    /// Per function: the closed effect set (eff.infer.3).
     sets: Vec<BTreeSet<&'static str>>,
 }
 
 impl<'p> Effects<'p> {
     pub fn infer(prog: &'p Program, resolved: &Resolved) -> Self {
-        let nodes = prog.fns.len() + prog.consts.len();
+        let nodes = prog.fns.len();
         let mut w = Walker {
             prog,
             resolved,
@@ -99,19 +99,8 @@ impl<'p> Effects<'p> {
             direct.push(std::mem::take(&mut w.direct));
             calls.push(std::mem::take(&mut w.calls));
         }
-        for c in &prog.consts {
-            w.expr(&c.value);
-            direct.push(std::mem::take(&mut w.direct));
-            calls.push(std::mem::take(&mut w.calls));
-        }
-        // mod.const.1: constants are computed before `main` runs, so `main`
-        // has their effects.
-        if let Some(&main) = w.fns.get("main") {
-            calls[main].extend(prog.fns.len()..nodes);
-        }
-        for c in &mut calls {
-            c.dedup();
-        }
+        // Constants need no walk: a constant expression calls no function
+        // and runs no user code (mod.const.2-3, ADR 0132).
         // eff.infer.3: the least fixed point.
         let mut sets: Vec<BTreeSet<&'static str>> = direct.iter().map(|d| d.keys().copied().collect()).collect();
         loop {
@@ -140,13 +129,10 @@ impl<'p> Effects<'p> {
     }
 
     fn node_name(&self, i: usize) -> String {
-        match self.prog.fns.get(i) {
-            Some(f) => display_name(self.prog, f),
-            None => self.prog.consts[i - self.prog.fns.len()].name.clone(),
-        }
+        display_name(self.prog, &self.prog.fns[i])
     }
 
-    /// The shortest chain of calls from node `from` to the source of effect
+    /// The shortest chain of calls from function `from` to the source of effect
     /// `e`, e.g. `main -> save -> fs.write_text` (eff.pure.1, eff.cap.1).
     pub fn chain(&self, from: usize, e: &str) -> String {
         let mut prev: Vec<Option<usize>> = vec![None; self.sets.len()];
@@ -519,8 +505,9 @@ pub fn parse_deny(list: &str) -> Result<Vec<&'static str>, String> {
         } else if let Some(&cap) = CAPABILITIES.iter().find(|c| **c == name) {
             out.push(cap);
         } else {
+            let rule = if EFFECT_NAMES.contains(&name) { "eff.cap.3" } else { "eff.cap.2" };
             return Err(format!(
-                "`{name}` is not a capability; `--deny` takes a comma-separated list of {} or `all` (eff.cap.2)",
+                "`{name}` is not a capability; `--deny` takes a comma-separated list of {} or `all` ({rule})",
                 CAPABILITIES.join(", ")
             ));
         }
@@ -593,14 +580,6 @@ mod tests {
     }
 
     #[test]
-    fn deny_sees_constants() {
-        let (prog, resolved) = front("NOW := time.now_ms()\nfn main()\n    print(1)\n");
-        let d = check_denied(&prog, &resolved, CAPABILITIES);
-        assert_eq!(d.len(), 1);
-        assert_eq!(d[0].message, "the program reaches the denied capability `clock`: main -> NOW -> time.now_ms");
-    }
-
-    #[test]
     fn pure_violation_names_each_chain() {
         let src = "fn main()\n    print(f(1))\n@pure fn f(x int) int\n    log(x)\n    save(x)\n    x\nfn log(x int)\n    print(x)\nfn save(n int)\n    fs.write_text(\"out.txt\", \"{n}\")\n";
         let (prog, resolved) = front(src);
@@ -624,7 +603,8 @@ mod tests {
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
         assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc"]);
-        assert!(parse_deny("io").unwrap_err().contains("not a capability"));
+        assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
+        assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }
 
     #[test]
