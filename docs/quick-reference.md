@@ -513,13 +513,37 @@ fn main() !
 ## Tests and assertions
 
 ```ail
-@test fn doubles()           # `@test` on the same line; no parameters
+@test fn doubles()           # `@test` on the same line
     assert_eq(double(4), 8)  # traps showing both values if unequal
     assert(double(1) == 2)   # traps if false
 ```
 
 A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 `assert` and `assert_eq` also work in ordinary code (a failure traps).
+
+A test with parameters is a **property**: `ail test` runs it on generated
+inputs (`--cases N`, default 100; `--seed S` replays), and shrinks a failure
+to the smallest input, printed as AIL literals. Parameters may be `int`,
+`float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, and structs
+and enums made of those.
+
+```ail fragment
+@test fn add_commutes(a int, b int)
+    assert_eq(a + b, b + a)
+```
+
+A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
+`# => text` after a `print` asserts its output:
+
+```text
+## Doubles a number.
+##
+## ```ail
+## print(double(4))
+## # => 8
+## ```
+fn double(x int) int
+```
 
 ## Effects
 

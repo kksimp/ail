@@ -1,0 +1,17 @@
+struct Box[T]
+    item T
+
+trait Shape
+    fn area(self) int
+
+@test fn generic(b Box[int])
+    assert(true)
+
+@test fn trait_object(s any Shape)
+    assert(true)
+
+@test fn closure_free(n int, m Map[str, Box[int]])
+    assert(true)
+
+fn main()
+    print("ok")

@@ -1,0 +1,7 @@
+{"test":"plain","status":"pass","line":54,"col":10,"message":""}
+{"test":"doc:double","status":"pass","line":6,"col":1,"message":""}
+{"test":"doc:double#2","status":"pass","line":13,"col":1,"message":""}
+{"test":"doc:Counter.next","status":"pass","line":21,"col":1,"message":""}
+{"test":"doc:wrong","status":"fail","line":39,"col":1,"message":"trap[test.doc.2]: output differs: expected [\"5\"], found [\"4\"]"}
+{"test":"doc:fails","status":"fail","line":49,"col":14,"message":"trap[test.assert.1]: assertion failed: left is 4, right is 5"}
+{"summary":true,"passed":4,"failed":2}

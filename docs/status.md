@@ -37,6 +37,7 @@ Overnight 2026-10-20 (lane 9, ADRs 0172–0174): the spec conformance harness
 specifications in interpolation (`{x:>8}`, `{r:.2}`, `{n:0>4x}`, resolves OQ-041)
 are implemented; `docs/language-card.md` is the whole language in under 4,000
 tokens. Linux selftest passes; macOS verification is pending.
+Lane 25 added property tests (`@test` with parameters, `--cases`, `--seed`, shrinking) and doc examples as tests (ADRs 0198–0201; spec `test.prop.*`, `test.doc.*`).
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
 interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
@@ -85,7 +86,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 25 | Optimization strategy | D (partial) + Q | [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0012](decisions/0012-memory-rd-tracks.md), [0013](decisions/0013-compiler-chosen-layout.md) | `plat.isa.*` |
 | 26 | Debugging/profiling architecture | D (partial) + Q | [0016](decisions/0016-optimized-and-observable-debugging.md), [0021](decisions/0021-debug-info-formats.md) | |
 | 27 | Build system | D (partial) + Q | [0015](decisions/0015-always-whole-program-incremental.md) (incremental cache), [0031](decisions/0031-hosts-and-cross-compilation.md) (hosts and cross-compilation) | |
-| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating), [0029](decisions/0029-token-efficiency-benchmarks.md) and [0030](decisions/0030-performance-benchmarks.md), [0036](decisions/0036-drag-race-c-styles.md) (benchmarks), [0032](decisions/0032-keep-rust-interpreter-as-oracle.md) (oracle), [0167](decisions/0167-test-functions-and-ail-test.md) and [0168](decisions/0168-assert-and-assert-eq.md) (`@test`, `ail test`, `assert`; I+T in the bootstrap) | [19](spec/19-testing.md) |
+| 28 | Testing strategy | D (partial) + Q | [0002](decisions/0002-normative-spec-with-rule-ids.md) (spec examples as conformance tests), [0019](decisions/0019-miscompilation-defence.md) (miscompilation defence), [0027](decisions/0027-ci-gating-all-targets.md) (CI gating), [0029](decisions/0029-token-efficiency-benchmarks.md) and [0030](decisions/0030-performance-benchmarks.md), [0036](decisions/0036-drag-race-c-styles.md) (benchmarks), [0032](decisions/0032-keep-rust-interpreter-as-oracle.md) (oracle), [0167](decisions/0167-test-functions-and-ail-test.md) and [0168](decisions/0168-assert-and-assert-eq.md) (`@test`, `ail test`, `assert`; I+T in the bootstrap), [0198](decisions/0198-test-properties.md)–[0201](decisions/0201-doc-example-output-comments.md) (property tests, shrinking, doc examples; I+T) | [19](spec/19-testing.md) |
 
 ## Project process
 

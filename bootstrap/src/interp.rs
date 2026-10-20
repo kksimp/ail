@@ -20,7 +20,9 @@ mod builtins;
 mod stdlib;
 
 pub use stdlib::set_program;
+mod prop;
 mod testing;
+pub use prop::PropInfo;
 pub use testing::run_tests;
 
 use builtins::{Key, Table, map_value};

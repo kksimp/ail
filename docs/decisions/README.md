@@ -180,3 +180,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
+| [0198](0198-test-properties.md) | Run a test with parameters as a property *(delegated)* | Accepted | 2026-10-20 |
+| [0199](0199-property-seeds-and-shrinking.md) | Seed properties from the test name and shrink failures *(delegated)* | Accepted | 2026-10-20 |
+| [0200](0200-doc-examples-as-tests.md) | Run doc-comment examples as tests *(delegated)* | Accepted | 2026-10-20 |
+| [0201](0201-doc-example-output-comments.md) | Assert example output with `# => text` comments *(delegated)* | Accepted | 2026-10-20 |

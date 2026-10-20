@@ -36,13 +36,14 @@ impl<'p> Checker<'p> {
                 Some((f.pos, "a test is a plain top-level function, not a method"))
             } else if !f.generics.is_empty() {
                 Some((f.generics[0].pos, "a test has no type parameters"))
-            } else if !f.params.is_empty() {
-                Some((f.params[0].pos, "a test takes no parameters"))
             } else {
                 None
             };
             if let Some((pos, msg)) = shape {
                 self.error_help("test.attr.2", pos, msg, "write `@test fn name()`");
+            }
+            if shape.is_none() {
+                self.check_prop_params(f);
             }
             if let Some(ret) = &f.ret
                 && !matches!(&ret.kind, TypeKind::Fallible { ok: None, .. })
@@ -54,6 +55,58 @@ impl<'p> Checker<'p> {
                     "write `@test fn name()`, or `@test fn name() !` if it can fail",
                 );
             }
+        }
+    }
+
+    /// test.prop.1-2: a test with parameters is a property, and each
+    /// parameter's type must be one `ail test` can generate.
+    fn check_prop_params(&mut self, f: &FnDecl) {
+        for p in &f.params {
+            let mut why = None;
+            if p.mutable {
+                why = Some("a property's parameters aren't `mut`".to_string());
+            } else if let Some(bad) = self.ungeneratable(&p.ty, &mut Vec::new()) {
+                why = Some(format!("`ail test` can't generate values of type `{bad}`"));
+            }
+            if let Some(msg) = why {
+                self.error_help(
+                    "test.prop.2",
+                    p.pos,
+                    msg,
+                    "use `int`, `float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, or structs and enums made of those",
+                );
+            }
+        }
+    }
+
+    /// The first part of `t` that can't be generated (test.prop.2), as written.
+    fn ungeneratable(&self, t: &crate::ast::TypeRef, seen: &mut Vec<String>) -> Option<String> {
+        match &t.kind {
+            TypeKind::Optional(inner) => self.ungeneratable(inner, seen),
+            TypeKind::Named { name, args } => match name.as_str() {
+                "int" | "i64" | "float" | "f64" | "str" | "char" | "bool" if args.is_empty() => None,
+                "List" | "Set" | "Map" => args.iter().find_map(|a| self.ungeneratable(a, seen)),
+                _ if !args.is_empty() => Some(name.clone()),
+                _ if seen.contains(name) => None,
+                _ => {
+                    seen.push(name.clone());
+                    if let Some(s) = self.prog.structs.iter().find(|s| s.name == *name) {
+                        if s.is_error || !s.generics.is_empty() {
+                            return Some(name.clone());
+                        }
+                        return s.fields.iter().find_map(|f| self.ungeneratable(&f.ty, seen));
+                    }
+                    if let Some(e) = self.prog.enums.iter().find(|e| e.name == *name) {
+                        if e.is_error || !e.generics.is_empty() {
+                            return Some(name.clone());
+                        }
+                        return e.variants.iter().flat_map(|v| &v.fields).find_map(|f| self.ungeneratable(&f.ty, seen));
+                    }
+                    Some(name.clone())
+                }
+            },
+            TypeKind::Any(tr) => Some(format!("any {tr}")),
+            TypeKind::Fallible { .. } => Some("a fallible type".to_string()),
         }
     }
 
