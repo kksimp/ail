@@ -44,6 +44,8 @@ commands:
   explain RULE  print a spec rule, its ADRs and an example
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
+  api --card [--budget N] DIR|FILE
+                a program's card: modules, signatures, tests, manifest, examples
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5

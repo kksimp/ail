@@ -23,6 +23,7 @@
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
 ./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
+./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
 ./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff

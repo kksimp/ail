@@ -9,6 +9,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **ADR** | Architecture Decision Record: one file per design decision in `docs/decisions/`. See ADR 0001. |
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
 | **Agent-tool corpus** | The benchmark programs of the kind an AI agent writes when operating a computer (`logscan`, `tasks`, `build`, and since ADR 0280 `snapdiff` and `csvreport`), each with a Python twin, measured for tokens and speed. See ADRs 0217 and 0218. |
+| **Card (program card)** | `ail api --card`: one Markdown page of a program or package (entry, tests, manifest, examples, each module's signatures), trimmed to a token budget. The language card is the same idea for the language. See ADRs 0310 and 0311. |
+| **Agent-tool corpus** | The benchmark programs of the kind an AI agent writes when operating a computer (`logscan`, `tasks`, `build`), each with a Python twin, measured for tokens and speed. See ADRs 0217 and 0218. |
 | **Allocation ladder** | The ordered list of allocation strategies the compiler tries per site: eliminate > stack > in-place reuse > inferred arena > task-local heap > shared GC heap. See ADR 0012. |
 | **`any Trait`** | A type holding any value whose type implements `Trait`. Calls dispatch dynamically (ADR 0079). |
 | **AoS / SoA** | Array of Structs vs. Struct of Arrays: two memory layouts for collections of records. SoA often vectorises and caches better. |
