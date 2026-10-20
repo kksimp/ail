@@ -1,0 +1,8 @@
+{"test":"sha256_abc_vector","status":"pass","line":6,"col":10,"message":""}
+{"test":"crc32_check_value","status":"pass","line":12,"col":10,"message":""}
+{"test":"digests_are_stable","status":"pass","line":15,"col":10,"message":"","cases":100,"seed":11905082256786721451}
+{"test":"deflate_round_trips","status":"pass","line":19,"col":10,"message":"","cases":100,"seed":12671785746871970796}
+{"test":"gzip_round_trips","status":"pass","line":22,"col":10,"message":"","cases":100,"seed":3087256680262456789}
+{"test":"zlib_round_trips","status":"pass","line":25,"col":10,"message":"","cases":100,"seed":18102760764533424376}
+{"test":"gzip_header_is_magic","status":"pass","line":28,"col":10,"message":"","cases":100,"seed":12127722349878877100}
+{"summary":true,"passed":7,"failed":0}
