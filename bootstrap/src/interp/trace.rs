@@ -311,6 +311,7 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
             write_value(s, &f.error, budget);
         }
         Value::Handle(h) => s.push_str(&h.text()),
+        Value::Atomic(c) => s.push_str(&c.text()),
     }
 }
 

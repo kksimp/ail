@@ -18,6 +18,7 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod absent;
+mod atomic;
 mod builtins;
 mod keyfn;
 pub mod limits;
@@ -81,6 +82,8 @@ enum Value {
     Ref(Rc<RefCell<Value>>),
     /// A task, task group, channel or mutex (conc.task.1, conc.share.2-3).
     Handle(Handle),
+    /// An `Atomic[int]` or `Atomic[bool]` (conc.atomic.3): copies share it.
+    Atomic(std::sync::Arc<atomic::Cell>),
 }
 
 impl Clone for Value {
@@ -106,6 +109,7 @@ impl Clone for Value {
             Value::Fail(f) => Value::Fail(Rc::clone(f)),
             Value::Ref(c) => Value::Ref(Rc::clone(c)),
             Value::Handle(h) => Value::Handle(*h),
+            Value::Atomic(c) => Value::Atomic(std::sync::Arc::clone(c)),
         }
     }
 }
@@ -275,6 +279,7 @@ enum Target<'a> {
 enum MethodKind {
     Type(bool, usize),
     Handle(Handle),
+    Atomic,
 }
 
 /// The kind of a method receiver, and the cell when it is a `ref` (own.ref.3).
@@ -290,6 +295,7 @@ fn method_kind(v: &Value) -> Option<MethodKind> {
         Value::Struct(s, _) => Some(MethodKind::Type(false, *s)),
         Value::Enum(e, _, _) => Some(MethodKind::Type(true, *e)),
         &Value::Handle(h) => Some(MethodKind::Handle(h)),
+        Value::Atomic(_) => Some(MethodKind::Atomic),
         _ => None,
     }
 }
@@ -2378,6 +2384,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => {}
             }
         }
+        if n == "Atomic" {
+            let v = self.eval(&args[0].value, env)?;
+            return Ok(atomic::new(v));
+        }
         if matches!(n.as_str(), "TaskGroup" | "Channel" | "Mutex") {
             return self.conc_constructor(n, args, pos, env);
         }
@@ -2541,6 +2551,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Value::Fail(f) => self.describe(&f.error, pos)?,
             Value::Handle(h) => h.text(),
+            Value::Atomic(c) => c.text(),
             Value::Map(t) => {
                 let mut parts = Vec::with_capacity(t.len());
                 for (k, v) in t.entries() {
@@ -2663,6 +2674,17 @@ impl<'a, W: Write> Interp<'a, W> {
         let (is_enum, index) = match kind {
             Some(MethodKind::Type(is_enum, index)) => (is_enum, index),
             Some(MethodKind::Handle(h)) => return self.handle_method(h, name, args, pos, env),
+            Some(MethodKind::Atomic) => {
+                let cell = match &recv {
+                    Operand::Value(Value::Atomic(c)) => c.clone(),
+                    Operand::Place(p) => view(env, p, |v| match v {
+                        Value::Atomic(c) => c.clone(),
+                        _ => unreachable!("an atomic"),
+                    })?,
+                    Operand::Value(_) => unreachable!("an atomic"),
+                };
+                return self.atomic_method(cell, name, args, pos, env);
+            }
             None => return self.builtin(recv, name, args, pos, env),
         };
         let f = match site.last {
