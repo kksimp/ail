@@ -1,6 +1,6 @@
-# 22. Tool lookups: api, explain, fix
+# 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
 
-Chapter keys: `api`, `explain`, `fix`
+Chapter keys: `api`, `explain`, `fix`, `snap`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -276,3 +276,37 @@ suite fails when they differ.
 **explain.cover.4** — An entry is short enough to read in one step: the mean
 `ail explain RULE` output stays under 120 tokens
 ([ADR 0336](../decisions/0336-explain-listing-and-length.md)).
+
+## Snapshot updating
+
+**snap.update.1** — `ail test --update FILE` runs the tests of `FILE` as
+`ail test` does, and rewrites the expectations that failed so that they
+hold (`snap.update.2–5`). It prints a unified diff of each file it changed,
+then `updated N snapshots in M files`, then the test report as the tests
+now stand; the exit status follows that report
+([ADR 0395](../decisions/0395-ail-test-update-rewrites-snapshots.md)).
+
+**snap.update.2** — An `assert_eq(actual, expected)` whose `expected` is a
+literal (a string, character, number, `-` number or boolean, or a list
+literal of these) does not fail under `--update` when `actual` has a
+literal form of that shape: the literal is rewritten to it and the test
+goes on. String literals of any form are rewritten as one-line `"..."`
+literals with escapes (`lex.str.1`). Any other `assert_eq` and every
+`assert` fail as usual.
+
+**snap.update.3** — A literal reached more than once with different actual
+values (in a loop, a helper or a property) is not rewritten, and the
+assertion that found the second value fails as usual.
+
+**snap.update.4** — A doc example (`test.doc.2`) whose output differs from
+its `# =>` lines has those lines replaced by one `# =>` line per line of
+output, with the first one's indentation. An example without `# =>` lines
+is not changed.
+
+**snap.update.5** — When `NAME.out` exists next to `FILE`, it is replaced by
+what `ail run FILE` writes to standard output.
+
+**snap.update.6** — `--dry-run` prints the same report and writes nothing
+(`would update ...`). With `--json` each change is a line
+`{"snapshot":"assert_eq"|"doc"|"out","file","line","col","old","new"}` and
+the summary is `{"snapshots":true,"dry_run","updated","files","skipped"}`.
