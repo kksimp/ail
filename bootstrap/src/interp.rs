@@ -2243,6 +2243,13 @@ impl<'a, W: Write> Interp<'a, W> {
                             }
                         }
                     }
+                    // expr.match.11: a false guard falls through to the next arm.
+                    if let Some(g) = &arm.guard
+                        && !matches!(self.eval(g, env)?, Value::Bool(true))
+                    {
+                        env.truncate(mark);
+                        continue;
+                    }
                     let r = self.block(&arm.body, env);
                     env.truncate(mark);
                     return r;
@@ -2283,6 +2290,21 @@ impl<'a, W: Write> Interp<'a, W> {
                 (Literal::Bool(a), Value::Bool(b)) => a == b,
                 _ => false,
             },
+            // expr.match.12
+            (Pattern::Range { lo, hi, inclusive, .. }, v) => {
+                let at = match (lo, v) {
+                    (Literal::Int(_), Value::Int(x)) => i128::from(*x),
+                    (Literal::Int(_), Value::Num(k, x)) => k.decode(*x),
+                    (Literal::Char(_), Value::Char(c)) => i128::from(*c as u32),
+                    _ => return false,
+                };
+                let end = |l: &Literal| match l {
+                    Literal::Int(n) => i128::from(*n),
+                    Literal::Char(c) => i128::from(*c as u32),
+                    _ => 0,
+                };
+                end(lo) <= at && (at < end(hi) || (*inclusive && at == end(hi)))
+            }
             _ => false,
         }
     }

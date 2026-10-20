@@ -738,6 +738,9 @@ impl<'p, 'r> Walker<'p, 'r> {
             Expr::Match { scrutinee, arms, .. } => {
                 self.expr(scrutinee);
                 for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&arm.body);
                 }
             }
