@@ -39,7 +39,9 @@ libSystem but import nothing, and are signed ad hoc by the backend
 
 All values are 64-bit and little-endian (ADR 0007). In registers and in list
 elements each scalar takes 8 bytes, except that a `List[bool]` element takes
-one byte, 0 or 1 (ADR 0391).
+one byte, 0 or 1 (ADR 0391). A list's length never decreases in the native
+subset, and the optimiser relies on it (ADR 0578): an operation that
+shortens a list must be added to the optimiser's decision first.
 
 | Type | Layout |
 |---|---|
@@ -181,7 +183,9 @@ by zero), `expr.arith.1` (overflow), per `expr.arith` in spec chapter 5.
 with every program, provides `rt.init`, `rt.exit`, `rt.alloc`, `rt.trap`,
 `rt.out_str`, `rt.out_int`, `rt.out_float`, `rt.out_bool`, `rt.out_nl`,
 `rt.out_list_int`/`_float`/`_bool`, `rt.list_new`, `rt.list_push`,
-`rt.list_pushf` and `rt.list_copy`; `print` writes its pieces straight into
+`rt.list_pushf`, `rt.list_copy` and `rt.list_reserve(xs, lo, hi, per, size)`
+(room for `(hi - lo) * per` more elements, inserted by the optimiser before
+loops that fill a list, ADR 0579); `print` writes its pieces straight into
 the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 (`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,

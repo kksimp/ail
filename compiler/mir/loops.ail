@@ -99,14 +99,21 @@ pub fn is_innermost(loops List[LoopInfo], lp LoopInfo) bool
     true
 
 ## A loop `while p < hi` that adds 1 to `p` on every path back, and leaves
-## only from its header, on the false edge.
+## only from its header, on the false edge. The bound `hi` is defined
+## outside the loop, or is a second header parameter `q` that subtracts 1 on
+## every path back (`while i < j` with `i += 1` and `j -= 1`), so that
+## `0 <= p < q <= start of q` inside the body.
 pub struct Counted
     ## The header parameter, its index, and its start (a constant >= 0).
     pub p int
     pub k int
     pub lo int
-    ## The bound, defined outside the loop.
     pub hi int
+    ## The second parameter, or -1.
+    pub q int
+    ## A value defined outside the loop that `p` stays below in the body:
+    ## `hi`, or `q`'s start.
+    pub bound int
     pub body int
     pub exit int
     ## The edge of the header's branch that leaves.
@@ -120,18 +127,31 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
     if t.kind != "branch" or not lp.member[t.targets[0]] or lp.member[t.targets[1]]
         return none
     cmp := inst_of(f, defs, t.cond)?
-    if cmp.op != "lt" or defs[t.cond].block != lp.header
+    if (cmp.op != "lt" and cmp.op != "gt") or defs[t.cond].block != lp.header
         return none
-    p := cmp.args[0]
-    hi := cmp.args[1]
-    if lp.member[defs[hi].block]
-        return none
-    mut k := -1
-    for j in 0..h.params.len()
-        if h.params[j] == p
-            k = j
+    p := if cmp.op == "lt" then cmp.args[0] else cmp.args[1]
+    hi := if cmp.op == "lt" then cmp.args[1] else cmp.args[0]
+    k := param_index(h, p)
     if k < 0
         return none
+    mut q := -1
+    mut bound := hi
+    if lp.member[defs[hi].block]
+        kq := param_index(h, hi)
+        if kq < 0 or hi == p
+            return none
+        q = hi
+        bound = f.blocks[lp.pre].term.args[0][kq]
+        if lp.member[defs[bound].block]
+            return none
+        for l in lp.latches
+            lt := f.blocks[l].term
+            for e in 0..lt.targets.len()
+                if lt.targets[e] != lp.header
+                    continue
+                dec := inst_of(f, defs, lt.args[e][kq])?
+                if dec.op != "sub" or dec.args[0] != q or const_of(f, defs, dec.args[1]) != 1
+                    return none
     lo := f.blocks[lp.pre].term.args[0][k]
     start := const_of(f, defs, lo)?
     if start < 0
@@ -144,4 +164,20 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
             step := inst_of(f, defs, lt.args[e][k])?
             if step.op != "add" or step.args[0] != p or const_of(f, defs, step.args[1]) != 1
                 return none
-    Counted(p: p, k: k, lo: lo, hi: hi, body: t.targets[0], exit: t.targets[1], exit_edge: 1)
+    Counted(
+        p: p,
+        k: k,
+        lo: lo,
+        hi: hi,
+        q: q,
+        bound: bound,
+        body: t.targets[0],
+        exit: t.targets[1],
+        exit_edge: 1,
+    )
+
+fn param_index(h Block, v int) int
+    for j in 0..h.params.len()
+        if h.params[j] == v
+            return j
+    -1

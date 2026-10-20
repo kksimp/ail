@@ -64,6 +64,38 @@ vary by about 10% between runs; nbody's 1.93 is within that of its earlier
 mandelbrot are within 1.7x. fannkuch, matmul, binarytrees and fasta stay
 at 3–5.6x.
 
+## After bounds-check elimination and list sizing (ADRs 0577–0579)
+
+Lane 176. Counted loops are versioned with guards so their list accesses
+lose their checks, row loads are hoisted into the guard, two-pointer loops
+(`while i < j`) are covered, accesses that an earlier access or a `push`
+vouches for lose theirs, and a list filled by a counted loop is sized first.
+
+| program | size | native | clang -O2 | gcc -O2 | python | native/clang | native/gcc | native/python |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| collatz | 1000000 | 0.347 | 0.158 | 0.244 | 10.612 | 2.19 | 1.42 | 0.03 |
+| nbody | 1000000 | 0.091 | 0.054 | 0.058 | 6.351 | 1.68 | 1.57 | 0.01 |
+| spectralnorm | 1000 | 0.076 | 0.052 | 0.054 | 8.080 | 1.46 | 1.41 | 0.01 |
+| mandelbrot | 1000 | 0.108 | 0.083 | 0.079 | 4.263 | 1.30 | 1.36 | 0.03 |
+| fannkuch | 10 | 0.609 | 0.234 | 0.220 | 9.157 | 2.60 | 2.76 | 0.07 |
+| sieve | 30000000 | 0.245 | 0.237 | 0.239 | 5.890 | 1.03 | 1.02 | 0.04 |
+| matmul | 400 | 0.138 | 0.049 | 0.069 | 4.673 | 2.83 | 2.01 | 0.03 |
+| binarytrees | 17 | 0.789 | 0.179 | 0.135 | 5.453 | 4.41 | 5.84 | 0.14 |
+| fasta | 5000000 | 0.175 | 0.060 | 0.069 | 1.176 | 2.91 | 2.53 | 0.15 |
+
+Instructions retired at the `.args` sizes (callgrind), before → after:
+fannkuch 442M → 296M, matmul 223M → 157M, sieve 144M → 136M, binarytrees
+381M → 375M, fasta 75M → 74M, collatz 188M (unchanged). Wall times on this
+shared VM vary by 10–20% between runs: fannkuch ran 0.84–0.94 s before and
+0.51–0.61 s after, matmul 0.20 s before and 0.13–0.14 s after.
+
+What is left against C: the row of `b[k][j]` in matmul keeps its length
+check (the rows' lengths aren't known), the data pointer and length are
+reloaded on every access (new MIR operations and code generator changes),
+`n` still spills in matmul's inner loop, and binarytrees and fasta are
+allocation and call bound, not check bound. `ail build` takes about 0.1 s
+longer per program.
+
 ## perfbench sizes (`tools/perfbench/run.sh --all`, min of 5)
 
 The `.args` sizes, now passed to every column. C finishes most in under
@@ -124,10 +156,10 @@ compiler), and build the compiler natively once the subset covers it
 Done in ADR 0391: constant folding, the `% 2^k` mask, overflow checks ruled
 out by a dominating bound, inline `push`, inlining of leaf functions. Left:
 
-1. **Bounds checks in loops** (matmul, fannkuch): hoist the check over
-   `0..xs.len()` and index without it; keep row pointers in registers.
-2. **List allocation** (fannkuch, binarytrees): start lists at their
-   literal or known size; free short-lived lists once a collector exists.
+1. **Bounds checks in loops** (matmul, fannkuch): done in ADR 0577. Left:
+   keep the data pointer and length in registers across the loop.
+2. **List allocation** (fannkuch, binarytrees): sized before counted loops
+   in ADR 0579. Left: free short-lived lists once a collector exists.
 3. **Callee-saved registers** (binarytrees): save only the ones a function
    uses on the paths that need them.
 4. **Division by a power of two** as a shift with a sign fix (collatz).

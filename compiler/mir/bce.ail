@@ -188,6 +188,8 @@ fn reserve_lists(f Func) Func
     mut g := f
     for lp in loops
         c := counted(f, defs, lp) else continue
+        if c.q >= 0
+            continue
         mut lists := List[int]()
         mut per := List[int]()
         mut size := List[int]()
@@ -376,6 +378,10 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
                 needs.push(Need(kind: "index", x: x, arg: 0))
                 relax.add("{b}:{k}")
                 continue
+            if c.q >= 0 and idx == c.q
+                needs.push(Need(kind: "off", x: x, arg: 1))
+                relax.add("{b}:{k}")
+                continue
             if kc := cst(f, defs, idx)
                 if kc >= 0
                     needs.push(Need(kind: "const", x: x, arg: kc))
@@ -434,7 +440,7 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
         lens: Map[int, int](),
         zero: -1,
     )
-    hd := inst_of(f, defs, c.hi)
+    hd := inst_of(f, defs, c.bound)
     for h in 0..hoists.len()
         y := fresh_of(hoists, hidx, hoists[h].y)
         ci := fresh_of(hoists, hidx, hoists[h].c)
@@ -451,7 +457,7 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
         if d := hd
             hi_is_len = d.op == "len" and d.args[0] == nd.x
         idx := if nd.kind == "inv" then fresh_of(hoists, hidx, nd.arg) else nd.arg
-        gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.hi, hi_is_len)
+        gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
     # The last guard block enters the copy, which follows the guard blocks.
     clone_base := n + gd.blocks.len() + 1
     gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(clone_base, pre_args)))
