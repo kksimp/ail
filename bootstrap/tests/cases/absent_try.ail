@@ -1,0 +1,12 @@
+## err.prop.5: `?` on an optional in a function whose errors are inferred
+## fails with `Absent`, with the `?`'s context if it has one.
+fn port(text str) !int
+    text.to_int()? "port {text}"
+
+fn first_word(text str) !str
+    text.split(" ").first()?
+
+fn main() !
+    print(port("8080")?)
+    print(first_word("hi there")?)
+    print(port("http")?)

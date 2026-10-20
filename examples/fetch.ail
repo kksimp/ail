@@ -2,10 +2,6 @@
 # argument it asks an https URL, which the bootstrap can't reach yet (no TLS),
 # so it reports why and falls back to the copy in examples/data.
 #   ./ail run examples/fetch.ail http://127.0.0.1:8000/tasks.json
-use std.env
-use std.fs
-use std.net
-use std.path
 
 fn main() !
     url := env.args().first() else "https://example.com/tasks.json"

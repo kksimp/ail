@@ -17,6 +17,7 @@ use std::rc::Rc;
 
 use std::cmp::Ordering;
 
+mod absent;
 mod builtins;
 mod keyfn;
 pub mod limits;
@@ -407,6 +408,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         mutating,
         field_slots: HashMap::default(),
         str_lits: HashMap::default(),
+        lit_mask: resolved.float_literals.iter().chain(resolved.sized_literals.keys()).fold(0, |m, p| m | 1 << (p.line & 63)),
         has_unique: prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique),
         has_defer: prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b)),
         has_moves: !resolved.moves.is_empty(),
@@ -534,6 +536,8 @@ struct Interp<'a, W: Write> {
     field_slots: HashMap<usize, Rc<[usize]>>,
     /// String literals as shared text, by the address of the literal in the program.
     str_lits: HashMap<usize, Rc<str>>,
+    /// Bit `line % 64` is set for each line holding a sized or float-typed literal, so most literals skip the tables.
+    lit_mask: u64,
     /// The program declares a unique type, so scopes release values
     /// (own.uniq.3); uses `defer` (own.defer.1); moves values (own.uniq.2).
     /// Each is off for most programs, which then pay nothing for it.
@@ -1683,7 +1687,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
                 self.eval_binary(*op, lhs, rhs, *pos, env)
             }
-            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
+            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
             Expr::Char(c, _) => Ok(Value::Char(*c)),
             Expr::Name(n, pos) if !self.has_moves || !self.resolved.moves.contains_key(pos) => match lookup(env, n) {
@@ -1750,6 +1754,11 @@ impl<'a, W: Write> Interp<'a, W> {
         let r = self.block(body, env);
         env.truncate(mark);
         return r;
+    }
+
+    #[inline(always)]
+    fn lit_maybe(&self, pos: &Pos) -> bool {
+        self.lit_mask >> (pos.line & 63) & 1 != 0
     }
 
     /// `recv.name`: a field, or a unit variant `Enum.Variant` (type.struct.2, type.enum.2).
@@ -1838,7 +1847,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     return Ok(v.clone());
                 }
             }
-            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => return Ok(Value::Int(*v)),
+            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => return Ok(Value::Int(*v)),
             _ => {}
         }
         self.eval(e, env)
@@ -1852,7 +1861,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 Some(Value::Int(v)) => Some(*v),
                 _ => None,
             },
-            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Some(*v),
+            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => Some(*v),
             _ => None,
         }
     }
@@ -1901,14 +1910,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Str(Rc::clone(self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str()))))
             }
             // type.num.13: a literal typed by context as a sized number.
-            Expr::Int(v, pos) if self.resolved.sized_literals.contains_key(pos) => {
+            Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
             }
-            Expr::Float(v, pos) if self.resolved.sized_literals.contains_key(pos) => {
+            Expr::Float(v, pos) if self.lit_maybe(pos) && self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v, 0)
             }
             // type.num.10
-            Expr::Int(v, pos) if self.resolved.float_literals.contains(pos) => Value::Float(*v as f64),
+            Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.float_literals.contains(pos) => Value::Float(*v as f64),
             Expr::Int(v, _) => Value::Int(*v),
             Expr::Float(v, _) => Value::Float(*v),
             Expr::Char(c, _) => Value::Char(*c),
@@ -1929,6 +1938,9 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Try { expr, context, pos } => {
                 let v = self.eval(expr, env)?;
                 match v {
+                    Value::None if self.resolved.absent_try.contains(pos) => {
+                        return Err(self.absent(context.as_deref(), *pos, env)?);
+                    }
                     Value::None if self.resolved.optional_try.contains(pos) => {
                         self.returned = Some((Value::None, *pos));
                         return Err(Exit::Return);

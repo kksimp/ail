@@ -1,0 +1,34 @@
+## An agent-style "fetch and diff": compare two snapshots of a directory and
+## report the files added, removed and changed, with the changed lines.
+
+fn snapshot(dir str) !Map[str, List[str]]
+    {name: fs.read_text("{dir}/{name}")?.lines() for name in fs.list_dir(dir)?}
+
+fn diff(before List[str], after List[str]) List[str]
+    mut out := ["- {line}" for line in before if not after.contains(line)]
+    out.extend(["+ {line}" for line in after if not before.contains(line)])
+    out
+
+fn main() !
+    data := "{path.dir(env.program())}/data"
+    old := snapshot("{data}/snap_old")?
+    new := snapshot("{data}/snap_new")?
+    mut changed := 0
+    for name in {n for keys in [old.keys(), new.keys()] for n in keys}.sorted()
+        before := old.get(name) else
+            print("added {name} ({new[name].len()} lines)")
+            continue
+        after := new.get(name) else
+            print("removed {name}")
+            continue
+        lines := diff(before, after)
+        if lines.len() > 0
+            changed += 1
+            print("changed {name}")
+            for line in lines
+                print("  {line}")
+    print("{changed} changed, {new.len()} files now")
+
+@test fn diffs_lines()
+    assert_eq(diff(["a", "b"], ["b", "c"]), ["- a", "+ c"])
+    assert_eq(diff(["a"], ["a"]), [])

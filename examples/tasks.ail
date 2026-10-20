@@ -1,8 +1,4 @@
 ## An agent-style task runner: load JSON tasks, run the small ones, write back.
-use std.env
-use std.fs
-use std.path
-use std.proc
 
 MAX_HOURS := 3.0
 
@@ -33,25 +29,23 @@ fn main() !
             continue
         r := proc.run("echo", ["running", task.title])? "running {task.id}"
         ran += 1
-        task.status = "done"
         if r.status != 0
             failed += 1
-            task.status = "failed"
+        task.status = if r.status == 0 then "done" else "failed"
         print("{task.id}: {r.out.trim()}")
         updated.push(task.to_json())
     out := Json.Obj([JsonMember(key: "tasks", value: Json.Arr(updated))]).to_text()
     fs.write_text("{dir}/tasks.out.json", out)?
     back := parse_json(fs.read_text("{dir}/tasks.out.json")?)?
     fs.remove("{dir}/tasks.out.json")?
-    count := back.arr("tasks") else []
-    print("ran {ran}, failed {failed}, wrote {count.len()} tasks ({out.chars().len()} chars)")
+    print("ran {ran}, failed {failed}, wrote {back.arr("tasks")?.len()} tasks ({out.len()} chars)")
 
 @test fn loads_a_task()
-    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}") else return
-    t := Todo.from_json(doc) else return
+    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}")?
+    t := Todo.from_json(doc)?
     assert_eq(t.title, "t")
     assert_eq(t.hours, 2.0)
-    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}") else return
+    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}")?
     missing := Todo.from_json(bad) else err
         assert_eq(err.message, "missing title")
         return

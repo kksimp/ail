@@ -1,0 +1,3 @@
+{"test":"halves","status":"pass","line":5,"col":10,"message":""}
+{"test":"odd_fails","status":"fail","line":9,"col":22,"message":"error: a value is absent"}
+{"summary":true,"passed":1,"failed":1}

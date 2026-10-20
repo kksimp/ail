@@ -84,10 +84,7 @@ fn Lexer.token(mut self) Token ! MiniError
         while peek().is_alnum() or peek() == '_'
             advance()
         word := text_from(start)
-        kind := if KEYWORDS.contains(word)
-            TokKind.Keyword
-        else
-            Ident
+        kind := if KEYWORDS.contains(word) then TokKind.Keyword else Ident
         return Token(kind, word, pos)
     if c == '"'
         return string(pos)
@@ -245,10 +242,7 @@ fn Parser.if_statement(mut self) Stmt ! MiniError
     mut else_body := []
     if at("else")
         advance()
-        else_body = if at("if")
-            [if_statement()?]
-        else
-            block()?
+        else_body = if at("if") then[if_statement()?] else block()?
     If(pos, cond, then_body, else_body)
 fn Parser.expression(mut self, level int) Expr ! MiniError
     if level == BINARY_LEVELS.len()

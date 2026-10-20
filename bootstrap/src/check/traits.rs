@@ -212,6 +212,7 @@ impl<'p> Checker<'p> {
                     Con::Enum(e) => is_prelude(prog.enums[e].pos),
                     _ => true,
                 };
+                // The prelude's own impls (an error type's message, err.msg.1) are allowed.
                 if is_prelude(prog.traits[t].pos) && built_in_type && !is_prelude(imp.pos) {
                     self.error(
                         "trait.impl.4",

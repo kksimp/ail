@@ -150,3 +150,35 @@ Slot-resolved locals (about 5% of a run, [ADR 0176](../decisions/0176-keep-name-
 builtin), a 24-byte `Value`, in-place string appends (`s = "{s}x"` copies the
 string, which CPython avoids by reusing its buffer when the count is one), and
 the bytecode form, which belongs in Stage 3 and not in the oracle.
+
+## Round 3: where the time goes now (lane 61)
+
+Profile of `examples/interp.ail` (callgrind, 783M instructions, plan branch
+at ecd6d75), self cost of the top ten, as a share of the run:
+
+| # | Cost | Share | What it is |
+|---|---|---|---|
+| 1 | `eval` | 9.1% | the hot expression arms and the leaf reads |
+| 2 | `method_call` | 5.7% | site-cache lookup, receiver kind, `ref` cell and handle checks |
+| 3 | malloc, free | 5.9% | struct and enum construction allocates twice (`Rc` and its `Vec`) |
+| 4 | `stmt` | 5.1% | statement dispatch, `let`, watch and `else` checks |
+| 5 | `eval_general` | 4.4% | construction, `match`, interpolation |
+| 6 | `invoke` | 3.2% | operand preparation, env pool |
+| 7 | `eval_binary` | 3.0% | operators that are not int-on-int |
+| 8 | `block` | 2.8% | scope marks, task and unique checks |
+| 9 | `Value` drop glue | 2.3% | releasing `Rc` fields when an environment is cleared |
+| 10 | `run_body`, `matches` | 3.4% | frame set-up, enum pattern tests |
+
+No entry is above 10%. The next step per cost is not another local fast
+path: a name scan is about 5% inside `eval`, one hash lookup per site is
+under 3%, and removing the float-literal probes from the literal arms saved
+0.4% on `interp` and 3% on a collatz loop. To get from parity to the
+1.5x-faster target the work has to remove whole layers (name search, `Flow`
+results, `Rc` indirection and per-node dispatch together), which is what a
+compiled form does.
+
+Measured and rejected this round: fat LTO with one codegen unit (collatz 12%
+faster by wall time, `interp` 8% slower, so no net win).
+
+Kept: a one-word mask over the lines that hold sized or float-typed literals,
+so the common int literal skips two table probes ([ADR 0297](../decisions/0297-no-bytecode-tier-in-the-oracle.md)).
