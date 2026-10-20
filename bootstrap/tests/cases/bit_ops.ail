@@ -1,0 +1,14 @@
+fn main()
+    flags := 5.bit_or(8)
+    print(flags)
+    print(flags.bit_and(4))
+    print(flags.bit_xor(1))
+    print(0.bit_not())
+    print(1.shl(62))
+    print(1.shl(63))
+    print((-8).shr(1))
+    print(1024.shr(3))
+    mut total := 0
+    for i in 0..64
+        total = total.bit_xor(i.shl(i.bit_and(3)))
+    print(total)

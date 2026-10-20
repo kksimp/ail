@@ -24,6 +24,10 @@ pub struct Program {
     /// The capabilities each package manifest grants (eff.cap.4-5,
     /// `packages.rs`). Empty without an `ail.pkg`.
     pub grants: Vec<Grant>,
+    /// The packages whose manifests allow `unsafe` code (unsafe.block.3),
+    /// the root package as `""`. `None` without any `ail.pkg`: a program
+    /// with no manifest may use `unsafe`.
+    pub unsafe_allowed: Option<Vec<String>>,
     /// The code derive generators wrote, one per deriving `impl`; each is
     /// a file of `files` (ct.gen.1-4, `derive.rs`).
     pub generated: Vec<Generated>,
@@ -102,6 +106,22 @@ impl Program {
     /// for the root module and the prelude.
     pub fn module_at(&self, pos: Pos) -> &str {
         self.file_at(pos).map_or("", |f| f.module.as_str())
+    }
+
+    /// The package a position belongs to: a dependency's name, or `""` for
+    /// the root package (unsafe.block.3, eff.cap.4).
+    pub fn package_at(&self, pos: Pos) -> &str {
+        let head = self.module_at(pos).split('.').next().unwrap_or("");
+        if self.grants.iter().any(|g| !g.own && g.package == head) { head } else { "" }
+    }
+
+    /// Whether the manifests let the package at `pos` contain `unsafe` code
+    /// (unsafe.block.3).
+    pub fn unsafe_ok_at(&self, pos: Pos) -> bool {
+        match &self.unsafe_allowed {
+            None => true,
+            Some(list) => is_prelude(pos) || list.iter().any(|p| p == self.package_at(pos)),
+        }
     }
 
     /// Whether the declaration at `pos` is marked `pub`, or is in the prelude.
@@ -257,6 +277,17 @@ pub struct FnDecl {
     /// has contracts, which the implementation inherits (contract.inh.1);
     /// an index into `Program::fns`. Set by `parser::contracts::link`.
     pub inherits: Option<usize>,
+    /// `unsafe fn`: callable only inside an `unsafe` block (unsafe.block.2).
+    pub unsafe_fn: bool,
+    /// `extern c "lib" fn`: a C function with no body (ffi.decl.2).
+    pub ext: Option<Extern>,
+}
+
+/// Where an `extern c fn` lives (ffi.decl.2, ffi.load.1).
+#[derive(Debug, Clone)]
+pub struct Extern {
+    /// The library written after `c`; `None` is the process itself.
+    pub lib: Option<String>,
 }
 
 /// `requires COND`, `ensures COND` or a struct's `invariant COND`
@@ -422,12 +453,17 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
+    /// `unsafe` and its block (unsafe.block.1); `pos` is the `unsafe`'s.
+    Unsafe {
+        body: Block,
+        pos: Pos,
+    },
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } | Stmt::Unsafe { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),

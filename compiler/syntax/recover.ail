@@ -310,7 +310,7 @@ fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
             path.push(take_name("a module name after `.`", "mod.use.1")?)
         else
             break
-    mut alias := absent[ast.Ident]()
+    mut alias := none
     if eat_kw("as")
         alias = take_name("a name after `as`", "mod.use.1")?
     if not eat_newline() and peek() != Tok.Eof

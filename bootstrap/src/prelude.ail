@@ -274,7 +274,10 @@ fn JsonParser.number(mut self) !Json
         if digits() == 0
             return fail("invalid number")
     text := chars[start..pos].join("")
-    Num(text.to_float() else return fail_at(start, "invalid number"))
+    n := text.to_float() else return fail_at(start, "invalid number")
+    if n - n != 0.0
+        return fail_at(start, "number out of range")
+    Num(n)
 
 ## Parse one JSON document (json.parse.1).
 fn parse_json(text str) Json ! JsonError
@@ -306,7 +309,7 @@ fn Json.to_text(self) str
     match self
         Null => "null"
         Bool(b) => "{b}"
-        Num(n) => "{n}"
+        Num(n) => if n - n != 0.0 then "null" else "{n}"
         Str(s) => json_quote(s)
         Arr(items) =>
             mut parts := []

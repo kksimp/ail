@@ -721,6 +721,7 @@ impl Cx<'_> {
                 self.local(var, *var_pos);
                 self.block(body);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);

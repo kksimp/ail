@@ -325,6 +325,33 @@ fn main()
 
 ## Booleans
 
+**type.opt.9** — A `mut` local declared with `:=` from `none` has no type
+until its first assignment `x = e`: it takes the type `T?`, where `T` is the
+type of `e` (`type.opt.5`). Any other use before then, or none at all, is a
+compile-time error whose help asks for an assignment. The local is not a
+`none`-typed value in between. *(ADR 0468)*
+
+```ail fragment
+fn first_word(s str) str?
+    mut owner := none
+    for w in s.split(" ")
+        owner = w
+        break
+    owner
+```
+
+**type.opt.10** — An `if` with no expected type, whose branch is a bare `none`
+and whose other branches have a type `T`, has the type `T?`: each `none`
+branch is `none` of that type, and each other branch converts by
+`type.opt.5`. When every branch is `none`, the `if` has no type and the
+error is `type.opt.4`. *(ADR 0468)*
+
+```ail fragment
+fn half(n int) int?
+    x := if n % 2 == 0 then n / 2 else none
+    x
+```
+
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 

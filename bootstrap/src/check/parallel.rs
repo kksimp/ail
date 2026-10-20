@@ -293,6 +293,7 @@ impl<'a> Scan<'a> {
             }
             // `defer` runs at block exit; its statement is part of the body (own.defer.1).
             Stmt::Defer(inner, _) => self.stmt(inner),
+            Stmt::Unsafe { body, .. } => self.block(body),
             // conc.share.6: holding a mutex synchronises with other tasks.
             Stmt::With { mutex, var, body, pos, .. } => {
                 self.expr(mutex);
@@ -680,6 +681,7 @@ pub(crate) fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
             expr_blocks(value, f);
             other(otherwise, f);
         }
+        Stmt::Unsafe { body, .. } => f(body),
         Stmt::Defer(inner, _) => each_block(inner, f),
     }
 }
@@ -1221,6 +1223,7 @@ fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
                 walk(value, f);
                 other(otherwise, f);
             }
+            Stmt::Unsafe { body, .. } => block(body, f),
             Stmt::Defer(inner, _) => stmt(inner, f),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
         }

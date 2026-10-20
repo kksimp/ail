@@ -130,7 +130,7 @@ fn token_line(t: &Token, out: &mut String) {
     }
 }
 
-// ---- The syntax tree (api.ast.1-6) ----
+// ---- The syntax tree (api.ast.1-3) ----
 
 /// A JSON value, written as the derived `ToJson` of `compiler/ast/ast.ail`
 /// writes it (ADR 0376): a number as AIL prints a `float`, a variant with
@@ -421,6 +421,8 @@ fn function(f: &FnDecl) -> J {
         }),
         ("contracts", arr(&f.contracts, contract)),
         ("inherits", opt(&f.inherits, |i| n(*i))),
+        ("unsafe_fn", J::Bool(f.unsafe_fn)),
+        ("ext", opt(&f.ext, |e| J::Obj(vec![("lib", opt(&e.lib, |l| s(l)))]))),
     ])
 }
 
@@ -501,6 +503,7 @@ fn stmt(st: &Stmt) -> J {
             variant("Handle", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise))])
         }
         Stmt::Defer(inner, p) => variant("Defer", vec![("stmt", stmt(inner)), ("pos", pos(*p))]),
+        Stmt::Unsafe { body, pos: p } => variant("Unsafe", vec![("body", block(body)), ("pos", pos(*p))]),
         Stmt::With { mutex, var, var_pos, body, pos: p } => variant(
             "With",
             vec![

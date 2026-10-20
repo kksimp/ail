@@ -1006,6 +1006,7 @@ impl<'p> Refs<'p> {
                 self.expr(iter);
                 self.block(body);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
             Stmt::Handle { value, otherwise } => {

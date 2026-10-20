@@ -670,6 +670,20 @@ fn int_method(n: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> 
             Some(v) => Value::Int(v),
             None => return trap("expr.arith.1", pos, format!("`({n}).abs()` overflows `int`")),
         },
+        // expr.bit.1: `&`, `|`, `^` and `!` on the two's complement bits.
+        "bit_and" => Value::Int(n & m()),
+        "bit_or" => Value::Int(n | m()),
+        "bit_xor" => Value::Int(n ^ m()),
+        "bit_not" => Value::Int(!n),
+        // expr.bit.1: bits shifted past the top are discarded; `shr` keeps the sign.
+        // expr.bit.2: the count must be in 0..=63.
+        "shl" | "shr" => {
+            let k = m();
+            if !(0..=63).contains(&k) {
+                return trap("expr.bit.2", pos, format!("shift count `{k}` is outside `0..=63`"));
+            }
+            if name == "shl" { Value::Int(n.wrapping_shl(k as u32)) } else { Value::Int(n >> k) }
+        }
         "to_float" => Value::Float(n as f64),
         "to_hex" => s(if n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }),
         _ => convert_int(i128::from(n), name, pos)?,

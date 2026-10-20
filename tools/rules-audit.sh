@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Audit the spec rule IDs against the code (ADR 0002; lane 146, ADRs 0483-0485).
+#
+#   tools/rules-audit.sh
+#
+# Checks four things and exits 1 when any is not empty:
+#   1. cited but not in the spec: a rule ID named in a comment or a string
+#      literal of bootstrap/src or compiler/ that docs/spec/ does not define;
+#   2. spec rules never cited: a rule in docs/spec/ that no comment or string
+#      literal in bootstrap/src or compiler/ names (`[removed in ...]` rules
+#      are skipped; they stay in place by the spec README, rule 2);
+#   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
+#      literal (a diagnostic's rule) that `ail explain` cannot explain;
+#   4. `ail explain` entries with no example: a rule whose explanation has no
+#      `example` (checked through `ail explain RULE --json`).
+#
+# Ranges such as `eff.cap.4-5` count as citations of each ID in the range.
+# Self-setting-up (ADR 0071): the first `./ail explain` builds the bootstrap
+# when it is stale. Needs only python3, which both platforms already have.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+# Build (if stale) and check the binary answers before auditing.
+./ail explain --json > /dev/null
+
+exec python3 -I - "$root" <<'PY'
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
+root = pathlib.Path(sys.argv[1])
+ail = root / "ail"
+
+RULE = re.compile(r"(?<![\w.])([a-z_]+\.[a-z_]+\.[0-9]+)(?:-([0-9]+))?(?!\w)(?!\.\d)")
+HEADED = re.compile(r"^\*\*([a-z_]+\.[a-z_]+\.[0-9]+)\*\*")
+QUOTED = re.compile(r'"([a-z_]+\.[a-z_]+\.[0-9]+)"')
+
+
+def expand(match):
+    """The rule IDs a citation names: one, or every number in a `a-b` range."""
+    base, end = match.group(1), match.group(2)
+    if end is None:
+        return [base]
+    stem, start = base.rsplit(".", 1)
+    lo, hi = int(start), int(end)
+    return [f"{stem}.{n}" for n in range(lo, hi + 1)] if lo <= hi else [base]
+
+
+# 1. The spec's rules.
+spec = {}  # rule -> file name
+removed = set()
+for path in sorted((root / "docs" / "spec").glob("*.md")):
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = HEADED.match(line)
+        if m:
+            spec.setdefault(m.group(1), path.name)
+            if "[removed in" in line:
+                removed.add(m.group(1))
+
+# 2. Citations in code: comments name rules, string literals emit them.
+cited = {}  # rule -> set of files that cite it (comments or literals)
+emitted = {}  # rule -> set of files that emit it as a literal
+sources = list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "compiler").rglob("*.ail"))
+for path in sources:
+    rel = str(path.relative_to(root))
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if path.suffix == ".rs":
+            comment = line[line.index("//"):] if "//" in line else ""
+        else:
+            comment = line if line.lstrip().startswith("#") else ""
+        if comment:
+            for m in RULE.finditer(comment):
+                for rule in expand(m):
+                    cited.setdefault(rule, set()).add(rel)
+        for m in QUOTED.finditer(line):
+            cited.setdefault(m.group(1), set()).add(rel)
+            emitted.setdefault(m.group(1), set()).add(rel)
+
+problems = 0
+
+
+def report(title, items):
+    global problems
+    problems += len(items)
+    print(f"{title}: {len(items)}")
+    for item in items:
+        print(f"  {item}")
+
+
+report(
+    "1. cited but not in docs/spec/",
+    [f"{r}  ({', '.join(sorted(cited[r]))})" for r in sorted(set(cited) - set(spec))],
+)
+report(
+    "2. spec rules never cited in bootstrap/src or compiler/",
+    [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed)],
+)
+
+# 3 and 4 need `ail explain`, which reads the spec it was built from.
+listing = json.loads(subprocess.run([str(ail), "explain", "--json"], capture_output=True, text=True, check=True).stdout)
+explained = {entry["rule"] for entry in listing["rules"]}
+report(
+    "3. diagnostics with no `ail explain` entry",
+    [f"{r}  ({', '.join(sorted(emitted[r]))})" for r in sorted(set(emitted) - explained)],
+)
+
+no_example = []
+for rule in sorted(explained):
+    out = subprocess.run([str(ail), "explain", rule, "--json"], capture_output=True, text=True, check=True).stdout
+    if json.loads(out).get("example") in (None, ""):
+        no_example.append(rule)
+report("4. `ail explain` entries with no example", [f"{r}  ({spec.get(r, '?')})" for r in no_example])
+
+print(f"rules in spec: {len(spec)}; explained: {len(explained)}; findings: {problems}")
+sys.exit(1 if problems else 0)
+PY

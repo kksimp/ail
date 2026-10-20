@@ -135,6 +135,14 @@ pub struct FnDecl
     pub contracts List[Contract]
     ## For an `impl` method: the trait's method it inherits contracts from.
     pub inherits int?
+    ## `unsafe fn` (unsafe.block.2).
+    pub unsafe_fn bool
+    ## `extern c "lib" fn` (ffi.decl.2).
+    pub ext Extern?
+
+## Where an `extern c fn` lives; `none` is the process itself.
+pub struct Extern
+    pub lib str?
 
 ## `requires COND`, `ensures COND` or `invariant COND` (contract.decl.1-2).
 pub struct Contract
@@ -210,6 +218,8 @@ pub enum Stmt
     Handle(value Expr, otherwise Else)
     Defer(stmt Stmt, pos Pos)
     With(mutex Expr, var str, var_pos Pos, body List[Stmt], pos Pos)
+    ## `unsafe` and its block (unsafe.block.1).
+    Unsafe(body List[Stmt], pos Pos)
 
 ## The `else` part of `x := e else ...` (err.else.1-3).
 pub enum Else
@@ -339,6 +349,8 @@ impl ToJson for Program
 impl FromJson for Program
 impl ToJson for SourceFile
 impl FromJson for SourceFile
+impl ToJson for Extern
+impl FromJson for Extern
 impl ToJson for Grant
 impl FromJson for Grant
 impl ToJson for Generated
