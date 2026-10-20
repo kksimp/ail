@@ -6,14 +6,14 @@
 use ast
 
 ## A counted loop `for i in 0..hi` under construction.
-struct Counted
+struct KeyLoop
     key str
     head int
     exit int
     ## The index inside the body.
     i int
 
-fn Lower.count_open(mut self, hi int) Counted
+fn Lower.count_open(mut self, hi int) KeyLoop
     nvars += 1
     key := "#k{nvars}"
     var_ty[key] = Ty.Int
@@ -27,9 +27,9 @@ fn Lower.count_open(mut self, hi int) Counted
     branch(op("lt", [i, hi], Ty.Bool), inner, [], exit, [])
     seal(inner)
     cur = inner
-    Counted(key: key, head: head, exit: exit, i: i)
+    KeyLoop(key: key, head: head, exit: exit, i: i)
 
-fn Lower.count_close(mut self, c Counted)
+fn Lower.count_close(mut self, c KeyLoop)
     j := read_var(c.key, cur)
     write_var(c.key, cur, op("add", [j, konst(1, Ty.Int)], Ty.Int))
     jump(c.head, [])
