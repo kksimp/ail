@@ -236,4 +236,21 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     assert!(out.contains("image-only pages (scans; these need OCR): 1"), "pdf info on a scan:\n{out}");
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
     assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
+/// Garlic's JavaScript engine (`tools/garlic/js`, docs/design/garlic-js.md)
+/// checks clean, passes its `@test`s, its lexer prints the expected tokens,
+/// its parser matches every hand-written tree and error, and the packed
+/// test262 parser tests hold (their exceptions listed in `known.txt`).
+fn garlic_js_parses_its_suites() {
+    let dir = tool("tools/garlic/js");
+    let check = ail().args(["check", &dir]).output().unwrap();
+    assert!(check.status.success() && stderr.is_empty(), "ail check {dir}:\n{stderr}");
+    let test = ail().args(["test", &tool("tools/garlic/js/syntax/text.ail")]).output().unwrap();
+    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test text.ail:\n{stdout}");
+    let tokens = ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
+    let expected = std::fs::read_to_string(tool("tools/garlic/js/testdata/tokens/sample.tokens")).unwrap();
+    assert_eq!(String::from_utf8_lossy(&tokens.stdout), expected, "--tokens sample.js");
+    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser")] {
+        let out = ail().args(["run", &dir, flag, &tool(data)]).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
 }

@@ -66,6 +66,8 @@ Design notes:
   and per-dependency capability grants.
 - [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
   writes.
+- [design/garlic-js.md](design/garlic-js.md): the JavaScript engine of the
+  Garlic browser, written in AIL: lexer, parser, testing, plan.
 - [design/compile-time-execution.md](design/compile-time-execution.md),
   [design/metaprogramming.md](design/metaprogramming.md),
   [design/reflection.md](design/reflection.md),
