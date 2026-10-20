@@ -1,0 +1,15 @@
+# fuzz-input: json
+# fuzz-needs:
+# parse_json never crashes, and its text form is a fixed point of parse then print.
+
+fn main()
+    text := {{TEXT}}
+    doc := parse_json(text) else err
+        print("rejected {err.at >= 0}")
+        return
+    again := parse_json(doc.to_text()) else e2
+        print("FAIL reparse failed at {e2.at}")
+        return
+    if again.to_text() != doc.to_text()
+        print("FAIL to_text is not a fixed point")
+    print("ok")

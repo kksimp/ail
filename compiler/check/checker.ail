@@ -406,7 +406,7 @@ fn Checker.collect_fns(mut self)
     for i in 0..prog.fns.len()
         f := prog.fns[i]
         mut owner_ids := List[int]()
-        mut own_self := no_ty()
+        mut own_self := none
         match f.within
             InTrait(t) =>
                 owner_ids = [trait_self[t]]
@@ -484,9 +484,6 @@ fn Checker.collect_fns(mut self)
         ))
         if f.within == ast.Within.TopLevel
             register_fn(i, f)
-
-fn no_ty() Ty?
-    none
 
 ## `true` for `mut self`, `false` for `self`, `none` without a receiver.
 fn receiver_of(f ast.FnDecl) bool?

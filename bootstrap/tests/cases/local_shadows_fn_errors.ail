@@ -1,0 +1,7 @@
+## expr.call.1: a call of a name that a local shadows in its block.
+fn word(s str) str
+    s
+
+fn main()
+    word := "x"
+    print(word("y"))
