@@ -1,4 +1,4 @@
-# List comprehensions (ADR 0394): filters, nested clauses, structs, and a
+# List comprehensions (ADR 0532): filters, nested clauses, structs, and a
 # trap inside one.
 struct P
     x int

@@ -1,4 +1,4 @@
-## List comprehensions in the native subset (ADR 0394): `[e for x in xs if
+## List comprehensions in the native subset (ADR 0532): `[e for x in xs if
 ## c]` is lowered as the loops it means, pushing onto a new list, so it
 ## gets the `for` loop's code (ranges, lists, `break`-free) and `push`'s
 ## fast path.
@@ -60,7 +60,7 @@ fn Lower.lower_comp(
     Val(id: read_var(key, cur), ty: var_ty[key])
 
 ## `xs[a..b]`, `xs[a..=b]`, `xs[a..]`, `xs[..b]`: a new list, after a check
-## that traps as the interpreter does (type.coll.4, ADR 0394).
+## that traps as the interpreter does (type.coll.4, ADR 0532).
 fn Lower.lower_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool, rpos ast.Pos) Val?
     elem := l.ty.elem() else return none
     n := op("len", [l.id], Ty.Int)

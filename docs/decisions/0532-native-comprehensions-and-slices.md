@@ -1,4 +1,4 @@
-# 0394. List comprehensions and slices in the native subset
+# 0532. List comprehensions and slices in the native subset
 
 - **Status:** Accepted
 - **Date:** 2026-10-20

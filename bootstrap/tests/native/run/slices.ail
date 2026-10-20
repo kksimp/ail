@@ -1,4 +1,4 @@
-# List slices (ADR 0394): open and inclusive ranges, deep copies of nested
+# List slices (ADR 0532): open and inclusive ranges, deep copies of nested
 # lists, `List[bool]`, and the interpreter's trap.
 fn main()
     xs := [1, 2, 3, 4, 5]
