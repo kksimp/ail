@@ -120,6 +120,8 @@ struct Problem {
     provable: bool,
     /// A call of a handle's method (conc.par.2).
     handle: bool,
+    /// A call of an atomic's method (conc.atomic.6).
+    atomic: bool,
 }
 
 /// How a write reaches a place that outlives an iteration.
@@ -165,8 +167,9 @@ struct Scan<'a> {
     writes: Vec<Write<'a>>,
     reads: Vec<Read<'a>>,
     problems: Vec<Problem>,
-    /// Per function: it may call a method of a handle (conc.par.2).
-    sync: &'a [bool],
+    /// Per function: it may call a method of a handle (`SYNC`, conc.par.2)
+    /// or of an atomic (`ATOMIC`, conc.atomic.6).
+    sync: &'a [u8],
     /// Free functions by name.
     fns: &'a HashMap<&'a str, usize>,
 }
@@ -218,7 +221,7 @@ impl<'a> Scan<'a> {
     }
 
     fn problem(&mut self, rule: &'static str, at: Pos, provable: bool, reason: String, help: impl Into<String>) {
-        self.problems.push(Problem { rule, reason, help: help.into(), at, provable, handle: false });
+        self.problems.push(Problem { rule, reason, help: help.into(), at, provable, handle: false, atomic: false });
     }
 
     fn exit(&mut self, what: &str, at: Pos) {
@@ -383,7 +386,11 @@ impl<'a> Scan<'a> {
     /// A call of function `i`, which may synchronise through a handle.
     fn calls_sync(&mut self, i: usize, name: &str, at: Pos) {
         // Empty while `context` computes the direct facts.
-        if self.sync.get(i).copied().unwrap_or(false) {
+        let flags = self.sync.get(i).copied().unwrap_or(0);
+        if flags & SYNC == 0 && flags & ATOMIC != 0 {
+            self.atomic_problem(at, format!("calls `{name}`, which uses an `Atomic`"));
+        }
+        if flags & SYNC != 0 {
             self.problem(
                 "conc.par.2",
                 at,
@@ -391,6 +398,21 @@ impl<'a> Scan<'a> {
                 format!("calls `{name}`, which uses a task, channel or mutex handle"),
                 "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
             );
+        }
+    }
+
+    /// conc.atomic.6: an atomic's operations may observe the order of the
+    /// iterations, so only `par for` asserts that they don't matter.
+    fn atomic_problem(&mut self, at: Pos, reason: String) {
+        self.problem(
+            "conc.atomic.6",
+            at,
+            false,
+            reason,
+            "iterations update the atomic in any order; write `par for` if the result doesn't depend on it",
+        );
+        if let Some(p) = self.problems.last_mut() {
+            p.atomic = true;
         }
     }
 
@@ -458,7 +480,13 @@ impl<'a> Scan<'a> {
             }
             Expr::Method { recv, name, name_pos, args } => {
                 let std_module = self.resolved.std_calls.contains_key(name_pos);
-                if self.resolved.handle_calls.contains(name_pos) {
+                let task_module = matches!(
+                    self.resolved.std_calls.get(name_pos),
+                    Some(crate::stdlib::StdCall::Fn("task", _))
+                );
+                if self.resolved.atomic_calls.contains(name_pos) {
+                    self.atomic_problem(*name_pos, format!("calls `.{name}()` on an `Atomic`"));
+                } else if self.resolved.handle_calls.contains(name_pos) || task_module {
                     self.problem(
                         "conc.par.2",
                         *name_pos,
@@ -474,8 +502,12 @@ impl<'a> Scan<'a> {
                 }
                 let mutating = match self.resolved.targets.get(name_pos) {
                     Some(&f) => self.prog.fns[f].receiver.is_some_and(|r| r.mutable),
+                    // An atomic's methods change the shared cell, not the binding.
                     None => {
-                        !std_module && !self.resolved.calls.contains_key(name_pos) && MUTATING.contains(&name.as_str())
+                        !std_module
+                            && !self.resolved.atomic_calls.contains(name_pos)
+                            && !self.resolved.calls.contains_key(name_pos)
+                            && MUTATING.contains(&name.as_str())
                     }
                 };
                 if mutating {
@@ -750,6 +782,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                 at: w.pos,
                 provable: true,
                 handle: false,
+                atomic: false,
             });
         } else if ws.iter().any(|w| w.kind == Kind::Add) {
             let at = ws[0].pos;
@@ -761,6 +794,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                     at: w.pos,
                     provable: true,
                     handle: false,
+                    atomic: false,
                 });
             } else if let Some(r) = reads_of.first() {
                 problems.push(Problem {
@@ -770,6 +804,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                     at: r.pos,
                     provable: true,
                     handle: false,
+                    atomic: false,
                 });
             } else {
                 match holds_int(f, resolved, root) {
@@ -781,6 +816,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                         at,
                         provable: true,
                         handle: false,
+                        atomic: false,
                     }),
                     None => problems.push(Problem {
                         rule: "conc.par.4",
@@ -789,6 +825,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                         at,
                         provable: false,
                         handle: false,
+                        atomic: false,
                     }),
                 }
             }
@@ -818,6 +855,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                     at: w.pos,
                     provable: false,
                     handle: false,
+                    atomic: false,
                 });
             } else if sigs.windows(2).any(|p| p[0] != p[1]) {
                 problems.push(Problem {
@@ -827,6 +865,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                     at: ws[1].pos,
                     provable: false,
                     handle: false,
+                    atomic: false,
                 });
             } else {
                 let sig = sigs[0];
@@ -852,6 +891,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                         at: r.pos,
                         provable: whole,
                         handle: false,
+                        atomic: false,
                     });
                     break;
                 }
@@ -911,7 +951,7 @@ struct Context<'a> {
     prog: &'a Program,
     resolved: &'a Resolved,
     fx: &'a Effects<'a>,
-    sync: Vec<bool>,
+    sync: Vec<u8>,
     fns: HashMap<&'a str, usize>,
 }
 
@@ -924,14 +964,14 @@ fn context<'a>(prog: &'a Program, resolved: &'a Resolved, fx: &'a Effects<'a>) -
         .filter(|(_, f)| f.owner.is_none() && f.top_level())
         .map(|(i, f)| (f.name.as_str(), i))
         .collect();
-    let mut cx = Context { prog, resolved, fx, sync: vec![false; prog.fns.len()], fns };
+    let mut cx = Context { prog, resolved, fx, sync: vec![0; prog.fns.len()], fns };
     // A function synchronises if its body calls a handle's method, or it
     // calls a function that does: a fixed point over the call graph.
-    let direct: Vec<bool> = prog
+    let direct: Vec<u8> = prog
         .fns
         .iter()
         .map(|f| {
-            f.body.as_ref().is_some_and(|b| {
+            f.body.as_ref().map_or(0, |b| {
                 let mut s = Scan {
                     prog,
                     resolved,
@@ -946,28 +986,34 @@ fn context<'a>(prog: &'a Program, resolved: &'a Resolved, fx: &'a Effects<'a>) -
                     fns: &HashMap::new(),
                 };
                 s.block(b);
-                s.problems.iter().any(|p| p.handle)
+                s.problems.iter().fold(0, |acc, p| acc | if p.handle { SYNC } else { 0 } | if p.atomic { ATOMIC } else { 0 })
             })
         })
         .collect();
     cx.sync = direct;
     loop {
-        let add: Vec<usize> =
-            (0..prog.fns.len()).filter(|&i| !cx.sync[i] && fx.calls_of(i).iter().any(|&j| cx.sync[j])).collect();
+        let add: Vec<(usize, u8)> = (0..prog.fns.len())
+            .map(|i| (i, fx.calls_of(i).iter().fold(cx.sync[i], |acc, &j| acc | cx.sync[j])))
+            .filter(|&(i, flags)| flags != cx.sync[i])
+            .collect();
         if add.is_empty() {
             break;
         }
-        add.into_iter().for_each(|i| cx.sync[i] = true);
+        add.into_iter().for_each(|(i, flags)| cx.sync[i] = flags);
     }
     cx
 }
+
+/// `Context::sync` flags: calls a handle's method, or an atomic's.
+const SYNC: u8 = 1;
+const ATOMIC: u8 = 2;
 
 /// conc.par.10: the functions a task may run on the pool: no ordering
 /// effect (conc.par.2) and no handle, through every call.
 pub fn pure_fns(prog: &Program, resolved: &Resolved) -> Vec<bool> {
     let fx = Effects::infer(prog, resolved);
     let cx = context(prog, resolved, &fx);
-    (0..prog.fns.len()).map(|i| !cx.sync[i] && !fx.of(i).iter().any(|e| ordering(e))).collect()
+    (0..prog.fns.len()).map(|i| cx.sync[i] & SYNC == 0 && !fx.of(i).iter().any(|e| ordering(e))).collect()
 }
 
 /// The verdict on every `for` loop of the program's own functions, in
@@ -1195,6 +1241,7 @@ fn judge_comp(cx: &Context, f: &FnDecl, elem: &Expr, c: &CompFor) -> Verdict {
             at: w.pos,
             provable: true,
             handle: false,
+            atomic: false,
         });
     }
     problems.sort_by_key(|p| (!p.provable, p.at.line, p.at.col));

@@ -59,10 +59,11 @@ reported but don't stop a program from running.
 | `src/check/ownership.rs`, `src/check/moves.rs` | Unique types, `move`, `ref` and `defer` while typing; then use after move on every path | `own.uniq.1–2`, `own.uniq.5–6`, `own.uniq.8–10`, `own.move.2–6`, `own.ref.1`, `own.ref.3–6`, `own.defer.3`, `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3` |
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel`; `par for` comprehensions | `conc.par.2–6`, `conc.par.12` |
-| `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `with`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6` |
+| `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `Atomic`, `with`, `cancel`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6`, `conc.atomic.3–5`, `conc.cancel.1` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
 | `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–3`, `trace.test.1–2`, `trace.snap.1–4` |
-| `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, `for v in ch`, mutexes, `with`, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–7` |
+| `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186) or a seeded random one; channels, `for v in ch`, mutexes, `with`, groups, cancellation, deadlock traps | `conc.task.1–9`, `conc.share.1–7`, `conc.cancel.1–2`, `conc.sched.1` |
+| `src/interp/atomic.rs` | `Atomic[int]` and `Atomic[bool]` as shared hardware atomics | `conc.atomic.3–6` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
 | `src/parser/messages.rs`, `src/check/absent.rs`, `src/interp/absent.rs` | Messages on error types (turned into an `impl ToStr` at parse time); `?` on an optional failing with the prelude's `Absent` where errors are inferred | `err.msg.1–2`, `err.prop.5` |
 | `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, `par for` comprehensions, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–12` |
@@ -80,6 +81,9 @@ reported but don't stop a program from running.
 | `src/interp/net.rs` | The HTTP/1.1 client of `std.net` (no TLS) | `std.net.2–4` |
 | `src/interp/keyfn.rs` | Key functions: `sorted`, `sort`, `min`, `max` with `by: \|x\| key` | `expr.key.3–4` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
+| `src/check/tensor.rs` | Types of `tensor.from`, `tensor.zeros` and the tensor methods | `std.tensor.1–4`, `std.tensor.8` |
+| `src/interp/tensor.rs` | Builds tensors, runs their methods, text form | `std.tensor.1–9` |
+| `src/tensor.rs` | Tensor buffers and kernels: AVX2, NEON and scalar, picked at run time; `matmul` on the thread pool | `std.tensor.5–7` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
@@ -169,7 +173,8 @@ package's are reported file by file.
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Standard modules:** `fs`, `env`, `io`, `proc`, `net` (HTTP/1.1 `get` and
-  `post`, no TLS; ADR 0283), `path`, `random`, `time` and `ui` (a window of
+  `post`, no TLS; ADR 0283), `path`, `random`, `tensor` (`Tensor[int|float]`
+  on AVX2/NEON kernels; ADRs 0328–0329), `time` and `ui` (a window of
   text cells; ADR 0177), in scope without `use` unless something else has the
   name (ADR 0277; `use std.NAME as d` also works), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
@@ -239,8 +244,16 @@ and `close`, and `Mutex(v)` with `get`, `set`, `swap`, `lock` and `unlock`.
 `for v in ch` receives until the channel closes (`conc.share.7`), and
 `with m as mut x` holds a mutex for a block and stores `x` back
 (`conc.share.6`) (ADRs 0300–0301).
+`Atomic(v)` (`int` or `bool`) with `load`, `store`, `add` and `cas` is a
+hardware atomic shared by tasks, pooled tasks and `par for` workers
+(`conc.atomic.3–6`); `t.cancel()` and `g.cancel()` set a flag that
+`task.cancelled()` reads and `task.check()` turns into `Cancelled`, and make
+`recv`, `for v in ch`, `time.sleep_ms` and `proc.run` return early
+(`conc.cancel.1–2`) (ADRs 0320–0321).
 Tasks run one at a time in a fixed order, so output repeats; a deadlock
-traps (`conc.task.7`). `spawn` takes a call of a declared function, without
+traps (`conc.task.7`). `--schedule=random:SEED` on `run` and `test` picks
+the switch points from the seed instead, and a failing test prints it
+(`conc.sched.1–2`, ADR 0322). `spawn` takes a call of a declared function, without
 `mut` arguments.
 
 Parallel loops (ADRs 0236–0239): `ail effects --parallel` reports, per `for`

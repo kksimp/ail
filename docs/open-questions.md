@@ -265,6 +265,10 @@ reach these devices at all, and nothing of LLVM's ships with AIL);
 (b) CPU only, no GPU or NPU ever; (c) allow vendor libraries (cuDNN, MPS) as
 opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
 section 6 and [ADR 0247](decisions/0247-std-tensor-and-accel-capability.md).
+The CPU slice exists (`std.tensor`, ADRs 0328–0329); [ADR 0330](decisions/0330-tensor-accelerator-backends-plug-in.md)
+lists what a device backend needs decided here. Still missing from the CPU
+slice: axis reductions, `transpose`, `conv2d`, activations, `f32`, indexing,
+operators, and fusing chains of elementwise calls.
 *Owner: designer (it reads ADR 0010, a designer decision).*
 
 ## OQ-091 — Field attributes for derive generators
@@ -327,3 +331,17 @@ template (recommended: one rule for every derive, and an agent sees what
 `cmp` compares); (b) list them by name only, like automatic implementations
 (cheapest); (c) write the prelude generators in AIL and drop the native code
 (slower in the interpreter). *Owner: AI under ADR 0076.*
+
+## OQ-097 — Weaker atomic orderings, cancel trees, and send under cancellation
+Lane 72 (ADRs 0320–0322) left three follow-ups. (1) `conc.atomic.2` requires
+acquire, release, acquire-release and relaxed orderings; the bootstrap has
+only SeqCst. Options: (a) a trailing named argument, `a.load(order: Relaxed)`
+(recommended: rare, so the token cost lands only where it's used); (b)
+separate methods (`load_relaxed`); (c) wait for the native backend. (2)
+Cancelling a task doesn't reach tasks it already started (only tasks it
+starts later). Options: (a) cancel the whole tree, as structured concurrency
+suggests (recommended once tasks record their parent); (b) keep it per
+task. (3) A cancelled task blocked in `send` on a full channel still
+waits. Options: (a) `send` returns `! Cancelled` (breaks every existing
+call's type); (b) keep waiting, so a cancelled producer is released by its
+consumer (current); (c) drop the value and return. *Owner: AI under ADR 0076.*

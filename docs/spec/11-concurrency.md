@@ -4,8 +4,9 @@ Chapter key: `conc`
 
 > **Status:** Drafted (partial). Specified: memory-model foundations, the task
 > model, scope-bound tasks, communication through `Channel[T]` and
-> `Mutex[T]`, and parallel loops. Not yet designed: cancellation, `select`,
-> `Atomic[T]`, and the formal model.
+> `Mutex[T]`, `Atomic[int]` and `Atomic[bool]`, cancellation, random-schedule
+> testing, and parallel loops. Not yet designed: weaker atomic orderings,
+> `select`, and the formal model.
 
 ## Memory model
 
@@ -42,6 +43,57 @@ acquire-release and relaxed orderings. *(ADR 0025)*
 > **Note:** an implementation SHOULD report atomic operations whose ordering
 > could be weakened without changing behaviour. It MUST NOT weaken an
 > ordering on its own initiative.
+
+**conc.atomic.3** — `Atomic(v)` (or `Atomic[T](v)`) makes an atomic cell
+holding `v`. `T` MUST be `int` or `bool`. An atomic is a handle: copies of
+it, copies passed to tasks, and the copies a parallel loop's iterations see
+are the same cell, so tasks and `par for` share it without a `ref` or a
+`Mutex`. *(ADR 0320)*
+
+**conc.atomic.4** — `a.load()` returns the value, `a.store(v)` replaces it,
+and `a.cas(old, new)` replaces it with `new` only if it equals `old`,
+returning whether it did. Each is one indivisible step, sequentially
+consistent (`conc.atomic.1`). *(ADR 0320)*
+
+**conc.atomic.5** — On an `Atomic[int]`, `a.add(n)` adds `n` in one
+indivisible step and returns the value from before. An add whose result
+would leave `int` traps and leaves the cell unchanged. *(ADR 0320)*
+
+```ail
+fn count(hits Atomic[int], n int)
+    for _ in 0..n
+        hits.add(1)
+
+fn main() !
+    hits := Atomic(0)
+    g := TaskGroup()
+    for _ in 0..4
+        g.add(spawn count(hits, 100))
+    g.wait_all()?
+    print(hits.load())
+```
+
+**conc.atomic.6** — A call of an atomic's method, directly or through the
+functions a loop body calls, makes a `for` loop not proven independent
+(`conc.par.2`), since the operations may see the order of the iterations.
+`par for` asserts that the result doesn't depend on it, and such a loop
+may run on the pool (`conc.par.8`): iterations then update the one cell in
+any order. Iterations that already ran can't be undone, so if one traps
+the loop reports that trap instead of running again in order
+(`conc.par.11`). A task that calls atomic methods but has no other
+ordering effect may still run on its own thread (`conc.par.10`).
+*(ADR 0320)*
+
+```ail
+fn main()
+    total := Atomic(0)
+    par for i in 0..1000
+        total.add(i)
+    print(total.load())
+```
+
+> **Note:** `conc.atomic.2`'s weaker orderings aren't provided yet; every
+> operation is SeqCst (ADR 0320).
 
 ## Tasks
 
@@ -128,6 +180,40 @@ fn main() !
     g.wait_all()?
 ```
 
+## Cancellation
+
+**conc.cancel.1** — `t.cancel()` asks task `t` to stop, and `g.cancel()`
+asks every task of group `g` to stop, including tasks added to it later.
+A task started by a cancelled task starts cancelled. Cancelling doesn't end
+a task and doesn't consume its handle: the scope still waits for it
+(`conc.task.4`, `conc.task.5`). *(ADR 0321)*
+
+**conc.cancel.2** — `task.cancelled()` returns whether the running task was
+cancelled; it is `false` in the main task. `task.check()` returns
+`! Cancelled`, failing with the prelude error
+`error struct Cancelled "the task was cancelled"` once the task is
+cancelled, so `task.check()?` stops a task at a point of its choosing. In a
+cancelled task, blocking calls return early: `ch.recv()` returns `none` and
+`for v in ch` ends, even if a value could arrive later, and a blocked call
+is woken by the cancel; `time.sleep_ms` returns at once; and `proc.run`
+fails with `ProcError` of kind `"cancelled"` without starting the process.
+*(ADR 0321)*
+
+```ail
+fn worker(jobs Channel[int])
+    for v in jobs
+        print("got {v}")
+    print("stopped: {task.cancelled()}")
+
+fn main() !
+    jobs := Channel[int](4)
+    g := TaskGroup()
+    g.add(spawn worker(jobs))
+    jobs.send(1)
+    g.cancel()
+    g.wait_all()?
+```
+
 **conc.task.9** — The order in which ready tasks run is unspecified. A
 program's output MUST NOT depend on it except through `wait`, channels and
 mutexes. *(ADR 0186)*
@@ -136,6 +222,21 @@ mutexes. *(ADR 0186)*
 > order, so its output is repeatable: a new task runs at once until it
 > blocks or finishes, its spawner resumes next, and other ready tasks run
 > first in, first out. Native code runs tasks in parallel (`conc.task.3`).
+
+**conc.sched.1** — `ail test --schedule=random:SEED` (and `ail run` with the
+same option) runs tasks on a random schedule decided by `SEED`: at each
+`spawn` a coin picks whether the new task or its spawner goes first; at
+every method call of a task, group, channel or mutex, every atomic
+operation, `task.cancelled()` and `task.check()`, a coin picks whether the
+running task hands the turn to another ready task; and the next task is
+picked at random from the ready ones. Pooled loops and tasks
+(`conc.par.8–10`) run on the scheduler instead. The same seed gives the
+same interleaving on every run and target, so a failure can be replayed;
+`--schedule=random` without a seed picks one. *(ADR 0322)*
+
+**conc.sched.2** — When a test fails under a random schedule, `ail test`
+prints `schedule seed SEED: replay with ...` after its summary, and with
+`--json` adds `"schedule_seed":SEED` to the summary object. *(ADR 0322)*
 
 ## Communication
 

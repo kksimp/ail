@@ -44,7 +44,11 @@ impl<'a, W: Write> Interp<'a, W> {
             StdCall::Fn(module, f) => (module, f),
             StdCall::Method(_) => unreachable!("interp::method_call runs `ui.Window` methods"),
             StdCall::Const(_) => unreachable!("interp::eval reads module constants"),
+            StdCall::Tensor(_) => unreachable!("interp::method_call runs tensor methods"),
         };
+        if module == "tensor" {
+            return self.tensor_call(f, args, pos, env);
+        }
         if (module, f) == ("random", "shuffle") {
             let p = self.place(&args[0].value, env)?;
             let Value::List(items) = slot_mut(env, &p, false)? else { unreachable!("checked: a list") };
@@ -229,6 +233,12 @@ impl<'a, W: Write> Interp<'a, W> {
                     _ => None,
                 };
                 self.flush(pos)?;
+                // conc.cancel.2: a cancelled task doesn't start a process.
+                if self.cancelled() {
+                    let s = self.structs["proc.ProcError"];
+                    let error = Value::Struct(s, Rc::new(vec![Value::Str(cmd), text("cancelled")]));
+                    return Ok(fail(error, pos));
+                }
                 match super::osext::run(&cmd, &argv, input.as_deref(), timeout) {
                     Ok((status, out, err)) => {
                         let s = self.structs["proc.Output"];
@@ -291,7 +301,22 @@ impl<'a, W: Write> Interp<'a, W> {
                     return stop("std.time.2", pos, format!("can't sleep for {ms} milliseconds"));
                 }
                 self.flush(pos)?;
-                std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+                // conc.cancel.2: a cancelled task doesn't sleep.
+                if !self.cancelled() {
+                    std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+                }
+                Value::Unit
+            }
+            ("task", "cancelled") => {
+                self.switch_point(pos)?;
+                Value::Bool(self.cancelled())
+            }
+            ("task", "check") => {
+                self.switch_point(pos)?;
+                if self.cancelled() {
+                    let s = self.structs["Cancelled"];
+                    return Ok(fail(Value::Struct(s, Rc::new(Vec::new())), pos));
+                }
                 Value::Unit
             }
             ("ui", "clipboard_get") => crate::ui::clipboard_get().map_or(Value::None, text),

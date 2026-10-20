@@ -1,0 +1,9 @@
+# conc.atomic.3: an atomic holds an `int` or a `bool`; `add` needs an `int`.
+
+fn main()
+    a := Atomic("x")
+    b := Atomic(false)
+    b.add(1)
+    c := Atomic[float](1.0)
+    d := Atomic(0)
+    d.store(true)

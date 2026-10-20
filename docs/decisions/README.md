@@ -318,3 +318,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0317](0317-move-self-receivers.md) | `move self` receivers consume the receiver; the call site is unmarked *(delegated)* | Accepted | 2026-10-20 |
 | [0318](0318-unique-values-in-lists-and-maps.md) | Lists and maps may hold unique values; such a collection is unique *(delegated)* | Accepted | 2026-10-20 |
 | [0319](0319-copying-methods-on-unique-collections.md) | Methods that copy elements are errors on unique collections; task handles stay out of lists *(delegated)* | Accepted | 2026-10-20 |
+| [0328](0328-std-tensor-cpu-api.md) | `std.tensor`: an eager, value-typed `Tensor[T]` of `int` or `float` *(delegated)* | Accepted | 2026-10-20 |
+| [0329](0329-std-tensor-kernels-and-dispatch.md) | Tensor kernels: AVX2, NEON or scalar at run time, one specified summation order *(delegated)* | Accepted | 2026-10-20 |
+| [0330](0330-tensor-accelerator-backends-plug-in.md) | How an NPU or GPU backend plugs into `std.tensor` (design) *(delegated)* | Accepted | 2026-10-20 |
+| [0320](0320-atomic-int-and-bool.md) | `Atomic[int]` and `Atomic[bool]`: shared cells for tasks and `par for` *(delegated)* | Accepted | 2026-10-20 |
+| [0321](0321-task-cancellation.md) | Cancellation: `cancel`, `task.cancelled()`, `task.check()` *(delegated)* | Accepted | 2026-10-20 |
+| [0322](0322-random-schedule-testing.md) | `--schedule=random[:SEED]`: replayable random interleavings *(delegated)* | Accepted | 2026-10-20 |

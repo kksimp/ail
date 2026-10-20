@@ -1,0 +1,4 @@
+# std.tensor.7: `matmul` needs matching inner sizes.
+fn main()
+    a := tensor.zeros([2, 3])
+    print(a.matmul(a))
