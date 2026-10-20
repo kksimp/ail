@@ -1,0 +1,10 @@
+# std.tensor.10, std.tensor.11: operators and reductions a tensor rejects.
+fn main()
+    a := tensor.from([1.0, 2.0])
+    i := tensor.from([1, 2])
+    print(a / a)
+    print(a + i)
+    print(i * 2.0)
+    print(a + "x")
+    print(i.mean())
+    print(a.sum(0, 1))

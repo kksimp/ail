@@ -4267,9 +4267,15 @@ impl<'p> Checker<'p> {
         }
         // expr.cmp.1: the right operand's expected type is the left's.
         let mut lt = self.expr(lhs, None, true);
-        let rt = self.expr(rhs, Some(&lt), true);
+        let mut rt = self.expr(rhs, Some(&lt), true);
         // type.num.10: `2 * x` with a float `x`.
         if lt == Ty::Int && rt == Ty::Float && self.float_literal(lhs) {
+            lt = Ty::Float;
+        }
+        // std.tensor.10: `t * 2` and `2 * t` with a float tensor `t`.
+        if self.float_tensor_scalar(&lt, &rt, rhs) {
+            rt = Ty::Float;
+        } else if self.float_tensor_scalar(&rt, &lt, lhs) {
             lt = Ty::Float;
         }
         // type.num.13: `1 + x` with a sized `x`.
@@ -4307,6 +4313,9 @@ impl<'p> Checker<'p> {
         if *lt == Ty::Unit || *rt == Ty::Unit {
             self.error("trait.op.1", pos, format!("an operand of `{sym}` produces no value"));
             return Ty::Err;
+        }
+        if let Some(t) = self.tensor_operator(sym, op.is_arithmetic(), lt, rt, pos) {
+            return t;
         }
         // expr.cmp.1: the right operand converts to the left's type, as an
         // argument would (`opt == 1`, type.opt.5).
