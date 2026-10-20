@@ -15,6 +15,9 @@ Apache attribution terms (section 4) would otherwise reach those programs.
 Licensing is the designer's call (AGENTS.md, escalation criterion 4). The
 designer stated on 2026-10-20 that the project is "Apache 2.0 with a
 Runtime Exception".
+The exception wording in `LICENSE` was drafted by the AI and reviewed by
+the designer, who approved it on 2026-10-20 ("The license is good"), so it
+is the project's final text rather than a draft.
 
 ## Options considered
 
