@@ -383,6 +383,15 @@ a summary line. With `--json` each is a JSON line, a test that now fails
 carries `"status":"fail"`, and the last line is
 `{"summary":true,...}`. The exit status is 0 when nothing changed, 1 when
 something did, 2 for an error.
+
+```ail pkg=diff_pair tool=diff,old/a.ail,new/a.ail status=1 expect=adds: rules=diff.out.1,diff.out.2,diff.out.3,diff.out.4,diff.out.6
+```
+
+```ail pkg=diff_pair tool=diff,--json,--no-tests,old/a.ail,new/a.ail status=1 expect="summary":true rules=diff.out.6
+```
+
+```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
+```
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that
@@ -699,6 +708,15 @@ status is 2 when there are errors, 0 otherwise. The files are written even
 when there are errors, unless `--if-clean` is given.
 **edit.out.3** — `--dry-run` writes nothing and prints a unified diff of
 each file that would change; `--diff` prints the diff and writes.
+
+```ail pkg=edit_ops tool=edit,--dry-run,main.ail stdin=edits.json expect=edits; rules=edit.in.1,edit.id.1,edit.op.1,edit.op.2,edit.op.3,edit.op.4,edit.op.5,edit.op.6,edit.out.1,edit.out.2,edit.out.3
+```
+
+```ail pkg=edit_ops tool=edit,main.ail stdin=bad.json status=2 expect=written rules=edit.in.2,edit.id.1,edit.id.2
+```
+
+```ail pkg=edit_ops tool=edit,main.ail stdin=text.txt status=2 expect=edit.in.1 rules=edit.in.1
+```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
 @test

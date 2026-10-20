@@ -1,0 +1,9 @@
+fn add(a int, b int) int
+    a + b
+
+fn gone() int
+    1
+
+@test
+fn adds()
+    assert_eq(add(1, 1), 2)

@@ -1,0 +1,10 @@
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b + 0
+
+fn fresh() int
+    2
+
+@test
+fn adds()
+    assert_eq(add(1, 1), 3)

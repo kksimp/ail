@@ -404,6 +404,14 @@ fn main() !
     print(proc.wait(move c)?)
 ```
 
+```ail rules=std.proc.8
+use std.proc
+
+fn main() !
+    r := proc.run_bytes("sort", [], b"b\na\n")?
+    print("{r.status} {r.out.len()}")
+```
+
 ## Memory for C: `std.mem`
 
 **std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new
@@ -412,7 +420,7 @@ NUL-terminated string (invalid UTF-8 becomes U+FFFD); `alloc(n, example) *T`,
 `cast(p, example) *T`, `null() *u8` and `free(p)` (`unsafe.mem.3`). Each is an unsafe operation (`unsafe.op.1`), and a block that is
 not freed leaks. The rules for bad pointers are `unsafe.mem.1-2`. *(ADR 0434)*
 
-```ail fragment
+```ail fragment rules=std.mem.1
 use std.mem
 
 extern c fn strlen(s *u8) int
@@ -624,6 +632,21 @@ fn main() !
     t := spawn answer(srv)
     r := net.get("http://{srv.addr()}/?name=ail")?
     print(r.body)
+    t.wait()?
+```
+
+```ail rules=std.net.16
+use std.net
+
+fn echo(srv net.Server) !
+    ex := srv.accept()?
+    ex.respond_bytes(200, {}, ex.request.data + b"!")?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn echo(srv)
+    r := net.post_bytes("http://{srv.addr()}/", b"\x01\x02", "application/octet-stream")?
+    print("{r.status} {r.data.hex()}")
     t.wait()?
 ```
 

@@ -346,7 +346,7 @@ parameter type (`expr.call.1`, `expr.call.2`). Calling a function value adds no
 effect of its own. There are no anonymous functions and no captured variables.
 *(ADR 0456)*
 
-```ail
+```ail rules=type.fn.1,type.fn.2,type.fn.3
 fn double(n int) int
     n * 2
 

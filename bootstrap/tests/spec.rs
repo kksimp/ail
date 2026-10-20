@@ -33,6 +33,8 @@
 //!   the tool runs on the example and prints what the rule describes.
 //! - ```` ```ail pkg=DIR status=N ````: with `tool=`, `DIR` is a copy of the case
 //!   package `bootstrap/tests/cases/packages/DIR` and the tool must exit N.
+//! - ```` ```ail stdin=NAME ````: with `tool=`, the tool reads the file `NAME`
+//!   of the package directory on its standard input (`ail edit` takes its edits there).
 //! - ```` ```ail fixture=DIR ````: a block with no code. `ail check` runs on the
 //!   case fixture `bootstrap/tests/cases/DIR` and must report every rule the
 //!   block cites (its `rules=` list).
@@ -61,6 +63,7 @@ struct Block {
     tool: Option<(Vec<String>, String)>,
     pkg: Option<String>,
     status: i32,
+    stdin: Option<String>,
     fixture: Option<String>,
     code: String,
 }
@@ -98,7 +101,8 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                             true,
                             Vec::new(),
                         );
-                        let (mut flags, mut tool, mut fixture, mut pkg, mut status) = (Vec::new(), None, None, None, 0);
+                        let (mut flags, mut tool, mut fixture, mut pkg, mut status, mut stdin) =
+                            (Vec::new(), None, None, None, 0, None);
                         let mut want = None;
                         for t in &tags {
                             if let Some(v) = t.strip_prefix("flags=") {
@@ -113,6 +117,8 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                                 pkg = Some(v.to_string());
                             } else if let Some(v) = t.strip_prefix("status=") {
                                 status = v.parse().unwrap();
+                            } else if let Some(v) = t.strip_prefix("stdin=") {
+                                stdin = Some(v.to_string());
                             }
                         }
                         if let (Some((_, text)), Some(w)) = (&mut tool, want) {
@@ -125,6 +131,7 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                                 || t.starts_with("fixture=")
                                 || t.starts_with("pkg=")
                                 || t.starts_with("status=")
+                                || t.starts_with("stdin=")
                             {
                                 continue;
                             }
@@ -155,6 +162,7 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                             fixture,
                             pkg,
                             status,
+                            stdin,
                             code,
                         });
                     } else {
@@ -333,7 +341,14 @@ fn spec_examples() {
                     _ => a.clone(),
                 })
                 .collect();
-            let out = Command::new(env!("CARGO_BIN_EXE_ail")).args(&args).current_dir(&dir).output().unwrap();
+            let mut cmd = Command::new(env!("CARGO_BIN_EXE_ail"));
+            cmd.args(&args).current_dir(&dir);
+            if let Some(name) = &b.stdin {
+                cmd.stdin(fs::File::open(dir.join(name)).unwrap());
+            } else {
+                cmd.stdin(std::process::Stdio::null());
+            }
+            let out = cmd.output().unwrap();
             let stdout = String::from_utf8_lossy(&out.stdout);
             let stderr = String::from_utf8_lossy(&out.stderr);
             if out.status.code() != Some(b.status) || !format!("{stdout}{stderr}").contains(want.as_str()) {

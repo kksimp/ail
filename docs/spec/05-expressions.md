@@ -101,7 +101,7 @@ order. `mut` and `move` go before the value (`f(mut v: xs)`). Built-in
 functions and methods don't take named arguments. There are no default
 values, so a named argument never leaves a parameter out. *(ADR 0454)*
 
-```ail
+```ail rules=expr.call.3
 fn show(tag str, n int, scale int) str
     "{tag}:{n * scale}"
 
