@@ -19,6 +19,7 @@
 ./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread
 ./ail run --parallel FILE.ail      # also pool loops proven independent; AIL_THREADS=N sets the pool size
 ./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
+./ail run --no-bytecode FILE.ail     # every function on the tree walker (the oracle), not the bytecode tier
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail explain                # all rules, with chapter and whether `ail fix` repairs them
