@@ -91,7 +91,7 @@ fn main() unit
     v52 int = const -7
     jump b12(v52)
   b14(v55 int):
-    v56 int = neg v55 !s5
+    v56 int = neg v55 !s6
     v58 int = div v56, v43
     v59 int = const 3
     v60 bool = eq v58, v59

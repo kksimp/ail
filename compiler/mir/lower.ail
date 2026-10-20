@@ -231,7 +231,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
             items: [l.problems[k] for k in order],
             files: [srcs[l.problem_files[k]].path for k in order],
         )
-    m := inline_module(Module(
+    m := mark_recursion(inline_module(Module(
         path: srcs[0].path,
         funcs: l.funcs,
         strs: l.strs,
@@ -239,7 +239,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         lines: srcs[0].text.lines(),
         files: [src.path for src in srcs],
         file_lines: [src.text.lines() for src in srcs],
-    ))
+    )))
     mut errs := List[Problem]()
     for f in m.funcs
         for err in verify(f)
@@ -466,6 +466,17 @@ fn Lower.checked(mut self, op str, args List[int], site int, ty Ty) int
 fn Lower.call(mut self, name str, args List[int], ty Ty) int
     mut i := inst(-1, "call", args)
     i.name = name
+    if ty.is_unit()
+        emit_void(i)
+        return -1
+    emit(i, ty)
+
+## A call of a program's function: it traps at its site when the stack is
+## nearly exhausted (err.trap.1, ADR 0535). `shown` names the callee.
+fn Lower.user_call(mut self, name str, args List[int], ty Ty, pos ast.Pos, shown str) int
+    mut i := inst(-1, "call", args)
+    i.name = name
+    i.site = site("err.trap.1", "call", shown, pos)
     if ty.is_unit()
         emit_void(i)
         return -1
@@ -1418,7 +1429,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     return unsupported(pos, "labelled arguments")
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
-            Val(id: call(key, vs, sig.ret), ty: sig.ret)
+            Val(id: user_call(key, vs, sig.ret, npos, name), ty: sig.ret)
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)

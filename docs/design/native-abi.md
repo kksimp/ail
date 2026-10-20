@@ -229,11 +229,22 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 end of its function, which calls
 `rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
 1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
-count), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+count, 7 slice, 8 stack exhausted), `a` and `b` are the operands (for 4, the float's bits), `head` is the
 constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
 constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
 after them are not printed. Runtime code has no checks: its arithmetic wraps.
+
+**Stack check (ADR 0535).** `rt.init` stores a limit in global slot 8: the
+argument vector's address (the top of the main stack) less the stack's size
+limit (`RLIMIT_STACK`; 8 MiB when unknown or unlimited, at most 1 GiB) less a
+1 MiB reserve for the trap itself. A call that can recurse, one whose callee
+is in its caller's strongly connected component of the call graph, first
+compares the stack pointer with it (`cmp rsp, [globals+64]; jb stub` on
+x86-64; `adrp`, `add`, `ldr`, `cmp sp, x16`, `b.lo` on ARM64) and traps with
+kind 8 at the call: `call depth exceeded the native stack in `NAME``. Other
+calls are unchecked: their chains are bounded by the program's functions.
+Threads other than the main one need their own limit (lane 178).
 
 The trap-record design below was the first draft; a record can't hold the
 operands the interpreter's messages contain.

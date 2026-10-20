@@ -65,7 +65,11 @@ fn main()
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
 trap[RULE]: MESSAGE`, err.trap.*); the interpreter's frame lines after it
-may be absent. *(ADRs 0384, 0385)*
+may be absent. Recursion is the exception: the interpreter traps after a
+fixed number of nested calls, a native executable when its stack is nearly
+exhausted. It traps under err.trap.1 at the call, with `call depth exceeded
+the native stack in `NAME``, so it may recurse deeper than the interpreter
+allows. *(ADRs 0384, 0385, 0535)*
 
 **native.build.2** — An error inside the backend itself (MIR that fails the
 verifier, ir-architecture.md §4) is reported under this rule as an internal
