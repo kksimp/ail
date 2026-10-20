@@ -1,0 +1,7 @@
+use geo
+
+fn p() int
+    1
+
+fn main()
+    print(geo.twice(p() + 2))

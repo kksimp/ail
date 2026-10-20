@@ -1,0 +1,96 @@
+## What this checker covers so far (ADR 0377), for the differential test
+## against `ail check`: the rules it reports, and the source lines it
+## doesn't check yet. Each slice widens it; at the end nothing is skipped.
+use ast
+
+## The rules the declaration passes report (slice 1).
+pub COVERED_RULES := [
+    "bootstrap.unsupported",
+    "conc.atomic.3",
+    "conc.task.5",
+    "err.decl.2",
+    "err.decl.3",
+    "expr.name.1",
+    "gen.bound.1",
+    "gen.bound.3",
+    "gen.decl.1",
+    "gen.decl.2",
+    "gen.method.2",
+    "gram.attr.4",
+    "gram.generic.1",
+    "mod.const.2",
+    "mod.main.1",
+    "mod.unit.1",
+    "own.uniq.5",
+    "std.use.1",
+    "std.use.2",
+    "std.use.3",
+    "test.attr.1",
+    "test.attr.2",
+    "test.prop.2",
+    "trait.any.1",
+    "trait.any.2",
+    "trait.auto.4",
+    "trait.auto.5",
+    "trait.derive.1",
+    "trait.impl.1",
+    "trait.impl.3",
+    "trait.impl.4",
+    "trait.impl.5",
+    "trait.impl.6",
+    "trait.method.5",
+    "trait.self.1",
+    "trait.std.2",
+    "trait.super.1",
+    "trait.super.2",
+    "type.enum.5",
+    "type.map.2",
+    "type.opt.3",
+    "type.struct.5",
+]
+
+## A range of lines of one file not checked yet: `first` to `last`, inclusive.
+pub struct Skip
+    pub file str
+    pub first int
+    pub last int
+
+## The lines not checked yet: function bodies with their contracts, and
+## struct invariants (slices 2 and 3).
+pub fn skipped(p ast.Program) List[Skip]
+    mut starts := List[int]()
+    for f in p.fns
+        starts.push(f.pos.line)
+    for s in p.structs
+        starts.push(s.pos.line)
+    for e in p.enums
+        starts.push(e.pos.line)
+    for t in p.traits
+        starts.push(t.pos.line)
+    for i in p.impls
+        starts.push(i.pos.line)
+    for c in p.consts
+        starts.push(c.pos.line)
+    starts.sort()
+    mut out := List[Skip]()
+    for f in p.fns
+        if f.body != none and f.pos.line < 1073741824
+            mut end := 1073741823
+            for l in starts
+                if l > f.pos.line
+                    end = l - 1
+                    break
+            out.push(local_skip(p, f.pos.line + 1, end))
+    for s in p.structs
+        for inv in s.invariants
+            out.push(local_skip(p, inv.pos.line, inv.pos.line))
+    out
+
+fn local_skip(p ast.Program, first int, last int) Skip
+    mut file := ""
+    mut base := 0
+    for f in p.files
+        if f.base < first
+            file = f.path
+            base = f.base
+    Skip(file: file, first: first - base, last: (last - base).min(1048575))
