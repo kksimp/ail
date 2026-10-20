@@ -1,6 +1,6 @@
 # 0114. Reserved keywords
 
-- **Status:** Accepted; amended by [ADR 0120](0120-error-keyword.md) (adds `error`)
+- **Status:** Accepted; amended by [ADR 0120](0120-error-keyword.md) (adds `error`) and [ADR 0210](0210-contract-syntax.md) (adds `requires`, `ensures`)
 - **Date:** 2026-10-04
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md))
 - **Topic:** 2 — Core syntax

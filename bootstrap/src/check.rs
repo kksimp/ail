@@ -18,11 +18,13 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod contracts;
 mod stdlib;
 pub mod effects;
 mod privacy;
 mod testing;
 mod traits;
+mod ui;
 
 use std::collections::HashMap;
 
@@ -241,6 +243,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
+    c.diags.extend(effects::check_contracts(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 
@@ -1392,6 +1395,7 @@ impl<'p> Checker<'p> {
                 self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param, decl: None });
             }
         }
+        self.check_contracts(f, &sig.ret);
         let need = !Self::returns_nothing(&sig.ret);
         let got = self.block(body, need.then_some(&sig.ret), need);
         if need && !self.accepts(&sig.ret, &got) {
@@ -3253,6 +3257,9 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&rt, recv.pos()) || rt == Ty::Err {
             self.args_only(args);
             return Ty::Err;
+        }
+        if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
+            return t;
         }
         let cands = self.candidates(&rt, name);
         match cands.as_slice() {

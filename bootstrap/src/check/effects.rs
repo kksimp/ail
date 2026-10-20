@@ -17,7 +17,7 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -51,6 +51,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "proc" => (&["run"], &["proc", "io"]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.ui.9: opening a window and every `ui.Window` method.
+        "ui" => (&["open", "Window"], &["ui", "io"]),
         _ => return None,
     };
     names.contains(&name).then_some(effects)
@@ -71,29 +73,7 @@ pub struct Effects<'p> {
 impl<'p> Effects<'p> {
     pub fn infer(prog: &'p Program, resolved: &Resolved) -> Self {
         let nodes = prog.fns.len();
-        let mut w = Walker {
-            prog,
-            resolved,
-            fns: HashMap::new(),
-            std_impls: Vec::new(),
-            direct: BTreeMap::new(),
-            calls: Vec::new(),
-        };
-        for (i, f) in prog.fns.iter().enumerate() {
-            if f.owner.is_none() && f.within == Within::TopLevel {
-                w.fns.insert(f.name.as_str(), i);
-            }
-        }
-        // eff.infer.5: operators, interpolation, `print` and the built-in
-        // collection methods call the standard traits' implementations.
-        let std = resolved.std;
-        if !prog.traits.is_empty() {
-            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
-                w.std_impls.extend(implementations(prog, tr, name));
-            }
-            w.std_impls.sort_unstable();
-            w.std_impls.dedup();
-        }
+        let mut w = Walker::new(prog, resolved);
         let mut direct = Vec::with_capacity(nodes);
         let mut calls = Vec::with_capacity(nodes);
         for f in &prog.fns {
@@ -227,6 +207,53 @@ pub fn check_pure(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     diags
 }
 
+/// contract.decl.3: a contract's condition has no effect but `fail`. It
+/// must not print, reach a capability or change a `mut` argument, so that
+/// turning checks off (contract.run.3) can't change what a program does.
+pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.fns.iter().all(|f| f.contracts.is_empty()) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut w = Walker::new(prog, resolved);
+    let mut diags = Vec::new();
+    for f in &prog.fns {
+        for c in &f.contracts {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.cond);
+            let mut bad: BTreeMap<&str, String> = BTreeMap::new();
+            for (e, source) in &w.direct {
+                bad.insert(e, source.clone());
+            }
+            for &j in &w.calls {
+                for &e in fx.of(j) {
+                    bad.entry(e).or_insert_with(|| fx.chain(j, e));
+                }
+            }
+            bad.remove("fail");
+            if bad.is_empty() {
+                continue;
+            }
+            let word = if c.ensures { "ensures" } else { "requires" };
+            let what: Vec<String> = bad.iter().map(|(e, chain)| format!("`{e}` via {chain}")).collect();
+            diags.push(
+                Diagnostic::new(
+                    "contract.decl.3",
+                    c.pos,
+                    format!(
+                        "the `{word}` condition of `{}` must be pure, but it has {}",
+                        f.full_name(),
+                        what.join(", ")
+                    ),
+                )
+                .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
+            );
+        }
+    }
+    diags
+}
+
 /// eff.cap.1: `main` must not reach a denied capability. One diagnostic
 /// per capability, at `main`.
 pub fn check_denied(prog: &Program, resolved: &Resolved, denied: &[&str]) -> Vec<Diagnostic> {
@@ -321,7 +348,34 @@ struct Walker<'p, 'r> {
     calls: Vec<usize>,
 }
 
-impl Walker<'_, '_> {
+impl<'p, 'r> Walker<'p, 'r> {
+    fn new(prog: &'p Program, resolved: &'r Resolved) -> Self {
+        let mut w = Walker {
+            prog,
+            resolved,
+            fns: HashMap::new(),
+            std_impls: Vec::new(),
+            direct: BTreeMap::new(),
+            calls: Vec::new(),
+        };
+        for (i, f) in prog.fns.iter().enumerate() {
+            if f.owner.is_none() && f.within == Within::TopLevel {
+                w.fns.insert(f.name.as_str(), i);
+            }
+        }
+        // eff.infer.5: operators, interpolation, `print` and the built-in
+        // collection methods call the standard traits' implementations.
+        let std = resolved.std;
+        if !prog.traits.is_empty() {
+            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
+                w.std_impls.extend(implementations(prog, tr, name));
+            }
+            w.std_impls.sort_unstable();
+            w.std_impls.dedup();
+        }
+        w
+    }
+
     fn add(&mut self, e: &'static str, source: impl Into<String>) {
         self.direct.entry(e).or_insert_with(|| source.into());
     }
@@ -441,6 +495,12 @@ impl Walker<'_, '_> {
                 {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
+                    }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && let Some(effects) = std_effects("ui", "Window")
+                {
+                    for &e in effects {
+                        self.add(e, format!("ui.Window.{m}"));
                     }
                 } else if let Expr::Name(m, _) = &**recv
                     && self.prog.enums.iter().any(|d| d.name == *m)
@@ -610,7 +670,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

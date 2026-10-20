@@ -521,6 +521,25 @@ fn main() !
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`; colors `0xRRGGBB` |
+
+A window is a grid of text cells; draw with `put`, then `present`:
+
+```ail
+use std.ui
+
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless: kind "no_display"
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, ctrl, _, _) =>                # "a", "enter", "f1"; Ctrl-S is ("s", true)
+                if key == "escape"
+                    break
+            Resize(_, _) => w.present()
+            Close => break
+```
 
 ## Tests and assertions
 
@@ -561,7 +580,7 @@ fn double(x int) int
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
-`fs`, `env`, `proc`, `clock`, `random`, `net`. A call through `any Trait` counts every
+`fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. A call through `any Trait` counts every
 implementation.
 
 ```ail
@@ -572,3 +591,17 @@ implementation.
 `@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
 area")` before a function warns at each call, with the reason (required).
 Unknown attributes are errors.
+
+## Contracts
+
+Lines directly under the signature; conditions are pure `bool`s. `result` is
+the returned value in `ensures`. A failed `requires` traps at the call
+(`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`), both
+with the arguments' values. `ail run --no-contracts` skips the checks.
+
+```ail
+fn divide(a int, b int) int
+    requires b != 0
+    ensures result * b + a % b == a
+    a / b
+```

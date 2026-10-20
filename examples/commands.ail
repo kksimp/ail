@@ -51,6 +51,8 @@ fn apply(mut stock List[Entry], cmd Command)
                     print("  {entry.item}: {entry.qty}")
 
 fn total_added(lines List[str]) !int
+    requires lines.len() > 0
+    ensures result >= 0
     mut total := 0
     for line in lines
         cmd := parse(line)? "reading \"{line}\""

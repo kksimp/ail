@@ -5,6 +5,10 @@ The Rust front end and reference interpreter for AIL ([ADR 0023](../docs/decisio
 It is temporary scaffolding for the compiler, apart from the interpreter, which
 stays as a permanent test oracle.
 
+Dependencies: only `minifb` and `embedded-graphics`, pinned in `Cargo.toml`,
+for `std.ui`'s window and font (ADR 0177). On Linux, X11 is loaded at run
+time, so building and `./ail selftest` need no display libraries.
+
 ## Using it
 
 From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0087):
@@ -15,6 +19,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/commands.ail
 ./ail run examples/shapes.ail
 ./ail run examples/tool.ail        # files and processes (std modules)
+./ail run examples/ui_hello.ail    # a window (std.ui); needs a display
 ./ail run FILE a b                 # words after FILE go to the program (env.args())
 .\ail.ps1 run examples\hello.ail   # Windows (not yet tested on Windows)
 ./ail run bootstrap/tests/cases/packages/geometry   # a package: root module plus `use`d modules
@@ -42,12 +47,16 @@ reported but don't stop a program from running.
 | `src/modules.rs` | Loads a file or package and the modules it imports; renames each module's items to qualified names; import and item-privacy errors; per-file diagnostics | `mod.unit.1–5`, `mod.use.1–6`, `mod.vis.1`, `expr.bind.5` (for imported modules) |
 | `src/parser.rs` | Tokens to syntax tree (`use`, `pub` and qualified names in `src/parser/modules.rs`: `mod.use.1`, `mod.vis.1–2`, `mod.unit.4`) | `mod.use.1`, `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `gram.attr.1–2`, `gen.decl.1`, `gen.bound.1`, `gen.method.1–3`, `gen.infer.2`, `trait.decl.1–2`, `trait.impl.1`, `trait.any.1`, `type.struct.1–3`, `type.enum.1–2`, `type.opt.2`, `err.decl.1`, `err.type.1–2`, `err.type.5`, `err.else.1–3`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.if.5–6`, `expr.loop.1–3`, `expr.loop.6`, `expr.match.1`, `expr.match.6`, `expr.prec.1–2`, `expr.op.1–3` |
 | `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.hole.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.str.2–3`, `type.str.11`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2`, `own.excl.5`, `type.opt.4–5`, `type.enum.6`, `type.str.4–5`, `expr.loop.6`, `expr.match.6`, `err.decl.1–3`, `err.type.1–2`, `err.type.5–6`, `err.prop.1–3`, `err.use.1–2`, `err.else.1–3`, `err.ctx.2`, `err.text.1`, `expr.if.5–6`, `expr.cmp.1`, `gen.decl.1–2`, `gen.bound.1–4`, `gen.method.1–3`, `gen.infer.1–2`, `gen.anon.1`, `trait.decl.1–2`, `trait.impl.1–6`, `trait.self.1`, `trait.res.1`, `trait.any.1–5`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–4` (traits and generics in `src/check/traits.rs`), `test.attr.1–3`, `test.assert.2` (in `src/check/testing.rs`), `mod.vis.1`, `mod.vis.3` (private fields and methods, in `src/check/privacy.rs`), `test.prop.2` |
-| `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects` | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3` |
+| `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3` |
+| `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires` and `ensures`: parsing, typing and `result`, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–2`, `contract.run.1–3`, `contract.api.1` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.str.4–5`, `type.str.11`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`) |
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
-| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError` | `std.use.1`, `std.err.1` |
+| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
+| `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8` |
+| `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8` |
+| `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics` (ADRs 0177–0179) | `std.ui.1–8` |
 | `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2` |
 | `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
@@ -126,7 +135,7 @@ package's are reported file by file.
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc`,
-  `std.random` and `std.time` (and `use std.NAME as d`), their functions called as
+  `std.random`, `std.time` and `std.ui` (a window of text cells; ADR 0177) (and `use std.NAME as d`), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
 - **Methods:** inside a method, the receiver's fields and methods by bare
   name (`pos += 1`, `peek()`); `[]` and `{}` declared with `:=` are typed by
@@ -152,6 +161,12 @@ error: ConfigError.Missing(key: "host")
   at config.ail:7:5
   at config.ail:11:27
 ```
+
+Contracts (ADRs 0210–0213): `requires COND` and `ensures COND` lines under a
+signature are checked at every call (`result` names the returned value);
+a failure traps `contract.req.1` at the call or `contract.ens.1` at the
+`ensures` line with the arguments' values. `--no-contracts` skips them. No
+`old(x)` yet.
 
 Effects (ADRs 0163–0165): every function's effect set is inferred and
 printed by `ail effects`; `@pure` and `--deny` are checked at compile time.
