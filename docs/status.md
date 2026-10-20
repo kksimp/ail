@@ -34,6 +34,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `compiler/a64/`, `compiler/obj/macho.ail`: ARM64 code generation (ADR 0388) and signed Mach-O executables (ADR 0389); `ail build --target aarch64-linux|aarch64-macos`. Linux ARM64 is tested under qemu where installed; macOS ARM64 in the designer's gate.
 - Native drag race (ADR 0390): eleven perfbench programs build natively and match the interpreter byte for byte; times against `clang -O2`, `gcc -O2` and Python, and the compiler's own speed, are in [native-performance.md](design/native-performance.md). First optimisations (ADR 0391): lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols.
 - Self-compile survey (ADR 0585, 0586): `tools/self-compile/run.sh` lowers every compiler module and groups the 937 native-subset problems by file and construct; the top blockers and owners are in [self-compile-status.md](design/self-compile-status.md).
+- Native drag race (ADR 0390): eleven perfbench programs build natively and match the interpreter byte for byte; times against `clang -O2`, `gcc -O2` and Python, and the compiler's own speed, are in [native-performance.md](design/native-performance.md). First optimisations (ADR 0391): lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols. Structs and methods (ADR 0392), with the heap header every native object uses.
 
 ### Language (2026-10-20 batch)
 
