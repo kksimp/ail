@@ -140,7 +140,24 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
         l.lower_fn(f)
     if l.problems.len() > 0
         return Problems(items: l.problems.sorted(by: |p| p.pos.line * 100000 + p.pos.col))
-    Module(path: path, funcs: l.funcs, strs: l.strs, sites: l.sites, lines: text.lines())
+    m := inline_module(Module(
+        path: path,
+        funcs: l.funcs,
+        strs: l.strs,
+        sites: l.sites,
+        lines: text.lines(),
+    ))
+    mut errs := List[Problem]()
+    for f in m.funcs
+        for err in verify(f)
+            errs.push(Problem(
+                rule: "native.build.2",
+                pos: ast.Pos(line: 1, col: 1),
+                message: "internal error: invalid MIR after inlining: {f.name}: {err}",
+            ))
+    if errs.len() > 0
+        return Problems(items: errs)
+    m
 
 fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))

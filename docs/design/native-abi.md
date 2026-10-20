@@ -38,7 +38,8 @@ libSystem but import nothing, and are signed ad hoc by the backend
 ## 2. Value layouts
 
 All values are 64-bit and little-endian (ADR 0007). In registers and in list
-elements each scalar takes 8 bytes.
+elements each scalar takes 8 bytes, except that a `List[bool]` element takes
+one byte, 0 or 1 (ADR 0391).
 
 | Type | Layout |
 |---|---|
@@ -65,7 +66,7 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```text
 +0   u64  len     elements in use
 +8   u64  cap     elements allocated
-+16  ptr  data    cap * 8 bytes, separate allocation
++16  ptr  data    cap * 8 bytes (cap bytes for List[bool]), separate allocation
 ```
 
 `data` is separate so `push` can grow without moving the header the caller

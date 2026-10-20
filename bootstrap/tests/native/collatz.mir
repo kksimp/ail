@@ -10,25 +10,21 @@ fn steps(v0:n int) int
     branch v4, b2(), b3()
   b2:
     v6 int = const 2
-    v7 int = rem v2:x, v6 !s0
-    v8 int = const 0
-    v9 bool = eq v7, v8
+    v21 int = band v2:x, v3
+    v9 bool = eq v21, v1:k
     branch v9, b5(), b6()
   b3:
     return v17:k
   b4(v5 int):
-    v18 int = const 1
-    v19 int = add v17:k, v18 !s4
+    v19 int = add v17:k, v3 !s4
     jump b1(v5, v19)
   b5:
-    v10 int = const 2
-    v11 int = div v2:x, v10 !s1
+    v11 int = div v2:x, v6
     jump b4(v11)
   b6:
     v12 int = const 3
     v13 int = mul v12, v2:x !s2
-    v14 int = const 1
-    v15 int = add v13, v14 !s3
+    v15 int = add v13, v3 !s3
     jump b4(v15)
 
 fn main() unit
@@ -41,9 +37,7 @@ fn main() unit
     v4 bool = le v3:i, v2
     branch v4, b2(), b3(v5:total)
   b2:
-    v6 int = call steps(v3:i)
-    v7 int = add v5:total, v6 !s5
-    jump b4()
+    jump b5(v3:i, v0:total)
   b3(v12:total int):
     v11 str = str #0
     call rt.out_str(v11)
@@ -51,9 +45,28 @@ fn main() unit
     call rt.out_nl()
     return
   b4:
-    v8 bool = eq v3:i, v2
-    branch v8, b3(v7), b5()
-  b5:
-    v9 int = const 1
-    v10 int = add v3:i, v9
+    v10 int = add v3:i, v1
     jump b1(v10, v7)
+  b5(v15:x int, v30:k int):
+    v17 bool = ne v15:x, v1
+    branch v17, b6(), b7()
+  b6:
+    v19 int = const 2
+    v34 int = band v15:x, v1
+    v22 bool = eq v34, v0:total
+    branch v22, b9(), b10()
+  b7:
+    v7 int = add v5:total, v30:k !s5
+    v8 bool = eq v3:i, v2
+    branch v8, b3(v7), b4()
+  b8(v18 int):
+    v32 int = add v30:k, v1 !s4
+    jump b5(v18, v32)
+  b9:
+    v24 int = div v15:x, v19
+    jump b8(v24)
+  b10:
+    v25 int = const 3
+    v26 int = mul v25, v15:x !s2
+    v28 int = add v26, v1 !s3
+    jump b8(v28)

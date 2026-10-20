@@ -1,0 +1,155 @@
+## Inlining (ADR 0391): a call to a leaves function that calls nothing is
+## replaced by a copy of its blocks, so arithmetic helpers such as
+## `eval_a(i, j)` cost no call, and folding then sees through them. The
+## callee's trap sites are kept, so a trap still names the callee's line.
+
+## Functions with at most this many instructions are inlined.
+INLINE_LIMIT := 40
+
+## How many calls one function may have inlined into it.
+INLINE_BUDGET := 64
+
+pub fn inline_module(m Module) Module
+    mut by_name := Map[str, int]()
+    for k in 0..m.funcs.len()
+        by_name[m.funcs[k].name] = k
+    mut leaves := Set[str]()
+    for f in m.funcs
+        if inlinable(f)
+            leaves.add(f.name)
+    mut out := m
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
+        mut budget := INLINE_BUDGET
+        mut changed := true
+        while changed and budget > 0
+            changed = false
+            for b in 0..f.blocks.len()
+                at := first_call(f.blocks[b], leaves, f.name)
+                if at >= 0
+                    callee := m.funcs[by_name[f.blocks[b].insts[at].name]]
+                    f = inline_call(f, b, at, callee)
+                    budget -= 1
+                    changed = true
+                    break
+        if budget < INLINE_BUDGET
+            f = simplify(fold(simplify(f)))
+        out.funcs[k] = merge_blocks(f)
+    out
+
+## Small, calls nothing, and nothing jumps back to its entry.
+fn inlinable(f Func) bool
+    mut n := 0
+    for blk in f.blocks
+        n += blk.insts.len()
+        for i in blk.insts
+            if i.op == "call" or i.op == "prim" and i.name == "syscall"
+                return false
+        for t in blk.term.targets
+            if t == 0
+                return false
+    n <= INLINE_LIMIT
+
+fn first_call(blk Block, leaves Set[str], self_name str) int
+    for k in 0..blk.insts.len()
+        i := blk.insts[k]
+        if i.op == "call" and i.name != self_name and leaves.contains(i.name)
+            return k
+    -1
+
+## `f` with the call at `blocks[b].insts[at]` replaced by `callee`'s blocks:
+## the block jumps to the copy of the callee's entry with the arguments, and
+## each `return` jumps to a new block, holding the rest of `b`, whose
+## parameter is the call's value.
+fn inline_call(f Func, b int, at int, callee Func) Func
+    mut g := f
+    nv := g.vals.len()
+    nb := g.blocks.len()
+    rest := nb + callee.blocks.len()
+    for k in 0..callee.vals.len()
+        g.vals.push(callee.vals[k])
+        g.names.push(callee.names[k])
+    call := g.blocks[b].insts[at]
+    mut tail := List[Inst]()
+    for k in at + 1..g.blocks[b].insts.len()
+        tail.push(g.blocks[b].insts[k])
+    cont := Block(
+        params: if call.dst >= 0 then[call.dst] else [],
+        insts: tail,
+        term: g.blocks[b].term,
+    )
+    mut head := List[Inst]()
+    for k in 0..at
+        head.push(g.blocks[b].insts[k])
+    g.blocks[b].insts = head
+    g.blocks[b].term = jump_to(nb, call.args)
+    for blk in callee.blocks
+        mut insts := List[Inst]()
+        for i in blk.insts
+            mut c := i
+            c.dst = if i.dst >= 0 then i.dst + nv else -1
+            c.args = [a + nv for a in i.args]
+            insts.push(c)
+        t := blk.term
+        mut nt := t
+        if t.kind == "return"
+            nt = jump_to(rest, if t.value >= 0 then[t.value + nv] else [])
+        else
+            nt.cond = if t.cond >= 0 then t.cond + nv else -1
+            nt.targets = [x + nb for x in t.targets]
+            nt.args = [[a + nv for a in edge] for edge in t.args]
+        g.blocks.push(Block(params: [p + nv for p in blk.params], insts: insts, term: nt))
+    g.blocks.push(cont)
+    g
+
+## Join each block to the one it jumps to when it is that block's only
+## predecessor: the jump's arguments replace the parameters, renamed once at
+## the end.
+pub fn merge_blocks(f Func) Func
+    mut g := f
+    n := g.blocks.len()
+    mut preds := [0 for _ in 0..n]
+    for blk in g.blocks
+        for t in blk.term.targets
+            preds[t] += 1
+    mut repl := [v for v in 0..g.vals.len()]
+    mut merged := false
+    for b in 0..n
+        while g.blocks[b].term.kind == "jump"
+            t := g.blocks[b].term
+            s := t.targets[0]
+            if s == b or s == 0 or preds[s] != 1
+                break
+            ps := g.blocks[s].params
+            for j in 0..ps.len()
+                repl[ps[j]] = t.args[0][j]
+            g.blocks[b].insts.extend(g.blocks[s].insts)
+            g.blocks[b].term = g.blocks[s].term
+            # `s` is left unreachable, for `simplify` to drop.
+            g.blocks[s].params = []
+            g.blocks[s].insts = []
+            g.blocks[s].term = unreachable_term()
+            merged = true
+    if not merged
+        return g
+    # A parameter's argument may itself be a merged parameter.
+    for v in 0..repl.len()
+        mut r := repl[v]
+        while repl[r] != r
+            r = repl[r]
+        repl[v] = r
+    simplify(rename(g, repl))
+
+fn rename(f Func, repl List[int]) Func
+    mut g := f
+    for b in 0..g.blocks.len()
+        for k in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = repl[t.cond]
+        if t.value >= 0
+            t.value = repl[t.value]
+        t.args = [[repl[a] for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
