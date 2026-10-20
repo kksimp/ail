@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.path`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -14,7 +14,7 @@ failures are values (ADR 0157). There is no string-typed shell.
 
 **std.use.1** — `use std.NAME` imports the standard module `NAME`, available
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
-The standard modules are `env`, `fs`, `io`, `proc`, `random`, `time` and `ui`. Importing
+The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `time` and `ui`. Importing
 `std` itself, a submodule of a standard module, or any other `std.NAME` is a
 compile-time error that lists the modules. *(ADR 0157)*
 
@@ -34,9 +34,10 @@ the same name. A local MUST NOT reuse an imported module's name
 fields `path str` (the path the function was given) and `kind str`. A
 failure to start a process is the error struct `proc.ProcError`, with
 fields `cmd str` and `kind str`. `kind` is one of `not_found`,
-`permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`
-and `other`, and is the same for the same failure on every platform.
-*(ADR 0158)*
+`permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`,
+`timed_out` (a process killed at its time limit, `std.proc.2`) and `other`,
+and is the same for the same failure on every platform. `std.net` fails
+with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282)*
 
 ```ail
 use std.fs
@@ -75,6 +76,48 @@ a tree. *(ADR 0157)*
 **std.fs.7** — `make_dir(path str) ! IoError` creates a directory and any
 missing parents. An existing directory is not a failure. *(ADR 0157)*
 
+**std.fs.8** — `walk(dir str) List[str] ! IoError` returns every file
+below `dir` at any depth, each as `dir` joined with its path below it
+(`path.join`), sorted by bytes. Directories are not listed, names that start
+with `.` are, and a symbolic link to a directory is listed, not followed.
+Any directory that can't be read fails with that directory's path.
+*(ADR 0281)*
+
+**std.fs.9** — `glob(pattern str) List[str]` returns the existing paths
+that match `pattern`, sorted by bytes, without duplicates. The pattern's
+components are split at `/`. In a component, `*` matches any run of
+characters and `?` exactly one, and neither matches a leading `.` unless
+the component starts with `.`; any other character matches itself. A whole
+component `**` matches zero or more directories (not starting with `.`),
+and a trailing `**` matches everything below. A pattern starting with `/`
+is absolute; otherwise paths are relative to the working directory and are
+returned without a leading `./`. Directories that can't be read are
+skipped, so `glob` never fails. *(ADR 0281)*
+
+**std.fs.10** — `metadata(path str) Metadata ! IoError` returns
+`struct Metadata { size int, modified_ms int, is_dir bool }`: the size in
+bytes (`0` for a directory), the last modification time in milliseconds
+since 1970-01-01T00:00:00Z, and whether it is a directory. Symbolic links
+are followed. *(ADR 0281)*
+
+**std.fs.11** — `rename(from str, to str) ! IoError` moves a file or
+directory, replacing a file at `to`. *(ADR 0281)*
+
+**std.fs.12** — `copy(from str, to str) ! IoError` copies the file `from`
+to `to`, replacing a file there. A directory `from` fails with `is_dir`;
+nothing copies a tree. For `rename` and `copy`, a failure's `path` is
+`from` when `from` is missing (or, for `copy`, a directory), else `to`.
+*(ADR 0281)*
+
+```ail
+use std.fs
+
+fn main() !
+    for p in fs.glob("examples/*.ail")
+        m := fs.metadata(p)?
+        print("{p} {m.size}")
+```
+
 ## Environment: `std.env`
 
 **std.env.1** — `args() List[str]` returns the program's arguments: the
@@ -89,6 +132,10 @@ read, the program traps. *(ADR 0157)*
 
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
+
+**std.env.5** — `vars() Map[str, str]` returns the environment variables
+whose names and values are UTF-8, in order of their names' bytes.
+*(ADR 0282)*
 
 ## Paths: `std.path`
 
@@ -156,6 +203,68 @@ fn main() !
     r := proc.run("git", ["status", "--short"])?
     if r.status != 0
         print("git failed: {r.err}")
+```
+
+**std.proc.2** — `run` takes two optional parameters after `args`, which
+may be left off from the end (ADR 0284): `input str?` and
+`timeout_ms int?`. With `input`, the process reads that text as its
+standard input, which is then closed; `none` gives an empty input. With
+`timeout_ms`, a process still running after that many milliseconds is
+killed and `run` fails with `ProcError` of kind `timed_out`; its output is
+discarded. A negative `timeout_ms` traps. Standard output already printed
+is written before the process starts. *(ADR 0282)*
+
+**std.proc.3** — `which(name str) str?` returns the path of the program
+that `run(name, ...)` would start, or `none` when there is none: `name`
+itself when it contains a separator and is an executable file, otherwise
+the first executable `DIR/name` for the directories of `PATH` in order
+(on Windows, also with each extension of `PATHEXT`). *(ADR 0282)*
+
+```ail
+use std.proc
+
+fn main() !
+    if proc.which("sort") == none
+        return
+    r := proc.run("sort", [], "b\na\n", 2000)?
+    print(r.out)
+```
+
+## Network: `std.net`
+
+**std.net.1** — Every function of `std.net` has the effects `net` and
+`io` (`eff.infer.4`), so `--deny net`, a package's capability grants and
+`--deterministic` (`eff.det.1`) cover it. *(ADR 0283)*
+
+**std.net.2** — `get(url str) Response ! NetError` sends an HTTP/1.1 `GET`
+and returns `struct Response { status int, headers Map[str, str], body str }`:
+the status code, the headers with names in lowercase in the order they
+arrived (a repeated header's values joined with `, `), and the body as
+text, with bytes that aren't UTF-8 as U+FFFD. A response with any status is
+a success; only a request that gets no response fails. Redirects (`301`,
+`302`, `303`, `307`, `308` with a `Location`) are followed, at most five.
+Connecting, and each read and write, time out after 30 seconds.
+*(ADR 0283)*
+
+**std.net.3** — `post(url str, body str, content_type str) Response ! NetError`
+sends `body` as an HTTP/1.1 `POST` with that `Content-Type`, and returns
+the response as `get` does, without following redirects. *(ADR 0283)*
+
+**std.net.4** — A failure is `error struct NetError { url str, kind str,
+message str }`: the URL given, a short kind, and a sentence for people.
+`kind` is `bad_url` (not `http://HOST[:PORT][/PATH]`), `tls` (an `https`
+URL: the bootstrap has no TLS yet), `not_found` (the host has no address),
+`refused`, `timed_out`, `protocol` (a malformed response, or too many
+redirects) or `other`. *(ADR 0283)*
+
+```ail
+use std.net
+
+fn main() !
+    r := net.get("http://127.0.0.1:8080/health") else err
+        print("{err.kind}: {err.message}")
+        return
+    print("{r.status} {r.headers["content-type"]}")
 ```
 
 ## Clock: `std.time`

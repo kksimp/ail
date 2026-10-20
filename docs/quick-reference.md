@@ -614,7 +614,8 @@ dep textkit path vendor/textkit
 Import a standard module with `use std.NAME` and call it by its name
 (spec 17-std). Failures are values: `fs.IoError(path, kind)` and
 `proc.ProcError(cmd, kind)`, `kind` one of `not_found`, `permission`,
-`exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `other`.
+`exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`;
+`net.NetError(url, kind, message)`.
 
 ```ail
 use std.fs
@@ -624,17 +625,20 @@ fn main() !
     text := fs.read_text("in.txt")?          # str ! fs.IoError
     fs.write_text("out.txt", text)?           # also append_text
     names := fs.list_dir(".")?                # sorted names
+    srcs := fs.glob("src/**/*.ail")            # also fs.walk(dir)?: every file, sorted
     r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
     print("{r.status} {r.out} {r.err}")      # proc.Output
+    s := proc.run("sort", [], text, 5000)?     # input, then a time limit (kind timed_out)
 ```
 
 | Module | Functions |
 |---|---|
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents); all but `exists` are `! fs.IoError` |
-| `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
+| `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str` |
 | `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
-| `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
+| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?` |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` only (no TLS yet: kind `tls`) |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |

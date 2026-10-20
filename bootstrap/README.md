@@ -19,6 +19,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/commands.ail
 ./ail run examples/shapes.ail
 ./ail run examples/tool.ail        # files and processes (std modules)
+./ail run examples/fetch.ail URL   # an HTTP GET (std.net); offline, falls back to a file
 ./ail run examples/logscan.ail     # agent-tool corpus: also tasks.ail, build.ail (ADR 0217)
 ./ail run examples/pipeline.ail    # tasks and channels
 ./ail run examples/ui_hello.ail    # a window (std.ui); needs a display
@@ -66,12 +67,14 @@ reported but don't stop a program from running.
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
-| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
+| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `fs.Metadata`, `proc.Output`, `proc.ProcError`, `net.Response`, `net.NetError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
 | `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8`, `std.ui.13` |
 | `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8`, `std.ui.10–13` |
 | `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics`, mouse, scroll and the clipboard (ADRs 0177–0179, 0240) | `std.ui.1–8`, `std.ui.10–13` |
-| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.path.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
+| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–12`, `std.env.1–5`, `std.path.1–4`, `std.io.1–4`, `std.proc.1–3`, `std.net.2–3`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
 | `src/interp/stdlib.rs` | Runs the standard modules (`std.path` text in `src/stdlib.rs`) | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.path.2–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
+| `src/interp/osext.rs` | Walking, globbing, metadata, rename and copy; processes with input and a time limit; `which`; `env.vars` | `std.fs.8–12`, `std.env.5`, `std.proc.2–3` |
+| `src/interp/net.rs` | The HTTP/1.1 client of `std.net` (no TLS) | `std.net.2–4` |
 | `src/interp/keyfn.rs` | Key functions: `sorted`, `sort`, `min`, `max` with `by: \|x\| key` | `expr.key.3–4` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
@@ -153,7 +156,8 @@ package's are reported file by file.
   `type.char.*`, `type.num.*`, `type.coll.*`, `type.map.*`); the standard
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
-- **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc`,
+- **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc`, `std.net`
+  (HTTP/1.1 `get` and `post`, no TLS; ADR 0283),
   `std.path`, `std.random`, `std.time` and `std.ui` (a window of text cells; ADR 0177) (and `use std.NAME as d`), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
 - **Methods:** inside a method, the receiver's fields and methods by bare

@@ -59,6 +59,10 @@ update a `mut` variable in a loop, use `=`.
 
 `use std.random`: `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
+`use std.fs`: `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
+`use std.proc`: `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`use std.net`: `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
+
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
 ## Structs, enums and methods

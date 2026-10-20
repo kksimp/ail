@@ -269,3 +269,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0269](0269-fuzz-generator-design.md) | The fuzz harness generates typed programs, edge-value probes and token-level mutants from a seed *(delegated)* | Accepted | 2026-10-20 |
 | [0270](0270-fuzz-properties.md) | The fuzz harness checks crash-freedom, determinism, fmt idempotence, api validity and a contracts differential *(delegated)* | Accepted | 2026-10-20 |
 | [0271](0271-every-crash-becomes-a-case.md) | Every fuzz crash becomes a regression case; `repeat` and `pad_*` trap above 2^30 bytes *(delegated)* | Accepted | 2026-10-20 |
+| [0281](0281-std-fs-walk-glob-metadata.md) | `std.fs` gets `walk`, `glob`, `metadata`, `rename` and `copy` *(delegated)* | Accepted | 2026-10-20 |
+| [0282](0282-std-proc-input-timeout-which.md) | `proc.run` takes input and a time limit; `proc.which` and `env.vars` *(delegated)* | Accepted | 2026-10-20 |
+| [0283](0283-std-net-http-client.md) | `std.net`: a minimal HTTP/1.1 client, without TLS for now *(delegated)* | Accepted | 2026-10-20 |
+| [0284](0284-trailing-optional-std-parameters.md) | A standard function's trailing optional parameters may be left off *(delegated)* | Accepted | 2026-10-20 |

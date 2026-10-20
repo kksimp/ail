@@ -1,0 +1,20 @@
+## std.net.2-3 against the local server that `tests/net.rs` starts; its
+## address is the first argument.
+use std.env
+use std.net
+
+fn main() !
+    base := env.args()[0]
+    r := net.get("{base}/hello")?
+    print(r.status)
+    print(r.headers["content-type"])
+    print(r.headers["x-twice"])
+    print(r.body)
+    moved := net.get("{base}/moved")?
+    print("{moved.status} {moved.body}")
+    chunked := net.get("{base}/chunked")?
+    print(chunked.body)
+    missing := net.get("{base}/missing")?
+    print("{missing.status} {missing.body}")
+    echo := net.post("{base}/echo", "name=ail", "application/x-www-form-urlencoded")?
+    print(echo.body)
