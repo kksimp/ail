@@ -54,9 +54,9 @@ reported but don't stop a program from running.
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
 | `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
-| `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8` |
-| `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8` |
-| `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics` (ADRs 0177–0179) | `std.ui.1–8` |
+| `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8`, `std.ui.13` |
+| `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8`, `std.ui.10–13` |
+| `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics`, mouse, scroll and the clipboard (ADRs 0177–0179, 0240) | `std.ui.1–8`, `std.ui.10–13` |
 | `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
 | `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |

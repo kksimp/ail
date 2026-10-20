@@ -50,10 +50,14 @@ outline fonts through the platform text APIs.
 - **Fonts and glyphs.** Latin-1 only, 10x20 pixels, no size option, `?` for
   everything else. A native layer adds a font size, full Unicode via the
   platform's text system, and wide-character cells.
-- **Missing pieces to add additively:** mouse events (a new `Event` variant
-  breaks exhaustive `match`es, so they should arrive together with a
-  `_ =>`-friendly guideline or a version bump), clipboard, HiDPI scaling,
-  a `meta` key distinct from Ctrl on macOS (ADR 0179), and IME composition.
+- **Clipboard.** Today it shells out to `pbcopy`, `wl-copy`, `xclip` or
+  PowerShell (ADR 0240); a native layer uses `NSPasteboard`, the Win32
+  clipboard API and the Wayland/X11 selection protocols.
+- **Missing pieces to add additively:** modifier state on mouse events
+  (for Shift-click), HiDPI scaling, a `meta` key distinct from Ctrl on
+  macOS (ADR 0179), and IME composition. Mouse and scroll arrived as new
+  `Event` variants (ADR 0240), which broke `match`es that listed every
+  variant; batch any further variants into one change.
 
 ## Risks
 
