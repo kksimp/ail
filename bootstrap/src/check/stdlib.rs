@@ -41,6 +41,7 @@ impl<'p> Checker<'p> {
                     );
                     continue;
                 }
+                [(root, _), _, _, ..] if root == "std" && stdlib::ail_module_path(&u.dotted()).is_some() => continue,
                 [(root, _), _, _, ..] if root == "std" => {
                     let (_, last) = u.path.last().expect("a path");
                     self.error_help(
