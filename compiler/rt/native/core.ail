@@ -247,6 +247,14 @@ fn out_list_float(xs List[int])
         out_float(loadf(data + 8 * i))
     out_byte(93)
 
+## A heap object of `size` bytes after its header word (native-abi.md §3):
+## bits 0-7 the kind, 16-63 the size. The pointer is to the first byte
+## after the header.
+fn obj_new(size int, kind int) int
+    p := alloc(size + 8)
+    store64(p, kind + size.shl(16))
+    p + 8
+
 # ---- lists (native-abi.md §2) ----
 
 ## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
