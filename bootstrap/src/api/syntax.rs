@@ -127,7 +127,7 @@ fn token_line(t: &Token, out: &mut String) {
     }
 }
 
-// ---- The syntax tree (api.ast.1-6) ----
+// ---- The syntax tree (api.ast.1-3) ----
 
 /// A JSON value, written as the derived `ToJson` of `compiler/ast/ast.ail`
 /// writes it (ADR 0376): a number as AIL prints a `float`, a variant with

@@ -1,0 +1,4 @@
+shape [2, 2]
+product [58, 64, 139, 154]
+transpose [1, 4, 2, 5, 3, 6]
+row sums [122, 293]

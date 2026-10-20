@@ -662,8 +662,8 @@ error that lists them. *(ADR 0328)*
 same element type (checked) and MUST have equal shapes: otherwise the call
 traps. *(ADR 0328)*
 
-**std.tensor.5** — On `float` tensors, `add` and `mul` round each element
-as `+` and `*` do. `sum` and `dot` add in this order: element `i` (or
+**std.tensor.5** — On `float` tensors, `add`, `mul` and `/` round each element
+as `+`, `*` and `/` do. `sum` and `dot` add in this order: element `i` (or
 product `i`) goes to partial sum `i % 16` for the first `16 * (n / 16)`
 elements; the partial sums then halve, `s[i] += s[i + h]` for `h` = 8, 4,
 2, 1; the remaining elements are added to `s[0]` in order. Products are
@@ -692,16 +692,17 @@ elements are equal. A tensor's text form is the call that rebuilds it:
 `tensor.from([1.0, 2.0])`, with the shape after the list when the tensor
 isn't 1-D. *(ADR 0328)*
 
-**std.tensor.10** — `a + b`, `a - b` and `a * b` with a tensor operand are
-elementwise, with no other arithmetic operator defined for tensors. Both
-operands are tensors with one element type and equal shapes (`a + b` is
-`a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the other a
-scalar of its element type, on either side, which is taken with every
-element: `t * 2.0`, `1.0 - t`. An `int` literal beside a `Tensor[float]` is a
-`float` (`type.num.10`). Rounding is std.tensor.5's and overflow
-std.tensor.6's; other operand types are a compile-time error, and unequal
-shapes trap. `+=`, `-=` and `*=` follow. Matrix product stays
-`a.matmul(b)`. *(ADR 0344)*
+**std.tensor.10** — `a + b`, `a - b`, `a * b` and `a / b` with a tensor
+operand are elementwise, with no other arithmetic operator defined for
+tensors. Both operands are tensors with one element type and equal shapes
+(`a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the
+other a scalar of its element type, on either side, which is taken with
+every element: `t * 2.0`, `1.0 - t`, `8.0 / t`. `/` is defined on `float`
+tensors only; `/` on a `Tensor[int]` is a compile-time error. An `int`
+literal beside a `Tensor[float]` is a `float` (`type.num.10`). Rounding is
+std.tensor.5's and overflow std.tensor.6's; other operand types are a
+compile-time error, and unequal shapes trap. `+=`, `-=` and `*=` follow.
+Matrix product stays `a.matmul(b)`. *(ADR 0344, ADR 0507)*
 
 **std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
 to a `T`; `t.sum(axis int)`, `t.max(axis)` and `t.mean(axis)` reduce along
@@ -717,6 +718,16 @@ one that is `>` it: a NaN never replaces it, and ties keep the earlier one.
 **std.tensor.12** — `t.transpose()` of an `m` by `n` tensor is the `n` by
 `m` tensor whose element `(j, i)` is `t`'s `(i, j)`. A tensor that isn't
 2-D traps. *(ADR 0345)*
+
+**std.tensor.13** — `t.relu()`, `t.sigmoid()` and `t.tanh()` apply an
+activation to each element of a `float` tensor and give a tensor of the
+same shape. `relu(x)` is `x` when `x > 0.0` and `0.0` otherwise, except
+that a NaN stays NaN. `sigmoid(x)` is `1.0 / (1.0 + exp(-x))` and `tanh` is
+the hyperbolic tangent, both with the platform's `exp` and `tanh`, so their
+last bit may differ between operating systems. Each element is computed by
+the same scalar code on every ISA, so std.tensor.5's vector paths don't
+apply to them.
+These methods on a `Tensor[int]` are a compile-time error. *(ADR 0507)*
 
 ```ail
 fn main()

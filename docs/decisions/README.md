@@ -366,9 +366,22 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0377](0377-checker-in-ail-ported-pass-for-pass.md) | The checker in AIL is ported pass for pass, and says what it covers *(delegated)* | Accepted | 2026-10-20 |
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
+| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
 | [0450](0450-iso-8601-parse-and-print.md) | ISO 8601: an offset is required, `parse_in` supplies a zone, `iso()` prints round-trippable text *(delegated)* | Accepted | 2026-10-20 |
 | [0451](0451-format-patterns-use-strftime-tokens.md) | `format` patterns use strftime tokens *(delegated)* | Accepted | 2026-10-20 |
+| [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |
+| [0405](0405-native-traps.md) | Native traps print the interpreter's first line and exit 1 *(delegated)* | Accepted | 2026-10-20 |
+| [0406](0406-raw-syscalls-for-native-runtime.md) | Raw syscalls for the first native runtime, including on macOS *(delegated)* | Accepted | 2026-10-20 |
+| [0407](0407-bump-allocator-no-header.md) | Bump allocator over mmap, no object header, collector later *(delegated)* | Accepted | 2026-10-20 |
+| [0408](0408-buffered-output.md) | Output is buffered in the runtime; errors are not *(delegated)* | Accepted | 2026-10-20 |
+| [0409](0409-float-text-by-exact-digit-generation.md) | Float text by exact digit generation, written from the textbook *(delegated)* | Accepted | 2026-10-20 |
+| [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
+| [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
+| [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
+| [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
+| [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
+| [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |

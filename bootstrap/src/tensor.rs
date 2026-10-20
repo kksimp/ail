@@ -167,6 +167,17 @@ impl Tensor {
         Ok(Tensor { shape: self.shape.clone(), data })
     }
 
+    /// std.tensor.13: an activation of each element of a `float` tensor.
+    /// The scalar code below runs on every target, so the results agree
+    /// across ISAs (std.tensor.5, lockstep ADR 0008).
+    pub fn activate(&self, act: Activation) -> Result<Tensor, Fault> {
+        let Data::F(v) = &self.data else {
+            return fault("std.tensor.13", format!("`{}` is on `float` tensors", act.name()));
+        };
+        let data = v.iter().map(|&x| act.apply(x)).collect();
+        Ok(Tensor { shape: self.shape.clone(), data: Data::F(data) })
+    }
+
     /// std.tensor.12: the transpose of a 2-D tensor.
     pub fn transpose(&self) -> Result<Tensor, Fault> {
         let &[m, n] = self.shape.as_slice() else {
@@ -255,6 +266,7 @@ pub enum Op {
     Add,
     Sub,
     Mul,
+    Div,
 }
 
 impl Op {
@@ -263,6 +275,7 @@ impl Op {
             Op::Add => "add",
             Op::Sub => "-",
             Op::Mul => "mul",
+            Op::Div => "/",
         }
     }
 
@@ -271,6 +284,7 @@ impl Op {
             Op::Add => x + y,
             Op::Sub => x - y,
             Op::Mul => x * y,
+            Op::Div => x / y,
         }
     }
 
@@ -279,6 +293,8 @@ impl Op {
             Op::Add => x.checked_add(y),
             Op::Sub => x.checked_sub(y),
             Op::Mul => x.checked_mul(y),
+            // `/` is `float`-only (std.tensor.10): the checker rejects it on `int`.
+            Op::Div => None,
         }
     }
 }
@@ -294,6 +310,36 @@ pub enum Scalar {
 pub enum Sum {
     F(f64),
     I(i64),
+}
+
+/// An elementwise activation (std.tensor.13).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Activation {
+    Relu,
+    Sigmoid,
+    Tanh,
+}
+
+impl Activation {
+    pub fn name(self) -> &'static str {
+        match self {
+            Activation::Relu => "relu",
+            Activation::Sigmoid => "sigmoid",
+            Activation::Tanh => "tanh",
+        }
+    }
+
+    /// `relu` keeps a positive element and makes the rest `0.0`, but a NaN
+    /// stays NaN. `sigmoid` and `tanh` use the platform's `exp` and `tanh`.
+    fn apply(self, x: f64) -> f64 {
+        match self {
+            Activation::Relu if x.is_nan() => x,
+            Activation::Relu if x > 0.0 => x,
+            Activation::Relu => 0.0,
+            Activation::Sigmoid => 1.0 / (1.0 + (-x).exp()),
+            Activation::Tanh => x.tanh(),
+        }
+    }
 }
 
 fn overflow() -> Fault {
@@ -683,6 +729,7 @@ mod x86 {
             Op::Add => _mm256_add_pd(x, y),
             Op::Sub => _mm256_sub_pd(x, y),
             Op::Mul => _mm256_mul_pd(x, y),
+            Op::Div => _mm256_div_pd(x, y),
         }
     }
 
@@ -829,6 +876,7 @@ mod arm {
             Op::Add => vaddq_f64(x, y),
             Op::Sub => vsubq_f64(x, y),
             Op::Mul => vmulq_f64(x, y),
+            Op::Div => vdivq_f64(x, y),
         }
     }
 

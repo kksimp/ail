@@ -1,0 +1,26 @@
+# Word frequencies over a generated text: an integer LCG picks each word from a
+# fixed vocabulary, a Map counts them, and the counts print in vocabulary order.
+# N words come from argv. The text is generated in memory, not read from disk.
+
+WORDS := ["the", "of", "and", "to", "in", "fox", "jumps", "lazy", "dog", "river", "stone", "moss"]
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(1000000)
+    mut counts := Map[str, int]()
+    mut seed := 7
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        w := WORDS[seed % WORDS.len()]
+        c := counts.get(w) else 0
+        counts[w] = c + 1
+    for w in WORDS
+        c := counts.get(w) else 0
+        print("{w} {c}")
+    print("distinct {counts.len()}")

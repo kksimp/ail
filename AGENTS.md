@@ -108,6 +108,9 @@ Style:
 - Write precisely and concisely. Docs are loaded into AI context, so every
   sentence should earn its tokens.
 - Never put a model name or model identifier in any committed file.
+- Licence: Apache 2.0 with a Runtime Library Exception (ADR 0510). Only
+  Apache-2.0-compatible code or algorithm ports may be added; runtime code
+  embedded into user programs falls under the exception.
 
 ## Repository layout
 
@@ -134,6 +137,7 @@ tools/
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
   prune-merged.sh         deletes remote branches already merged into main (ADR 0028)
+  rules-audit.sh          audits spec rule IDs against the code and `ail explain` (ADR 0002, ADR 0483)
 ```
 
 ## Settled constraints (summary; the ADRs are authoritative)
