@@ -1,17 +1,14 @@
 # AIL language card
 
-> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,770 tokens
-> (4,253 on the costliest tokenizer; measure with
-> `tools/tokbench/run.sh docs/language-card.md`). Non-normative: the
-> [spec](spec/) is authoritative and the [quick reference](quick-reference.md)
-> has the long form. Everything here runs on the bootstrap interpreter.
+> v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
+> [quick reference](quick-reference.md) has the long form. Budget 4,000 tokens
+> on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs
 
 ```sh
-./ail run FILE.ail           # check, then run
+./ail run FILE.ail           # check, then run; --deterministic forbids clock/random/proc
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail run --deterministic FILE.ail  # same inputs, same output (no clock/random/proc)
 ```
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
@@ -61,9 +58,9 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
 `use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
-`random.seed(n)`, `random.shuffle(mut xs)`; `--seed N` repeats a run.
+`random.seed(n)`, `random.shuffle(mut xs)`.
 
-Constants are top-level `NAME := value` (literals, constants, operators; no calls).
+Constants: top-level `NAME := value` (no calls).
 
 ## Structs, enums and methods
 
@@ -85,22 +82,15 @@ fn Point.shift(mut self, dx int)  # may change self
 fn Point.origin() Point           # associated function: Point.origin()
     Point(x: 0, y: 0)
 
-fn is_red(c Color) bool
-    match c
-        Red => true
-        Green => false
-
 fn main()
     mut p := Point(y: 2, x: 1)    # name fields, in any order
     p.shift(3)                    # `mut self` methods need a `mut` variable
     print(p.sum())                # method calls always have ()
-    c := Color.Red                # qualify a variant...
-    print(is_red(Green))          # ...unless its type is known from context
+    c := Color.Red                # qualified, unless the type is known: `c = Green`
     p.x = 10                      # fields of a `mut` variable can be assigned
 ```
 
-Every value can be compared with `==` (structs and lists field by field) and
-printed: `print(p)` shows `Point(x: 1, y: 2)`, and `"{c}"` gives `Color.Red`.
+`==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
 
 Variants can carry fields. Build them like structs; match them by position:
 
@@ -147,55 +137,31 @@ fn main() !                                 # main can fail; the error is report
         print("bad input: {err}")           # ParseError.BadNumber(text: "x")
         0
     print("{i} {n} {t}")
-    if v := parse("7")                      # do one thing or the other, then go on
+    if v := parse("7")                      # handle both outcomes, then go on
         print("got {v}")
     else err
         print("error: {err}")
 ```
 
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
-- `x := ... else ...` must give a fallback or leave (`return`, `continue`,
-  `break`); to handle both outcomes and carry on, use `if x := ...` + `else err`.
-- `else` also works inside an expression: `(m.get(k) else 0) + 1`.
-- Several error types: `fn load() Config ! IoError | ParseError`.
-- No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
-  As a statement, `save() else err` + block handles the failure and goes on;
-  `save() else return` leaves.
-- `int??` (from `m.get(k)` on a `Map[K, int?]`): `none` is the outer level;
-  `else` peels one, so `m.get(k) else none` flattens to `int?`.
-- `unreachable("why")` stops the program; it fits any type, like `return`.
+  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
+- Several error types: `fn load() Config ! IoError | ParseError`. No success
+  value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
 
 ## Traits and generics
 
 ```ail
 trait Shape
     fn area(self) int
-    fn name(self) str                # a default; an `impl` may replace it
-        "shape"
-    fn describe(self) str            # defaults call other methods on `self`
-        "{name()}: {area()}"
+    fn describe(self) str            # a default; an `impl` may replace it
+        "shape: {area()}"            # defaults call other methods on `self`
 
 struct Circle
     r int
 
-struct Square
-    side int
-
 impl Shape for Circle                # defines every method without a default
     fn area(self) int
         3 * r * r
-
-impl Shape for Square
-    fn area(self) int
-        side * side
-    fn name(self) str
-        "square"
-
-struct Version
-    major int
-    minor int
-
-impl Ord for Version                 # no methods: compares major, then minor
 
 fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
     mut best := items[0]
@@ -204,32 +170,20 @@ fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
             best = x
     best
 
-struct Stack[T]                      # a generic type
-    items List[T]
-
-fn Stack.new() Self                  # its methods use `T` directly;
-    Stack(items: [])                 # `Self` means `Stack[T]`
-
-fn Stack.push(mut self, x T)
-    items.push(x)
-
-struct Scene
-    shapes List[any Shape]           # `any`: values of different types
+struct Stack[T]                      # a generic type; its methods use `T`
+    items List[T]                    # and `Self` (for `Stack[T]`) directly
 
 fn main()
     c := Circle(r: 2)
     print(c.describe())              # shape: 12
     print(largest([3, 9, 4]))        # type arguments are inferred
-    mut s := Stack[int].new()
-    s.push(1)
-    scene := Scene(shapes: [c, Square(side: 3)])
-    for sh in scene.shapes
-        print(sh.describe())
-    print(Shape.area(c))             # the qualified form of `c.area()`
+    mut shapes := List[any Shape]()  # `any`: values of different types
+    shapes.push(c)
 ```
 
-- `<`, `<=`, `>`, `>=` work on `int`, `str`, lists and types with `impl Ord`.
-  Customise with `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
+- `impl Ord for Version` with no body compares the fields in order. `<` and
+  friends work on `int`, `str`, lists and `Ord` types. Customise with
+  `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
 
 ## Control flow
 
@@ -257,9 +211,7 @@ for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
 
 label := match c     # must cover every variant; `_` covers the rest
     Red => "red"
-    Green =>
-        part := "gr"
-        "{part}een"
+    Green => "green"  # an arm can also be an indented block
 
 match ch             # literals and `|`; ints, strings and chars need `_`
     '+' | '-' => continue           # a one-line statement arm
@@ -280,16 +232,16 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 - `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
   `x.to_int()`. An int literal works where a float is expected.
 - Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32`: literals take the type from
-  context; same-type operands only; overflow traps; convert with `x.to_u8()`.
-- `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()`, `checked_add`
-  (gives `int?`), `wrapping_add`, `saturating_add`.
+  context; same-type operands only; overflow traps; `x.to_u8()` converts.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`), `wrapping_add`,
+  `saturating_add`.
 
 ## Strings and characters
 
 ```ail
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
-print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, hex
+print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 ```
 
 - Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
@@ -299,8 +251,8 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
-- Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
+  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `pad_right`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+- `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
@@ -316,7 +268,6 @@ xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
-empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
 Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`; `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
@@ -326,13 +277,8 @@ and negative indexes are errors.
 Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
 `{k: v for ...}`.
 
-`for x in xs` gives a copy of each element, and changing `xs` inside the loop
-doesn't affect it. To change the elements themselves, use `for mut`:
-
-```ail
-for mut item in items      # `items` must be `mut`
-    item.qty += 1          # changes the element
-```
+`for x in xs` gives a copy of each element. To change the elements
+themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1`.
 
 ## Maps and sets
 
@@ -340,8 +286,7 @@ for mut item in items      # `items` must be `mut`
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["ann"] += 1                       # the key must exist, or the program stops
-a := ages["bob"]                       # traps if missing...
-b := ages.get("dan") else 0            # ...`get` gives an optional
+b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
 for name in ages.keys()                # `for k in m` is an error; also values()
     print("{name}: {ages[name]}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
