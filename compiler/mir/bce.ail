@@ -278,17 +278,13 @@ fn Guard.len_of(mut self, x int) int
 
 fn Guard.check(mut self, cond int)
     next := base + blocks.len() + 1
-    blocks.push(Block(
-        params: [],
-        insts: cur,
-        term: Term(
-            kind: "branch",
-            cond: cond,
-            targets: [next, slow],
-            args: [[], slow_args],
-            value: -1,
-        ),
-    ))
+    blocks.push(Block(params: [], insts: cur, term: Term(
+        kind: "branch",
+        cond: cond,
+        targets: [next, slow],
+        args: [[], slow_args],
+        value: -1,
+    )))
     cur = []
 
 ## `0 <= idx < len x`, with `idx` the constant `k` if known.

@@ -252,10 +252,10 @@ fn os_str_cmp(a int, b int) int
         x := load8(a + 16 + i)
         y := load8(b + 16 + i)
         if x != y
-            return if x < y then -1 else 1
+            return if x < y then - 1 else 1
     if na == nb
         return 0
-    if na < nb then -1 else 1
+    if na < nb then - 1 else 1
 
 # ---- std.fs ----
 
@@ -604,7 +604,15 @@ fn line_buffered() bool
     mut k := load64(global(OUT_TTY))
     if k == 0
         buf := os_scratch(OS_TMP)
-        r := if target() == 2 then syscall(54, 1, 1078490131, buf, 0, 0, 0) else syscall(os_pick(16, 29, 0), 1, 21505, buf, 0, 0, 0)
+        r := if target() == 2 then syscall(54, 1, 1078490131, buf, 0, 0, 0) else syscall(
+            os_pick(16, 29, 0),
+            1,
+            21505,
+            buf,
+            0,
+            0,
+            0,
+        )
         k = if r == 0 then 2 else 1
         store64(global(OUT_TTY), k)
     k == 2
@@ -693,7 +701,10 @@ fn os_lossy(s int) str
             sb_byte(c)
             i += 1
             continue
-        need := if c >= 194 and c <= 223 then 2 else if c >= 224 and c <= 239 then 3 else if c >= 240 and c <= 244 then 4 else 0
+        need := if c >= 194
+            and c <= 223 then 2 else if c >= 224
+            and c <= 239 then 3 else if c >= 240
+            and c <= 244 then 4 else 0
         # How many bytes of a valid sequence start here.
         mut k := if need == 0 then 0 else 1
         mut ok := need > 0

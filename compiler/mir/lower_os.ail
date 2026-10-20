@@ -121,7 +121,7 @@ fn Lower.lower_os_or_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos)
         res = new_value(f.ret, "")
         blocks[join].params.push(res)
     fail := new_block()
-    branch(ok, join, if f.ret.is_unit() then [] else [r.id], fail, [])
+    branch(ok, join, if f.ret.is_unit() then[] else [r.id], fail, [])
     seal(fail)
     cur = fail
     match other
@@ -138,7 +138,10 @@ fn Lower.lower_os_or_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos)
                 problem(pos, "this `else` must leave: `return`, `break` or `continue`")
         Handler(err, body, hpos) =>
             if err != none
-                problem(hpos, "`else err` isn't in the native subset yet: error values come with lane 175")
+                problem(
+                    hpos,
+                    "`else err` isn't in the native subset yet: error values come with lane 175",
+                )
             elif f.ret.is_unit()
                 lower_block(body, false)
                 if not done()
@@ -217,6 +220,9 @@ fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
 fn Lower.lower_os_handle(mut self, value ast.Expr, other ast.Else)
     pos := expr_pos(value)
     if fallible(value) == none
-        problem(pos, "`else` handlers aren't in the native subset yet, but for the OS calls and `s.to_float()`")
+        problem(
+            pos,
+            "`else` handlers aren't in the native subset yet, but for the OS calls and `s.to_float()`",
+        )
         return
     lower_os_or_else(value, other, pos)

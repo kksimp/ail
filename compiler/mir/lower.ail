@@ -692,7 +692,10 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     if recv == none
         if lower_os_let_else(name, pos, value, other)
             return
-        problem(pos, "`else` on a binding isn't in the native subset yet, but for `s.to_int()` and the OS calls")
+        problem(
+            pos,
+            "`else` on a binding isn't in the native subset yet, but for `s.to_int()` and the OS calls",
+        )
         declare(name, Ty.Unknown, -1)
         return
     s := lower_value(recv?, Ty.Str) else
