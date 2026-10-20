@@ -515,7 +515,7 @@ if seen.add("x")                       # true if it wasn't there
 ```
 
 Also `m.contains(k)`, `m.remove(k)` (gives `V?`), `m.len()`, `s.remove(x)`,
-`s.contains(x)`, `s.sorted()`. Keys and set elements can be any type whose
+`s.contains(x)`, `s.sorted()`, `s.union(t)`, `s.intersect(t)`, `s.difference(t)` (also on two `keys()` lists; give a set), and `m.push(k, x)` for a `Map[K, List[T]]` (starts an empty list when `k` is missing; types an untyped `{}`). Keys and set elements can be any type whose
 `==` is automatic (ints, strings, chars, structs and enums of them), but not
 floats.
 

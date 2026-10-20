@@ -60,9 +60,14 @@ The newly available features do not shorten the five older agent programs.
 Their remaining gap to Python (`logscan` +3.1%, `snapdiff` +4.6%, `csvreport`
 +2.5%) is the declared structs and the escaped `\{` in JSON test strings
 that [round 5](program-measurements-r5.md) already measured. The one change
-found is a missing method, proposed in OQ-110 below, not implemented.
+found is a missing method, added in round 9 as `Set.union` ([ADR 0340](../decisions/0340-set-operations.md)).
 
 ## Where AIL still costs more than Python
 
-Recorded in [open-questions.md](../open-questions.md) (OQ-110 to OQ-112),
-with the estimated saving, and not implemented tonight.
+Resolved in round 9 (lane 91): `Set.union` and friends (−9.6 tokens on
+`snapdiff`, [ADR 0340](../decisions/0340-set-operations.md)) and `m.push(k, x)`
+(−4.8 on `scan`, [ADR 0341](../decisions/0341-map-push.md)); named arguments
+for `proc.run` measured +1.4 on `runner` and were not added
+([ADR 0342](../decisions/0342-named-arguments-for-std-optionals-rejected.md)).
+The ten agent programs are 3,800.0 tokens against Python's 4,031.8 (5.7%
+under, from 5.4%).

@@ -156,7 +156,7 @@ package's are reported file by file.
   `mut` arguments, method calls, fields, indexing `xs[i]` and `m[k]`, slices
   `xs[a..b]`, `xs[a..]`, `xs[..b]`; struct and variant literals
   `Type(field: value)`, with shorthand (`Pos(row, col)`) and positional
-  arguments when no two fields filled share a type; list, map and set literals; list, set and map comprehensions (`[e for x in xs if c]`, ADR 0182); key functions `xs.sorted(by: |x| key)` and `take(n)` (ADR 0250); `m[k] += v` from zero on a missing key (ADR 0251); `?` before an `else` (ADR 0252); `List[T]()`,
+  arguments when no two fields filled share a type; list, map and set literals; list, set and map comprehensions (`[e for x in xs if c]`, ADR 0182); key functions `xs.sorted(by: |x| key)` and `take(n)` (ADR 0250); `m[k] += v` from zero on a missing key (ADR 0251); `Set` and `keys()` `union`/`intersect`/`difference` (ADR 0340); `m.push(k, x)` on `Map[K, List[T]]` (ADR 0341); `?` before an `else` (ADR 0252); `List[T]()`,
   `Map[K, V]()`, `Set[T]()`; float and char literals; multi-line,
   one-line `"""..."""` and raw strings; operators
   by ADR 0112's precedence; string interpolation `"{expr}"` with format specs `"{x:>8}"`, `"{r:.2}"`, `"{n:0>4x}"` (ADR 0173); bare enum
