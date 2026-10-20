@@ -115,7 +115,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 let pos = p.bump().pos;
                 p.i += 1; // `:=`
                 match p.expression() {
-                    Some(value) if p.eat(&Tok::Newline) => prog.consts.push(ConstDecl { name, pos, value }),
+                    Some(value) if p.eat(&Tok::Newline) => prog.consts.push(ConstDecl { name, pos, doc: None, value }),
                     Some(_) => {
                         p.unexpected("end of line after the constant", "lex.stmt.1");
                         p.skip_statement();
@@ -501,7 +501,7 @@ impl Parser {
         } else {
             Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
         };
-        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within })
+        Some(FnDecl { owner, name, pos, doc: None, generics, receiver, params, ret, body, within })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -540,7 +540,7 @@ impl Parser {
             return;
         }
         let index = prog.traits.len();
-        prog.traits.push(TraitDecl { name: name.clone(), pos, methods: Vec::new() });
+        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new() });
         if !self.eat(&Tok::Newline) {
             self.unexpected(&format!("end of line after `trait {name}`"), "trait.decl.1");
             self.skip_statement();
@@ -716,7 +716,7 @@ impl Parser {
             self.i += 1;
         }
         let ty = self.type_ref("the field's type (written `name Type`)", rule)?;
-        Some(Field { name: fname, pos: fpos, ty })
+        Some(Field { name: fname, pos: fpos, doc: None, ty })
     }
 
     /// `struct Name` followed by one `name Type` field per line (type.struct.1-2).
@@ -742,7 +742,7 @@ impl Parser {
             fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
-        Some(StructDecl { name, pos, is_error, generics, fields })
+        Some(StructDecl { name, pos, doc: None, is_error, generics, fields })
     }
 
     /// `enum Name` followed by one variant per line (type.enum.1-2).
@@ -776,10 +776,10 @@ impl Parser {
                 }
                 p.expect_sym(")", "`)` or `,` in the variant's fields", "type.enum.2")?;
             }
-            variants.push(Variant { name: vname, pos: vpos, fields });
+            variants.push(Variant { name: vname, pos: vpos, doc: None, fields });
             Some(())
         });
-        Some(EnumDecl { name, pos, is_error, generics, variants })
+        Some(EnumDecl { name, pos, doc: None, is_error, generics, variants })
     }
 
     /// An indented block of one-line members, each parsed by `member`.
