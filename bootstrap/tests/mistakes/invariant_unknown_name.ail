@@ -1,0 +1,7 @@
+struct Account
+    balance int
+    invariant total >= 0
+
+fn main()
+    a := Account(balance: 5)
+    print(a.balance)

@@ -614,6 +614,22 @@ fn holds_int(f: &FnDecl, resolved: &Resolved, name: &str) -> Option<bool> {
     found.flatten()
 }
 
+/// Whether `name` is a `ref` in `f`: a `ref T` parameter or `name := ref ...`.
+fn is_ref_local(f: &FnDecl, name: &str) -> bool {
+    if let Some(p) = f.params.iter().find(|p| p.name == name) {
+        return matches!(p.ty.kind, TypeKind::Ref(_));
+    }
+    let mut found = false;
+    if let Some(b) = f.body.as_ref() {
+        each_let(b, &mut |n, value| {
+            if n == name {
+                found = matches!(value, Expr::Ref { .. });
+            }
+        });
+    }
+    found
+}
+
 fn literal_kind(e: &Expr, resolved: &Resolved) -> Option<bool> {
     match e {
         Expr::Int(_, p) => Some(!resolved.float_literals.contains(p)),
@@ -838,7 +854,20 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
                 })
                 .collect();
             let unproven = ws.iter().find(|w| matches!(w.kind, Kind::Unproven(_)));
-            if let Some(w) = unproven {
+            if let (Some(w), true) = (unproven, is_ref_local(f, root)) {
+                // conc.par.2: every iteration writes the one cell a `ref` names.
+                problems.push(Problem {
+                    rule: "conc.par.2",
+                    reason: format!("writes through the `ref` `{root}`, which every iteration shares"),
+                    help: format!(
+                        "give each iteration its own element (`out[{var}] = ...`), keep `{root}` in a `Mutex` or `Atomic`, or drop `par`"
+                    ),
+                    at: w.pos,
+                    provable: true,
+                    handle: false,
+                    atomic: false,
+                });
+            } else if let Some(w) = unproven {
                 let Kind::Unproven(steps) = &w.kind else { unreachable!() };
                 let why = if scan_range(iter, *mutable) {
                     format!("its index isn't the loop variable `{var}`")

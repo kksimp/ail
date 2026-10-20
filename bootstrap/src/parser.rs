@@ -1365,12 +1365,14 @@ impl Parser {
         }
         if !self.eat_kw("mut") {
             let at = self.pos();
-            self.error_help(
+            let d = Diagnostic::new(
                 "conc.share.6",
                 at,
                 "a `with` block writes its variable back to the mutex, so the variable is `mut`",
-                "write `with m as mut x`; to read the value once, use `m.get()`",
-            );
+            )
+            .help("write `with m as mut x`; to read the value once, use `m.get()`")
+            .fix("write `as mut`", vec![Edit::insert(at, "mut ")]);
+            self.diags.push(d);
             return None;
         }
         let (var, var_pos) = self.name("a variable after `as mut`", "conc.share.6")?;

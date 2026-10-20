@@ -1,0 +1,8 @@
+fn work(n int) int
+    n * 2
+
+fn main() !
+    t := spawn work(1)
+    a := t.wait()?
+    b := t.wait()?
+    print(a + b)

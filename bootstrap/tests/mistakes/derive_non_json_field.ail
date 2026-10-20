@@ -1,0 +1,8 @@
+struct Job
+    id int
+    results Channel[int]
+
+impl ToJson for Job
+
+fn main()
+    print("x")

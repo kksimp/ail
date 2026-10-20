@@ -1,0 +1,6 @@
+fn load(path str) str
+    requires fs.exists(path)
+    "x"
+
+fn main()
+    print(load("a"))

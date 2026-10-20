@@ -1,0 +1,8 @@
+unique struct File
+    fd int
+
+fn main()
+    mut files := List[File]()
+    f := File(fd: 1)
+    files.push(f)
+    print(files.len())

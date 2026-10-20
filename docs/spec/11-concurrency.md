@@ -368,7 +368,9 @@ loop, `return`, `?`, or `else return`; (3) calls no method of a task,
 functions it calls; and
 (4) writes only places that `conc.par.3` or `conc.par.4` allow, or places
 rooted at names declared in the body (including the loop variable). Calls
-with a `mut` argument and methods with `mut self` write their place. *(ADR 0236)*
+with a `mut` argument and methods with `mut self` write their place. A
+write through a `ref` declared outside the body (`c.n = i`) is shared by every
+iteration and is an error in a `par for`. *(ADR 0236, ADR 0358)*
 
 **conc.par.3** — In a loop over a range, a write to `r[i]` (optionally
 followed by more fields or indexes), where `r` is declared outside the body,

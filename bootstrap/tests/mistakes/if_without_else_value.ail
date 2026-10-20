@@ -1,0 +1,5 @@
+fn sign(n int) str
+    if n < 0 then "-"
+
+fn main()
+    print(sign(3))

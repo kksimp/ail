@@ -1,3 +1,4 @@
+conc.share.6
 err.else.3
 err.prop.1
 err.ret.1
@@ -25,6 +26,7 @@ lex.str.2
 lex.str.4
 mod.const.1
 mod.main.3
+own.move.2
 own.param.2
 trait.method.3
 trait.op.1
