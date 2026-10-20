@@ -1,4 +1,4 @@
-# 0599. Native list methods: editing, searching and sorting
+# 0605. Native list methods: editing, searching and sorting
 
 - **Status:** Accepted
 - **Date:** 2026-10-20

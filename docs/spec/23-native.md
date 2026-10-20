@@ -35,7 +35,7 @@ statement or with `else`), `contains`, `sort` and `sorted` on lists of
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 and the bit operations of expr.bit.1. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393, 0532, 0599)*
+*(ADRs 0384, 0390, 0392, 0393, 0532, 0605)*
 
 ```ail
 fn steps(n int) int

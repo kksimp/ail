@@ -1,5 +1,5 @@
 ## List methods that edit, search or order a list (type.coll.9, 11, 14;
-## ADR 0599): `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop`,
+## ADR 0605): `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop`,
 ## `contains`, `sort` and `sorted`. Each is a runtime call
 ## (`compiler/rt/native/list.ail`); the index checks are MIR checks, so a
 ## trap names the interpreter's rule and position.

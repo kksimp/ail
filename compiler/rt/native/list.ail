@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## List methods that edit or search a list (type.coll.9, type.coll.11,
-## type.coll.14; ADR 0599). Lists are the objects of native-abi.md §2:
+## type.coll.14; ADR 0605). Lists are the objects of native-abi.md §2:
 ## +0 len, +8 cap, +16 data. `size` is an element's bytes: 8, or 1 for a
 ## `List[bool]`.
 
