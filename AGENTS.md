@@ -134,6 +134,7 @@ tools/
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
   prune-merged.sh         deletes remote branches already merged into main (ADR 0028)
+  rules-audit.sh          audits spec rule IDs against the code and `ail explain` (ADR 0002, ADR 0483)
 ```
 
 ## Settled constraints (summary; the ADRs are authoritative)

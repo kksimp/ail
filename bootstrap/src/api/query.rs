@@ -1,5 +1,5 @@
 //! Position queries of `ail api`: `--locals`, `--type` and `--refs`
-//! (api.loc.1-3, api.type.1-2, api.refs.1-3, ADRs 0258-0261). The checker
+//! (api.loc.1-2, api.type.1-2, api.refs.1-3, ADRs 0258-0261). The checker
 //! records the facts (`check::facts`); this file only selects and prints them.
 
 use std::process::ExitCode;
