@@ -69,6 +69,8 @@ struct Stub
 
 ## Integer arguments passed in x0-x7 (native-abi.md §1).
 INT_ARGS := 8
+## The runtime global holding the stack limit (`rt.STACK_LIMIT`, ADR 0535).
+STACK_LIMIT := 8
 
 struct Gen
     a Asm
@@ -715,6 +717,12 @@ fn Gen.push(mut self, i mir.Inst)
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
+    if i.site >= 0
+        # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
+        a.adr_sym(S0, "globals")
+        a.ldr(S0, S0, 8 * STACK_LIMIT)
+        a.cmp_sp(S0)
+        a.b_cond(LO, stub(8, -1, -1, i.site, m.sites[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -882,7 +890,7 @@ fn Gen.gen_stubs(mut self)
         if s.kind == 4
             # The float's bits.
             a.fmov_xd(1, fpr(s.a, X0))
-        else
+        elif s.kind != 8
             moves.push(move_of(1, s.a))
             moves.push(move_of(2, s.b))
         moves.push(Move(dst: 3, src: -1, imm: 0, sym: "d:h{s.site}", float: false))
