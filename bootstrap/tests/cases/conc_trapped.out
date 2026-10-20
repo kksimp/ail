@@ -1,0 +1,3 @@
+rule: expr.arith.3
+message: 5:7: division by zero in `10 / 0`
+-1

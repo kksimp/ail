@@ -28,11 +28,11 @@ fn parse_pos(text str) Pos?
     Pos(col, row)
 
 fn cells_in(first Pos, last Pos) List[Pos]
-    mut out := []
-    for r in first.row.min(last.row)..=first.row.max(last.row)
+    [
+        Pos(col: c, row: r)
+        for r in first.row.min(last.row)..=first.row.max(last.row)
         for c in first.col.min(last.col)..=first.col.max(last.col)
-            out.push(Pos(col: c, row: r))
-    out
+    ]
 
 enum Op
     Add
@@ -142,7 +142,7 @@ fn Parser.next(mut self) Token
 fn Parser.take(mut self, syms str) char?
     c := match peek()
         Sym(s) => s
-        Num(_) | Cell(_, _) | Name(_) | End => return none
+        Num | Cell | Name | End => return none
     if not syms.contains(c)
         return none
     at += 1
@@ -157,7 +157,7 @@ fn Parser.cell(mut self) !Pos
     tok := next()
     match tok
         Cell(_, pos) => pos
-        Num(_) | Name(_) | Sym(_) | End => return Expected("a cell", tok)
+        Num | Name | Sym | End => return Expected("a cell", tok)
 
 fn Parser.formula(mut self) !Expr
     e := sum()?
@@ -232,7 +232,7 @@ fn parse_formula(src str) !Expr
 
 fn collect_refs(e Expr, mut out Set[Pos])
     match e
-        Lit(_) => return
+        Lit => return
         Ref(pos) => out.add(pos)
         Neg(operand) => collect_refs(operand, mut out)
         Bin(_, left, right) =>
@@ -253,8 +253,8 @@ enum Content
 
 fn Content.is_formula(self) bool
     match self
-        Number(_) | Label(_) => false
-        Formula(_, _) | Broken(_, _) => true
+        Number | Label => false
+        Formula | Broken => true
 
 error enum CellError
     BadValue
@@ -354,7 +354,7 @@ fn Sheet.value(mut self, pos Pos) Value
     match (cells.get(pos) else return Num(0))
         Number(n) => Num(n)
         Label(text) => Text(text)
-        Broken(_, _) => Fail(BadParse)
+        Broken => Fail(BadParse)
         Formula(_, expr) =>
             if not active.add(pos)
                 return Fail(Cycle)
@@ -369,7 +369,7 @@ fn Sheet.value(mut self, pos Pos) Value
 fn Sheet.number(mut self, pos Pos) !int
     match value(pos)
         Num(n) => n
-        Text(_) => return BadValue
+        Text => return BadValue
         Fail(err) => return err
 
 fn Sheet.numbers(mut self, first Pos, last Pos) !List[int]
@@ -379,7 +379,7 @@ fn Sheet.numbers(mut self, first Pos, last Pos) !List[int]
             continue
         match value(pos)
             Num(n) => found.push(n)
-            Text(_) => continue
+            Text => continue
             Fail(err) => return err
     found
 
@@ -422,40 +422,26 @@ fn Sheet.snapshot(mut self) Map[Pos, str]
     shot
 
 fn Sheet.formulas(self) List[Pos]
-    mut out := []
-    for pos in cells.keys()
-        if cells[pos].is_formula()
-            out.push(pos)
-    out.sorted()
+    [pos for pos in cells.keys() if cells[pos].is_formula()].sorted()
 
 fn Sheet.deps(self, pos Pos) List[Pos]
     content := cells.get(pos) else return []
     mut refs := {}
     match content
         Formula(_, expr) => collect_refs(expr, mut refs)
-        Number(_) | Label(_) | Broken(_, _) => return []
+        Number | Label | Broken => return []
     refs.sorted()
 
 fn Sheet.eval_order(self) Order
     formulas := formulas()
-    mut waits := {}
-    for pos in formulas
-        mut need := {}
-        for d in deps(pos)
-            if formulas.contains(d)
-                need.add(d)
-        waits[pos] = need
+    waits := {pos: {d for d in deps(pos) if formulas.contains(d)} for pos in formulas}
     mut order := []
     mut done := {}
     while true
         ready := first_ready(formulas, waits, done) else break
         order.push(ready)
         done.add(ready)
-    mut blocked := []
-    for pos in formulas
-        if not done.contains(pos)
-            blocked.push(pos)
-    Order(order, blocked)
+    Order(order, [pos for pos in formulas if not done.contains(pos)])
 
 fn first_ready(formulas List[Pos], waits Map[Pos, Set[Pos]], done Set[Pos]) Pos?
     for pos in formulas
@@ -464,26 +450,19 @@ fn first_ready(formulas List[Pos], waits Map[Pos, Set[Pos]], done Set[Pos]) Pos?
     none
 
 fn Sheet.table(mut self) List[str]
-    mut col_set := {}
-    mut row_set := {}
-    for pos in cells.keys()
-        col_set.add(pos.col)
-        row_set.add(pos.row)
-    cols := col_set.sorted()
+    cols := {pos.col for pos in cells.keys()}.sorted()
     mut header := [""]
     for c in cols
         header.push(col_name(c))
     mut grid := [header]
-    for r in row_set.sorted()
+    for r in {pos.row for pos in cells.keys()}.sorted()
         mut row := [r.to_str()]
         for c in cols
             row.push(display(Pos(col: c, row: r)))
         grid.push(row)
     mut dashes := []
     for i in 0..header.len()
-        mut w := 0
-        for g in grid
-            w = w.max(g[i].chars().len())
+        w := [g[i].chars().len() for g in grid].max() else 0
         dashes.push("-".repeat(w))
         for mut g in grid
             g[i] = g[i].pad_left(w, ' ')
@@ -503,20 +482,20 @@ fn Sheet.print_deps(self)
     for pos in formulas()
         match cells[pos]
             Broken(_, err) => print("  {pos} <- {CellError.BadParse.code()} {err}")
-            Formula(_, _) =>
+            Formula =>
                 deps := deps(pos)
                 listing := if deps == []
                     "(none)"
                 else
                     deps.join(", ")
                 print("  {pos} <- {listing}")
-            Number(_) | Label(_) => continue
+            Number | Label => continue
 
 fn Sheet.print_parse_errors(self)
     for pos in formulas()
         match cells[pos]
             Broken(src, err) => print("parse error in {pos}: {err} in '{src}'")
-            Formula(_, _) | Number(_) | Label(_) => continue
+            Formula | Number | Label => continue
 
 fn Sheet.print_order(self)
     o := eval_order()

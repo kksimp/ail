@@ -16,3 +16,20 @@ struct Output
 error struct ProcError
     cmd str
     kind str
+
+## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
+struct Window
+    handle int
+
+struct Size
+    cols int
+    rows int
+
+enum Event
+    Key(key str, ctrl bool, alt bool, shift bool)
+    Resize(cols int, rows int)
+    Close
+
+error struct UiError
+    kind str
+    message str

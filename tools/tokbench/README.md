@@ -72,4 +72,18 @@ The language card has a budget of 4,000 tokens ([ADR 0174](../../docs/decisions/
 | `corpus/r5/` | Concurrency (colorless vs. async/await), visibility (`pub` vs. capitalisation), and import styles. |
 | `corpus/r8/` | Format specifications (`{x:>8}`, `{r:.2}`) vs `pad_left`/`to_hex`/`to_fixed` calls on a table-and-money program (ADR 0173). |
 | `corpus/r9/` | One 4-dependency package manifest in seven formats: line per dependency, indented, dotted keys, TOML (two forms), JSON, AIL literal (ADR 0230). |
+| `corpus/programs/NAME/` | Whole programs with Python twins (and Go, Rust, TypeScript, C or Swift ports for some), compared in [program-measurements-r2.md](../../docs/design/program-measurements-r2.md) and [-r3.md](../../docs/design/program-measurements-r3.md). The `.ail` files are `examples/NAME.ail` without comments, blank lines or `@test` functions: regenerate them with `python3 tools/tokbench/corpus_from_examples.py`. |
 | `corpus/current/` | Samples in the syntax decided so far (as of 2026-10-04). `tokenize.ail` predates ADR 0089 (it still indexes a `str` directly) and also uses constructs that aren't decided yet: `while`, `char`, slicing, `+=`, `and`, methods that mutate a `mut` binding, and returning an error value. Corpus files hold no explanatory comments, because comments would distort the counts. |
+
+## Attribution
+
+`attribute.py` (measurement only) says where the tokens of the
+`corpus/programs/` go: for each construct class (signature types, `fn`,
+`self`, `:=`, `mut`, `use`, `else`, `?`, indentation, ...) it deletes that
+class from every program and reports the difference, for AIL and for Python.
+Run it after `run.sh` has set up once:
+
+```sh
+tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
+```
+

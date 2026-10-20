@@ -1,0 +1,21 @@
+# conc.task.5: a task handle is consumed exactly once, on every path.
+
+fn work(x int) int
+    x
+
+fn main() !
+    a := spawn work(1)
+    b := spawn work(2)
+    if true
+        b.wait()?
+    c := spawn work(3)
+    c.wait()?
+    c.wait()?
+    d := spawn work(4)
+    show(d)
+    xs := [spawn work(5)]
+    e := spawn work(mut 6)
+    e.wait()?
+
+fn show(t Task[int])
+    print(1)

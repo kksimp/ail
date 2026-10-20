@@ -413,6 +413,10 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         if let Some(r) = &mut f.ret {
             cx.type_ref(r);
         }
+        // contract.decl.2: conditions name the module's items as the body does.
+        for c in f.contracts.iter_mut() {
+            cx.expr(&mut c.cond);
+        }
         if let Some(b) = &mut f.body {
             cx.block(b);
         }
@@ -711,6 +715,19 @@ impl Cx<'_> {
                 self.expr(k);
                 self.expr(v);
             }),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses.iter_mut() {
+                    self.expr(&mut c.iter);
+                    self.local(&c.var, c.var_pos);
+                    if let Some(cond) = &mut c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
