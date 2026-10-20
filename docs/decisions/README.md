@@ -199,3 +199,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
 | [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
 | [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0210](0210-contract-syntax.md) | Contracts are `requires` and `ensures` lines under the signature; `result` names the value *(delegated)* | Accepted | 2026-10-20 |
+| [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
+| [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
+| [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |

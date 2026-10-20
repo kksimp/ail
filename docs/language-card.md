@@ -33,6 +33,11 @@ fn add(a int, b int) int     # `name Type`, no colon; return type after `)`
 
 fn greet(name str)           # no return type: returns nothing
     print("hello, {name}")
+
+fn half(n int) int
+    requires n >= 0          # contract: a pure bool; false traps
+    ensures result * 2 <= n  # `result` is the returned value
+    n / 2
 ```
 
 `return x` (or bare `return`) exits early.

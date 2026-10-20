@@ -403,6 +403,10 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
         if let Some(r) = &mut f.ret {
             cx.type_ref(r);
         }
+        // contract.decl.2: conditions name the module's items as the body does.
+        for c in f.contracts.iter_mut() {
+            cx.expr(&mut c.cond);
+        }
         if let Some(b) = &mut f.body {
             cx.block(b);
         }

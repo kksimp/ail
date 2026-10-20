@@ -18,6 +18,8 @@ use crate::ast::{
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
+mod contracts;
+
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
@@ -431,6 +433,11 @@ impl Parser {
             );
             return Some(Vec::new());
         }
+        Some(self.block_rest())
+    }
+
+    /// The statements of a block after its INDENT, through its DEDENT.
+    fn block_rest(&mut self) -> Block {
         let mut body = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
             if self.eat(&Tok::Newline) {
@@ -441,7 +448,7 @@ impl Parser {
             }
         }
         self.eat(&Tok::Dedent);
-        Some(body)
+        body
     }
 
     // ---- Declarations ----
@@ -596,16 +603,30 @@ impl Parser {
             None => format!("`{name}`"),
         };
         // A trait method without a default ends with its signature (trait.decl.2).
-        let body = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
+        let (body, contracts) = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
             if !self.eat(&Tok::Newline) {
                 self.unexpected("end of line after the signature", "trait.decl.1");
                 return None;
             }
-            None
+            (None, Vec::new())
         } else {
-            Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
+            let (body, contracts) = self.fn_body(&format!("the signature of {full}"))?;
+            (Some(body), contracts)
         };
-        Some(FnDecl { attrs: Vec::new(), owner, name, pos, doc: None, generics, receiver, params, ret, body, within })
+        Some(FnDecl {
+            attrs: Vec::new(),
+            owner,
+            name,
+            pos,
+            doc: None,
+            generics,
+            receiver,
+            params,
+            ret,
+            body,
+            within,
+            contracts,
+        })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -927,6 +948,9 @@ impl Parser {
                 "only a line that opens a block (like `if`, `for` or `fn`) can be followed by an indented line",
             );
             self.skip_block();
+            return None;
+        }
+        if self.misplaced_contract() {
             return None;
         }
         let errors_before = self.diags.len();
