@@ -196,17 +196,7 @@ ADR 0076; decide when a real program needs it.*
 **Resolved** by [ADR 0209](decisions/0209-nested-optionals.md) (distinct nested types, `none` is the outermost).
 
 ## OQ-045 — Capability manifests for packages
-[ai-first-plan.md §3.2](design/ai-first-plan.md) gives every function an
-inferred capability set (`fs`, `env`, `proc`, `clock`, `net`) and lets
-`ail run --deny` refuse a program at compile time. The package half is open:
-should a package manifest declare the capabilities a dependency may use, so
-an AI-added dependency can't reach the filesystem or network unless granted
-(wishlist 5.1)? Options: (a) a `capabilities` list per dependency in the
-manifest, checked like `--deny` per package (recommended: it reuses the
-inference, and the grant is visible in one file); (b) capabilities as values
-passed explicitly from `main` (wishlist 6.6; most explicit, but costs tokens
-on every call chain); (c) nothing at the package level. Waits on Topic 13
-(packages). *Owner: designer.*
+**Resolved** by [ADR 0232](decisions/0232-capabilities-per-dependency.md) (`caps LIST` per `dep` line in `ail.pkg`, default none, checked at compile time by the `--deny` inference).
 
 ## OQ-046 — Deterministic execution mode
 **Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).
@@ -232,3 +222,14 @@ lines, a few tokens and an O(n) copy each. Options: (a) character slicing
 `chars()` and add `str.to_lower`/`to_upper` only. Recommendation: (a) now,
 since it doesn't prejudge OQ-043, plus `str.to_lower`. *Owner: AI under ADR
 0076.*
+
+## OQ-049 — A package registry and version ranges
+Dependencies come from a path or a pinned git commit
+([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
+central registry with names and semver ranges (`dep json 1.4`), resolved
+into `ail.lock` (recommended eventually: short `dep` lines and discovery for
+agents, but it needs hosting, accounts, a naming policy and a solver);
+(b) git URLs only, with tags as versions (no service to run; long URLs in
+every manifest); (c) a registry that only maps names to git URLs and commits
+(no solver; small service). Involves hosting and publishing, so it is the
+designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*

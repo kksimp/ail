@@ -494,6 +494,17 @@ There are no item or wildcard imports, no `pub use`, and no import cycles.
 `fn T.m` must be in `T`'s module. Text forms show the module path:
 `geo.Point(x: 1, y: 2)`.
 
+A package root may hold `ail.pkg` (spec `mod.pkg.*`). Each `dep` is imported
+by its name (`use geo`, `use geo.shapes`) and may reach only the
+capabilities in its `caps` (none if omitted); `caps` on the `package` line
+limits the package itself. Violations are compile errors at the line.
+
+```
+package notes caps fs
+dep geo path ../geo caps fs
+dep textkit path vendor/textkit
+```
+
 ## Files, processes and the system
 
 Import a standard module with `use std.NAME` and call it by its name
