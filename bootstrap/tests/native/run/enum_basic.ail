@@ -1,0 +1,116 @@
+# Enums (ADR 0602): variants with and without fields, bare and qualified
+# names, `==`, methods, enums in lists and struct fields.
+enum Op
+    Plus
+    Minus
+    Times
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+enum Ty
+    Int
+    Name(n str)
+    List(elem Ty)
+
+enum Tok
+    Words(ws List[str])
+    Nums(ns List[List[int]])
+    Newline
+
+struct Leaf
+    n int
+    f float
+    at List[int]
+
+enum Ast
+    Sym(text str)
+    Node(leaf Leaf)
+    Opaque(xs List[Item])
+
+struct Item
+    shape Shape
+    op Op
+
+fn Op.apply(self, a int, b int) int
+    match self
+        Plus => a + b
+        Minus => a - b
+        Times => a * b
+
+fn Shape.area(self) int
+    match self
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+        Dot => 0
+
+fn Ty.text(self) str
+    match self
+        Int => "int"
+        Name(n) => n
+        List(_) => "list"
+
+fn depth(t Ty) int
+    match t
+        List(e) => 1 + depth(e)
+        Int | Name => 0
+
+fn pick(n int) Shape
+    if n == 0
+        return Dot
+    if n == 1
+        return Circle(r: n)
+    Shape.Rect(w: n, h: n + 1)
+
+fn main()
+    ops := [Op.Plus, Minus, Op.Times]
+    for o in ops
+        print(o.apply(6, 3))
+    print(ops[1] == Op.Minus)
+    print(ops[0] != Op.Plus)
+    shapes := [pick(0), pick(1), pick(2), Shape.Circle(2)]
+    mut total := 0
+    for s in shapes
+        total += s.area()
+    print(total)
+    t := Ty.List(Ty.List(Ty.Int))
+    print(depth(t))
+    print(t.text())
+    print(Ty.Name("abc").text())
+    print(t == Ty.List(Ty.List(Ty.Int)))
+    print(t == Ty.List(Ty.Name("x")))
+    print(Ty.Name("a") == Ty.Name("a"))
+    print(Ty.Name("a") == Ty.Name("b"))
+    print(Ty.Int == Ty.Int)
+    mut it := Item(shape: Shape.Rect(w: 2, h: 5), op: Op.Times)
+    print(it.shape.area())
+    it.shape = Dot
+    print(it.shape.area())
+    print(it.op.apply(4, 5))
+    toks := [Tok.Words(["a", "b"]), Tok.Nums([[1], [2, 3]]), Tok.Newline]
+    print(toks[0] == Tok.Words(["a", "b"]))
+    print(toks[0] == Tok.Words(["a"]))
+    print(toks[1] == Tok.Nums([[1], [2, 3]]))
+    print(toks[1] == Tok.Nums([[1], [2, 4]]))
+    print(toks[2] == Newline)
+    print(toks[0] != Newline)
+    print(Tok.Newline == toks[1])
+    # A variant built in the comparison needs only its own fields comparable.
+    words := [Ast.Sym("."), Ast.Node(Leaf(n: 1, f: 2.0, at: [3])), Ast.Sym("(")]
+    print(words[0] == Ast.Sym("."))
+    print(words[2] != Ast.Sym("."))
+    print(words[1] == Ast.Sym("."))
+    print(words[1] == Ast.Node(Leaf(n: 1, f: 2.0, at: [3])))
+    print(words[1] == Ast.Node(Leaf(n: 1, f: 2.0, at: [4])))
+    # `==` on lists of enums and on structs (lists of numbers and strings are
+    # lane 173's `rt.list_eq`).
+    tys := [Ty.Int, Ty.List(Ty.Name("a"))]
+    print(tys == [Ty.Int, Ty.List(Ty.Name("a"))])
+    print(tys != [Ty.Int, Ty.List(Ty.Name("b"))])
+    print(tys == [Ty.Int])
+    print(it == Item(shape: Dot, op: Op.Times))
+    print(Leaf(n: 1, f: 0.5, at: []) == Leaf(n: 1, f: 0.5, at: [1]))
+    print([[1, 2], [3]] == [[1, 2], [3]])
+    print([[1.5], []] != [[1.5], []])

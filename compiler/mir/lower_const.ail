@@ -1,0 +1,157 @@
+## Module constants that aren't constant expressions (ADR 0604): lists,
+## strings built at run time, struct and enum values, results of calls
+## (`K := [...]`, `P := Point(1, 2)`). Each is a global slot after the
+## runtime's, filled once by the generated `init.consts`, which `main` calls
+## before its first statement; a use reads the slot. The constants are
+## computed in declaration order, except that a constant named by another
+## is computed before it (mod.const.1). The shared objects of enum
+## variants without fields (ADR 0602) are globals too, built by
+## `init.enums` before the constants.
+
+use ast
+
+## A program global: its slot and the type of its value.
+struct Global
+    slot int
+    ty Ty
+
+## A computed constant: its key (`m.NAME`), declaration and file.
+struct GlobalConst
+    key str
+    decl ast.ConstDecl
+    file int
+
+## The runtime's global slots (native-abi.md §5); the program's start after.
+pub RT_GLOBALS := 16
+
+## Give `key` the next global slot.
+fn Lower.new_global(mut self, key str, t Ty) int
+    mut slot := RT_GLOBALS
+    for g in globals.values()
+        slot = slot.max(g.slot + 1)
+    globals[key] = Global(slot: slot, ty: t)
+    slot
+
+## The address of global slot `slot`.
+fn Lower.global_addr(mut self, slot int) int
+    mut i := inst(-1, "prim", [konst(slot, Ty.Int)])
+    i.name = "global"
+    emit(i, Ty.Int)
+
+## A use of the computed constant `key`; `none` when computing it was
+## reported (slot -1).
+fn Lower.global_const(mut self, key str) Val?
+    g := globals.get(key)?
+    if g.slot < 0
+        return none
+    Val(id: load(global_addr(g.slot), 0, g.ty), ty: g.ty)
+
+## Lower `init.consts`: each computed constant into its slot, a constant
+## after those it names.
+fn Lower.gen_const_init(mut self)
+    if global_consts.len() == 0
+        return
+    mut order := List[int]()
+    mut state := [0 for _ in global_consts]
+    for k in 0..global_consts.len()
+        const_order(k, mut order, mut state)
+    sigs["init.consts"] = Sig(params: [], ret: Ty.Unit)
+    begin_fn("init.consts", Ty.Unit, [])
+    for k in order
+        c := global_consts[k]
+        # Each value is lowered in its own file, so its names are its module's.
+        enter_file(c.file)
+        v := lower_value(c.decl.value, none) else
+            globals[c.key] = Global(slot: -1, ty: Ty.Unknown)
+            continue
+        slot := new_global(c.key, v.ty)
+        store(global_addr(slot), 0, v.id)
+    finish(return_of(-1))
+    end_fn("init.consts", ast.Pos(line: 1, col: 1))
+    enter_file(0)
+
+## Depth first: the computed constants `global_consts[k]` names, then it.
+## A cycle is the checker's to report (mod.const.1); it is cut here.
+fn Lower.const_order(self, k int, mut order List[int], mut state List[int])
+    if state[k] != 0
+        return
+    state[k] = 1
+    c := global_consts[k]
+    mut refs := List[str]()
+    names_in(c.decl.value, mut refs)
+    for n in refs
+        for j in 0..global_consts.len()
+            if global_consts[j].key == "{file_prefix[c.file]}{n}"
+                const_order(j, mut order, mut state)
+    state[k] = 2
+    order.push(k)
+
+## The names an expression reads, roughly: enough to order constants.
+fn names_in(e ast.Expr, mut out List[str])
+    match e
+        Name(n, _) => out.push(n)
+        Unary(_, x, _) => names_in(x, mut out)
+        Binary(_, a, b, _) =>
+            names_in(a, mut out)
+            names_in(b, mut out)
+        Call(callee, args, _) =>
+            names_in(callee, mut out)
+            for a in args
+                names_in(a.value, mut out)
+        Method(recv, _, _, args) =>
+            names_in(recv, mut out)
+            for a in args
+                names_in(a.value, mut out)
+        Member(recv, _, _) => names_in(recv, mut out)
+        Index(recv, index, _) =>
+            names_in(recv, mut out)
+            names_in(index, mut out)
+        ListLit(items, _) =>
+            for x in items
+                names_in(x, mut out)
+        MapLit(entries, _) =>
+            for en in entries
+                names_in(en.key, mut out)
+                names_in(en.value, mut out)
+        SetLit(items, _) =>
+            for x in items
+                names_in(x, mut out)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Hole(x) => names_in(x, mut out)
+                    Fmt(x, _) => names_in(x, mut out)
+                    Lit => continue
+        _ => return
+
+## Call `init.enums` and `init.consts` at the start of `main`, as needed.
+fn Lower.call_inits(mut self)
+    mut first := List[Inst]()
+    for name in ["init.enums", "init.consts"]
+        if sigs.contains(name)
+            mut i := inst(-1, "call", [])
+            i.name = name
+            first.push(i)
+    if first.len() == 0
+        return
+    for k in 0..funcs.len()
+        if funcs[k].name == "main"
+            first.extend(funcs[k].blocks[0].insts)
+            funcs[k].blocks[0].insts = first
+            return
+
+## The number of global slots a module uses: the runtime's and the program's.
+pub fn Module.globals_used(self) int
+    mut n := RT_GLOBALS
+    for f in funcs
+        mut consts := Map[int, int]()
+        for b in f.blocks
+            for i in b.insts
+                if i.op == "const"
+                    consts[i.dst] = i.imm
+        for b in f.blocks
+            for i in b.insts
+                if i.op == "prim" and i.name == "global" and i.args.len() == 1
+                    if k := consts.get(i.args[0])
+                        n = n.max(k + 1)
+    n

@@ -206,3 +206,14 @@ is `err.else.1` with a fix to `2` (`bootstrap/src/fix/number.rs`; the anchored e
 matches `2.0` only). Corpus: 151 programs, 94 fixed (62%). The whole-task t2 slip
 is a different error: `doc.num` gives `float`, so `retries + 1` ends in `float`
 under `!int`. Its fix is a choice (`.to_int()`, or `!float`), so none is applied.
+
+Bit operators, the rest (lane 147): `a | b` in a call's argument list is
+`gram.foreign.1` with a fix to `a.bit_or(b)` (both parsers; the AIL parser is
+ported). `~a` is `gram.foreign.1` with help `a.bit_not()` and no fix, since the
+operand's extent isn't in the tree for a prefix operator. Corpus: 153 programs,
+95 fixed (62%). `date.Date(2026, 10, 20)` (`type.struct.7`) now gets the named-field fix:
+the call anchor reads the dotted callee as written (`date.Date`).
+
+Qualified constructors (lane 147): `type.struct.7` on `date.Date(2026, 10, 20)` now
+has the named-field fix; the call anchor reads the dotted callee as written. Corpus:
+154 programs, 96 fixed (62%).

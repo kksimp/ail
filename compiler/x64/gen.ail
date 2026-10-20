@@ -66,6 +66,7 @@ struct Gen
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
     mut img := codegen.new_image()
+    img.globals = m.globals_used()
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
