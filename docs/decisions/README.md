@@ -338,3 +338,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0343](0343-json-derives-maps-optionals-enum-payloads.md) | `ToJson`/`FromJson` derives for maps, any optional, enum payloads as `{"kind": ...}`, and error paths; generic `FromJson` waits for OQ-039 *(delegated)* | Accepted | 2026-10-20 |
 | [0346](0346-formatter-splits-at-binary-operators.md) | The formatter splits long lines before binary operators *(delegated)* | Accepted | 2026-10-20 |
 | [0347](0347-watch-shows-collection-writes.md) | `--watch` shows writes to a collection's elements *(delegated)* | Accepted | 2026-10-20 |
+| [0351](0351-cancel-trees-and-cancelled-send.md) | Cancel trees; `send` in a cancelled task drops its value *(delegated)* | Accepted | 2026-10-20 |
+| [0352](0352-weaker-atomic-orderings.md) | Weaker atomic orderings as a trailing `order:` argument *(delegated)* | Accepted | 2026-10-20 |

@@ -773,11 +773,13 @@ n.add(1)                      # returns the old value; also load, store, cas
 g.cancel()                    # or t.cancel(): ask tasks to stop
 task.cancelled()              # in the task: was it cancelled?
 task.check()?                 # fails with Cancelled once cancelled
+n.add(1, order: Relaxed)      # weaker ordering: Relaxed Acquire Release AcqRel
 ```
 
-A cancelled task's `recv` gives `none` (and `for v in ch` ends),
-`time.sleep_ms` returns at once and `proc.run` fails; the scope still waits
-for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
+A cancel reaches every task the cancelled task started. A cancelled task's
+`recv` gives `none` (and `for v in ch` ends), a `send` on a full channel
+drops its value, `time.sleep_ms` returns at once and `proc.run` fails; the
+scope still waits for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
 `SEED` and prints the seed when a test fails, so the interleaving replays.
 
 Each task handle must be waited or added to a group exactly once, on every
