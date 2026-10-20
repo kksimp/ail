@@ -1,0 +1,202 @@
+## Types as the checker sees them (ADR 0377), mirroring `Ty` in
+## `bootstrap/src/check.rs`.
+
+pub enum Ty
+    Int
+    ## A sized numeric type other than `int` and `float` (type.num.1), by name.
+    Num(name str)
+    Float
+    Str
+    Char
+    Bool
+    ## No value, as `print(...)` gives.
+    Unit
+    ## A block that always leaves (expr.block.3).
+    Never
+    ## Already reported, or unknown: suppresses follow-on errors.
+    Unknown
+    Struct(index int, args List[Ty])
+    Enum(index int, args List[Ty])
+    ListOf(elem Ty)
+    MapOf(key Ty, value Ty)
+    SetOf(elem Ty)
+    ## `T?` (type.opt.2)
+    Opt(inner Ty)
+    ## `T ! E`; `ok` is `Unit` for a bare `!` (err.type.1-2).
+    Res(ok Ty, errs Errs)
+    ## One of several error types (err.type.5).
+    Union(members List[Ty])
+    ## A type parameter by id, including a trait's `Self` (gen.decl.1).
+    Param(id int)
+    ## `any Trait` (trait.any.1)
+    AnyOf(trait_index int)
+    ## `ref T` (own.ref.1)
+    RefOf(inner Ty)
+    ## `Channel[T]`, `Mutex[T]`, `Atomic[T]`, `TaskGroup` (inner `Unit`).
+    Conc(kind str, inner Ty)
+
+## The error part of `T ! E`: a written set, or a function's inferred set.
+pub enum Errs
+    ErrSet(types List[Ty])
+    Inferred(fn_index int)
+
+## A declared struct or enum.
+pub enum Def
+    DStruct(index int)
+    DEnum(index int)
+
+## A binding of a type parameter.
+pub struct Bind
+    pub param int
+    pub ty Ty
+
+## `a` and `b` are the same type, or an error already reported makes it moot.
+pub fn same(a Ty, b Ty) bool
+    if a == Ty.Unknown or b == Ty.Unknown
+        return true
+    match a
+        ListOf(x) =>
+            if y := elem_of_list(b)
+                return same(x, y)
+            false
+        Opt(x) =>
+            match b
+                Opt(y) => same(x, y)
+                _ => false
+        SetOf(x) =>
+            match b
+                SetOf(y) => same(x, y)
+                _ => false
+        MapOf(k, v) =>
+            match b
+                MapOf(l, w) => same(k, l) and same(v, w)
+                _ => false
+        Conc(c, x) =>
+            match b
+                Conc(d, y) => c == d and same(x, y)
+                _ => false
+        Struct(s, xs) =>
+            match b
+                Struct(t, ys) => s == t and same_all(xs, ys)
+                _ => false
+        Enum(s, xs) =>
+            match b
+                Enum(t, ys) => s == t and same_all(xs, ys)
+                _ => false
+        _ => a == b
+
+fn elem_of_list(t Ty) Ty?
+    match t
+        ListOf(x) => x
+        _ => none
+
+fn same_all(xs List[Ty], ys List[Ty]) bool
+    if xs.len() != ys.len()
+        return false
+    for i in 0..xs.len()
+        if not same(xs[i], ys[i])
+            return false
+    true
+
+## Whether `t` contains an unknown part.
+pub fn has_unknown(t Ty) bool
+    match t
+        Unknown => true
+        ListOf(x) => has_unknown(x)
+        Opt(x) => has_unknown(x)
+        SetOf(x) => has_unknown(x)
+        Conc(_, x) => has_unknown(x)
+        MapOf(k, v) => has_unknown(k) or has_unknown(v)
+        Res(x, _) => has_unknown(x)
+        Struct(_, xs) => any_unknown(xs)
+        Enum(_, xs) => any_unknown(xs)
+        Union(xs) => any_unknown(xs)
+        _ => false
+
+fn any_unknown(xs List[Ty]) bool
+    for x in xs
+        if has_unknown(x)
+            return true
+    false
+
+## Sort key that keeps error sets in a canonical order.
+pub fn ty_key(t Ty) int
+    match t
+        Struct(i, _) => i
+        Enum(i, _) => 1000000000 + i
+        _ => 2000000000
+
+## `ts` sorted by `ty_key`, stable.
+pub fn sort_errors(ts List[Ty]) List[Ty]
+    ts.sorted(by: |t| ty_key(t))
+
+## Replace the type parameters bound in `binds`.
+pub fn subst(t Ty, binds List[Bind]) Ty
+    match t
+        Param(p) =>
+            for b in binds
+                if b.param == p
+                    return b.ty
+            t
+        Struct(s, args) => Ty.Struct(s, subst_all(args, binds))
+        Enum(e, args) => Ty.Enum(e, subst_all(args, binds))
+        ListOf(x) => Ty.ListOf(subst(x, binds))
+        SetOf(x) => Ty.SetOf(subst(x, binds))
+        MapOf(k, v) => Ty.MapOf(key: subst(k, binds), value: subst(v, binds))
+        Opt(x) => Ty.Opt(subst(x, binds))
+        Conc(k, x) => Ty.Conc(k, subst(x, binds))
+        Res(x, errs) =>
+            match errs
+                ErrSet(set) => Ty.Res(subst(x, binds), Errs.ErrSet(subst_all(set, binds)))
+                Inferred => Ty.Res(subst(x, binds), errs)
+        Union(m) => Ty.Union(subst_all(m, binds))
+        _ => t
+
+pub fn subst_all(ts List[Ty], binds List[Bind]) List[Ty]
+    [subst(t, binds) for t in ts]
+
+## Whether `t` mentions the type parameter `p`.
+pub fn mentions(t Ty, p int) bool
+    match t
+        Param(q) => q == p
+        Struct(_, xs) => mentions_any(xs, p)
+        Enum(_, xs) => mentions_any(xs, p)
+        Union(xs) => mentions_any(xs, p)
+        ListOf(x) => mentions(x, p)
+        Opt(x) => mentions(x, p)
+        SetOf(x) => mentions(x, p)
+        Conc(_, x) => mentions(x, p)
+        MapOf(k, v) => mentions(k, p) or mentions(v, p)
+        Res(x, errs) =>
+            match errs
+                ErrSet(set) => mentions(x, p) or mentions_any(set, p)
+                Inferred => mentions(x, p)
+        _ => false
+
+fn mentions_any(xs List[Ty], p int) bool
+    for x in xs
+        if mentions(x, p)
+            return true
+    false
+
+## The type constructor of a type that can have an `impl` (trait.impl.6),
+## as a key: `int`, `list`, `s3` for struct 3, `e2` for enum 2.
+pub fn con_of(t Ty) str?
+    match t
+        Int => "int"
+        Float => "float"
+        Str => "str"
+        Char => "char"
+        Bool => "bool"
+        ListOf => "list"
+        Struct(s, _) => "s{s}"
+        Enum(e, _) => "e{e}"
+        _ => none
+
+## The type arguments of a struct, enum or list.
+pub fn args_of(t Ty) List[Ty]
+    match t
+        Struct(_, a) => a
+        Enum(_, a) => a
+        ListOf(e) => [e]
+        _ => []

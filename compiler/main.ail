@@ -1,0 +1,36 @@
+# The self-hosted front end's entry point (Stage 3, ADR 0022), run by the
+# bootstrap and compared with it by the selftest:
+#   ail run compiler check PROGRAM.json   the checker's diagnostics for a program dumped by
+#                                         `ail api --ast --program` (first line), one JSON line each
+use ast
+use check
+
+fn main() !
+    args := env.args()
+    if args.len() < 2
+        io.eprint("usage: ail run compiler check PROGRAM.json...")
+        io.exit(2)
+    match args[0]
+        "check" =>
+            for path in args[1..]
+                check_dump(path, args.len() > 2)?
+        _ =>
+            io.eprint("unknown command {args[0]}")
+            io.exit(2)
+
+## The checker's diagnostics for one dump, sorted by position as `ail check`
+## reports them. With several dumps, each starts with `== PATH` and ends
+## with what the checker covers (`rules ...`, `skip FILE FIRST LAST`).
+fn check_dump(path str, many bool) !
+    text := fs.read_text(path)?
+    first := text.lines().first() else ""
+    prog := ast.Program.from_json(parse_json(first)?)?
+    diags := check.check_declarations(prog).sorted(by: |d| d.pos.line * 100000 + d.pos.col)
+    if many
+        print("== {path}")
+    for d in diags
+        print(d.to_json(prog.files))
+    if many
+        print("rules {check.COVERED_RULES.join(" ")}")
+        for s in check.skipped(prog)
+            print("skip {s.file} {s.first} {s.last}")
