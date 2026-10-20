@@ -1012,8 +1012,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 {
                     return Ok(v);
                 }
-                let l = self.eval(lhs, env)?;
-                let r = self.eval(rhs, env)?;
+                let l = self.operand_value(lhs, env)?;
+                let r = self.operand_value(rhs, env)?;
                 if let (Value::Int(a), Value::Int(b)) = (&l, &r)
                     && let Some(v) = int_op(*op, *a, *b)
                 {
@@ -1093,7 +1093,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = self.variant_index(e, name);
                 return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
             }
-            let Value::Struct(s, fields) = self.eval(recv, env)? else { unreachable!("checked: struct") };
+            let Value::Struct(s, fields) = self.operand_value(recv, env)? else { unreachable!("checked: struct") };
             Ok(fields[self.field_index(s, name)].clone())
     }
 
@@ -1123,6 +1123,23 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             let i = self.eval(index, env)?.int();
             Ok(element(&items, i, pos)?.clone())
+    }
+
+    /// `eval` with names and int literals handled in the caller's frame: most
+    /// operands are leaves, and a call for each costs more than reading one
+    /// (ADR 0219).
+    #[inline(always)]
+    fn operand_value(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        match e {
+            Expr::Name(n, _) => {
+                if let Some(v) = lookup(env, n) {
+                    return Ok(v.clone());
+                }
+            }
+            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => return Ok(Value::Int(*v)),
+            _ => {}
+        }
+        self.eval(e, env)
     }
 
     /// The value of an int local or literal, without cloning.
@@ -1871,7 +1888,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             for (a, param) in args.iter().zip(&f.params) {
                 // A read-only operand is its value: reading a place and evaluating it agree.
-                let v = self.eval(&a.value, env)?;
+                let v = self.operand_value(&a.value, env)?;
                 callee.push((param.name.as_str(), v));
             }
             let result = self.run_body(f, &mut callee, pos)?;
