@@ -122,3 +122,10 @@ fn compare_with_bootstrap(command: &str, flag: &str) {
 fn ail_lexer_matches_the_bootstrap() {
     compare_with_bootstrap("tokens", "--tokens");
 }
+
+/// The AIL parser builds the same tree, with diagnostics naming the same
+/// rules at the same places, as the bootstrap's on every file (ADR 0371).
+#[test]
+fn ail_parser_matches_the_bootstrap() {
+    compare_with_bootstrap("parse", "--ast");
+}

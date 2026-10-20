@@ -2,18 +2,23 @@
 ## compared with it by the selftest.
 ##
 ##     ail run compiler/selfhost.ail tokens FILE...    the AIL lexer's tokens, as `ail api --tokens FILE`
+##     ail run compiler/selfhost.ail parse FILE...     the AIL parser's tree, as `ail api --ast FILE`
 ##
 ## With more than one file, each file's output follows a line `== FILE`.
 use syntax
 
 fn main() !
     args := env.args()
-    if args.len() < 2 or args[0] != "tokens"
-        io.eprint("usage: ail run compiler/selfhost.ail tokens FILE...")
+    if args.len() < 2 or args[0] != "tokens" and args[0] != "parse"
+        io.eprint("usage: ail run compiler/selfhost.ail (tokens | parse) FILE...")
         io.exit(2)
     files := args[1..]
     for f in files
         if files.len() > 1
             print("== {f}")
         src := fs.read_text(f)?
-        print(syntax.tokens_text(syntax.lex(src)))
+        lexed := syntax.lex(src)
+        if args[0] == "tokens"
+            print(syntax.tokens_text(lexed))
+        else
+            print(syntax.ast_text(lexed, syntax.parse(lexed.tokens)))

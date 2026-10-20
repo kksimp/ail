@@ -59,3 +59,11 @@ fn spec_text(f FormatSpec) str
 ## A string in JSON, as the prelude's `json_quote` writes it.
 pub fn quote(s str) str
     Json.Str(s).to_text()
+
+## The tree of `ail api --ast` (api.ast.1-2): the program as one line of
+## JSON, then the lexer's diagnostics and the parser's, one per line.
+pub fn ast_text(lexed Lexed, parsed Parsed) str
+    mut out := [parsed.program.to_json().to_text()]
+    diag_lines(lexed.diags, mut out)
+    diag_lines(parsed.diags, mut out)
+    out.join("\n")
