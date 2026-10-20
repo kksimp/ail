@@ -1,0 +1,44 @@
+fn mix(a int, b int, c int, d int, e int, f int) int
+    a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + f
+
+fn fmix(a float, b int, c float, d int) float
+    a * c + (b - d).to_float()
+
+fn main()
+    print(mix(1, 2, 3, 4, 5, 6))
+    print(mix(6, 5, 4, 3, 2, 1))
+    print(fmix(1.5, 7, 2.0, 3))
+    mut xs := [3, -7, 11, 0, -1]
+    for x in xs
+        print(x / 2)
+        print(x % 2)
+        print(x / -3)
+        print(x % -3)
+        print(x % 8)
+        print(x / 4)
+    a := 7
+    b := -2
+    print(a / b)
+    print(a % b)
+    print(-9223372036854775807 - 1)
+    print(9223372036854775807)
+    print((0 - 5).abs())
+    print(2.5.floor())
+    print(-2.5.ceil())
+    print(2.0.sqrt())
+    print(10.0 / 4.0)
+    print(1.0 / 3.0)
+    print(0.1 + 0.2)
+    print(1e300 * 1e10)
+    print(3.7.to_int())
+    print(-3.7.to_int())
+    print(a < b)
+    print(a >= b)
+    print(1.5 < 2.5)
+    print(2.5 <= 2.5)
+    print(2.5 != 2.5)
+    xs.push(42)
+    print(xs)
+    print(xs.len())
+    print([1.5, 2.25])
+    print([true, false])

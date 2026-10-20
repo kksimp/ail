@@ -152,6 +152,12 @@ impl<'p> Checker<'p> {
         };
         self.resolved.std_calls.insert(pos, StdCall::Fn(module, f));
         let what = format!("{head}.{f}");
+        if module == "mem" {
+            self.note_unsafe_op(&format!("`{what}`"), pos);
+            if let Some(t) = self.mem_generic(f, args, pos, expect) {
+                return Some(t);
+            }
+        }
         if module == "tensor" {
             return Some(self.tensor_call(f, args, pos, expect));
         }
@@ -161,13 +167,24 @@ impl<'p> Checker<'p> {
         if (module, f) == ("random", "shuffle") {
             return Some(self.shuffle_call(args, pos));
         }
+        if (module, f) == ("task", "select") {
+            return Some(self.select_call(args, pos));
+        }
         let (mut params, ret) = self.std_signature(module, f);
-        if (module, f) == ("proc", "run") {
+        if matches!((module, f), ("proc", "run" | "run_bytes")) {
             // std.proc.2: `input str?` and `timeout_ms int?` may be left off
             // from the end.
             params.truncate(args.len().clamp(2, 4));
         }
-        let sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
+        if (module, f) == ("proc", "start") {
+            // std.proc.4: `timeout_ms int?` may be left off.
+            params.truncate(args.len().clamp(2, 3));
+        }
+        let mut sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
+        if module == "proc" && matches!(f, "wait" | "kill") {
+            // std.proc.7: the child is consumed.
+            sig.moves = vec![true];
+        }
         Some(self.check_call(&what, &sig, Vec::new(), args, None, pos, expect))
     }
 
@@ -180,10 +197,14 @@ impl<'p> Checker<'p> {
             Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
             _ => unreachable!("std/types.ail declares `{name}`"),
         };
+        let compress = |t: Ty| Ty::Res(Box::new(t), Errs::Set(vec![std_ty("compress.CompressError")]));
         let io = |t: Ty| Ty::Res(Box::new(t), Errs::Set(vec![std_ty("fs.IoError")]));
         match (module, f) {
             ("fs", "read_text") => (vec![Str], io(Str)),
             ("fs", "write_text" | "append_text") => (vec![Str, Str], io(Unit)),
+            // std.fs.13-14 (ADR 0412): the same with `bytes`.
+            ("fs", "read_bytes") => (vec![Str], io(Ty::Bytes)),
+            ("fs", "write_bytes" | "append_bytes") => (vec![Str, Ty::Bytes], io(Unit)),
             ("fs", "exists") => (vec![Str], Bool),
             ("fs", "list_dir") => (vec![Str], io(list(Str))),
             ("fs", "remove" | "make_dir") => (vec![Str], io(Unit)),
@@ -196,21 +217,75 @@ impl<'p> Checker<'p> {
             ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
+            ("hash", "sha256" | "sha384" | "sha512") => (vec![Str], Str),
+            ("hash", "hmac_sha256") => (vec![Str, Str], Str),
+            ("hash", "crc32" | "hash64") => (vec![Str], Int),
+            ("compress", "deflate" | "gzip" | "zlib") => (vec![Str], list(Int)),
+            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![list(Int)], compress(Str)),
+            ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
+            ("io", "read_bytes") => (vec![], Ty::Bytes),
             // std.io.4: `exit` never returns (ADR 0139).
             ("io", "exit") => (vec![Int], Ty::Never),
             ("proc", "run") => (
                 vec![Str, list(Str), opt(Str), opt(Int)],
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
-            ("proc", "which") => (vec![Str], opt(Str)),
-            ("net", "get" | "post") => (
-                if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
-                Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
+            // std.proc.8 (ADR 0417)
+            ("proc", "run_bytes") => (
+                vec![Str, list(Str), opt(Ty::Bytes), opt(Int)],
+                Ty::Res(Box::new(std_ty("proc.RawOutput")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
+            ("proc", "which") => (vec![Str], opt(Str)),
+            // std.proc.4-7 (ADR 0424)
+            ("proc", "start") => (
+                vec![Str, list(Str), opt(Int)],
+                Ty::Res(Box::new(std_ty("proc.Child")), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
+            ("proc", "wait") => (
+                vec![std_ty("proc.Child")],
+                Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
+            ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
+            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => (
+                match f {
+                    "get" | "get_bytes" => vec![Str],
+                    "post" => vec![Str, Str, Str],
+                    "post_bytes" => vec![Str, Ty::Bytes, Str],
+                    _ => vec![Str, Str, std_ty("net.Options")],
+                },
+                Ty::Res(
+                    Box::new(std_ty(if f.ends_with("_bytes") { "net.RawResponse" } else { "net.Response" })),
+                    Errs::Set(vec![std_ty("net.NetError")]),
+                ),
+            ),
+            // unsafe.mem.1: C strings in memory the program frees itself.
+            ("mem", "cstr") => (vec![Str], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
+            ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
+            ("mem", "null") => (vec![], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
+            ("net", "options") => (vec![], std_ty("net.Options")),
+            ("net", "serve" | "listen" | "connect" | "connect_tls") => {
+                let (params, ok) = match f {
+                    "serve" => (vec![Str], "net.Server"),
+                    "listen" => (vec![Str], "net.Listener"),
+                    _ => (vec![Str, Int], "net.Conn"),
+                };
+                (params, Ty::Res(Box::new(std_ty(ok)), Errs::Set(vec![std_ty("net.NetError")])))
+            }
+            ("regex", "compile") => (
+                vec![Str],
+                Ty::Res(Box::new(std_ty("regex.Regex")), Errs::Set(vec![std_ty("regex.RegexError")])),
+            ),
+            ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
+            ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
+            ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
+            ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
+            ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),
+            ("regex", "escape") => (vec![Str], Str),
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
@@ -219,6 +294,9 @@ impl<'p> Checker<'p> {
             ("task", "check") => (vec![], Ty::Res(Box::new(Unit), Errs::Set(vec![self.prelude_error("Cancelled")]))),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
+            // std.tz.1-2
+            ("tz", "offset") => (vec![Str, Int], opt(Int)),
+            ("tz", "system") => (vec![], Str),
             ("ui", "clipboard_get") => (vec![], opt(Str)),
             ("ui", "clipboard_set") => (vec![Str], Unit),
             ("ui", "open") => (
@@ -235,6 +313,33 @@ impl<'p> Checker<'p> {
             Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
             _ => Ty::Err,
         }
+    }
+
+    /// conc.select.1 (ADR 0427): `task.select(chans)` takes a `List[Channel[T]]`
+    /// and gives the index of a channel with a value waiting, or none.
+    fn select_call(&mut self, args: &'p [Arg], pos: Pos) -> Ty {
+        let result = Ty::Opt(Box::new(Ty::Int));
+        if args.len() != 1 {
+            self.args_only(args);
+            self.error(
+                "conc.select.1",
+                pos,
+                format!("`select` takes exactly one argument, but {} given", super::was_were(args.len())),
+            );
+            return result;
+        }
+        let t = self.expr(&args[0].value, None, true);
+        match &t {
+            Ty::List(e) if matches!(**e, Ty::Conc(super::conc::Conc::Channel, _) | Ty::Err) => {}
+            Ty::Err => {}
+            _ => self.error_help(
+                "conc.select.1",
+                args[0].value.pos(),
+                format!("`select` needs a list of channels, not {}", self.ty_name(&t)),
+                "write `task.select([a, b])`, then `recv` from the channel at the index it gives",
+            ),
+        }
+        result
     }
 
     /// std.random.4: `random.shuffle(mut xs)` reorders any `List[T]` in place.

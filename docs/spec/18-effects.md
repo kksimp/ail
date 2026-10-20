@@ -11,7 +11,7 @@ Chapter key: `eff`
 
 **eff.infer.1** — Every function has an *effect set*: the effects `io`,
 `fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
-`proc`, `clock`, `random`, `net` and `ui`. The set is inferred; it is never written in
+`proc`, `clock`, `random`, `net`, `net.serve` and `ui`. The set is inferred; it is never written in
 source. *(ADR 0163)*
 
 **eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
@@ -30,7 +30,7 @@ computed at compile time and may call only compile-time-safe code
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`,
-`net.*` gives `net` and `io` (`std.net.1`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
+`net.*` gives `net` and `io` (`std.net.1`), and `net.serve` and `net.listen` also give `net.serve` (`std.net.14`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
 of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
 `spawn`. *(ADR 0163, ADR 0283)*
 
@@ -125,3 +125,128 @@ sources of nondeterminism, so they stay allowed. *(ADR 0207)*
 **eff.det.3** — `ail run --seed S FILE` seeds `std.random` (`std.random.3`).
 A program that uses `random` and runs with a seed repeats without being
 denied the capability. *(ADR 0207)*
+
+## Examples
+
+Conformance examples (ADR 0002). `tool=` examples run `ail effects` or
+another tool on the block and check its output; `flags=` examples are checked
+with those `ail check` flags; `fixture=` examples use a case fixture that
+must report the cited rules.
+
+```ail tool=effects,FILE expect=fn:log rules=eff.infer.1,eff.infer.6
+fn log(msg str)
+    print(msg)
+
+fn main()
+    log("hi")
+```
+
+```ail tool=effects,FILE expect=fn:bump rules=eff.infer.2
+fn bump(mut xs List[int])
+    xs.push(1)
+
+fn main()
+    mut ys := List[int]()
+    bump(mut ys)
+    print(ys.len())
+```
+
+```ail tool=effects,FILE expect=fn:outer rules=eff.infer.3
+fn inner()
+    print("deep")
+
+fn outer()
+    inner()
+
+fn main()
+    outer()
+```
+
+```ail tool=effects,--json,FILE expect=ail_api rules=eff.infer.4,eff.infer.6
+use std.env
+
+fn home_dir() str
+    env.cwd()
+
+fn main()
+    print(home_dir().len() > 0)
+```
+
+```ail rules=eff.infer.5
+trait Speak
+    fn say(self) str
+
+struct Dog
+    name str
+
+impl Speak for Dog
+    fn say(self) str
+        "woof from {self.name}"
+
+fn talk(s any Speak) str
+    s.say()
+
+fn main()
+    print(talk(Dog(name: "rex")))
+```
+
+```ail error=eff.pure.1
+fn log(msg str)
+    print(msg)
+
+@pure fn double(x int) int
+    log("doubling")               # error: a @pure function may not do io
+    x * 2
+
+fn main()
+    print(double(21))
+```
+
+```ail flags=--deny,fs rules=eff.cap.3
+fn main()
+    print("io is not a capability")     # clean: printing is never denied
+```
+
+```ail error=eff.cap.1 flags=--deny,fs rules=eff.cap.1,eff.cap.2
+use std.fs
+
+fn save(text str) ! fs.IoError
+    fs.write_text("out.txt", text)
+
+fn main() !
+    save("hi")?
+```
+
+```ail error=eff.cap.1 flags=--deny,all rules=eff.cap.2
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)
+```
+
+```ail fixture=packages/caps_denied rules=eff.cap.4,eff.cap.5
+```
+
+```ail rules=eff.det.1
+fn main()
+    mut counts := Map[str, int]()
+    for w in ["b", "a", "b"]
+        counts[w] += 1
+    for k in counts.keys()           # insertion order: no clock, random, proc or net
+        print("{k}: {counts[k]}")
+```
+
+```ail error=eff.cap.1 flags=--deterministic rules=eff.det.2
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)         # error: the clock is denied in deterministic mode
+```
+
+```ail tool=run,--seed,42,FILE expect=true rules=eff.det.3
+use std.random
+
+fn main()
+    random.seed(1)
+    print(random.int(1, 6) <= 6)
+```

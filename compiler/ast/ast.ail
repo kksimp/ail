@@ -207,6 +207,8 @@ pub enum TypeShape
     AnyTrait(trait_name str)
     ## `ref T`
     RefTo(inner TypeRef)
+    ## `*T`, a raw pointer (unsafe.ptr.1)
+    PtrTo(inner TypeRef)
     ## `fn(A, B) R`: a function value's type; `ret` none for no result
     FnType(params List[TypeRef], ret TypeRef?)
 
@@ -254,6 +256,8 @@ pub enum UnOp
 
 pub enum Expr
     Str(value str, pos Pos)
+    ## `b"..."`: its bytes as lowercase hex (lex.bytes.1).
+    Bytes(hex str, pos Pos)
     Interp(parts List[InterpPart], pos Pos)
     ## The literal's value in decimal: JSON numbers can't hold every `int`.
     Int(value str, pos Pos)

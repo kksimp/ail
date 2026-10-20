@@ -510,6 +510,9 @@ fn prefix(before: Option<&FTok>, a: &FTok) -> bool {
         Kind::Sym("-") => before.is_none_or(|t| !t.ends_operand()),
         // `!T` and `T ! E` differ only by position in a type; the source's spacing says which.
         Kind::Sym("!") => !a.space_after && before.is_none_or(|t| !t.ends_operand() || t.is(")")),
+        // `*T`, a raw pointer type (unsafe.ptr.1): `s *u8`, `) *u8`, `**u8`. A product is
+        // written `a * b`, with a space on both sides, so a `*` touching its operand is a type.
+        Kind::Sym("*") => !a.space_after && before.is_none_or(|t| !t.ends_operand() || t.space_after),
         _ => false,
     }
 }

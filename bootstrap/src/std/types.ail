@@ -13,15 +13,33 @@ struct Metadata
     modified_ms int
     is_dir bool
 
+## std.compress (ADR 0443)
+error struct CompressError
+    kind str
+    message str
+
 ## std.proc
 struct Output
     status int
     out str
     err str
 
+## std.proc.8 (ADR 0417): the output of `run_bytes`.
+struct RawOutput
+    status int
+    out bytes
+    err bytes
+
 error struct ProcError
     cmd str
     kind str
+
+## std.proc.4 (ADR 0424): a child; `stdin` takes `send` and `close`, `out` and `err` give lines.
+unique struct Child
+    pid int
+    stdin Channel[str]
+    out Channel[str]
+    err Channel[str]
 
 ## std.net (ADR 0283)
 struct Response
@@ -29,10 +47,49 @@ struct Response
     headers Map[str, str]
     body str
 
+## std.net.16 (ADR 0416): a response with its body undecoded.
+struct RawResponse
+    status int
+    headers Map[str, str]
+    data bytes
+
 error struct NetError
     url str
     kind str
     message str
+
+## std.net.6: what a request can set beyond its method and URL.
+struct Options
+    headers Map[str, str]
+    query Map[str, str]
+    body str
+    timeout_ms int
+    max_redirects int
+    data bytes
+
+## std.net.9-11: a request the server received, and the server.
+struct Request
+    method str
+    path str
+    query Map[str, str]
+    headers Map[str, str]
+    body str
+    peer str
+    data bytes
+
+struct Server
+    handle int
+
+struct Exchange
+    request net.Request
+    handle int
+
+## std.net.12: raw TCP.
+struct Listener
+    handle int
+
+struct Conn
+    handle int
 
 ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
 struct Window
@@ -76,3 +133,27 @@ error struct UiError
 ## (std.tensor.1), so a tensor is `Eq` but neither ordered nor a key.
 struct Tensor[T]
     elements Map[int, T]
+
+## std.regex (ADR 0438). A regex is its pattern; compiled programs are cached
+## by the interpreter, so a copy costs nothing.
+struct Regex
+    pat str
+
+error struct RegexError
+    pattern str
+    at int
+    kind str
+    rule str
+    message str
+
+struct Match
+    start int
+    end int
+    text str
+
+## `groups[0]` is the whole match; a group that didn't take part is `none`.
+struct Captures
+    start int
+    end int
+    groups List[str?]
+    named Map[str, str]

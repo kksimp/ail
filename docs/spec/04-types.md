@@ -346,7 +346,7 @@ parameter type (`expr.call.1`, `expr.call.2`). Calling a function value adds no
 effect of its own. There are no anonymous functions and no captured variables.
 *(ADR 0456)*
 
-```ail
+```ail rules=type.fn.1,type.fn.2,type.fn.3
 fn double(n int) int
     n * 2
 
@@ -396,7 +396,7 @@ of a single Unicode scalar value. *(ADR 0089)*
 
 **type.str.2** — `str` doesn't support the indexing operator or `for`
 iteration. Character access goes through the explicit view `s.chars()`
-(`type.str.7`); `s.bytes()` is not implemented yet. The diagnostic for `s[i]`
+(`type.str.7`); the UTF-8 bytes are `s.to_bytes()` (`type.bytes.10`). The diagnostic for `s[i]`
 or `for c in s` suggests `s.chars()`. Length is `s.len()` (`type.str.12`).
 *(ADR 0089, ADR 0135, ADR 0208)*
 
@@ -509,6 +509,101 @@ print("{n:.2}")      # compile-time error: write {n.to_float():.2}
 > **Note:** joining is `xs.join(sep)` on any list (`type.coll.9`). There is
 > no `str.from_chars`. `s.len()` is absent until bytes versus characters is
 > decided (open questions).
+
+## Bytes
+
+**type.bytes.1** — `bytes` is the type of an immutable sequence of `u8`. Its
+literal is `b"..."` (`lex.bytes.1`). It holds any bytes, valid UTF-8 or not;
+`str` stays text (`type.str.1`). Copies share storage. *(ADR 0412)*
+
+**type.bytes.2** — `bytes` values never change in place: `b[i] = x` is an
+error, and no method changes its receiver. To change one, build a new value
+(`b[..i] + bytes.from_list([x]) + b[i + 1..]`) or edit a `List[u8]` and
+convert it with `bytes.from_list`. `==` and `!=` compare the bytes; `<`, `<=`,
+`>` and `>=` order them lexicographically by byte value, a shorter prefix
+first; `bytes` is `Hash` and so can be a map key or set element (`trait.std.2`,
+`trait.auto.5`). The text form of `bytes`, in `print` and in interpolation, is
+its literal form `b"..."`: printable ASCII as itself, `\" \\ \n \t \r` as
+escapes, and every other byte as `\xHH`. *(ADR 0412)*
+
+**type.bytes.3** — `b[i]` is the `u8` at index `i`. `i` is an `int`; it traps
+if `i` is negative or not less than `b.len()`. *(ADR 0412)*
+
+**type.bytes.4** — `b[lo..hi]` and `b[lo..=hi]` are the `bytes` between the
+bounds, as for lists (`type.coll.4`); a missing bound is the start or the end.
+It traps if `lo > hi` or a bound is outside `0..=b.len()`. *(ADR 0412)*
+
+**type.bytes.5** — `for x in b` and comprehensions over `b` give each byte as
+a `u8`, in order. *(ADR 0412)*
+
+**type.bytes.6** — `a + b`, for two `bytes`, and `a.concat(b)` are a new
+`bytes`: the bytes of `a` then those of `b`. *(ADR 0412)*
+
+**type.bytes.7** — `b.len()` is the number of bytes, an `int`. `b.to_list()`
+is a new `List[u8]` of them. *(ADR 0412)*
+
+**type.bytes.8** — `b.to_str()` is a `str?`: the bytes as UTF-8 text, or `none`
+if they aren't valid UTF-8. `b.text()` is a `str`: the same, with each invalid
+sequence as U+FFFD. `to_str` on `bytes` is this fallible conversion, not the
+text form of `trait.std.3`; the text form is reached by interpolation
+(`"{b}"`) or `ToStr.to_str(b)`. *(ADR 0414)*
+
+**type.bytes.9** — `b.find(sub)` is the index of the first occurrence of
+`sub` in `b` as an `int?` (`0` for an empty `sub`). `b.contains(sub)`,
+`b.starts_with(p)` and `b.ends_with(p)` return a `bool`. Each argument is a
+`bytes`. *(ADR 0414)*
+
+**type.bytes.10** — `s.to_bytes()` is the UTF-8 bytes of the `str` `s`, a
+`bytes` of length `s.byte_len()`. *(ADR 0414)*
+
+**type.bytes.11** — `b.hex()` is a `str` of two lowercase hexadecimal digits
+for each byte. *(ADR 0414)*
+
+**type.bytes.12** — `b.base64()` is a `str`: the bytes in standard base64
+(RFC 4648, the `+` and `/` alphabet), padded with `=`. *(ADR 0414)*
+
+**type.bytes.13** — `bytes` has these associated functions. *(ADR 0414)*
+- `bytes.from_list(xs)` is the `bytes` of a `List[u8]`.
+- `bytes.from_hex(s)` is a `bytes?`: `none` unless `s` is an even number of
+  hexadecimal digits, either case.
+- `bytes.from_base64(s)` is a `bytes?`: `none` unless `s` is standard base64
+  with its padding and no other character.
+- `bytes.zeros(n)` is `n` zero bytes; it traps if `n` is negative or above 2^32.
+
+```ail fragment rules=type.bytes.1,type.bytes.2,type.bytes.3,type.bytes.4,type.bytes.5,type.bytes.6,type.bytes.7,type.bytes.8,type.bytes.9,type.bytes.10,type.bytes.11,type.bytes.12,type.bytes.13
+b := b"hello\x00\n"
+print(b.len())                       # 7
+print(b[1])                          # 101
+print(b[1..3])                       # b"el"
+print(b[..2] + b[3..])               # b"helo\x00\n"
+print(b.hex())                       # 68656c6c6f000a
+print("hi".to_bytes().to_list())     # [104, 105]
+print(bytes.from_base64("aGk=") else b"")
+for x in b"abc"
+    print(x)                         # 97 98 99
+print(b.to_str() else "bad")         # bad: the NUL byte is valid UTF-8, so this prints the text
+print(b"\xff".text().len())          # 1: one U+FFFD
+print(b.find(b"ll") else -1)         # 2
+print(b.contains(b"lo"))             # true
+print(b.starts_with(b"he"))          # true
+print(b.ends_with(b"\n"))            # true
+print("é".to_bytes().len())          # 2
+print(bytes.zeros(3).hex())          # 000000
+print(bytes.from_list([104, 105]))   # b"hi"
+print(bytes.from_hex("ff") else b"") # b"\xff"
+```
+
+```ail error=type.bytes.2 rules=type.bytes.2
+fn main()
+    b := b"ab"
+    b[0] = 0x63                          # bytes are immutable: no element assignment
+```
+
+```ail norun rules=type.bytes.3,type.bytes.4
+fn main()
+    b := b"abc"
+    print(b[3])                          # traps: index 3 is not below b.len()
+```
 
 ## Characters
 
@@ -710,7 +805,7 @@ does it insert or replace, and when it is the whole target of `op=` a missing
 
 `k` is evaluated once, before the right-hand side. *(ADR 0131, ADR 0251)*
 
-```ail fragment
+```ail fragment norun
 mut m := Map[str, int]()
 m["a"] = 1              # inserts
 m["a"] = 2              # replaces; "a" keeps its position
@@ -779,4 +874,525 @@ mut ages := {"ann": 31, "bob": 27}
 ages.get("cy")          # none
 for k in ages.keys()
     print("{k}: {ages[k]}")
+```
+
+## Examples
+
+Each block below is a conformance example (ADR 0002). Its `rules=` list names
+the rules it demonstrates; `norun` and `error=` blocks are checked, not run.
+
+```ail rules=type.num.1,type.num.2,type.num.3,type.num.4
+fn signed() i8
+    -128
+
+fn unsigned() u64
+    4000000000
+
+fn main()
+    print(signed())          # -128
+    print(unsigned())        # 4000000000
+    print(7)                 # an int literal
+    print(1.5)               # a float literal
+```
+
+```ail rules=type.num.5
+fn main()
+    print(7 / 2)             # 3
+    print(7 % 3)             # 1
+    print(-(2 * 3))          # -6
+    print(2 < 3)             # true
+```
+
+```ail rules=type.num.6,type.num.7
+fn main()
+    print(0.1 + 0.2)         # 0.30000000000000004
+    print(1.0 / 0.0)         # inf: no trap
+    print(0.0 / 0.0 == 0.0 / 0.0)   # false: nan is unequal to itself
+    print("{1000.0} {0.0001} {-0.0} {1e16} {1e-5}")  # 1000.0 0.0001 -0.0 1e+16 1e-05
+```
+
+```ail rules=type.num.8
+fn main()
+    print("2.5E-3".to_float())   # 0.0025
+    print("1e999".to_float())    # inf
+    print("+1".to_float())       # none
+    print(".5".to_float())       # none
+```
+
+```ail rules=type.num.9
+fn main()
+    x := -0.4
+    print(x.round())             # -0.0: floor, ceil, round, sqrt keep the sign of zero
+    print(2.5.round())           # 3.0: halves round away from zero
+    print(9.0.sqrt())            # 3.0
+    print(3.9.to_int())          # 3: truncates toward zero
+    print(7.to_float())          # 7.0
+```
+
+```ail rules=type.num.10
+fn one() float
+    1                            # an int literal in a float position is a float literal
+
+fn main()
+    print(one())                 # 1.0
+```
+
+```ail rules=type.num.11
+fn main()
+    n := 0.0 / 0.0
+    print([2.0, n, 1.0].sorted())  # [1.0, 2.0, nan]: nan sorts last
+    print(n < 1.0)                 # false: the operator is IEEE
+```
+
+```ail rules=type.num.12
+fn main()
+    x := 9223372036854775807
+    print(x.checked_add(1))        # none
+    print(x.wrapping_add(1))       # -9223372036854775808
+    print(x.saturating_add(1))     # 9223372036854775807
+    print((-5).checked_div(0))     # none: a zero divisor
+    print(255.to_hex())            # ff
+```
+
+```ail rules=type.num.13
+fn low() i8
+    -128                           # the literal is an i8 because the return type is i8
+
+fn byte(n u8) u8
+    n
+
+fn main()
+    print(low())                   # -128
+    print(byte(255))               # 255
+```
+
+```ail error=type.num.13
+fn too_big() u8
+    256                            # error: 256 doesn't fit in u8
+```
+
+```ail rules=type.num.14
+fn add8(a i8, b i8) i8
+    a + b
+
+fn main()
+    print(add8(100, 27))           # 127
+    print(-(5.to_i8()))            # -5: unary minus on a signed size
+    print(f32_half(3.0))           # 1.5
+    print(200.to_hex())            # c8: same methods as int, in the type
+
+fn f32_half(x f32) f32
+    x.sqrt() * x.sqrt() / 2
+```
+
+```ail error=trait.op.3
+fn mixed(a i8, b i64) i64
+    a + b                          # error: no implicit widening between i8 and i64
+```
+
+```ail rules=type.num.15
+fn main()
+    a := 300.to_u16()
+    b := a.to_u32() * 2
+    print(b)                       # 600
+    c := 0.5.to_f32() + 1
+    print(c)                       # 1.5
+    print(3.to_float())            # 3.0
+```
+
+```ail rules=type.struct.1,type.struct.2,type.struct.3,type.struct.4,type.struct.6
+struct User
+    id int
+    name str
+    email str?
+
+fn main()
+    u := User(id: 7, name: "Ada", email: none)
+    v := User(name: "Lin", email: "l@x", id: 8)   # named arguments in any order
+    id := 9
+    name := "Kim"
+    w := User(id, name, email: none)              # shorthand and named together
+    print(u.name)                                 # Ada
+    print(v.id + w.id)                            # 17
+```
+
+```ail error=type.struct.4
+struct User
+    id int
+    name str
+
+fn main()
+    u := User(id: 1)                              # error: `name` is not set
+    print(u.id)
+```
+
+```ail error=type.struct.5
+struct Pair
+    a int
+    a str                                         # error: duplicate field name
+```
+
+```ail rules=type.struct.5,type.struct.7
+struct Pos
+    row int
+    col int
+
+fn main()
+    row := 2
+    col := 5
+    p := Pos(row, col)                            # positional: both fields are int
+    print(p.col)                                  # 5
+```
+
+```ail rules=type.enum.1,type.enum.2,type.enum.3,type.enum.4,type.enum.6
+enum Shape
+    Circle(r float)
+    Rect(w float, h float)
+    Empty
+
+fn area(s Shape) float
+    match s
+        Circle(r) => 3.0 * r * r                  # unqualified: the type is known
+        Rect(w, h) => w * h
+        Empty => 0.0
+
+fn main()
+    c := Shape.Circle(r: 1.0)                     # qualified: no context yet
+    r := Shape.Rect(w: 2.0, h: 3.0)               # named: both fields are float
+    print(area(c))                                # 3.0
+    print(area(r))                                # 6.0
+    print(area(Empty))                            # 0.0
+```
+
+```ail error=type.enum.5
+enum Dir
+    Up
+    Down
+    Up                                            # error: duplicate variant name
+```
+
+```ail rules=type.opt.1,type.opt.2,type.opt.3,type.opt.4,type.opt.5
+fn find(id int) int?
+    if id > 0
+        return id * 10
+    none
+
+fn main()
+    print(find(2))                                # 20
+    print(find(-1))                               # none: none is the absent value
+    x := find(1) else 0                           # else gives a plain int
+    print(x)                                      # 10
+```
+
+```ail rules=type.opt.6,type.opt.7
+fn lookup(m Map[str, int?], k str) int??
+    m.get(k)
+
+fn flat(m Map[str, int?], k str) int?
+    lookup(m, k) else none
+
+fn find(id int) int?
+    if id > 0
+        return id
+    none
+
+fn main()
+    mut m := Map[str, int?]()
+    m["a"] = 1
+    m["b"] = none
+    print(flat(m, "a"))                           # 1
+    print(flat(m, "b"))                           # none: a present but empty value
+    print(flat(m, "c"))                           # none: missing key
+    print(lookup(m, "b") == none)                 # false: the present-but-empty value is not none
+```
+
+```ail error=expr.call.2 rules=type.opt.8
+fn show(x int??)
+    print(x)
+
+fn find(id int) int?
+    if id > 0
+        return id
+    none
+
+fn main()
+    v := find(1)                                  # an int?
+    show(v)                                       # error: int? does not convert to int??
+```
+
+```ail rules=type.bool.1
+fn main()
+    t := true
+    f := false
+    print(t and f)                                # false
+    print(t or f)                                 # true
+```
+
+```ail rules=type.str.1,type.str.2,type.str.3
+fn main()
+    s := "héllo"
+    n := 42
+    ok := true
+    print(s.len())                                # 5 characters
+    print(s.chars().len())                        # 5
+    print("{n} {ok} {s}")                         # 42 true héllo
+    print(s == "héllo")                           # true: equality compares UTF-8 bytes
+    print("abc" < "abd")                          # true
+    c := 'é'
+    print(c)                                      # é
+```
+
+```ail error=type.str.2
+fn main()
+    s := "abc"
+    print(s[0])                                   # error: str has no indexing
+```
+
+```ail rules=type.str.4,type.str.5,type.str.6
+fn main()
+    parts := "a,,b".split(",")
+    print(parts.len())                            # 3: empty pieces are kept
+    print("a/b/c".split('/').len())               # 3: a char separator
+    print("-42".to_int())                         # -42
+    print("4x".to_int())                          # none
+    print("x".to_int() else 0)                    # 0
+    print("path/to".contains('/'))                # true
+    print("pre-body".starts_with("pre-"))         # true
+```
+
+```ail rules=type.str.7,type.str.8,type.str.9,type.str.10
+fn main()
+    print("a\r\nb\n".lines().len())               # 2
+    print("  hi ".trim())                         # hi
+    print("key=v".strip_prefix("key=") else "")   # v
+    print("file.txt".strip_suffix(".md") else "") # none: the empty string here
+    print("h\u{e9}".chars().len())                # 2
+    print("3.5".to_float() else 0.0)              # 3.5
+    print(255.to_hex())                           # ff
+    print("7".pad_left(3, '0'))                   # 007
+    p := "ab".pad_right(4, ' ')
+    print("{p}|")                                 # ab  |
+    print("ab".repeat(3))                         # ababab
+```
+
+```ail rules=type.str.11
+fn main()
+    x := 2.5
+    print("{x:.0} {x:.2}")                        # 2 2.50: half to even
+    n := 255
+    print("{n:x}")                                # ff
+```
+
+```ail rules=type.str.12,type.str.13,type.str.14
+fn main()
+    s := "Héllo"
+    print(s.len())                                # 5
+    print("héllo".byte_len())                     # 6
+    print("e\u{301}".len())                       # 2: grapheme clusters are not counted
+    print(s.slice(1, 3))                          # él
+    print(s.char_at(1) else '?')                  # é
+    print(s.find("llo") else -1)                  # 2
+    print(s.replace("l", "L"))                    # HéLLo
+    print("Ünï".to_lower())                       # ünï
+    print("straße".to_upper())                    # STRASSE is not produced: ß is unchanged
+```
+
+```ail norun rules=type.str.15
+fn main()
+    # A trap on purpose: building a 2 GiB string exceeds the 2^30-byte limit.
+    s := "x".repeat(2147483648)
+    print(s.len())
+```
+
+```ail rules=type.char.1,type.char.2
+fn main()
+    c := 'f'
+    print(c.is_alpha())                           # true
+    print('7'.is_digit())                         # true
+    print(' '.is_space())                         # true
+    print('A'.is_upper())                         # true
+    print('a'.to_upper())                         # A
+    print('ß'.to_upper())                         # ß: a multi-character mapping is unchanged
+    print(c == 'f')                               # true
+```
+
+```ail rules=type.char.3,type.char.4
+fn main()
+    c := 'f'
+    print(c.to_digit(16) else 0)                  # 15
+    print(c.to_digit(10))                         # none
+    print(c.code())                               # 102
+    print(char.from_code(0x41))                   # A
+    print(char.from_code(0xD800))                 # none: a surrogate
+```
+
+```ail rules=type.coll.1,type.coll.2,type.coll.3,type.coll.8
+fn main()
+    ports := {"http": 80, "https": 443}
+    primes := [2, 3, 5, 7]
+    seen := Set[int]()
+    counts := Map[str, int]()
+    names := List[str]()
+    empty := Map[str, int]()
+    print(primes.len())                           # 4
+    print(ports["https"])                         # 443
+    print(seen.len() + counts.len() + names.len() + empty.len())   # 0
+```
+
+```ail rules=type.coll.4,type.coll.5,type.coll.10
+fn main()
+    xs := [10, 20, 30, 40]
+    print(xs[1])                                  # 20
+    print(xs[1..3])                               # [20, 30]
+    print(xs[1..=2])                              # [20, 30]
+    print(xs[2..])                                # [30, 40]
+    print(xs[..2])                                # [10, 20]
+    print(xs.len())                               # 4
+```
+
+```ail error=type.coll.4
+fn main()
+    xs := [1, 2, 3]
+    print(xs[-1])                                 # error: a negative index literal
+```
+
+```ail rules=type.coll.6,type.coll.7,type.coll.13
+fn main()
+    mut out := []
+    out.push("a")                                 # out is List[str] from this use
+    out.push("b")
+    mut ids := [3, 1, 2]
+    ids.swap(0, 2)                                # [2, 1, 3]
+    ids.swap(1, 1)                                # does nothing
+    print(out.join(","))                          # a,b
+    print(ids)                                    # [2, 1, 3]
+```
+
+```ail error=type.coll.13
+fn main()
+    xs := []
+    print(xs.len())                               # error: the element type is never determined
+```
+
+```ail rules=type.coll.9
+fn main()
+    mut xs := ["a", "b"]
+    print(xs.join(", "))                          # a, b
+    print([1, 2, 3].join(""))                     # 123
+    print([["a"], ["b"]].join("+"))               # ["a"]+["b"]
+    print(xs.index_of("b") else -1)               # 1
+    print(xs.contains("z"))                       # false
+    print(xs.pop() else "")                       # b
+    print(xs.last() else "")                      # a
+```
+
+```ail rules=type.coll.11,type.coll.12,type.coll.15
+fn main()
+    xs := [3, 1, 2]
+    print(xs.sorted())                            # [1, 2, 3]
+    print(xs.min() else 0)                        # 1
+    print(xs.max() else 0)                        # 3
+    print(xs.sum())                               # 6
+    print([0.5, 0.25].sum())                      # 0.75
+    print(xs.take(2))                             # [3, 1]
+    mut ys := [2.0, 1.0]
+    ys.sort()
+    print(ys)                                     # [1.0, 2.0]
+```
+
+```ail rules=type.coll.14
+fn main()
+    mut xs := [1, 2, 3]
+    xs.insert(1, 9)                               # [1, 9, 2, 3]
+    xs.insert(xs.len(), 4)                        # append
+    n := xs.remove_at(0)                          # 1
+    xs.extend([5, 6])
+    print(n)                                      # 1
+    print(xs.first() else 0)                      # 9
+    xs.reverse()
+    print(xs)
+    xs.clear()
+    print(xs.len())                               # 0
+```
+
+```ail rules=type.coll.16
+fn main()
+    a := {1, 2, 3}
+    b := {3, 4}
+    print(a.union(b))                             # {1, 2, 3, 4}
+    print(a.intersect(b))                         # {3}
+    print(a.difference(b))                        # {1, 2}
+    m := {"x": 1, "y": 2}
+    print(m.keys().union(["z"]))                  # {"x", "y", "z"}: the result is a set
+```
+
+```ail rules=type.map.1,type.map.2,type.map.3,type.map.7
+fn main()
+    mut m := Map[str, int]()
+    m["a"] = 1
+    m["b"] = 2
+    m["a"] = 5                                    # keeps the first position
+    m["a"] += 1                                   # 6
+    m["c"] += 1                                   # a missing key starts from zero
+    print(m.keys())                               # [a, b, c]
+    mut g := Map[int, Map[int, str]]()
+    g[1] = Map[int, str]()
+    g[1][2] = "x"                                 # inserts key 2 into g[1]
+    print(g[1][2])                                # x
+    mut counts := Map[str, int]()
+    for w in ["a", "b", "a"]
+        counts[w] += 1
+    print(counts["a"])                            # 2
+```
+
+```ail error=type.map.2
+fn main()
+    m := Map[float, int]()                        # error: float is not Hash
+    print(m.len())
+```
+
+```ail norun rules=type.map.3
+fn main()
+    m := {"a": 3}
+    print(m["z"])                                 # traps: the key "z" is missing
+```
+
+```ail rules=type.map.4,type.map.5,type.map.6
+fn main()
+    a := {"a": 1, "b": 2}
+    b := {"b": 2, "a": 1}
+    print(a == b)                                 # true: order is ignored
+    print({1, 2} == {2, 1})                       # true
+    e := Map[str, int]()
+    print(e)                                      # {}
+    print(a.get("cy") else 0)                     # 0
+    print(a.contains("a"))                        # true
+    print(a.len())                                # 2
+    for k in a.keys()
+        print("{k}: {a[k]}")
+    s := {3, 1, 2}
+    for x in s
+        print(x)                                  # 3, 1, 2: insertion order
+    print(s.is_subset({1, 2, 3, 4}))              # true
+    print(s.sorted())                             # [1, 2, 3]
+```
+
+```ail error=type.map.5
+fn main()
+    m := {"a": 1}
+    for k in m                                    # error: iterate m.keys() instead
+        print(k)
+```
+
+```ail rules=type.map.8
+fn main()
+    mut groups := Map[str, List[int]]()
+    groups.push("odd", 1)
+    groups.push("odd", 3)
+    groups.push("even", 2)
+    print(groups["odd"])                          # [1, 3]
+    mut seen := Set[str]()
+    print(seen.add("a"))                          # true
+    print(seen.add("a"))                          # false: already there
+    print(seen.remove("a"))                       # true
 ```

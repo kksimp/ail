@@ -133,6 +133,7 @@ pub(super) enum Plain {
     Num(Num, i64),
     Bool(bool),
     Str(String),
+    Bytes(Vec<u8>),
     Char(char),
     Struct(usize, Vec<Plain>),
     Enum(usize, usize, Vec<Plain>),
@@ -172,6 +173,7 @@ fn plain(v: &Value) -> Option<Plain> {
         Value::Num(k, b) => Plain::Num(*k, *b),
         Value::Bool(b) => Plain::Bool(*b),
         Value::Str(s) => Plain::Str(s.to_string()),
+        Value::Bytes(b) => Plain::Bytes((**b).clone()),
         Value::Char(c) => Plain::Char(*c),
         Value::Struct(s, fs) => Plain::Struct(*s, all(fs)?),
         Value::Enum(e, i, fs) => Plain::Enum(*e, *i, all(fs)?),
@@ -197,6 +199,7 @@ fn value(p: &Plain) -> Value {
         Plain::Num(k, b) => Value::Num(*k, *b),
         Plain::Bool(b) => Value::Bool(*b),
         Plain::Str(s) => Value::Str(Rc::from(s.as_str())),
+        Plain::Bytes(b) => Value::Bytes(Rc::new(b.clone())),
         Plain::Char(c) => Value::Char(*c),
         Plain::Struct(s, fs) => Value::Struct(*s, Rc::new(all(fs))),
         Plain::Enum(e, i, fs) => Value::Enum(*e, *i, Rc::new(all(fs))),
@@ -237,6 +240,7 @@ fn same(a: &Value, b: &Value) -> bool {
         (Value::Char(x), Value::Char(y)) => x == y,
         (Value::Nested(x), Value::Nested(y)) => x == y,
         (Value::Str(x), Value::Str(y)) => Rc::ptr_eq(x, y),
+        (Value::Bytes(x), Value::Bytes(y)) => Rc::ptr_eq(x, y),
         (Value::Struct(_, x), Value::Struct(_, y))
         | (Value::Enum(_, _, x), Value::Enum(_, _, y))
         | (Value::List(x), Value::List(y)) => Rc::ptr_eq(x, y),

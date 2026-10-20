@@ -137,6 +137,8 @@ bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (A
 examples/                 example programs; NAME.out holds the expected output
 tools/
   edit/                   a code editor written in AIL (ADR 0180)
+  garlic/                 Garlic, a text-mode web browser written in AIL
+    js/                   its JavaScript engine (docs/design/garlic-js.md)
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
   prune-merged.sh         deletes remote branches already merged into main (ADR 0028)

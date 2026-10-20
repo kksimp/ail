@@ -1,0 +1,7 @@
+mode 6 is rw-, mode 5 is r-x
+set bits in 0b1011: 3
+not 0 is -1, shr of -8 by 1 is -4
+hash of 1234: 8707
+bitset has 4: true, has 5: false
+bitset count: 4
+bitset as int: 1099511628306

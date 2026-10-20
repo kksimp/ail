@@ -1,0 +1,25 @@
+# Small functions are inlined (ADR 0391): results match the interpreter,
+# and a trap inside an inlined function still names its own line.
+fn a(i int, j int) float
+    1.0 / ((i + j) * (i + j + 1) / 2 + i + 1).to_float()
+
+fn pick(c bool, x int, y int) int
+    if c
+        return x
+    y
+
+fn ratio(x int, y int) int
+    x / y
+
+fn main()
+    mut s := 0.0
+    for i in 0..50
+        for j in 0..50
+            s += a(i, j)
+    print(s)
+    mut t := 0
+    for k in 0..20
+        t += pick(k % 3 == 0, k, -k)
+    print(t)
+    print(ratio(10, 3))
+    print(ratio(t, t - t))

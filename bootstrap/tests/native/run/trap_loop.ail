@@ -1,0 +1,9 @@
+# An overflow in a loop variable updated in place: the trap reports the
+# operands from before the add (expr.arith.1).
+fn main()
+    mut x := 1
+    mut k := 0
+    while k < 100
+        x = x + x / 2 + 4611686018427387904
+        k += 1
+    print(x)

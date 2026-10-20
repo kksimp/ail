@@ -94,7 +94,7 @@ impl<'p> Checker<'p> {
                     "test.prop.2",
                     p.pos,
                     msg,
-                    "use `int`, `float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, or structs and enums made of those",
+                    "use `int`, `float`, `bool`, `char`, `str`, `bytes`, `List`, `Map`, `Set`, optionals, or structs and enums made of those",
                 );
             }
         }
@@ -105,9 +105,10 @@ impl<'p> Checker<'p> {
         match &t.kind {
             TypeKind::Optional(inner) => self.ungeneratable(inner, seen),
             TypeKind::Ref(_) => Some("ref".to_string()),
+            TypeKind::Ptr(_) => Some("a raw pointer".to_string()),
             TypeKind::Fn { .. } => Some("fn".to_string()),
             TypeKind::Named { name, args } => match name.as_str() {
-                "int" | "i64" | "float" | "f64" | "str" | "char" | "bool" if args.is_empty() => None,
+                "int" | "i64" | "float" | "f64" | "str" | "bytes" | "char" | "bool" if args.is_empty() => None,
                 "List" | "Set" | "Map" => args.iter().find_map(|a| self.ungeneratable(a, seen)),
                 _ if !args.is_empty() => Some(name.clone()),
                 _ if seen.contains(name) => None,

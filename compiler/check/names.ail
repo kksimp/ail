@@ -18,6 +18,7 @@ pub BUILTIN_TYPES := [
     "f64",
     "f32",
     "str",
+    "bytes",
     "char",
     "bool",
     "List",
@@ -33,6 +34,9 @@ pub BUILTIN_TYPES := [
 ## Type names the spec defines that the bootstrap doesn't support yet.
 pub SPEC_TYPES_NOT_YET := ["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "Option"]
 
+## The types a property test can generate without type arguments (test.prop.2).
+pub GENERATABLE := ["int", "i64", "float", "f64", "str", "bytes", "char", "bool"]
+
 pub SIZED := ["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32"]
 
 pub CONC_TYPES := ["Task", "TaskGroup", "Channel", "Mutex", "Atomic"]
@@ -45,21 +49,26 @@ ALLOWABLE := ["expr.match.3"]
 
 ## The standard modules (std.use.1), sorted.
 pub STD_MODULES := [
+    "compress",
     "env",
     "fs",
+    "hash",
     "io",
+    "mem",
     "net",
     "path",
     "proc",
     "random",
+    "regex",
     "tensor",
     "task",
     "time",
+    "tz",
     "ui",
 ]
 
 ## The standard modules written in AIL (std.ui.19).
-pub AIL_STD_MODULES := ["std.ui.widgets"]
+pub AIL_STD_MODULES := ["std.time.date", "std.ui.widgets"]
 
 ## Positions from here on are the prelude's.
 pub PRELUDE_LINE := 1073741824

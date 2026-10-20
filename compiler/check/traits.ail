@@ -50,6 +50,7 @@ fn Checker.collect_impls(mut self)
                 "int" => Ty.Int
                 "float" => Ty.Float
                 "str" => Ty.Str
+                "bytes" => Ty.Bytes
                 "char" => Ty.Char
                 "bool" => Ty.Bool
                 "list" => Ty.ListOf(args[0])
@@ -123,7 +124,7 @@ fn Checker.implements(self, t Ty, tr int) bool
                     return true
             return false
         AnyOf(a) => return a == tr and whole_trait_through_any(tr)
-        RefOf => return tr == eq
+        RefOf | PtrOf => return tr == eq
         Num(k) => return tr == eq or tr == std_ord or (tr == std_hash and k != "f32")
         Union => return tr == eq or tr == std_hash
         Opt(inner) => return (tr == eq or tr == std_hash) and implements_in(inner, tr, mut seen)
@@ -146,6 +147,7 @@ fn Checker.implements(self, t Ty, tr int) bool
             Int => true
             Float => true
             Str => true
+            Bytes => true
             Char => true
             ListOf(e) => implements_in(e, tr, mut seen)
             _ => false
@@ -188,6 +190,7 @@ fn Checker.custom_eq_con(self, t Ty) bool
         Int => return true
         Bool => return true
         Str => return true
+        Bytes => return true
         Char => return true
         Float => return tr == std_eq
         ListOf(e) => return implements_in(e, tr, mut seen)

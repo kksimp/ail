@@ -1,0 +1,43 @@
+# type.bytes.1-13 and std.fs.13-14: the `bytes` type.
+use std.fs
+
+fn main() !
+    b := b"hello\x00\n"
+    print(b)
+    print(b.len())
+    print(b[1])
+    print(b[1..3])
+    print(b[..2] + b[3..])
+    print(b[5..=6])
+    print(b == b"hello\x00\n")
+    print(b != b"hello")
+    print(b"abc" < b"abd")
+    print(b.hex())
+    print(b.base64())
+    print("hi".to_bytes().to_list())
+    print(bytes.from_list([104, 105]).to_str())
+    print((bytes.from_hex("68ff") else b"").hex())
+    print(bytes.from_hex("6") == none)
+    print(bytes.from_hex("zz") == none)
+    print((bytes.from_base64("aGVsbG8=") else b"").text())
+    print(bytes.from_base64("aGVsbG8") == none)
+    print(b.find(b"llo"))
+    print(b.find(b"xyz"))
+    print("{b.contains(b"el")} {b.starts_with(b"he")} {b.ends_with(b"\n")}")
+    print(b"\xff\xfe".to_str())
+    print(b"\xff\xfe".text().byte_len())
+    print(b"say \"hi\"\\".len())
+    print(bytes.zeros(3))
+    mut total := 0
+    for x in b
+        total += x.to_int()
+    print(total)
+    print([x.to_int() for x in b"abc"])
+    fs.write_bytes("bytes_basic_case.tmp", b"\xff\x00abc")?
+    fs.append_bytes("bytes_basic_case.tmp", b"\n")?
+    back := fs.read_bytes("bytes_basic_case.tmp")?
+    print(back)
+    fs.remove("bytes_basic_case.tmp")?
+    m := {b"k": 1}
+    print(m[b"k"])
+    print("{b}")

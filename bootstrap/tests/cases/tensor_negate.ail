@@ -1,0 +1,7 @@
+# std.tensor.14: unary `-` on tensors, elementwise, for both element types.
+fn main()
+    a := tensor.from([1.5, -2.0, 0.0, 4.0], [2, 2])
+    print(-a)
+    print(-(-a) == a)
+    print(-tensor.from([3, -4, 0]))
+    print((-a * 2.0).sum())

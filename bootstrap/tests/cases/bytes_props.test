@@ -1,0 +1,11 @@
+{"test":"hex_round_trip","status":"pass","line":3,"col":10,"message":"","cases":100,"seed":2536461094067510733}
+{"test":"base64_round_trip","status":"pass","line":6,"col":10,"message":"","cases":100,"seed":16408781081809712925}
+{"test":"base64_length","status":"pass","line":9,"col":10,"message":"","cases":100,"seed":4073998057949657615}
+{"test":"list_round_trip","status":"pass","line":12,"col":10,"message":"","cases":100,"seed":15087350291469195952}
+{"test":"str_round_trip","status":"pass","line":15,"col":10,"message":"","cases":100,"seed":12425603311501678983}
+{"test":"text_agrees_with_to_str","status":"pass","line":19,"col":10,"message":"","cases":100,"seed":12440942343622246757}
+{"test":"split_and_join","status":"pass","line":23,"col":10,"message":"","cases":100,"seed":10306302048563205418}
+{"test":"concat_laws","status":"pass","line":29,"col":10,"message":"","cases":100,"seed":1740422592164884679}
+{"test":"find_is_a_position","status":"pass","line":38,"col":10,"message":"","cases":100,"seed":1050686098477690451}
+{"test":"order_matches_equality","status":"pass","line":42,"col":10,"message":"","cases":100,"seed":1461162696452358898}
+{"summary":true,"passed":10,"failed":0}

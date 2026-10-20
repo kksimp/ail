@@ -178,6 +178,7 @@ pub COVERED_RULES := [
     "type.struct.7",
     "unsafe.block.2",
     "unsafe.block.3",
+    "unsafe.ptr.1",
 ]
 
 ## A range of lines of one file not checked yet: `first` to `last`, inclusive.

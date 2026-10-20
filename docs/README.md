@@ -52,6 +52,11 @@ Design notes:
   write AIL from the quick reference.
 - [design/program-measurements-r2.md](design/program-measurements-r2.md):
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
+- [design/garlic-browser.md](design/garlic-browser.md): Garlic, a web
+  browser written in AIL: architecture, text-mode first milestone, the page
+  model agents read, JavaScript and dependencies.
+- [design/pdf-viewer.md](design/pdf-viewer.md): the PDF reader and viewer
+  in AIL that searches the text layer without OCR, and what pixels need.
 - [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
   moves from the bootstrap's crate shim to platform APIs through `extern c`.
 - [design/semantic-api.md](design/semantic-api.md): the machine-readable
@@ -61,12 +66,15 @@ Design notes:
   and per-dependency capability grants.
 - [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
   writes.
+- [design/garlic-js.md](design/garlic-js.md): the JavaScript engine of the
+  Garlic browser, written in AIL: lexer, parser, testing, plan.
 - [design/compile-time-execution.md](design/compile-time-execution.md),
   [design/metaprogramming.md](design/metaprogramming.md),
   [design/reflection.md](design/reflection.md),
   [design/ir-architecture.md](design/ir-architecture.md): topics 16–19:
   compile-time constants, derive generators, compile-time reflection, and the
   compiler tiers.
+- [design/native-performance.md](design/native-performance.md): `ail build` output raced against C and Python, where the time goes, and the compiler's own speed (ADR 0390).
 - [design/program-measurements-r5.md](design/program-measurements-r5.md),
   [design/program-measurements-r8.md](design/program-measurements-r8.md): the
   agent-tool corpus against Python after rounds 5 and 8.

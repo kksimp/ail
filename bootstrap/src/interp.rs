@@ -22,13 +22,21 @@ mod assoc;
 mod atomic;
 mod builtins;
 mod bytecode;
+mod bytes;
+mod ffi;
 mod keyfn;
 pub mod limits;
 mod contracts;
 pub mod parallel;
 mod net;
+mod netsock;
 mod osext;
+mod spawn;
+mod codec;
 mod random;
+mod tz;
+mod regex;
+pub mod replay;
 mod stdlib;
 mod tasks;
 mod tensor;
@@ -68,6 +76,8 @@ enum Value {
     Num(Num, i64),
     Bool(bool),
     Str(Rc<str>),
+    /// `bytes` (type.bytes.1): copies share the storage.
+    Bytes(Rc<Vec<u8>>),
     Char(char),
     /// A struct (by index in the program) and its fields.
     Struct(usize, Rc<Vec<Value>>),
@@ -113,6 +123,7 @@ impl Clone for Value {
             Value::None => Value::None,
             Value::Nested(n) => Value::Nested(*n),
             Value::Str(s) => Value::Str(Rc::clone(s)),
+            Value::Bytes(b) => Value::Bytes(Rc::clone(b)),
             Value::Struct(i, f) => Value::Struct(*i, Rc::clone(f)),
             Value::Enum(e, v, f) => Value::Enum(*e, *v, Rc::clone(f)),
             Value::List(l) => Value::List(Rc::clone(l)),
@@ -406,7 +417,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
-    let has_unique = prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique);
+    // A standard module's unique type (`proc.Child`) has no cleanup to run, so
+    // it doesn't slow programs that don't declare one (std.proc.7).
+    let has_unique = prog.structs.iter().any(|s| s.unique && !s.name.contains('.')) || prog.enums.iter().any(|e| e.unique);
     let has_defer = prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b));
     Interp {
         prog,
@@ -910,6 +923,7 @@ fn key_text(k: &Value) -> String {
     };
     match k {
         Value::Str(s) => quoted(s, '"'),
+        Value::Bytes(b) => bytes::bytes_text(b),
         Value::Char(c) => quoted(&c.to_string(), '\''),
         Value::Int(n) => n.to_string(),
         Value::Num(k, bits) if k.is_float() => float_text32(Num::f32_of(*bits)),
@@ -1168,6 +1182,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn run_body_inner(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if f.ext.is_some() {
+            return self.call_extern(f, env, pos);
+        }
         self.depth += 1;
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
@@ -1531,6 +1548,8 @@ impl<'a, W: Write> Interp<'a, W> {
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
             Value::Set(t) => Rc::new(t.key_list()),
+            // type.bytes.5: each byte, as a `u8`.
+            Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
             // conc.share.7: each value received, until the channel is closed and empty.
             Value::Handle(Handle::Channel(c)) => {
                 while let Some(v) = self.chan_next(c, iter.pos())? {
@@ -1585,6 +1604,7 @@ impl<'a, W: Write> Interp<'a, W> {
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
+                Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
                 Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
@@ -1948,6 +1968,23 @@ impl<'a, W: Write> Interp<'a, W> {
                 let k = self.eval(index, env)?;
                 return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
             }
+            // type.bytes.3-4: an element is a `u8`; a range slices.
+            Value::Bytes(b) => {
+                if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
+                    let lo = match lo {
+                        Some(e) => self.eval(e, env)?.int(),
+                        None => 0,
+                    };
+                    let (hi, inclusive) = match hi {
+                        Some(e) => (self.eval(e, env)?.int(), *inclusive),
+                        None => (b.len() as i64, false),
+                    };
+                    return Ok(bytes::slice(&b, lo, hi, inclusive, *range_pos)?);
+                }
+                let i = self.eval(index, env)?.int();
+                return Ok(bytes::at(&b, i, pos)?);
+            }
+            Value::Tensor(t) => return self.tensor_index(&t, index, pos, env),
             other => unreachable!("checked: list or map, found {other:?}"),
         };
         if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
@@ -2059,6 +2096,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Str(s, _) => {
                 Value::Str(Rc::clone(self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str()))))
             }
+            Expr::Bytes(b, _) => bytes::bytes_value(b.clone()),
             // type.num.13: a literal typed by context as a sized number.
             Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
@@ -2156,6 +2194,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = match self.eval(operand, env)? {
                     Value::Float(x) => return Ok(Value::Float(-x)),
                     Value::Num(k, bits) => return negate(k, bits, *pos),
+                    Value::Tensor(t) => {
+                        return match t.neg() {
+                            Ok(r) => Ok(Value::Tensor(Rc::new(r))),
+                            Err(f) => Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        };
+                    }
                     v => v.int(),
                 };
                 match v.checked_neg() {
@@ -2353,6 +2397,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => unreachable!("checked: `{sym}` on floats"),
             },
             (Value::Num(k, a), Value::Num(_, b)) => num_binop(op, k, a, b, pos)?,
+            // type.bytes.6: `a + b` joins two `bytes`.
+            (Value::Bytes(a), Value::Bytes(b)) if op == BinOp::Add => {
+                let mut v = Vec::with_capacity(a.len() + b.len());
+                v.extend_from_slice(&a);
+                v.extend_from_slice(&b);
+                bytes::bytes_value(v)
+            }
             // Characters and booleans compare without the trait-aware generic path.
             (Value::Char(a), Value::Char(b)) if !self.user_std[0] && !self.user_std[1] => Value::Bool(match op {
                 BinOp::Eq => a == b,
@@ -2400,6 +2451,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Int(_) => Some(Con::Int),
             Value::Float(_) => Some(Con::Float),
             Value::Str(_) => Some(Con::Str),
+            Value::Bytes(_) => Some(Con::Bytes),
             Value::Char(_) => Some(Con::Char),
             Value::Bool(_) => Some(Con::Bool),
             Value::List(_) => Some(Con::List),
@@ -2433,6 +2485,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Char(x), Value::Char(y)) => x == y,
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::Bytes(x), Value::Bytes(y)) => x == y,
             (Value::None, Value::None) => true,
             (Value::None, _) | (_, Value::None) => false,
             (Value::Nested(m), Value::Nested(n)) => m == n,
@@ -2495,6 +2548,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Float(x), Value::Float(y)) => float_order(*x, *y),
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
+            (Value::Bytes(x), Value::Bytes(y)) => x.cmp(y),
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
                 self.lexicographic(x, y, pos)?
             }
@@ -2714,6 +2768,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Num(k, bits) => k.decode(*bits).to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => quoted(s, '"'),
+            Value::Bytes(b) => bytes::bytes_text(b),
             Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
             Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
@@ -2813,6 +2868,9 @@ impl<'a, W: Write> Interp<'a, W> {
             if let Some(&c) = self.resolved.std_calls.get(&pos) {
                 return self.std_call(c, args, pos, env);
             }
+            if tn == "bytes" {
+                return self.bytes_assoc(name, args, pos, env);
+            }
             if tn == "char" {
                 let n = self.eval(&args[0].value, env)?.int();
                 let c = u32::try_from(n).ok().and_then(char::from_u32);
@@ -2833,6 +2891,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Ptr(m, elem)) = site.std {
+            return self.ptr_method(m, elem, recv, args, pos, env);
+        }
         let recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
         self.method_on(key, site, recv, name, args, pos, env)
     }
@@ -2847,7 +2908,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),
@@ -3155,9 +3216,7 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn flush(&mut self, pos: Pos) -> Result<(), Trap> {
-        if self.conc.is_some() {
-            self.task_print("");
-        }
+        self.task_flush();
         match self.out.flush() {
             Err(e) if e.kind() != io::ErrorKind::BrokenPipe => {
                 trap("mod.main.3", pos, format!("writing to standard output failed: {e}"))

@@ -1,0 +1,48 @@
+## Edge-date vectors and properties for std.time.date (lane 150; complements
+## std_date_props.ail). Run with `ail test`.
+use std.time.date
+
+fn day(n int) date.Date
+    date.Date.from_days(n % 3_000_000)
+
+@test fn epoch_is_a_thursday()
+    d := date.Date.from_days(0)
+    assert_eq(d.iso(), "1970-01-01")
+    assert_eq(d.weekday(), 4)
+
+@test fn y2k_vector()
+    assert_eq(date.Date.from_days(10957).iso(), "2000-01-01")
+
+@test fn leap_day_rolls_over()
+    d := date.parse_date("2000-02-29") else return
+    assert_eq(d.add_days(1).iso(), "2000-03-01")
+    c := date.parse_date("1900-02-28") else return
+    assert_eq(c.add_days(1).iso(), "1900-03-01")
+
+@test fn invalid_leap_day_is_absent()
+    assert(date.Date.new(2023, 2, 29) == none)
+    assert(date.Date.new(1900, 2, 29) == none)
+    assert(date.Date.new(2000, 2, 29) != none)
+
+@test fn year_lengths_sum_correctly(n int)
+    y := 1600 + n % 800
+    mut total := 0
+    for m in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        total += date.days_in_month(y, m)
+    assert_eq(total, if date.is_leap(y) then 366 else 365)
+
+@test fn weekday_advances_by_one(n int)
+    d := day(n)
+    assert_eq(d.add_days(1).weekday(), d.weekday() % 7 + 1)
+
+@test fn yday_counts_from_january_first(n int)
+    d := day(n)
+    assert(d.yday() >= 1 and d.yday() <= 366)
+    first := d.add_days(1 - d.yday())
+    assert_eq(first.month, 1)
+    assert_eq(first.day, 1)
+
+@test fn month_shift_undoes_when_day_fits(n int, k int)
+    d := day(n)
+    if d.day <= 28
+        assert_eq(d.add_months(k % 1000).add_months(-(k % 1000)), d)

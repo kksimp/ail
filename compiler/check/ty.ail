@@ -7,6 +7,8 @@ pub enum Ty
     Num(name str)
     Float
     Str
+    ## `bytes` (type.bytes.1)
+    Bytes
     Char
     Bool
     ## No value, as `print(...)` gives.
@@ -32,6 +34,8 @@ pub enum Ty
     AnyOf(trait_index int)
     ## `ref T` (own.ref.1)
     RefOf(inner Ty)
+    ## `*T`, a raw pointer (unsafe.ptr.1).
+    PtrOf(inner Ty)
     ## `Channel[T]`, `Mutex[T]`, `Atomic[T]`, `TaskGroup` (inner `Unit`).
     Conc(kind str, inner Ty)
     ## `fn(A, B) R`, a function value (type.fn.1); `ret` is `Unit` for no result.
@@ -195,6 +199,7 @@ fn mentions_any(xs List[Ty], p int) bool
         Int => "int"
         Float => "float"
         Str => "str"
+        Bytes => "bytes"
         Char => "char"
         Bool => "bool"
         ListOf => "list"

@@ -1,6 +1,11 @@
-# 22. Tool lookups: api, explain, fix
+# 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
 
-Chapter keys: `api`, `explain`, `fix`
+Chapter keys: `api`, `explain`, `fix`, `budget`
+Chapter keys: `api`, `explain`, `fix`, `snap`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `diff`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `edit`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `replay`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -276,3 +281,542 @@ suite fails when they differ.
 **explain.cover.4** — An entry is short enough to read in one step: the mean
 `ail explain RULE` output stays under 120 tokens
 ([ADR 0336](../decisions/0336-explain-listing-and-length.md)).
+
+## Token budgets
+
+**budget.out.1** — Every command accepts `--budget N` before its file
+(before a program's own arguments for `ail run`). The command runs as
+usual; when its output, standard output and standard error together, is
+estimated as for program cards (ADR 0311) at no more than `N` tokens, it is printed
+unchanged. Otherwise records are printed by `budget.out.3` until the next
+would pass `N`, then a note (`budget.out.4`). At least one record is shown.
+The exit status is the command's own. `api --card` keeps its own
+`--budget` (ADR 0311)
+([ADR 0394](../decisions/0394-token-budgets-on-every-command.md)).
+
+**budget.out.2** — A record is one diagnostic, trap or failing test with its
+indented, `help:`, `note:` and `fix:` lines; one JSON line; or one other
+line. A record stays on the stream it was written to.
+
+**budget.out.3** — Records are shown in rank order, and in output order
+within a rank: errors and traps, failed tests, warnings, other lines, passed
+tests. A test summary (`N passed, M failed` or its JSON line) is always
+shown, after the records.
+
+**budget.out.4** — The note counts the records not shown by kind and gives
+the number `K` of the first one not shown; `--from K` with the same command
+and budget skips the first `K` records in rank order. With `--json` the note
+is one line `{"budget","from","shown","total","tokens","omitted","next"}`,
+`next` being `null` when nothing is left. The note is written to the stream
+of the first record not shown.
+
+**budget.out.5** — `--budget` without a number takes the command's default:
+1,500 tokens for `check`, `fix`, `edit` and `test`; 2,000 for `run`,
+`explain`, `effects` and `diff`; 4,000 otherwise. `--from` without
+`--budget` uses the default too.
+
+**budget.out.6** — A record is never cut, so a command whose whole output is
+one line (`ail api FILE`, `ail explain --json`) is shown whole; its text forms
+(`--text`) split into records.
+
+## Snapshot updating
+**snap.update.1** — `ail test --update FILE` runs the tests of `FILE` as
+`ail test` does, and rewrites the expectations that failed so that they
+hold (`snap.update.2–5`). It prints a unified diff of each file it changed,
+then `updated N snapshots in M files`, then the test report as the tests
+now stand; the exit status follows that report
+([ADR 0395](../decisions/0395-ail-test-update-rewrites-snapshots.md)).
+**snap.update.2** — An `assert_eq(actual, expected)` whose `expected` is a
+literal (a string, character, number, `-` number or boolean, or a list
+literal of these) does not fail under `--update` when `actual` has a
+literal form of that shape: the literal is rewritten to it and the test
+goes on. String literals of any form are rewritten as one-line `"..."`
+literals with escapes (`lex.str.1`). Any other `assert_eq` and every
+`assert` fail as usual.
+**snap.update.3** — A literal reached more than once with different actual
+values (in a loop, a helper or a property) is not rewritten, and the
+assertion that found the second value fails as usual.
+**snap.update.4** — A doc example (`test.doc.2`) whose output differs from
+its `# =>` lines has those lines replaced by one `# =>` line per line of
+output, with the first one's indentation. An example without `# =>` lines
+is not changed.
+**snap.update.5** — When `NAME.out` exists next to `FILE`, it is replaced by
+what `ail run FILE` writes to standard output.
+**snap.update.6** — `--dry-run` prints the same report and writes nothing
+(`would update ...`). With `--json` each change is a line
+`{"snapshot":"assert_eq"|"doc"|"out","file","line","col","old","new"}` and
+the summary is `{"snapshots":true,"dry_run","updated","files","skipped"}`.
+
+
+## Semantic diff
+
+**diff.out.1** — `ail diff OLD NEW` compares two versions of a program: two
+files, or two package directories. Each is loaded and checked as
+`ail check` would; for files, the tests of each are run as `ail test` would
+(a 10-second limit per test run), unless `--no-tests` is given. Packages'
+tests are not run
+([ADR 0396](../decisions/0396-ail-diff-semantic-diff.md)).
+
+**diff.out.2** — Declarations are matched by id (`api.id.1`). An id only in
+`NEW` is added, only in `OLD` removed. A matched declaration is changed when
+any of these differ: its signature, whether it is `pub`, its effects, its
+error types, its `requires`/`ensures`, the trait method it implements,
+whether a trait method has a default, its doc comment, or, for functions and
+methods, the text of its body (the lines after its first, to the next
+declaration, without trailing blank and comment lines). Members (fields,
+variants, methods) are declarations of their own. When either side is
+rejected, declarations are not compared.
+
+**diff.out.3** — Diagnostics are matched by rule, file (relative to the
+compared path) and message, counting repeats; line numbers are shown but not
+compared.
+
+**diff.out.4** — A test is reported when its outcome differs, or when it
+exists on one side only (`absent`).
+
+**diff.out.5** — `ail diff --rev REV PATH` compares `PATH` as git has it at
+revision `REV` (with the directory around a file, so its modules load)
+against `PATH` now. An unknown revision or path is an error (exit 2).
+
+**diff.out.6** — The text form has one line per added (`+`) or removed
+(`-`) declaration, a `~ ID` line per changed one with `(doc, body changed)`
+and an indented `KEY: OLD -> NEW` line for each other changed key, one
+`+`/`-` line per diagnostic, one `test NAME: OLD -> NEW` line per test, and
+a summary line. With `--json` each is a JSON line, a test that now fails
+carries `"status":"fail"`, and the last line is
+`{"summary":true,...}`. The exit status is 0 when nothing changed, 1 when
+something did, 2 for an error.
+
+```ail pkg=diff_pair tool=diff,old/a.ail,new/a.ail status=1 expect=adds: rules=diff.out.1,diff.out.2,diff.out.3,diff.out.4,diff.out.6
+```
+
+```ail pkg=diff_pair tool=diff,--json,--no-tests,old/a.ail,new/a.ail status=1 expect="summary":true rules=diff.out.6
+```
+
+```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
+```
+## Examples
+Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
+example (`FILE` is the example, `DIR` its package directory) and checks that
+its output contains the `expect=` text. The tools' output formats are
+non-normative; these examples check the behaviour the rules describe.
+`explain.cover.*` is also enforced by `bootstrap/tests/explain_coverage.rs`
+in `./ail selftest`, and `api.card.5` (the generated cards match `ail api --card`)
+by `bootstrap/tests/api_card.rs`; the harness cannot read the repository's cards.
+```ail tool=api,--text,FILE expect=add rules=api.id.1
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--text,FILE expect=Adds rules=api.doc.1
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+# A plain comment ends the doc run above; it is not a doc comment.
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--locals,DIR,FILE,2,5 expect=a rules=api.pkg.2
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--tokens,FILE expect=1:1 rules=api.tok.2
+fn main()
+    print(1)
+```
+```ail tool=api,--tokens,FILE expect=main rules=api.tok.1
+fn main()
+    print(1)
+```
+```ail tool=api,--tokens,FILE expect=comment rules=api.tok.3
+# a comment line
+fn main()
+    print(1)
+```
+```ail tool=api,--ast,FILE expect="fns" rules=api.ast.1,api.ast.2
+fn main()
+    print(1)
+```
+```ail tool=api,--ast,--program,FILE expect=1073741843 rules=api.ast.3
+fn main()
+    print(1)
+```
+```ail tool=fix,--dry-run,FILE expect=mut rules=fix.edit.1
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+```ail tool=fix,--dry-run,FILE expect={name} rules=fix.edit.6
+fn main()
+    name := "bo"
+    print("hi " + name)
+```
+```ail tool=explain,expr.bind.4 expect=expr.bind.4 rules=explain.show.1
+fn main()
+    x := 1
+    print(x)
+```
+```ail tool=explain,--json expect="count" rules=explain.list.1
+fn main()
+    print(1)
+```
+```ail tool=explain,--json expect="fixable" rules=explain.cover.1,explain.cover.2,explain.cover.3,explain.cover.4
+fn main()
+    print(1)
+```
+```ail tool=api,--pretty,FILE expect=items rules=api.out.1,api.out.2,api.out.3,api.out.4
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+fn log(msg str)
+    print(msg)
+fn main()
+    log("{add(1, 2)}")
+```
+```ail tool=api,FILE expect=io rules=api.out.4
+fn log(msg str)
+    print(msg)
+fn main()
+    log("hi")
+```
+```ail tool=api,FILE expect=error status=2 rules=api.out.5,api.card.4
+fn main()
+    x := 1
+    x = 2                              # a program with errors has no outline
+```
+```ail tool=api,FILE expect=method:Circle.Shape.area rules=api.id.2
+trait Shape
+    fn area(self) float
+struct Circle
+    r float
+fn Circle.area(self) float
+    3.0 * self.r * self.r
+impl Shape for Circle
+    fn area(self) float
+        self.r * self.r
+fn main()
+    print(Shape.area(Circle(r: 1.0)))
+```
+```ail tool=api,FILE expect=fn:largest rules=api.id.3
+fn largest(xs List[int]) int
+    xs.max() else 0
+fn main()
+    print(largest([3, 9, 2]))
+```
+```ail tool=api,--refs,FILE,9,7 expect=method:Shape.area rules=api.ref.2
+trait Shape
+    fn area(self) float
+struct Square
+    side float
+impl Shape for Square
+    fn area(self) float
+        self.side * self.side
+fn total(s any Shape) float
+    s.area()
+fn main()
+    sq := Square(side: 2.0)
+    print(total(sq))
+```
+```ail tool=api,--refs,FILE,11,5 expect=refs rules=api.ref.1,api.refs.1,api.refs.3
+trait Shape
+    fn area(self) float
+struct Square
+    side float
+impl Shape for Square
+    fn area(self) float
+        self.side * self.side
+fn total(s any Shape) float
+    s.area()
+fn main()
+    sq := Square(side: 2.0)
+    print(total(sq))
+```
+```ail tool=api,--locals,FILE,2,5 expect=kind rules=api.loc.1,api.loc.2
+fn add(a int, b int) int
+    c := a + b
+    c
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--type,FILE,2,5 expect=int rules=api.type.1,api.type.2
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--refs,FILE,1,4 expect=add rules=api.query.1
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--text,FILE expect=add rules=api.text.1,api.doc.2
+## Adds two numbers.
+## Returns their sum.
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--card,FILE expect=entry rules=api.card.1,api.card.3
+## Sums two numbers.
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--card,--json,FILE expect=card rules=api.card.2
+fn main()
+    print(1)
+```
+```ail tool=api,--card,--budget,30,FILE expect=entry rules=api.card.3
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--outline,DIR expect=geo pkg=geometry rules=api.pkg.1,api.pkg.4
+```
+```ail tool=api,--locals,DIR,FILE,2,5 expect=kind rules=api.pkg.2
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=fix,--dry-run,FILE expect=match rules=fix.edit.2,fix.edit.4
+enum Dir
+    North
+    South
+fn name(d Dir) str
+    match d
+        North => "n"
+fn main()
+    print(name(Dir.North))
+```
+```ail tool=fix,--dry-run,FILE expect=load()? rules=fix.edit.3
+error enum Oops
+    Bad "bad"
+fn load() int ! Oops
+    Bad
+fn run() int ! Oops
+    load()
+    1
+fn main() ! Oops
+    print(run()?)
+```
+```ail tool=fix,FILE expect=mut rules=fix.apply.1,fix.apply.2,fix.apply.3
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+```ail tool=fix,--dry-run,FILE expect=--- rules=fix.apply.4
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+```ail rules=type.opt.9
+fn main()
+    mut x := none
+    x = 5
+    print(x)                    # x is int?, fixed by its first assignment
+```
+```ail rules=type.opt.10
+fn main()
+    n := 3
+    v := if n > 2
+        3
+    else
+        none
+    print(v)
+```
+```ail rules=expr.bit.1
+fn main()
+    print(6.bit_and(3))         # 2
+    print(6.bit_or(3))          # 7
+    print(6.bit_xor(3))         # 5
+    print(0.bit_not())          # -1
+    print(1.shl(4))             # 16
+    print(-16.shr(2))           # -4: the sign bit is copied in
+```
+```ail norun rules=expr.bit.2
+fn main()
+    print(1.shl(64))            # traps: the shift count must be 0..=63
+```
+```ail tool=api,--refs,DIR,main.ail,16,12 expect=origin pkg=geometry rules=api.refs.2,api.pkg.2,api.pkg.3
+```
+```ail tool=api,--card,DIR expect=entry pkg=geometry rules=api.card.5
+```
+```ail tool=check,--budget,40,FILE expect=shown status=2 rules=budget.out.1,budget.out.2,budget.out.3,budget.out.4
+fn main()
+    x := 1
+    x = 2
+    y := 3
+    y = 4
+    z := 5
+    z = 6
+    print(x + y + z)
+```
+```ail tool=run,--budget,FILE expect=1 rules=budget.out.5,budget.out.6
+fn main()
+    print(1)
+```
+## Structured edits
+**edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
+object) from standard input and applies them in order to the file or
+package directory `PATH`. Each edit has an `"op"`: `replace_body`,
+`replace`, `insert`, `delete`, `rename` or `import`, with the keys of
+`edit.op.1–6`. Input that isn't such JSON is an error (exit 2)
+([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
+**edit.in.2** — Edits apply all or nothing: when one cannot be applied, the
+command names it (`edit K of N`), writes nothing and exits 2.
+**edit.id.1** — An edit names a declaration by its id (`api.id.1`):
+`fn:NAME`, `method:TYPE.NAME`, `type:NAME`, `trait:NAME`, `const:NAME`,
+and for `rename` also `field:TYPE.NAME` and `variant:TYPE.NAME`. Only
+declarations that start at column 0 are found. A declaration runs from its
+doc comment and attributes to its last indented line.
+**edit.id.2** — In a package, an id may carry the module of its file
+(`fn:geo.origin`, `api.pkg.1`). An id that names declarations in two files
+is an error that asks for the module.
+**edit.op.1** — `{"op":"replace_body","id":ID,"body":TEXT}` replaces the
+lines after the declaration's signature with `TEXT`, re-indented to one
+level. Leading `requires` and `ensures` lines are kept unless `TEXT` has
+its own.
+**edit.op.2** — `{"op":"replace","id":ID,"text":TEXT}` replaces the whole
+declaration, doc comment included. `{"op":"delete","id":ID}` removes it.
+**edit.op.3** — `{"op":"insert","text":TEXT}` adds a declaration after
+(`"after":ID`) or before (`"before":ID`) another, or at the end of the file
+(`"file"` picks it in a package; the default is the package's first root
+file).
+**edit.op.4** — The edits of `edit.op.1–3` are textual: their result is
+checked with the rest (`edit.out.2`), not before.
+**edit.op.5** — `{"op":"rename","id":ID,"to":NAME}` renames the declaration
+and every reference to it that `ail api --symbols` reports (`api.ref.1`),
+in every file of the program. The program as edited so far must check
+without errors; otherwise the rename fails.
+**edit.op.6** — `{"op":"import","module":M}` adds `use M` after the last
+`use` line (or at the top) unless it is there.
+**edit.out.1** — Every changed file is rewritten in canonical layout
+(`ail fmt`) when it parses.
+**edit.out.2** — The program is then checked and its diagnostics are
+reported as `ail check` reports them, followed by one summary line,
+`edited N files with K edits; E errors, W warnings` (with `--json`,
+`{"summary":true,"edits","written","files","errors","warnings"}`). The exit
+status is 2 when there are errors, 0 otherwise. The files are written even
+when there are errors, unless `--if-clean` is given.
+**edit.out.3** — `--dry-run` writes nothing and prints a unified diff of
+each file that would change; `--diff` prints the diff and writes.
+
+```ail pkg=edit_ops tool=edit,--dry-run,main.ail stdin=edits.json expect=edits; rules=edit.in.1,edit.id.1,edit.op.1,edit.op.2,edit.op.3,edit.op.4,edit.op.5,edit.op.6,edit.out.1,edit.out.2,edit.out.3
+```
+
+```ail pkg=edit_ops tool=edit,main.ail stdin=bad.json status=2 expect=written rules=edit.in.2,edit.id.1,edit.id.2
+```
+
+```ail pkg=edit_ops tool=edit,main.ail stdin=text.txt status=2 expect=edit.in.1 rules=edit.in.1
+```
+
+```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
+@test
+fn adds()
+    assert_eq(1 + 1, 3)
+```
+
+```ail tool=test,--update,--dry-run,FILE expect=would rules=snap.update.3
+@test
+fn repeated()
+    for i in [1, 2]
+        assert_eq(i, 1)
+```
+
+```ail tool=test,--update,--dry-run,FILE expect=would rules=snap.update.4
+## Doubles a number.
+##
+## ```ail
+## print(double(2))
+## # => 5
+## ```
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(1))
+```
+
+```ail tool=test,--update,--dry-run,--json,FILE expect=dry_run rules=snap.update.6
+@test
+fn adds()
+    assert_eq(1 + 1, 3)
+```
+
+```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
+```
+## Record and replay
+**replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
+and writes R, a recording of every captured call's result
+(`replay.cap.1`). `ail test --record R FILE` keeps the calls of the tests
+that failed. `--record` and `--replay` need `run` or `test`, a file name,
+and not each other
+([ADR 0398](../decisions/0398-record-and-replay.md)).
+**replay.rec.2** — A recording is JSON lines. The first is
+`{"ail_record":1,"program","args","seed","limit"}`: the program path as
+given, its arguments, and the seed `std.random` starts from (the `--seed`
+given, or one taken from the clock, `std.random.3`). Each captured call
+then adds `{"call":"MODULE.FN","line","col",...}` in the order the calls
+ran, with `"result"`, `"trap"` and `"message"`, or `"uncaptured":true`.
+`ail test` writes `{"test":NAME}` before each failed test's calls.
+**replay.rec.3** — A result is written as JSON: `unit` as `null`, `int`,
+`bool` and `str` as themselves, and the rest as objects (`{"f":"1.5"}`,
+`{"bytes":HEX}`, `{"char":"c"}`, `{"none":true}`,
+`{"struct":NAME,"fields":[...]}`, `{"enum":NAME,"variant":N,"fields":[...]}`,
+`{"map":[[k,v],...]}`, `{"set":[...]}`, `{"num":KIND,"bits":N}`,
+`{"nested":N}`, and a failure as `{"fail":ERROR,"context":[...],"trace":[[line,col],...]}`).
+A call that traps records the trap's rule and message.
+**replay.rec.4** — A recording holds at most 64 MiB of calls. A call that
+would pass the limit, and every later one, is left out, and the recording
+ends with `{"truncated":true}`.
+**replay.rec.5** — A recorded or replayed run keeps every loop on one
+thread (`conc.par.9`), and each test of `ail test --record` or `--replay`
+starts `std.random` from the recording's seed.
+**replay.cap.1** — The captured calls are every `std.fs`, `std.env`,
+`std.time`, `std.tz`, `std.net` and `std.proc` function, `io.read_line`,
+`io.read_all` and `io.read_bytes`, and `ui.clipboard_get` and
+`ui.clipboard_set`. Not captured: `print` and `io.eprint` (output, which
+the replay writes again), `io.exit`, `std.random` (repeated by the seed),
+`std.task`, `ui.open`, the pure modules, and methods on handles.
+**replay.cap.2** — A captured call whose result holds a handle (a process
+from `proc.start`, a socket, a listener) is recorded as
+`"uncaptured":true`, and a replay that reaches it stops with a trap
+`replay.cap.2`.
+**replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
+recording's program) with the recording's arguments and seed, and answers
+each captured call from R instead of running it: nothing is read, written,
+fetched, started or waited for. `ail test --replay R [FILE]` runs only the
+tests R holds, each from its own calls.
+**replay.run.2** — An unchanged program replays the recorded run: the same
+output, the same failures, and a trap at the same position with the same
+message. A recorded trap in a call traps again at that call.
+**replay.run.3** — A call that is not the recording's next one (another
+function, or none left) traps with `replay.run.3`, naming the call the
+recording expected and where it was recorded; a recorded result that names
+a type the program doesn't have traps the same way.
+
+```ail pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
+```
+
+```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.run.1,replay.run.2
+```
+
+```ail pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
+```
+
+```ail pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
+```
+
+```ail pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
+```

@@ -20,7 +20,8 @@
 `todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
-standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
+standard modules (`compress`, `fs`, `env`, `hash`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time`, `ui`)
 need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -71,11 +72,13 @@ update a `mut` variable in a loop, use `=`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
+Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
+
 `t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
-`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`get_bytes`/`post_bytes`/`request_bytes` give `.data` as `bytes`; `proc.run_bytes`) (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
@@ -354,6 +357,9 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
+- `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
+  `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`,
+  `bytes.from_list(xs)`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
 ## Lists
 
@@ -528,10 +534,12 @@ dep geo path ../geo caps fs
 ```
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
-`env`, `proc`, `clock`, `random`, `net`, `ui`. `@pure fn f()` is an error if it reaches
+`env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
-`unsafe` and a block allow `unsafe fn` calls (and C calls, raw pointers); `ail.pkg` needs `unsafe allow`.
+`unsafe` and a block allow `unsafe fn` calls, C calls and `std.mem`; `ail.pkg` needs `unsafe allow`.
+`extern c "libm" fn hypot(a float, b float) float` declares a C function (types `int`, `float`,
+`bool`, `i32`, `u8`, `*T`...; a C `int` is `i32`); `mem.cstr(s) *u8`, `mem.from_cstr(p)`, `mem.alloc(n, 0) *int`, `mem.free(p)`; `p.read()`, `p.write(v)`, `p.offset(n)`.
 
 A window is a grid of text cells; draw with `put`, then `present`:
 

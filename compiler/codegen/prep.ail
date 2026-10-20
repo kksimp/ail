@@ -1,0 +1,109 @@
+## Preparing MIR for code generation (ADR 0386), the same for every target:
+## edges that pass arguments out of a two-way branch get a block of their
+## own, so a block's moves happen on one edge only; edges to a block that
+## only jumps on go straight to its target; blocks are put in reverse
+## postorder, so a loop's body follows its header.
+use mir
+
+## Split each branch edge that passes arguments: the new block jumps to the
+## old target with them.
+pub fn split_edges(f mir.Func) mir.Func
+    mut g := f
+    n := g.blocks.len()
+    for b in 0..n
+        t := g.blocks[b].term
+        if t.kind != "branch"
+            continue
+        for e in 0..2
+            if t.args[e].len() == 0
+                continue
+            g.blocks.push(mir.Block(
+                params: [],
+                insts: [],
+                term: mir.jump_to(t.targets[e], t.args[e]),
+            ))
+            g.blocks[b].term.targets[e] = g.blocks.len() - 1
+            g.blocks[b].term.args[e] = []
+    thread_jumps(g)
+
+## Retarget each edge into an empty block that jumps on without arguments.
+fn thread_jumps(f mir.Func) mir.Func
+    n := f.blocks.len()
+    mut fwd := [b for b in 0..n]
+    for b in 1..n
+        mut t := b
+        mut steps := 0
+        while t != 0 and is_forwarder(f.blocks[t]) and steps < n
+            t = f.blocks[t].term.targets[0]
+            steps += 1
+        fwd[b] = t
+    mut g := f
+    for b in 0..n
+        for e in 0..g.blocks[b].term.targets.len()
+            to := g.blocks[b].term.targets[e]
+            if g.blocks[b].term.args[e].len() == 0
+                g.blocks[b].term.targets[e] = fwd[to]
+    g
+
+fn is_forwarder(blk mir.Block) bool
+    blk.params.len() == 0
+        and blk.insts.len() == 0
+        and blk.term.kind == "jump"
+        and blk.term.args[0].len() == 0
+
+## The blocks in reverse postorder from the entry.
+pub fn block_order(f mir.Func) List[int]
+    n := f.blocks.len()
+    mut seen := [false for _ in 0..n]
+    mut post := List[int]()
+    # An explicit stack of (block, next successor index).
+    mut stack := [0]
+    mut next := [0 for _ in 0..n]
+    seen[0] = true
+    while stack.len() > 0
+        b := stack[stack.len() - 1]
+        succs := f.blocks[b].term.targets
+        if next[b] < succs.len()
+            s := succs[succs.len() - 1 - next[b]]
+            next[b] += 1
+            if not seen[s]
+                seen[s] = true
+                stack.push(s)
+        else
+            post.push(b)
+            stack.pop()
+    post.reverse()
+    post
+
+## Float constants in a 64-bit pattern, computed with exact float scaling
+## (AIL has no bit cast outside the runtime): IEEE 754 binary64.
+pub fn f64_bits(x float) int
+    if x != x
+        return 9221120237041090560
+    neg := x < 0.0 or x == 0.0 and 1.0 / x < 0.0
+    a := if neg then 0.0 - x else x
+    mut bits := 0
+    if a > 1.7976931348623157e308
+        bits = 2047.shl(52)
+    elif a == 0.0
+        bits = 0
+    else
+        mut m := a
+        mut e := 0
+        while m >= 2.0
+            m = m / 2.0
+            e += 1
+        while m < 1.0
+            m = m * 2.0
+            e -= 1
+        if e < -1022
+            # Subnormal: the mantissa is `a` in units of 2^-1074.
+            mut s := a
+            for _ in 0..1074
+                s = s * 2.0
+            bits = s.to_int()
+        else
+            bits = (e + 1023).shl(52).bit_or(((m - 1.0) * 4503599627370496.0).to_int())
+    if neg
+        bits = bits.bit_or(1.shl(63))
+    bits

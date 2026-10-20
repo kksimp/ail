@@ -393,6 +393,8 @@ pub enum TypeKind {
     Any(String),
     /// `ref T` (own.ref.1)
     Ref(Box<TypeRef>),
+    /// `*T`, a raw pointer (unsafe.ptr.1)
+    Ptr(Box<TypeRef>),
     /// `fn(A, B) R`, a function value's type; `ret` is `None` for no result (type.fn.1).
     Fn { params: Vec<TypeRef>, ret: Option<Box<TypeRef>> },
 }
@@ -536,6 +538,8 @@ pub enum UnOp {
 #[derive(Debug)]
 pub enum Expr {
     Str(String, Pos),
+    /// `b"..."` (lex.bytes.1)
+    Bytes(Vec<u8>, Pos),
     /// `"text {expr} text"` (lex.str.2)
     Interp(Vec<InterpPart>, Pos),
     Int(i64, Pos),
@@ -658,6 +662,7 @@ impl Expr {
     pub fn pos(&self) -> Pos {
         match self {
             Expr::Str(_, p)
+            | Expr::Bytes(_, p)
             | Expr::Interp(_, p)
             | Expr::Int(_, p)
             | Expr::Float(_, p)

@@ -222,7 +222,7 @@ fn main()
     print(n)
 ```
 
-```ail fragment
+```ail fragment norun
 error enum Oops
     Bad
 
