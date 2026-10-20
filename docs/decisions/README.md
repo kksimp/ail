@@ -445,3 +445,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
+| [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
+| [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |

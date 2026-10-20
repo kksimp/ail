@@ -708,7 +708,7 @@ Failures are values: `fs.IoError(path, kind)` and
 `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`;
 `net.NetError(url, kind, message)`.
 
-```ail
+```ail norun
 fn main() !
     text := fs.read_text("in.txt")?          # str ! fs.IoError
     fs.write_text("out.txt", text)?           # also append_text

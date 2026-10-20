@@ -393,7 +393,9 @@ a child's `out`, `err` (`std.proc.5`) and ordinary channels of one element
 type. Other tasks run while it waits; when none can, it is a deadlock
 (`conc.task.7`) unless a child's stream could still wake it. *(ADR 0427)*
 
-```ail
+```ail norun
+# norun: the order of the two streams depends on how the child's writes race, so
+# the output differs between runs; the example is checked, not compared.
 use std.proc
 use std.task
 

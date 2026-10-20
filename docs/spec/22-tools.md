@@ -381,3 +381,274 @@ a summary line. With `--json` each is a JSON line, a test that now fails
 carries `"status":"fail"`, and the last line is
 `{"summary":true,...}`. The exit status is 0 when nothing changed, 1 when
 something did, 2 for an error.
+## Examples
+Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
+example (`FILE` is the example, `DIR` its package directory) and checks that
+its output contains the `expect=` text. The tools' output formats are
+non-normative; these examples check the behaviour the rules describe.
+`explain.cover.*` is also enforced by `bootstrap/tests/explain_coverage.rs`
+in `./ail selftest`, and `api.card.5` (the generated cards match `ail api --card`)
+by `bootstrap/tests/api_card.rs`; the harness cannot read the repository's cards.
+```ail tool=api,--text,FILE expect=add rules=api.id.1
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--text,FILE expect=Adds rules=api.doc.1
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+# A plain comment ends the doc run above; it is not a doc comment.
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--locals,DIR,FILE,2,5 expect=a rules=api.pkg.2
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--tokens,FILE expect=1:1 rules=api.tok.2
+fn main()
+    print(1)
+```
+```ail tool=api,--tokens,FILE expect=main rules=api.tok.1
+fn main()
+    print(1)
+```
+```ail tool=api,--tokens,FILE expect=comment rules=api.tok.3
+# a comment line
+fn main()
+    print(1)
+```
+```ail tool=api,--ast,FILE expect="fns" rules=api.ast.1,api.ast.2
+fn main()
+    print(1)
+```
+```ail tool=api,--ast,--program,FILE expect=1073741843 rules=api.ast.3
+fn main()
+    print(1)
+```
+```ail tool=fix,--dry-run,FILE expect=mut rules=fix.edit.1
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+```ail tool=fix,--dry-run,FILE expect={name} rules=fix.edit.6
+fn main()
+    name := "bo"
+    print("hi " + name)
+```
+```ail tool=explain,expr.bind.4 expect=expr.bind.4 rules=explain.show.1
+fn main()
+    x := 1
+    print(x)
+```
+```ail tool=explain,--json expect="count" rules=explain.list.1
+fn main()
+    print(1)
+```
+```ail tool=explain,--json expect="fixable" rules=explain.cover.1,explain.cover.2,explain.cover.3,explain.cover.4
+fn main()
+    print(1)
+```
+```ail tool=api,--pretty,FILE expect=items rules=api.out.1,api.out.2,api.out.3,api.out.4
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+fn log(msg str)
+    print(msg)
+fn main()
+    log("{add(1, 2)}")
+```
+```ail tool=api,FILE expect=io rules=api.out.4
+fn log(msg str)
+    print(msg)
+fn main()
+    log("hi")
+```
+```ail tool=api,FILE expect=error status=2 rules=api.out.5,api.card.4
+fn main()
+    x := 1
+    x = 2                              # a program with errors has no outline
+```
+```ail tool=api,FILE expect=method:Circle.Shape.area rules=api.id.2
+trait Shape
+    fn area(self) float
+struct Circle
+    r float
+fn Circle.area(self) float
+    3.0 * self.r * self.r
+impl Shape for Circle
+    fn area(self) float
+        self.r * self.r
+fn main()
+    print(Shape.area(Circle(r: 1.0)))
+```
+```ail tool=api,FILE expect=fn:largest rules=api.id.3
+fn largest(xs List[int]) int
+    xs.max() else 0
+fn main()
+    print(largest([3, 9, 2]))
+```
+```ail tool=api,--refs,FILE,12,7 expect=method:Shape.area rules=api.ref.2
+trait Shape
+    fn area(self) float
+struct Square
+    side float
+impl Shape for Square
+    fn area(self) float
+        self.side * self.side
+fn total(s any Shape) float
+    s.area()
+fn main()
+    sq := Square(side: 2.0)
+    print(total(sq))
+```
+```ail tool=api,--refs,FILE,15,5 expect=refs rules=api.ref.1,api.refs.1,api.refs.3
+trait Shape
+    fn area(self) float
+struct Square
+    side float
+impl Shape for Square
+    fn area(self) float
+        self.side * self.side
+fn total(s any Shape) float
+    s.area()
+fn main()
+    sq := Square(side: 2.0)
+    print(total(sq))
+```
+```ail tool=api,--locals,FILE,2,5 expect=kind rules=api.loc.1,api.loc.2
+fn add(a int, b int) int
+    c := a + b
+    c
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--type,FILE,2,5 expect=int rules=api.type.1,api.type.2
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--refs,FILE,1,4 expect=add rules=api.query.1
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--text,FILE expect=add rules=api.text.1,api.doc.2
+## Adds two numbers.
+## Returns their sum.
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--card,FILE expect=entry rules=api.card.1,api.card.3
+## Sums two numbers.
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--card,--json,FILE expect=card rules=api.card.2
+fn main()
+    print(1)
+```
+```ail tool=api,--card,--budget,30,FILE expect=entry rules=api.card.3
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--outline,DIR expect=geo pkg=geometry rules=api.pkg.1,api.pkg.4
+```
+```ail tool=api,--locals,DIR,FILE,2,5 expect=kind rules=api.pkg.2
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=fix,--dry-run,FILE expect=match rules=fix.edit.2,fix.edit.4
+enum Dir
+    North
+    South
+fn name(d Dir) str
+    match d
+        North => "n"
+fn main()
+    print(name(Dir.North))
+```
+```ail tool=fix,--dry-run,FILE expect=load()? rules=fix.edit.3
+error enum Oops
+    Bad "bad"
+fn load() int ! Oops
+    Bad
+fn run() int ! Oops
+    load()
+    1
+fn main() ! Oops
+    print(run()?)
+```
+```ail tool=fix,FILE expect=mut rules=fix.apply.1,fix.apply.2,fix.apply.3
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+```ail tool=fix,--dry-run,FILE expect=--- rules=fix.apply.4
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+```ail rules=type.opt.9
+fn main()
+    mut x := none
+    x = 5
+    print(x)                    # x is int?, fixed by its first assignment
+```
+```ail rules=type.opt.10
+fn main()
+    n := 3
+    v := if n > 2
+        3
+    else
+        none
+    print(v)
+```
+```ail rules=expr.bit.1
+fn main()
+    print(6.bit_and(3))         # 2
+    print(6.bit_or(3))          # 7
+    print(6.bit_xor(3))         # 5
+    print(0.bit_not())          # -1
+    print(1.shl(4))             # 16
+    print(-16.shr(2))           # -4: the sign bit is copied in
+```
+```ail norun rules=expr.bit.2
+fn main()
+    print(1.shl(64))            # traps: the shift count must be 0..=63
+```
+```ail tool=api,--refs,DIR,main.ail,16,12 expect=origin pkg=geometry rules=api.refs.2,api.pkg.2,api.pkg.3
+```
+```ail tool=api,--card,DIR expect=entry pkg=geometry rules=api.card.5
+```
+```ail tool=check,--budget,40,FILE expect=shown status=2 rules=budget.out.1,budget.out.2,budget.out.3,budget.out.4
+fn main()
+    x := 1
+    x = 2
+    y := 3
+    y = 4
+    z := 5
+    z = 6
+    print(x + y + z)
+```
+```ail tool=run,--budget,FILE expect=1 rules=budget.out.5,budget.out.6
+fn main()
+    print(1)
+```
