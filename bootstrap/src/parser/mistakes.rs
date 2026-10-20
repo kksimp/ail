@@ -1,5 +1,5 @@
 //! Recovery from constructs borrowed from other languages (gram.foreign.1,
-//! diag.rec.1, ADRs 0262-0263). Each function recognises one family of
+//! gram.rec.1, ADRs 0262-0263). Each function recognises one family of
 //! mistakes at a place the parser has already failed, reports it once with
 //! the AIL spelling, and, where the edit is mechanical, with a fix.
 
@@ -21,7 +21,7 @@ impl Parser {
     ) {
         let msg = msg.into();
         // The same mistake again on one line is one diagnostic with one fix
-        // (diag.rec.1): its edits join the first report's.
+        // (gram.rec.1): its edits join the first report's.
         if let Some(last) = self.diags.last_mut()
             && last.rule == rule
             && last.pos.line == pos.line
@@ -105,7 +105,9 @@ impl Parser {
         let d = Diagnostic::new("gram.foreign.1", pos, info.msg).help(info.help);
         let d = match info.fix {
             Fix::None => d,
-            Fix::Replace(new) => d.fix(format!("write `{new}`"), vec![Edit::span(pos, self.tok_end(at).unwrap_or(pos), new)]),
+            Fix::Replace(new) => {
+                d.fix(format!("write `{new}`"), vec![Edit::span(pos, self.tok_end(at).unwrap_or(pos), new)])
+            }
             Fix::Delete => {
                 let end = self.through_blank(at).unwrap_or(pos);
                 d.fix(format!("remove `{word}`"), vec![Edit::delete(pos, end)])
@@ -114,7 +116,9 @@ impl Parser {
         self.diags.push(d);
         // A modifier is followed by the declaration itself, which the next
         // round (or the same parse, for `fn`) handles.
-        if matches!(info.fix, Fix::Delete | Fix::Replace("pub")) && matches!(self.peek_at(1), Tok::Kw(_) | Tok::Ident(_)) {
+        if matches!(info.fix, Fix::Delete | Fix::Replace("pub"))
+            && matches!(self.peek_at(1), Tok::Kw(_) | Tok::Ident(_))
+        {
             self.i += 1;
             return true;
         }
@@ -141,8 +145,11 @@ impl Parser {
             return false;
         }
         let pos = self.tok_pos(at);
-        let mut d = Diagnostic::new("gram.foreign.1", pos, "AIL has no `from ... import`")
-            .help(format!("import the module with `use {}` and write `{}.name` for its items", path.join("."), path.last().unwrap()));
+        let mut d = Diagnostic::new("gram.foreign.1", pos, "AIL has no `from ... import`").help(format!(
+            "import the module with `use {}` and write `{}.name` for its items",
+            path.join("."),
+            path.last().unwrap()
+        ));
         if let (Tok::Ident(item), Some(end)) = (&self.tokens[k + 1].tok, self.tok_end(k + 1))
             && matches!(self.tokens[k + 2].tok, Tok::Newline | Tok::Eof)
         {
@@ -157,7 +164,10 @@ impl Parser {
     /// `throw`, ...), unless the word is used as a name.
     pub(super) fn foreign_stmt(&mut self) -> bool {
         let Tok::Ident(word) = self.peek().clone() else { return false };
-        if !matches!(self.peek_at(1), Tok::Newline | Tok::Ident(_) | Tok::Str(_) | Tok::Interp(_) | Tok::Int(_) | Tok::Kw(_)) {
+        if !matches!(
+            self.peek_at(1),
+            Tok::Newline | Tok::Ident(_) | Tok::Str(_) | Tok::Interp(_) | Tok::Int(_) | Tok::Kw(_)
+        ) {
             return false;
         }
         let Some(info) = foreign::stmt_word(&word) else { return false };
@@ -165,7 +175,9 @@ impl Parser {
         let pos = self.tok_pos(at);
         let d = Diagnostic::new("gram.foreign.1", pos, info.msg).help(info.help);
         let d = match info.fix {
-            Fix::Replace(new) => d.fix(format!("write `{new}`"), vec![Edit::span(pos, self.tok_end(at).unwrap_or(pos), new)]),
+            Fix::Replace(new) => {
+                d.fix(format!("write `{new}`"), vec![Edit::span(pos, self.tok_end(at).unwrap_or(pos), new)])
+            }
             _ => d,
         };
         self.diags.push(d);
@@ -183,10 +195,12 @@ impl Parser {
         let cond = after.contains("condition");
         match self.peek().clone() {
             Tok::Sym(":") if !cond || matches!(self.peek_at(1), Tok::Newline) => {
-                let end = self.through_blank(at).filter(|e| e.line == pos.line).unwrap_or(Pos { col: pos.col + 1, ..pos });
-                // `fn f() : int` keeps the type; `if c:` ends the line.
+                // `if c:` ends the line; `fn f() : int` goes on to the type.
                 let colon_only = matches!(self.peek_at(1), Tok::Newline);
-                let end = if colon_only { Pos { col: pos.col + 1, ..pos } } else { end };
+                let end = match self.through_blank(at) {
+                    Some(e) if !colon_only && e.line == pos.line => e,
+                    _ => Pos { col: pos.col + 1, ..pos },
+                };
                 self.error_fix(
                     "gram.foreign.1",
                     pos,
@@ -229,11 +243,7 @@ impl Parser {
                 Header::Reported
             }
             Tok::Kw("in") if cond => {
-                self.error(
-                    "gram.foreign.1",
-                    pos,
-                    "AIL has no `in` operator for membership",
-                );
+                self.error("gram.foreign.1", pos, "AIL has no `in` operator for membership");
                 if let Some(d) = self.diags.last_mut() {
                     d.help = Some("write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`".into());
                 }
@@ -273,7 +283,9 @@ impl Parser {
                     edits.push(Edit::delete(cp, n.pos));
                 }
                 Some(n) if n.pos.line == cp.line && !matches!(n.tok, Tok::Newline | Tok::Eof) => ok = false,
-                _ if alone => edits.push(Edit::delete(Pos { line: cp.line, col: 1 }, Pos { line: cp.line + 1, col: 1 })),
+                _ if alone => {
+                    edits.push(Edit::delete(Pos { line: cp.line, col: 1 }, Pos { line: cp.line + 1, col: 1 }))
+                }
                 _ => ok = false,
             }
         }
@@ -293,8 +305,20 @@ impl Parser {
         let first = self.tokens.iter().find(|t| t.pos.line == line);
         matches!(
             first.map(|t| &t.tok),
-            Some(Tok::Kw("fn" | "if" | "elif" | "else" | "while" | "for" | "match" | "struct" | "enum" | "impl" | "trait" | "error" | "pub"))
-                | Some(Tok::Sym("}" | "@"))
+            Some(Tok::Kw(
+                "fn" | "if"
+                    | "elif"
+                    | "else"
+                    | "while"
+                    | "for"
+                    | "match"
+                    | "struct"
+                    | "enum"
+                    | "impl"
+                    | "trait"
+                    | "error"
+                    | "pub"
+            )) | Some(Tok::Sym("}" | "@"))
         )
     }
 
@@ -320,7 +344,10 @@ impl Parser {
             let mut d = Diagnostic::new("expr.bind.1", self.tok_pos(start), format!("`{name}` is declared without a type annotation"))
                 .help(format!("write `{name} := value`; the type is inferred. An empty collection names its type in the value: `List[int]()`"));
             if let (Some(e), false) = (eq, empty) {
-                d = d.fix("declare it with `:=`", vec![Edit::span(pos, Pos { col: self.tokens[e].pos.col + 1, ..self.tokens[e].pos }, " :=")]);
+                d = d.fix(
+                    "declare it with `:=`",
+                    vec![Edit::span(pos, Pos { col: self.tokens[e].pos.col + 1, ..self.tokens[e].pos }, " :=")],
+                );
             }
             self.diags.push(d);
             return true;
@@ -352,13 +379,12 @@ impl Parser {
         }
         // `n > 0 ? a : b`
         if at >= 1 && matches!(self.tokens[at - 1].tok, Tok::Sym("?")) && !matches!(cur, Tok::Newline) {
-            self.error(
-                "gram.foreign.1",
-                self.tok_pos(at - 1),
-                "AIL has no `?:` conditional operator",
-            );
+            self.error("gram.foreign.1", self.tok_pos(at - 1), "AIL has no `?:` conditional operator");
             if let Some(d) = self.diags.last_mut() {
-                d.help = Some("use an `if` expression: `x := if n > 0` with the value indented below, then `else` and its value".into());
+                d.help = Some(
+                    "use an `if` expression: `x := if n > 0` with the value indented below, then `else` and its value"
+                        .into(),
+                );
             }
             return true;
         }

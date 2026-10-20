@@ -18,12 +18,12 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod comprehension;
 pub mod conc;
 mod contracts;
-mod comprehension;
-mod stdlib;
 pub mod effects;
 mod privacy;
+mod stdlib;
 mod testing;
 mod traits;
 mod ui;
@@ -37,8 +37,8 @@ use crate::ast::{
     Arg, ArgKind, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep,
     Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
-use crate::fasthash::{FastMap, FastSet};
 use crate::diag::{Diagnostic, Edit, Fix, Pos};
+use crate::fasthash::{FastMap, FastSet};
 use crate::foreign;
 use crate::lexer::UNSUPPORTED;
 use crate::num::Num;
@@ -173,8 +173,28 @@ pub struct Resolved {
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &[
-    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
-    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex",
+    "int",
+    "i64",
+    "i8",
+    "i16",
+    "i32",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "float",
+    "f64",
+    "f32",
+    "str",
+    "char",
+    "bool",
+    "List",
+    "Map",
+    "Set",
+    "Task",
+    "TaskGroup",
+    "Channel",
+    "Mutex",
 ];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
@@ -368,7 +388,7 @@ struct Checker<'p> {
     pending: Vec<Pending>,
     ret: Ty,
     /// In a method written without `self`: where its `(` is, whether it has
-    /// parameters, and the owner's field names (diag.rec.2).
+    /// parameters, and the owner's field names (gram.rec.2).
     assoc: Option<(Pos, bool, Vec<String>)>,
     loops: usize,
 }
@@ -725,7 +745,12 @@ impl<'p> Checker<'p> {
             None if self.fns.contains_key(name) || self.types.contains_key(name) || self.traits.contains_key(name) => {
                 let mut d =
                     Diagnostic::new("mod.unit.1", f.pos, format!("`{name}` is declared more than once in this module"));
-                if let Some(first) = self.fns.get(name).map(|j| self.prog.fns[*j].pos).or_else(|| self.types.get(name).map(|d| self.def_pos(*d))) {
+                if let Some(first) = self
+                    .fns
+                    .get(name)
+                    .map(|j| self.prog.fns[*j].pos)
+                    .or_else(|| self.types.get(name).map(|d| self.def_pos(*d)))
+                {
                     d = d.note(first, format!("`{name}` is first declared here"));
                 }
                 self.diags.push(d);
@@ -1311,10 +1336,8 @@ impl<'p> Checker<'p> {
         };
         let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
         if admits && matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
-            d.fixes.push(Fix {
-                title: "pass the error on with `?`".into(),
-                edits: vec![Edit::at_line_end(e.pos(), "?")],
-            });
+            d.fixes
+                .push(Fix { title: "pass the error on with `?`".into(), edits: vec![Edit::at_line_end(e.pos(), "?")] });
         }
     }
 
@@ -1421,7 +1444,13 @@ impl<'p> Checker<'p> {
         }
         for (p, (_, ty)) in f.params.iter().zip(&sig.params) {
             if self.declare(&p.name, p.pos) {
-                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param, decl: None });
+                self.locals.push(Local {
+                    name: p.name.clone(),
+                    ty: ty.clone(),
+                    mutable: p.mutable,
+                    kind: Kind::Param,
+                    decl: None,
+                });
             }
         }
         self.check_contracts(f, &sig.ret);
@@ -1531,7 +1560,13 @@ impl<'p> Checker<'p> {
                     }
                 }
                 if self.declare(name, *pos) {
-                    self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding, decl: Some(*pos) });
+                    self.locals.push(Local {
+                        name: name.clone(),
+                        ty,
+                        mutable: *mutable,
+                        kind: Kind::Binding,
+                        decl: Some(*pos),
+                    });
                 } else if *mutable
                     && let Some(d) = self.diags.last_mut()
                     && let Some(f) = d.fixes.first_mut()
@@ -1561,7 +1596,13 @@ impl<'p> Checker<'p> {
                 let elem = if *mutable { self.mut_iterable(iter, var, body) } else { self.iterable(iter) };
                 let mark = self.locals.len();
                 if self.declare(var, *var_pos) {
-                    self.locals.push(Local { name: var.clone(), ty: elem, mutable: *mutable, kind: Kind::LoopVar, decl: None });
+                    self.locals.push(Local {
+                        name: var.clone(),
+                        ty: elem,
+                        mutable: *mutable,
+                        kind: Kind::LoopVar,
+                        decl: None,
+                    });
                 }
                 self.loops += 1;
                 self.block(body, None, false);
@@ -1821,7 +1862,10 @@ impl<'p> Checker<'p> {
         }
         if !self.accepts(&Ty::Bool, &t) {
             let msg = format!("a condition must be `bool`, found {}", self.show(&t));
-            let simple = matches!(cond, Expr::Name(..) | Expr::Field { .. } | Expr::Method { .. } | Expr::Index { .. } | Expr::Call { .. });
+            let simple = matches!(
+                cond,
+                Expr::Name(..) | Expr::Field { .. } | Expr::Method { .. } | Expr::Index { .. } | Expr::Call { .. }
+            );
             // The test that the other languages' truthiness stands for.
             let (help, suffix) = match &t {
                 Ty::Int => ("compare explicitly, e.g. `n != 0`", " != 0"),
@@ -1849,8 +1893,9 @@ impl<'p> Checker<'p> {
             Ty::Err => Ty::Err,
             t if self.reject_unhandled(&t, iter.pos()) => Ty::Err,
             Ty::Map(..) => {
-                let mut d = Diagnostic::new("type.map.5", iter.pos(), "`for` iterates a map's keys or values explicitly")
-                    .help("write `for k in m.keys()`, or `m.values()`");
+                let mut d =
+                    Diagnostic::new("type.map.5", iter.pos(), "`for` iterates a map's keys or values explicitly")
+                        .help("write `for k in m.keys()`, or `m.values()`");
                 if let Expr::Name(n, p) = iter {
                     d = d.fix("iterate the keys", vec![Edit::replace(*p, n.clone(), format!("{n}.keys()"))]);
                 }
@@ -1967,15 +2012,18 @@ impl<'p> Checker<'p> {
                 let mut d = Diagnostic::new("expr.bind.3", *npos, format!("`{n}` isn't declared"))
                     .help(format!("declare it with `mut {n} := ...`"));
                 if op.is_none() {
-                    let edits = vec![
-                        Edit::insert(*npos, "mut "),
-                        Edit::replace(pos, "=", ":="),
-                    ];
+                    let edits = vec![Edit::insert(*npos, "mut "), Edit::replace(pos, "=", ":=")];
                     d = d.fix(format!("declare `{n}` with `mut {n} :=`"), edits);
                 }
                 self.diags.push(d);
-                // Later uses don't report the same name again (diag.rec.2).
-                self.locals.push(Local { name: n.clone(), ty: Ty::Err, mutable: true, kind: Kind::Binding, decl: None });
+                // Later uses don't report the same name again (gram.rec.2).
+                self.locals.push(Local {
+                    name: n.clone(),
+                    ty: Ty::Err,
+                    mutable: true,
+                    kind: Kind::Binding,
+                    decl: None,
+                });
             }
             return;
         }
@@ -2036,7 +2084,8 @@ impl<'p> Checker<'p> {
                 "copy it into a `mut` binding first".into(),
             ),
         };
-        let mut d = Diagnostic::new(rule.unwrap_or(default_rule), e.pos(), format!("{msg}, so it can't be {action}")).help(help);
+        let mut d = Diagnostic::new(rule.unwrap_or(default_rule), e.pos(), format!("{msg}, so it can't be {action}"))
+            .help(help);
         // fix.edit.1: a `:=` binding that is changed later becomes `mut`.
         if let Some(decl) = decl {
             d = d.fix(format!("declare `{root}` with `mut`"), vec![Edit::insert(decl, "mut ")]);
@@ -3125,14 +3174,15 @@ impl<'p> Checker<'p> {
         } else {
             let t = self.expr(&args[0].value, None, true);
             if t == Ty::Unit {
-                let mut d = Diagnostic::new("mod.main.3", args[0].value.pos(), "this expression produces no value to print");
+                let mut d =
+                    Diagnostic::new("mod.main.3", args[0].value.pos(), "this expression produces no value to print");
                 if let Expr::Call { callee, .. } = &args[0].value
                     && let Expr::Name(f, _) = &**callee
                     && self.fns.contains_key(f.as_str())
                 {
-                    d = d
-                        .message(format!("`{f}` returns nothing, so there is no value to print"))
-                        .help(format!("if `{f}` should give a value, declare its type after the `)`: `fn {f}(...) int`"));
+                    d = d.message(format!("`{f}` returns nothing, so there is no value to print")).help(format!(
+                        "if `{f}` should give a value, declare its type after the `)`: `fn {f}(...) int`"
+                    ));
                 }
                 self.diags.push(d);
             } else {
@@ -3284,8 +3334,8 @@ impl<'p> Checker<'p> {
             "fields `{fa}` and `{fb}` of `{type_label}` are both {}, so they can't be given by position",
             self.show(&types[a])
         );
-        let mut d = Diagnostic::new("type.struct.7", at, msg)
-            .help(format!("name them: `{type_label}({fa}: ..., {fb}: ...)`"));
+        let mut d =
+            Diagnostic::new("type.struct.7", at, msg).help(format!("name them: `{type_label}({fa}: ..., {fb}: ...)`"));
         if let Some(call) = call
             && slots.len() == fields.len()
             && slots.iter().all(|(i, k)| i.is_some() && *k == ArgKind::Positional)
@@ -3678,10 +3728,9 @@ impl<'p> Checker<'p> {
                 let msg = format!("{} has no fields", self.show(t));
                 let mut d = Diagnostic::new("type.struct.6", pos, msg);
                 if let Some(new) = builtins::method_rename(t, name) {
-                    d = d.help(format!("`{name}` isn't a field; write the method `.{new}()`")).fix(
-                        format!("write `{new}()`"),
-                        vec![Edit::replace(pos, name, format!("{new}()"))],
-                    );
+                    d = d
+                        .help(format!("`{name}` isn't a field; write the method `.{new}()`"))
+                        .fix(format!("write `{new}()`"), vec![Edit::replace(pos, name, format!("{new}()"))]);
                 } else {
                     d = d.help("only structs have fields; the built-in types have methods, written with `()`");
                 }
@@ -3818,7 +3867,12 @@ impl<'p> Checker<'p> {
         if let (UnOp::Neg, Ty::Num(k)) = (op, &t) {
             if !k.is_signed() && !k.is_float() {
                 let msg = format!("unary `-` is not defined for `{}`, which is unsigned", k.name());
-                self.error_help("type.num.14", pos, msg, "negate a signed type, or subtract from zero with `wrapping_neg`");
+                self.error_help(
+                    "type.num.14",
+                    pos,
+                    msg,
+                    "negate a signed type, or subtract from zero with `wrapping_neg`",
+                );
                 return Ty::Err;
             }
             return t;
@@ -3895,7 +3949,12 @@ impl<'p> Checker<'p> {
             if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
                 self.error_help("trait.op.3", pos, msg, "build text with interpolation: \"{a}{b}\"");
             } else if *lt == Ty::Str && op == BinOp::Rem {
-                self.error_help("trait.op.3", pos, msg, "AIL has no `%` formatting; interpolate the values: \"n is {n}\"");
+                self.error_help(
+                    "trait.op.3",
+                    pos,
+                    msg,
+                    "AIL has no `%` formatting; interpolate the values: \"n is {n}\"",
+                );
             } else if *lt == Ty::Str && op == BinOp::Mul {
                 self.error_help("trait.op.3", pos, msg, "repeat a string with `s.repeat(n)`");
             } else {
@@ -3965,7 +4024,13 @@ impl<'p> Checker<'p> {
                     binds_failure |= errs.is_some();
                     errors = errs;
                     if self.declare(name, *npos) {
-                        self.locals.push(Local { name: name.clone(), ty, mutable: false, kind: Kind::Binding, decl: None });
+                        self.locals.push(Local {
+                            name: name.clone(),
+                            ty,
+                            mutable: false,
+                            kind: Kind::Binding,
+                            decl: None,
+                        });
                     }
                 }
             }
@@ -3988,7 +4053,13 @@ impl<'p> Checker<'p> {
                     (Some(set), 1) => {
                         let t = if set.len() == 1 { set[0].clone() } else { Ty::Union(set.clone()) };
                         if self.declare(name, *npos) {
-                            self.locals.push(Local { name: name.clone(), ty: t, mutable: false, kind: Kind::Binding, decl: None });
+                            self.locals.push(Local {
+                                name: name.clone(),
+                                ty: t,
+                                mutable: false,
+                                kind: Kind::Binding,
+                                decl: None,
+                            });
                         }
                     }
                     _ => self.error_help(
@@ -4351,8 +4422,7 @@ impl<'p> Checker<'p> {
             d = d.help(c.help).fix(format!("write `{}`", c.example), vec![Edit::call(pos, name, c.template)]);
         } else if let Some(h) = foreign::call_help(name).or_else(|| builtins::function_help(name)) {
             d = d.help(h);
-        } else if let Some((at, params, fields)) = self.assoc.as_ref().filter(|(_, _, f)| f.iter().any(|f| f == name)) {
-            let _ = fields;
+        } else if let Some((at, params, _)) = self.assoc.as_ref().filter(|(_, _, f)| f.iter().any(|f| f == name)) {
             d = d
                 .help(format!("this function has no `self`, so the field `{name}` isn't in scope; add `self` as its first parameter"))
                 .fix(
@@ -4510,7 +4580,7 @@ fn was_were(n: usize) -> String {
 /// Closest candidate by edit distance, if it's close enough to be a likely typo.
 pub(crate) fn suggest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
     // One or two letters are within one edit of nearly any name: a "fix" to
-    // another short name would change what the program means (diag.rec.3).
+    // another short name would change what the program means (gram.rec.3).
     if name.chars().count() < 3 {
         return None;
     }

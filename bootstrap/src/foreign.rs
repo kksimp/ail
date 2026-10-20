@@ -71,7 +71,11 @@ pub fn stmt_word(word: &str) -> Option<Word> {
         "switch" | "case" | "default" => {
             w("AIL has no `switch`", "write `match value` with one `pattern => result` arm per line", Fix::None)
         }
-        "pass" => w("AIL has no `pass`", "a block needs a statement; write `todo` for code you haven't written yet", Fix::None),
+        "pass" => w(
+            "AIL has no `pass`",
+            "a block needs a statement; write `todo` for code you haven't written yet",
+            Fix::None,
+        ),
         "await" => w(
             "AIL has no `await`",
             "tasks are colorless: `t := spawn f(x)` starts one and `t.wait()` waits for it",
@@ -79,9 +83,11 @@ pub fn stmt_word(word: &str) -> Option<Word> {
         ),
         "loop" => w("AIL has no `loop`", "write `while true`", Fix::None),
         "elseif" | "elsif" | "else_if" => w("AIL writes `elseif` as `elif`", "write `elif`", Fix::Replace("elif")),
-        "unless" | "until" | "with" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => {
-            w("this keyword from another language has no AIL form", "see the language card for the statements AIL has", Fix::None)
-        }
+        "unless" | "until" | "with" | "yield" | "lambda" | "del" | "global" | "nonlocal" | "goto" | "do" => w(
+            "this keyword from another language has no AIL form",
+            "see the language card for the statements AIL has",
+            Fix::None,
+        ),
         _ => None,
     }
 }
@@ -95,7 +101,9 @@ pub fn name_word(name: &str) -> Option<(&'static str, &'static str)> {
         "None" | "nil" | "null" | "undefined" | "NULL" => {
             ("none", "the absent value is `none`, and the type must say it can be absent: `int?`")
         }
-        "println" | "puts" | "echo" | "print_line" | "printline" | "writeln" => ("print", "`print(value)` writes a value and a newline"),
+        "println" | "puts" | "echo" | "print_line" | "printline" | "writeln" => {
+            ("print", "`print(value)` writes a value and a newline")
+        }
         _ => return None,
     })
 }
@@ -129,7 +137,8 @@ pub fn call_hint(name: &str, args: usize) -> Option<CallHint> {
 /// A type name from another language and the AIL type for it.
 pub fn type_word(name: &str) -> Option<&'static str> {
     Some(match name {
-        "Integer" | "Int" | "long" | "Long" | "short" | "Number" | "number" | "integer" | "int32" | "int64" | "size_t" => "int",
+        "Integer" | "Int" | "long" | "Long" | "short" | "Number" | "number" | "integer" | "int32" | "int64"
+        | "size_t" => "int",
         "String" | "string" | "std::string" | "Str" | "text" => "str",
         "Boolean" | "boolean" | "Bool" => "bool",
         "double" | "Double" | "float64" | "Float" | "float32" | "real" => "float",
@@ -159,7 +168,9 @@ pub fn call_help(name: &str) -> Option<&'static str> {
         "list" | "dict" | "set" | "array" | "vec" | "Vec" => {
             "build collections with literals or typed constructors: `[1, 2]`, `{\"a\": 1}`, `Set[int]()`, `List[int]()`"
         }
-        "isinstance" | "typeof" | "type" => "AIL is statically typed; use `match` on an enum or a trait method instead of a type test",
+        "isinstance" | "typeof" | "type" => {
+            "AIL is statically typed; use `match` on an enum or a trait method instead of a type test"
+        }
         "assert" => "`assert` works inside an `@test` function (spec chapter 19)",
         _ => return None,
     })

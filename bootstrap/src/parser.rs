@@ -56,14 +56,8 @@ const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
 fn prelude_text(tokens: &[Token]) -> &'static str {
     let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
     let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
-    let declared = tokens.windows(2).any(|w| {
-        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
-    });
-    if tokens.iter().any(named) && !declared {
-        PRELUDE
-    } else {
-        core
-    }
+    let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1]));
+    if tokens.iter().any(named) && !declared { PRELUDE } else { core }
 }
 
 /// Parse a program after the prelude, whose lines are numbered from
@@ -206,7 +200,9 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 );
                 p.skip_statement();
             }
-            Tok::Ident(word) if ["const", "let", "var"].contains(&word.as_str()) && matches!(p.peek_at(1), Tok::Ident(_)) => {
+            Tok::Ident(word)
+                if ["const", "let", "var"].contains(&word.as_str()) && matches!(p.peek_at(1), Tok::Ident(_)) =>
+            {
                 let pos = p.pos();
                 let mut d = Diagnostic::new(
                     "mod.const.1",
@@ -608,7 +604,11 @@ impl Parser {
         if self.at_sym("->") || (self.at_sym(":") && !matches!(self.peek_at(1), Tok::Newline)) {
             let pos = self.pos();
             let sym = if self.at_sym("->") { "->" } else { ":" };
-            let end = self.tokens.get(self.i + 1).filter(|t| t.pos.line == pos.line).map_or(Pos { col: pos.col + sym.len(), ..pos }, |t| t.pos);
+            let end = self
+                .tokens
+                .get(self.i + 1)
+                .filter(|t| t.pos.line == pos.line)
+                .map_or(Pos { col: pos.col + sym.len(), ..pos }, |t| t.pos);
             self.error_fix(
                 "gram.fn.2",
                 pos,
@@ -1055,10 +1055,7 @@ impl Parser {
                     } else {
                         Edit::delete(pos, self.tokens[self.i + 1].pos)
                     };
-                    d = d.fix(
-                        "declare it with `:=`",
-                        vec![first, Edit::span(eq, Pos { col: eq.col + 1, ..eq }, ":=")],
-                    );
+                    d = d.fix("declare it with `:=`", vec![first, Edit::span(eq, Pos { col: eq.col + 1, ..eq }, ":=")]);
                 }
                 self.diags.push(d);
                 None
@@ -1677,10 +1674,15 @@ impl Parser {
                 // lex.str.2: `{{` isn't an escape; `\{` is.
                 Part::Code(tokens) if matches!(tokens.first().map(|t| &t.tok), Some(Tok::Sym("{"))) => {
                     let inner = tokens[0].pos;
-                    let mut edits = vec![Edit::span(Pos { col: inner.col - 1, ..inner }, Pos { col: inner.col + 1, ..inner }, "\\{")];
+                    let mut edits = vec![Edit::span(
+                        Pos { col: inner.col - 1, ..inner },
+                        Pos { col: inner.col + 1, ..inner },
+                        "\\{",
+                    )];
                     // `{{x}}`: the last token is the inner `}`, then the outer one.
                     if let Some(Token { tok: Tok::Sym("}"), pos: last }) = tokens.iter().rev().nth(1) {
-                        edits.push(Edit::delete(Pos { col: last.col + 1, ..*last }, Pos { col: last.col + 2, ..*last }));
+                        edits
+                            .push(Edit::delete(Pos { col: last.col + 1, ..*last }, Pos { col: last.col + 2, ..*last }));
                     }
                     self.diags.push(
                         Diagnostic::new("lex.str.2", inner, "`{{` in a string isn't an escaped brace")

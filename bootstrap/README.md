@@ -67,6 +67,7 @@ reported but don't stop a program from running.
 | `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
+| `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
@@ -221,6 +222,10 @@ implement correctly.
    - `NAME.ail` + `NAME.err` (+ optional `NAME.out`) for programs whose `main`
      must fail with exactly the report in `NAME.err`, with `$FILE` standing
      for the program's path.
+   A mistake an AI might plausibly make (syntax from another language, a
+   habit from Python or Rust) also goes in `tests/mistakes/` as `NAME.ail` +
+   `NAME.rules` (+ `NAME.fixed` when `ail fix` should resolve it); the first
+   diagnostic must name the mistake and carry a `help` (ADR 0262).
 4. Keep the code formatted with `rustfmt` (settings in `rustfmt.toml`) and free
    of `clippy` warnings. Neither is in the minimal toolchain the designer
    uses, so agents add them locally (`rustup component add rustfmt clippy`).

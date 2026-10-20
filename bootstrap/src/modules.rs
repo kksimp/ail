@@ -127,7 +127,7 @@ fn ail_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// One syntax diagnostic per line (diag.rec.1, ADR 0263): a mistake on a line
+/// One syntax diagnostic per line (gram.rec.1, ADR 0263): a mistake on a line
 /// often breaks the lexer and the parser in turn, and the first report, the
 /// leftmost, names it. Fixes of the reports it absorbs join its own when they
 /// don't overlap, so `ail fix` still settles the whole line in one round.
@@ -306,8 +306,12 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         } else if found.undeclared {
             let head = &u.path[0].0;
             diags.push(
-                Diagnostic::new("mod.pkg.3", u.path[0].1, format!("package `{head}` is not a dependency of this package"))
-                    .help(format!("add `dep {head} path DIR` to this package's `ail.pkg`")),
+                Diagnostic::new(
+                    "mod.pkg.3",
+                    u.path[0].1,
+                    format!("package `{head}` is not a dependency of this package"),
+                )
+                .help(format!("add `dep {head} path DIR` to this package's `ail.pkg`")),
             );
             None
         } else if items.contains_key(&found.module) && !found.module.is_empty() {

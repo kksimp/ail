@@ -623,7 +623,7 @@ mod tests {
 }
 
 /// The help of a rule whose diagnostics carry none of their own, so that
-/// every error tells an agent what to write (diag.help.1, ADR 0262). A
+/// every error tells an agent what to write (gram.help.1, ADR 0262). A
 /// diagnostic's own help always wins.
 pub fn default_help(rule: &str) -> Option<&'static str> {
     Some(match rule {
@@ -636,16 +636,24 @@ pub fn default_help(rule: &str) -> Option<&'static str> {
         "gram.fn.1" | "gram.fn.2" => "a function is `fn name(a int, b int) int`, then an indented body",
         "expr.if.1" | "expr.loop.1" => "a header ends its line, and the block is the lines indented 4 spaces below it",
         "expr.call.1" => "give exactly the arguments the signature lists; `ail api FILE` shows each signature",
-        "expr.call.2" => "pass a value of the expected type: convert with `n.to_float()`, `x.to_int()`, or `\"{x}\"` for text",
-        "expr.block.2" => "make the last expression the declared return type, change the return type, or add `return value`",
+        "expr.call.2" => {
+            "pass a value of the expected type: convert with `n.to_float()`, `x.to_int()`, or `\"{x}\"` for text"
+        }
+        "expr.block.2" => {
+            "make the last expression the declared return type, change the return type, or add `return value`"
+        }
         "expr.match.5" => "delete this arm, or move it below the arms it overlaps",
         "expr.match.7" => "write a pattern of the same type as the matched value",
         "expr.loop.5" => "`break` and `continue` belong inside a `for` or `while` loop",
         "expr.loop.6" => "`for mut x in xs` needs `xs` to be a `mut` list",
         "expr.comp.3" => "a comprehension's element is a value: `[x * 2 for x in xs]`",
-        "trait.op.1" | "trait.op.3" => "both operands need one type and an operator the type has: convert with `n.to_float()` or `x.to_int()`",
+        "trait.op.1" | "trait.op.3" => {
+            "both operands need one type and an operator the type has: convert with `n.to_float()` or `x.to_int()`"
+        }
         "type.coll.2" => "give every element the same type; convert the odd one, e.g. `n.to_float()`",
-        "type.struct.4" | "type.struct.5" => "give each field once, as `field: value`, with a value of the field's type",
+        "type.struct.4" | "type.struct.5" => {
+            "give each field once, as `field: value`, with a value of the field's type"
+        }
         "type.bool.1" => "`not`, `and` and `or` take `bool`; compare first, e.g. `n != 0`",
         "err.else.1" => "`else` follows a value that can be absent (`T?`) or fail (`T ! E`); remove it here",
         "err.else.2" => "end the `else` block with `return`, `break` or `continue`, or with a value",
@@ -655,9 +663,64 @@ pub fn default_help(rule: &str) -> Option<&'static str> {
         "own.param.2" => "mark `mut` only a variable, or a field or element of one, and only for a `mut` parameter",
         "test.assert.2" => "`assert` takes a `bool`, e.g. `assert n == 3`",
         "contract.decl.2" => "a contract is a pure `bool` expression, e.g. `requires n >= 0`",
-        "trait.impl.1" | "trait.impl.4" | "trait.std.2" => "`impl Trait for Type` then each method; `ail api FILE` lists the traits",
+        "trait.impl.1" | "trait.impl.4" | "trait.std.2" => {
+            "`impl Trait for Type` then each method; `ail api FILE` lists the traits"
+        }
         "gen.infer.2" => "give as many type arguments as the type declares, in `[]`",
         "bootstrap.unsupported" => "this part of the spec isn't implemented in the bootstrap yet; see docs/status.md",
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod anchor_tests {
+    use super::*;
+
+    /// Resolve `edit` against one line and apply it.
+    fn apply(line: &str, mut edit: Edit) -> Option<String> {
+        let lines = vec![line.chars().collect::<Vec<char>>()];
+        if !edit.resolve(&lines) {
+            return None;
+        }
+        let chars: Vec<char> = line.chars().collect();
+        let (s, e) = (edit.pos.col - 1, edit.end.col - 1);
+        Some(format!("{}{}{}", chars[..s].iter().collect::<String>(), edit.text, chars[e..].iter().collect::<String>()))
+    }
+
+    fn at(col: usize) -> Pos {
+        Pos { line: 1, col }
+    }
+
+    #[test]
+    fn call_anchor_rewrites_with_a_template() {
+        let e = || Edit::call(at(11), "len", "$r1.len()");
+        assert_eq!(apply("    print(len(xs))", e()).as_deref(), Some("    print(xs.len())"));
+        // A receiver that isn't a plain postfix expression gets parentheses.
+        let e = Edit::call(at(11), "abs", "$r1.abs()");
+        assert_eq!(apply("    print(abs(a - b))", e).as_deref(), Some("    print((a - b).abs())"));
+        let e = Edit::call(at(5), "max", "$r1.max($2)");
+        assert_eq!(apply("    max(1, f(2, 3))", e).as_deref(), Some("    (1).max(f(2, 3))"));
+        // Commas inside strings and brackets don't split arguments.
+        let e = Edit::call(at(5), "print", "print($*)");
+        assert_eq!(apply("    print(\"a, b\", [1, 2])", e).as_deref(), Some("    print(\"a, b {[1, 2]}\")"));
+    }
+
+    #[test]
+    fn call_anchor_is_dropped_when_it_does_not_fit() {
+        let e = Edit::call(at(5), "range", "$1..$2");
+        assert_eq!(apply("    range(3)", e), None);
+        let e = Edit::call(at(5), "len", "$r1.len()");
+        assert_eq!(apply("    len(xs", e), None);
+        let e = Edit::call(at(5), "str", "\"{$1}\"");
+        assert_eq!(apply("    str(\"a\")", e), None);
+    }
+
+    #[test]
+    fn named_and_chain_anchors() {
+        let e = Edit::call_named(at(1), "Point", &["x", "y"]);
+        assert_eq!(apply("Point(1, g(2, 3))", e).as_deref(), Some("Point(x: 1, y: g(2, 3))"));
+        let e = Edit::chain(at(6), at(10));
+        assert_eq!(apply("if 0 < n < 5", e).as_deref(), Some("if 0 < n and n < 5"));
+        assert_eq!(apply("x := 1 ;", Edit::trim_before(at(8))).as_deref(), Some("x := 1"));
+    }
 }

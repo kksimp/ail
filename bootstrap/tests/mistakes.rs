@@ -1,11 +1,11 @@
-//! The mistakes corpus (diag.corpus.1, ADR 0262): each `tests/mistakes/NAME.ail`
+//! The mistakes corpus (gram.help.2, ADR 0262): each `tests/mistakes/NAME.ail`
 //! is a plausible error of an AI writing AIL as if it were Python, Rust, Go or
 //! TypeScript. For each:
 //!
 //! - `NAME.rules`: the rule IDs of the diagnostics, in report order. The first
 //!   names the actual mistake and every following one is a mistake of its own,
-//!   so a file with one slip lists one rule (diag.rec.1).
-//! - every error carries a `help` an agent can act on (diag.help.1).
+//!   so a file with one slip lists one rule (gram.rec.1).
+//! - every error carries a `help` an agent can act on (gram.help.1).
 //! - `NAME.fixed`, when it exists: the text `ail fix` must produce. It must
 //!   check clean and be stable. Without one, `ail fix` must not claim success.
 
@@ -55,7 +55,8 @@ fn each_mistake_is_named_once_with_help() {
         let name = path.file_stem().unwrap().to_string_lossy().to_string();
         let got = errors(&path);
         let rules: Vec<String> = got.iter().map(|l| rule_of(l)).collect();
-        let want: Vec<String> = fs::read_to_string(path.with_extension("rules")).unwrap().lines().map(str::to_string).collect();
+        let want: Vec<String> =
+            fs::read_to_string(path.with_extension("rules")).unwrap().lines().map(str::to_string).collect();
         if rules != want {
             failures.push(format!("{name}: rules differ\n  expected {want:?}\n  got      {rules:?}"));
         }
@@ -89,7 +90,8 @@ fn fixes_produce_the_recorded_text() {
                 failures.push(format!("{name}: fixed text differs\n--- expected\n{want}--- actual\n{got}"));
             }
             if check.status.code() != Some(0) {
-                failures.push(format!("{name}: the fixed file doesn't check\n{}", String::from_utf8_lossy(&check.stderr)));
+                failures
+                    .push(format!("{name}: the fixed file doesn't check\n{}", String::from_utf8_lossy(&check.stderr)));
             }
             let again = ail().args(["fix", "--json"]).arg(&work).output().unwrap();
             if !String::from_utf8_lossy(&again.stdout).contains("\"applied\":0,\"rounds\":0") {
