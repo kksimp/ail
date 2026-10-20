@@ -34,8 +34,9 @@ fn fault<T>(rule: &'static str, message: String) -> Result<T, Fault> {
 }
 
 /// The partial sums `sum` and `dot` keep (std.tensor.5): element `i` goes
-/// to accumulator `i % LANES`; two AVX2 registers or four NEON registers.
-const LANES: usize = 8;
+/// to accumulator `i % LANES`; four AVX2 registers or eight NEON registers,
+/// enough independent additions to hide the adder's latency.
+const LANES: usize = 16;
 
 /// The smallest `m * k * n` that `matmul` spreads over threads (64^3).
 const PAR_WORK: usize = 64 * 64 * 64;
@@ -192,12 +193,18 @@ fn sum_i64(xs: impl Iterator<Item = i64>) -> Result<i64, Fault> {
     Ok(s)
 }
 
-/// std.tensor.5: how the eight partial sums combine: lanewise into four
-/// (`acc[i] + acc[i + 4]`), then `(t0 + t2) + (t1 + t3)`. Every backend
-/// ends this way, then adds the tail elements in order.
-fn combine(acc: [f64; LANES]) -> f64 {
-    let t = [acc[0] + acc[4], acc[1] + acc[5], acc[2] + acc[6], acc[3] + acc[7]];
-    (t[0] + t[2]) + (t[1] + t[3])
+/// std.tensor.5: how the partial sums combine: halve repeatedly,
+/// `acc[i] += acc[i + half]`, down to one. Every backend ends this way,
+/// then adds the tail elements in order.
+fn combine(mut acc: [f64; LANES]) -> f64 {
+    let mut half = LANES / 2;
+    while half > 0 {
+        for i in 0..half {
+            acc[i] += acc[i + half];
+        }
+        half /= 2;
+    }
+    acc[0]
 }
 
 pub fn sum_f64(v: &[f64]) -> f64 {
@@ -356,21 +363,22 @@ mod x86 {
     use super::{LANES, combine};
     use std::arch::x86_64::*;
 
+    const REGS: usize = LANES / 4;
+
     #[target_feature(enable = "avx2")]
     pub unsafe fn sum(v: &[f64]) -> f64 {
         let body = v.len() / LANES * LANES;
         let p = v.as_ptr();
-        let (mut lo, mut hi) = (_mm256_setzero_pd(), _mm256_setzero_pd());
+        let mut acc = [_mm256_setzero_pd(); REGS];
         let mut i = 0;
         while i < body {
-            // SAFETY: `i + 8 <= body <= v.len()`.
-            unsafe {
-                lo = _mm256_add_pd(lo, _mm256_loadu_pd(p.add(i)));
-                hi = _mm256_add_pd(hi, _mm256_loadu_pd(p.add(i + 4)));
+            for (r, a) in acc.iter_mut().enumerate() {
+                // SAFETY: `i + LANES <= body <= v.len()`.
+                *a = _mm256_add_pd(*a, unsafe { _mm256_loadu_pd(p.add(i + 4 * r)) });
             }
             i += LANES;
         }
-        let mut s = combine(lanes(lo, hi));
+        let mut s = combine(lanes(acc));
         for x in &v[body..] {
             s += x;
         }
@@ -381,17 +389,17 @@ mod x86 {
     pub unsafe fn dot(a: &[f64], b: &[f64]) -> f64 {
         let body = a.len() / LANES * LANES;
         let (pa, pb) = (a.as_ptr(), b.as_ptr());
-        let (mut lo, mut hi) = (_mm256_setzero_pd(), _mm256_setzero_pd());
+        let mut acc = [_mm256_setzero_pd(); REGS];
         let mut i = 0;
         while i < body {
-            // SAFETY: `i + 8 <= body`, and `a` and `b` have equal lengths.
-            unsafe {
-                lo = _mm256_add_pd(lo, _mm256_mul_pd(_mm256_loadu_pd(pa.add(i)), _mm256_loadu_pd(pb.add(i))));
-                hi = _mm256_add_pd(hi, _mm256_mul_pd(_mm256_loadu_pd(pa.add(i + 4)), _mm256_loadu_pd(pb.add(i + 4))));
+            for (r, s) in acc.iter_mut().enumerate() {
+                // SAFETY: `i + LANES <= body`, and `a` and `b` have equal lengths.
+                let (x, y) = unsafe { (_mm256_loadu_pd(pa.add(i + 4 * r)), _mm256_loadu_pd(pb.add(i + 4 * r))) };
+                *s = _mm256_add_pd(*s, _mm256_mul_pd(x, y));
             }
             i += LANES;
         }
-        let mut s = combine(lanes(lo, hi));
+        let mut s = combine(lanes(acc));
         for i in body..a.len() {
             s += a[i] * b[i];
         }
@@ -435,13 +443,13 @@ mod x86 {
         }
     }
 
+    /// Accumulator `r` holds lanes `4r` to `4r + 3`.
     #[target_feature(enable = "avx2")]
-    fn lanes(lo: __m256d, hi: __m256d) -> [f64; LANES] {
+    fn lanes(acc: [__m256d; REGS]) -> [f64; LANES] {
         let mut out = [0.0; LANES];
-        // SAFETY: `out` holds eight `f64`s.
-        unsafe {
-            _mm256_storeu_pd(out.as_mut_ptr(), lo);
-            _mm256_storeu_pd(out.as_mut_ptr().add(4), hi);
+        for (r, a) in acc.iter().enumerate() {
+            // SAFETY: `out` holds `LANES` `f64`s.
+            unsafe { _mm256_storeu_pd(out.as_mut_ptr().add(4 * r), *a) };
         }
         out
     }
@@ -452,15 +460,17 @@ mod arm {
     use super::{LANES, combine};
     use std::arch::aarch64::*;
 
+    const REGS: usize = LANES / 2;
+
     #[target_feature(enable = "neon")]
     pub unsafe fn sum(v: &[f64]) -> f64 {
         let body = v.len() / LANES * LANES;
         let p = v.as_ptr();
-        let mut acc = [vdupq_n_f64(0.0); 4];
+        let mut acc = [vdupq_n_f64(0.0); REGS];
         let mut i = 0;
         while i < body {
             for (r, a) in acc.iter_mut().enumerate() {
-                // SAFETY: `i + 8 <= body <= v.len()`.
+                // SAFETY: `i + LANES <= body <= v.len()`.
                 *a = vaddq_f64(*a, unsafe { vld1q_f64(p.add(i + 2 * r)) });
             }
             i += LANES;
@@ -476,11 +486,11 @@ mod arm {
     pub unsafe fn dot(a: &[f64], b: &[f64]) -> f64 {
         let body = a.len() / LANES * LANES;
         let (pa, pb) = (a.as_ptr(), b.as_ptr());
-        let mut acc = [vdupq_n_f64(0.0); 4];
+        let mut acc = [vdupq_n_f64(0.0); REGS];
         let mut i = 0;
         while i < body {
             for (r, s) in acc.iter_mut().enumerate() {
-                // SAFETY: `i + 8 <= body`, and `a` and `b` have equal lengths.
+                // SAFETY: `i + LANES <= body`, and `a` and `b` have equal lengths.
                 let (x, y) = unsafe { (vld1q_f64(pa.add(i + 2 * r)), vld1q_f64(pb.add(i + 2 * r))) };
                 *s = vaddq_f64(*s, vmulq_f64(x, y));
             }
@@ -531,10 +541,10 @@ mod arm {
 
     /// Accumulator `r` holds lanes `2r` and `2r + 1`.
     #[target_feature(enable = "neon")]
-    fn lanes(acc: [float64x2_t; 4]) -> [f64; LANES] {
+    fn lanes(acc: [float64x2_t; REGS]) -> [f64; LANES] {
         let mut out = [0.0; LANES];
         for (r, a) in acc.iter().enumerate() {
-            // SAFETY: `out` holds eight `f64`s.
+            // SAFETY: `out` holds `LANES` `f64`s.
             unsafe { vst1q_f64(out.as_mut_ptr().add(2 * r), *a) };
         }
         out
