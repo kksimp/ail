@@ -75,6 +75,12 @@ fn alloc(n int) int
 
 fn copy_bytes(dst int, src int, n int)
     mut i := 0
+    while i + 32 <= n
+        store64(dst + i, load64(src + i))
+        store64(dst + i + 8, load64(src + i + 8))
+        store64(dst + i + 16, load64(src + i + 16))
+        store64(dst + i + 24, load64(src + i + 24))
+        i += 32
     while i + 8 <= n
         store64(dst + i, load64(src + i))
         i += 8

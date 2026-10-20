@@ -1,0 +1,145 @@
+## Value ranges in a counted loop (ADR 0580): which checked `+`, `-`, `*` of
+## a loop can't overflow if its held `int` operands are limited. bce.ail
+## tests those operands once, ahead of the loop, and runs a copy of the loop
+## without the checks when they hold.
+
+## The values the guard keeps within +-LIMIT: 2^30, so a sum of two and a
+## product of two such sums stay below 2^63.
+pub LIMIT := 1073741824
+
+## The largest magnitude the analysis computes with (2^61): sums of two
+## such values can't overflow the compiler's own `int`s.
+BIG := 2305843009213693952
+
+struct Span
+    known bool
+    lo int
+    hi int
+
+fn top() Span
+    Span(known: false, lo: 0, hi: 0)
+
+fn exact(lo int, hi int) Span
+    if lo < 0 - BIG or hi > BIG
+        return top()
+    Span(known: true, lo: lo, hi: hi)
+
+## Whether an operation can't overflow (or isn't checked), and its result.
+struct Out
+    safe bool
+    span Span
+
+fn verdict(safe bool, span Span) Out
+    Out(safe: safe, span: span)
+
+pub struct Proven
+    ## `block:index` of the checked operations that can't overflow.
+    pub sites Set[str]
+    ## The held values the guard must keep within +-LIMIT.
+    pub limited List[int]
+
+## What can be proven about the checked arithmetic of the loop `lp` (a
+## counted loop `c`) when every held `int` it reads is within +-LIMIT.
+## `held(v)` says whether `v` is held in the loop.
+pub fn prove(f Func, defs List[Def], lp LoopInfo, c Counted, order List[int], held List[bool]) Proven
+    mut spans := Map[int, Span]()
+    mut limited := List[int]()
+    mut sites := Set[str]()
+    # The induction value runs from its start to below its bound.
+    spans[c.p] = exact(const_of(f, defs, c.lo) else 0, LIMIT - 1)
+    if not limited.contains(c.bound)
+        limited.push(c.bound)
+    for b in order
+        if not lp.member[b] or b == lp.header
+            continue
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            if i.dst < 0 or f.vals[i.dst] != Ty.Int
+                continue
+            r := span_of(f, defs, i, mut spans, mut limited, held)
+            if r.safe and is_arith(i.op)
+                if i.site >= 0
+                    sites.add("{b}:{k}")
+            spans[i.dst] = r.span
+    Proven(sites: sites, limited: limited)
+
+fn is_arith(op str) bool
+    op == "add" or op == "sub" or op == "mul" or op == "neg" or op == "div" or op == "rem"
+
+## The span of an instruction's result, and whether the operation can't
+## overflow (or is not checked at all).
+fn span_of(
+    f Func,
+    defs List[Def],
+    i Inst,
+    mut spans Map[int, Span],
+    mut limited List[int],
+    held List[bool],
+) Out
+    if i.op == "const"
+        return verdict(true, exact(i.imm, i.imm))
+    if i.op != "add" and i.op != "sub" and i.op != "mul" and i.op != "neg" and i.op != "div" and i.op != "rem"
+        return verdict(true, top())
+    a := arg_span(f, defs, i.args[0], mut spans, mut limited, held)
+    if not a.known
+        return verdict(false, top())
+    if i.op == "neg"
+        return verdict(true, exact(0 - a.hi, 0 - a.lo))
+    b := arg_span(f, defs, i.args[1], mut spans, mut limited, held)
+    if not b.known
+        return verdict(false, top())
+    match i.op
+        "add" => verdict(true, exact(a.lo + b.lo, a.hi + b.hi))
+        "sub" => verdict(true, exact(a.lo - b.hi, a.hi - b.lo))
+        "mul" => times(a, b)
+        "div" =>
+            # A positive constant divisor, which truncates toward 0.
+            if b.lo == b.hi and b.lo > 0
+                verdict(true, exact(a.lo / b.lo, a.hi / b.lo))
+            else
+                verdict(false, top())
+        _ =>
+            if b.lo == b.hi and b.lo > 0
+                verdict(true, exact(if a.lo >= 0 then 0 else 1 - b.lo, b.lo - 1))
+            else
+                verdict(false, top())
+
+fn times(a Span, b Span) Out
+    m := max_abs(a)
+    n := max_abs(b)
+    if m != 0 and n > BIG / m
+        return verdict(false, top())
+    p := [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi]
+    verdict(true, exact(least(p), most(p)))
+
+fn least(xs List[int]) int
+    mut m := xs[0]
+    for x in xs
+        if x < m
+            m = x
+    m
+
+fn most(xs List[int]) int
+    mut m := xs[0]
+    for x in xs
+        if x > m
+            m = x
+    m
+
+fn max_abs(s Span) int
+    lo := if s.lo < 0 then 0 - s.lo else s.lo
+    hi := if s.hi < 0 then 0 - s.hi else s.hi
+    if lo > hi then lo else hi
+
+## A value's span: known for what the loop computed, +-LIMIT for a held
+## `int` (which the guard then has to test), unknown otherwise.
+fn arg_span(f Func, defs List[Def], v int, mut spans Map[int, Span], mut limited List[int], held List[bool]) Span
+    if s := spans.get(v)
+        return s
+    if k := const_of(f, defs, v)
+        return exact(k, k)
+    if held[v] and f.vals[v] == Ty.Int
+        if not limited.contains(v)
+            limited.push(v)
+        return exact(0 - LIMIT, LIMIT)
+    top()

@@ -99,3 +99,9 @@ operation in the program shortens a list. *(ADR 0578)*
 
 **native.bce.3** — A list's capacity is not observable: a native executable
 may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
+
+**native.bce.4** — An overflow check (expr.arith.1) may be removed from a
+loop only where the operands' values, tested before the loop, rule the
+overflow out; otherwise the loop with the check runs and traps as the
+interpreter does. A check on an operation that repeats an earlier identical
+one on every path may be removed. *(ADR 0611)*
