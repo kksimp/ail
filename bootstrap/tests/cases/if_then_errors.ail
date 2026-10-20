@@ -1,0 +1,5 @@
+## expr.if.8: the one-line form needs its `else` on the same line.
+fn main()
+    n := 3
+    x := if n > 2 then "big"
+    print(x)

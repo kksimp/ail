@@ -17,6 +17,7 @@
 //! enum variants (type.enum.3), which method calls go through a trait, and
 //! which `impl` implements each trait for each type.
 
+mod absent;
 mod builtins;
 pub mod conc;
 mod contracts;
@@ -161,6 +162,9 @@ pub struct Resolved {
     /// `e?` on an optional, which passes on `none` (err.prop.2); every other
     /// `?` passes on only a failure, so a successful `none` stays a value.
     pub optional_try: FastSet<Pos>,
+    /// `e?` on an optional in a function whose errors are inferred, which
+    /// fails with the prelude's `Absent` on `none` (err.prop.5, ADR 0279).
+    pub absent_try: FastSet<Pos>,
     /// `e?` on an optional inside the value of an `else`, which goes to that
     /// `else` instead of leaving the function (err.prop.4, ADR 0252).
     pub else_try: FastSet<Pos>,
@@ -727,6 +731,10 @@ impl<'p> Checker<'p> {
                 params.push((p.mutable, ty));
             }
             let mut ret = f.ret.as_ref().map_or(Ty::Unit, |t| self.resolve_ret(t, i));
+            // test.attr.4: a test can always fail, so `?` works in it.
+            if f.ret.is_none() && f.is_test() {
+                ret = Ty::Res(Box::new(Ty::Unit), Errs::Inferred(i));
+            }
             // A `main` with a wrong return type is reported once (mod.main.1);
             // its body is then checked as returning nothing.
             if f.top_level()
@@ -2078,18 +2086,20 @@ impl<'p> Checker<'p> {
     // ---- Assignment and places ----
 
     fn assign(&mut self, target: &'p Expr, op: Option<BinOp>, value: &'p Expr, pos: Pos) {
-        // type.coll.13: `m[k] = v` or `x = e` can fix a pending local's type.
+        // type.coll.13: `m[k] = v`, `m[k] += n` or `x = e` can fix a pending
+        // local's type; `op=` starts a missing key at zero (ADR 0251, ADR 0280).
+        if let Expr::Index { recv, index, .. } = target
+            && let Expr::Name(n, _) = &**recv
+            && let Some(k) = self.pending_of(n)
+            && self.pending[k].brace
+        {
+            let (kt, vt) = (self.quiet_type(index), self.quiet_type(value));
+            if op.is_none() || matches!(vt, Ty::Int | Ty::Float) {
+                self.settle(k, Ty::Map(Box::new(kt), Box::new(vt)));
+            }
+        }
         if op.is_none() {
             match target {
-                Expr::Index { recv, index, .. } => {
-                    if let Expr::Name(n, _) = &**recv
-                        && let Some(k) = self.pending_of(n)
-                        && self.pending[k].brace
-                    {
-                        let (kt, vt) = (self.quiet_type(index), self.quiet_type(value));
-                        self.settle(k, Ty::Map(Box::new(kt), Box::new(vt)));
-                    }
-                }
                 Expr::Name(n, _) => {
                     if let Some(k) = self.pending_of(n) {
                         let vt = self.quiet_type(value);
@@ -2711,7 +2721,9 @@ impl<'p> Checker<'p> {
         let t = self.expr(inner, None, true);
         if let Some(c) = context {
             let ct = self.expr(c, Some(&Ty::Str), true);
-            if !matches!(t, Ty::Res(..) | Ty::Err) {
+            // err.prop.5: `opt? "context"` fails with `Absent` and the context.
+            let absent = matches!(t, Ty::Opt(_)) && self.catching == 0 && matches!(self.ret, Ty::Res(_, Errs::Inferred(_)));
+            if !matches!(t, Ty::Res(..) | Ty::Err) && !absent {
                 self.error("err.ctx.2", c.pos(), "only an error can carry context; this value can't fail");
             } else if !self.accepts(&Ty::Str, &ct) {
                 self.mismatch("err.ctx.2", c.pos(), &Ty::Str, &ct);
@@ -2733,11 +2745,11 @@ impl<'p> Checker<'p> {
                     // err.prop.4: an enclosing `else` handles the absence.
                     self.resolved.else_try.insert(pos);
                     self.caught += 1;
-                } else if !matches!(ret, Ty::Opt(_)) {
+                } else if !matches!(ret, Ty::Opt(_)) && !self.absent_try(&ret, pos) {
                     self.error_help(
                         "err.prop.2",
                         pos,
-                        "`?` on an optional only works in a function that returns an optional, or before an `else`",
+                        "`?` on an optional only works in a function that returns an optional or infers its errors, or before an `else`",
                         "add a fallback: `x?.y else d`, or leave: `x := value else return ...`",
                     );
                 }

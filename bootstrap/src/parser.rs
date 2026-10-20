@@ -910,10 +910,16 @@ impl Parser {
         };
         let whole = self.error_message(is_error);
         let mut fields = Vec::new();
-        self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
+        // err.msg.1: an error struct with a message may have no fields.
+        let bare = whole.is_some() && matches!(self.peek(), Tok::Newline) && !matches!(self.peek_at(1), Tok::Indent);
+        if bare {
+            self.bump();
+        } else {
+            self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
             fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
+        }
         if whole.is_some() {
             self.splice_messages(&name, pos, !generics.is_empty(), Vec::new(), whole);
         }
@@ -1644,6 +1650,9 @@ impl Parser {
     fn if_expr(&mut self) -> Option<Expr> {
         let pos = self.bump().pos;
         let cond = self.condition()?;
+        if matches!(self.peek(), Tok::Ident(t) if t == "then") {
+            return self.if_then(cond, pos);
+        }
         let body = self.block("the `if` condition", "expr.if.1")?;
         let mut branches = vec![(cond, body)];
         let mut els = None;
@@ -1675,6 +1684,26 @@ impl Parser {
             }
         }
         Some(Expr::If { branches, els, else_err, pos })
+    }
+
+    /// expr.if.8: the one-line form `if c then a else b`, after `c`. `then`
+    /// is a keyword only here, so it stays usable as a name.
+    fn if_then(&mut self, cond: Cond, pos: Pos) -> Option<Expr> {
+        self.bump(); // then
+        // Both values are plain: the `else` here is the `if`'s, not err.else.6.
+        let a = self.expression_plain()?;
+        if !self.eat_kw("else") {
+            let at = self.pos();
+            self.error_help(
+                "expr.if.8",
+                at,
+                "`if c then a` needs `else b` on the same line",
+                "add `else` and the other value; for a statement with no `else`, put the body on its own line",
+            );
+            return None;
+        }
+        let b = self.expression_plain()?;
+        Some(Expr::If { branches: vec![(cond, vec![Stmt::Expr(a)])], els: Some(vec![Stmt::Expr(b)]), else_err: None, pos })
     }
 
     /// A `bool` condition, or a binding `name := e` (expr.if.5).
