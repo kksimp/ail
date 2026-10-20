@@ -73,7 +73,9 @@ fn Checker.collect_impls(mut self)
                     built_in_type = is_prelude_line(prog.structs[index].pos.line)
                 elif c.starts_with("e")
                     built_in_type = is_prelude_line(prog.enums[index].pos.line)
-                if is_prelude_line(prog.traits[t].pos.line) and built_in_type and not is_prelude_line(imp.pos.line)
+                if is_prelude_line(prog.traits[t].pos.line)
+                    and built_in_type
+                    and not is_prelude_line(imp.pos.line)
                     err(
                         "trait.impl.4",
                         imp.pos,
@@ -125,7 +127,11 @@ fn Checker.implements_in(self, t Ty, tr int, mut seen List[str]) bool
         Num(k) => return tr == eq or tr == std_ord or (tr == std_hash and k != "f32")
         Union => return tr == eq or tr == std_hash
         Opt(inner) => return (tr == eq or tr == std_hash) and implements_in(inner, tr, mut seen)
-        MapOf(k, v) => return tr == eq and implements_in(k, eq, mut seen) and implements_in(v, eq, mut seen)
+        MapOf(k, v) => return tr == eq and implements_in(
+            k,
+            eq,
+            mut seen,
+        ) and implements_in(v, eq, mut seen)
         SetOf(e) => return tr == eq and implements_in(e, eq, mut seen)
         _ => tr == tr
     con := con_of(t) else return false
@@ -224,7 +230,8 @@ fn Checker.hash_cause(self, t Ty) str
     match t
         Float => "`float` isn't `Hash`, since NaN isn't equal to itself"
         Num(k) =>
-            if k == "f32" then "`f32` isn't `Hash`, since NaN isn't equal to itself" else "{show(t)} isn't `Hash`"
+            if k
+                == "f32" then "`f32` isn't `Hash`, since NaN isn't equal to itself" else "{show(t)} isn't `Hash`"
         MapOf => "maps and sets aren't `Hash`"
         SetOf => "maps and sets aren't `Hash`"
         AnyOf => "`any` values aren't `Hash`"
@@ -338,7 +345,10 @@ fn Checker.check_impls(mut self)
             mut matches := want.receiver == got.receiver and want.params.len() == got.params.len()
             if matches
                 for k in 0..want.params.len()
-                    if want.params[k].mutable != got.params[k].mutable or not same(want.params[k].ty, got.params[k].ty)
+                    if want.params[k].mutable != got.params[k].mutable or not same(
+                        want.params[k].ty,
+                        got.params[k].ty,
+                    )
                         matches = false
             matches = matches and same_result(want.ret, got.ret)
             if not matches
@@ -355,7 +365,11 @@ fn Checker.check_impls(mut self)
         elif built_in and imp.methods.len() == 0
             check_derived(i, tr, target)
         else
-            missing := [m for m in decl.methods if prog.fns[m].body == none and not defined.contains(prog.fns[m].name)]
+            missing := [
+                m
+                for m in decl.methods if prog.fns[m].body == none
+                    and not defined.contains(prog.fns[m].name)
+            ]
             if missing.len() > 0
                 names := [prog.fns[m].name for m in missing]
                 shown := ["`{sig_text(m, sig_subst(sigs[m], binds))}`" for m in missing]
@@ -367,7 +381,11 @@ fn Checker.check_impls(mut self)
                     "add {shown.join(", ")} to the block{derive}",
                 )
         if tr == std_ord and not implements(target, std_eq)
-            err("trait.std.2", imp.pos, "{show(target)} implements `Ord`, so it must also support `==`")
+            err(
+                "trait.std.2",
+                imp.pos,
+                "{show(target)} implements `Ord`, so it must also support `==`",
+            )
         for s in supers[tr]
             if (tr == std_ord and s == std_eq) or implements(target, s)
                 continue
@@ -414,5 +432,8 @@ fn Checker.check_derived(mut self, i int, tr int, target Ty)
         t := tys[k]
         if not implements(t, tr)
             text := "`{trait_name}` can't be derived for `{imp.target.name}`: the field `{names[k]}` is {show(t)}, which doesn't implement `{trait_name}`"
-            hint := how_to_implement(t, tr) else "define the trait's methods in this `impl` instead of deriving `{trait_name}`"
+            hint := how_to_implement(
+                t,
+                tr,
+            ) else "define the trait's methods in this `impl` instead of deriving `{trait_name}`"
             err_help("trait.derive.1", imp.pos, text, hint)

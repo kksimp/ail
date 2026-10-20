@@ -25,7 +25,12 @@ fn Checker.resolve_ret(mut self, t ast.TypeRef, fn_index int) Ty
             for e in given
                 et := resolve_type(e)
                 if et != Ty.Unknown and not is_error_type(et)
-                    err_help("err.decl.2", e.pos, "{show(et)} isn't an error type", "declare it with `error struct` or `error enum`")
+                    err_help(
+                        "err.decl.2",
+                        e.pos,
+                        "{show(et)} isn't an error type",
+                        "declare it with `error struct` or `error enum`",
+                    )
                 elif et != Ty.Unknown and not set.contains(et)
                     set.push(et)
             Ty.Res(ok_ty, Errs.ErrSet(sort_errors(set)))
@@ -39,7 +44,10 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
             no_unique(inner_ty, inner.pos, "the contents of a `ref`")
             return Ty.RefOf(inner_ty)
         Fallible =>
-            unsupported(t.pos, "a type that can fail is only supported as a function's return type in the bootstrap (spec err.type.1)")
+            unsupported(
+                t.pos,
+                "a type that can fail is only supported as a function's return type in the bootstrap (spec err.type.1)",
+            )
             return Ty.Unknown
         AnyTrait(tr) =>
             if i := trait_named(tr, t.pos, "trait.any.1")
@@ -73,11 +81,21 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         if s := self_ty
             ty = s
         else
-            err_help("trait.self.1", at, "`Self` is only a type in a trait, a method, or an `impl` block", "write the type's name")
+            err_help(
+                "trait.self.1",
+                at,
+                "`Self` is only a type in a trait, a method, or an `impl` block",
+                "write the type's name",
+            )
             return Ty.Unknown
     elif n == "List"
         if args.len() != 1
-            err_help("gram.generic.1", at, "`List` takes 1 type argument, but {was_were(args.len())} given", "write e.g. `List[int]`")
+            err_help(
+                "gram.generic.1",
+                at,
+                "`List` takes 1 type argument, but {was_were(args.len())} given",
+                "write e.g. `List[int]`",
+            )
             return Ty.Unknown
         return Ty.ListOf(resolve_type(args[0]))
     elif n == "Map" or n == "Set"
@@ -248,7 +266,12 @@ fn Checker.require_key(mut self, t Ty, at ast.Pos)
         return
     if implements(t, std_hash)
         return
-    err_help("type.map.2", at, "{show(t)} can't be a map key or set element (it isn't `Hash`)", hash_cause(t))
+    err_help(
+        "type.map.2",
+        at,
+        "{show(t)} can't be a map key or set element (it isn't `Hash`)",
+        hash_cause(t),
+    )
 
 ## A handle type written in a signature or field (conc.task.5).
 fn Checker.conc_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
@@ -266,7 +289,12 @@ fn Checker.conc_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         err("gram.generic.1", at, "`TaskGroup` takes no type arguments")
         return Ty.Unknown
     if args.len() != 1
-        err_help("gram.generic.1", at, "`{n}` takes 1 type argument, but {was_were(args.len())} given", "write e.g. `{n}[int]`")
+        err_help(
+            "gram.generic.1",
+            at,
+            "`{n}` takes 1 type argument, but {was_were(args.len())} given",
+            "write e.g. `{n}[int]`",
+        )
         return Ty.Unknown
     inner := resolve_type(args[0])
     if n == "Atomic" and inner != Ty.Int and inner != Ty.Bool and inner != Ty.Unknown
@@ -292,8 +320,13 @@ fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
     if types.contains(n) and not STD_MODULES.contains(head)
         return none
     if STD_MODULES.contains(head)
-        diags.push(new_diag("std.use.2", at, "the standard module `{head}` is not imported")
-            .with_help("add `use std.{head}` at the top of the file"))
+        diags.push(
+            new_diag(
+                "std.use.2",
+                at,
+                "the standard module `{head}` is not imported",
+            ).with_help("add `use std.{head}` at the top of the file"),
+        )
     else
         err_help(
             "std.use.2",

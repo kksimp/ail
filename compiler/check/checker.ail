@@ -249,7 +249,12 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
     if j := traits.get(n)
         return j
     if types.contains(n) or is_builtin_type(n)
-        err_help(rule, at, "`{n}` is a type, not a trait", "a constraint or `impl` names a trait, e.g. `Ord`")
+        err_help(
+            rule,
+            at,
+            "`{n}` is a type, not a trait",
+            "a constraint or `impl` names a trait, e.g. `Ord`",
+        )
         return none
     mut d := new_diag("expr.name.1", at, "unknown trait `{n}`")
     if s := suggest(n, traits.keys())
@@ -304,7 +309,12 @@ fn Checker.declare_generics(mut self, gs List[ast.GenericParam]) List[int]
         if twice
             err("gen.decl.2", g.pos, "the type parameter `{n}` is declared twice")
         elif types.contains(n) or is_builtin_type(n) or n == "Self"
-            err_help("gen.decl.2", g.pos, "`{n}` is already a type", "choose another name for the type parameter, e.g. `T`")
+            err_help(
+                "gen.decl.2",
+                g.pos,
+                "`{n}` is already a type",
+                "choose another name for the type parameter, e.g. `T`",
+            )
         elif traits.contains(n)
             err_help(
                 "gen.decl.2",
@@ -437,12 +447,18 @@ fn Checker.collect_fns(mut self)
         is_test := [a for a in f.attrs if a.name == "test"].len() > 0
         if f.ret == none and is_test
             ret = Ty.Res(Ty.Unit, Errs.Inferred(i))
-        if f.within == ast.Within.TopLevel and f.owner == none and f.name == "main" and not fails_only(ret)
+        if f.within == ast.Within.TopLevel
+            and f.owner == none
+            and f.name == "main"
+            and not fails_only(ret)
             ret = Ty.Unit
         match f.within
             InTrait =>
                 if f.generics.len() > 0
-                    unsupported(f.pos, "type parameters on a trait's methods are not supported by the bootstrap yet")
+                    unsupported(
+                        f.pos,
+                        "type parameters on a trait's methods are not supported by the bootstrap yet",
+                    )
                 if is_inferred(ret)
                     mut at := f.pos
                     if r := f.ret
@@ -497,9 +513,16 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     o := f.owner?.name else ""
     if f.owner == none
         if PRELUDE_FNS.contains(n)
-            unsupported(f.pos, "redeclaring the prelude function `{n}` is not supported by the bootstrap")
+            unsupported(
+                f.pos,
+                "redeclaring the prelude function `{n}` is not supported by the bootstrap",
+            )
         elif fns.contains(n) or types.contains(n) or traits.contains(n)
-            mut d := new_diag("mod.unit.1", f.pos, "`{n}` is declared more than once in this module")
+            mut d := new_diag(
+                "mod.unit.1",
+                f.pos,
+                "`{n}` is declared more than once in this module",
+            )
             if j := fns.get(n)
                 d = d.with_note(prog.fns[j].pos, "`{n}` is first declared here")
             elif t := types.get(n)
@@ -511,7 +534,11 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
     at := f.owner?.pos else f.pos
     if not types.contains(o)
         if BUILTIN_TYPES.contains(o) or SPEC_TYPES_NOT_YET.contains(o)
-            err("trait.method.5", at, "methods of `{o}` can only be declared where `{o}` is declared")
+            err(
+                "trait.method.5",
+                at,
+                "methods of `{o}` can only be declared where `{o}` is declared",
+            )
         elif traits.contains(o)
             err_help(
                 "trait.impl.1",
@@ -538,8 +565,13 @@ fn Checker.register_fn(mut self, i int, f ast.FnDecl)
         )
     key := "{o}.{n}"
     if j := methods.get(key)
-        diags.push(new_diag("mod.unit.1", f.pos, "`{o}.{n}` is declared more than once")
-            .with_note(prog.fns[j].pos, "`{o}.{n}` is first declared here"))
+        diags.push(
+            new_diag(
+                "mod.unit.1",
+                f.pos,
+                "`{o}.{n}` is declared more than once",
+            ).with_note(prog.fns[j].pos, "`{o}.{n}` is first declared here"),
+        )
     else
         methods[key] = i
 
@@ -551,10 +583,18 @@ fn Checker.collect_consts(mut self)
     for i in 0..prog.consts.len()
         c := prog.consts[i]
         n := c.name
-        taken := fns.contains(n) or types.contains(n) or traits.contains(n) or consts.contains(n)
-            or PRELUDE_FNS.contains(n) or BUILTIN_TYPES.contains(n)
+        taken := fns.contains(n)
+            or types.contains(n)
+            or traits.contains(n)
+            or consts.contains(n)
+            or PRELUDE_FNS.contains(n)
+            or BUILTIN_TYPES.contains(n)
         if taken
-            mut d := new_diag("mod.unit.1", c.pos, "`{n}` is declared more than once in this module")
+            mut d := new_diag(
+                "mod.unit.1",
+                c.pos,
+                "`{n}` is declared more than once in this module",
+            )
             if j := consts.get(n)
                 d = d.with_note(prog.consts[j].pos, "`{n}` is first declared here")
             elif j := fns.get(n)
@@ -653,8 +693,13 @@ fn Checker.check_main(mut self)
                         "write `fn main()`, or `fn main() !` if it can fail",
                     )
             return
-    diags.push(new_diag("mod.main.1", ast.Pos(line: 1, col: 1), "program has no `main` function")
-        .with_help("add:\n    fn main()\n        print(\"Hello, world!\")"))
+    diags.push(
+        new_diag(
+            "mod.main.1",
+            ast.Pos(line: 1, col: 1),
+            "program has no `main` function",
+        ).with_help("add:\n    fn main()\n        print(\"Hello, world!\")"),
+    )
 
 ## test.attr.1-2, gram.attr.4: known attributes, and the shape of a test.
 fn Checker.check_attrs(mut self)
@@ -665,16 +710,36 @@ fn Checker.check_attrs(mut self)
                 is_test = true
             if not KNOWN_ATTRS.contains(a.name)
                 known := ["`@{k}`" for k in KNOWN_ATTRS].join(", ")
-                err_help("test.attr.1", a.pos, "unknown attribute `@{a.name}`", "the known attributes are {known}")
+                err_help(
+                    "test.attr.1",
+                    a.pos,
+                    "unknown attribute `@{a.name}`",
+                    "the known attributes are {known}",
+                )
             if a.name == "deprecated" and a.arg == none
-                err_help("gram.attr.4", a.pos, "`@deprecated` needs a reason", "write `@deprecated(\"use new_name instead\")`")
+                err_help(
+                    "gram.attr.4",
+                    a.pos,
+                    "`@deprecated` needs a reason",
+                    "write `@deprecated(\"use new_name instead\")`",
+                )
         if not is_test
             continue
         mut bad_shape := true
         if f.owner != none or f.within != ast.Within.TopLevel
-            err_help("test.attr.2", f.pos, "a test is a plain top-level function, not a method", "write `@test fn name()`")
+            err_help(
+                "test.attr.2",
+                f.pos,
+                "a test is a plain top-level function, not a method",
+                "write `@test fn name()`",
+            )
         elif f.generics.len() > 0
-            err_help("test.attr.2", f.generics[0].pos, "a test has no type parameters", "write `@test fn name()`")
+            err_help(
+                "test.attr.2",
+                f.generics[0].pos,
+                "a test has no type parameters",
+                "write `@test fn name()`",
+            )
         else
             bad_shape = false
         if not bad_shape
@@ -782,7 +847,12 @@ fn Checker.check_unique_fields(mut self)
             continue
         for v in 0..decl.variants.len()
             for f in 0..decl.variants[v].fields.len()
-                unique_field(variant_types[e][v][f], decl.variants[v].fields[f].ty.pos, decl.name, "enum")
+                unique_field(
+                    variant_types[e][v][f],
+                    decl.variants[v].fields[f].ty.pos,
+                    decl.name,
+                    "enum",
+                )
 
 fn Checker.unique_field(mut self, t Ty, at ast.Pos, owner str, kind str)
     if is_unique(t)
@@ -834,9 +904,13 @@ fn Checker.check_uses(mut self)
         alias := named.name
         key := "{file_of(u.pos)}/{alias}"
         if first := seen.get(key)
-            diags.push(new_diag("std.use.3", named.pos, "`{alias}` is already imported").with_help(
-                "it is first imported on line {first.line}; remove one import, or import it under another name with `as`",
-            ))
+            diags.push(
+                new_diag(
+                    "std.use.3",
+                    named.pos,
+                    "`{alias}` is already imported",
+                ).with_help("it is first imported on line {first.line}; remove one import, or import it under another name with `as`"),
+            )
         else
             seen[key] = named.pos
 

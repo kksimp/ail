@@ -352,6 +352,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0359](0359-bytecode-tier-in-the-bootstrap.md) | Add a bytecode tier to the bootstrap interpreter (designer) | Accepted | 2026-10-20 |
 | [0360](0360-in-house-tls-for-std-net.md) | `https` in `std.net` through an in-house TLS implementation, not a crate (designer) | Accepted | 2026-10-20 |
 | [0376](0376-syntax-tree-in-ail-and-its-json.md) | The syntax tree in AIL, `compiler/ast/`, and its JSON is the derived shape *(delegated)* | Accepted | 2026-10-20 |
+| [0377](0377-checker-in-ail-ported-pass-for-pass.md) | The checker in AIL is ported pass for pass, and says what it covers *(delegated)* | Accepted | 2026-10-20 |
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |

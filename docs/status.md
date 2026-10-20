@@ -25,7 +25,8 @@ All verified on Linux x86-64 and macOS ARM64.
 
 ### Stage 3: self-hosting (started 2026-10-20)
 
-- `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376). Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
+- `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
+- `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slice 1 (declarations) agrees with `ail check` on every corpus program; the selftest `self_hosted_check` holds it there. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 
 ### Language (2026-10-20 batch)
 

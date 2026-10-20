@@ -5,8 +5,29 @@
 pub PRELUDE_FNS := ["print", "unreachable", "assert", "assert_eq"]
 
 pub BUILTIN_TYPES := [
-    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
-    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
+    "int",
+    "i64",
+    "i8",
+    "i16",
+    "i32",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "float",
+    "f64",
+    "f32",
+    "str",
+    "char",
+    "bool",
+    "List",
+    "Map",
+    "Set",
+    "Task",
+    "TaskGroup",
+    "Channel",
+    "Mutex",
+    "Atomic",
 ]
 
 ## Type names the spec defines that the bootstrap doesn't support yet.
@@ -20,7 +41,19 @@ pub CONC_TYPES := ["Task", "TaskGroup", "Channel", "Mutex", "Atomic"]
 pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated"]
 
 ## The standard modules (std.use.1), sorted.
-pub STD_MODULES := ["env", "fs", "io", "net", "path", "proc", "random", "tensor", "task", "time", "ui"]
+pub STD_MODULES := [
+    "env",
+    "fs",
+    "io",
+    "net",
+    "path",
+    "proc",
+    "random",
+    "tensor",
+    "task",
+    "time",
+    "ui",
+]
 
 ## The standard modules written in AIL (std.ui.19).
 pub AIL_STD_MODULES := ["std.ui.widgets"]
