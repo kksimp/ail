@@ -102,6 +102,11 @@ struct Lower
     src_lines List[List[str]]
     ## The functions with contracts, by key, and the file of every function.
     contracted Map[str, ast.FnDecl]
+    ## The structs with `invariant` lines, and the file of each.
+    invariants Map[str, List[ast.Contract]]
+    inv_file Map[str, int]
+    ## The struct whose invariants the current `mut self` method must keep.
+    inv_key str
     fn_decl Map[str, ast.FnDecl]
     fn_file Map[str, int]
     ## Lowering code that checks no contracts: a condition, or the `.nc`
@@ -197,6 +202,9 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         src_paths: [src.path for src in srcs],
         src_lines: [src.text.lines() for src in srcs],
         contracted: {},
+        invariants: {},
+        inv_file: {},
+        inv_key: "",
         fn_decl: {},
         fn_file: {},
         unchecked: false,
@@ -681,6 +689,7 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
     nvars = 0
     loops = []
     ens = []
+    inv_key = ""
     borrowed = Set[str]()
     cur = new_block()
     sealed[cur] = true
@@ -734,11 +743,20 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
             if e := final_expr(s)
                 result = lower_expr(e, none) else Val(id: -2, ty: Ty.Unit)
                 continue
+            # An `unsafe` block gives its last expression's value.
+            if inner := unsafe_body(s)
+                result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                continue
         lower_stmt(s)
     scopes.pop()
     if result.id == -2
         return none
     result
+
+fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
+    match s
+        Unsafe(body, _) => body
+        _ => none
 
 fn final_expr(s ast.Stmt) ast.Expr?
     match s

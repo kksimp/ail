@@ -18,8 +18,7 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
-function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
-invariants, and lists of those and of lists, using
+function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
 on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
 value), `while`, `for` over a range or a list, `break`, `continue`,
@@ -31,7 +30,7 @@ lists of them or an interpolation of them (with
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 `round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
 construct is reported at its position under this rule, all of them at once,
-`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, `unreachable(message)` (err.model.2), `requires`, `ensures` and `old(e)` on those functions (contract.req.1, contract.ens.1-3, contract.run.1-2, ADR 0612), `unsafe` blocks (unsafe.block.1) as plain blocks, functions marked `@test` (left out of the build, test.attr.2), `@deprecated` and `@inline` (gram.attr.3-4, ADR 0613), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
+`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, `unreachable(message)` (err.model.2), `requires`, `ensures`, `old(e)` and struct `invariant` lines (contract.req.1, contract.ens.1-3, contract.inv.2-3, contract.run.1-2, ADR 0612), `unsafe` blocks (unsafe.block.1) as plain blocks, functions marked `@test` (left out of the build, test.attr.2), `@deprecated` and `@inline` (gram.attr.3-4, ADR 0613), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
 *(ADRs 0384, 0390, 0392, 0393)*
 and the bit operations of expr.bit.1. Also: format specifications on numbers,

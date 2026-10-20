@@ -19,14 +19,15 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
-        elif s.invariants.len() > 0
-            problem(s.pos, "struct `{s.name}`: invariants aren't in the native subset yet")
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
         elif s.is_error
             problem(s.pos, "error struct `{s.name}` isn't in the native subset yet")
         else
             structs["{prefix}{s.name}"] = []
+            if s.invariants.len() > 0
+                invariants["{prefix}{s.name}"] = s.invariants
+                inv_file["{prefix}{s.name}"] = file
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
     for s in prog.structs
@@ -69,6 +70,7 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()
         store(obj, k, vs[k])
+    check_invariants(n, obj, pos, "", pos)
     Val(id: obj, ty: t)
 
 ## The heap object kinds (native-abi.md §2).

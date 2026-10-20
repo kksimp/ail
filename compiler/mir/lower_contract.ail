@@ -197,6 +197,11 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
 ## On entry to `f`: take the `old(e)` values of its `ensures` lines
 ## (contract.ens.3) and remember what the checks at each return need.
 fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
+    if r := f.receiver
+        if r.mutable and self_ty != "" and invariants.contains(self_ty)
+            inv_key = self_ty
+            ens_label = key
+            ens_vars = []
     mut list := List[ast.Contract]()
     for c in f.contracts
         if c.is_ensures
@@ -222,7 +227,7 @@ fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
 ## contract.ens.1: at a return of `rv` (-1 for none) at `at`, each
 ## `ensures` holds, or the program traps at its line.
 fn Lower.check_ensures(mut self, rv int, at ast.Pos)
-    if ens.len() == 0 or unchecked
+    if (ens.len() == 0 and inv_key == "") or unchecked
         return
     saved := scopes
     scopes = [Map[str, str]()]
@@ -246,3 +251,49 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
         cur = ok
     unchecked = false
     scopes = saved
+    if inv_key != ""
+        me := lookup("self") else return
+        check_invariants(inv_key, read_var(me, cur), at, ens_label, at)
+
+# ---- invariants ----
+
+## contract.inv.2-3: the struct `key` value `obj` keeps its `invariant`
+## lines. `by` is "" for a value just built at `pos`, else the method that
+## returned at `at` and changed it.
+fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at ast.Pos)
+    if unchecked
+        return
+    list := invariants.get(key) else return
+    if inv_file[key] != file
+        problem(
+            pos,
+            "`{key}`: invariants of a struct in another module aren't in the native subset yet",
+        )
+        return
+    saved := scopes
+    saved_self := self_ty
+    scopes = [Map[str, str]()]
+    self_ty = key
+    t := Ty.Struct(key)
+    declare("self", t, obj)
+    parts := key.split(".")
+    name := parts[parts.len() - 1]
+    unchecked = true
+    for c in list
+        v := lower_value(c.cond, Ty.Bool) else break
+        ok := check_branch(v.id)
+        if by == ""
+            trap_open("contract.inv.2", c.pos)
+            say("`{name}` invariant `{c.text}` doesn't hold for ")
+            describe(Val(id: obj, ty: t), c.pos)
+            say(", built at {pos.line}:{pos.col} (invariant at {c.pos.line}:{c.pos.col})")
+        else
+            trap_open("contract.inv.3", c.pos)
+            say("`{name}` invariant `{c.text}` was broken by `{by}`, which returned at {at.line}:{at.col} with self = ")
+            describe(Val(id: obj, ty: t), c.pos)
+            say(" (invariant at {c.pos.line}:{c.pos.col})")
+        trap_close(c.pos)
+        cur = ok
+    unchecked = false
+    scopes = saved
+    self_ty = saved_self
