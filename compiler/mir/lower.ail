@@ -40,6 +40,9 @@ struct Lower
     ## Functions outside the subset, already reported: calls of them are
     ## not reported again.
     bad Set[str]
+    ## Constants whose value is a number or `bool` literal, inlined at
+    ## each use (mod.const.1).
+    consts Map[str, ast.Expr]
     strs List[str]
     str_index Map[str, int]
     sites List[Site]
@@ -84,7 +87,11 @@ PRIMS := {
     "list_at": "list",
     "float_bits": "int",
     "bits_float": "float",
+    "target": "int",
 }
+
+## The `int` methods of two operands that are one instruction (expr.bit.1).
+BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl", "shr": "shr"}
 
 ## Lower a program and, when given, the runtime; `Problems` lists what is
 ## outside the subset.
@@ -92,6 +99,7 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
     mut l := Lower(
         sigs: {},
         bad: Set[str](),
+        consts: {},
         strs: [],
         str_index: {},
         sites: [],
@@ -144,7 +152,13 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for t in prog.traits
         problem(t.pos, "trait `{t.name}` isn't in the native subset yet")
     for c in prog.consts
-        problem(c.pos, "constant `{c.name}` isn't in the native subset yet")
+        if is_literal(c.value)
+            consts["{pre}{c.name}"] = c.value
+        else
+            problem(
+                c.pos,
+                "constant `{c.name}`: only number and `bool` literals are in the native subset yet",
+            )
     for f in prog.fns
         before := problems.len()
         declare_fn(f, pre)
@@ -178,7 +192,8 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         else
             ints += 1
         params.push(t)
-    if ints > 6 or floats > 8
+    # Primitives are not called through the ABI.
+    if (ints > 6 or floats > 8) and not (pre == "rt." and PRIMS.contains(f.name))
         problem(f.pos, "`{f.name}` has more than 6 integer or 8 float parameters")
     mut rty := Ty.Unit
     if r := f.ret
@@ -206,6 +221,15 @@ fn type_of(t ast.TypeRef) Ty?
                     none
                 _ => none
         _ => none
+
+fn is_literal(e ast.Expr) bool
+    match e
+        Int | Float | Bool => true
+        Unary(o, x, _) =>
+            match o
+                Neg => is_literal(x)
+                _ => false
+        _ => false
 
 fn is_number(t Ty) bool
     match t
@@ -353,7 +377,11 @@ fn Lower.lookup(self, name str) str?
         i -= 1
     none
 
+## A check's trap site, or -1 in the runtime, whose arithmetic wraps and
+## whose indexing is unchecked (native-abi.md §7).
 fn Lower.site(mut self, rule str, kind str, op str, pos ast.Pos) int
+    if is_rt
+        return -1
     sites.push(Site(rule: rule, kind: kind, op: op, line: pos.line, col: pos.col, func: fname))
     sites.len() - 1
 
@@ -744,7 +772,12 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
         Name(name, pos) =>
             key := lookup(name) else
-                problem(pos, "`{name}` isn't in the native subset yet (only locals and parameters)")
+                if c := consts.get("{prefix}{name}")
+                    return lower_expr(c, want)
+                problem(
+                    pos,
+                    "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
+                )
                 return none
             if var_ty[key].is_unknown()
                 return none
@@ -1116,6 +1149,14 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: int_abs(r.id, npos), ty: Ty.Int)
             if (name == "min" or name == "max") and vs.len() == 1
                 return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
+            # expr.bit.1-2
+            if BIT_OPS.contains(name) and vs.len() == 1
+                mut s := -1
+                if name == "shl" or name == "shr"
+                    s = site("expr.bit.2", "shift", name, npos)
+                return Val(id: checked(BIT_OPS[name], [r.id, vs[0].id], s, Ty.Int), ty: Ty.Int)
+            if name == "bit_not" and vs.len() == 0
+                return Val(id: op("bnot", [r.id], Ty.Int), ty: Ty.Int)
         Float =>
             if name == "to_int" and vs.len() == 0
                 s := site("type.num.9", "float_int", "", npos)
@@ -1157,7 +1198,7 @@ fn Lower.int_abs(mut self, a int, pos ast.Pos) int
     branch(neg, yes, [], join, [a])
     seal(yes)
     cur = yes
-    jump(join, [checked("neg", [a], site("expr.arith.1", "neg", "-", pos), Ty.Int)])
+    jump(join, [checked("neg", [a], site("expr.arith.1", "abs", "abs", pos), Ty.Int)])
     seal(join)
     cur = join
     r

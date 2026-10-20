@@ -23,7 +23,13 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
 registers go on the stack, 8 bytes each, in order. Callee-saved registers are
-the platform's. No variadics. Structs are passed by pointer.
+the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
+an `extern` call treats them as clobbered). No variadics. Structs are passed
+by pointer.
+
+On x86-64 the code generator keeps rax, rdx, r10, r11, xmm14 and xmm15 as
+scratch; the allocator (ADR 0386) uses rsi, rdi, r8, r9, rcx, rbx, r12–r15,
+xmm0–xmm13.
 
 ## 2. Value layouts
 
@@ -69,8 +75,10 @@ addresses with 8 bytes of slack for it (ADR 0407).
 
 ## 3. Entry and exit
 
-The linker script of lane 120 points the object's entry at `_start` (ELF) or
-`_main` (Mach-O, `LC_MAIN`), both defined by the runtime:
+The object writer points the entry at `_start` (ELF) or `_main` (Mach-O,
+`LC_MAIN`). On Linux x86-64 `_start` is emitted by the code generator: clear
+`rbp`, align the stack, `call rt.init`, `call main`, `rt.exit(0)` (ADR 0387).
+The steps:
 
 1. take the stack pointer, set up the heap (§5), save `argc`/`argv` for
    `env.args()` (later);
@@ -123,6 +131,19 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 
 ## 7. Traps
 
+**As built (lane 120, ADR 0385).** A failed check branches to a stub at the
+end of its function, which calls
+`rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
+1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
+count), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
+constant source excerpt (`  L | line` and the caret line). The output is the
+interpreter's first line and excerpt, byte for byte; the snapshot lines
+after them are not printed. Runtime code has no checks: its arithmetic wraps.
+
+The trap-record design below was the first draft; a record can't hold the
+operands the interpreter's messages contain.
+
 `rt_trap(rec)` takes a pointer to a **trap record** the compiler emits per
 trap site, then writes to standard error and exits 1:
 
@@ -150,6 +171,20 @@ range), `run.limit.2`. Compiler-emitted checks: `expr.arith.3` (division
 by zero), `expr.arith.1` (overflow), per `expr.arith` in spec chapter 5.
 
 ## 8. What the runtime provides to compiled code
+
+**As built (lane 120, ADR 0387).** `compiler/rt/native/core.ail`, compiled
+with every program, provides `rt.init`, `rt.exit`, `rt.alloc`, `rt.trap`,
+`rt.out_str`, `rt.out_int`, `rt.out_float`, `rt.out_bool`, `rt.out_nl`,
+`rt.out_list_int`/`_float`/`_bool`, `rt.list_new`, `rt.list_push`,
+`rt.list_pushf` and `rt.list_copy`; `print` writes its pieces straight into
+the buffer instead of building a string. List indexing and `len` are inline.
+The runtime is written over the primitives of `compiler/rt/native/prim.ail`
+(`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
+`global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
+`target`), which the code generator expands inline and only runtime code may
+call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
+
+The table below is the first draft:
 
 | Symbol | Meaning |
 |---|---|

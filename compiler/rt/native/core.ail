@@ -1,0 +1,523 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native runtime's core (native-abi.md, ADRs 0404-0408, 0387): system
+## calls, the bump allocator, buffered output, lists of numbers, and traps.
+## Written in the native subset over the primitives of `prim.ail`, and
+## compiled by the backend into every executable. The algorithms follow
+## lane 122's machine model in `compiler/rt/rt.ail`.
+
+# Global slots.
+OUT_BUF := 0
+OUT_LEN := 1
+HEAP_NEXT := 2
+HEAP_END := 3
+CHUNK := 4
+
+OUT_CAP := 65536
+
+# ---- system calls (native-abi.md §4) ----
+
+fn sys_write(fd int, p int, n int)
+    t := target()
+    mut done := 0
+    while done < n
+        k := if t == 0 then 1 else if t == 1 then 64 else 4
+        r := syscall(k, fd, p + done, n - done, 0, 0, 0)
+        if r <= 0
+            return
+        done += r
+
+fn sys_exit(code int)
+    t := target()
+    k := if t == 0 then 231 else if t == 1 then 94 else 1
+    syscall(k, code, 0, 0, 0, 0, 0)
+
+fn sys_mmap(n int) int
+    t := target()
+    k := if t == 0 then 9 else if t == 1 then 222 else 197
+    flags := if t == 2 then 4098 else 34
+    syscall(k, 0, n, 3, flags, -1, 0)
+
+# ---- memory (ADR 0407) ----
+
+fn init()
+    store64(global(OUT_BUF), sys_mmap(OUT_CAP))
+    store64(global(OUT_LEN), 0)
+    store64(global(CHUNK), 1048576)
+
+## `n` zeroed bytes, 16-byte aligned, never freed.
+fn alloc(n int) int
+    size := (n + 15) / 16 * 16
+    mut p := load64(global(HEAP_NEXT))
+    if p == 0 or p + size > load64(global(HEAP_END))
+        mut chunk := load64(global(CHUNK))
+        if chunk < size
+            chunk = size
+        p = sys_mmap(chunk)
+        if p < 0
+            fail(1, 0, 0)
+        store64(global(HEAP_END), p + chunk)
+        store64(global(CHUNK), chunk * 2)
+    store64(global(HEAP_NEXT), p + size)
+    p
+
+fn copy_bytes(dst int, src int, n int)
+    mut i := 0
+    while i + 8 <= n
+        store64(dst + i, load64(src + i))
+        i += 8
+    while i < n
+        store8(dst + i, load8(src + i))
+        i += 1
+
+# ---- output (ADR 0408) ----
+
+fn flush_to(fd int)
+    n := load64(global(OUT_LEN))
+    if n > 0
+        sys_write(fd, load64(global(OUT_BUF)), n)
+        store64(global(OUT_LEN), 0)
+
+fn flush()
+    flush_to(1)
+
+## Flush, then end the process.
+fn exit(code int)
+    flush()
+    sys_exit(code)
+
+fn out_byte(b int)
+    mut n := load64(global(OUT_LEN))
+    if n == OUT_CAP
+        flush()
+        n = 0
+    store8(load64(global(OUT_BUF)) + n, b)
+    store64(global(OUT_LEN), n + 1)
+
+fn out_bytes(p int, n int)
+    for i in 0..n
+        out_byte(load8(p + i))
+
+## A string object: +0 bytes, +8 chars, +16 UTF-8 (native-abi.md §2).
+fn out_str(s str)
+    p := str_addr(s)
+    out_bytes(p + 16, load64(p))
+
+fn out_nl()
+    out_byte(10)
+
+## Decimal, working on negative remainders so the smallest `int` needs no
+## negation.
+fn out_int(n int)
+    if n == 0
+        out_byte(48)
+        return
+    if n < 0
+        out_byte(45)
+    mut v := n
+    mut scale := 1
+    while v / 10 != 0
+        v = v / 10
+        scale *= 10
+    v = n
+    while scale > 0
+        d := v / scale % 10
+        out_byte(48 + d.abs())
+        scale = scale / 10
+
+fn out_bool(b bool)
+    if b
+        out_byte(116)
+        out_byte(114)
+        out_byte(117)
+        out_byte(101)
+    else
+        out_byte(102)
+        out_byte(97)
+        out_byte(108)
+        out_byte(115)
+        out_byte(101)
+
+fn out_sep(i int)
+    if i > 0
+        out_byte(44)
+        out_byte(32)
+
+fn out_list_int(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_int(load64(data + 8 * i))
+    out_byte(93)
+
+fn out_list_bool(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_bool(load64(data + 8 * i) != 0)
+    out_byte(93)
+
+fn out_list_float(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_float(loadf(data + 8 * i))
+    out_byte(93)
+
+# ---- lists (native-abi.md §2) ----
+
+## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
+fn list_new(cap int) List[int]
+    p := alloc(24)
+    c := if cap < 4 then 4 else cap
+    store64(p + 8, c)
+    store64(p + 16, alloc(8 * c))
+    list_at(p)
+
+fn list_grow(p int)
+    cap := load64(p + 8) * 2
+    data := alloc(8 * cap)
+    copy_bytes(data, load64(p + 16), 8 * load64(p))
+    store64(p + 8, cap)
+    store64(p + 16, data)
+
+fn list_push(xs List[int], v int)
+    p := list_addr(xs)
+    n := load64(p)
+    if n == load64(p + 8)
+        list_grow(p)
+    store64(load64(p + 16) + 8 * n, v)
+    store64(p, n + 1)
+
+fn list_pushf(xs List[int], x float)
+    list_push(xs, float_bits(x))
+
+fn list_copy(xs List[int]) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    q := list_addr(list_new(n))
+    copy_bytes(load64(q + 16), load64(p + 16), 8 * n)
+    store64(q, n)
+    list_at(q)
+
+# ---- traps (ADR 0405) ----
+
+## Print a trap and exit 1. `head` is `PATH:LINE:COL: trap[RULE]: `, `tail`
+## the source excerpt; `kind` picks the message, finished with `a`, `b`
+## and the operator `op` (native-abi.md §7).
+fn trap(kind int, a int, b int, head str, op str, tail str)
+    flush()
+    out_str(head)
+    if kind == 0
+        # `a OP b` overflows `int` (expr.arith.1)
+        out_byte(96)
+        out_int(a)
+        out_byte(32)
+        out_str(op)
+        out_byte(32)
+        out_int(b)
+        out_str("` overflows `int`")
+    elif kind == 1
+        out_str("division by zero in `")
+        out_int(a)
+        out_byte(32)
+        out_str(op)
+        out_byte(32)
+        out_int(b)
+        out_byte(96)
+    elif kind == 2
+        out_str("`-(")
+        out_int(a)
+        out_str(")` overflows `int`")
+    elif kind == 3
+        out_str("index ")
+        out_int(a)
+        out_str(" is out of bounds for a list of length ")
+        out_int(b)
+    elif kind == 4
+        out_byte(96)
+        out_float(bits_float(a))
+        out_str("` doesn't fit in `int`")
+    elif kind == 5
+        out_str("`(")
+        out_int(a)
+        out_str(").abs()` overflows `int`")
+    elif kind == 6
+        out_str("shift count `")
+        out_int(a)
+        out_str("` is outside `0..=63`")
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
+
+## A failure of the runtime itself: out of memory (run.limit.2).
+fn fail(kind int, a int, b int)
+    flush()
+    out_str("trap[run.limit.2]: out of memory\n")
+    flush_to(2)
+    sys_exit(1)
+
+# ---- float text (ADR 0409) ----
+#
+# Lane 122's algorithm from `compiler/rt/rt.ail`, in the native subset: the
+# shortest digits that read back as the same value, closest when several
+# are as short (Steele and White, with Burger and Dybvig's exact
+# arithmetic), in fixed notation for decimal exponents -4 to 15 and
+# `d.ddde+XX` otherwise. Big numbers are little-endian base 10^9 limbs.
+
+BASE := 1000000000
+
+## A float as the interpreter prints it (type.num.7).
+fn out_float(x float)
+    if x != x
+        out_str("nan")
+        return
+    if x > 1.7976931348623157e308
+        out_str("inf")
+        return
+    if x < -1.7976931348623157e308
+        out_str("-inf")
+        return
+    if x == 0.0
+        if 1.0 / x < 0.0
+            out_byte(45)
+        out_str("0.0")
+        return
+    neg := x < 0.0
+    if neg
+        out_byte(45)
+    ds := digits_of(if neg then 0.0 - x else x)
+    # The last element is the decimal point's position `p`: x = 0.DIGITS * 10^p.
+    n := ds.len() - 1
+    p := ds[n]
+    if p >= -3 and p <= 16
+        if p <= 0
+            out_byte(48)
+            out_byte(46)
+            for _ in 0..0 - p
+                out_byte(48)
+            for i in 0..n
+                out_byte(48 + ds[i])
+        elif p >= n
+            for i in 0..n
+                out_byte(48 + ds[i])
+            for _ in 0..p - n
+                out_byte(48)
+            out_byte(46)
+            out_byte(48)
+        else
+            for i in 0..n
+                if i == p
+                    out_byte(46)
+                out_byte(48 + ds[i])
+        return
+    out_byte(48 + ds[0])
+    if n > 1
+        out_byte(46)
+        for i in 1..n
+            out_byte(48 + ds[i])
+    out_byte(101)
+    e := p - 1
+    out_byte(if e < 0 then 45 else 43)
+    a := e.abs()
+    if a < 10
+        out_byte(48)
+    out_int(a)
+
+fn trim(a List[int]) List[int]
+    mut n := a.len()
+    while n > 0 and a[n - 1] == 0
+        n -= 1
+    mut out := List[int]()
+    for i in 0..n
+        out.push(a[i])
+    out
+
+fn big_of(v int) List[int]
+    mut out := List[int]()
+    mut x := v
+    while x > 0
+        out.push(x % BASE)
+        x = x / BASE
+    out
+
+fn big_mul(a List[int], k int) List[int]
+    mut out := List[int]()
+    if k == 0
+        return out
+    mut carry := 0
+    for limb in a
+        t := limb * k + carry
+        out.push(t % BASE)
+        carry = t / BASE
+    while carry > 0
+        out.push(carry % BASE)
+        carry = carry / BASE
+    out
+
+fn big_add(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut carry := 0
+    n := if a.len() > b.len() then a.len() else b.len()
+    for i in 0..n
+        x := if i < a.len() then a[i] else 0
+        y := if i < b.len() then b[i] else 0
+        t := x + y + carry
+        out.push(t % BASE)
+        carry = t / BASE
+    if carry > 0
+        out.push(carry)
+    out
+
+## `a - b`, for `a >= b`.
+fn big_sub(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut borrow := 0
+    for i in 0..a.len()
+        y := if i < b.len() then b[i] else 0
+        mut t := a[i] - y - borrow
+        if t < 0
+            t += BASE
+            borrow = 1
+        else
+            borrow = 0
+        out.push(t)
+    trim(out)
+
+## -1, 0 or 1.
+fn big_cmp(a List[int], b List[int]) int
+    if a.len() != b.len()
+        return if a.len() < b.len() then - 1 else 1
+    mut i := a.len() - 1
+    while i >= 0
+        if a[i] != b[i]
+            return if a[i] < b[i] then - 1 else 1
+        i -= 1
+    0
+
+fn big_pow2(a List[int], k int) List[int]
+    mut out := a
+    mut left := k
+    while left >= 29
+        out = big_mul(out, 536870912)
+        left -= 29
+    if left > 0
+        out = big_mul(out, 1.shl(left))
+    out
+
+fn big_pow10(a List[int], k int) List[int]
+    mut out := a
+    mut left := k
+    while left >= 9
+        out = big_mul(out, BASE)
+        left -= 9
+    if left > 0
+        mut p := 1
+        for _ in 0..left
+            p *= 10
+        out = big_mul(out, p)
+    out
+
+## The shortest digits of the positive finite `x`, then the decimal point's
+## position `k`, so that x = 0.DIGITS * 10^k.
+fn digits_of(x float) List[int]
+    # x = f * 2^e, f an integer below 2^53, from the bits.
+    bits := float_bits(x)
+    be := bits.shr(52).bit_and(2047)
+    mut f := bits.bit_and(4503599627370495)
+    mut e := -1074
+    if be > 0
+        f += 4503599627370496
+        e = be - 1075
+    # r/s = x; mp/s and mm/s are half the gaps above and below x.
+    mut r := List[int]()
+    mut s := List[int]()
+    mut mp := List[int]()
+    mut mm := List[int]()
+    wide := f == 4503599627370496 and be > 1
+    if e >= 0
+        if wide
+            r = big_pow2(big_of(f), e + 2)
+            s = big_of(4)
+            mp = big_pow2(big_of(1), e + 1)
+            mm = big_pow2(big_of(1), e)
+        else
+            r = big_pow2(big_of(f), e + 1)
+            s = big_of(2)
+            mp = big_pow2(big_of(1), e)
+            mm = mp
+    elif wide
+        r = big_of(f * 4)
+        s = big_pow2(big_of(1), 2 - e)
+        mp = big_of(2)
+        mm = big_of(1)
+    else
+        r = big_of(f * 2)
+        s = big_pow2(big_of(1), 1 - e)
+        mp = big_of(1)
+        mm = big_of(1)
+    even := f % 2 == 0
+    # Estimate k = ceil(log10 x), then fix it up exactly.
+    mut k := (53 + e) * 30103 / 100000
+    if k >= 0
+        s = big_pow10(s, k)
+    else
+        r = big_pow10(r, 0 - k)
+        mp = big_pow10(mp, 0 - k)
+        mm = big_pow10(mm, 0 - k)
+    # Too small: r + mp >= s (> when the high end is excluded).
+    while true
+        c := big_cmp(big_add(r, mp), s)
+        if c > 0 or c == 0 and even
+            s = big_mul(s, 10)
+            k += 1
+        else
+            break
+    # Too large: (r + mp) * 10 < s.
+    while true
+        c := big_cmp(big_mul(big_add(r, mp), 10), s)
+        if c < 0 or c == 0 and not even
+            r = big_mul(r, 10)
+            mp = big_mul(mp, 10)
+            mm = big_mul(mm, 10)
+            k -= 1
+        else
+            break
+    mut ds := List[int]()
+    while true
+        r = big_mul(r, 10)
+        mp = big_mul(mp, 10)
+        mm = big_mul(mm, 10)
+        mut d := 0
+        while big_cmp(r, s) >= 0
+            r = big_sub(r, s)
+            d += 1
+        cl := big_cmp(r, mm)
+        low := cl < 0 or cl == 0 and even
+        ch := big_cmp(big_add(r, mp), s)
+        high := ch > 0 or ch == 0 and even
+        if not low and not high
+            ds.push(d)
+            continue
+        if low and not high
+            ds.push(d)
+        elif high and not low
+            ds.push(d + 1)
+        elif big_cmp(big_add(r, r), s) < 0
+            ds.push(d)
+        else
+            ds.push(d + 1)
+        break
+    ds.push(k)
+    ds

@@ -16,28 +16,28 @@ pub enum Ty
     Unknown
     Unit
 
-fn Ty.is_float(self) bool
+pub fn Ty.is_float(self) bool
     match self
         Float => true
         _ => false
 
-fn Ty.is_unit(self) bool
+pub fn Ty.is_unit(self) bool
     match self
         Unit => true
         _ => false
 
-fn Ty.is_unknown(self) bool
+pub fn Ty.is_unknown(self) bool
     match self
         Unknown => true
         _ => false
 
 ## The element type of a list type, else `none`.
-fn Ty.elem(self) Ty?
+pub fn Ty.elem(self) Ty?
     match self
         List(e) => e
         _ => none
 
-fn Ty.name(self) str
+pub fn Ty.name(self) str
     match self
         Int => "int"
         Float => "float"
@@ -104,7 +104,7 @@ pub fn unreachable_term() Term
     Term(kind: "unreachable", cond: -1, targets: [], args: [], value: -1)
 
 ## The values a terminator reads, including edge arguments.
-fn Term.uses(self) List[int]
+pub fn Term.uses(self) List[int]
     mut out := List[int]()
     if cond >= 0
         out.push(cond)
@@ -150,11 +150,12 @@ pub struct Module
     pub lines List[str]
 
 ## Whether an instruction may be removed when its value is unused.
-fn Inst.is_pure(self) bool
+pub fn Inst.is_pure(self) bool
     match op
         "const" | "fconst" | "str" | "fadd" | "fsub" | "fmul" | "fdiv" => true
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "copy" => true
-        "add" | "sub" | "mul" | "neg" => site < 0
+        "band" | "bor" | "bxor" | "bnot" => true
+        "add" | "sub" | "mul" | "neg" | "shl" | "shr" => site < 0
         _ => false

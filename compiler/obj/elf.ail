@@ -1,0 +1,103 @@
+## Static ELF executables (ADR 0387): no section headers, no dynamic
+## linker, no libc. One read-and-execute segment holds the headers, the code
+## and the read-only data; a second, zero-filled read-write segment holds
+## the runtime's globals. Symbols are resolved here: functions, `d:` data
+## and `globals`.
+use x64
+
+BASE := 4194304
+PAGE := 4096
+EHDR := 64
+PHDR := 56
+
+## ELF machine numbers.
+pub X86_64 := 62
+pub AARCH64 := 183
+
+pub fn elf_x64(img x64.Image) List[int]
+    code_off := EHDR + 2 * PHDR
+    data_off := align_up(code_off + img.code.len(), 16)
+    size := data_off + img.data.len()
+    bss := align_up(BASE + size, PAGE)
+    mut code := img.code
+    for f in img.fixups
+        target := address(img, f.sym, BASE + code_off, BASE + data_off, bss)
+        addend := read32(code, f.at)
+        rel := target + addend - (BASE + code_off + f.at + 4 + f.tail)
+        for i in 0..4
+            code[f.at + i] = rel.shr(8 * i).bit_and(255)
+    mut out := List[int]()
+    header(mut out, X86_64, BASE + code_off + img.entry)
+    segment(mut out, 5, 0, BASE, size, size)
+    segment(mut out, 6, 0, bss, 0, 8 * img.globals)
+    out.extend(code)
+    while out.len() < data_off
+        out.push(0)
+    out.extend(img.data)
+    out
+
+## The address of a symbol, given where the code, data and globals start.
+fn address(img x64.Image, sym str, code int, data int, bss int) int
+    if sym == "globals"
+        return bss
+    if sym.starts_with("d:")
+        return data + (img.data_syms.get(sym) else unreachable("no data {sym}"))
+    code + (img.funcs.get(sym) else unreachable("no function {sym}"))
+
+## A signed 32-bit little-endian field.
+fn read32(bytes List[int], at int) int
+    mut v := 0
+    for i in 0..4
+        v = v.bit_or(bytes[at + i].shl(8 * i))
+    if v >= 2147483648 then v - 4294967296 else v
+
+pub fn align_up(n int, a int) int
+    (n + a - 1) / a * a
+
+fn header(mut out List[int], machine int, entry int)
+    out.extend([127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    put(mut out, 2, 2)
+    put(mut out, machine, 2)
+    put(mut out, 1, 4)
+    put(mut out, entry, 8)
+    put(mut out, EHDR, 8)
+    put(mut out, 0, 8)
+    put(mut out, 0, 4)
+    put(mut out, EHDR, 2)
+    put(mut out, PHDR, 2)
+    put(mut out, 2, 2)
+    put(mut out, 64, 2)
+    put(mut out, 0, 2)
+    put(mut out, 0, 2)
+
+## A `PT_LOAD` program header; `flags` is R 4, W 2, X 1.
+fn segment(mut out List[int], flags int, offset int, vaddr int, filesz int, memsz int)
+    put(mut out, 1, 4)
+    put(mut out, flags, 4)
+    put(mut out, offset, 8)
+    put(mut out, vaddr, 8)
+    put(mut out, vaddr, 8)
+    put(mut out, filesz, 8)
+    put(mut out, memsz, 8)
+    put(mut out, PAGE, 8)
+
+## `v` in `n` little-endian bytes.
+pub fn put(mut out List[int], v int, n int)
+    for i in 0..n
+        out.push(v.shr(8 * i).bit_and(255))
+
+## Bytes as lines of hexadecimal text, for the driver to write out until
+## the standard library writes bytes.
+pub fn hex(bytes List[int]) str
+    digits := "0123456789abcdef".chars()
+    mut lines := List[str]()
+    mut k := 0
+    while k < bytes.len()
+        mut row := List[char]()
+        end := if k + 64 < bytes.len() then k + 64 else bytes.len()
+        for i in k..end
+            row.push(digits[bytes[i].shr(4)])
+            row.push(digits[bytes[i].bit_and(15)])
+        lines.push(row.join(""))
+        k = end
+    lines.join("\n")

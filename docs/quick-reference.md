@@ -11,6 +11,7 @@
 ./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail build FILE.ail [-o OUT] # native executable (Linux x86-64 so far): numbers, lists of numbers, loops, free functions (native.build.3)
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
 ./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges

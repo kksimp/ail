@@ -5,6 +5,7 @@
 
 mod api;
 mod ast;
+mod build;
 mod budget;
 mod bump;
 mod check;
@@ -44,6 +45,8 @@ commands:
                 ARGS are the program's (std.env.1: `env.args()`)
   run DIR [ARGS...]
                 check and run the package whose root module is DIR
+  build FILE [-o OUT]
+                compile a program in the native subset to an executable (native.build.3)
   check FILE    check a program (or a package DIR) without running it;
                 --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;
@@ -56,6 +59,8 @@ commands:
   explain       list every rule with its chapter and whether `ail fix` repairs it (--json)
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
+  api --mir FILE
+                the program's native-backend MIR (ADR 0384)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
   diff OLD NEW  what changed between two versions of a file or package:
@@ -246,8 +251,10 @@ fn main() -> ExitCode {
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
+        ["api", "--mir", file] => build::mir(file),
         ["api", rest @ ..] => api::command(rest, json),
         ["diff", rest @ ..] => api::diff::command(rest, json),
+        ["build", rest @ ..] => build::command(rest),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));

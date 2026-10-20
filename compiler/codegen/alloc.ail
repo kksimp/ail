@@ -1,0 +1,240 @@
+## Register allocation by linear scan (ADR 0386; Poletto and Sarkar, 1999),
+## the same for every target. Each value gets one location for its whole
+## life: a register, a stack slot, or none when it is a constant that the
+## code generator rematerialises at each use.
+##
+## Positions: a block's parameters are defined at its start + 1; each
+## instruction reads at 2k and writes at 2k + 1; the terminator reads at
+## the block's last position. A value's interval runs from its definition
+## to its last use, widened to the ends of every block it is live through,
+## and to the ends of the blocks that pass it to a block parameter.
+use mir
+
+## Where a value lives: a register (0-63, targets number vector registers
+## from `FLOAT_BASE`), a stack slot (`SLOT_BASE + k`), `REMAT` (rebuilt at
+## each use), or `NOWHERE` (never read).
+pub FLOAT_BASE := 32
+pub SLOT_BASE := 1000
+pub REMAT := -2
+pub NOWHERE := -1
+
+## The registers a target lets the allocator use, best first.
+pub struct Target
+    pub int_caller List[int]
+    pub int_callee List[int]
+    pub float_caller List[int]
+    pub float_callee List[int]
+
+pub struct Alloc
+    ## The location of each value.
+    pub loc List[int]
+    ## The blocks in layout order.
+    pub order List[int]
+    pub slots int
+    ## The callee-saved registers used, which the prologue saves.
+    pub saved List[int]
+
+## Whether an instruction's value is rebuilt at each use instead of held.
+pub fn is_remat(i mir.Inst) bool
+    i.op == "const" or i.op == "fconst" or i.op == "str"
+
+## Whether an instruction clobbers the caller-saved registers.
+pub fn is_call(i mir.Inst) bool
+    i.op == "call" or i.op == "prim" and i.name == "syscall"
+
+pub fn allocate(f mir.Func, t Target) Alloc
+    n := f.vals.len()
+    order := block_order(f)
+    nb := f.blocks.len()
+    mut remat := [false for _ in 0..n]
+    for blk in f.blocks
+        for i in blk.insts
+            if is_remat(i)
+                remat[i.dst] = true
+    # Positions of each block.
+    mut bstart := [0 for _ in 0..nb]
+    mut bend := [0 for _ in 0..nb]
+    mut pos := 0
+    for b in order
+        bstart[b] = pos
+        pos += 2 + 2 * f.blocks[b].insts.len()
+        bend[b] = pos
+        pos += 2
+    live_in := liveness(f, order)
+    mut start := [-1 for _ in 0..n]
+    mut end := [-1 for _ in 0..n]
+    mut calls := List[int]()
+    for b in order
+        blk := f.blocks[b]
+        for p in blk.params
+            extend(mut start, mut end, p, bstart[b] + 1)
+        mut k := bstart[b] + 2
+        for i in blk.insts
+            for a in i.args
+                extend(mut start, mut end, a, k)
+            if i.dst >= 0
+                extend(mut start, mut end, i.dst, k + 1)
+            if is_call(i)
+                calls.push(k)
+            k += 2
+        for a in blk.term.uses()
+            extend(mut start, mut end, a, bend[b])
+        for s in blk.term.targets
+            for v in 0..n
+                if live_in[s][v]
+                    extend(mut start, mut end, v, bend[b])
+            # A parameter is written at the end of each block that jumps to it.
+            for p in f.blocks[s].params
+                extend(mut start, mut end, p, bend[b])
+        for v in 0..n
+            if live_in[b][v]
+                extend(mut start, mut end, v, bstart[b])
+    mut hints := [List[int]() for _ in 0..n]
+    for blk in f.blocks
+        for e in 0..blk.term.targets.len()
+            ps := f.blocks[blk.term.targets[e]].params
+            args := blk.term.args[e]
+            for j in 0..args.len()
+                hints[ps[j]].push(args[j])
+                hints[args[j]].push(ps[j])
+        for i in blk.insts
+            if i.op == "copy"
+                hints[i.dst].push(i.args[0])
+    mut loc := [NOWHERE for _ in 0..n]
+    mut queue := List[int]()
+    for v in 0..n
+        if remat[v]
+            loc[v] = REMAT
+        elif start[v] >= 0
+            queue.push(v)
+    queue = queue.sorted(by: |v| start[v] * n + v)
+    mut s := Scan(
+        loc: loc,
+        active: [],
+        slots: 0,
+        saved: [],
+        start: start,
+        end: end,
+        calls: calls,
+        hints: hints,
+    )
+    for v in queue
+        s.assign(v, f.vals[v].is_float(), t)
+    Alloc(loc: s.loc, order: order, slots: s.slots, saved: s.saved.sorted())
+
+fn extend(mut start List[int], mut end List[int], v int, p int)
+    if start[v] < 0 or p < start[v]
+        start[v] = p
+    if p > end[v]
+        end[v] = p
+
+## Which values are live on entry to each block (the block's parameters
+## are defined there, so they are not).
+fn liveness(f mir.Func, order List[int]) List[List[bool]]
+    n := f.vals.len()
+    nb := f.blocks.len()
+    mut live_in := [[false for _v in 0..n] for _b in 0..nb]
+    mut changed := true
+    while changed
+        changed = false
+        mut k := order.len() - 1
+        while k >= 0
+            b := order[k]
+            k -= 1
+            blk := f.blocks[b]
+            mut live := [false for _ in 0..n]
+            for s in blk.term.targets
+                for v in 0..n
+                    if live_in[s][v]
+                        live[v] = true
+            for a in blk.term.uses()
+                live[a] = true
+            mut i := blk.insts.len() - 1
+            while i >= 0
+                inst := blk.insts[i]
+                if inst.dst >= 0
+                    live[inst.dst] = false
+                for a in inst.args
+                    live[a] = true
+                i -= 1
+            for p in blk.params
+                live[p] = false
+            if live != live_in[b]
+                live_in[b] = live
+                changed = true
+    live_in
+
+struct Scan
+    loc List[int]
+    ## Values holding a register now.
+    active List[int]
+    slots int
+    saved List[int]
+    start List[int]
+    end List[int]
+    calls List[int]
+    hints List[List[int]]
+
+## Whether `v` is live across a call, so it needs a callee-saved register.
+fn Scan.crosses(self, v int) bool
+    for c in calls
+        if start[v] < c and end[v] > c
+            return true
+    false
+
+fn Scan.assign(mut self, v int, float bool, t Target)
+    # Free the registers of values that ended.
+    mut keep := List[int]()
+    for a in active
+        if end[a] >= start[v]
+            keep.push(a)
+    active = keep
+    mut used := Set[int]()
+    for a in active
+        used.add(loc[a])
+    cross := crosses(v)
+    mut pool := List[int]()
+    if float
+        if not cross
+            pool.extend(t.float_caller)
+        pool.extend(t.float_callee)
+    else
+        if not cross
+            pool.extend(t.int_caller)
+        pool.extend(t.int_callee)
+    mut pick := -1
+    for h in hints[v]
+        r := loc[h]
+        if r >= 0 and r < SLOT_BASE and not used.contains(r) and pool.contains(r)
+            pick = r
+            break
+    if pick < 0
+        for r in pool
+            if not used.contains(r)
+                pick = r
+                break
+    if pick < 0
+        # Spill whichever of `v` and the active values in its pool ends last.
+        mut victim := -1
+        for a in active
+            if pool.contains(loc[a]) and (victim < 0 or end[a] > end[victim])
+                victim = a
+        if victim >= 0 and end[victim] > end[v]
+            pick = loc[victim]
+            loc[victim] = new_slot()
+            mut rest := List[int]()
+            for a in active
+                if a != victim
+                    rest.push(a)
+            active = rest
+        else
+            loc[v] = new_slot()
+            return
+    loc[v] = pick
+    active.push(v)
+    if (t.int_callee.contains(pick) or t.float_callee.contains(pick)) and not saved.contains(pick)
+        saved.push(pick)
+
+fn Scan.new_slot(mut self) int
+    slots += 1
+    SLOT_BASE + slots - 1

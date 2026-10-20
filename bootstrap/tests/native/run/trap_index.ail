@@ -1,0 +1,6 @@
+fn main()
+    xs := [1, 2, 3]
+    mut i := 0
+    while i < 5
+        print(xs[i])
+        i += 1

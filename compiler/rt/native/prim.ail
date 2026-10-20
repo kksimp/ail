@@ -1,0 +1,56 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The primitives of the native runtime (native-abi.md §6, ADR 0387). The
+## backend expands each call inline; these declarations only let the
+## bootstrap check the runtime's source. Calling them anywhere but in the
+## runtime is not possible: the backend knows them only there.
+
+## The 8 bytes at address `a`.
+fn load64(a int) int
+    todo
+
+fn store64(a int, v int)
+    todo
+
+## The byte at `a`, 0-255.
+fn load8(a int) int
+    todo
+
+fn store8(a int, v int)
+    todo
+
+fn loadf(a int) float
+    todo
+
+fn storef(a int, x float)
+    todo
+
+## A raw system call (native-abi.md §4); the result register.
+fn syscall(n int, a int, b int, c int, d int, e int, f int) int
+    todo
+
+## The address of the runtime's global slot `k` (8 bytes each).
+fn global(k int) int
+    todo
+
+## The address of a string object.
+fn str_addr(s str) int
+    todo
+
+## A list's address, and a list at an address.
+fn list_addr(xs List[int]) int
+    todo
+
+fn list_at(p int) List[int]
+    todo
+
+fn float_bits(x float) int
+    todo
+
+fn bits_float(n int) float
+    todo
+
+## The target: 0 Linux x86-64, 1 Linux ARM64, 2 macOS ARM64.
+fn target() int
+    todo

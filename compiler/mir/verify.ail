@@ -76,6 +76,7 @@ fn check_use(
 fn check_types(f Func, i Inst, mut errs List[str])
     want := match i.op
         "add" | "sub" | "mul" | "div" | "rem" | "neg" | "itof" | "lt" | "le" | "gt" | "ge" => "int"
+        "band" | "bor" | "bxor" | "bnot" | "shl" | "shr" => "int"
         "fadd" | "fsub" | "fmul" | "fdiv" | "fneg" | "ftoi" | "sqrt" | "abs" | "floor" | "ceil" => "float"
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => "float"
         "not" => "bool"
