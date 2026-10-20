@@ -44,3 +44,38 @@ fn Gen.libsys_call(mut self, i mir.Inst)
             put_xmm(i.dst, 0)
         else
             put_gpr(i.dst, RAX)
+
+## The Windows entry (ADR 0606): `_start` calls `main` and passes its result
+## to kernel32's `ExitProcess`. The loader enters with rsp 8 mod 16, so
+## `sub rsp, 40` aligns the stack for the calls. Unlike `generate`, it calls
+## no runtime start-up or exit (`rt.init`, `rt.exit`), which use Linux system calls.
+pub fn generate_windows(m mir.Module) codegen.Image
+    mut img := codegen.new_image()
+    for i in 0..m.strs.len()
+        codegen.add_str(mut img, "d:s{i}", m.strs[i])
+    mut a := new_asm()
+    a.alu_ri("sub", RSP, 40)
+    a.call_sym("main")
+    a.mov_rr(RCX, RAX)
+    a.call_import("ExitProcess")
+    a.ud2()
+    img.code = a.code
+    for fx in a.fixups
+        img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
+    for f in m.funcs
+        gen_func(mut img, m, f)
+    img
+
+## A module with one function, `main`, that calls kernel32's `GetStdHandle(-11)`
+## and returns 7: the exit code under Wine shows the call went through the import
+## table with its argument in rcx (ADR 0606).
+pub fn win_sample() mir.Module
+    mut h := mir.inst(0, "const", [])
+    h.imm = -11
+    mut call := mir.inst(1, "call", [0])
+    call.name = "libsys.GetStdHandle"
+    mut seven := mir.inst(2, "const", [])
+    seven.imm = 7
+    block := mir.Block(params: List[int](), insts: [h, call, seven], term: mir.return_of(2))
+    main := mir.Func(name: "main", params: [], ret: mir.Ty.Int, blocks: [block], vals: [mir.Ty.Int, mir.Ty.Int, mir.Ty.Int], names: ["", "", ""])
+    mir.Module(path: "win_sample.ail", funcs: [main], strs: [], sites: [], lines: [], files: ["win_sample.ail"], file_lines: [[]])

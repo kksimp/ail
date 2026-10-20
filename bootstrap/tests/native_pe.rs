@@ -116,3 +116,33 @@ fn pe_sample_runs_under_wine_when_installed() {
     assert!(out.status.success(), "wine exited with {:?}", out.status);
     assert_eq!(String::from_utf8_lossy(&out.stdout), "hello from AIL on Windows\n");
 }
+
+// ADR 0606: a MIR module with a `libsys.GetStdHandle` call, lowered for Windows
+// (`x64::generate_windows`), runs under Wine and exits with `main`'s result, 7.
+// Wine's exit status shows the call went through the import table and returned.
+#[test]
+fn libsys_call_runs_under_wine_when_installed() {
+    if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+        return;
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "compiler", "pe-mir-sample", "x"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "pe-mir-sample failed:\n{}", String::from_utf8_lossy(&out.stderr));
+    let hex: String = String::from_utf8(out.stdout).unwrap().split_whitespace().collect();
+    let b: Vec<u8> = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
+    let dir = std::env::temp_dir().join(format!("ail-pe-libsys-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("libsys.exe");
+    std::fs::write(&exe, &b).unwrap();
+    let run = Command::new("wine")
+        .arg(&exe)
+        .env("WINEDEBUG", "-all")
+        .env("WINEPREFIX", dir.join("prefix"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(run.status.code(), Some(7), "wine exit status");
+}

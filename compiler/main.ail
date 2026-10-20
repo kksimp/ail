@@ -45,6 +45,8 @@ fn main() !
                 print(mir.module_text(lower_file(args[1], runtime(args[2])?)?))
             else
                 print(mir.module_text(lower_file(args[1], none)?))
+        "pe-mir-sample" =>
+            print(obj.hex(obj.pe_image(x64.generate_windows(x64.win_sample()))))
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
         "build" =>

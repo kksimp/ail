@@ -49,6 +49,15 @@ x86-64 path.
   already fills the table, and run-time lookup adds a dependency on kernel32
   at a point where it is not yet loaded.
 
+## Checks
+
+- `ail run compiler pe-mir-sample x` builds a MIR module with one
+  `libsys.GetStdHandle(-11)` call and returns 7. `x64::generate_windows` lowers
+  it, and the PE runs under Wine (apt `wine`, 9.0) with exit status 7. That
+  shows the call went through the import table and returned. It does not
+  check the argument value.
+- The `native_pe` tests run both checks when Wine is installed.
+
 ## Consequences
 
 - `libsys.` calls on the x86-64 Linux target would reach an unresolved
