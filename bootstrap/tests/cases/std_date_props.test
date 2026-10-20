@@ -1,0 +1,11 @@
+{"test":"days_round_trip","status":"pass","line":10,"col":10,"message":"","cases":100,"seed":1942887301827910125}
+{"test":"add_days_undoes","status":"pass","line":15,"col":10,"message":"","cases":100,"seed":13931430296210871489}
+{"test":"week_is_seven_days","status":"pass","line":20,"col":10,"message":"","cases":100,"seed":17423062356241600690}
+{"test":"months_clamp","status":"pass","line":25,"col":10,"message":"","cases":100,"seed":11517439637933031358}
+{"test":"dates_order_like_days","status":"pass","line":32,"col":10,"message":"","cases":100,"seed":17753526486194729069}
+{"test":"iso_date_round_trip","status":"pass","line":35,"col":10,"message":"","cases":100,"seed":14201669879800767714}
+{"test":"instant_round_trip","status":"pass","line":41,"col":10,"message":"","cases":100,"seed":4505815034701865493}
+{"test":"zones_keep_the_instant","status":"pass","line":50,"col":10,"message":"","cases":100,"seed":4636216950166473458}
+{"test":"add_ms_is_elapsed_time","status":"pass","line":59,"col":10,"message":"","cases":100,"seed":3413086160936074127}
+{"test":"local_wall_time_survives_days","status":"pass","line":63,"col":10,"message":"","cases":100,"seed":11818904064437663031}
+{"summary":true,"passed":10,"failed":0}

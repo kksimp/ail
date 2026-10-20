@@ -25,6 +25,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("tensor", &["from", "zeros"]),
     ("task", &["cancelled", "check"]),
     ("time", &["now_ms", "sleep_ms"]),
+    ("tz", &["offset", "system"]),
     ("ui", &["clipboard_get", "clipboard_set", "open"]),
 ];
 
@@ -96,8 +97,10 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
-const AIL_MODULES: &[(&str, &str, &str)] =
-    &[("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail"))];
+const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
+    ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
+];
 
 /// The file name of the standard module in AIL at `dotted`, if there is one.
 pub fn ail_module_path(dotted: &str) -> Option<&'static str> {

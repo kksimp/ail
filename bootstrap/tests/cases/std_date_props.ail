@@ -1,0 +1,68 @@
+## std.date.2-14: properties of the calendar and of ISO 8601.
+use std.time.date
+
+fn day(n int) date.Date
+    date.Date.from_days(n % 3_000_000)
+
+fn instant(n int) int
+    n % 100_000_000_000_000
+
+@test fn days_round_trip(n int)
+    d := day(n)
+    assert_eq(date.Date.from_days(d.days()), d)
+    assert(date.Date.new(d.year, d.month, d.day) != none)
+
+@test fn add_days_undoes(n int, k int)
+    d := day(n)
+    assert_eq(d.add_days(k % 100_000).add_days(-(k % 100_000)), d)
+    assert_eq(d.add_days(k % 100_000).since(d), k % 100_000)
+
+@test fn week_is_seven_days(n int)
+    d := day(n)
+    assert_eq(d.add_days(7).weekday(), d.weekday())
+    assert(d.weekday() >= 1 and d.weekday() <= 7)
+
+@test fn months_clamp(n int, k int)
+    d := day(n)
+    m := d.add_months(k % 5000)
+    assert(m.day <= date.days_in_month(m.year, m.month))
+    assert(m.day <= d.day)
+    assert_eq(d.add_years(k % 400), d.add_months(12 * (k % 400)))
+
+@test fn dates_order_like_days(a int, b int)
+    assert_eq(day(a) < day(b), day(a).days() < day(b).days())
+
+@test fn iso_date_round_trip(n int)
+    d := day(n)
+    if d.year >= 0 and d.year <= 9999
+        back := date.parse_date(d.iso()) else return
+        assert_eq(back, d)
+
+@test fn instant_round_trip(n int)
+    ms := instant(n)
+    t := date.utc(ms)
+    assert_eq(t.unix_ms(), ms)
+    assert(t.hour >= 0 and t.hour < 24 and t.minute < 60 and t.second < 60 and t.ms < 1000)
+    if t.date.year >= 0 and t.date.year <= 9999
+        back := date.parse_iso(t.iso()) else return
+        assert_eq(back.unix_ms(), ms)
+
+@test fn zones_keep_the_instant(n int)
+    ms := instant(n) % 4_000_000_000_000
+    for zone in ["America/New_York", "Australia/Sydney", "Asia/Kolkata", "+03:30", "UTC"]
+        t := date.at(ms, zone) else return
+        assert_eq(t.unix_ms(), ms)
+        assert(t.offset >= -43200 and t.offset <= 50400)
+        back := t.in_zone("UTC") else return
+        assert_eq(back.unix_ms(), ms)
+
+@test fn add_ms_is_elapsed_time(n int, k int)
+    t := date.utc(instant(n))
+    assert_eq(t.add_ms(k % 1_000_000_000).since(t), k % 1_000_000_000)
+
+@test fn local_wall_time_survives_days(n int)
+    ms := 1_000_000_000_000 + n % 2_000_000_000_000
+    t := date.at(ms, "Europe/Berlin") else return
+    next := t.add_days(1)
+    assert_eq(next.date, t.date.add_days(1))
+    assert(next.hour == t.hour or next.hour == t.hour + 1 or next.hour == t.hour - 1)

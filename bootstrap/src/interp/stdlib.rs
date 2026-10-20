@@ -295,6 +295,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
                 Value::Int(now.map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)))
             }
+            ("tz", "offset") => super::tz::offset(&str_arg(0), values[1].int()).map_or(Value::None, Value::Int),
+            ("tz", "system") => text(super::tz::system()),
             ("time", "sleep_ms") => {
                 let ms = values[0].int();
                 if ms < 0 {

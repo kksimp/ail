@@ -68,6 +68,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.tz.1-2: reads the tz database files, and `TZ`.
+        "tz" => (&["offset", "system"], &["fs", "env"]),
         // std.tensor.1: values only, so no effects.
         "tensor" => (&["from", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
@@ -803,6 +805,13 @@ mod tests {
         let src = "use std.time\nuse std.env\nuse std.proc\nfn main()\n    t := time.now_ms()\n    e := env.cwd()\n    r := proc.run(\"ls\", [])\n";
         let (prog, resolved) = front(src);
         assert_eq!(set(&prog, &resolved, "fn:main"), ["clock", "env", "io", "proc"]);
+    }
+
+    #[test]
+    fn tz_reads_files_and_env() {
+        let src = "use std.tz\nfn main()\n    print(tz.offset(\"UTC\", 0))\n    print(tz.system())\n";
+        let (prog, resolved) = front(src);
+        assert_eq!(set(&prog, &resolved, "fn:main"), ["env", "fs", "io"]);
     }
 
     #[test]
