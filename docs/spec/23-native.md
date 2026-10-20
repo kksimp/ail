@@ -30,14 +30,24 @@ lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round` (type.num.9, ADR 0591), the bit operations of expr.bit.1, and `Map[K, V]` and `Set[T]` over
-`int`, `bool` and `str` keys: `Map[K, V]()`, `Set[T]()`, map and set
-literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`, `contains`,
-`remove` (a statement for a map), `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table, and constants
-that are lists of constants. Any other construct is
-reported at its position under this rule, all of them at once, and nothing is
-built. *(ADRs 0384, 0390, 0391, 0392, 0393, 0568, 0569, 0570, 0591)*
+`round` (type.num.9, ADR 0591), the bit operations of expr.bit.1, and
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys: `Map[K, V]()`,
+`Set[T]()`, map and set literals, `m[k]`, `m[k] = v`, `m[k] op= v`,
+`m.get(k) else ...`, `contains`, `remove` (a statement for a map), `len`,
+`keys`, `values`, `push(k, x)` on a `Map[K, List[T]]`, `s.add(x)`,
+`for x in s`, printing a table, and constants that are lists of constants.
+Also: format specifications on numbers, `bool` and `str` in `print`
+(lex.str.7, type.str.11: width, fill, alignment, `.N`, `x`); `s.to_float()`
+in the `else` forms; and the calls `fs.exists`, `fs.read_text`,
+`fs.write_text`, `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`,
+`fs.rename`, `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line`,
+`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
+(std.fs, std.env, std.io, std.time). A call that can fail is in the subset
+only as the value of `else` with a fallback value, a statement that leaves,
+or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
+Any other construct is reported at its position under this rule, all of them
+at once, and nothing is built. *(ADRs 0384, 0390, 0391, 0392, 0393, 0568,
+0569, 0570, 0580, 0582, 0591)*
 
 ```ail
 fn steps(n int) int
@@ -77,3 +87,20 @@ $ ail build examples/hello.ail
 $ ./hello
 Hello, world!
 ```
+
+## Optimisation
+
+**native.bce.1** — An optimisation that removes a list bounds check
+(type.coll.4) from a loop keeps native.build.1: when the lengths the check
+would have tested are not known to be enough, the loop runs with the check,
+and traps on the same iteration with the same message. A list that a call in
+the loop receives, or a `push` in the loop grows, is never assumed to keep
+its length. *(ADR 0577)*
+
+**native.bce.2** — An access `xs[i]` has no bounds check when `i` was
+already used to index `xs` on every path to it, or is `xs.len()` taken
+before a `push` to `xs` that is on every path to it. This holds while no
+operation in the program shortens a list. *(ADR 0578)*
+
+**native.bce.3** — A list's capacity is not observable: a native executable
+may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*

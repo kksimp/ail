@@ -290,9 +290,9 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     cur = join
     Val(id: r, ty: vt)
 
-fn is_get_call(e ast.Expr) bool
+fn Lower.is_get_call(self, e ast.Expr) bool
     match e
-        Method(_, n, _, a) => n == "get" and a.len() == 1
+        Method(r, n, _, a) => n == "get" and a.len() == 1 and not self.is_module(r, "env")
         _ => false
 
 # ---- methods ----

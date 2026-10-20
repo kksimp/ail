@@ -542,6 +542,12 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
+        "data" =>
+            d := out_gpr(i.dst, S1)
+            a.ldr(d, gpr(i.args[0], S0), 16)
+            put_gpr(i.dst, d)
+        "ldx" => indexed_load(i)
+        "stx" => indexed_store(i)
         "len" =>
             d := out_gpr(i.dst, S1)
             a.ldr(d, gpr(i.args[0], S0), 0)
@@ -838,6 +844,58 @@ fn Gen.list_set(mut self, i mir.Inst)
         a.str(r, S2, at[1])
     else
         a.str_idx(r, S2, at[0])
+
+## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577):
+## the index's register, or -1 with a constant index's element number.
+fn Gen.indexed_at(mut self, i mir.Inst) int
+    if k := imm(i.args[1])
+        if k >= 0 and k < 4095
+            return -1 - k
+    gpr(i.args[1], S1)
+
+fn Gen.indexed_load(mut self, i mir.Inst)
+    base := gpr(i.args[0], S0)
+    x := indexed_at(i)
+    if f.vals[i.dst].is_float()
+        d := out_fpr(i.dst, X0)
+        if x < 0
+            a.ldr_d(d, base, 8 * (-1 - x))
+        else
+            a.ldr_d_idx(d, base, x)
+        put_fpr(i.dst, d)
+        return
+    d := out_gpr(i.dst, S1)
+    if i.imm == 1
+        if x < 0
+            a.ldrb_off(d, base, -1 - x)
+        else
+            a.ldrb_idx(d, base, x)
+    elif x < 0
+        a.ldr(d, base, 8 * (-1 - x))
+    else
+        a.ldr_idx(d, base, x)
+    put_gpr(i.dst, d)
+
+fn Gen.indexed_store(mut self, i mir.Inst)
+    v := i.args[2]
+    base := gpr(i.args[0], S0)
+    x := indexed_at(i)
+    if f.vals[v].is_float()
+        if x < 0
+            a.str_d(fpr(v, X0), base, 8 * (-1 - x))
+        else
+            a.str_d_idx(fpr(v, X0), base, x)
+        return
+    r := gpr(v, 0)
+    if i.imm == 1
+        if x < 0
+            a.strb_off(r, base, -1 - x)
+        else
+            a.strb_idx(r, base, x)
+    elif x < 0
+        a.str(r, base, 8 * (-1 - x))
+    else
+        a.str_idx(r, base, x)
 
 # ---- trap stubs ----
 
