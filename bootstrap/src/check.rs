@@ -392,6 +392,8 @@ struct Pending {
     /// The literal, and whether it is `{}` (a map or a set).
     lit: Pos,
     brace: bool,
+    /// Whether it is `none`, typed by its first assignment (type.opt.9).
+    opt: bool,
     /// Its index in `locals`.
     index: usize,
 }
@@ -1641,7 +1643,11 @@ impl<'p> Checker<'p> {
             if matches!(got, Ty::Res(..) | Ty::Union(_)) || self.is_error(&got) {
                 self.mismatch("expr.block.2", at, &sig.ret, &got);
             } else {
-                self.error("expr.block.2", at, msg);
+                let mut d = Diagnostic::new("expr.block.2", at, msg);
+                if f.ret.is_some() {
+                    d = d.note(ret_pos, "the return type is declared here");
+                }
+                self.diags.push(d);
             }
         }
         self.record_locals(0);
@@ -1695,11 +1701,14 @@ impl<'p> Checker<'p> {
                 let empty = match value {
                     Expr::List(xs, _) | Expr::Set(xs, _) => xs.is_empty(),
                     Expr::Map(xs, _) => xs.is_empty(),
+                    // type.opt.9: a `mut` local that starts as `none`.
+                    Expr::None(_) => *mutable,
                     _ => false,
                 };
                 if empty && otherwise.is_none() {
                     if self.declare(name, *pos) {
-                        let brace = !matches!(value, Expr::List(..));
+                        let opt = matches!(value, Expr::None(_));
+                        let brace = !matches!(value, Expr::List(..) | Expr::None(_));
                         let index = self.locals.len();
                         self.locals.push(Local {
                             name: name.clone(),
@@ -1708,7 +1717,7 @@ impl<'p> Checker<'p> {
                             kind: Kind::Binding,
                             decl: Some(*pos),
                         });
-                        self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, index });
+                        self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, opt, index });
                     }
                     return Ty::Unit;
                 }
@@ -2042,7 +2051,9 @@ impl<'p> Checker<'p> {
         let what = if is_prelude(pos) || !self.prog.module_at(pos).is_empty() {
             return true;
         } else if self.fns.contains_key(name) || PRELUDE.contains(&name) {
-            "a function"
+            // A local may shadow a function (ADR 0469); a call of it in the
+            // local's block is expr.call.1.
+            return true;
         } else if self.types.contains_key(name) || BUILTIN_TYPES.contains(&name) {
             "a type"
         } else if self.consts.contains_key(name) {
@@ -2083,6 +2094,16 @@ impl<'p> Checker<'p> {
     /// Report a use of pending local `k` before its type is known.
     fn unsettled(&mut self, k: usize, at: Pos) {
         let p = self.pending.remove(k);
+        if p.opt {
+            self.error_help(
+                "type.opt.9",
+                at,
+                format!("the type of `{}` isn't known yet", p.name),
+                format!("its first assignment should fix it, such as `{} = e`", p.name),
+            );
+            self.locals[p.index].ty = Ty::Err;
+            return;
+        }
         let ctor = if p.brace { "`Map[K, V]()` or `Set[T]()`" } else { "`List[T]()`" };
         let first =
             if p.brace { format!("`{0}.add(x)` or `{0}[k] = v`", p.name) } else { format!("`{}.push(x)`", p.name) };
@@ -2109,6 +2130,15 @@ impl<'p> Checker<'p> {
     fn end_scope(&mut self, mark: usize) {
         while let Some(k) = self.pending.iter().position(|p| p.index >= mark) {
             let p = self.pending.remove(k);
+            if p.opt {
+                self.error_help(
+                    "type.opt.9",
+                    p.lit,
+                    format!("nothing fixes the type of `{}`", p.name),
+                    format!("assign it a value with `{} = e` first", p.name),
+                );
+                continue;
+            }
             let ctor = if p.brace { "`Map[K, V]()` or `Set[T]()`" } else { "`List[T]()`" };
             self.error_help(
                 "type.coll.13",
@@ -2320,9 +2350,17 @@ impl<'p> Checker<'p> {
                 Expr::Name(n, _) => {
                     if let Some(k) = self.pending_of(n) {
                         let vt = self.quiet_type(value);
-                        match (&vt, self.pending[k].brace) {
-                            (Ty::List(_), false) | (Ty::Map(..) | Ty::Set(_), true) => self.settle(k, vt),
-                            _ => {}
+                        if self.pending[k].opt {
+                            // type.opt.9: the first value gives `T?` (type.opt.5).
+                            if !matches!(vt, Ty::Err | Ty::Unit | Ty::Never) {
+                                let t = if matches!(vt, Ty::Opt(_)) { vt } else { Ty::Opt(Box::new(vt)) };
+                                self.settle(k, t);
+                            }
+                        } else {
+                            match (&vt, self.pending[k].brace) {
+                                (Ty::List(_), false) | (Ty::Map(..) | Ty::Set(_), true) => self.settle(k, vt),
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -2418,6 +2456,8 @@ impl<'p> Checker<'p> {
         // fix.edit.1: a `:=` binding that is changed later becomes `mut`.
         if let Some(decl) = decl {
             d = d.fix(format!("declare `{root}` with `mut`"), vec![Edit::insert(decl, "mut ")]);
+            // The binding's own position: where an agent changes the declaration.
+            d = d.note(decl, format!("`{root}` is declared here"));
         }
         self.diags.push(d);
     }
@@ -2718,7 +2758,7 @@ impl<'p> Checker<'p> {
                 e => e,
             };
             return match want {
-                Some(t @ Ty::List(_)) if !self.pending[k].brace => {
+                Some(t @ Ty::List(_)) if !self.pending[k].brace && !self.pending[k].opt => {
                     let t = t.clone();
                     self.settle(k, t.clone());
                     t
@@ -3756,6 +3796,7 @@ impl<'p> Checker<'p> {
         // type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
         if let Expr::Name(n, _) = recv
             && let Some(k) = self.pending_of(n)
+            && !self.pending[k].opt
             && let [arg] = args
         {
             match (name, self.pending[k].brace) {
@@ -4334,6 +4375,10 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&t, operand.pos()) {
             return Ty::Err;
         }
+        // std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
+        if op == UnOp::Neg && self.tensor_elem(&t).is_some() {
+            return t;
+        }
         if op == UnOp::Neg && t == Ty::Float {
             return Ty::Float;
         }
@@ -4546,7 +4591,28 @@ impl<'p> Checker<'p> {
             agree.block(self, body, pos);
             self.end_scope(mark);
         }
-        if need && els.is_none() { Ty::Err } else { agree.result() }
+        if need && els.is_none() {
+            return Ty::Err;
+        }
+        let nones = agree.none_at.clone();
+        let t = agree.result();
+        // type.opt.10: a bare `none` branch takes `T?` from the other branches.
+        match t {
+            _ if nones.is_empty() => t,
+            Ty::Opt(_) | Ty::Err => t,
+            Ty::Never => {
+                for at in nones {
+                    self.error_help(
+                        "type.opt.4",
+                        at,
+                        "the type of `none` isn't known here",
+                        "use `none` where a `T?` is expected, e.g. as an argument or a return value",
+                    );
+                }
+                Ty::Err
+            }
+            _ => Ty::Opt(Box::new(t)),
+        }
     }
 
     /// Help for `else` or `if name :=` on a value that is never absent, when
@@ -4938,14 +5004,23 @@ struct Agree {
     failed: bool,
     part: &'static str,
     construct: &'static str,
+    /// The `none` branches, typed once the other branches are (type.opt.10).
+    none_at: Vec<Pos>,
 }
 
 impl Agree {
     fn new(expect: Option<&Ty>, need: bool, part: &'static str, construct: &'static str) -> Self {
-        Agree { expect: expect.cloned(), need, first: None, failed: false, part, construct }
+        Agree { expect: expect.cloned(), need, first: None, failed: false, part, construct, none_at: Vec::new() }
     }
 
     fn block<'p>(&mut self, c: &mut Checker<'p>, body: &'p Block, pos: Pos) {
+        if self.need
+            && self.expect.is_none()
+            && let [Stmt::Expr(Expr::None(at))] = body.as_slice()
+        {
+            self.none_at.push(*at);
+            return;
+        }
         let hint = self.expect.clone().or_else(|| self.first.clone());
         let t = c.block(body, hint.as_ref(), self.need);
         if !self.need {
@@ -5135,7 +5210,13 @@ mod tests {
     #[test]
     fn no_shadowing() {
         assert_eq!(rules("fn main()\n    x := 1\n    x := 2\n"), vec!["expr.bind.4"]);
-        assert_eq!(rules("fn main()\n    main := 1\n"), vec!["expr.bind.5"]);
+        assert_eq!(rules("struct Point\n    x int\nfn main()\n    Point := 1\n"), vec!["expr.bind.5"]);
+        // A local may shadow a function, and a call of it in the block is expr.call.1 (ADR 0469).
+        assert!(rules("fn word(s str) str\n    s\nfn main()\n    word := \"x\"\n    print(word)\n").is_empty());
+        assert_eq!(
+            rules("fn word(s str) str\n    s\nfn main()\n    word := \"x\"\n    print(word(\"y\"))\n"),
+            vec!["expr.call.1"]
+        );
         assert_eq!(rules("fn main()\n    x := 1\n    for i in 0..3\n        x := i\n"), vec!["expr.bind.4"]);
         // Sibling blocks may reuse a name.
         assert!(rules("fn main()\n    if true\n        x := 1\n    else\n        x := 2\n").is_empty());

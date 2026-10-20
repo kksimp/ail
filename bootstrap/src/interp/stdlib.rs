@@ -208,6 +208,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     return stop("std.io.4", pos, format!("exit status {code} is outside 0 to 255"));
                 }
                 self.flush(pos)?;
+                super::spawn::reap_all();
                 std::process::exit(code as i32);
             }
             ("proc", "run") => {
@@ -256,6 +257,80 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            ("proc", "start") => {
+                let cmd = str_arg(0);
+                let Value::List(list) = &values[1] else { unreachable!("checked: List[str]") };
+                let argv: Vec<String> = list
+                    .iter()
+                    .map(|v| match v {
+                        Value::Str(s) => s.to_string(),
+                        other => unreachable!("checked: str, found {other:?}"),
+                    })
+                    .collect();
+                let timeout = match values.get(2) {
+                    Some(Value::Int(ms)) if *ms < 0 => {
+                        return stop("std.proc.4", pos, format!("can't time out after {ms} milliseconds"));
+                    }
+                    Some(Value::Int(ms)) => Some(*ms as u64),
+                    _ => None,
+                };
+                self.flush(pos)?;
+                let failed = |this: &Self, kind: &str| {
+                    let s = this.structs["proc.ProcError"];
+                    fail(Value::Struct(s, Rc::new(vec![Value::Str(cmd.clone()), text(kind)])), pos)
+                };
+                if self.cancelled() {
+                    return Ok(failed(self, "cancelled"));
+                }
+                match super::spawn::start(&cmd, &argv, timeout) {
+                    Ok(c) => {
+                        let stdin = self.child_chan(None, Some(c.stdin));
+                        let out = self.child_chan(Some(c.out), None);
+                        let err = self.child_chan(Some(c.err), None);
+                        let s = self.structs["proc.Child"];
+                        Value::Struct(s, Rc::new(vec![Value::Int(i64::from(c.pid)), stdin, out, err]))
+                    }
+                    Err(kind) => failed(self, kind),
+                }
+            }
+            ("proc", "wait") => {
+                let Value::Struct(_, fields) = &values[0] else { unreachable!("checked: a Child") };
+                let pid = fields[0].int() as u32;
+                // std.proc.6: other tasks run while the child does.
+                let ended = loop {
+                    if let Some(e) = super::spawn::try_wait(pid) {
+                        break e;
+                    }
+                    if self.cancelled() {
+                        let e = super::spawn::kill(pid);
+                        let cmd = e.map_or_else(String::new, |e| e.cmd);
+                        let s = self.structs["proc.ProcError"];
+                        return Ok(fail(Value::Struct(s, Rc::new(vec![Value::Str(cmd.into()), text("cancelled")])), pos));
+                    }
+                    self.yield_turn(pos)?;
+                };
+                if ended.timed_out {
+                    let s = self.structs["proc.ProcError"];
+                    return Ok(fail(Value::Struct(s, Rc::new(vec![Value::Str(ended.cmd.into()), text("timed_out")])), pos));
+                }
+                Value::Int(exit_status(&ended.status))
+            }
+            ("proc", "kill") => {
+                let Value::Struct(_, fields) = &values[0] else { unreachable!("checked: a Child") };
+                // Already ended and waited: killing it again is not an error.
+                Value::Int(super::spawn::kill(fields[0].int() as u32).map_or(-1, |e| exit_status(&e.status)))
+            }
+            ("task", "select") => {
+                let Value::List(list) = &values[0] else { unreachable!("checked: List[Channel]") };
+                let chans: Vec<usize> = list
+                    .iter()
+                    .map(|v| match v {
+                        Value::Handle(super::tasks::Handle::Channel(c)) => *c,
+                        other => unreachable!("checked: a channel, found {other:?}"),
+                    })
+                    .collect();
+                return self.select(&chans, pos);
+            }
             ("proc", "which") => super::osext::which(&str_arg(0)).map_or(Value::None, text),
             ("net", "get" | "post") => {
                 let url = str_arg(0);
@@ -296,6 +371,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
                 Value::Int(now.map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)))
             }
+            ("tz", "offset") => super::tz::offset(&str_arg(0), values[1].int()).map_or(Value::None, Value::Int),
+            ("tz", "system") => text(super::tz::system()),
             ("time", "sleep_ms") => {
                 let ms = values[0].int();
                 if ms < 0 {

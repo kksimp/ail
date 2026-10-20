@@ -1,0 +1,19 @@
+# Harness smoke test for tools/perfbench/race.py: pure integer code with C and
+# Python twins (race_smoke.c, race_smoke.py) that print the same bytes.
+
+fn collatz(start int) int
+    mut n := start
+    mut steps := 0
+    while n != 1
+        if n % 2 == 0
+            n = n / 2
+        else
+            n = 3 * n + 1
+        steps += 1
+    steps
+
+fn main()
+    mut total := 0
+    for i in 1..30000
+        total += collatz(i)
+    print(total)

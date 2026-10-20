@@ -261,6 +261,12 @@ reading was recorded as OQ-090 and the designer accepted it in
 
 ### 6.4 First prototype and cost
 
+**Status (2026-10-20, lane 154):** the CPU slice has float division and the
+activations `relu`, `sigmoid` and `tanh` ([ADR 0507](../decisions/0507-tensor-divide-and-activations.md)).
+On 1,000,000 elements, four passes take 0.25–0.32 s in AIL against 0.39–0.50 s
+in CPython (Linux x86-64). `conv2d`, `f32`, indexing, slicing, broadcasting,
+unary `-` and fusion are not done yet.
+
 1. **`std.tensor` on the CPU in the bootstrap** (about one lane-night):
    the type, the operations, lazy graph, exact CPU evaluation, tests. This
    fixes the API before any device work.

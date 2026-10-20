@@ -49,15 +49,15 @@ at run time.
 - **Cons:** there is no `ail build` and no linker yet; dynamic loading is
   also what the native backend does for libc (ADR 0105, `native-abi.md`).
 
-### Option D — Rust's spelling (\`extern "C" fn f(a: f64) -> f64\`) or an \`extern c\` block
-Measured with \`tools/tokbench\` on four declarations (hypot, abs, strlen, atoi),
+### Option D — Rust's spelling (`extern "C" fn f(a: f64) -> f64`) or an `extern c` block
+Measured with `tools/tokbench` on four declarations (hypot, abs, strlen, atoi),
 mean of five tokenizers:
 
 | Spelling | Mean tokens |
 |---|---|
-| \`extern c "libm" fn hypot(a float, b float) float\` (chosen) | 54.4 |
-| \`extern "C" fn hypot(a: f64) -> f64\` with Rust types | 77.8 |
-| one \`extern c "lib"\` block of indented \`fn\` lines | 54.6 |
+| `extern c "libm" fn hypot(a float, b float) float` (chosen) | 54.4 |
+| `extern "C" fn hypot(a: f64) -> f64` with Rust types | 77.8 |
+| one `extern c "lib"` block of indented `fn` lines | 54.6 |
 
 The Rust-like form costs 43% more (ADR 0011: resemblance to Rust is not a
 goal). The block form ties the one-line form (under 2%), so the one-line form

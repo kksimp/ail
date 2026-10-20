@@ -6,7 +6,7 @@
 ##
 ## Grammar rules: gram.fn.1-2, gram.list.1, gram.generic.1, gram.syntax.1,
 ## gram.attr.1-3, gram.foreign.1, gram.rec.1, lex.stmt.1, lex.kw.1,
-## type.struct.1-3, type.enum.1-2, expr.bind.1-3, expr.if.1-8,
+## type.struct.1-3, type.enum.1-2, expr.bind.1-3, expr.if.1-6, expr.if.8,
 ## expr.loop.1-6, expr.match.1-9, expr.prec.1-2, expr.op.1, expr.comp.1-2,
 ## expr.key.1, gen.decl.1, gen.bound.1, gen.method.1-3, gen.infer.2,
 ## trait.decl.1-2, trait.impl.1, trait.any.1, trait.super.1, err.else.1-6,
@@ -549,11 +549,11 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
     mut generics := List[ast.GenericParam]()
     if at_sym("[")
         generics = generic_params()?
-    mut owner := absent[ast.Owner]()
+    mut owner := none
     mut name := first.name
     mut pos := first.pos
     if eat_sym(".")
-        mut params := absent[List[ast.GenericParam]]()
+        mut params := none
         if generics.len() > 0
             params = generics
         generics = []
@@ -607,7 +607,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         sym := if at_sym("->") then "->" else ":"
         error_fix("gram.fn.2", here(), "there is no `{sym}`; the return type follows `)` directly")
         i += 1
-    mut ret := absent[ast.TypeRef]()
+    mut ret := none
     if tag_at(0) == "id" or at_sym("!") or at_sym("*") or at_kw("any") or at_kw("ref")
         ret = type_ref("a return type", "gram.fn.2")?
     full := if o := owner then "`{o.name}.{name}`" else "`{name}`"
@@ -720,7 +720,7 @@ fn Parser.impl_decl(mut self)
     target := dotted_name("the implementing type after `for`", "trait.impl.1") else
         skip_statement()
         return
-    mut params := absent[List[ast.GenericParam]]()
+    mut params := none
     if at_sym("[")
         ps := generic_params() else
             skip_statement()
@@ -769,7 +769,7 @@ fn Parser.fn_block(mut self, within ast.Within, what str) List[int]
 fn Parser.type_ref(mut self, expected str, rule str) ast.TypeRef?
     pos := here()
     if eat_sym("!")
-        mut ok := absent[ast.TypeRef]()
+        mut ok := none
         if tag_at(0) == "id"
             ok = optional_type(expected, rule)?
         elif at_kw("any")
@@ -1164,7 +1164,7 @@ fn Parser.comp_clauses(mut self) List[ast.CompFor]?
             unexpected("`in` after the comprehension's variable", "expr.comp.2")
             return none
         iter := range()?
-        mut cond := absent[ast.Expr]()
+        mut cond := none
         if eat_kw("if")
             cond = expression()?
         clauses.push(ast.CompFor(
@@ -1216,14 +1216,14 @@ fn Parser.else_block_follows(self) bool
 ## `a..b` and `a..=b` (expr.loop.3): the loosest operators. A bound may be
 ## left out before `]`, for a slice (type.coll.10).
 fn Parser.range(mut self) ast.Expr?
-    mut lo := absent[ast.Expr]()
+    mut lo := none
     if not at_sym("..") and not at_sym("..=")
         lo = or_expr()?
     inclusive := at_sym("..=")
     if not at_sym("..") and not inclusive
         return lo
     pos := bump().pos
-    mut hi := absent[ast.Expr]()
+    mut hi := none
     if not at_sym("]")
         hi = or_expr()?
     ast.Expr.Range(lo: lo, hi: hi, inclusive: inclusive, pos: pos)
@@ -1417,7 +1417,7 @@ fn Parser.postfix(mut self) ast.Expr?
         elif at_sym("?")
             # `e?` propagates; `e? "message"` also adds context (err.prop.1, err.ctx.2).
             pos := bump().pos
-            mut context := absent[ast.Expr]()
+            mut context := none
             if tag_at(0) == "str" or tag_at(0) == "interp"
                 context = primary()?
             e = ast.Expr.Try(expr: e, context: context, pos: pos)
@@ -1429,14 +1429,14 @@ fn Parser.postfix(mut self) ast.Expr?
 fn Parser.call_args(mut self) List[ast.Arg]?
     mut args := List[ast.Arg]()
     while not at_sym(")")
-        mut label := absent[ast.Ident]()
+        mut label := none
         if tag_at(0) == "id" and sym_at(1) == ":"
             label = take_name("a field name", "type.struct.3")?
             i += 1
         mutable := eat_kw("mut")
         moved := not mutable and eat_kw("move")
         # expr.key.1: `by: |x| e`, a key function.
-        mut param := absent[ast.Ident]()
+        mut param := none
         if eat_sym("|")
             param = take_name("a parameter name after `|`", "expr.key.1")?
             expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
@@ -1486,13 +1486,17 @@ fn Parser.primary(mut self) ast.Expr?
             if k == "self"
                 i += 1
                 return ast.Expr.Name(name: "self", pos: pos)
-            if k == "if" or k == "match"
+            if k == "if"
+                diag("expr.if.8", pos)
+                return none
+            if k == "match"
                 diag("gram.syntax.1", pos)
                 return none
         Sym(s) =>
             if s == "("
                 i += 1
-                inner := range()?
+                # expr.if.8: a parenthesised one-line `if` is an operand.
+                inner := if at_kw("if") then if_expr()? else range()?
                 inner2 := else_expr(inner)?
                 expect_sym(")", "`)`", "gram.syntax.1")?
                 return inner2
@@ -1607,19 +1611,15 @@ fn Parser.sub_expression(mut self, code List[Token]) ast.Expr?
     diags.extend(sub.diags)
     if clean then e else none
 
-## The none of any optional type, where nothing else names the type.
+## The none of any optional type, where nothing else names the type (a local
+## that is read before its first assignment, type.opt.9).
 fn absent[T]() T?
-    none
-
-fn char_text(c char?) str?
-    if v := c
-        return "{v}"
     none
 
 fn ast_spec(f FormatSpec) ast.FormatSpec
     ast.FormatSpec(
-        fill: char_text(f.fill),
-        align: char_text(f.align),
+        fill: if v := f.fill then "{v}" else none,
+        align: if v := f.align then "{v}" else none,
         width: f.width,
         precision: f.precision,
         hex: f.hex,
@@ -1634,8 +1634,8 @@ fn Parser.if_expr(mut self) ast.Expr?
             return if_then(cond, pos)
     body := block("the `if` condition", "expr.if.1")?
     mut branches := [ast.Branch(cond: cond, body: body)]
-    mut els := absent[List[ast.Stmt]]()
-    mut else_err := absent[ast.Ident]()
+    mut els := none
+    mut else_err := none
     while true
         if eat_kw("elif")
             c := condition()?
@@ -1746,11 +1746,11 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             while eat_sym(".")
                 path.push(take_name("a variant name after `.`", "expr.match.4")?.name)
             name := path[path.len() - 1]
-            mut qualifier := absent[str]()
+            mut qualifier := none
             if path.len() > 1
                 qualifier = path[0..path.len() - 1].join(".")
             # `Variant(a, _)`: one binding per field (expr.match.6).
-            mut bindings := absent[List[ast.Ident]]()
+            mut bindings := none
             if eat_sym("(")
                 mut names := List[ast.Ident]()
                 while not at_sym(")")

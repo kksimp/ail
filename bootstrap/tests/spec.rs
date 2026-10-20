@@ -91,7 +91,7 @@ fn has_main(code: &str) -> bool {
     code.lines().any(|l| l.starts_with("fn main"))
 }
 
-const DECLS: [&str; 13] =
+const DECLS: [&str; 15] =
     ["struct ", "enum ", "error ", "unique ", "fn ", "unsafe fn ", "extern ", "trait ", "impl ", "const ", "use ", "type ", "@", "pub ", "#"];
 
 /// Split a fragment into top-level declarations and a `main` body.
