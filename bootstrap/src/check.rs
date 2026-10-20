@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+pub mod effects;
 mod testing;
 mod traits;
 
@@ -140,6 +141,9 @@ pub struct Resolved {
     pub optional_try: std::collections::HashSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
     pub float_literals: std::collections::HashSet<Pos>,
+    /// The function each method or associated function call runs, by the
+    /// position of its name, when that is known statically (eff.infer.3).
+    pub targets: HashMap<Pos, usize>,
     pub std: Std,
 }
 
@@ -218,6 +222,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     }
     c.resolved.impls = c.impl_of.clone();
     c.resolved.std = c.std;
+    c.diags.extend(effects::check_pure(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 
@@ -3097,6 +3102,7 @@ impl<'p> Checker<'p> {
                         if mutable {
                             self.require_mutable(recv, Some("trait.method.3"), "the receiver of a `mut self` method");
                         }
+                        self.resolved.targets.insert(pos, *i);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
                                 sig.generics[..sig.owner].iter().copied().zip(a.iter().cloned()).collect()
@@ -3163,6 +3169,9 @@ impl<'p> Checker<'p> {
             self.require_mutable(recv, Some("trait.method.3"), "the receiver of a `mut self` method");
         }
         self.resolved.calls.insert(pos, Call::Trait(tr));
+        if let Some(&k) = traits::con_of(rt).and_then(|c| self.impl_of.get(&(tr, c))) {
+            effects::record_impl_target(self.prog, &mut self.resolved, pos, k, tr, name);
+        }
         let binds = vec![(self.trait_self[tr], rt.clone())];
         self.check_call(name, &sig, binds, args, Some(recv), pos, expect)
     }
@@ -3253,6 +3262,7 @@ impl<'p> Checker<'p> {
             }
             None => Vec::new(),
         };
+        self.resolved.targets.insert(pos, i);
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 

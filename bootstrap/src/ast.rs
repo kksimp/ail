@@ -158,6 +158,10 @@ impl FnDecl {
     pub fn top_level(&self) -> bool {
         self.within == Within::TopLevel
     }
+
+    pub fn has_attr(&self, name: &str) -> bool {
+        self.attrs.iter().any(|a| a.name == name)
+    }
 }
 
 /// `self` or `mut self` (trait.method.1).

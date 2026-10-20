@@ -76,6 +76,7 @@ aren't run.
 | 12 | [Modules and programs](12-modules.md) | `mod` | Drafted (partial) |
 | 13 | [Unsafe](13-unsafe.md) | `unsafe` | Drafted (partial) |
 | 14 | [FFI and C interoperability](14-ffi.md) | `ffi` | Drafted (partial) |
+| 18 | [Effects and capabilities](18-effects.md) | `eff` | Drafted (partial) |
 | 19 | [Testing](19-testing.md) | `test` | Drafted (partial) |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |
 | 16 | Reflection | `refl` | Not started |

@@ -20,10 +20,13 @@ commands:
   run FILE      check and run an AIL program
   check FILE    check a program without running it
   test FILE     run the program's `@test` functions
+  effects FILE  print each function's inferred effects (eff.infer.6)
   version       print the version
 
 options:
   --json        report diagnostics as JSON lines (for tools and AI agents)
+  --deny LIST   with run or check: reject a program whose `main` reaches a
+                denied capability (fs, env, proc, clock, net, or all) (eff.cap.1)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -32,11 +35,19 @@ const STACK_BYTES: usize = 256 * 1024 * 1024;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let json = args.iter().any(|a| a == "--json");
-    let rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
+    let mut rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
+    let deny = match take_deny(&mut rest) {
+        Ok(d) => d,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    };
     match rest.as_slice() {
-        ["run", file] => run_file(file, json, true),
-        ["check", file] => run_file(file, json, false),
+        ["run", file] => run_file(file, json, true, &deny),
+        ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => run_tests(file, json),
+        ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -48,7 +59,51 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
+/// Remove `--deny LIST` from the arguments and return the denied
+/// capabilities (eff.cap.2).
+fn take_deny(args: &mut Vec<&str>) -> Result<Vec<&'static str>, String> {
+    let Some(at) = args.iter().position(|a| *a == "--deny") else { return Ok(Vec::new()) };
+    let Some(list) = args.get(at + 1).copied() else {
+        return Err("`--deny` needs a list of capabilities, e.g. `--deny fs,proc`".into());
+    };
+    args.drain(at..at + 2);
+    check::effects::parse_deny(list)
+}
+
+/// `ail effects FILE [--json]`: each function's effect set (eff.infer.6).
+fn effects_file(path: &str, json: bool) -> ExitCode {
+    let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
+    print!("{}", check::effects::render(&check::effects::effects_of(&program, &resolved), json));
+    ExitCode::SUCCESS
+}
+
+/// Lex, parse and check `path`, reporting diagnostics; `None` if the
+/// program is rejected.
+fn front_end(path: &str, json: bool) -> Option<(ast::Program, check::Resolved)> {
+    let src = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: can't read {path}: {e}");
+            return None;
+        }
+    };
+    let (tokens, mut diags) = lexer::lex(&src);
+    let (program, parse_diags) = parser::parse_with_prelude(tokens);
+    diags.extend(parse_diags);
+    let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
+    diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
+    let mut resolved = check::Resolved::default();
+    if diags.is_empty() {
+        (diags, resolved) = check::check(&program);
+    }
+    let rejected = diags.iter().any(|d| !d.warning);
+    if !diags.is_empty() {
+        diag::report(&mut diags, path, &src, json);
+    }
+    (!rejected).then_some((program, resolved))
+}
+
+fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -67,6 +122,9 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
+        if !deny.is_empty() {
+            diags.extend(check::effects::check_denied(&program, &resolved, deny));
+        }
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {

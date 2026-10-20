@@ -1,0 +1,4 @@
+fn:apply {io, mutates}
+fn:main {fail, io}
+fn:parse {fail}
+fn:total_added {fail}

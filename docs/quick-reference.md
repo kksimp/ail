@@ -10,6 +10,8 @@
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
+./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -440,3 +442,15 @@ Two `mut` arguments of one call can't refer to the same value.
 
 A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 `assert` and `assert_eq` also work in ordinary code (a failure traps).
+
+## Effects
+
+Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
+`fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
+`fs`, `env`, `proc`, `clock`, `net`. A call through `any Trait` counts every
+implementation.
+
+```ail
+@pure fn area(w int, h int) int   # error if it reaches print or a capability
+    w * h
+```
