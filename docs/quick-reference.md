@@ -327,7 +327,7 @@ fn main()
 
 ## Control flow
 
-```ail
+```ail skip=context
 if a < b
     print("less")
 elif a == b
@@ -399,7 +399,7 @@ no `break` can end a function too.
 
 ## Strings and characters
 
-```ail
+```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
 t := """
     line one
@@ -427,7 +427,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 
 ## Lists
 
-```ail
+```ail skip=context
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
@@ -457,7 +457,7 @@ top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:
 
-```ail
+```ail skip=context
 for mut item in items      # `items` must be `mut`
     item.qty += 1          # changes the element
 ```
@@ -501,7 +501,7 @@ fn main()
 
 ## Maps and sets
 
-```ail
+```ail skip=context
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["ann"] += 1                       # `op=` on a missing key starts from 0
@@ -525,7 +525,7 @@ floats.
 `Json` is built in, with no import (`json.type.1`). It is read only when the
 program uses it.
 
-```ail
+```ail skip=context
 doc := parse_json("\{\"a\": [1, \"x\"]}")?   # Json ! JsonError; err.at is the char offset
 doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/as_bool/as_arr/as_obj)
 doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
@@ -539,7 +539,7 @@ the type isn't known. A program that declares its own `Json` keeps it.
 
 Derive the conversions of your own types (`json.derive.1-2`):
 
-```ail
+```ail skip=context
 struct Todo
     id str
     hours float
@@ -564,7 +564,7 @@ Enums: a variant without fields is its name (`"Red"`), one with fields
 Assigning or passing a value copies it (cheaply): changing `b` after
 `b := a` never changes `a`.
 
-```ail
+```ail skip=context
 fn bump(mut p Point)   # the caller sees the change
     p.x += 1
 
@@ -578,7 +578,7 @@ Two `mut` arguments of one call can't refer to the same value.
 `ref T` is the one way to share a value: copies of a reference see each
 other's changes, and fields and methods reach the contents directly.
 
-```ail
+```ail skip=context
 root := ref Node(value: 1, children: [])
 alias := root
 alias.value = 2        # root.value is 2; any copy may change the cell
@@ -608,7 +608,7 @@ close(move f)          # f can't be used after this
 A `move self` method consumes its receiver; the call has no mark, and the
 receiver can't be used after it (own.move.6):
 
-```ail
+```ail skip=context
 fn File.finish(move self) int
     fd
 
@@ -629,7 +629,7 @@ A module is a directory of `.ail` files sharing one namespace. `use a.b`
 imports `ROOT/a/b`, where ROOT is the directory run (`ail run DIR`) or the
 file's directory (`ail run FILE`, whose siblings are not included).
 
-```ail fragment
+```ail skip=context
 use geo                  # imports at the top of each file
 use util.text as fmt     # `as` renames; names must not clash
 
@@ -715,7 +715,7 @@ fn main()
 
 ## Tests and assertions
 
-```ail
+```ail skip=context
 @test fn doubles()           # `@test` on the same line
     assert_eq(double(4), 8)  # traps showing both values if unequal
     assert(double(1) == 2)   # traps if false
@@ -752,7 +752,7 @@ fn double(x int) int
 
 ## Tasks and channels
 
-```ail
+```ail skip=context
 t := spawn load(1)            # runs load(1) as a task; args are copies
 p := t.wait()?                # its result; fails with Trapped if it trapped
 g := TaskGroup()              # tasks that return nothing

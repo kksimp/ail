@@ -204,7 +204,7 @@ fn main()
 
 ## Control flow
 
-```ail
+```ail skip=context
 if a < b
     print("less")
 elif a == b
@@ -255,7 +255,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 
 ## Strings and characters
 
-```ail
+```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
@@ -276,7 +276,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 
 ## Lists
 
-```ail
+```ail skip=context
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..], xs[..2]
@@ -300,7 +300,7 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 
 ## Maps and sets
 
-```ail
+```ail skip=context
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
@@ -319,7 +319,7 @@ Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `int
 
 Assigning or passing copies: changing `b` after `b := a` never changes `a`.
 
-```ail
+```ail skip=context
 fn bump(mut p Point)   # the caller sees the change
     p.x += 1
 
@@ -331,7 +331,7 @@ Two `mut` arguments of one call can't refer to the same value.
 
 ## Tasks
 
-```ail
+```ail skip=context
 t := spawn load(1)          # a task; args are copies
 p := t.wait()?              # result, or fails with Trapped
 g := TaskGroup()            # tasks returning nothing; waited at block end
