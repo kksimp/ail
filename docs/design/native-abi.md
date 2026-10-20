@@ -257,13 +257,26 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
   the task each worker runs.
 - **Atomic cell:** 8 bytes, no header yet.
 
-**With the collector (lane 171).** Roots in a threaded program are the main
-stack, each live worker's stack (`STACKS + k * 8 MiB` up to its saved stack
-pointer), the queued task records and their argument words, and the
-environment records of running loops. Until a collector exists nothing is
-freed, and `alloc` serialises on `ALLOC_LOCK`. Proposed header kinds when
-lane 171's header lands: 11 task record, 12 environment or group record
-(every word may be a pointer), 13 atomic cell (no pointers).
+**With the collector (lane 171, PR #174).** Its collector is conservative and
+assumes every task is at a call; a worker in a loop that never allocates is
+not. The protocol for threaded programs:
+
+1. The collector runs inside `alloc` holding `ALLOC_LOCK` and sets `GC_REQ`.
+2. Every other thread parks at its next `alloc`, lock wait or task wait: it
+   calls `gc_regs(buf)` on its own stack, publishes the returned stack pointer
+   in the pool block, and sleeps on a futex until the collection ends. A thread
+   already blocked in a futex wait publishes its stack pointer before sleeping.
+3. The collector waits until every live worker has parked, then scans the main
+   stack (to `STACK_TOP`), each worker stack (published pointer up to
+   `STACKS + k * STACK_SZ + STACK_SZ`), the registers, the globals and the pool
+   block. A loop that never allocates delays a collection but nothing else.
+4. `rt.gc_stop_world()` and `rt.gc_start_world()` do steps 1-3 and the wake;
+   they are no-ops in `notask.ail`. Lane 171 calls them around `gc_collect`.
+
+Header kinds (11 is lane 171's pointer-free words): 12 task record and 13
+environment or group record (every word may be a pointer), 14 atomic cell (no
+pointers). Until the collector merges, nothing is freed and `alloc` only
+serialises on `ALLOC_LOCK`.
 
 ## Licensing
 
