@@ -27,9 +27,9 @@ value), `while`, `for` over a range or a list, `break`, `continue`,
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-and the bit operations of expr.bit.1. Any other construct is reported at its
-position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390)*
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
+construct is reported at its position under this rule, all of them at once,
+and nothing is built. *(ADRs 0384, 0390, 0591)*
 
 ```ail
 fn steps(n int) int
