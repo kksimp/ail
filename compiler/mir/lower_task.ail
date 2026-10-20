@@ -1,4 +1,4 @@
-## Lowering tasks (conc.task.1-6, ADRs 0599-0601): `t := spawn f(x)` builds a
+## Lowering tasks (conc.task.1-6, native.task.1, ADRs 0599-0601): `t := spawn f(x)` builds a
 ## task record and queues it with the runtime (`compiler/rt/native/task.ail`),
 ## `t.wait()?` waits for it, and a function per `spawn` site, with one
 ## `rt.dispatch` that picks it by the record's id, lets a worker run the call.
@@ -55,6 +55,18 @@ pub fn new_task_state() TaskState
 ## task runtime is linked. A false positive only costs compile time.
 pub fn uses_tasks(text str) bool
     text.contains("spawn ") or text.contains("par for") or text.contains("Atomic")
+
+## Whether the program starts threads (`spawn` or `par for`): a Mach-O
+## executable can't yet (ADR 0599).
+pub fn uses_threads(m Module) bool
+    for f in m.funcs
+        if f.name.starts_with("rt.")
+            continue
+        for blk in f.blocks
+            for i in blk.insts
+                if i.op == "call" and (i.name == "rt.task_start" or i.name == "rt.par_start")
+                    return true
+    false
 
 ## `fn main() !`: no result and no error type of its own. The only `?` the
 ## subset knows is `t.wait()?`, which ends the program on a trap.
@@ -371,6 +383,11 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
         ListLit(items, _) =>
             for x in items
                 scan_expr(mut sc, x)
+        Range(a, b, _, _) =>
+            if x := a
+                scan_expr(mut sc, x)
+            if y := b
+                scan_expr(mut sc, y)
         If(branches, els, _, _) =>
             for b in branches
                 match b.cond

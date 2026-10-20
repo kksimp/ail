@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## Tasks (conc.task.*, ADRs 0599-0601): a pool of worker threads sized to the
+## Tasks (conc.task.*, native.task.1, ADRs 0599-0601): a pool of worker threads sized to the
 ## cores (at most 8, conc.par.9) that take tasks from one queue; `spawn` puts
 ## a task record on the queue and `wait` sleeps on the record's state word.
 ## Linux only: a thread is a `clone` with a stack from `mmap` and every sleep
@@ -173,7 +173,7 @@ fn on_trap(kind int, a int, b int, head str, op str, tail str)
 
 ## `t.wait()?` in `main`: sleep until the task ends, then its result word; a
 ## trapped task ends the program as the interpreter's uncaught `Trapped`
-## does (err.trace.1).
+## does (conc.task.6, native.task.1).
 fn task_wait(rec int) int
     wait_done(rec)
     if atomic_load(rec + T_STATE) == 3

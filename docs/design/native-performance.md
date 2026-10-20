@@ -132,3 +132,31 @@ out by a dominating bound, inline `push`, inlining of leaf functions. Left:
    uses on the paths that need them.
 4. **Division by a power of two** as a shift with a sign fix (collatz).
 5. Cache the runtime's machine code (compile time).
+
+## Parallel drag race (ADRs 0599-0601)
+
+`tools/perfbench/parallel/run.py` runs `parsum`, `mandelbrot`, `spectralnorm`
+and `nbody` as native AIL (`par for`), C with OpenMP, and Python with
+`multiprocessing`, pinned to N cores with `taskset`. Every column prints the
+same output (hash-checked). Seconds, best of one run, Linux x86-64:
+
+| program | size | cores | native AIL | C OpenMP | Python | AIL vs C | AIL vs Python |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| parsum | 3000000 | 1 | 1.179 | 0.751 | 35.949 | 1.57 | 0.03 |
+| parsum | 3000000 | 4 | 0.441 | 0.341 | 10.212 | 1.29 | 0.04 |
+| mandelbrot | 1000 | 1 | 0.720 | 0.625 | 24.614 | 1.15 | 0.03 |
+| mandelbrot | 1000 | 4 | 0.196 | 0.152 | 6.848 | 1.29 | 0.03 |
+| spectralnorm | 1500 | 1 | 0.255 | 0.161 | 14.433 | 1.59 | 0.02 |
+| spectralnorm | 1500 | 4 | 0.077 | 0.051 | 5.258 | 1.51 | 0.01 |
+| nbody | 1500 | 1 | 0.090 | 0.083 | 5.246 | 1.09 | 0.02 |
+| nbody | 1500 | 4 | 0.038 | 0.035 | 1.792 | 1.09 | 0.02 |
+
+Reading it: native AIL scales as well as OpenMP (about 2.4-3.7x from 1 to 4
+cores) and stays 1.1-1.6x behind C, the same gap as single-threaded code, so
+the parallel runtime adds no visible cost. It is 25-100x faster than Python
+multiprocessing. The edge over C is not speed but that `par for` is checked:
+a trap or an `int` overflow in a chunk reruns the loop in order and gives the
+sequential result (`conc.par.1`), where OpenMP gives a data race or wraps.
+Single-thread programs are unchanged (no measurable difference on the ten
+classics; the fasta binary grew from 20304 to 21992 bytes, from the lock and
+thread-identity checks added to `alloc`, `print` and `trap`).

@@ -149,3 +149,23 @@ fn build_refuses_programs_outside_the_subset() {
     assert!(!out.status.success() && !tmp.exists(), "built a program outside the subset");
     assert!(err.contains("error[native.subset.1]"), "{err}");
 }
+
+/// `spawn` and `par for` need threads, which Mach-O executables don't start
+/// yet (native.task.1, ADR 0599); atomics, which need none, build.
+#[test]
+fn tasks_are_refused_for_macos() {
+    let tmp = std::env::temp_dir().join(format!("ail-native-macos-{}", std::process::id()));
+    let build = |name: &str| {
+        Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["build", &format!("bootstrap/tests/native/run/{name}.ail"), "--target", "aarch64-macos", "-o"])
+            .arg(&tmp)
+            .output()
+            .unwrap()
+    };
+    let refused = build("task_basic");
+    let err = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success() && err.contains("error[native.subset.1]"), "{err}");
+    assert!(build("atomic_trap").status.success(), "an atomic needs no thread");
+    let _ = fs::remove_file(&tmp);
+}

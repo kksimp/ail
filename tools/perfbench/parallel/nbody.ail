@@ -1,0 +1,65 @@
+# N-body with N bodies on a ring, all pairs, 10 steps of a leapfrog update.
+# Accelerations on each body are one `par for` iteration (the sum over the
+# other bodies in index order); positions and velocities update in a second
+# `par for`. Prints the sum of the coordinates. N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn zeros(n int) List[float]
+    mut out := List[float]()
+    for _ in 0..n
+        out.push(0.0)
+    out
+
+fn main()
+    n := size(1500)
+    mut px := zeros(n)
+    mut py := zeros(n)
+    mut pz := zeros(n)
+    mut vx := zeros(n)
+    mut vy := zeros(n)
+    mut vz := zeros(n)
+    mut ax := zeros(n)
+    mut ay := zeros(n)
+    mut az := zeros(n)
+    mut mass := zeros(n)
+    for i in 0..n
+        t := i.to_float() * 0.37
+        px[i] = 100.0 * (i % 17).to_float() + t
+        py[i] = 90.0 * (i % 13).to_float() - t
+        pz[i] = 80.0 * (i % 11).to_float() + 0.5 * t
+        mass[i] = 1.0 + (i % 5).to_float()
+    for _ in 0..10
+        par for i in 0..n
+            mut sx := 0.0
+            mut sy := 0.0
+            mut sz := 0.0
+            for j in 0..n
+                if j != i
+                    dx := px[j] - px[i]
+                    dy := py[j] - py[i]
+                    dz := pz[j] - pz[i]
+                    d2 := dx * dx + dy * dy + dz * dz + 0.01
+                    inv := mass[j] / (d2 * d2.sqrt())
+                    sx += dx * inv
+                    sy += dy * inv
+                    sz += dz * inv
+            ax[i] = sx
+            ay[i] = sy
+            az[i] = sz
+        par for i in 0..n
+            vx[i] = vx[i] + 0.01 * ax[i]
+            vy[i] = vy[i] + 0.01 * ay[i]
+            vz[i] = vz[i] + 0.01 * az[i]
+            px[i] = px[i] + 0.01 * vx[i]
+            py[i] = py[i] + 0.01 * vy[i]
+            pz[i] = pz[i] + 0.01 * vz[i]
+    mut sum := 0.0
+    for i in 0..n
+        sum += px[i] + py[i] + pz[i]
+    print("{sum:.6}")

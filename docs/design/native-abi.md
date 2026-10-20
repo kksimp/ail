@@ -219,6 +219,52 @@ them when the first dynamic `extern` appears. Until then a native program with
 an `extern` is rejected by `ail build` with `ffi.native.1` (to be written by
 lane 126).
 
+## 10. Threads, tasks and atomics
+
+**As built (lane 178, ADRs 0599–0601).** `compiler/rt/native/task.ail` is part
+of the runtime of a program whose source mentions `spawn `, `par for` or
+`Atomic`; `notask.ail` otherwise. Linux only (x86-64 and ARM64).
+
+- **Threads.** `clone` with `CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM` (flags
+  `0x50F00`; syscall 56 on x86-64, 220 on ARM64), no TLS. Worker `k` has the
+  stack `STACKS + k * 8 MiB` (a lazily committed region of 64, `PROT_NONE`
+  guard page at the low end); `STACKS` is global slot 46, and a thread is a
+  worker exactly when its stack pointer lies in that region. The child starts
+  in `rt.worker_main(k)` with the stack top (16-byte aligned) in `rsp`/`sp`;
+  the argument rides in `r8` (x86-64) or `x4` (ARM64), which `clone` ignores
+  without `CLONE_SETTLS`. The `restart` primitive re-enters `rt.worker_main`
+  on a fresh stack after a trap.
+- **Sleeping.** `futex` wait and wake with `FUTEX_PRIVATE` (`128`, `129`) on
+  the low 32 bits of an 8-byte word (syscall 202 on x86-64, 98 on ARM64).
+  Locks are three-state futex mutexes (0 free, 1 held, 2 held and waited
+  for) over `atomic_cas`, `atomic_add` and `atomic_store`.
+- **Atomics.** x86-64: `mov`, `xchg`, `lock xadd`, `lock cmpxchg`. ARM64:
+  `ldar`, `stlr`, `swpal`, `ldaddal`, `casal` (LSE). Always sequentially
+  consistent.
+- **Globals** 40–46: `TASKS` (the pool block), `MULTI` (1 once the pool
+  exists: `alloc` then takes `ALLOC_LOCK`), `ALLOC_LOCK`, `OUT_LOCK`,
+  `OUT_OWNER` and `OUT_DEPTH` (the reentrant output lock), `STACKS`. The image
+  has 64 slots.
+- **Task record** (8-byte words): 0 state (0 queued or running, 2 done,
+  3 trapped), 1 function id, 2 result, 3 next in the queue, 4–6 the trap's
+  kind and operands, 7 its head string, 8 its operator, 9 its source
+  excerpt, 10–23 arguments (a chunk function: environment, `lo`, `hi`, then
+  sum, lowest and highest running sum per accumulator). The compiler writes
+  `task.K(rec)` for each `spawn` and `par for` site, and `rt.dispatch(id,
+  rec)` to call it.
+- **Pool block** (one `mmap` page): lock, queue head and tail, the sequence
+  word idle workers sleep on, live, blocked and idle counts, the target, and
+  the task each worker runs.
+- **Atomic cell:** 8 bytes, no header yet.
+
+**With the collector (lane 171).** Roots in a threaded program are the main
+stack, each live worker's stack (`STACKS + k * 8 MiB` up to its saved stack
+pointer), the queued task records and their argument words, and the
+environment records of running loops. Until a collector exists nothing is
+freed, and `alloc` serialises on `ALLOC_LOCK`. Proposed header kinds when
+lane 171's header lands: 11 task record, 12 environment or group record
+(every word may be a pointer), 13 atomic cell (no pointers).
+
 ## Licensing
 
 [ADR 0510](../decisions/0510-licence-apache-2-with-runtime-exception.md): the

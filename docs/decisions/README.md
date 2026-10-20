@@ -445,3 +445,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0599](0599-native-threads-and-task-pool.md) | Native threads: `clone` and futex on Linux, one pool, replacement workers *(delegated)* | Accepted | 2026-10-20 |
+| [0600](0600-native-atomics.md) | Native atomics: sequentially consistent cells, LSE on ARM64, `add` as a compare-and-swap loop *(delegated)* | Accepted | 2026-10-20 |
+| [0601](0601-native-par-for.md) | Native `par for`: the body becomes a chunk function with exact accumulators *(delegated)* | Accepted | 2026-10-20 |

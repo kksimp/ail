@@ -61,3 +61,15 @@ fn main()
     print(bits[3])
     print(bits[98])
     print(bits[99])
+    # A body with its own loops, locals and a list of strings per iteration.
+    mut rows := List[str]()
+    for _ in 0..64
+        rows.push("")
+    par for y in 0..64
+        mut cells := []
+        for x in 0..8
+            cells.push(if (x + y) % 3 == 0 then "#" else ".")
+        rows[y] = cells.join("")
+    print(rows[0])
+    print(rows[1])
+    print(rows[63])
