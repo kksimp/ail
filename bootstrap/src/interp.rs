@@ -27,10 +27,13 @@ pub mod limits;
 mod contracts;
 pub mod parallel;
 mod net;
+mod netsock;
 mod osext;
 mod spawn;
+mod codec;
 mod random;
 mod tz;
+mod regex;
 mod stdlib;
 mod tasks;
 mod tensor;
@@ -2241,6 +2244,13 @@ impl<'a, W: Write> Interp<'a, W> {
                             }
                         }
                     }
+                    // expr.match.11: a false guard falls through to the next arm.
+                    if let Some(g) = &arm.guard
+                        && !matches!(self.eval(g, env)?, Value::Bool(true))
+                    {
+                        env.truncate(mark);
+                        continue;
+                    }
                     let r = self.block(&arm.body, env);
                     env.truncate(mark);
                     return r;
@@ -2281,6 +2291,21 @@ impl<'a, W: Write> Interp<'a, W> {
                 (Literal::Bool(a), Value::Bool(b)) => a == b,
                 _ => false,
             },
+            // expr.match.12
+            (Pattern::Range { lo, hi, inclusive, .. }, v) => {
+                let at = match (lo, v) {
+                    (Literal::Int(_), Value::Int(x)) => i128::from(*x),
+                    (Literal::Int(_), Value::Num(k, x)) => k.decode(*x),
+                    (Literal::Char(_), Value::Char(c)) => i128::from(*c as u32),
+                    _ => return false,
+                };
+                let end = |l: &Literal| match l {
+                    Literal::Int(n) => i128::from(*n),
+                    Literal::Char(c) => i128::from(*c as u32),
+                    _ => 0,
+                };
+                end(lo) <= at && (at < end(hi) || (*inclusive && at == end(hi)))
+            }
             _ => false,
         }
     }
@@ -3118,9 +3143,7 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn flush(&mut self, pos: Pos) -> Result<(), Trap> {
-        if self.conc.is_some() {
-            self.task_print("");
-        }
+        self.task_flush();
         match self.out.flush() {
             Err(e) if e.kind() != io::ErrorKind::BrokenPipe => {
                 trap("mod.main.3", pos, format!("writing to standard output failed: {e}"))

@@ -564,7 +564,8 @@ impl Lexer {
                 '&' if line.get(i + 1) != Some(&'&') => {
                     self.diags.push(
                         Diagnostic::new("gram.foreign.1", pos, "AIL has no `&`")
-                            .help("write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes"),
+                            .help("bit operations are methods: `a.bit_and(b)` (expr.bit.1); write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes")
+                            .fix("write `.bit_and`", vec![crate::fix::bit::operator(pos, "&", "bit_and")]),
                     );
                     i += 1;
                 }
@@ -596,6 +597,14 @@ impl Lexer {
                         Some(sym) => {
                             self.symbol(sym, pos);
                             i += sym.len();
+                        }
+                        None if c == '^' => {
+                            self.diags.push(
+                                Diagnostic::new("gram.foreign.1", pos, "AIL has no `^`")
+                                    .help("bit operations are methods: `a.bit_xor(b)` (expr.bit.1)")
+                                    .fix("write `.bit_xor`", vec![crate::fix::bit::operator(pos, "^", "bit_xor")]),
+                            );
+                            i += 1;
                         }
                         None => {
                             self.unsupported(pos, &format!("the `{c}` symbol"), "chapter 05");

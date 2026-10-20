@@ -382,6 +382,8 @@ match c              # as a statement, arms can just do things
 match ch             # literals and `|`; ints, strings and chars need `_`
     '+' | '-' => continue           # a one-line statement arm
     '0' => total += 1
+    'a'..='z' => lower += 1         # ranges: `lo..hi` or `lo..=hi`, ints or chars
+    _ if ch == ' ' => skip += 1     # guard: `pattern if cond =>`; a guarded arm covers nothing
     _ => return ch
 ```
 
@@ -717,13 +719,19 @@ fn main() !
 | Module | Functions |
 |---|---|
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
+| `std.compress` | `gzip(s) List[int]`, `deflate(s)`, `zlib(s)`: bytes as ints 0-255; `gunzip(b)`, `inflate(b)`, `unzlib(b)`: `str ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)`: `! CompressError`, effects `fs`, `io`; others no effects |
+| `std.hash` | `sha256(s)`, `sha384(s)`, `sha512(s)` (hex `str`), `hmac_sha256(key, s)` (hex), `crc32(s) int`, `hash64(s) int` (fast, not secure); no effects |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
 | `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`) |
+| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?` |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.timeout_ms`, `o.max_redirects`); server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_line()`, `write(text)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b` (elementwise, or with a scalar on either side: `t * 2.0`); methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), linear time, no backreferences or lookaround; offsets in characters; write patterns as `r"..."` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)` (offset required) and `date.parse_in(text, zone)` `: DateTime ! DateError`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); a zone is `"UTC"`, `"+05:30"` or `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)` (months clamp the day), `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format("%Y-%m-%d %H:%M:%S %z")` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
 | `std.tz` | `offset(zone, secs) int?` (none for an unknown zone), `system() str`; effects `fs`, `env` |
@@ -824,7 +832,7 @@ traps (deadlock).
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), `spawn`, and the capabilities
-`fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. A call through `any Trait` counts every
+`fs`, `env`, `proc`, `clock`, `random`, `net`, `net.serve` (`net.serve`, `net.listen`), `ui`. A call through `any Trait` counts every
 implementation.
 
 ```ail

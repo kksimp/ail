@@ -1,0 +1,53 @@
+## std.net.12-13: raw TCP. A line-echo server task and a client in one
+## program, timeouts, characters never split across reads, and what a closed
+## connection reports.
+use std.net
+
+fn echo(l net.Listener) !
+    c := l.accept()?
+    c.write("welcome\n")?
+    while true
+        line := c.read_line()? else break
+        c.write("echo: {line}\n")?
+    c.close()
+
+fn connect_kind(port int) str
+    c := net.connect("127.0.0.1", port) else err
+        return err.kind
+    c.close()
+    "connected"
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    t := spawn echo(l)
+    addr := l.addr()
+    port := addr.split(":")[1].to_int() else 0
+    c := net.connect("127.0.0.1", port)?
+    print(c.read_line()? else "")
+    c.write("one\ntwo")?
+    print(c.read_line()? else "")
+    c.write("\r\n")?
+    print(c.read_line()? else "")
+
+    # A read with nothing to read times out; the connection stays usable.
+    c.set_timeout(50)
+    quiet := c.read(10) else err
+        print("quiet: {err.kind}")
+        ""
+    print(quiet.len())
+    c.set_timeout(5000)
+    c.write("héllo wörld\n")?
+    # read(2) returns 2 bytes' worth of characters, never half of one.
+    first := c.read(8)?
+    print(first.len() > 0)
+    rest := c.read_line()? else ""
+    print("{first}{rest}")
+    c.close()
+    t.wait()?
+    l.close()
+
+    # After a close, every operation says so.
+    c.write("x") else err
+        print("after close: {err.kind}")
+    print(connect_kind(1))
+    print(connect_kind(70000))

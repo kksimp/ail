@@ -1,0 +1,25 @@
+## std.regex.1-8: compile, test, find, capture, replace and split.
+use std.regex
+
+fn main()
+    date := regex.compile(r"(?P<y>\d{4})-(?P<m>\d\d)-(?P<d>\d\d)") else return
+    text := "from 2026-10-20 to 2026-11-02"
+    print(regex.is_match(date, text))
+    print(regex.find(date, text))
+    for m in regex.find_all(date, text)
+        print("{m.start}..{m.end} {m.text}")
+    if c := regex.captures(date, text)
+        print(c.groups)
+        print(c.named.get("y"))
+    print(regex.replace(date, text, "$d/$m/$y"))
+    print(regex.replace_first(date, text, "<$0>"))
+    words := regex.compile(r"\s+") else return
+    print(regex.split(words, "  a b   c "))
+    lazy := regex.compile(r"<.+?>") else return
+    print(regex.find_all(lazy, "<a><b>").len())
+    print(regex.escape("1+1=2 (really?)"))
+    plain := regex.compile(regex.escape("a.b")) else return
+    print(regex.is_match(plain, "axb"))
+    print(regex.is_match(plain, "a.b"))
+    kana := regex.compile(r"\p{Hiragana}+") else return
+    print(regex.find(kana, "abc ひらがな def"))

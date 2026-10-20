@@ -509,6 +509,9 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
         elif c == '&' and at(line, i + 1) != '&'
             diag("gram.foreign.1", pos)
             i += 1
+        elif c == '^'
+            diag("gram.foreign.1", pos)
+            i += 1
         elif c.is_digit()
             i = number(line, i, line_no)
         elif c.is_alpha() or c == '_'

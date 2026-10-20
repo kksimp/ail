@@ -1,0 +1,30 @@
+## std.compress.5-6: gzip files and zip a directory, in a scratch directory.
+use std.compress
+use std.fs
+
+fn main() !
+    dir := "std_compress_case.tmp"
+    fs.make_dir("{dir}/src/sub")?
+    fs.make_dir("{dir}/src/hollow")?
+    fs.write_text("{dir}/src/a.txt", "alpha alpha alpha alpha\n")?
+    fs.write_text("{dir}/src/sub/b.txt", "beta\n")?
+    compress.gzip_file("{dir}/src/a.txt", "{dir}/a.gz")?
+    compress.gunzip_file("{dir}/a.gz", "{dir}/a.out")?
+    print(fs.read_text("{dir}/a.out")?)
+    compress.zip_dir("{dir}/src", "{dir}/all.zip")?
+    compress.unzip("{dir}/all.zip", "{dir}/out")?
+    print(fs.walk("{dir}/out")?)
+    print(fs.exists("{dir}/out/hollow"))
+    print(fs.read_text("{dir}/out/sub/b.txt")?)
+    compress.gunzip_file("{dir}/none.gz", "{dir}/x") else err
+        print(err.kind)
+    fs.write_text("{dir}/junk.zip", "not a zip")?
+    compress.unzip("{dir}/junk.zip", "{dir}/junk") else err
+        print(err.kind)
+    for p in fs.walk(dir)?
+        fs.remove(p)?
+    for d in ["out/sub", "out/hollow", "out", "src/sub", "src/hollow", "src"]
+        fs.remove("{dir}/{d}") else err
+            print("left: {d}")
+    fs.remove(dir)?
+    print(fs.exists(dir))

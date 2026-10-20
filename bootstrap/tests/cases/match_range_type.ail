@@ -1,0 +1,5 @@
+fn main()
+    c := 'x'
+    match c
+        1..5 => print("a")
+        _ => print("c")

@@ -191,6 +191,7 @@ impl<'p> Checker<'p> {
             Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
             _ => unreachable!("std/types.ail declares `{name}`"),
         };
+        let compress = |t: Ty| Ty::Res(Box::new(t), Errs::Set(vec![std_ty("compress.CompressError")]));
         let io = |t: Ty| Ty::Res(Box::new(t), Errs::Set(vec![std_ty("fs.IoError")]));
         match (module, f) {
             ("fs", "read_text") => (vec![Str], io(Str)),
@@ -207,6 +208,12 @@ impl<'p> Checker<'p> {
             ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
+            ("hash", "sha256" | "sha384" | "sha512") => (vec![Str], Str),
+            ("hash", "hmac_sha256") => (vec![Str, Str], Str),
+            ("hash", "crc32" | "hash64") => (vec![Str], Int),
+            ("compress", "deflate" | "gzip" | "zlib") => (vec![Str], list(Int)),
+            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![list(Int)], compress(Str)),
+            ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
@@ -228,10 +235,34 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
             ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
-            ("net", "get" | "post") => (
-                if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
+            ("net", "get" | "post" | "request") => (
+                match f {
+                    "get" => vec![Str],
+                    "post" => vec![Str, Str, Str],
+                    _ => vec![Str, Str, std_ty("net.Options")],
+                },
                 Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
             ),
+            ("net", "options") => (vec![], std_ty("net.Options")),
+            ("net", "serve" | "listen" | "connect" | "connect_tls") => {
+                let (params, ok) = match f {
+                    "serve" => (vec![Str], "net.Server"),
+                    "listen" => (vec![Str], "net.Listener"),
+                    _ => (vec![Str, Int], "net.Conn"),
+                };
+                (params, Ty::Res(Box::new(std_ty(ok)), Errs::Set(vec![std_ty("net.NetError")])))
+            }
+            ("regex", "compile") => (
+                vec![Str],
+                Ty::Res(Box::new(std_ty("regex.Regex")), Errs::Set(vec![std_ty("regex.RegexError")])),
+            ),
+            ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
+            ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
+            ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
+            ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
+            ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),
+            ("regex", "escape") => (vec![Str], Str),
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
