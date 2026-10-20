@@ -1,14 +1,16 @@
 true
+abc abc abc abc abc abc abc abc
 true
-hello
+b"hello"
 31 139 8
 true
-true
-hello
-true
-checksum
-true
+0
 corrupt
+0
+checksum
+0
+b"hello"
 true
 checksum
+0
 true
