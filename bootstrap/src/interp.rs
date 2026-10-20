@@ -977,6 +977,26 @@ impl<'a, W: Write> Interp<'a, W> {
             env[slot].1 = v;
             return Ok(());
         }
+        // `local.field = e` and `local.field op= e`, the commonest place: same steps as below, no `Place`.
+        if let Expr::Field { recv, name, .. } = target
+            && let Expr::Name(n, _) = &**recv
+            && let Some(slot) = env.iter().rposition(|(m, _)| name_eq(m, n))
+            && let Value::Struct(s, _) = &env[slot].1
+        {
+            let index = self.field_index(*s, name);
+            let v = match op {
+                None => self.eval(value, env)?,
+                Some(op) => {
+                    let Value::Struct(_, fields) = &env[slot].1 else { unreachable!("checked: struct") };
+                    let old = fields[index].clone();
+                    let rhs = self.eval(value, env)?;
+                    self.binop(op, old, rhs, pos)?
+                }
+            };
+            let Value::Struct(_, fields) = &mut env[slot].1 else { unreachable!("checked: struct") };
+            Rc::make_mut(fields)[index] = v;
+            return Ok(());
+        }
         let p = self.place(target, env)?;
         let v = match op {
             None => self.eval(value, env)?,
