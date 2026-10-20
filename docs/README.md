@@ -52,6 +52,9 @@ Design notes:
   write AIL from the quick reference.
 - [design/program-measurements-r2.md](design/program-measurements-r2.md):
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
+- [design/garlic-browser.md](design/garlic-browser.md): Garlic, a web
+  browser written in AIL: architecture, text-mode first milestone, the page
+  model agents read, JavaScript and dependencies.
 - [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
   moves from the bootstrap's crate shim to platform APIs through `extern c`.
 - [design/semantic-api.md](design/semantic-api.md): the machine-readable

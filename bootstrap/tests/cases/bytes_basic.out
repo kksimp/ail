@@ -1,0 +1,30 @@
+b"hello\x00\n"
+7
+101
+b"el"
+b"helo\x00\n"
+b"\x00\n"
+true
+true
+true
+68656c6c6f000a
+aGVsbG8ACg==
+[104, 105]
+hi
+68ff
+true
+true
+hello
+true
+2
+none
+true true true
+none
+6
+9
+b"\x00\x00\x00"
+542
+[97, 98, 99]
+b"\xff\x00abc\n"
+1
+b"hello\x00\n"

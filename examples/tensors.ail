@@ -1,0 +1,19 @@
+## Float tensors on the CPU slice of std.tensor (ADRs 0328-0345, 0507-0509):
+## scalars on either side, unary minus, division, and the activations relu,
+## sigmoid and tanh. Every value is exact in binary floating point.
+##   ./ail run examples/tensors.ail
+
+fn main()
+    x := tensor.from([-1.5, 0.0, 2.0, 3.5])
+    print("times two {(x * 2.0).to_list()}")
+    print("relu {x.relu().to_list()}")
+    print("sum of relu {x.relu().sum()}")
+    y := tensor.from([1.0, 2.5])
+    print("unary minus {(-y).to_list()}")
+    a := tensor.from([1.0, 2.0, 4.0])
+    b := tensor.from([2.0, 4.0, 8.0])
+    print("a / b {(a / b).to_list()}")
+    s := tensor.from([0.0, -1000.0])
+    print("sigmoid {s.sigmoid().to_list()}")
+    t := tensor.from([0.0, 1000.0])
+    print("tanh {t.tanh().to_list()}")

@@ -95,6 +95,35 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(e) => self.io_error(&path, dir_kind(&path, &e), pos),
                 }
             }
+            // std.fs.13
+            ("fs", "read_bytes") => {
+                let path = str_arg(0);
+                let result = if std::fs::metadata(&*path).is_ok_and(|m| m.is_dir()) {
+                    Err("is_dir")
+                } else {
+                    std::fs::read(&*path).map_err(|e| error_kind(&e))
+                };
+                match result {
+                    Ok(b) => super::bytes::bytes_value(b),
+                    Err(kind) => self.io_error(&path, kind, pos),
+                }
+            }
+            // std.fs.14
+            ("fs", "write_bytes" | "append_bytes") => {
+                let path = str_arg(0);
+                let Value::Bytes(contents) = &values[1] else { unreachable!("checked: bytes") };
+                let result = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(f == "append_bytes")
+                    .truncate(f == "write_bytes")
+                    .open(&*path)
+                    .and_then(|mut file| file.write_all(contents));
+                match result {
+                    Ok(()) => Value::Unit,
+                    Err(e) => self.io_error(&path, dir_kind(&path, &e), pos),
+                }
+            }
             ("fs", "exists") => Value::Bool(std::path::Path::new(&*str_arg(0)).exists()),
             ("fs", "list_dir") => {
                 let path = str_arg(0);
@@ -196,6 +225,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     return stop("std.io.2", pos, format!("reading standard input failed: {e}"));
                 }
                 text(String::from_utf8_lossy(&bytes).into_owned())
+            }
+            // std.io.5: the rest of standard input, undecoded.
+            ("io", "read_bytes") => {
+                self.flush(pos)?;
+                let mut bytes = Vec::new();
+                if let Err(e) = std::io::stdin().lock().read_to_end(&mut bytes) {
+                    return stop("std.io.2", pos, format!("reading standard input failed: {e}"));
+                }
+                super::bytes::bytes_value(bytes)
             }
             ("io", "eprint") => {
                 let line = self.text(&values[0], pos)?;

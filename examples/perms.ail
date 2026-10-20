@@ -1,13 +1,12 @@
 ## An agent-style permission checker: a Unix mode is one number and each
-## permission is one bit. AIL has no bit operators yet, so a bit is read with
-## integer division and remainder.
+## permission is one bit, read with `bit_and` (expr.bit.1).
 ##   ./ail run examples/perms.ail
 
 BITS := [256, 128, 64, 32, 16, 8, 4, 2, 1]
 MARKS := ["r", "w", "x", "r", "w", "x", "r", "w", "x"]
 
 fn has(mode int, bit int) bool
-    (mode / bit) % 2 == 1
+    mode.bit_and(bit) != 0
 
 fn symbolic(mode int) str
     mut out := []

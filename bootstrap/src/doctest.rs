@@ -157,6 +157,11 @@ pub fn check_output(t: &DocTest, output: &str) -> Option<String> {
 }
 
 impl DocTest {
+    /// The lines of its `# =>` expectations (snap.update.4).
+    pub fn expected_lines(&self) -> Vec<usize> {
+        self.code.iter().filter(|(_, c)| c.trim().starts_with("# =>")).map(|(l, _)| *l).collect()
+    }
+
     /// Where a failing example is reported: its opening fence.
     pub fn line(&self) -> usize {
         self.fence

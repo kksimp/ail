@@ -33,9 +33,48 @@ impl<'a, W: Write> Interp<'a, W> {
             if self.equal(&a, &b, pos)? {
                 return Ok(Value::Unit);
             }
+            // snap.update.2: under `ail test --update`, a literal expectation takes the actual value.
+            if crate::snapshot::enabled()
+                && let Some(text) = literal_of(&a, &args[1].value)
+                && crate::snapshot::record(args[1].value.pos(), text)
+            {
+                return Ok(Value::Unit);
+            }
             format!("assertion failed: left is {}, right is {}", self.describe(&a, pos)?, self.describe(&b, pos)?)
         };
         Err(Exit::Trap(Box::new(Trap { rule: "test.assert.1", pos, message })))
+    }
+}
+
+/// The literal that writes `v` in the shape of the expectation `e`, when `e`
+/// is a literal and `v` has a literal form (snap.update.2).
+fn literal_of(v: &Value, e: &Expr) -> Option<String> {
+    let scalar = |v: &Value| match v {
+        Value::Int(i) => Some(i.to_string()),
+        Value::Float(f) if f.is_finite() => Some(format!("{f:?}")),
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Char(c) => Some(crate::snapshot::quote_char(*c)),
+        Value::Str(s) => Some(crate::snapshot::quote(s)),
+        _ => None,
+    };
+    match e {
+        Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) => scalar(v),
+        Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..) | Expr::Float(..)) => scalar(v),
+        Expr::List(items, _) if items.iter().all(is_literal) => {
+            let Value::List(xs) = v else { return None };
+            let parts: Option<Vec<String>> = xs.iter().map(scalar).collect();
+            Some(format!("[{}]", parts?.join(", ")))
+        }
+        _ => None,
+    }
+}
+
+/// A scalar literal, possibly negated (snap.update.2).
+fn is_literal(e: &Expr) -> bool {
+    match e {
+        Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) => true,
+        Expr::Unary { op: UnOp::Neg, operand, .. } => matches!(**operand, Expr::Int(..) | Expr::Float(..)),
+        _ => false,
     }
 }
 
