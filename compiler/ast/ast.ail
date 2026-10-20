@@ -204,6 +204,8 @@ pub enum TypeShape
     AnyTrait(trait_name str)
     ## `ref T`
     RefTo(inner TypeRef)
+    ## `*T`, a raw pointer (unsafe.ptr.1)
+    PtrTo(inner TypeRef)
 
 pub enum Stmt
     Let(name str, pos Pos, mutable bool, value Expr, otherwise Else?)

@@ -868,6 +868,25 @@ fn safe_twice(x int) int
         twice(x)
 ```
 
+C functions are declared, not imported. Types: `int`, `float`, `bool`,
+`i8`...`u64`, `f32`, and `*T` pointers; at most 6 integer-like and 8 float
+arguments; no `mut`. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
+A narrow C `int` result is declared `i32`. Wrap each call in a safe function.
+
+```ail
+use std.mem
+
+extern c "libm" fn hypot(a float, b float) float
+extern c fn strlen(s *u8) int
+
+fn c_length(text str) int
+    unsafe
+        p := mem.cstr(text)
+        n := strlen(p)
+        mem.free(p)
+        n
+```
+
 ## Contracts
 
 Lines directly under the signature; conditions are pure `bool`s. `result` is

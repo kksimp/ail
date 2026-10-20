@@ -659,7 +659,7 @@ impl Cx<'_> {
                 *name = self.type_name(name, t.pos);
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
-            TypeKind::Optional(inner) | TypeKind::Ref(inner) => self.type_ref(inner),
+            TypeKind::Optional(inner) | TypeKind::Ref(inner) | TypeKind::Ptr(inner) => self.type_ref(inner),
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {
                     self.type_ref(ok);

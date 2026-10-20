@@ -43,6 +43,10 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
             inner_ty := resolve_type(inner)
             no_unique(inner_ty, inner.pos, "the contents of a `ref`")
             return Ty.RefOf(inner_ty)
+        PtrTo(inner) =>
+            inner_ty := resolve_type(inner)
+            ptr_target(inner_ty, inner.pos)
+            return Ty.PtrOf(inner_ty)
         Fallible =>
             unsupported(
                 t.pos,
@@ -244,6 +248,7 @@ fn Checker.ty_name(self, t Ty) str
         Param(p) => tparams[p].name
         AnyOf(tr) => "any {prog.traits[tr].name}"
         RefOf(x) => "ref {ty_name(x)}"
+        PtrOf(x) => "*{ty_name(x)}"
         Conc(k, x) => if k == "TaskGroup" then "TaskGroup" else "{k}[{ty_name(x)}]"
 
 fn Checker.with_args(self, n str, args List[Ty]) str

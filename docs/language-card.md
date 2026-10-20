@@ -533,7 +533,9 @@ Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
-`unsafe` and a block allow `unsafe fn` calls (and C calls, raw pointers); `ail.pkg` needs `unsafe allow`.
+`unsafe` and a block allow `unsafe fn` calls, C calls and `std.mem`; `ail.pkg` needs `unsafe allow`.
+`extern c "libm" fn hypot(a float, b float) float` declares a C function (types `int`, `float`,
+`bool`, `i32`, `u8`, `*T`...; a C `int` is `i32`); `mem.cstr(s) *u8`, `mem.from_cstr(p)`, `mem.free(p)`.
 
 A window is a grid of text cells; draw with `put`, then `present`:
 

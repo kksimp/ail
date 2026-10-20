@@ -437,6 +437,7 @@ fn ty(t: &TypeRef) -> J {
         ),
         TypeKind::Any(name) => variant("AnyTrait", vec![("trait_name", s(name))]),
         TypeKind::Ref(inner) => variant("RefTo", vec![("inner", ty(inner))]),
+        TypeKind::Ptr(inner) => variant("PtrTo", vec![("inner", ty(inner))]),
     };
     J::Obj(vec![("shape", shape), ("pos", pos(t.pos))])
 }

@@ -20,6 +20,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ),
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
+    ("mem", &["cstr", "free", "from_cstr"]),
     ("net", &["connect", "connect_tls", "get", "listen", "options", "post", "request", "serve"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("net", &["get", "post"]),

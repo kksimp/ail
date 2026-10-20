@@ -95,6 +95,8 @@ pub enum Ty {
     Any(usize),
     /// `ref T` (own.ref.1).
     Ref(Box<Ty>),
+    /// `*T`, a raw pointer: an address with no ownership (unsafe.ptr.1).
+    Ptr(Box<Ty>),
     /// `Task[T]`, `TaskGroup` (with `Unit`), `Channel[T]` and `Mutex[T]`
     /// (conc.task.1, conc.share.2-3, ADRs 0186-0189).
     Conc(conc::Conc, Box<Ty>),
@@ -1136,6 +1138,11 @@ impl<'p> Checker<'p> {
                 self.no_unique(&inner_ty, inner.pos, "the contents of a `ref`");
                 return Ty::Ref(Box::new(inner_ty));
             }
+            TypeKind::Ptr(inner) => {
+                let inner_ty = self.resolve_type(inner);
+                self.ptr_target(&inner_ty, inner.pos);
+                return Ty::Ptr(Box::new(inner_ty));
+            }
             TypeKind::Fallible { .. } => {
                 self.unsupported(
                     t.pos,
@@ -1544,6 +1551,7 @@ impl<'p> Checker<'p> {
             Ty::Param(p) => self.tparams[*p].name.clone(),
             Ty::Any(tr) => format!("any {}", self.prog.traits[*tr].name),
             Ty::Ref(t) => format!("ref {}", self.ty_name(t)),
+            Ty::Ptr(t) => format!("*{}", self.ty_name(t)),
             Ty::Conc(conc::Conc::Group, _) => "TaskGroup".into(),
             Ty::Conc(k, t) => format!("{}[{}]", k.name(), self.ty_name(t)),
         }
@@ -1576,6 +1584,10 @@ impl<'p> Checker<'p> {
     // ---- Functions and blocks ----
 
     fn check_fn(&mut self, idx: usize, f: &'p FnDecl) {
+        if f.ext.is_some() {
+            self.check_extern(idx, f);
+            return;
+        }
         let Some(body) = &f.body else {
             if !f.contracts.is_empty() {
                 self.check_bodyless_contracts(idx, f);

@@ -309,7 +309,7 @@ impl<'p> Checker<'p> {
                 .any(|&b| self.provides(b, tr) || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
             // own.ref.6: references compare by identity, and aren't keys or ordered.
-            Ty::Ref(_) => tr == eq,
+            Ty::Ref(_) | Ty::Ptr(_) => tr == eq,
             // type.num.14: sized numbers are `Eq` and `Ord`; every one but `f32` is `Hash`.
             Ty::Num(k) => tr == eq || tr == self.std.ord || (tr == self.std.hash && !k.is_float()),
             Ty::Union(_) => tr == eq || tr == self.std.hash,

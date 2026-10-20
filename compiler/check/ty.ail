@@ -34,6 +34,8 @@ pub enum Ty
     AnyOf(trait_index int)
     ## `ref T` (own.ref.1)
     RefOf(inner Ty)
+    ## `*T`, a raw pointer (unsafe.ptr.1).
+    PtrOf(inner Ty)
     ## `Channel[T]`, `Mutex[T]`, `Atomic[T]`, `TaskGroup` (inner `Unit`).
     Conc(kind str, inner Ty)
 

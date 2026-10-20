@@ -397,6 +397,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0422](0422-net-serve-capability.md) | `net.serve` is a capability on top of `net` *(delegated)* | Accepted | 2026-10-20 |
 | [0423](0423-net-platforms-and-deferred.md) | `std.net` on Windows and what is deferred *(delegated)* | Accepted | 2026-10-20 |
 | [0430](0430-unsafe-blocks-and-functions-built.md) | `unsafe` blocks and `unsafe fn`, with a manifest opt-in, are built *(delegated)* | Accepted | 2026-10-20 |
+| [0431](0431-extern-c-fn-and-dynamic-loading.md) | `extern c fn` declares a C function, loaded dynamically on first call *(delegated)* | Accepted | 2026-10-20 |
+| [0432](0432-c-calls-through-two-register-files.md) | C calls use two register-file trampolines, with no foreign-function library *(delegated)* | Accepted | 2026-10-20 |
+| [0433](0433-raw-pointer-type.md) | `*T` is a raw pointer type with a C-layout target *(delegated)* | Accepted | 2026-10-20 |
+| [0434](0434-std-mem-c-strings.md) | `std.mem` hands out C strings from C's allocator and traps on bad frees *(delegated)* | Accepted | 2026-10-20 |
 | [0460](0460-drag-race-harness.md) | The drag race is one Python harness that times AIL, native AIL, C and Python from twins *(delegated)* | Accepted | 2026-10-20 |
 | [0461](0461-module-fuzzers.md) | Module fuzzers are templates plus seeded input generators *(delegated)* | Accepted | 2026-10-20 |
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
