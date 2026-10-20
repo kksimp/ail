@@ -11,7 +11,7 @@
 ./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail build FILE.ail [-o OUT] # native executable for the host (or --target x86_64-linux|aarch64-linux|aarch64-macos): numbers, strings, lists, loops, free functions, env.args() (native.subset.1)
+./ail build FILE.ail [-o OUT] # native executable (see Native builds below)
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
 ./ail run --record r.json FILE.ail      # write every effect's result; `--replay r.json` repeats the run exactly (`ail test --record` keeps failed tests)
@@ -57,6 +57,21 @@ fn area(w int, h int) int
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
+
+## Native builds
+
+```sh
+./ail build examples/native_fib.ail   # writes ./native_fib, a static executable
+./native_fib                          # same output as ./ail run
+```
+
+- A native build covers free functions over numbers, strings, bools and lists
+  of them: loops, calls, `print`, `join`, `chars`, `env.args()` (native.subset.1).
+  Structs, enums, methods, traits, maps and generics are not built yet, and
+  `ail build` names the first one it meets (`error[native.subset.1]`).
+- A trap prints the same first line as `ail run` and exits 1.
+- Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
+- Guide: [design/native-guide.md](design/native-guide.md).
 
 ## Layout
 

@@ -1,0 +1,27 @@
+# Floats in the native subset: the escape-time Mandelbrot iteration over a
+# grid, with a float printed to a fixed number of decimals.
+fn escape(cr float, ci float, limit int) int
+    mut zr := 0.0
+    mut zi := 0.0
+    mut n := 0
+    while n < limit and zr * zr + zi * zi <= 4.0
+        t := zr * zr - zi * zi + cr
+        zi = 2.0 * zr * zi + ci
+        zr = t
+        n += 1
+    n
+
+fn main()
+    mut inside := 0
+    mut total := 0
+    for row in 0..24
+        ci := -1.2 + 2.4 * row.to_float() / 23.0
+        for col in 0..64
+            cr := -2.0 + 2.6 * col.to_float() / 63.0
+            k := escape(cr, ci, 200)
+            total += k
+            if k == 200
+                inside += 1
+    print("{inside} of {24 * 64} points stay bounded")
+    print("{total} iterations in all")
+    print("the grid's last point is at {-2.0 + 2.6:.4}")
