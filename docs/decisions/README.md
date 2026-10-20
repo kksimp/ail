@@ -354,6 +354,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0371](0371-self-hosted-front-end-compared-by-dumps.md) | Compare the self-hosted lexer and parser with the bootstrap through text dumps *(delegated)* | Accepted | 2026-10-20 |
 | [0372](0372-identifier-characters.md) | A name is letters, ASCII digits and `_` *(delegated)* | Accepted | 2026-10-20 |
+| [0373](0373-self-hosted-diagnostics-are-rule-and-position.md) | The self-hosted front end reports a rule and a position, and runs the corpus in one process *(delegated)* | Accepted | 2026-10-20 |
 | [0376](0376-syntax-tree-in-ail-and-its-json.md) | The syntax tree in AIL, `compiler/ast/`, and its JSON is the derived shape *(delegated)* | Accepted | 2026-10-20 |
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
