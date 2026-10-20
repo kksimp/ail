@@ -187,6 +187,8 @@ pub struct StructDecl {
     pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
+    /// `invariant COND` lines (contract.inv.1).
+    pub invariants: Vec<Contract>,
 }
 
 #[derive(Debug)]
@@ -249,9 +251,14 @@ pub struct FnDecl {
     pub within: Within,
     /// `requires` and `ensures` lines before the body (contract.decl.1).
     pub contracts: Vec<Contract>,
+    /// For an `impl` method: the trait's method of the same name, when that
+    /// has contracts, which the implementation inherits (contract.inh.1);
+    /// an index into `Program::fns`. Set by `parser::contracts::link`.
+    pub inherits: Option<usize>,
 }
 
-/// `requires COND` or `ensures COND` (contract.decl.1-2).
+/// `requires COND`, `ensures COND` or a struct's `invariant COND`
+/// (contract.decl.1-2, contract.inv.1).
 #[derive(Debug)]
 pub struct Contract {
     /// `true` for `ensures`, `false` for `requires`.
@@ -260,6 +267,10 @@ pub struct Contract {
     /// The condition as written, for traps and `ail api` (contract.req.1).
     pub text: String,
     pub pos: Pos,
+    /// The `old(e)` calls of an `ensures` condition, in order: the hidden
+    /// name the condition reads instead and `e`, evaluated on entry
+    /// (contract.ens.3).
+    pub olds: Vec<(String, Expr)>,
 }
 
 /// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.

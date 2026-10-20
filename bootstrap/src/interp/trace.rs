@@ -588,6 +588,26 @@ impl<'a, W: Write> Interp<'a, W> {
         });
     }
 
+    /// trace.run.3: a struct invariant was checked (contract.inv.2-3).
+    #[inline(never)]
+    pub(super) fn trace_invariant(&self, name: &str, c: &crate::ast::Contract, held: bool) {
+        let prog = self.prog;
+        let depth = self.depth;
+        emit(5, |json| {
+            if json {
+                format!(
+                    "{{\"api\":1,\"trace\":\"contract\",\"fn\":{},\"kind\":\"invariant\",\"cond\":{},\"held\":{held},{}}}",
+                    json_str(name),
+                    json_str(&c.text),
+                    at_json(prog, c.pos)
+                )
+            } else {
+                let verdict = if held { "held" } else { "FAILED" };
+                format!("trace: {}contract {name} invariant `{}`: {verdict}", indent(depth), c.text)
+            }
+        });
+    }
+
     /// trace.run.3: a contract condition was checked (contract.run.1).
     #[inline(never)]
     pub(super) fn trace_contract(&self, f: &FnDecl, c: &crate::ast::Contract, held: bool) {

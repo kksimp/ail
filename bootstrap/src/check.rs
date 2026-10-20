@@ -282,6 +282,9 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     c.check_main();
     c.check_attrs();
     c.check_impls();
+    for i in 0..prog.structs.len() {
+        c.check_invariants(i);
+    }
     // err.type.6: inferred error sets are the least fixed point over all
     // functions, found by re-checking them silently until nothing changes.
     let inferring: Vec<usize> =
@@ -1534,7 +1537,12 @@ impl<'p> Checker<'p> {
     // ---- Functions and blocks ----
 
     fn check_fn(&mut self, idx: usize, f: &'p FnDecl) {
-        let Some(body) = &f.body else { return };
+        let Some(body) = &f.body else {
+            if !f.contracts.is_empty() {
+                self.check_bodyless_contracts(idx, f);
+            }
+            return;
+        };
         let sig = self.sigs[idx].clone();
         self.scope = self.fn_scopes[idx].clone();
         self.self_ty = self.fn_self[idx].clone();
@@ -4717,6 +4725,15 @@ impl<'p> Checker<'p> {
 
     /// An unknown name; `args` is the argument count when it was called.
     fn unknown_name(&mut self, name: &str, pos: Pos, args: Option<usize>) {
+        if name == "old" && args.is_some() {
+            self.error_help(
+                "contract.ens.3",
+                pos,
+                "`old(...)` is only available in an `ensures` condition",
+                "name the value in the body before it changes, or move the condition to an `ensures` line",
+            );
+            return;
+        }
         let candidates: Vec<&str> = (self.locals.iter().map(|l| l.name.as_str()))
             .chain(self.fns.keys().copied())
             .chain(PRELUDE.iter().copied())

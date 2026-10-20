@@ -672,6 +672,7 @@ fn main() !
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(col, row, text, fg, bg, ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar|Block|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`, `ORANGE`, `RED`, `WHITE`, `YELLOW` |
+| `std.ui.widgets` | `TextField`, `ListView` (fuzzy `filter`), `Button`, `Dialog`, `Pane`, `Tree`: `render(rect, theme) List[widgets.Run]`, `draw(mut w, rect, theme)`, `on_event(ev[, rect]) widgets.Action` (`Ignored`, `Changed`, `Submit`, `Cancel`); `widgets.Rect(col, row, cols, rows)`; `text_rows(runs, cols, rows)` prints a screen headless |
 
 A window is a grid of text cells; draw with `put`, then `present`:
 
@@ -770,10 +771,22 @@ Lines directly under the signature; conditions are pure `bool`s. `result` is
 the returned value in `ensures`. A failed `requires` traps at the call
 (`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`), both
 with the arguments' values. `ail run --no-contracts` skips the checks.
+`old(e)` in `ensures` is `e` on entry. A trait method's contracts bind its
+implementations (their own `requires` weaken, their own `ensures` add). A
+struct's `invariant COND` lines hold after construction and after every
+`mut self` method (`contract.inv.2`, `contract.inv.3`).
 
 ```ail
 fn divide(a int, b int) int
     requires b != 0
     ensures result * b + a % b == a
     a / b
+
+struct Account
+    balance int
+    invariant balance >= 0
+
+fn Account.add(mut self, n int)
+    ensures balance == old(balance) + n
+    balance += n
 ```

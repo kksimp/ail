@@ -1,0 +1,7 @@
+# contract.ens.3: `old` takes exactly one expression.
+fn f(x int) int
+    ensures result == old(x, x)
+    x
+
+fn main()
+    print(f(1))

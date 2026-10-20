@@ -1,0 +1,13 @@
+# contract.run.3: `--no-contracts` evaluates no condition, `old` and invariants included.
+struct Box
+    n int
+    invariant n > 0
+
+fn Box.drop(mut self, k int)
+    ensures n == old(n) + 1
+    n -= k
+
+fn main()
+    mut b := Box(n: -4)
+    b.drop(1)
+    print(b.n)

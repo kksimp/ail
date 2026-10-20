@@ -410,6 +410,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         str_lits: HashMap::default(),
         lit_mask: resolved.float_literals.iter().chain(resolved.sized_literals.keys()).fold(0, |m, p| m | 1 << (p.line & 63)),
         has_unique: prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique),
+        has_invariants: prog.structs.iter().any(|s| !s.invariants.is_empty()),
         has_defer: prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b)),
         has_moves: !resolved.moves.is_empty(),
         showing: Vec::new(),
@@ -542,6 +543,8 @@ struct Interp<'a, W: Write> {
     /// (own.uniq.3); uses `defer` (own.defer.1); moves values (own.uniq.2).
     /// Each is off for most programs, which then pay nothing for it.
     has_unique: bool,
+    /// Some struct declares an `invariant` (contract.inv.1).
+    has_invariants: bool,
     has_defer: bool,
     has_moves: bool,
     /// The `ref` cells whose text form is being made, to show cycles.
@@ -1118,8 +1121,10 @@ impl<'a, W: Write> Interp<'a, W> {
             self.trace_call(f, &env, pos);
         }
         let checked = contracts::active(f);
+        let mut olds = Vec::new();
         if checked {
             self.check_requires(f, env, pos)?;
+            olds = self.entry_olds(f, env)?;
         }
         let body = f.body.as_ref().expect("checked: the function has a body");
         let mut outcome = self.block(body, env);
@@ -1147,7 +1152,19 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         if checked {
             let at = at.unwrap_or_else(|| body.last().map_or(f.pos, Stmt::pos));
-            if let Err(t) = self.check_ensures(f, env, &result, at) {
+            if let Err(t) = self.check_ensures(f, env, &result, at, &olds) {
+                return Err(self.unwound(f, env, pos, t));
+            }
+        }
+        // contract.inv.3: a `mut self` method leaves its struct's invariants holding.
+        if f.receiver.is_some_and(|r| r.mutable)
+            && self.invariants_active()
+            && let Some((_, Value::Struct(s, _))) = env.first()
+            && !self.prog.structs[*s].invariants.is_empty()
+        {
+            let (s, value) = (*s, env[0].1.clone());
+            let at = at.unwrap_or_else(|| body.last().map_or(f.pos, Stmt::pos));
+            if let Err(t) = self.check_invariants(s, &value, contracts::Culprit::Method(f), at) {
                 return Err(self.unwound(f, env, pos, t));
             }
         }
@@ -2385,7 +2402,12 @@ impl<'a, W: Write> Interp<'a, W> {
         match target {
             Target::Struct(s) => {
                 let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
-                Ok(Value::Struct(s, Rc::new(fields)))
+                let built = Value::Struct(s, Rc::new(fields));
+                // contract.inv.2: a new value satisfies its struct's invariants.
+                if self.invariants_active() && !self.prog.structs[s].invariants.is_empty() {
+                    self.check_invariants(s, &built, contracts::Culprit::Built, pos)?;
+                }
+                Ok(built)
             }
             Target::Variant(e, v) => {
                 let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;

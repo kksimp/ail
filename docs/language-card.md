@@ -39,7 +39,9 @@ fn half(n int) int
     n / 2
 ```
 
-`return x` or bare `return` exits early.
+`return x` or bare `return` exits early. In `ensures`, `old(e)` is `e` on entry. A trait
+method's contracts bind its impls; a struct's `invariant COND` lines hold after
+construction and each `mut self` method.
 
 ## Bindings
 

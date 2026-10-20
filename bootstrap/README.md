@@ -63,7 +63,7 @@ reported but don't stop a program from running.
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
 | `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
-| `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires` and `ensures`: parsing, typing and `result`, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–2`, `contract.run.1–3`, `contract.api.1` |
+| `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
 | `src/parser/messages.rs`, `src/check/absent.rs`, `src/interp/absent.rs` | Messages on error types (turned into an `impl ToStr` at parse time); `?` on an optional failing with the prelude's `Absent` where errors are inferred | `err.msg.1–2`, `err.prop.5` |
 | `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–11` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.coll.14`, `type.str.4–5`, `type.str.11`, `type.str.13–14`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`), `expr.comp.3–4`, `own.uniq.3–4`, `own.uniq.7`, `own.defer.1–2`, `own.ref.1–7` |
@@ -207,8 +207,13 @@ error: ConfigError.Missing(key: "host")
 Contracts (ADRs 0210–0213): `requires COND` and `ensures COND` lines under a
 signature are checked at every call (`result` names the returned value);
 a failure traps `contract.req.1` at the call or `contract.ens.1` at the
-`ensures` line with the arguments' values. `--no-contracts` skips them. No
-`old(x)` yet.
+`ensures` line with the arguments' values. `--no-contracts` skips them.
+Round two (ADRs 0303–0305): `old(e)` in `ensures` (evaluated on entry, bound
+under a hidden name), trait method contracts inherited by implementations
+(`FnDecl::inherits`; own `requires` OR the trait's, own `ensures` AND the
+trait's, arguments renamed to the trait's parameter names), and struct
+`invariant` lines checked after a struct literal and after each `mut self`
+method. `invariant` is a keyword.
 
 Traces (ADRs 0265–0268, `trace.*`): `ail run --trace[=calls|effects|all]`
 writes calls, returns, effects, tasks and contract checks to stderr (JSON

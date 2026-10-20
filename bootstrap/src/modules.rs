@@ -76,7 +76,10 @@ fn load_package(
             }
             let src = match first_src.take() {
                 Some(src) => src,
-                None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                None => match crate::stdlib::ail_module_source(&p.display().to_string()) {
+                    Some(src) => src.to_string(),
+                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                },
             };
             let base = files.len() * FILE_LINES;
             let (mut toks, lex_diags) = lex(&src);
@@ -92,6 +95,13 @@ fn load_package(
             }));
             for import in scan_uses(&toks) {
                 if import.first().is_some_and(|s| s == "std") {
+                    // std.ui.19: a standard module written in AIL.
+                    let dotted = import.join(".");
+                    if let Some(path) = crate::stdlib::ail_module_path(&dotted)
+                        && seen.insert(dotted.clone())
+                    {
+                        queue.push((dotted, vec![PathBuf::from(path)]));
+                    }
                     continue;
                 }
                 let target = packages.target(&module, &import);
@@ -314,7 +324,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         // checker's (`check/stdlib.rs`); their uses are left as written.
         let path: Vec<String> = u.path.iter().map(|(s, _)| s.clone()).collect();
         let found = packages.target(&module, &path);
-        let target = if u.path[0].0 == "std" {
+        let target = if u.path[0].0 == "std" && crate::stdlib::ail_module_path(&dotted).is_some() {
+            Some(Target::Module(dotted.clone()))
+        } else if u.path[0].0 == "std" {
             Some(Target::Std)
         } else if found.module == module {
             diags.push(
@@ -437,6 +449,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             for f in s.fields.iter_mut() {
                 cx.type_ref(&mut f.ty);
             }
+            for c in s.invariants.iter_mut() {
+                cx.expr(&mut c.cond);
+            }
             diags.extend(cx.diags);
         }
     }
@@ -480,6 +495,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         // contract.decl.2: conditions name the module's items as the body does.
         for c in f.contracts.iter_mut() {
             cx.expr(&mut c.cond);
+            for (_, e) in c.olds.iter_mut() {
+                cx.expr(e);
+            }
         }
         if let Some(b) = &mut f.body {
             cx.block(b);
@@ -494,6 +512,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             diags.extend(cx.diags);
         }
     }
+    crate::parser::link_inherited_contracts(prog);
 }
 
 /// mod.use.5: imports must not form a cycle. Each cycle is reported once,

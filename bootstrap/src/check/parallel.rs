@@ -353,7 +353,8 @@ impl<'a> Scan<'a> {
 
     /// A call of function `i`, which may synchronise through a handle.
     fn calls_sync(&mut self, i: usize, name: &str, at: Pos) {
-        if self.sync[i] {
+        // Empty while `context` computes the direct facts.
+        if self.sync.get(i).copied().unwrap_or(false) {
             self.problem(
                 "conc.par.2",
                 at,
