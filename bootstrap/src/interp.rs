@@ -272,6 +272,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         depth: 0,
         closed: false,
         consts: HashMap::default(),
+        env_pool: Vec::new(),
     }
 }
 
@@ -313,6 +314,8 @@ struct Interp<'a, W: Write> {
     closed: bool,
     /// The values of the constants computed so far (mod.const.1).
     consts: HashMap<&'a str, Value>,
+    /// Spare call environments, so a call doesn't allocate one (ADR 0219).
+    env_pool: Vec<Env<'a>>,
 }
 
 /// Name equality without a `memcmp` call: names are short, and `lookup` is
@@ -674,19 +677,34 @@ impl<'a, W: Write> Interp<'a, W> {
         args: Vec<Value>,
         pos: Pos,
     ) -> Result<(Value, Vec<Value>), Trap> {
-        self.depth += 1;
-        if self.depth > MAX_DEPTH {
-            return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
-        }
-        let mut env: Env<'a> = Vec::with_capacity(16);
+        let mut env = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
         if let Some(r) = recv {
             env.push(("self", r));
         }
         env.extend(f.params.iter().map(|p| p.name.as_str()).zip(args));
+        let result = self.run_body(f, &mut env, pos)?;
+        // Only `mut` receivers and parameters are written back (own.param.2).
+        let finals = if f.receiver.is_some_and(|r| r.mutable) || f.params.iter().any(|p| p.mutable) {
+            env.drain(..).map(|(_, v)| v).collect()
+        } else {
+            Vec::new()
+        };
+        env.clear();
+        self.env_pool.push(env);
+        Ok((result, finals))
+    }
+
+    /// Run `f`'s body in `env`, which holds its receiver and parameters; on
+    /// return `env` holds just those again.
+    fn run_body(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
+        }
         let n = env.len();
         let body = f.body.as_ref().expect("checked: the function has a body");
         let end = body.last().map_or(f.pos, Stmt::pos);
-        let (mut result, at) = match self.block(body, &mut env) {
+        let (mut result, at) = match self.block(body, env) {
             Ok(v) => (v, end),
             Err(Exit::Return(v, at)) => (v, at),
             Err(Exit::Trap(t)) => return Err(*t),
@@ -698,12 +716,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         self.depth -= 1;
         env.truncate(n);
-        // Only `mut` receivers and parameters are written back (own.param.2).
-        if f.receiver.is_some_and(|r| r.mutable) || f.params.iter().any(|p| p.mutable) {
-            Ok((result, env.into_iter().map(|(_, v)| v).collect()))
-        } else {
-            Ok((result, Vec::new()))
-        }
+        Ok(result)
     }
 
     fn block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
@@ -1743,6 +1756,30 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
+        // No `mut` operand: no overlap check and nothing to write back, so the
+        // operands go straight into the callee's environment.
+        if f.receiver.is_none_or(|r| !r.mutable) && f.params.iter().all(|p| !p.mutable) {
+            let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+            match recv {
+                Some(Operand::Place(p)) => callee.push(("self", load(env, &p)?)),
+                Some(Operand::Value(v)) => callee.push(("self", v)),
+                None => {}
+            }
+            for (a, param) in args.iter().zip(&f.params) {
+                let v = match &a.value {
+                    Expr::Name(n, _) if let Some(v) = lookup(env, n) => v.clone(),
+                    e => match self.operand(e, env)? {
+                        Operand::Place(p) => load(env, &p)?,
+                        Operand::Value(v) => v,
+                    },
+                };
+                callee.push((param.name.as_str(), v));
+            }
+            let result = self.run_body(f, &mut callee, pos)?;
+            callee.clear();
+            self.env_pool.push(callee);
+            return Ok(result);
+        }
         let has_recv = recv.is_some();
         let mut ops = Vec::with_capacity(args.len() + 1);
         if let Some(r) = recv {
