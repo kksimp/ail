@@ -37,7 +37,7 @@ use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
 use crate::num::Num;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 enum Value {
     Unit,
     Int(i64),
@@ -63,6 +63,31 @@ enum Value {
     Nested(u32),
     /// The failure of a `T ! E` result (err.model.1).
     Fail(Rc<Failure>),
+}
+
+impl Clone for Value {
+    /// Written out so the scalar cases inline at every read of a local
+    /// (the derived `clone` was an out-of-line call; ADR 0219).
+    #[inline(always)]
+    fn clone(&self) -> Value {
+        match self {
+            Value::Unit => Value::Unit,
+            Value::Int(v) => Value::Int(*v),
+            Value::Float(v) => Value::Float(*v),
+            Value::Num(k, v) => Value::Num(*k, *v),
+            Value::Bool(v) => Value::Bool(*v),
+            Value::Char(v) => Value::Char(*v),
+            Value::None => Value::None,
+            Value::Nested(n) => Value::Nested(*n),
+            Value::Str(s) => Value::Str(Rc::clone(s)),
+            Value::Struct(i, f) => Value::Struct(*i, Rc::clone(f)),
+            Value::Enum(e, v, f) => Value::Enum(*e, *v, Rc::clone(f)),
+            Value::List(l) => Value::List(Rc::clone(l)),
+            Value::Map(t) => Value::Map(Rc::clone(t)),
+            Value::Set(t) => Value::Set(Rc::clone(t)),
+            Value::Fail(f) => Value::Fail(Rc::clone(f)),
+        }
+    }
 }
 
 /// An error value with its context messages and return trace (err.ctx.1-2).
@@ -273,6 +298,8 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         closed: false,
         consts: HashMap::default(),
         env_pool: Vec::new(),
+        ops_pool: Vec::new(),
+        str_lits: HashMap::default(),
     }
 }
 
@@ -316,6 +343,9 @@ struct Interp<'a, W: Write> {
     consts: HashMap<&'a str, Value>,
     /// Spare call environments, so a call doesn't allocate one (ADR 0219).
     env_pool: Vec<Env<'a>>,
+    ops_pool: Vec<Vec<Prepared>>,
+    /// String literals as shared text, by the address of the literal in the program.
+    str_lits: HashMap<usize, Rc<str>>,
 }
 
 /// Name equality without a `memcmp` call: names are short, and `lookup` is
@@ -703,15 +733,15 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let n = env.len();
         let body = f.body.as_ref().expect("checked: the function has a body");
-        let end = body.last().map_or(f.pos, Stmt::pos);
         let (mut result, at) = match self.block(body, env) {
-            Ok(v) => (v, end),
-            Err(Exit::Return(v, at)) => (v, at),
+            Ok(v) => (v, None),
+            Err(Exit::Return(v, at)) => (v, Some(at)),
             Err(Exit::Trap(t)) => return Err(*t),
             Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
         };
         // err.decl.3: an error value leaving a fallible function is its failure.
         if matches!(f.ret.as_ref().map(|t| &t.kind), Some(TypeKind::Fallible { .. })) && self.is_error(&result) {
+            let at = at.unwrap_or_else(|| body.last().map_or(f.pos, Stmt::pos));
             result = Value::Fail(Rc::new(Failure { error: result, context: Vec::new(), trace: vec![at] }));
         }
         self.depth -= 1;
@@ -1057,7 +1087,10 @@ impl<'a, W: Write> Interp<'a, W> {
     #[inline(never)]
     fn eval_general(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
-            Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
+            // A literal's text is shared, not copied, on every evaluation.
+            Expr::Str(s, _) => Value::Str(Rc::clone(
+                self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str())),
+            )),
             // type.num.13: a literal typed by context as a sized number.
             Expr::Int(v, pos) if self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
@@ -1269,7 +1302,7 @@ impl<'a, W: Write> Interp<'a, W> {
         match (pat, v) {
             (Pattern::Wildcard(_), _) => true,
             (Pattern::Or(alts, _), v) => alts.iter().any(|a| self.matches(a, v)),
-            (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => self.prog.enums[*e].variants[*i].name == *name,
+            (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => name_eq(&self.prog.enums[*e].variants[*i].name, name),
             (Pattern::Literal(lit, _), v) => match (lit, v) {
                 (Literal::Int(a), Value::Int(b)) => a == b,
                 (Literal::Int(a), Value::Num(k, b)) => i128::from(*a) == k.decode(*b),
@@ -1781,7 +1814,7 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(result);
         }
         let has_recv = recv.is_some();
-        let mut ops = Vec::with_capacity(args.len() + 1);
+        let mut ops = self.ops_pool.pop().unwrap_or_default();
         if let Some(r) = recv {
             ops.push(prepare(r, f.receiver.is_some_and(|r| r.mutable), env)?);
         }
@@ -1790,23 +1823,32 @@ impl<'a, W: Write> Interp<'a, W> {
             ops.push(prepare(op, param.mutable, env)?);
         }
         check_overlap(&ops, pos)?;
-        let mut values = Vec::with_capacity(ops.len());
-        for (place, value, _) in &mut ops {
-            values.push(match value.take() {
+        // The operands move straight into the callee's environment (receiver first).
+        let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+        for (i, (place, value, _)) in ops.iter_mut().enumerate() {
+            let name = match (has_recv, i) {
+                (true, 0) => "self",
+                (true, i) => f.params[i - 1].name.as_str(),
+                (false, i) => f.params[i].name.as_str(),
+            };
+            let v = match value.take() {
                 Some(v) => v,
                 None => std::mem::replace(
                     slot_mut(env, place.as_ref().expect("checked: `mut` operands are places"), false)?,
                     Value::Unit,
                 ),
-            });
+            };
+            callee.push((name, v));
         }
-        let recv_value = if has_recv { Some(values.remove(0)) } else { None };
-        let (result, finals) = self.call(f, recv_value, values, pos)?;
-        for ((place, _, mutable), v) in ops.into_iter().zip(finals) {
+        let result = self.run_body(f, &mut callee, pos)?;
+        // Only `mut` receivers and parameters are written back (own.param.2).
+        for ((place, _, mutable), (_, v)) in ops.drain(..).zip(callee.drain(..)) {
             if mutable {
                 *slot_mut(env, &place.expect("checked: `mut` operands are places"), false)? = v;
             }
         }
+        self.ops_pool.push(ops);
+        self.env_pool.push(callee);
         Ok(result)
     }
 
