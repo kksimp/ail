@@ -203,3 +203,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
 | [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
 | [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |
+| [0217](0217-agent-corpus-standing-benchmark.md) | Keep an agent-tool corpus as the standing token and speed benchmark; amends 0029 layer 1 *(delegated)* | Accepted | 2026-10-20 |
+| [0218](0218-agent-corpus-conventions.md) | Conventions for the agent-tool corpus programs *(delegated)* | Accepted | 2026-10-20 |
