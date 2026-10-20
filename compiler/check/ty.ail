@@ -34,8 +34,12 @@ pub enum Ty
     AnyOf(trait_index int)
     ## `ref T` (own.ref.1)
     RefOf(inner Ty)
+    ## `*T`, a raw pointer (unsafe.ptr.1).
+    PtrOf(inner Ty)
     ## `Channel[T]`, `Mutex[T]`, `Atomic[T]`, `TaskGroup` (inner `Unit`).
     Conc(kind str, inner Ty)
+    ## `fn(A, B) R`, a function value (type.fn.1); `ret` is `Unit` for no result.
+    FnTy(params List[Ty], ret Ty)
 
 ## The error part of `T ! E`: a written set, or a function's inferred set.
 pub enum Errs
@@ -85,6 +89,10 @@ pub fn same(a Ty, b Ty) bool
             match b
                 Enum(t, ys) => s == t and same_all(xs, ys)
                 _ => false
+        FnTy(xs, r) =>
+            match b
+                FnTy(ys, s) => same_all(xs, ys) and same(r, s)
+                _ => false
         _ => a == b
 
 fn elem_of_list(t Ty) Ty?
@@ -113,6 +121,7 @@ pub fn has_unknown(t Ty) bool
         Struct(_, xs) => any_unknown(xs)
         Enum(_, xs) => any_unknown(xs)
         Union(xs) => any_unknown(xs)
+        FnTy(xs, r) => any_unknown(xs) or has_unknown(r)
         _ => false
 
 fn any_unknown(xs List[Ty]) bool
@@ -152,6 +161,7 @@ pub fn subst(t Ty, binds List[Bind]) Ty
                 ErrSet(set) => Ty.Res(subst(x, binds), Errs.ErrSet(subst_all(set, binds)))
                 Inferred => Ty.Res(subst(x, binds), errs)
         Union(m) => Ty.Union(subst_all(m, binds))
+        FnTy(xs, r) => Ty.FnTy(subst_all(xs, binds), subst(r, binds))
         _ => t
 
 pub fn subst_all(ts List[Ty], binds List[Bind]) List[Ty]
@@ -173,6 +183,7 @@ pub fn mentions(t Ty, p int) bool
             match errs
                 ErrSet(set) => mentions(x, p) or mentions_any(set, p)
                 Inferred => mentions(x, p)
+        FnTy(xs, r) => mentions_any(xs, p) or mentions(r, p)
         _ => false
 
 fn mentions_any(xs List[Ty], p int) bool

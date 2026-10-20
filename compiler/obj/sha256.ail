@@ -1,0 +1,153 @@
+## SHA-256 (FIPS 180-4) over bytes, for the code signature of Mach-O
+## executables (ADR 0389). `std.hash` hashes `str` values only, so bytes that
+## aren't UTF-8 need this until the `bytes` type lands.
+
+K := [
+    1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298,
+]
+
+M32 := 4294967295
+
+fn rotr(x int, n int) int
+    x.shr(n).bit_or(x.shl(32 - n)).bit_and(M32)
+
+## The digest of `bytes[from..to]`, as 32 bytes.
+pub fn sha256(bytes List[int], from int, to int) List[int]
+    mut h := [
+        1779033703,
+        3144134277,
+        1013904242,
+        2773480762,
+        1359893119,
+        2600822924,
+        528734635,
+        1541459225,
+    ]
+    n := to - from
+    # The message, a 1 bit, zeros, and the length in bits: whole blocks.
+    mut tail := List[int]()
+    full := n / 64 * 64
+    for i in from + full..to
+        tail.push(bytes[i])
+    tail.push(128)
+    while tail.len() % 64 != 56
+        tail.push(0)
+    bits := n * 8
+    for k in 0..8
+        tail.push(bits.shr(8 * (7 - k)).bit_and(255))
+    mut w := [0 for _ in 0..64]
+    mut off := 0
+    while off < full + tail.len()
+        for t in 0..16
+            mut v := 0
+            for b in 0..4
+                p := off + 4 * t + b
+                byte := if p < full then bytes[from + p] else tail[p - full]
+                v = v.shl(8).bit_or(byte)
+            w[t] = v
+        for t in 16..64
+            x := w[t - 15]
+            y := w[t - 2]
+            s0 := rotr(x, 7).bit_xor(rotr(x, 18)).bit_xor(x.shr(3))
+            s1 := rotr(y, 17).bit_xor(rotr(y, 19)).bit_xor(y.shr(10))
+            w[t] = (w[t - 16] + s0 + w[t - 7] + s1).bit_and(M32)
+        mut a := h[0]
+        mut b := h[1]
+        mut c := h[2]
+        mut d := h[3]
+        mut e := h[4]
+        mut f := h[5]
+        mut g := h[6]
+        mut hh := h[7]
+        for t in 0..64
+            s1 := rotr(e, 6).bit_xor(rotr(e, 11)).bit_xor(rotr(e, 25))
+            ch := e.bit_and(f).bit_xor(e.bit_not().bit_and(M32).bit_and(g))
+            t1 := (hh + s1 + ch + K[t] + w[t]).bit_and(M32)
+            s0 := rotr(a, 2).bit_xor(rotr(a, 13)).bit_xor(rotr(a, 22))
+            maj := a.bit_and(b).bit_xor(a.bit_and(c)).bit_xor(b.bit_and(c))
+            t2 := (s0 + maj).bit_and(M32)
+            hh = g
+            g = f
+            f = e
+            e = (d + t1).bit_and(M32)
+            d = c
+            c = b
+            b = a
+            a = (t1 + t2).bit_and(M32)
+        h[0] = (h[0] + a).bit_and(M32)
+        h[1] = (h[1] + b).bit_and(M32)
+        h[2] = (h[2] + c).bit_and(M32)
+        h[3] = (h[3] + d).bit_and(M32)
+        h[4] = (h[4] + e).bit_and(M32)
+        h[5] = (h[5] + f).bit_and(M32)
+        h[6] = (h[6] + g).bit_and(M32)
+        h[7] = (h[7] + hh).bit_and(M32)
+        off += 64
+    mut out := List[int]()
+    for v in h
+        for k in 0..4
+            out.push(v.shr(8 * (3 - k)).bit_and(255))
+    out

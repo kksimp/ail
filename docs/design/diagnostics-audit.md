@@ -190,3 +190,7 @@ Networking and regex (lane 147): an unhandled `net.get` or `regex.compile`
 stays `err.use.1` with no fix, for the same reason as dates: the error type is
 another module's. Corpus: 146 programs, 90 fixed (62%). `regex.search` (a
 Python name) is `std.use.2` with no fix; the help lists the real functions.
+
+Braces in strings (lane 147, from the whole-task study): `lex.str.2` for an
+empty `{}` or an unclosed `{` now has a fix that writes `\{` (`bootstrap/src/fix/string.rs`).
+A `}` after the escaped brace stays literal. Corpus: 148 programs, 92 fixed (62%).

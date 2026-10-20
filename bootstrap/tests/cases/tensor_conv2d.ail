@@ -1,0 +1,9 @@
+# std.tensor.16: the valid 2-D convolution of an image with a kernel.
+fn main()
+    img := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], [3, 3])
+    k := tensor.from([1.0, 0.0, 0.0, -1.0], [2, 2])
+    print(img.conv2d(k))
+    print(img.conv2d(tensor.from([1.0], [1, 1])))
+    print(img.conv2d(k).sum())
+    small := tensor.from([0.5, 0.25, 0.125, 1.0], [2, 2])
+    print(small.conv2d(tensor.from([2.0, 2.0, 2.0, 2.0], [2, 2])))

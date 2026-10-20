@@ -1,0 +1,5 @@
+fn main()
+    mut k := 60
+    while true
+        print(1.shl(k))
+        k += 1

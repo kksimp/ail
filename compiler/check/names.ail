@@ -51,6 +51,7 @@ pub STD_MODULES := [
     "fs",
     "hash",
     "io",
+    "mem",
     "net",
     "path",
     "proc",

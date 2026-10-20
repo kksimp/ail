@@ -23,12 +23,23 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
 registers go on the stack, 8 bytes each, in order. Callee-saved registers are
-the platform's. No variadics. Structs are passed by pointer.
+the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
+an `extern` call treats them as clobbered). No variadics. Structs are passed
+by pointer.
+
+On x86-64 the code generator keeps rax, rdx, r10, r11, xmm14 and xmm15 as
+scratch; the allocator (ADR 0386) uses rsi, rdi, r8, r9, rcx, rbx, r12–r15,
+xmm0–xmm13. On ARM64 (ADR 0388) the scratch registers are x16, x17, x8, d30
+and d31 (x0 between calls); x18 is never used; the allocator uses x1–x7,
+x9–x15, x19–x28 and d0–d29. Mach-O executables are loaded by dyld, name
+libSystem but import nothing, and are signed ad hoc by the backend
+(ADR 0389).
 
 ## 2. Value layouts
 
 All values are 64-bit and little-endian (ADR 0007). In registers and in list
-elements each scalar takes 8 bytes.
+elements each scalar takes 8 bytes, except that a `List[bool]` element takes
+one byte, 0 or 1 (ADR 0391).
 
 | Type | Layout |
 |---|---|
@@ -55,7 +66,7 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```text
 +0   u64  len     elements in use
 +8   u64  cap     elements allocated
-+16  ptr  data    cap * 8 bytes, separate allocation
++16  ptr  data    cap * 8 bytes (cap bytes for List[bool]), separate allocation
 ```
 
 `data` is separate so `push` can grow without moving the header the caller
@@ -69,8 +80,10 @@ addresses with 8 bytes of slack for it (ADR 0407).
 
 ## 3. Entry and exit
 
-The linker script of lane 120 points the object's entry at `_start` (ELF) or
-`_main` (Mach-O, `LC_MAIN`), both defined by the runtime:
+The object writer points the entry at `_start` (ELF) or `_main` (Mach-O,
+`LC_MAIN`). On Linux x86-64 `_start` is emitted by the code generator: clear
+`rbp`, align the stack, `call rt.init`, `call main`, `rt.exit(0)` (ADR 0387).
+The steps:
 
 1. take the stack pointer, set up the heap (§5), save `argc`/`argv` for
    `env.args()` (later);
@@ -123,6 +136,19 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 
 ## 7. Traps
 
+**As built (lane 120, ADR 0385).** A failed check branches to a stub at the
+end of its function, which calls
+`rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
+1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
+count), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
+constant source excerpt (`  L | line` and the caret line). The output is the
+interpreter's first line and excerpt, byte for byte; the snapshot lines
+after them are not printed. Runtime code has no checks: its arithmetic wraps.
+
+The trap-record design below was the first draft; a record can't hold the
+operands the interpreter's messages contain.
+
 `rt_trap(rec)` takes a pointer to a **trap record** the compiler emits per
 trap site, then writes to standard error and exits 1:
 
@@ -151,6 +177,20 @@ by zero), `expr.arith.1` (overflow), per `expr.arith` in spec chapter 5.
 
 ## 8. What the runtime provides to compiled code
 
+**As built (lane 120, ADR 0387).** `compiler/rt/native/core.ail`, compiled
+with every program, provides `rt.init`, `rt.exit`, `rt.alloc`, `rt.trap`,
+`rt.out_str`, `rt.out_int`, `rt.out_float`, `rt.out_bool`, `rt.out_nl`,
+`rt.out_list_int`/`_float`/`_bool`, `rt.list_new`, `rt.list_push`,
+`rt.list_pushf` and `rt.list_copy`; `print` writes its pieces straight into
+the buffer instead of building a string. List indexing and `len` are inline.
+The runtime is written over the primitives of `compiler/rt/native/prim.ail`
+(`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
+`global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
+`target`), which the code generator expands inline and only runtime code may
+call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
+
+The table below is the first draft:
+
 | Symbol | Meaning |
 |---|---|
 | `rt_start` | entry, §3 |
@@ -169,15 +209,69 @@ and is tested under the interpreter. When lane 126 lands raw pointers the same
 modules switch their load/store helpers to `unsafe` pointer operations; the
 algorithms don't change (ADR 0404).
 
-## 9. FFI hook (with lane 126)
+## 9. FFI hook (lane 126, ADRs 0431–0436)
 
-An `extern "c" fn` in a native program resolves in one of two ways: **static**,
-a symbol the runtime itself provides (`rt_*`), or **dynamic**, a symbol from a
-shared library named in the declaration. Dynamic needs an `LC_LOAD_DYLIB` /
-`DT_NEEDED` and an import table; the ELF and Mach-O writers of lane 120 add
-them when the first dynamic `extern` appears. Until then a native program with
-an `extern` is rejected by `ail build` with `ffi.native.1` (to be written by
-lane 126).
+The interpreter already calls C (`extern c fn`, `docs/spec/14-ffi.md`). This
+section is the plan for compiled programs. Nothing here is built yet; until it
+is, `ail build` rejects a program that declares an `extern c fn` or uses
+`std.mem` allocation with `ffi.native.1` (spec `ffi.native.1`).
+
+**Source of truth for the call shape.** The checker already limits a C call to
+six integer-like and eight float arguments (`ffi.decl.3`) and types it with
+`int`/`float`/`bool`/sized numbers/`*T` (`ffi.map.1`). A native call is
+therefore the platform's register convention of §1 with no thunk and no stack
+arguments:
+
+| Step | Rule |
+|---|---|
+| Arguments | integer-like in order into the integer registers, `float` and `f32` in order into the float registers (`f32` in the low half); narrow integers are extended to 64 bits by signedness first (`movsx`/`movzx`, `sxtb`/`uxtb`...), because Apple's ARM64 convention makes the caller extend |
+| Result | integer register or float register; a narrow result is truncated to its declared type and extended again (`ffi.map.2`); `bool` is the low byte `!= 0` |
+| Registers | caller-saved registers are assumed clobbered across the call |
+| Stack | 16-byte aligned at the call (§1) |
+| Not supported | variadic functions, structs by value, stack arguments, callbacks (`ffi.decl.3`, ADR 0432) |
+
+**Resolution: static or dynamic.** A symbol the runtime provides (`rt_*`) is
+a direct call. Any other symbol is **dynamic**, from the library written in the
+declaration (`extern c "libm" fn`) or from libc when none is.
+
+| Target | What the writer emits |
+|---|---|
+| Linux x86-64, ARM64 (ELF) | `PT_INTERP` (the system loader), `DT_NEEDED` for each library, a `.got` slot per symbol bound at load time (`R_X86_64_GLOB_DAT`, `R_AARCH64_GLOB_DAT`; `DT_FLAGS` `BIND_NOW`, so no lazy PLT), calls as `call [rip+slot]` / `ldr x16, slot; blr x16` |
+| macOS ARM64 (Mach-O) | `LC_LOAD_DYLIB` per library (`/usr/lib/libSystem.B.dylib` always), chained fixups for the `__got` slots, same `ldr`/`blr` call; library names resolve as in `ffi.load.1` |
+| Windows x86-64 | stub, `plat.win.1` and `ffi.load.3` |
+
+A program with **no** `extern` links no libc and has no `PT_INTERP`
+(`ffi.link.1`, ADR 0105): the static executable of §3 is unchanged. A program
+with one becomes a dynamic executable; its entry is still `rt_start`, which
+does not go through `__libc_start_main`. That is safe for the pure functions
+the language targets (`strlen`, `sqrt`, `atoi`), because the loader has already
+initialised libc and its thread-local storage. It is not enough for libc's
+buffered stdio, so `rt_exit` calls `fflush(0)` through the dynamic symbol when
+libc is linked, before the `exit` syscall. This is an open risk until a
+differential test with `printf` passes on both Linux ARM64 and macOS.
+
+**Memory.** `mem.alloc`, `mem.cstr` and `mem.free` call libc `malloc` and
+`free` when libc is linked, so a block can cross the boundary in either
+direction (`unsafe.mem.1`); without libc they use `rt_alloc` and `free` is a
+no-op until the collector exists (§5). `read`, `write` and `offset` compile to
+a load, a store and an `add` of `n * size_of(T)`. The interpreter's block table
+(`unsafe.ptr.4–6`) does not exist natively: only a null access is trapped, by
+a guard page and a signal handler the runtime installs, reporting
+`unsafe.ptr.4`; out-of-block and freed accesses are undefined behaviour, as in
+C, and the differential harness runs them under the interpreter only.
+
+**Runtime Code.** The call stubs, the GOT slots and `rt_exit`'s flush belong
+to the executable and fall under the Runtime Exception (ADR 0510); the
+interpreter's `dlopen` glue (`bootstrap/src/interp/ffi.rs`) is toolchain code
+and does not.
+
+**Order of work (lane 120 and lane 122).** (1) `compiler/rt/` switches its
+word-addressed helpers to `unsafe` pointer methods once lane 122 has the
+interpreter-side tests (ADR 0435 is merged); (2) the ELF writer gains
+`PT_INTERP`/`DT_NEEDED`/GOT and the first `extern` call; (3) the Mach-O writer
+follows in lockstep (ADR 0008); (4) `ail build` drops `ffi.native.1` and the
+selftest diffs `examples/ffi_libc.ail` and `examples/ffi_buffers.ail` between
+the interpreter and the native executable on both platforms.
 
 ## Licensing
 

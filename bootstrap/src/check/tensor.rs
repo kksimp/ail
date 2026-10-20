@@ -111,6 +111,36 @@ impl<'p> Checker<'p> {
             );
             return Some(Ty::Err);
         }
+        if m == "round" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.19",
+                pos,
+                "`round` is on `float` tensors, and this one holds `int`",
+                "a tensor of `int` already has whole numbers",
+            );
+            return Some(Ty::Err);
+        }
+        if m == "clamp" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.18",
+                pos,
+                "`clamp` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).clamp(lo, hi)`",
+            );
+            return Some(Ty::Err);
+        }
+        if m == "conv2d" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.16",
+                pos,
+                "`conv2d` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).conv2d(k)`",
+            );
+            return Some(Ty::Err);
+        }
         if matches!(m, "relu" | "sigmoid" | "tanh") && elem == Ty::Int {
             self.args_only(args);
             let msg = format!("`{m}` is on `float` tensors, and this one holds `int`");
@@ -122,12 +152,17 @@ impl<'p> Checker<'p> {
             "shape" => (vec![], Ty::List(Box::new(Ty::Int))),
             "len" => (vec![], Ty::Int),
             "to_list" => (vec![], Ty::List(Box::new(elem))),
+            "item" => (vec![], elem),
             // std.tensor.11: over every element, or over one axis.
             "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
             "sum" | "max" | "mean" => (vec![Ty::Int], t),
             "transpose" => (vec![], t),
+            "round" => (vec![], self.tensor_ty(Ty::Int)),
+            "argmax" | "argmin" if args.is_empty() => (vec![], Ty::Int),
+            "argmax" | "argmin" => (vec![Ty::Int], self.tensor_ty(Ty::Int)),
+            "clamp" => (vec![elem.clone(), elem.clone()], t),
             "dot" => (vec![t], elem),
-            "add" | "mul" | "matmul" => (vec![t.clone()], t),
+            "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
             "relu" | "sigmoid" | "tanh" => (vec![], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),

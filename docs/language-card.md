@@ -78,7 +78,7 @@ Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
 `proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
-`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`get_bytes`/`post_bytes`/`request_bytes` give `.data` as `bytes`; `proc.run_bytes`) (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
@@ -105,6 +105,7 @@ fn Point.origin() Point           # associated function: Point.origin()
 fn main()
     mut p := Point(y: 2, x: 1)    # name fields, in any order
     p.shift(3)                    # `mut self` methods need a `mut` variable
+    p.shift(dx: 3)                # arguments may be named, after positional ones
     print(p.sum())                # method calls always have ()
     c := Color.Red                # qualified, unless the type is known: `c = Green`
     p.x = 10                      # fields of a `mut` variable can be assigned
@@ -318,6 +319,9 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 ```
 
 `if` and `match` work as statements or values; a function can end with either.
+
+A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
+calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible ones; no lambdas.
 
 ## Operators and strings
 
@@ -533,7 +537,9 @@ Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
-`unsafe` and a block allow `unsafe fn` calls (and C calls, raw pointers); `ail.pkg` needs `unsafe allow`.
+`unsafe` and a block allow `unsafe fn` calls, C calls and `std.mem`; `ail.pkg` needs `unsafe allow`.
+`extern c "libm" fn hypot(a float, b float) float` declares a C function (types `int`, `float`,
+`bool`, `i32`, `u8`, `*T`...; a C `int` is `i32`); `mem.cstr(s) *u8`, `mem.from_cstr(p)`, `mem.alloc(n, 0) *int`, `mem.free(p)`; `p.read()`, `p.write(v)`, `p.offset(n)`.
 
 A window is a grid of text cells; draw with `put`, then `present`:
 

@@ -1,0 +1,12 @@
+# unsafe.ptr.3: a pointer has read, write, offset and is_null. unsafe.ptr.1: the
+# memory functions take pointers, and a pointer can't point to a `str`.
+use std.mem
+
+fn main()
+    unsafe
+        p := mem.alloc(2, 1)
+        p.length()
+        mem.free(3)
+        q := mem.alloc(1, "text")
+        p.write(1.5)
+        mem.free(p)

@@ -1,0 +1,21 @@
+# Lists of numbers: a literal, an empty list typed by `push`, indexing,
+# a copy on binding, and a `for` over a list it changes (ADR 0384).
+fn norm(xs List[float]) float
+    mut s := 0.0
+    for x in xs
+        s += x * x
+    s.sqrt()
+
+fn main()
+    mut xs := []
+    for i in 0..5
+        xs.push(i * 2)
+    ys := xs
+    xs[0] = 7
+    for x in xs
+        if x > 4 and x < 8
+            xs.push(x)
+    print(xs)
+    print(ys[0] + ys.len())
+    print(norm([3, 4.0]))
+    print(-7.abs().max(2) / 2 == 3 or false)
