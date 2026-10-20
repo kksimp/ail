@@ -1,4 +1,4 @@
-//! Parallel loops (conc.par.1-7, ADRs 0236-0241): which `for` loops have
+//! Parallel loops (conc.par.1-7, ADRs 0236-0239 and 0242-0243): which `for` loops have
 //! independent iterations, and the checks on `par for`.
 //!
 //! Runs after type checking and reads only the program, the checker's

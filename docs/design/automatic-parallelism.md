@@ -1,6 +1,6 @@
 # Automatic parallelism and modern hardware
 
-> **Design note,** 2026-10-20 (lane 39). Decisions are in ADRs 0236–0241;
+> **Design note,** 2026-10-20 (lane 39). Decisions are in ADRs 0236–0239 and 0242–0243;
 > normative rules are `conc.par.1–7` in [11-concurrency.md](../spec/11-concurrency.md)
 > and the amended `type.coll.12`. This note explains them and records what a
 > native runtime and backend will build on.
@@ -168,7 +168,7 @@ more than the loop bodies, so `ail run --parallel` isn't offered. The
 analysis half (`ail effects --parallel`) is what the native backend will
 consume.
 
-## 5. SIMD (ADR 0240)
+## 5. SIMD (ADR 0242)
 
 The loops that are independent are also the loops that vectorise: no
 loop-carried dependence except recognised reductions. The backend
@@ -200,7 +200,7 @@ have four f64 lanes in flight.
   AIL can beat C here: C can't change a struct array's layout behind the
   programmer's back.
 
-## 6. NPUs and GPUs (ADR 0241)
+## 6. NPUs and GPUs (ADR 0243)
 
 ### 6.1 What's reachable per target
 
@@ -249,7 +249,7 @@ the OS driver compiling *something*: Vulkan drivers compile SPIR-V, Metal
 compiles MSL, Core ML compiles its model, ONNX Runtime compiles ONNX. AIL
 would generate SPIR-V/MSL/graphs itself (its own code generator), and the
 driver's compiler is part of the platform, like the CPU's microcode. This
-reading is recorded as OQ-060 for the designer.
+reading is recorded as OQ-090 for the designer.
 
 ### 6.4 First prototype and cost
 

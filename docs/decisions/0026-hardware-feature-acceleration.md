@@ -6,7 +6,7 @@
 - **Topic:** 6 — GC design; 22 — Runtime architecture
 - **Spec rules:** none (implementation policy)
 - **Resolves:** OQ-003
-- **Extended by:** [ADR 0236](0236-automatic-parallel-loops.md) (parallel loops give sequential results), [ADR 0240](0240-simd-vectorisation.md) (SIMD), [ADR 0241](0241-std-tensor-and-accel-capability.md) (NPUs and GPUs)
+- **Extended by:** [ADR 0236](0236-automatic-parallel-loops.md) (parallel loops give sequential results), [ADR 0242](0242-simd-vectorisation.md) (SIMD), [ADR 0243](0243-std-tensor-and-accel-capability.md) (NPUs and GPUs)
 
 ## Context
 

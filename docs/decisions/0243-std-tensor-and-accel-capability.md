@@ -1,4 +1,4 @@
-# 0241. NPUs and GPUs through a `std.tensor` module and an `accel` capability (design)
+# 0243. NPUs and GPUs through a `std.tensor` module and an `accel` capability (design)
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
@@ -6,7 +6,7 @@
 - **Topic:** 21 — Standard library; 25 — Optimization strategy; 18 — Effects
 - **Spec rules:** none yet (design only; the module isn't implemented)
 - **Extends:** [ADR 0026](0026-hardware-feature-acceleration.md), [ADR 0165](0165-capability-denial.md)
-- **Open question:** [OQ-060](../open-questions.md) (driver compilers and ADR 0010)
+- **Open question:** [OQ-090](../open-questions.md) (driver compilers and ADR 0010)
 
 ## Context
 
@@ -51,7 +51,7 @@ NPU with no per-platform code.
 
 - First prototype: `std.tensor` on the CPU in the bootstrap (about one lane-night). Then Core ML (one to two weeks after Objective-C FFI), Vulkan compute (two to three weeks, needs an AIL SPIR-V emitter), Windows ML (one to two weeks after FFI).
 - `accel` joins `eff.cap.*` when the module lands; until then nothing gives it.
-- OQ-060 must be settled before any device backend.
+- OQ-090 must be settled before any device backend.
 
 ## Rejected alternatives
 
