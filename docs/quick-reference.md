@@ -823,6 +823,22 @@ implementation.
 area")` before a function warns at each call, with the reason (required).
 Unknown attributes are errors.
 
+## Unsafe
+
+`unsafe` and a block allow unsafe operations; `unsafe fn` can be called only
+there. The block yields its last expression and may `return`. A package
+needs `unsafe allow` on its `package` or `dep` line in `ail.pkg`; a program
+without `ail.pkg` needs nothing. A function with an `unsafe` block is not `@pure`.
+
+```ail
+unsafe fn twice(x int) int
+    x * 2
+
+fn safe_twice(x int) int
+    unsafe
+        twice(x)
+```
+
 ## Contracts
 
 Lines directly under the signature; conditions are pure `bool`s. `result` is

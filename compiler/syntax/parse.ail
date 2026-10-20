@@ -88,7 +88,7 @@ fn tok_text(t Tok) str
 
 ## Keywords the spec defines that the bootstrap doesn't implement yet.
 fn not_yet(k str) bool
-    k == "unsafe" or k == "extern" or k == "as"
+    k == "extern" or k == "as"
 
 fn assign_op(s str) ast.BinOp?
     match s
@@ -176,6 +176,9 @@ fn Parser.top_level(mut self)
             diag("lex.block.1", here())
             skip_block()
         elif tag == "kw" and text == "fn"
+            if f := function(ast.Within.TopLevel)
+                fns.push(f)
+        elif tag == "kw" and text == "unsafe" and kw_at(1) == "fn"
             if f := function(ast.Within.TopLevel)
                 fns.push(f)
         elif tag == "kw" and text == "use"
@@ -498,9 +501,9 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                     break
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
-        while at_newline() and (sym_at(1) == "@" or kw_at(1) == "fn")
+        while at_newline() and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe")
             i += 1
-    if not at_kw("fn")
+    if not at_kw("fn") and not (at_kw("unsafe") and kw_at(1) == "fn")
         diag("gram.attr.2", here())
         skip_statement()
         return none
@@ -514,6 +517,7 @@ fn in_trait(w ast.Within) bool
         TopLevel | InImpl(_) => false
 
 fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
+    unsafe_fn := eat_kw("unsafe")
     bump()
     first := take_name("a function name after `fn`", "gram.fn.1")?
     # `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
@@ -604,6 +608,8 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         within: within,
         contracts: fb.contracts,
         inherits: none,
+        unsafe_fn: unsafe_fn,
+        ext: none,
     )
 
 ## `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -983,6 +989,11 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         return for_loop(false, pos)
     if tag == "kw" and text == "with"
         return with_stmt(pos)
+    if tag == "kw" and text == "unsafe" and kw_at(1) != "fn"
+        # unsafe.block.1: `unsafe` and an indented block.
+        bump()
+        body := block("`unsafe`", "unsafe.block.1")?
+        return ast.Stmt.Unsafe(body: body, pos: pos)
     if tag == "kw" and text == "par"
         # conc.par.5: `par for` asserts that the iterations are independent.
         bump()
