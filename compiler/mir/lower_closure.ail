@@ -89,3 +89,33 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
     emit_void(inst(-1, "set", [r.id, c2.i, op("get", [out, c2.i], e)]))
     count_close(c2)
     Val(id: -1, ty: Ty.Unit)
+
+## A declared function used as a value (type.fn.2): its address. `none` if
+## `name` isn't a function of the program.
+fn Lower.fn_value(mut self, name str) Val?
+    key := "{prefix}{name}"
+    sig := sigs.get(key) else return none
+    mut i := inst(-1, "fnaddr", [])
+    i.name = key
+    t := Ty.Fn(params: sig.params, ret: sig.ret)
+    Val(id: emit(i, t), ty: t)
+
+## `f(args)` where `f` is a function value (type.fn.3): an indirect call.
+fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
+    sig := match f.ty
+        Fn(ps, r) => Sig(params: ps, ret: r)
+        _ => return unsupported(pos, "calling a `{f.ty.name()}`")
+    if args.len() != sig.params.len()
+        return unsupported(pos, "this call")
+    mut vs := [f.id]
+    for k in 0..args.len()
+        a := args[k]
+        if a.label != none
+            return unsupported(pos, "labelled arguments")
+        v := lower_value(a.value, sig.params[k])?
+        vs.push(convert(v, sig.params[k], expr_pos(a.value)))
+    mut i := inst(-1, "icall", vs)
+    if sig.ret.is_unit()
+        emit_void(i)
+        return Val(id: -1, ty: Ty.Unit)
+    Val(id: emit(i, sig.ret), ty: sig.ret)

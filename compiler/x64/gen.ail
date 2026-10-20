@@ -211,6 +211,8 @@ fn Gen.gpr(mut self, v int, scratch int) int
         a.mov_ri(scratch, i.imm)
     elif i.op == "str"
         a.lea(scratch, at_sym("d:s{i.imm}", 0))
+    elif i.op == "fnaddr"
+        a.lea(scratch, at_sym(i.name, 0))
     else
         unreachable("value v{v} has no location")
     scratch
@@ -259,6 +261,8 @@ fn Gen.move_of(mut self, dst int, v int) Move
         return Move(dst: dst, src: -1, imm: i.imm, sym: "", float: fl)
     if i.op == "str"
         return Move(dst: dst, src: -1, imm: 0, sym: "d:s{i.imm}", float: fl)
+    if i.op == "fnaddr"
+        return Move(dst: dst, src: -1, imm: 0, sym: i.name, float: fl)
     if i.op == "fconst"
         return Move(dst: dst, src: -1, imm: 0, sym: codegen.add_f64(mut img, i.fimm), float: fl)
     Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
@@ -555,6 +559,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.bind(ok)
             put_gpr(i.dst, S1)
         "call" => call(i)
+        "icall" => call_out(i)
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
@@ -772,15 +777,23 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
-    for v in i.args
-        if f.vals[v].is_float()
+    # A call through a value (`icall`) takes the callee first, into the scratch register.
+    indirect := i.op == "icall"
+    for k in 0..i.args.len()
+        v := i.args[k]
+        if indirect and k == 0
+            moves.push(move_of(S0, v))
+        elif f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
         else
             moves.push(move_of(INT_ARGS[ni], v))
             ni += 1
     parallel(moves)
-    a.call_sym(i.name)
+    if indirect
+        a.call_reg(S0)
+    else
+        a.call_sym(i.name)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_xmm(i.dst, 0)

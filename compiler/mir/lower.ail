@@ -245,6 +245,14 @@ fn type_of(t ast.TypeRef) Ty?
                         return Ty.List(e)
                     none
                 _ => none
+        FnType(params, ret) =>
+            mut ps := List[Ty]()
+            for p in params
+                ps.push(type_of(p)?)
+            mut r := Ty.Unit
+            if rt := ret
+                r = type_of(rt)?
+            Ty.Fn(params: ps, ret: r)
         _ => none
 
 fn is_literal(e ast.Expr) bool
@@ -863,6 +871,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             key := lookup(name) else
                 if c := consts.get("{prefix}{name}")
                     return lower_expr(c, want)
+                if v := fn_value(name)
+                    return v
                 problem(
                     pos,
                     "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
@@ -1144,6 +1154,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_print(args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
+            if k := lookup(name)
+                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, pos)
             key := "{prefix}{name}"
             if bad.contains(key)
                 return none
@@ -1164,7 +1176,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     return unsupported(tpos, "this list type")
                 return Val(id: call("rt.list_new", [konst(0, Ty.Int)], t), ty: t)
             unsupported(tpos, "`{name}[...]`")
-        _ => unsupported(pos, "this call")
+        _ =>
+            f := lower_value(callee, none)?
+            call_value(f, args, pos)
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     mut vs := List[int]()

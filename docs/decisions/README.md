@@ -469,7 +469,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
 | [0571](0571-key-functions-inline.md) | Key functions are lowered inline in native code, with no closure object *(delegated)* | Accepted | 2026-10-20 |
 | [0572](0572-native-stable-sort.md) | Native stable sort: a merge sort over a list of indices *(delegated)* | Accepted | 2026-10-20 |
-| [0573](0573-native-function-values-deferred.md) | Function values in native code wait for the language (`call_indirect` design) *(delegated)* | Accepted | 2026-10-20 |
+| [0573](0573-native-function-values.md) | Function values in native code: the address of a declared function, `fnaddr` and `icall` *(delegated)* | Accepted | 2026-10-20 |
 | [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
 | [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
 | [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |

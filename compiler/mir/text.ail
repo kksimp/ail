@@ -43,7 +43,7 @@ fn inst_text(f Func, i Inst) str
         "const" => "const {i.imm}"
         "fconst" => "fconst {i.fimm}"
         "str" => "str #{i.imm}"
-        "call" | "prim" => "{i.op} {i.name}({vals_text(f, i.args)})"
+        "call" | "prim" | "fnaddr" => "{i.op} {i.name}({vals_text(f, i.args)})"
         _ => "{i.op} {vals_text(f, i.args)}{site}"
 
 fn term_text(f Func, t Term) str
