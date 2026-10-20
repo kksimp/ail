@@ -40,7 +40,9 @@ struct Val
     ty Ty
 
 struct Lower
+    ## The source file being lowered (for error traces) and every file's.
     path str
+    file_paths List[str]
     ## Zero-field `error struct`s to their messages (lower_err.ail).
     err_msgs Map[str, str]
     err_fns Set[str]
@@ -146,8 +148,9 @@ pub struct Source
 ## problems name the file they are in (`Problems.files`).
 pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     mut l := Lower(
-        path: path,
-        err_msgs: {},
+        path: srcs[0].path,
+        file_paths: [src.path for src in srcs],
+        err_msgs: {"fs.IoError": "", "IoError": ""},
         err_fns: Set[str](),
         fails: false,
         sigs: {},
@@ -197,6 +200,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     l.problem_files = [0 for _ in l.problems]
     for k in 0..srcs.len()
         l.enter_file(k)
+        l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
     for k in 0..srcs.len()
         l.enter_file(k)
@@ -281,7 +285,6 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
-    declare_errors(prog)
     for e in prog.enums
         problem(e.pos, "enum `{e.name}` isn't in the native subset yet")
     for t in prog.traits
@@ -1557,6 +1560,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: call("rt.str_chars", [r.id], t), ty: t)
             if name == "len" and vs.len() == 0
                 return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "to_float" and vs.len() == 0
+                return lower_to_float(r)
         List(e) =>
             if name == "len" and vs.len() == 0
                 return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)

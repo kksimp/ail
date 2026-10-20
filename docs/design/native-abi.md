@@ -268,8 +268,9 @@ call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `fmt_int`, `fmt_hex`, `fmt_bool`, `fmt_float`, `fmt_float_fixed`, `fmt_pad`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
-its value (empty on failure) and sets `os_ok()`; the lowering follows it
-with the status call.
+its value and, on failure, sets the error slot (global 8) to the display text
+of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
+`io_read_line` return a string or 0.
 
 The table below is the first draft:
 

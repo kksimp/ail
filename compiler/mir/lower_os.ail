@@ -1,10 +1,12 @@
 ## Lowering the operating-system calls of the native subset (ADRs 0580-0582):
 ## `std.fs`, `std.env`, `std.io`, `std.time`, `.to_float()` and the format
 ## specifications of an interpolation (lex.str.7). Each is a call of the
-## runtime in `compiler/rt/native/os.ail` and `fmt.ail`. A call that can fail
-## is lowered only in an `else` (err.else.1-2): its value, then the runtime's
-## status, then the fallback or the leaving statement. Error values arrive
-## with lane 175; until then `else err` and `?` are reported (native.subset.1).
+## runtime in `compiler/rt/native/os.ail` and `fmt.ail`. A call that can
+## fail (`fs.*`) is a fallible function of lane 175's model (lower_err.ail):
+## it returns its success value, or sets the error slot to the display text
+## of an `fs.IoError` and returns zero; `?`, `else` and `else err` follow it.
+## `env.get`, `env.home`, `io.read_line` and `s.to_float()` return an
+## optional.
 use ast
 
 ## A runtime function standing for a standard-library one.
@@ -13,35 +15,36 @@ struct OsFn
     rt str
     params List[Ty]
     ret Ty
-    ## The status call a failing function is followed by (`rt.os_ok` or
-    ## `rt.parse_ok`), else "".
-    status str
+    ## 1: can fail with `fs.IoError` (the runtime also takes the call's trace
+    ## line as a last argument).
+    fails bool
 
-fn os_fn(rt str, params List[Ty], ret Ty, status str) OsFn
-    OsFn(rt: rt, params: params, ret: ret, status: status)
+fn os_fn(rt str, params List[Ty], ret Ty, fails bool) OsFn
+    OsFn(rt: rt, params: params, ret: ret, fails: fails)
 
 ## The standard-library function `mod.name`, if the native subset has it.
 fn os_lookup(mod str, name str) OsFn?
     s := Ty.Str
+    maybe := Ty.Opt(Ty.Str)
     key := "{mod}.{name}"
     match key
-        "fs.exists" => os_fn("rt.fs_exists", [s], Ty.Bool, "")
-        "fs.read_text" => os_fn("rt.fs_read_text", [s], s, "rt.os_ok")
-        "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, "rt.os_ok")
-        "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, "rt.os_ok")
-        "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), "rt.os_ok")
-        "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, "rt.os_ok")
-        "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, "rt.os_ok")
-        "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, "rt.os_ok")
-        "env.get" => os_fn("rt.env_get", [s], s, "rt.os_ok")
-        "env.home" => os_fn("rt.env_home", [], s, "rt.os_ok")
-        "env.cwd" => os_fn("rt.env_cwd", [], s, "")
-        "env.program" => os_fn("rt.env_program", [], s, "")
-        "io.read_line" => os_fn("rt.io_read_line", [], s, "rt.os_ok")
-        "io.read_all" => os_fn("rt.io_read_all", [], s, "")
-        "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, "")
-        "time.now_ms" => os_fn("rt.time_now_ms", [], Ty.Int, "")
-        "time.sleep_ms" => os_fn("rt.time_sleep_ms", [Ty.Int], Ty.Unit, "")
+        "fs.exists" => os_fn("rt.fs_exists", [s], Ty.Bool, false)
+        "fs.read_text" => os_fn("rt.fs_read_text", [s], s, true)
+        "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, true)
+        "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, true)
+        "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
+        "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
+        "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
+        "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
+        "env.get" => os_fn("rt.env_get", [s], maybe, false)
+        "env.home" => os_fn("rt.env_home", [], maybe, false)
+        "env.cwd" => os_fn("rt.env_cwd", [], s, false)
+        "env.program" => os_fn("rt.env_program", [], s, false)
+        "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
+        "io.read_all" => os_fn("rt.io_read_all", [], s, false)
+        "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
+        "time.now_ms" => os_fn("rt.time_now_ms", [], Ty.Int, false)
+        "time.sleep_ms" => os_fn("rt.time_sleep_ms", [Ty.Int], Ty.Unit, false)
         _ => none
 
 ## The module name when `recv` is one of the OS modules.
@@ -51,30 +54,21 @@ fn Lower.os_module(self, recv ast.Expr) str
             return m
     ""
 
-## What `value` is when it is a call that can fail: a standard-library call
-## with a status, or `s.to_float()`.
-fn Lower.fallible(self, value ast.Expr) OsFn?
-    match value
-        Method(recv, name, _, margs) =>
-            if name == "to_float" and margs.len() == 0 and os_module(recv) == ""
-                return os_fn("rt.str_to_float", [Ty.Str], Ty.Float, "rt.parse_ok")
-            m := os_module(recv)
-            if m == ""
-                return none
-            f := os_lookup(m, name) else return none
-            if f.status == "" then none else f
-        _ => none
+## Whether the call `recv.name(...)` is an OS function that can fail.
+fn Lower.os_fails(self, recv ast.Expr, name str) bool
+    m := os_module(recv)
+    if m == ""
+        return false
+    f := os_lookup(m, name) else return false
+    f.fails
 
-## `fs.NAME(...)`, `io.NAME(...)`, `env.NAME(...)` and `time.NAME(...)` that
-## cannot fail, from `lower_method`. `none` after a report. A failing one
-## outside an `else` is reported.
+## `fs.NAME(...)`, `io.NAME(...)`, `env.NAME(...)` and `time.NAME(...)`, from
+## `lower_method`. `none` after a report.
 fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
     if m == "io" and name == "eprint"
         return lower_eprint(args, npos)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
-    if f.status != ""
-        return unsupported(npos, "`{m}.{name}` outside `else` (error values come with lane 175)")
     if name == "exit"
         v := os_call(f, args, npos)?
         finish(unreachable_term())
@@ -92,7 +86,14 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
             return unsupported(pos, "labelled arguments")
         v := lower_value(a.value, f.params[i])?
         vs.push(convert(v, f.params[i], expr_pos(a.value)))
+    if f.fails
+        vs.push(trace_line(pos))
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+
+## `s.to_float()` (type.num.8): a `float?`.
+fn Lower.lower_to_float(mut self, s Val) Val
+    t := Ty.Opt(Ty.Float)
+    Val(id: call("rt.str_float_opt", [s.id], t), ty: t)
 
 ## `io.eprint(x)` (std.io.3): `print`'s text on standard error.
 fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
@@ -100,72 +101,6 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
     lower_print(args, pos)?
     call("rt.err_end", [], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
-
-## `CALL else ...` where CALL can fail (err.else.1-2): the call, its status,
-## and on failure the fallback value or the leaving statement.
-fn Lower.lower_os_or_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) Val?
-    f := fallible(value) else
-        return unsupported(pos, "`else` on this expression")
-    args := match value
-        Method(recv, name, _, margs) =>
-            if name == "to_float" and margs.len() == 0 and os_module(recv) == ""
-                [ast.Arg(label: none, mutable: false, moved: false, value: recv, param: none)]
-            else
-                margs
-        _ => []
-    r := os_call(f, args, pos)?
-    ok := call(f.status, [], Ty.Bool)
-    join := new_block()
-    mut res := -1
-    if not f.ret.is_unit()
-        res = new_value(f.ret, "")
-        blocks[join].params.push(res)
-    fail := new_block()
-    branch(ok, join, if f.ret.is_unit() then [] else [r.id], fail, [])
-    seal(fail)
-    cur = fail
-    match other
-        Fallback(x) =>
-            if f.ret.is_unit()
-                lower_value(x, none)?
-                jump(join, [])
-            else
-                fb := lower_value(x, f.ret)?
-                jump(join, [convert(fb, f.ret, pos)])
-        Leave(st) =>
-            lower_stmt(st)
-            if not done()
-                problem(pos, "this `else` must leave: `return`, `break` or `continue`")
-        Handler(err, body, hpos) =>
-            if err != none
-                problem(hpos, "`else err` isn't in the native subset yet: error values come with lane 175")
-            elif f.ret.is_unit()
-                lower_block(body, false)
-                if not done()
-                    jump(join, [])
-            else
-                fb := lower_block(body, true)
-                if not done()
-                    if v := fb
-                        jump(join, [convert(v, f.ret, hpos)])
-                    else
-                        problem(hpos, "this `else` must leave or end with a value")
-    seal(join)
-    cur = join
-    if f.ret.is_unit()
-        return Val(id: -1, ty: Ty.Unit)
-    Val(id: res, ty: f.ret)
-
-## `name := CALL else ...` for a call from `fallible`: false when `value`
-## isn't one.
-fn Lower.lower_os_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else) bool
-    if fallible(value) == none
-        return false
-    v := lower_os_or_else(value, other, pos) else
-        declare(name, Ty.Unknown, -1)
-        return true
-    declare(name, v.ty, v.id)
-    true
 
 # ---- format specifications (lex.str.7, type.str.11) ----
 
@@ -212,11 +147,3 @@ fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     call("rt.out_str", [s.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 
-## `CALL else ...` as a statement (err.else.1-2): the OS calls, whose value,
-## if any, is dropped.
-fn Lower.lower_os_handle(mut self, value ast.Expr, other ast.Else)
-    pos := expr_pos(value)
-    if fallible(value) == none
-        problem(pos, "`else` handlers aren't in the native subset yet, but for the OS calls and `s.to_float()`")
-        return
-    lower_os_or_else(value, other, pos)
