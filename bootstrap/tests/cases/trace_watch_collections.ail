@@ -1,0 +1,11 @@
+# trace.watch.4: `--watch NAME` also shows writes to a collection's elements:
+# builtin mutating methods and `NAME[k] = e`, with the element and where.
+
+fn main()
+    mut xs := [1, 2]
+    xs.push(3)
+    xs.insert(0, 9)
+    xs[1] = 5
+    xs.pop()
+    xs.remove_at(0)
+    print(xs.len())

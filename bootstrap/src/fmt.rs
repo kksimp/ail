@@ -682,6 +682,74 @@ fn layout(toks: &[FTok], depth: usize) -> Vec<String> {
         }
         return lines;
     }
+    let lines = layout_lists(toks, depth, one);
+    if lines.iter().any(|l| l.chars().count() > WIDTH)
+        && let Some(split) = layout_operators(toks, depth)
+    {
+        return split;
+    }
+    lines
+}
+
+/// The binary-operator precedence of `toks[i]` for splitting, or `None` (fmt.op).
+/// `<` and `>` are left out: they also bracket type arguments.
+fn split_prec(toks: &[FTok], i: usize) -> Option<u8> {
+    let t = &toks[i];
+    let binary = i > 0 && toks[i - 1].ends_operand();
+    match t.kind {
+        Kind::Kw("or") => Some(1),
+        Kind::Kw("and") => Some(2),
+        Kind::Sym("==" | "!=" | "<=" | ">=") => Some(3),
+        Kind::Sym("+" | "-") if binary => Some(4),
+        Kind::Sym("*" | "/" | "%") if binary => Some(5),
+        _ => None,
+    }
+}
+
+/// fmt.op: a line still too long is split before each top-level operator of the
+/// lowest precedence, the operator first on the continuation line and one indent
+/// deeper (lex.stmt.2 (5)). `-` ends its line instead, because a line may not start with it.
+fn layout_operators(toks: &[FTok], depth: usize) -> Option<Vec<String>> {
+    let mut level = 0;
+    let mut points: Vec<(usize, u8)> = Vec::new();
+    for (i, t) in toks.iter().enumerate() {
+        if t.opens() {
+            level += 1;
+        } else if t.closes() {
+            level -= 1;
+        } else if level == 0 {
+            if t.is("|") {
+                return None; // a closure body runs to the end of the expression
+            }
+            if let Some(p) = split_prec(toks, i) {
+                points.push((i, p));
+            }
+        }
+    }
+    let lowest = points.iter().map(|&(_, p)| p).min()?;
+    let cuts: Vec<usize> = points
+        .iter()
+        .filter(|&&(_, p)| p == lowest)
+        .map(|&(i, _)| i)
+        .filter(|&i| i > 0 && i + 1 < toks.len())
+        .collect();
+    if cuts.is_empty() {
+        return None;
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut from = 0;
+    for &cut in &cuts {
+        let minus = toks[cut].is("-");
+        let end = if minus { cut + 1 } else { cut };
+        lines.extend(layout(&toks[from..end], if from == 0 { depth } else { depth + 1 }));
+        from = end;
+    }
+    lines.extend(layout(&toks[from..], depth + 1));
+    Some(lines)
+}
+
+/// fmt.wrap's list splitting, for a line that has no chain (see `layout`).
+fn layout_lists(toks: &[FTok], depth: usize, one: String) -> Vec<String> {
     let Some(mut group) = groups(toks, 0, toks.len()).into_iter().rev().max_by_key(|g| g.len) else {
         return vec![one]; // nothing to split: leave it long
     };
@@ -976,6 +1044,23 @@ mod tests {
         assert_eq!(fmt(&out), out);
         // A chain that fits is joined onto one line.
         assert_eq!(fmt("fn main()\n    x := a\n        .b()\n        .c()\n"), "fn main()\n    x := a.b().c()\n");
+    }
+
+    #[test]
+    fn long_conditions_split_before_the_lowest_operator() {
+        let src = "fn main()\n    if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000 or alpha_value == beta_value or beta_value == 77\n        print(1)\n";
+        let out = fmt(src);
+        assert_eq!(
+            out,
+            "fn main()\n    if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000\n        or alpha_value == beta_value\n        or beta_value == 77\n        print(1)\n"
+        );
+        assert_eq!(fmt(&out), out);
+        let sum = "fn f() int\n    alpha_value_long_name * beta_value_long_name + alpha_value_long_name * beta_value_long_name - gamma_value_long_name\n";
+        let out = fmt(sum);
+        assert!(out.contains("\n        + alpha_value_long_name * beta_value_long_name -\n"), "{out}");
+        assert_eq!(fmt(&out), out);
+        // Short enough: joined.
+        assert_eq!(fmt("fn f() bool\n    a\n        and b\n"), "fn f() bool\n    a and b\n");
     }
 
     #[test]

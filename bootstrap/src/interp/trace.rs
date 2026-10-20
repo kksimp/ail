@@ -323,7 +323,10 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
         Value::Map(t) | Value::Set(t) => {
             s.push('{');
             let is_map = matches!(v, Value::Map(_));
-            for (i, (k, x)) in t.entries().enumerate() {
+            // A set has no values, so `entries` would pair nothing.
+            let rows: Vec<(&Value, &Value)> =
+                if is_map { t.entries().collect() } else { t.keys().map(|k| (k, k)).collect() };
+            for (i, (k, x)) in rows.into_iter().enumerate() {
                 if i > 0 {
                     s.push_str(", ");
                 }
@@ -669,6 +672,13 @@ impl<'a, W: Write> Interp<'a, W> {
     /// frame because a `mut` receiver or argument passed it on.
     #[inline(never)]
     pub(super) fn trace_watch(&self, name: &str, env: &Env<'_>, pos: Pos) {
+        self.trace_watch_note(name, env, pos, None);
+    }
+
+    /// trace.watch.4: a write to one element of the watched collection, with what
+    /// was written and where, along with the collection's whole new value.
+    #[inline(never)]
+    pub(super) fn trace_watch_note(&self, name: &str, env: &Env<'_>, pos: Pos, note: Option<&WatchNote>) {
         let Some(cfg) = CONFIG.get() else { return };
         let (frame, depth, via) = FRAMES.with(|f| {
             let f = f.borrow();
@@ -688,16 +698,76 @@ impl<'a, W: Write> Interp<'a, W> {
             if json {
                 let frame = frame.as_deref().map_or(String::new(), |f| format!(",\"frame\":{}", json_str(f)));
                 let via = if via && name != watched { format!(",\"via\":{}", json_str(name)) } else { String::new() };
-                format!("{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{}{frame}{via},{}}}", json_str(watched), json_str(&value), at_json(prog, pos))
+                let op = note.map_or(String::new(), |n| n.json());
+                format!("{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{}{frame}{via}{op},{}}}", json_str(watched), json_str(&value), at_json(prog, pos))
             } else {
                 // The frame is named only below the first, so a plain run reads as before.
                 let in_frame = match &frame {
                     Some(f) if depth > 1 => format!(" in {f}"),
                     _ => String::new(),
                 };
-                format!("watch: {watched} = {value} at {}{in_frame}{through}", at_text(prog, pos))
+                let op = note.map_or(String::new(), |n| format!(" [{}]", n.text()));
+                format!("watch: {watched} = {value} at {}{in_frame}{through}{op}", at_text(prog, pos))
             }
         });
+    }
+
+    /// trace.watch.4: what a builtin mutating method is about to change, read before it runs.
+    pub(super) fn watch_before(&self, env: &Env<'_>, p: &Place, name: &str, args: &[Value]) -> Option<WatchBefore> {
+        let (len, removed) = view(env, p, |v| match (v, name) {
+            (Value::List(xs), "pop") => (xs.len(), xs.last().cloned()),
+            (Value::List(xs), "remove_at") => (xs.len(), usize::try_from(args[0].int()).ok().and_then(|i| xs.get(i).cloned())),
+            (Value::List(xs), _) => (xs.len(), None),
+            (Value::Map(t), "remove") => (t.len(), t.get(&args[0]).map(|i| t.val(i).clone())),
+            (Value::Map(t) | Value::Set(t), _) => (t.len(), None),
+            _ => (0, None),
+        })
+        .ok()?;
+        Some(WatchBefore { len, removed, args: args.to_vec() })
+    }
+
+    /// trace.watch.4: after a builtin mutating method on a watched collection.
+    pub(super) fn watch_after(&self, env: &Env<'_>, p: &Place, name: &str, before: WatchBefore, pos: Pos) {
+        if p.slot == IN_CELL {
+            return;
+        }
+        let Some(&(root, _)) = env.get(p.slot) else { return };
+        let len = view(env, p, |v| match v {
+            Value::List(xs) => xs.len(),
+            Value::Map(t) | Value::Set(t) => t.len(),
+            _ => 0,
+        })
+        .unwrap_or(0);
+        let a = &before.args;
+        let key = |v: &Value| show(v, LONG);
+        let note = match name {
+            "push" => WatchNote::at("push", Some(key(&a[0])), "index", Some(before.len.to_string())),
+            "pop" if len < before.len => WatchNote::at("pop", before.removed.as_ref().map(key), "index", Some(len.to_string())),
+            "insert" => WatchNote::at("insert", Some(key(&a[1])), "index", Some(key(&a[0]))),
+            "remove_at" if len < before.len => WatchNote::at("remove_at", before.removed.as_ref().map(key), "index", Some(key(&a[0]))),
+            "remove" if len < before.len && before.removed.is_some() => {
+                WatchNote::at("remove", before.removed.as_ref().map(key), "key", Some(key(&a[0])))
+            }
+            "remove" if len < before.len => WatchNote::at("remove", Some(key(&a[0])), "", None),
+            "add" if len > before.len => WatchNote::at("add", Some(key(&a[0])), "", None),
+            "swap" => WatchNote::at("swap", None, "index", Some(format!("{}, {}", key(&a[0]), key(&a[1])))),
+            "extend" | "clear" | "reverse" | "sort" => WatchNote::at(name, None, "", None),
+            _ => return,
+        };
+        self.trace_watch_note(root, env, pos, Some(&note));
+    }
+
+    /// trace.watch.4: `NAME[i] = e` and `NAME[k] = e`, after the write: `p` names the element.
+    pub(super) fn watch_element(&self, root: &str, env: &Env<'_>, p: &Place, pos: Pos) {
+        let (Some(step), Ok(new)) = (p.path.last(), load(env, p)) else {
+            return self.trace_watch(root, env, pos);
+        };
+        let note = match step {
+            Step::Index(i, _) => WatchNote::at("set", Some(show(&new, LONG)), "index", Some(i.to_string())),
+            Step::Key(k, _) => WatchNote::at("set", Some(show(&new, LONG)), "key", Some(show(k, LONG))),
+            _ => return self.trace_watch(root, env, pos),
+        };
+        self.trace_watch_note(root, env, pos, Some(&note));
     }
 
     /// trace.watch.3: before a call, find which names in the callee will
@@ -804,4 +874,54 @@ pub(super) fn capture_end() -> Vec<String> {
         });
     }
     lines
+}
+
+/// What a builtin mutating method will change, read before it runs (trace.watch.4).
+pub(super) struct WatchBefore {
+    len: usize,
+    removed: Option<Value>,
+    args: Vec<Value>,
+}
+
+/// The element-level part of a watch event (trace.watch.4).
+pub(super) struct WatchNote {
+    op: &'static str,
+    element: Option<String>,
+    at_label: &'static str,
+    at: Option<String>,
+}
+
+impl WatchNote {
+    fn at(op: &str, element: Option<String>, at_label: &'static str, at: Option<String>) -> Self {
+        let op = ["push", "pop", "insert", "remove_at", "remove", "add", "swap", "extend", "clear", "reverse", "sort", "set"]
+            .into_iter()
+            .find(|o| *o == op)
+            .unwrap_or("set");
+        WatchNote { op, element, at_label, at }
+    }
+
+    /// `push 3 at index 2`
+    fn text(&self) -> String {
+        let mut t = self.op.to_string();
+        if let Some(e) = &self.element {
+            t.push(' ');
+            t.push_str(e);
+        }
+        if let Some(a) = &self.at {
+            t.push_str(&format!(" at {} {a}", self.at_label));
+        }
+        t
+    }
+
+    /// `,"op":"push","element":"3","index":"2"`
+    fn json(&self) -> String {
+        let mut j = format!(",\"op\":{}", json_str(self.op));
+        if let Some(e) = &self.element {
+            j.push_str(&format!(",\"element\":{}", json_str(e)));
+        }
+        if let Some(a) = &self.at {
+            j.push_str(&format!(",{}:{}", json_str(self.at_label), json_str(a)));
+        }
+        j
+    }
 }

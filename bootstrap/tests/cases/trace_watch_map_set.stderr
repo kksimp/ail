@@ -1,0 +1,5 @@
+watch: m = {"a": 1} at 5:9
+watch: m = {"a": 1, "b": 2} at 6:5 [set 2 at key "b"]
+watch: m = {"a": 1, "b": 7} at 7:5 [set 7 at key "b"]
+watch: m = {"b": 7} at 8:7 [remove 1 at key "a"]
+trace: summary: 4 events shown, 0 dropped (watch 4)
