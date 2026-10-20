@@ -66,16 +66,35 @@ pub fn generate_windows(m mir.Module) codegen.Image
         gen_func(mut img, m, f)
     img
 
-## A module with one function, `main`, that calls kernel32's `GetStdHandle(-11)`
-## and returns 7: the exit code under Wine shows the call went through the import
-## table with its argument in rcx (ADR 0606).
+## A module with one function, `main`, that writes a line with kernel32's
+## `GetStdHandle(-11)` and `WriteFile(h, buf, len, &written, 0)`, then returns
+## `written`. The fifth argument goes on the stack, so the call exercises
+## the stack-argument path too. A string object's bytes start 16 bytes after
+## its pointer (native-abi.md §2), and `written` is the first word of `globals`.
 pub fn win_sample() mir.Module
+    msg := "hello from AIL on Windows\n"
     mut h := mir.inst(0, "const", [])
     h.imm = -11
-    mut call := mir.inst(1, "call", [0])
-    call.name = "libsys.GetStdHandle"
-    mut seven := mir.inst(2, "const", [])
-    seven.imm = 7
-    block := mir.Block(params: List[int](), insts: [h, call, seven], term: mir.return_of(2))
-    main := mir.Func(name: "main", params: [], ret: mir.Ty.Int, blocks: [block], vals: [mir.Ty.Int, mir.Ty.Int, mir.Ty.Int], names: ["", "", ""])
-    mir.Module(path: "win_sample.ail", funcs: [main], strs: [], sites: [], lines: [], files: ["win_sample.ail"], file_lines: [[]])
+    mut get := mir.inst(1, "call", [0])
+    get.name = "libsys.GetStdHandle"
+    mut s := mir.inst(2, "str", [])
+    s.imm = 0
+    mut sixteen := mir.inst(3, "const", [])
+    sixteen.imm = 16
+    mut buf := mir.inst(4, "add", [2, 3])
+    mut len := mir.inst(5, "const", [])
+    len.imm = msg.chars().len()
+    mut one := mir.inst(6, "const", [])
+    one.imm = 1
+    mut written := mir.inst(7, "prim", [6])
+    written.name = "global"
+    mut zero := mir.inst(8, "const", [])
+    zero.imm = 0
+    mut write := mir.inst(9, "call", [1, 4, 5, 7, 8])
+    write.name = "libsys.WriteFile"
+    mut load := mir.inst(10, "prim", [7])
+    load.name = "load64"
+    insts := [h, get, s, sixteen, buf, len, one, written, zero, write, load]
+    block := mir.Block(params: List[int](), insts: insts, term: mir.return_of(10))
+    main := mir.Func(name: "main", params: [], ret: mir.Ty.Int, blocks: [block], vals: [mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int], names: ["", "", "", "", "", "", "", "", "", "", ""])
+    mir.Module(path: "win_sample.ail", funcs: [main], strs: [msg], sites: [], lines: [], files: ["win_sample.ail"], file_lines: [[]])

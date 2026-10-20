@@ -51,12 +51,12 @@ x86-64 path.
 
 ## Checks
 
-- `ail run compiler pe-mir-sample x` builds a MIR module with one
-  `libsys.GetStdHandle(-11)` call and returns 7. `x64::generate_windows` lowers
-  it, and the PE runs under Wine (apt `wine`, 9.0) with exit status 7. That
-  shows the call went through the import table and returned. It does not
-  check the argument value.
-- The `native_pe` tests run both checks when Wine is installed.
+- `ail run compiler pe-mir-sample x` builds a MIR module that calls
+  `libsys.WriteFile(h, buf, len, &written, 0)`, with `h` from
+  `libsys.GetStdHandle(-11)`, and returns `written`. The fifth argument goes on
+  the stack. Under Wine (apt `wine`, 9.0) the PE prints `hello from AIL on
+  Windows` and exits with `written`, which equals the line's length (26).
+- The `native_pe` tests run the Wine checks when Wine is installed.
 
 ## Consequences
 

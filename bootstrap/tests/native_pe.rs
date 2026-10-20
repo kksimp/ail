@@ -117,11 +117,11 @@ fn pe_sample_runs_under_wine_when_installed() {
     assert_eq!(String::from_utf8_lossy(&out.stdout), "hello from AIL on Windows\n");
 }
 
-// ADR 0606: a MIR module with a `libsys.GetStdHandle` call, lowered for Windows
-// (`x64::generate_windows`), runs under Wine and exits with `main`'s result, 7.
-// Wine's exit status shows the call went through the import table and returned.
+// ADR 0606: a MIR module that calls `libsys.WriteFile` with five arguments
+// (the fifth on the stack) runs under Wine: it prints its line, and it exits
+// with `written`, which must equal the line's length.
 #[test]
-fn libsys_call_runs_under_wine_when_installed() {
+fn libsys_write_file_runs_under_wine_when_installed() {
     if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
         return;
     }
@@ -144,5 +144,7 @@ fn libsys_call_runs_under_wine_when_installed() {
         .output()
         .unwrap();
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(run.status.code(), Some(7), "wine exit status");
+    let line = "hello from AIL on Windows\n";
+    assert_eq!(String::from_utf8_lossy(&run.stdout), line, "the printed text");
+    assert_eq!(run.status.code(), Some(line.len() as i32), "written, which must equal the length");
 }
