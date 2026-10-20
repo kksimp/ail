@@ -905,7 +905,12 @@ impl<'p> Checker<'p> {
             }),
             Expr::Unary { operand, .. } => self.constant_expr(operand),
             // A constant is shared by the whole program, so it can't hold a cell.
-            Expr::Ref { pos, .. } => reject(self, *pos, "a `ref` cell"),
+            Expr::Ref { pos, .. } => self.error_help(
+                "mod.const.2",
+                *pos,
+                "a constant's value can't contain a `ref` cell".to_string(),
+                "a constant is shared by the whole program; make the cell inside a function",
+            ),
             Expr::Binary { lhs, rhs, .. } => {
                 self.constant_expr(lhs);
                 self.constant_expr(rhs);
