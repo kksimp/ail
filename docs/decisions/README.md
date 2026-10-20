@@ -308,6 +308,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
 | [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |
 | [0331](0331-editor-program-card-view.md) | Editor program card view (Ctrl-Shift-I) from `ail api --card --json` *(delegated)* | Accepted | 2026-10-20 |
+| [0332](0332-front-end-allocator.md) | `check`, `api` and `effects` use a front-end allocator (size-class free lists, huge pages) *(delegated)* | Accepted | 2026-10-20 |
+| [0333](0333-no-front-end-disk-cache-yet.md) | No on-disk prelude or check-result cache yet; the saving is under 0.5 ms *(delegated)* | Accepted | 2026-10-20 |
+| [0334](0334-fast-hashing-and-lexing-in-the-front-end.md) | Fast hasher in the checker, resolver and parser; keywords lexed without allocating *(delegated)* | Accepted | 2026-10-20 |
 | [0338](0338-card-json-positions.md) | `ail api --card --json` gives each declaration's file, line and col *(delegated)* | Accepted | 2026-10-20 |
 | [0339](0339-editor-problems-and-sessions.md) | Editor problems pane (Ctrl-Shift-M), replace in files with preview (Ctrl-Shift-H), and tabs remembered per directory *(delegated)* | Accepted | 2026-10-20 |
 | [0323](0323-chained-call-lines.md) | A line starting with `.name` continues the statement; the formatter splits chains one call per line *(delegated)* | Accepted | 2026-10-20 |

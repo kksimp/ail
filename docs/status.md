@@ -29,7 +29,7 @@ See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
 2026-10-20: the [AI-first buildout plan](design/ai-first-plan.md) is in
 progress on ten parallel lanes (semantic API, effects and capabilities,
 standard modules, user modules, tests, formatter, conformance harness,
-interpreter performance: `tools/perfbench/run.sh`, about 20-35% faster; round 3 (lane 61, ADR 0297) profiled the remaining cost and kept the tree walker; round 2 (lane 36, ADRs 0219–0221) cut instructions 32–47% more and brings interp and loops to parity with CPython, see
+interpreter performance: `tools/perfbench/run.sh`, about 20-35% faster; the front end (lane 81, ADRs 0332–0334) runs `ail check`, `api` and `effects` on the editor 1.2–1.3x faster (35% fewer instructions) with fast hashing, allocation-free keyword lexing and a front-end allocator, and records no on-disk cache yet; round 3 (lane 61, ADR 0297) profiled the remaining cost and kept the tree walker; round 2 (lane 36, ADRs 0219–0221) cut instructions 32–47% more and brings interp and loops to parity with CPython, see
 [interpreter-performance.md](design/interpreter-performance.md)). Lane 5 added `std.json` (`Json`, `parse_json`,
 `to_text`, accessors) to the prelude, read on demand (ADR 0161–0162).
 Overnight 2026-10-20 (lane 9, ADRs 0172–0174): the spec conformance harness

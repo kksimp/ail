@@ -16,7 +16,7 @@
 //! (mod.vis.1) are checked here; private fields and methods, which need
 //! types, in the checker (`Program::hidden`).
 
-use std::collections::{HashMap, HashSet};
+use crate::fasthash::{FastMap as HashMap, FastSet as HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::ast::{
@@ -85,7 +85,7 @@ fn load_package(
     let mut files: Vec<SourceFile> = Vec::new();
     let mut tokens: Vec<Token> = Vec::new();
     let mut diags = Vec::new();
-    let mut seen: HashSet<String> = HashSet::from([String::new()]);
+    let mut seen: HashSet<String> = HashSet::from_iter([String::new()]);
     let mut queue: Vec<(String, Vec<PathBuf>)> = vec![(String::new(), root_files)];
     // The manifests come first: they say where each package is (mod.pkg.1-3).
     let packages = crate::packages::Packages::read(&root);
@@ -282,7 +282,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
     let module_of = |prog: &Program, pos: Pos| prog.module_at(pos).to_string();
 
     // Every module's top-level names (mod.unit.1), before renaming.
-    let mut items: Items = modules.iter().map(|m| (m.clone(), HashMap::new())).collect();
+    let mut items: Items = modules.iter().map(|m| (m.clone(), HashMap::default())).collect();
     {
         let mut add = |name: &str, pos: Pos| {
             if is_prelude(pos) {
@@ -309,7 +309,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
     }
 
     // Imports, per file (mod.use.1, mod.use.3-6).
-    let mut imports: Vec<HashMap<String, Target>> = vec![HashMap::new(); prog.files.len()];
+    let mut imports: Vec<HashMap<String, Target>> = vec![HashMap::default(); prog.files.len()];
     let mut first_decl: Vec<usize> = vec![usize::MAX; prog.files.len()];
     {
         let decls = prog
@@ -329,7 +329,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         }
     }
     let mut edges: Vec<(String, String, Pos)> = Vec::new();
-    let mut unresolved: Vec<HashSet<String>> = vec![HashSet::new(); prog.files.len()];
+    let mut unresolved: Vec<HashSet<String>> = vec![HashSet::default(); prog.files.len()];
     for u in &prog.uses {
         let Some(fi) = file_index(prog, u.pos) else { continue };
         let module = prog.files[fi].module.clone();
@@ -541,7 +541,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
 fn report_cycles(edges: &[(String, String, Pos)], diags: &mut Vec<Diagnostic>) {
     let mut sorted: Vec<&(String, String, Pos)> = edges.iter().collect();
     sorted.sort_by_key(|(_, _, p)| (p.line, p.col));
-    let mut reported: HashSet<Vec<String>> = HashSet::new();
+    let mut reported: HashSet<Vec<String>> = HashSet::default();
     for (from, to, pos) in &sorted {
         // A path back from `to` to `from` closes a cycle through this import.
         let Some(mut path) = find_path(edges, to, from) else { continue };
@@ -561,9 +561,9 @@ fn report_cycles(edges: &[(String, String, Pos)], diags: &mut Vec<Diagnostic>) {
 
 /// A path of imports from `from` to `to`, both included.
 fn find_path(edges: &[(String, String, Pos)], from: &str, to: &str) -> Option<Vec<String>> {
-    let mut prev: HashMap<&str, &str> = HashMap::new();
+    let mut prev: HashMap<&str, &str> = HashMap::default();
     let mut todo = vec![from];
-    let mut seen: HashSet<&str> = HashSet::from([from]);
+    let mut seen: HashSet<&str> = HashSet::from_iter([from]);
     while let Some(m) = todo.pop() {
         if m == to {
             let mut path = vec![to.to_string()];

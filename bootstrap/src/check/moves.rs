@@ -3,7 +3,7 @@
 //! been moved out on every path. The checker has already recorded, in
 //! `Resolved::moves`, each name whose use moves its value (ADR 0190).
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 
 use super::Resolved;
 use crate::ast::{Block, Cond, Else, Expr, InterpPart, Pattern, Program, Stmt};
@@ -62,7 +62,7 @@ pub fn check(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     let mut w = Walker { moves: &moves, state: None, scope: Vec::new(), loops: Vec::new(), deferred: false, diags: Vec::new() };
     for f in &prog.fns {
         let Some(body) = &f.body else { continue };
-        w.state = Some(HashMap::new());
+        w.state = Some(HashMap::default());
         w.scope = f.params.iter().map(|p| p.name.as_str()).collect();
         w.block(body);
     }
