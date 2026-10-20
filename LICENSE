@@ -199,3 +199,21 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+---- Runtime Library Exception to the Apache 2.0 License ----
+
+As an exception to the Apache License, Version 2.0, the following applies
+to the AIL runtime library and to any other code that the AIL toolchain
+embeds into, links into, or generates as part of a program you compile
+(together, the "Runtime Code"):
+
+You may compile programs with the AIL toolchain and distribute the
+resulting binaries without complying with the attribution requirements of
+Section 4(a)–4(d) of the Apache License, Version 2.0, with respect to the
+Runtime Code so embedded, linked or generated, provided that the binary is
+not itself a copy of, or derived from, the AIL toolchain's source code.
+
+This exception does not alter the terms under which the AIL toolchain
+itself, its sources, and its documentation are licensed: those remain under
+the Apache License, Version 2.0, as set out above.

@@ -181,17 +181,15 @@ lane 126).
 
 ## Licensing
 
-The repository is Apache-2.0 with a Runtime Exception, so code that is linked
-into user executables stays under terms that don't pass through to the user's
-program. Runtime sources are only `compiler/rt/` and every file there starts
-with the header
+[ADR 0510](../decisions/0510-licence-apache-2-with-runtime-exception.md): the
+repository is Apache 2.0 with a Runtime Library Exception, and `compiler/rt/`
+is Runtime Code. Every file there starts with the header
 
 ```text
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ```
 
-Nothing in `compiler/rt/` is ported from another project. The float text
-algorithm is written from the textbook description (Steele and White; ADR
-0409). The `LICENSE` file in the repository doesn't yet contain the exception
-text; that is for the designer to add.
+Nothing in `compiler/rt/` is ported from another project; the float text
+algorithm is written from the textbook description (ADR 0409), so there is no
+third-party notice to carry.
