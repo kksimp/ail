@@ -54,7 +54,7 @@ the entries below. A declared name is never overridden by the table.
 
 | Habit | Help names |
 |---|---|
-| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()`; for a `str`, `s.chars().len()` |
+| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()` (a `str` counts characters; `s.byte_len()` counts bytes) |
 | `str(x)` | `"{x}"` |
 | `int(s)` | `s.to_int()` |
 | `float(x)` | `s.to_float()` for text, `n.to_float()` for an `int` |

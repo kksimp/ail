@@ -1,0 +1,8 @@
+# `pub` is accepted in a single-file program; it has no importers (mod.vis.1).
+pub struct Point
+    pub x int
+
+pub LIMIT := 3
+
+pub fn main()
+    print(Point(x: LIMIT).x)

@@ -21,6 +21,7 @@ mod builtins;
 mod comprehension;
 mod stdlib;
 pub mod effects;
+mod privacy;
 mod testing;
 mod traits;
 
@@ -34,12 +35,15 @@ use crate::ast::{
     Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
 use crate::fasthash::{FastMap, FastSet};
-use crate::diag::{Diagnostic, Edit, Pos};
+use crate::diag::{Diagnostic, Edit, Fix, Pos};
 use crate::lexer::UNSUPPORTED;
+use crate::num::Num;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
     Int,
+    /// A sized numeric type other than `int` and `float` (type.num.1).
+    Num(Num),
     /// `float`, `f64` (type.num.1-2)
     Float,
     Str,
@@ -144,6 +148,8 @@ pub struct Resolved {
     pub optional_try: FastSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
     pub float_literals: FastSet<Pos>,
+    /// Literals typed by context as a sized numeric type (type.num.13).
+    pub sized_literals: FastMap<Pos, Num>,
     /// The function each method or associated function call runs, by the
     /// position of its name, when that is known statically (eff.infer.3).
     pub targets: HashMap<Pos, usize>,
@@ -159,7 +165,10 @@ pub struct Resolved {
 /// Names available without import (mod.main.3, ADR 0084).
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
-const BUILTIN_TYPES: &[&str] = &["int", "i64", "float", "f64", "str", "char", "bool", "List", "Map", "Set"];
+const BUILTIN_TYPES: &[&str] = &[
+    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
+    "Map", "Set",
+];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
 const SPEC_TYPES_NOT_YET: &[&str] = &["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "Option"];
@@ -280,6 +289,8 @@ struct Local {
     ty: Ty,
     mutable: bool,
     kind: Kind,
+    /// Where a `:=` binding's name is written, for fixes (fix.edit.1).
+    decl: Option<Pos>,
 }
 
 /// A type parameter: its name and the traits it must implement (gen.bound.1).
@@ -698,7 +709,12 @@ impl<'p> Checker<'p> {
                 format!("redeclaring the prelude function `{name}` is not supported by the bootstrap"),
             ),
             None if self.fns.contains_key(name) || self.types.contains_key(name) || self.traits.contains_key(name) => {
-                self.error("mod.unit.1", f.pos, format!("`{name}` is declared more than once in this module"));
+                let mut d =
+                    Diagnostic::new("mod.unit.1", f.pos, format!("`{name}` is declared more than once in this module"));
+                if let Some(first) = self.fns.get(name).map(|j| self.prog.fns[*j].pos).or_else(|| self.types.get(name).map(|d| self.def_pos(*d))) {
+                    d = d.note(first, format!("`{name}` is first declared here"));
+                }
+                self.diags.push(d);
             }
             None => {
                 self.fns.insert(name, i);
@@ -740,8 +756,10 @@ impl<'p> Checker<'p> {
                     }
                 }
                 let table = self.methods.entry(o).or_default();
-                if table.contains_key(name) {
-                    self.error("mod.unit.1", f.pos, format!("`{o}.{name}` is declared more than once"));
+                if let Some(first) = table.get(name).map(|j| self.prog.fns[*j].pos) {
+                    let d = Diagnostic::new("mod.unit.1", f.pos, format!("`{o}.{name}` is declared more than once"))
+                        .note(first, format!("`{o}.{name}` is first declared here"));
+                    self.diags.push(d);
                 } else {
                     table.insert(name, i);
                 }
@@ -762,7 +780,15 @@ impl<'p> Checker<'p> {
                 || PRELUDE.contains(&name)
                 || BUILTIN_TYPES.contains(&name);
             if taken {
-                self.error("mod.unit.1", c.pos, format!("`{name}` is declared more than once in this module"));
+                let mut d =
+                    Diagnostic::new("mod.unit.1", c.pos, format!("`{name}` is declared more than once in this module"));
+                let first = (self.consts.get(name).map(|j| prog.consts[*j].pos))
+                    .or_else(|| self.fns.get(name).map(|j| prog.fns[*j].pos))
+                    .or_else(|| self.types.get(name).map(|d| self.def_pos(*d)));
+                if let Some(first) = first {
+                    d = d.note(first, format!("`{name}` is first declared here"));
+                }
+                self.diags.push(d);
             } else {
                 self.consts.insert(name, i);
             }
@@ -974,6 +1000,7 @@ impl<'p> Checker<'p> {
         let ty = match name.as_str() {
             "int" | "i64" => Ty::Int,
             "float" | "f64" => Ty::Float,
+            n if Num::from_name(n).is_some() => Ty::Num(Num::from_name(n).expect("a sized type")),
             "str" => Ty::Str,
             "char" => Ty::Char,
             "bool" => Ty::Bool,
@@ -1201,6 +1228,12 @@ impl<'p> Checker<'p> {
                     );
                 }
             }
+            (Ty::Opt(w), Ty::Opt(_)) if matches!(**w, Ty::Opt(_)) => self.error_help(
+                rule,
+                pos,
+                msg,
+                "an optional doesn't convert to a nested optional, since its `none` would be ambiguous (type.opt.7)",
+            ),
             (w, Ty::Opt(g)) if same(w, g) => self.error_help(
                 rule,
                 pos,
@@ -1215,6 +1248,14 @@ impl<'p> Checker<'p> {
                 "no implicit conversion: `x.to_int()` truncates toward zero; `x.round().to_int()` rounds",
             ),
             (Ty::Float, Ty::Int) => self.error_help(rule, pos, msg, "no implicit conversion: write `n.to_float()`"),
+            (Ty::Num(k), Ty::Int) | (Ty::Num(k), Ty::Float) => {
+                let help = format!("no implicit conversion: write `x.to_{}()`", k.name());
+                self.error_help(rule, pos, msg, help)
+            }
+            (Ty::Int | Ty::Float, Ty::Num(_)) => {
+                let name = if *want == Ty::Int { "to_int" } else { "to_float" };
+                self.error_help(rule, pos, msg, format!("no implicit conversion: write `x.{name}()`"))
+            }
             (Ty::Str, Ty::Char) => self.error_help(rule, pos, msg, "make a one-character string with \"{c}\""),
             (Ty::Char, Ty::Str) => self.error_help(rule, pos, msg, "a character is written in single quotes: 'a'"),
             _ => self.error(rule, pos, msg),
@@ -1233,6 +1274,26 @@ impl<'p> Checker<'p> {
             "pass the error on with `?`, or handle it with `x := ... else ...`",
         );
         true
+    }
+
+    /// fix.edit.3: offer `?` after a statement-level fallible call when this
+    /// function's error type already admits its errors. Adds the fix to the
+    /// `err.use.1` diagnostic just reported.
+    fn try_fix(&mut self, t: &Ty, e: &Expr) {
+        let Ty::Res(_, errs) = t else { return };
+        let errors = self.errs_of(errs);
+        let admits = match &self.ret {
+            Ty::Res(_, Errs::Inferred(_)) => true,
+            Ty::Res(_, Errs::Set(want)) => errors.iter().all(|g| want.contains(g)),
+            _ => false,
+        };
+        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
+        if admits && matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
+            d.fixes.push(Fix {
+                title: "pass the error on with `?`".into(),
+                edits: vec![Edit::at_line_end(e.pos(), "?")],
+            });
+        }
     }
 
     /// The success type of a value that may be a failure.
@@ -1265,6 +1326,7 @@ impl<'p> Checker<'p> {
         match t {
             Ty::Int => "int".into(),
             Ty::Float => "float".into(),
+            Ty::Num(n) => n.name().into(),
             Ty::Str => "str".into(),
             Ty::Char => "char".into(),
             Ty::Bool => "bool".into(),
@@ -1325,11 +1387,11 @@ impl<'p> Checker<'p> {
         if f.receiver.is_some() {
             let ty = self.self_ty.clone().unwrap_or(Ty::Err);
             let mutable = f.receiver.is_some_and(|r| r.mutable);
-            self.locals.push(Local { name: "self".into(), ty, mutable, kind: Kind::SelfParam });
+            self.locals.push(Local { name: "self".into(), ty, mutable, kind: Kind::SelfParam, decl: None });
         }
         for (p, (_, ty)) in f.params.iter().zip(&sig.params) {
             if self.declare(&p.name, p.pos) {
-                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param });
+                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param, decl: None });
             }
         }
         let need = !Self::returns_nothing(&sig.ret);
@@ -1382,6 +1444,9 @@ impl<'p> Checker<'p> {
             leaves |= ty == Ty::Never;
             // err.use.1: a failure can't be discarded.
             if (!last || !need) && matches!(s, Stmt::Expr(_)) && self.reject_unhandled(&ty, s.pos()) {
+                if let Stmt::Expr(e) = s {
+                    self.try_fix(&ty, e);
+                }
                 ty = Ty::Err;
             }
         }
@@ -1407,6 +1472,7 @@ impl<'p> Checker<'p> {
                             ty: Ty::Err,
                             mutable: *mutable,
                             kind: Kind::Binding,
+                            decl: Some(*pos),
                         });
                         self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, index });
                     }
@@ -1415,7 +1481,10 @@ impl<'p> Checker<'p> {
                 let vt = self.expr(value, None, true);
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
-                    None if self.reject_unhandled(&vt, value.pos()) => Self::ok_type(&vt),
+                    None if self.reject_unhandled(&vt, value.pos()) => {
+                        self.try_fix(&vt, value);
+                        Self::ok_type(&vt)
+                    }
                     None => vt,
                 };
                 if ty == Ty::Unit {
@@ -1431,7 +1500,7 @@ impl<'p> Checker<'p> {
                     }
                 }
                 if self.declare(name, *pos) {
-                    self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding });
+                    self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding, decl: Some(*pos) });
                 } else if *mutable
                     && let Some(d) = self.diags.last_mut()
                     && let Some(f) = d.fixes.first_mut()
@@ -1461,7 +1530,7 @@ impl<'p> Checker<'p> {
                 let elem = if *mutable { self.mut_iterable(iter, var, body) } else { self.iterable(iter) };
                 let mark = self.locals.len();
                 if self.declare(var, *var_pos) {
-                    self.locals.push(Local { name: var.clone(), ty: elem, mutable: *mutable, kind: Kind::LoopVar });
+                    self.locals.push(Local { name: var.clone(), ty: elem, mutable: *mutable, kind: Kind::LoopVar, decl: None });
                 }
                 self.loops += 1;
                 self.block(body, None, false);
@@ -1588,6 +1657,7 @@ impl<'p> Checker<'p> {
                                     ty: t,
                                     mutable: false,
                                     kind: Kind::Binding,
+                                    decl: None,
                                 });
                             }
                         }
@@ -1620,6 +1690,9 @@ impl<'p> Checker<'p> {
     fn declare(&mut self, name: &str, pos: Pos) -> bool {
         if let Some(l) = self.locals.iter().rev().find(|l| l.name == name) {
             let mut d = Diagnostic::new("expr.bind.4", pos, format!("`{name}` is already declared in this function"));
+            if let Some(first) = l.decl {
+                d = d.note(first, format!("`{name}` is first declared here"));
+            }
             d = if l.mutable {
                 d.help(format!("`{name}` is a `mut` variable; to change it, write `{name} = ...`"))
                     .fix(format!("assign to `{name}` with `=`"), vec![Edit::replace(pos, ":=", "=")])
@@ -1640,12 +1713,15 @@ impl<'p> Checker<'p> {
         } else {
             return true;
         };
-        self.error_help(
-            "expr.bind.5",
-            pos,
-            format!("`{name}` is already {what} name"),
-            "choose a different name for the local",
-        );
+        let mut d = Diagnostic::new("expr.bind.5", pos, format!("`{name}` is already {what} name"))
+            .help("choose a different name for the local");
+        let first = (self.fns.get(name).map(|j| self.prog.fns[*j].pos))
+            .or_else(|| self.types.get(name).map(|d| self.def_pos(*d)))
+            .or_else(|| self.consts.get(name).map(|j| self.prog.consts[*j].pos));
+        if let Some(first) = first.filter(|p| !is_prelude(*p)) {
+            d = d.note(first, format!("`{name}` is declared here"));
+        }
+        self.diags.push(d);
         false
     }
 
@@ -1851,7 +1927,7 @@ impl<'p> Checker<'p> {
                     .help(format!("declare it with `mut {n} := ...`"));
                 if op.is_none() {
                     let edits = vec![
-                        Edit { pos: *npos, end: *npos, old: None, text: "mut ".into() },
+                        Edit::insert(*npos, "mut "),
                         Edit::replace(pos, "=", ":="),
                     ];
                     d = d.fix(format!("declare `{n}` with `mut {n} :=`"), edits);
@@ -1896,6 +1972,7 @@ impl<'p> Checker<'p> {
         if l.mutable {
             return;
         }
+        let decl = l.decl;
         let (default_rule, msg, help) = match l.kind {
             Kind::Binding => {
                 ("expr.bind.3", format!("`{root}` is immutable"), format!("declare it with `mut {root} := ...`"))
@@ -1916,7 +1993,12 @@ impl<'p> Checker<'p> {
                 "copy it into a `mut` binding first".into(),
             ),
         };
-        self.error_help(rule.unwrap_or(default_rule), e.pos(), format!("{msg}, so it can't be {action}"), help);
+        let mut d = Diagnostic::new(rule.unwrap_or(default_rule), e.pos(), format!("{msg}, so it can't be {action}")).help(help);
+        // fix.edit.1: a `:=` binding that is changed later becomes `mut`.
+        if let Some(decl) = decl {
+            d = d.fix(format!("declare `{root}` with `mut`"), vec![Edit::insert(decl, "mut ")]);
+        }
+        self.diags.push(d);
     }
 
     /// Whether two argument places certainly overlap (own.excl.2). Overlaps
@@ -2051,6 +2133,16 @@ impl<'p> Checker<'p> {
                 self.resolved.float_literals.insert(*pos);
                 Ty::Float
             }
+            // type.num.13: a literal is typed by the sized type the context expects.
+            Expr::Int(v, pos) if matches!(expect, Some(Ty::Num(_))) => {
+                let Some(Ty::Num(k)) = expect else { unreachable!() };
+                self.sized_literal(*v, false, *pos, *k);
+                Ty::Num(*k)
+            }
+            Expr::Float(_, pos) if matches!(expect, Some(Ty::Num(Num::F32))) => {
+                self.resolved.sized_literals.insert(*pos, Num::F32);
+                Ty::Num(Num::F32)
+            }
             Expr::Int(..) => Ty::Int,
             Expr::Float(..) => Ty::Float,
             Expr::Char(..) => Ty::Char,
@@ -2102,6 +2194,19 @@ impl<'p> Checker<'p> {
                 self.float_literal(operand);
                 Ty::Float
             }
+            Expr::Unary { op: UnOp::Neg, operand, .. }
+                if matches!(expect, Some(Ty::Num(_))) && matches!(**operand, Expr::Int(..) | Expr::Float(..)) =>
+            {
+                let Some(Ty::Num(k)) = expect else { unreachable!() };
+                match **operand {
+                    Expr::Int(v, p) => self.sized_literal(v, true, p, *k),
+                    Expr::Float(_, p) if *k == Num::F32 => {
+                        self.resolved.sized_literals.insert(p, Num::F32);
+                    }
+                    _ => {}
+                }
+                Ty::Num(*k)
+            }
             Expr::Unary { op, operand, pos } => self.unary(*op, operand, *pos),
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
             Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
@@ -2128,7 +2233,7 @@ impl<'p> Checker<'p> {
     /// unhandled failure don't.
     /// `{x:spec}` (lex.str.7, type.str.11): `.N` needs a float, `x` an int.
     fn format_spec(&mut self, t: &Ty, spec: &crate::lexer::FormatSpec, pos: Pos) {
-        if spec.precision.is_some() && !matches!(t, Ty::Float | Ty::Err) {
+        if spec.precision.is_some() && !matches!(t, Ty::Float | Ty::Num(Num::F32) | Ty::Err) {
             self.error_help(
                 "type.str.11",
                 pos,
@@ -2136,7 +2241,7 @@ impl<'p> Checker<'p> {
                 "round a float with `{x:.2}`; to cut an int or text, convert it first",
             );
         }
-        if spec.hex && !matches!(t, Ty::Int | Ty::Err) {
+        if spec.hex && !matches!(t, Ty::Int | Ty::Err) && !matches!(t, Ty::Num(k) if !k.is_float()) {
             self.error_help(
                 "type.str.11",
                 pos,
@@ -2583,6 +2688,7 @@ impl<'p> Checker<'p> {
         }
         if let Some(&i) = self.fns.get(n.as_str()) {
             self.reject_test_call(i, npos);
+            self.note_deprecated(i, npos);
             self.resolved.symbols.insert(npos, format!("fn:{n}"));
             let sig = self.sigs[i].clone();
             let binds = match targs {
@@ -2986,6 +3092,7 @@ impl<'p> Checker<'p> {
         let mut binds = explicit.unwrap_or_else(|| self.expected_binds(Def::Struct(s), expect));
         let types = self.field_types[s].clone();
         let before = self.diags.len();
+        self.private_literal(s, pos);
         self.fields_literal(&decl.name, &decl.fields, &types, &params, &mut binds, args, pos);
         let quiet = self.diags.len() > before;
         self.finish(&decl.name, &params, &mut binds, pos, quiet);
@@ -3166,6 +3273,7 @@ impl<'p> Checker<'p> {
             }
             [Cand::Builtin] => self.builtin_call(recv, &rt, name, pos, args),
             [Cand::Inherent(i)] => {
+                self.private_fn(*i, pos);
                 let sig = self.sigs[*i].clone();
                 let tn = self.type_name(&rt).unwrap_or_default();
                 self.resolved.symbols.insert(pos, format!("method:{tn}.{name}"));
@@ -3185,6 +3293,7 @@ impl<'p> Checker<'p> {
                             self.require_mutable(recv, Some("trait.method.3"), "the receiver of a `mut self` method");
                         }
                         self.resolved.targets.insert(pos, *i);
+                        self.note_deprecated(*i, pos);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
                                 sig.generics[..sig.owner].iter().copied().zip(a.iter().cloned()).collect()
@@ -3327,6 +3436,7 @@ impl<'p> Checker<'p> {
             self.error("expr.name.1", pos, format!("`{tn}` has no associated function `{name}`"));
             return Ty::Err;
         };
+        self.private_fn(i, pos);
         self.resolved.symbols.insert(pos, format!("method:{tn}.{name}"));
         let sig = self.sigs[i].clone();
         if sig.receiver.is_some() {
@@ -3347,6 +3457,7 @@ impl<'p> Checker<'p> {
             None => Vec::new(),
         };
         self.resolved.targets.insert(pos, i);
+        self.note_deprecated(i, pos);
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 
@@ -3446,6 +3557,7 @@ impl<'p> Checker<'p> {
             Ty::Struct(s, args) => {
                 let decl = &self.prog.structs[*s];
                 if let Some(i) = decl.fields.iter().position(|f| f.name == name) {
+                    self.private_field(*s, i, pos);
                     self.resolved.symbols.insert(pos, format!("field:{}.{name}", decl.name));
                     let binds: Vec<(usize, Ty)> =
                         self.struct_params[*s].iter().copied().zip(args.iter().cloned()).collect();
@@ -3545,6 +3657,39 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// An integer literal `v` (negated when `neg`) typed as `k` by context
+    /// (type.num.13): it must fit, and an `f32` takes it as a float.
+    fn sized_literal(&mut self, v: i64, neg: bool, pos: Pos, k: Num) {
+        if !k.is_float() {
+            let value = if neg { -i128::from(v) } else { i128::from(v) };
+            if !k.fits(value) {
+                let (lo, hi) = k.range();
+                self.error_help(
+                    "type.num.13",
+                    pos,
+                    format!("`{value}` doesn't fit in `{}`", k.name()),
+                    format!("`{}` holds {lo} to {hi}", k.name()),
+                );
+            }
+        }
+        self.resolved.sized_literals.insert(pos, k);
+        // The interpreter's fast path treats every literal in this set as special.
+        self.resolved.float_literals.insert(pos);
+    }
+
+    /// Whether `e` is an integer literal (or its negation) that takes the
+    /// sized type `k` from its other operand (type.num.13); if so, record it.
+    fn sized_operand(&mut self, e: &Expr, k: Num, neg: bool) -> bool {
+        match e {
+            Expr::Int(v, pos) => {
+                self.sized_literal(*v, neg, *pos, k);
+                true
+            }
+            Expr::Unary { op: UnOp::Neg, operand, .. } => self.sized_operand(operand, k, true),
+            _ => false,
+        }
+    }
+
     fn unary(&mut self, op: UnOp, operand: &'p Expr, pos: Pos) -> Ty {
         let (want, rule, what) = match op {
             UnOp::Neg => (Ty::Int, "trait.op.1", "unary `-`"),
@@ -3556,6 +3701,14 @@ impl<'p> Checker<'p> {
         }
         if op == UnOp::Neg && t == Ty::Float {
             return Ty::Float;
+        }
+        if let (UnOp::Neg, Ty::Num(k)) = (op, &t) {
+            if !k.is_signed() && !k.is_float() {
+                let msg = format!("unary `-` is not defined for `{}`, which is unsigned", k.name());
+                self.error_help("type.num.14", pos, msg, "negate a signed type, or subtract from zero with `wrapping_neg`");
+                return Ty::Err;
+            }
+            return t;
         }
         if self.accepts(&want, &t) {
             return want;
@@ -3585,6 +3738,12 @@ impl<'p> Checker<'p> {
         // type.num.10: `2 * x` with a float `x`.
         if lt == Ty::Int && rt == Ty::Float && self.float_literal(lhs) {
             lt = Ty::Float;
+        }
+        // type.num.13: `1 + x` with a sized `x`.
+        if let (Ty::Int, Ty::Num(k)) = (&lt, &rt)
+            && self.sized_operand(lhs, *k, false)
+        {
+            lt = rt.clone();
         }
         // expr.cmp.3: `xs.index_of(x) == -1` would always be false.
         if matches!(op, BinOp::Eq | BinOp::Ne)
@@ -3630,6 +3789,8 @@ impl<'p> Checker<'p> {
         if op.is_arithmetic() {
             match lt {
                 Ty::Int => return Ty::Int,
+                // type.num.14: sized arithmetic; `f32` has no `%`.
+                Ty::Num(k) if !(k.is_float() && op == BinOp::Rem) => return lt.clone(),
                 // type.num.6: float arithmetic, without `%`.
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
                 Ty::Str if op == BinOp::Add => self.diags.push(
@@ -3687,7 +3848,7 @@ impl<'p> Checker<'p> {
                     binds_failure |= errs.is_some();
                     errors = errs;
                     if self.declare(name, *npos) {
-                        self.locals.push(Local { name: name.clone(), ty, mutable: false, kind: Kind::Binding });
+                        self.locals.push(Local { name: name.clone(), ty, mutable: false, kind: Kind::Binding, decl: None });
                     }
                 }
             }
@@ -3710,7 +3871,7 @@ impl<'p> Checker<'p> {
                     (Some(set), 1) => {
                         let t = if set.len() == 1 { set[0].clone() } else { Ty::Union(set.clone()) };
                         if self.declare(name, *npos) {
-                            self.locals.push(Local { name: name.clone(), ty: t, mutable: false, kind: Kind::Binding });
+                            self.locals.push(Local { name: name.clone(), ty: t, mutable: false, kind: Kind::Binding, decl: None });
                         }
                     }
                     _ => self.error_help(
@@ -3773,6 +3934,7 @@ impl<'p> Checker<'p> {
         let (e, literal) = match st {
             Ty::Enum(e, ref args) => (Some((e, args.clone())), None),
             Ty::Int | Ty::Char | Ty::Str | Ty::Bool => (None, Some(st.clone())),
+            Ty::Num(k) if !k.is_float() => (None, Some(st.clone())),
             Ty::Err => (None, None),
             ref t if self.reject_unhandled(t, scrutinee.pos()) => (None, None),
             Ty::Union(_) => {
@@ -3809,25 +3971,40 @@ impl<'p> Checker<'p> {
             let mark = self.locals.len();
             for (name, npos, ty) in bindings {
                 if name != "_" && self.declare(&name, npos) {
-                    self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding });
+                    self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding, decl: None });
                 }
             }
             agree.block(self, &arm.body, pos);
             self.end_scope(mark);
         }
         if let Some((e, _)) = e {
-            let missing: Vec<&str> = (self.prog.enums[e].variants.iter())
-                .zip(&covered)
-                .filter(|(_, c)| !**c)
-                .map(|(v, _)| v.name.as_str())
-                .collect();
+            let missing_variants: Vec<&crate::ast::Variant> =
+                (self.prog.enums[e].variants.iter()).zip(&covered).filter(|(_, c)| !**c).map(|(v, _)| v).collect();
+            let missing: Vec<&str> = missing_variants.iter().map(|v| v.name.as_str()).collect();
             if !wildcard && !missing.is_empty() {
-                self.error_help(
+                let mut d = Diagnostic::new(
                     "expr.match.2",
                     pos,
                     format!("this `match` doesn't cover {}", list_names(&missing)),
-                    "add an arm for each, or a `_` arm",
-                );
+                )
+                .help("add an arm for each, or a `_` arm");
+                // fix.edit.4: one arm per missing variant, each a typed hole.
+                if let Some(last) = arms.last() {
+                    let indent = " ".repeat(last.pat.pos().col - 1);
+                    let text: String = missing_variants
+                        .iter()
+                        .map(|v| {
+                            let binds = if v.fields.is_empty() {
+                                String::new()
+                            } else {
+                                format!("({})", vec!["_"; v.fields.len()].join(", "))
+                            };
+                            format!("{indent}{}{binds} => todo\n", v.name)
+                        })
+                        .collect();
+                    d = d.fix("add the missing arms, each a `todo`", vec![Edit::after_block(last.pat.pos(), text)]);
+                }
+                self.diags.push(d);
             }
         }
         if let Some(t) = &literal {
@@ -3840,12 +4017,26 @@ impl<'p> Checker<'p> {
                 } else {
                     "add a `_` arm for the other values"
                 };
-                self.error_help(
+                let mut d = Diagnostic::new(
                     "expr.match.2",
                     pos,
                     format!("this `match` on {} doesn't cover every value", self.show(t)),
-                    help,
-                );
+                )
+                .help(help);
+                if let Some(last) = arms.last() {
+                    let indent = " ".repeat(last.pat.pos().col - 1);
+                    let text: String = if *t == Ty::Bool {
+                        [true, false]
+                            .iter()
+                            .filter(|b| !seen.contains(&crate::ast::Literal::Bool(**b)))
+                            .map(|b| format!("{indent}{b} => todo\n"))
+                            .collect()
+                    } else {
+                        format!("{indent}_ => todo\n")
+                    };
+                    d = d.fix("add the missing arms, each a `todo`", vec![Edit::after_block(last.pat.pos(), text)]);
+                }
+                self.diags.push(d);
             }
         }
         agree.result()
@@ -3880,6 +4071,7 @@ impl<'p> Checker<'p> {
             }
             Pattern::Literal(lit, pos) => {
                 let lt = match lit {
+                    Literal::Int(_) if matches!(t, Ty::Num(k) if !k.is_float()) => t.clone(),
                     Literal::Int(_) => Ty::Int,
                     Literal::Char(_) => Ty::Char,
                     Literal::Str(_) => Ty::Str,
@@ -4184,7 +4376,7 @@ fn was_were(n: usize) -> String {
 }
 
 /// Closest candidate by edit distance, if it's close enough to be a likely typo.
-fn suggest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
+pub(crate) fn suggest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
     let limit = (name.chars().count() / 3).max(1);
     candidates.iter().map(|c| (edit_distance(name, c), *c)).filter(|(d, _)| *d <= limit).min().map(|(_, c)| c)
 }

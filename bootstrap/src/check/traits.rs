@@ -259,6 +259,8 @@ impl<'p> Checker<'p> {
                 .iter()
                 .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
+            // type.num.14: sized numbers are `Eq` and `Ord`; every one but `f32` is `Hash`.
+            Ty::Num(k) => tr == eq || tr == self.std.ord || (tr == self.std.hash && !k.is_float()),
             Ty::Union(_) => tr == eq || tr == self.std.hash,
             Ty::Opt(inner) => (tr == eq || tr == self.std.hash) && self.implements_in(inner, tr, seen),
             // type.map.4: maps and sets compare with `==`, and aren't keys.
@@ -324,6 +326,7 @@ impl<'p> Checker<'p> {
         let hash = self.std.hash;
         match t {
             Ty::Float => "`float` isn't `Hash`, since NaN isn't equal to itself".into(),
+            Ty::Num(k) if k.is_float() => "`f32` isn't `Hash`, since NaN isn't equal to itself".into(),
             Ty::Map(..) | Ty::Set(_) => "maps and sets aren't `Hash`".into(),
             Ty::Any(_) => "`any` values aren't `Hash`".into(),
             Ty::Param(p) => format!(

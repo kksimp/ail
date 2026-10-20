@@ -45,6 +45,20 @@ pub struct Fix {
     pub edits: Vec<Edit>,
 }
 
+/// A position the checker names by a rule instead of by coordinates.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Anchor {
+    /// The edit's `pos` and `end` are the position.
+    Exact,
+    /// Insert `text` (whole lines) after the indented block that starts at
+    /// `pos`: the line after the last line below `pos.line` that is blank or
+    /// indented deeper than `pos.col`.
+    AfterBlock,
+    /// Insert `text` at the end of the code on `pos.line`; dropped when the
+    /// line has a comment or doesn't end like a complete expression.
+    LineEnd,
+}
+
 /// Replace the text from `pos` to `end` (exclusive) with `text`.
 ///
 /// When `old` is set, the edit is anchored instead: it replaces the first
@@ -56,12 +70,30 @@ pub struct Edit {
     pub pos: Pos,
     pub end: Pos,
     pub old: Option<String>,
+    /// Where the checker can't name the position itself (fix.edit.2).
+    pub anchor: Anchor,
     pub text: String,
 }
 
 impl Edit {
     pub fn replace(pos: Pos, old: impl Into<String>, text: impl Into<String>) -> Self {
-        Edit { pos, end: pos, old: Some(old.into()), text: text.into() }
+        Edit { pos, end: pos, old: Some(old.into()), anchor: Anchor::Exact, text: text.into() }
+    }
+
+    /// Insert `text` at `pos`.
+    pub fn insert(pos: Pos, text: impl Into<String>) -> Self {
+        Edit { pos, end: pos, old: None, anchor: Anchor::Exact, text: text.into() }
+    }
+
+    /// Insert `text` at the end of the code on `pos.line`.
+    pub fn at_line_end(pos: Pos, text: impl Into<String>) -> Self {
+        Edit { pos, end: pos, old: None, anchor: Anchor::LineEnd, text: text.into() }
+    }
+
+    /// Append the lines `text` (each ending in a newline) after the block
+    /// starting at `pos`.
+    pub fn after_block(pos: Pos, text: impl Into<String>) -> Self {
+        Edit { pos, end: pos, old: None, anchor: Anchor::AfterBlock, text: text.into() }
     }
 }
 
@@ -120,6 +152,11 @@ impl Diagnostic {
 
 impl Edit {
     fn resolve(&mut self, lines: &[Vec<char>]) -> bool {
+        match std::mem::replace(&mut self.anchor, Anchor::Exact) {
+            Anchor::AfterBlock => return self.resolve_after_block(lines),
+            Anchor::LineEnd => return self.resolve_line_end(lines),
+            Anchor::Exact => {}
+        }
         let Some(old) = self.old.take() else { return true };
         let Some(line) = lines.get(self.pos.line.wrapping_sub(1)) else { return false };
         let old: Vec<char> = old.chars().collect();
@@ -137,6 +174,51 @@ impl Edit {
             }
         }
         false
+    }
+}
+
+impl Edit {
+    fn resolve_line_end(&mut self, lines: &[Vec<char>]) -> bool {
+        let Some(line) = lines.get(self.pos.line.wrapping_sub(1)) else { return false };
+        let code = line.iter().rposition(|c| !c.is_whitespace()).map_or(0, |i| i + 1);
+        let Some(last) = code.checked_sub(1).map(|i| line[i]) else { return false };
+        if line.contains(&'#') || !(last == ')' || last == ']' || last.is_alphanumeric() || last == '_') {
+            return false;
+        }
+        self.pos.col = code + 1;
+        self.end = self.pos;
+        true
+    }
+
+    fn resolve_after_block(&mut self, lines: &[Vec<char>]) -> bool {
+        let start = self.pos.line.wrapping_sub(1);
+        if lines.get(start).is_none() {
+            return false;
+        }
+        let indent = self.pos.col - 1;
+        let mut last = start;
+        for (i, l) in lines.iter().enumerate().skip(start + 1) {
+            let blank = l.iter().all(|c| c.is_whitespace());
+            let deeper = l.iter().take_while(|c| **c == ' ').count() > indent;
+            if !blank && !deeper {
+                break;
+            }
+            if !blank {
+                last = i;
+            }
+        }
+        // A final line with no newline after it is the last element of
+        // `split('\n')`: its successor doesn't exist.
+        let at = Pos { line: last + 2, col: 1 };
+        if last + 1 < lines.len() {
+            self.pos = at;
+        } else {
+            self.pos = Pos { line: last + 1, col: lines[last].len() + 1 };
+            self.text.insert(0, '\n');
+            self.text.pop();
+        }
+        self.end = self.pos;
+        true
     }
 }
 
@@ -163,13 +245,19 @@ fn token_end(lines: &[Vec<char>], pos: Pos) -> Pos {
     Pos { line: pos.line, col: pos.col + len }
 }
 
-/// Write all diagnostics to stderr, sorted by position for stable output.
-pub fn report(diags: &mut [Diagnostic], path: &str, src: &str, json: bool) {
+/// Sort diagnostics and settle their spans and anchored edits against
+/// `src`, as `report` does before printing; `ail fix` applies the result.
+pub fn settle(diags: &mut [Diagnostic], src: &str) {
     diags.sort_by_key(|d| (d.pos.line, d.pos.col));
     let lines: Vec<Vec<char>> = src.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l).chars().collect()).collect();
     for d in diags.iter_mut() {
         d.resolve(&lines);
     }
+}
+
+/// Write all diagnostics to stderr, sorted by position for stable output.
+pub fn report(diags: &mut [Diagnostic], path: &str, src: &str, json: bool) {
+    settle(diags, src);
     let mut out = String::new();
     for d in diags.iter() {
         if json {
