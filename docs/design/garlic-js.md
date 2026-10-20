@@ -74,6 +74,16 @@ tools/garlic/js/
 `tools/garlic/js` is the package `garlicjs` (`ail.pkg`): Garlic declares it as a
 dependency and imports `garlicjs.vm` from `tools/garlic/jsdom`.
 
+In Garlic (`tools/garlic/jsdom`, `load_doc` in `garlic.ail`), a page's
+scripts run after it is parsed, with external scripts fetched first, a
+budget of 1 s of virtual time and 5,000,000 steps, and the real time as the
+clock. Their changes are replayed into Garlic's tree. A navigation a
+script asks for, or else a `<meta http-equiv=refresh>` outside `<noscript>`,
+is followed, up to 5 hops. `jsdom/cookies.ail` is the cookie jar: cookies
+from `Set-Cookie` and `document.cookie` are sent back to their site (no
+paths, `Secure` or `SameSite` yet). `--no-js` skips scripts, and then a
+refresh inside `<noscript>` is followed too.
+
 ```sh
 ./ail run tools/garlic/js --ast page.js          # ESTree JSON, one line
 ./ail run tools/garlic/js --ast --loc page.js    # with "loc":"LINE:COL" on each node
