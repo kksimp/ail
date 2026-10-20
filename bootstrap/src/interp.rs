@@ -9,7 +9,7 @@
 //! and text forms use a type's `impl` or the built-in structural forms
 //! (trait.std.1-4, trait.auto.1-2, trait.derive.1).
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
 use std::rc::Rc;
@@ -146,12 +146,12 @@ enum Exit {
     Continue,
     /// A returned value, and where it was returned.
     Return(Value, Pos),
-    Trap(Trap),
+    Trap(Box<Trap>),
 }
 
 impl From<Trap> for Exit {
     fn from(t: Trap) -> Self {
-        Exit::Trap(t)
+        Exit::Trap(Box::new(t))
     }
 }
 
@@ -212,8 +212,8 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
                 .collect(),
         };
     });
-    let mut fns = HashMap::new();
-    let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::new();
+    let mut fns = HashMap::default();
+    let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::default();
     for f in prog.fns.iter().filter(|f| f.top_level()) {
         match &f.owner {
             Some(owner) => {
@@ -236,7 +236,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         out: BufWriter::new(out),
         depth: 0,
         closed: false,
-        consts: HashMap::new(),
+        consts: HashMap::default(),
     }
 }
 
@@ -246,7 +246,7 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     // mod.const.1: constants are computed before the program runs.
     for c in &prog.consts {
         it.constant(&c.name, c.pos).map_err(|e| match e {
-            Exit::Trap(t) => Stop::Trap(t),
+            Exit::Trap(t) => Stop::Trap(*t),
             _ => unreachable!("checked: constants don't leave"),
         })?;
     }
@@ -469,12 +469,14 @@ fn prepare(op: Operand, mutable: bool, env: &Env<'_>) -> Result<Prepared, Trap> 
 }
 
 /// own.excl.3: `mut` operands that overlap at run time trap before the call.
-fn check_overlap(places: &[(Option<Place>, bool)], pos: Pos) -> Result<(), Trap> {
-    for (j, (b, b_mut)) in places.iter().enumerate() {
-        for (a, a_mut) in &places[..j] {
+fn check_overlap(ops: &[Prepared], pos: Pos) -> Result<(), Trap> {
+    for (j, (b, _, b_mut)) in ops.iter().enumerate() {
+        if !*b_mut {
+            continue;
+        }
+        for (a, _, a_mut) in &ops[..j] {
             if let (Some(a), Some(b)) = (a, b)
                 && *a_mut
-                && *b_mut
                 && overlaps(a, b)
             {
                 return trap("own.excl.3", pos, "two `mut` arguments of this call overlap".into());
@@ -509,7 +511,7 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
         }
-        let mut env: Env<'a> = Vec::new();
+        let mut env: Env<'a> = Vec::with_capacity(16);
         if let Some(r) = recv {
             env.push(("self", r));
         }
@@ -520,7 +522,7 @@ impl<'a, W: Write> Interp<'a, W> {
         let (mut result, at) = match self.block(body, &mut env) {
             Ok(v) => (v, end),
             Err(Exit::Return(v, at)) => (v, at),
-            Err(Exit::Trap(t)) => return Err(t),
+            Err(Exit::Trap(t)) => return Err(*t),
             Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
         };
         // err.decl.3: an error value leaving a fallible function is its failure.
@@ -529,7 +531,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         self.depth -= 1;
         env.truncate(n);
-        Ok((result, env.into_iter().map(|(_, v)| v).collect()))
+        // Only `mut` receivers and parameters are written back (own.param.2).
+        if f.receiver.is_some_and(|r| r.mutable) || f.params.iter().any(|p| p.mutable) {
+            Ok((result, env.into_iter().map(|(_, v)| v).collect()))
+        } else {
+            Ok((result, Vec::new()))
+        }
     }
 
     fn block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
@@ -677,6 +684,20 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<()> {
+        // A plain local needs no `Place`: same steps as below with an empty path.
+        if let Expr::Name(n, _) = target {
+            let slot = env.iter().rposition(|(m, _)| m == n).expect("checked: a local");
+            let v = match op {
+                None => self.eval(value, env)?,
+                Some(op) => {
+                    let old = env[slot].1.clone();
+                    let rhs = self.eval(value, env)?;
+                    self.binop(op, old, rhs, pos)?
+                }
+            };
+            env[slot].1 = v;
+            return Ok(());
+        }
         let p = self.place(target, env)?;
         let v = match op {
             None => self.eval(value, env)?,
@@ -726,7 +747,47 @@ impl<'a, W: Write> Interp<'a, W> {
         self.prog.structs[s].fields.iter().position(|f| f.name == name).expect("checked: field exists")
     }
 
+    /// The hot expression forms, kept in a small frame: `eval_general`'s frame
+    /// is over a kilobyte, and most evaluations are names, literals and
+    /// operators (ADR 0175). Every other form, and every fallback, is
+    /// `eval_general`'s, so the two stay in step by construction.
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        match e {
+            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
+            Expr::Bool(b, _) => Ok(Value::Bool(*b)),
+            Expr::Name(n, _) => match lookup(env, n) {
+                Some(v) => Ok(v.clone()),
+                None => self.eval_general(e, env),
+            },
+            Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
+                let l = self.eval(lhs, env)?;
+                let r = self.eval(rhs, env)?;
+                // The common int cases inline; overflow and the rest go to `binop` (expr.arith.1).
+                if let (Value::Int(a), Value::Int(b)) = (&l, &r) {
+                    let fast = match op {
+                        BinOp::Add => a.checked_add(*b).map(Value::Int),
+                        BinOp::Sub => a.checked_sub(*b).map(Value::Int),
+                        BinOp::Mul => a.checked_mul(*b).map(Value::Int),
+                        BinOp::Eq => Some(Value::Bool(a == b)),
+                        BinOp::Ne => Some(Value::Bool(a != b)),
+                        BinOp::Lt => Some(Value::Bool(a < b)),
+                        BinOp::Le => Some(Value::Bool(a <= b)),
+                        BinOp::Gt => Some(Value::Bool(a > b)),
+                        BinOp::Ge => Some(Value::Bool(a >= b)),
+                        _ => None,
+                    };
+                    if let Some(v) = fast {
+                        return Ok(v);
+                    }
+                }
+                Ok(self.binop(*op, l, r, *pos)?)
+            }
+            _ => self.eval_general(e, env),
+        }
+    }
+
+    #[inline(never)]
+    fn eval_general(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
             Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
             // type.num.10
@@ -847,7 +908,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     Some(r) => Value::Int(r),
                     None => {
                         let message = format!("`-({v})` overflows `int`");
-                        return Err(Exit::Trap(Trap { rule: "expr.arith.1", pos: *pos, message }));
+                        return Err(Trap { rule: "expr.arith.1", pos: *pos, message }.into());
                     }
                 }
             }
@@ -1181,7 +1242,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         if n == "unreachable" && lookup(env, n).is_none() {
             let Value::Str(msg) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
-            return Err(Exit::Trap(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }));
+            return Err(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }.into());
         }
         if (n == "assert" || n == "assert_eq") && lookup(env, n).is_none() {
             return self.assert(n, args, pos, env);
@@ -1439,8 +1500,7 @@ impl<'a, W: Write> Interp<'a, W> {
             let op = self.operand(&a.value, env)?;
             ops.push(prepare(op, param.mutable, env)?);
         }
-        let places: Vec<(Option<Place>, bool)> = ops.iter().map(|(p, _, m)| (p.clone(), *m)).collect();
-        check_overlap(&places, pos)?;
+        check_overlap(&ops, pos)?;
         let mut values = Vec::with_capacity(ops.len());
         for (place, value, _) in &mut ops {
             values.push(match value.take() {

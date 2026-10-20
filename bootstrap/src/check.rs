@@ -31,6 +31,7 @@ use crate::ast::{
     Arg, ArgKind, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep,
     Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
+use crate::fasthash::{FastMap, FastSet};
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::UNSUPPORTED;
 
@@ -129,18 +130,18 @@ pub enum Call {
 #[derive(Debug, Default)]
 pub struct Resolved {
     /// Bare enum variants, by the position of the name: (enum, variant).
-    pub variants: HashMap<Pos, (usize, usize)>,
+    pub variants: FastMap<Pos, (usize, usize)>,
     /// Method calls through a trait, by the position of the method name.
-    pub calls: HashMap<Pos, Call>,
+    pub calls: FastMap<Pos, Call>,
     /// The `impl` block for each trait and type constructor (trait.impl.6).
-    pub impls: HashMap<(usize, Con), usize>,
+    pub impls: FastMap<(usize, Con), usize>,
     /// Empty `{}` literals that are sets rather than maps (type.coll.3).
-    pub empty_sets: std::collections::HashSet<Pos>,
+    pub empty_sets: FastSet<Pos>,
     /// `e?` on an optional, which passes on `none` (err.prop.2); every other
     /// `?` passes on only a failure, so a successful `none` stays a value.
-    pub optional_try: std::collections::HashSet<Pos>,
+    pub optional_try: FastSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
-    pub float_literals: std::collections::HashSet<Pos>,
+    pub float_literals: FastSet<Pos>,
     /// The function each method or associated function call runs, by the
     /// position of its name, when that is known statically (eff.infer.3).
     pub targets: HashMap<Pos, usize>,
@@ -220,7 +221,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     for (i, f) in prog.fns.iter().enumerate() {
         c.check_fn(i, f);
     }
-    c.resolved.impls = c.impl_of.clone();
+    c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
     (c.diags, c.resolved)

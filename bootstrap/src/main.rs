@@ -7,6 +7,7 @@ mod ast;
 mod check;
 mod diag;
 mod explain;
+mod fasthash;
 mod implicit_self;
 mod interp;
 mod lexer;
