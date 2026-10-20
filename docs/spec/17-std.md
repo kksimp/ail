@@ -132,7 +132,6 @@ to the file, creating it or replacing its contents; `append_bytes(path str,
 data bytes) ! IoError` adds `data` at the end, creating the file if needed.
 They fail as `write_text` and `append_text` do. *(ADR 0415)*
 
-```ail
 ```ail norun rules=std.fs.9
 use std.fs
 

@@ -493,7 +493,7 @@ fn largest(xs List[int]) int
 fn main()
     print(largest([3, 9, 2]))
 ```
-```ail tool=api,--refs,FILE,12,7 expect=method:Shape.area rules=api.ref.2
+```ail tool=api,--refs,FILE,9,7 expect=method:Shape.area rules=api.ref.2
 trait Shape
     fn area(self) float
 struct Square
@@ -507,7 +507,7 @@ fn main()
     sq := Square(side: 2.0)
     print(total(sq))
 ```
-```ail tool=api,--refs,FILE,15,5 expect=refs rules=api.ref.1,api.refs.1,api.refs.3
+```ail tool=api,--refs,FILE,11,5 expect=refs rules=api.ref.1,api.refs.1,api.refs.3
 trait Shape
     fn area(self) float
 struct Square
