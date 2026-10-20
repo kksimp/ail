@@ -14,9 +14,9 @@ struct Todo
 
 fn load_task(j Json) Todo ! TaskError
     id := j.str("id") else return TaskError(id: "?", field: "id")
-    title := j.str("title") else return TaskError(id: id, field: "title")
-    status := j.str("status") else return TaskError(id: id, field: "status")
-    Todo(id: id, title: title, status: status, hours: j.num("hours") else 0.0)
+    title := j.str("title") else return TaskError(id, field: "title")
+    status := j.str("status") else return TaskError(id, field: "status")
+    Todo(id, title, status, hours: j.num("hours") else 0.0)
 
 fn with_status(j Json, status str) Json
     mut out := j
@@ -43,28 +43,24 @@ fn main() !
         if r.status != 0
             failed += 1
         print("{task.id}: {r.out.trim()}")
-        if r.status == 0
-            updated.push(with_status(item, "done"))
-        else
-            updated.push(with_status(item, "failed"))
+        updated.push(with_status(item, if r.status == 0 then "done" else "failed"))
     out := Json.Obj([JsonMember(key: "tasks", value: Json.Arr(updated))]).to_text()
     fs.write_text("{dir}/tasks.out.json", out)?
     back := parse_json(fs.read_text("{dir}/tasks.out.json")?)?
     fs.remove("{dir}/tasks.out.json")?
-    count := back.arr("tasks") else []
-    print("ran {ran}, failed {failed}, wrote {count.len()} tasks ({out.chars().len()} chars)")
+    print("ran {ran}, failed {failed}, wrote {back.arr("tasks")?.len()} tasks ({out.len()} chars)")
 
 @test fn loads_a_task()
-    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}") else return
-    t := load_task(doc) else return
+    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}")?
+    t := load_task(doc)?
     assert_eq(t.title, "t")
     assert_eq(t.hours, 2.0)
-    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}") else return
+    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}")?
     missing := load_task(bad) else err
         assert_eq(err.field, "title")
         return
     assert_eq(missing.id, "rejected")
 
 @test fn sets_status()
-    doc := parse_json("\{\"status\":\"todo\",\"n\":1}") else return
+    doc := parse_json("\{\"status\":\"todo\",\"n\":1}")?
     assert_eq(with_status(doc, "done").to_text(), "\{\"status\":\"done\",\"n\":1.0}")
