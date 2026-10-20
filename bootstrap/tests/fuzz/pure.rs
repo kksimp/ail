@@ -470,15 +470,8 @@ pub fn funcs(seed: u64) -> String {
             12 => format!("print([2.5, -1.0, {n}.25, 9.0].sorted(by: |f| f.to_int() * -1))"),
             13 => "print([\"pear\", \"fig\", \"banana\", \"kiwi\", \"apple\", \"date\"].sorted(by: |w| w.len()).join(\",\"))".to_string(),
             14 => {
-                // Known native bug (found by this generator, reported on PR 170): printing the
-                // `List[str]` that `sorted(by:)` returns prints addresses. Joined text is fine,
-                // so the str arm joins until it is fixed; then print the list itself again.
                 let (l, key) = *r.pick(&[("[\"b\", \"a\", \"é\", \"\", \"ab\"]", "v.len()"), ("[3.5, -2.0, 0.0, 1.25]", "v.to_int()")]);
-                if l.starts_with("[\"") {
-                    format!("print({l}.sorted(by: |v| {key}).join(\"|\"))")
-                } else {
-                    format!("print({l}.sorted(by: |v| {key}))")
-                }
+                format!("print({l}.sorted(by: |v| {key}))")
             }
             _ => format!("print(List[int]().sorted(by: |x| x))"),
         };
