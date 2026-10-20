@@ -14,6 +14,7 @@
 ./ail build FILE.ail [-o OUT] # native executable for the host (or --target x86_64-linux|aarch64-linux|aarch64-macos): numbers, strings, lists, loops, free functions, env.args() (native.subset.1)
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
+./ail run --record r.json FILE.ail      # write every effect's result; `--replay r.json` repeats the run exactly (`ail test --record` keeps failed tests)
 ./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
 ./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot
 ./ail effects [--json] FILE.ail       # each function's inferred effects

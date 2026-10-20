@@ -94,6 +94,8 @@ options:
   --parallel    with run: run every loop proven independent on the thread
                 pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
+  --record R    with run or test: write every effect's result to R (test: failed tests only) (replay.rec.1)
+  --replay R    with run or test: answer effects from R, so the run repeats; FILE may be left out (replay.run.1)
   --schedule=random[:SEED]
                 with test or run: switch tasks at random points picked from
                 SEED (a new one if left off), so a test that fails on one
@@ -134,7 +136,7 @@ fn main() -> ExitCode {
             "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
-            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" => i += 1,
+            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
             // budget.out.5: `--budget` may stand alone (the command's default).
             "--budget" if args.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())) => i += 1,
             "--budget" => {}
@@ -195,6 +197,14 @@ fn main() -> ExitCode {
         eprintln!("error: {msg}");
         return ExitCode::from(2);
     }
+    // replay.rec.1, replay.run.1: `--record R` and `--replay R`.
+    let replay_args = match take_replay(&mut rest, &program_args) {
+        Ok(a) => a,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    };
     // run.limit.1-4, test.cover.1-3: limits for `ail run` and `ail test`, coverage for `ail test`.
     let coverage = match take_limit_options(&mut rest) {
         Ok(c) => c,
@@ -238,13 +248,19 @@ fn main() -> ExitCode {
     }
     match rest.as_slice() {
         ["run", file] => {
-            interp::set_program(file, program_args);
-            run_file(file, json, true, &deny)
+            interp::set_program(file, replay_args.unwrap_or(program_args));
+            let code = run_file(file, json, true, &deny);
+            interp::replay::finish();
+            code
         }
         ["check", "--errors", file] | ["check", file, "--errors"] => api::errors::command(file, json),
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => match take_test_options(&mut flags) {
-            Ok((cases, seed)) => run_tests(file, json, cases, seed, coverage),
+            Ok((cases, seed)) => {
+                let code = run_tests(file, json, cases, seed, coverage);
+                interp::replay::finish();
+                code
+            }
             Err(msg) => {
                 eprintln!("error: {msg}");
                 ExitCode::from(2)
@@ -376,6 +392,41 @@ fn take_deny(args: &mut Vec<&str>) -> Result<Vec<&'static str>, String> {
     };
     args.drain(at..at + 2);
     check::effects::parse_deny(list)
+}
+
+/// Remove `--record R` or `--replay R` and start recording or replaying
+/// (replay.rec.1, replay.run.1). A replay without FILE runs the recorded
+/// program, and returns the recorded program arguments.
+fn take_replay(rest: &mut Vec<&str>, program_args: &[String]) -> Result<Option<Vec<String>>, String> {
+    let both = rest.contains(&"--record") && rest.contains(&"--replay");
+    for flag in ["--record", "--replay"] {
+        let Some(at) = rest.iter().position(|a| *a == flag) else { continue };
+        if !matches!(rest.first(), Some(&"run" | &"test")) {
+            return Err(format!("`{flag}` works with `ail run` and `ail test` (replay.rec.1)"));
+        }
+        if both {
+            return Err("`--record` and `--replay` can't be used together (replay.rec.1)".into());
+        }
+        let Some(path) = rest.get(at + 1).map(|p| p.to_string()) else {
+            return Err(format!("`{flag}` needs a file, e.g. `{flag} run.json` (replay.rec.1)"));
+        };
+        rest.drain(at..at + 2);
+        // replay.rec.5: one thread, so effects happen in one order.
+        interp::parallel::set_mode(interp::parallel::Mode::Off);
+        if flag == "--record" {
+            let seed = rest.iter().position(|a| *a == "--seed").and_then(|i| rest.get(i + 1)).and_then(|s| s.parse().ok());
+            let program = rest.get(1).copied().unwrap_or_default();
+            interp::set_seed(interp::replay::start_record(&path, program, program_args, seed));
+            return Ok(None);
+        }
+        let header = interp::replay::start_replay(&path)?;
+        interp::set_seed(header.seed);
+        if rest.len() == 1 {
+            rest.push(Box::leak(header.program.into_boxed_str()));
+        }
+        return Ok(Some(header.args));
+    }
+    Ok(None)
 }
 
 /// Remove `--deterministic` and `--seed S`, and return the denied

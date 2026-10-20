@@ -70,6 +70,15 @@ impl<'a, W: Write> Interp<'a, W> {
         if matches!(module, "hash" | "compress") {
             return Ok(self.codec_call(module, f, &values, pos));
         }
+        // replay.cap.1: a recorded run's effects come from the recording.
+        if super::replay::on() && super::replay::captured(module, f) {
+            return self.captured_call(module, f, values, pos);
+        }
+        self.std_effect(module, f, values, pos)
+    }
+
+    /// A standard call that reaches the world (or the program's own state).
+    pub(super) fn std_effect(&mut self, module: &str, f: &str, values: Vec<Value>, pos: Pos) -> Flow<Value> {
         let str_arg = |i: usize| match &values[i] {
             Value::Str(s) => s.clone(),
             other => unreachable!("checked: str, found {other:?}"),
@@ -251,6 +260,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 self.flush(pos)?;
                 super::spawn::reap_all();
+                super::replay::finish();
                 std::process::exit(code as i32);
             }
             ("proc", "run" | "run_bytes") => {
