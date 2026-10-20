@@ -560,6 +560,12 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
+        "data" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rm(d, at(gpr(i.args[0], S0), 16))
+            put_gpr(i.dst, d)
+        "ldx" => indexed_load(i)
+        "stx" => indexed_store(i)
         "len" =>
             r := gpr(i.args[0], S0)
             d := out_gpr(i.dst, S1)
@@ -970,6 +976,38 @@ fn Gen.list_set(mut self, i mir.Inst)
     else
         r := gpr(v, RDX)
         a.mov_mr(list_index(i, 8), r)
+
+## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577).
+fn Gen.indexed_mem(mut self, i mir.Inst) Mem
+    b := gpr(i.args[0], S0)
+    if k := imm32(i.args[1])
+        return at(b, i.imm * k)
+    at_index(b, gpr(i.args[1], S1), i.imm, 0)
+
+fn Gen.indexed_load(mut self, i mir.Inst)
+    mem := indexed_mem(i)
+    if f.vals[i.dst].is_float()
+        d := out_xmm(i.dst, X0)
+        a.vmovsd_rm(d, mem)
+        put_xmm(i.dst, d)
+    elif i.imm == 1
+        d := out_gpr(i.dst, S1)
+        a.movzx8_rm(d, mem)
+        put_gpr(i.dst, d)
+    else
+        d := out_gpr(i.dst, S1)
+        a.mov_rm(d, mem)
+        put_gpr(i.dst, d)
+
+fn Gen.indexed_store(mut self, i mir.Inst)
+    v := i.args[2]
+    mem := indexed_mem(i)
+    if f.vals[v].is_float()
+        a.vmovsd_mr(mem, xmm(v, X0))
+    elif i.imm == 1
+        a.mov8_mr(mem, gpr(v, RDX))
+    else
+        a.mov_mr(mem, gpr(v, RDX))
 
 # ---- trap stubs ----
 

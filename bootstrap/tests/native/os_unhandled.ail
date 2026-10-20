@@ -1,0 +1,11 @@
+# A call that can fail is lowered only in an `else` (ADR 0580).
+fn main()
+    text := fs.read_text("x")?
+    print(text)
+    other := fs.read_text("y") else err
+        print(err.kind)
+        ""
+    print(other)
+    fs.write_text("z", "w")
+    n := io.read_line()
+    print(n)

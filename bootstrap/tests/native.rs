@@ -5,7 +5,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -73,6 +73,19 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
     cases.sort();
     let tmp = std::env::temp_dir().join(format!("ail-native-{}-{}", target.unwrap_or("host"), std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
+    // Scratch paths for the `os_*` programs, which can't build a path yet
+    // (std.fs, ADR 0580): a file, a second file, a directory with a nested
+    // one, and a file inside it.
+    let scratch = tmp.join("scratch");
+    fs::create_dir_all(&scratch).unwrap();
+    let scratch_env = [
+        ("AIL_TEST_A", scratch.join("a.txt")),
+        ("AIL_TEST_B", scratch.join("b.txt")),
+        ("AIL_TEST_DIR", scratch.join("d1")),
+        ("AIL_TEST_MID", scratch.join("d1/d2")),
+        ("AIL_TEST_DEEP", scratch.join("d1/d2/d3")),
+        ("AIL_TEST_IN", scratch.join("d1/f.txt")),
+    ];
     let mut failures = Vec::new();
     for case in cases.iter().filter(|p| p.extension().is_some_and(|x| x == "ail")) {
         let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
@@ -87,10 +100,23 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
             failures.push(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
             continue;
         }
-        let want = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", &rel]).output().unwrap();
+        // Standard input is `NAME.in` when there is one, else empty.
+        let input = || match fs::File::open(case.with_extension("in")) {
+            Ok(f) => Stdio::from(f),
+            Err(_) => Stdio::null(),
+        };
+        let want = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .envs(scratch_env.clone())
+            .stdin(input())
+            .args(["run", &rel])
+            .output()
+            .unwrap();
         let got = match runner {
-            Some(r) => Command::new(r).arg(&exe).current_dir(root()).output().unwrap(),
-            None => Command::new(&exe).current_dir(root()).output().unwrap(),
+            Some(r) => {
+                Command::new(r).arg(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap()
+            }
+            None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
         };
         let snapshot = |l: &&str| {
             // Frame lines after an error's first line may be absent (native.build.1).
