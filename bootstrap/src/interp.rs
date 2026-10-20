@@ -204,8 +204,9 @@ impl Report {
 enum Exit {
     Break,
     Continue,
-    /// A returned value, and where it was returned.
-    Return(Value, Pos),
+    /// A `return` (or `?`): the value and where it was returned wait in `Interp::returned`,
+    /// which keeps `Flow<Value>` at 32 bytes instead of 48 (ADR 0219).
+    Return,
     Trap(Box<Trap>),
 }
 
@@ -298,7 +299,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         closed: false,
         consts: HashMap::default(),
         env_pool: Vec::new(),
+        returned: None,
         ops_pool: Vec::new(),
+        field_slots: HashMap::default(),
         str_lits: HashMap::default(),
     }
 }
@@ -343,7 +346,11 @@ struct Interp<'a, W: Write> {
     consts: HashMap<&'a str, Value>,
     /// Spare call environments, so a call doesn't allocate one (ADR 0219).
     env_pool: Vec<Env<'a>>,
+    /// The value of the `return` being carried out, and where it was returned.
+    returned: Option<(Value, Pos)>,
     ops_pool: Vec<Vec<Prepared>>,
+    /// The field each argument of a struct or variant construction sets, by the address of its arguments.
+    field_slots: HashMap<usize, Rc<[usize]>>,
     /// String literals as shared text, by the address of the literal in the program.
     str_lits: HashMap<usize, Rc<str>>,
 }
@@ -735,7 +742,10 @@ impl<'a, W: Write> Interp<'a, W> {
         let body = f.body.as_ref().expect("checked: the function has a body");
         let (mut result, at) = match self.block(body, env) {
             Ok(v) => (v, None),
-            Err(Exit::Return(v, at)) => (v, Some(at)),
+            Err(Exit::Return) => {
+                let (v, at) = self.returned.take().expect("a return leaves its value");
+                (v, Some(at))
+            }
             Err(Exit::Trap(t)) => return Err(*t),
             Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
         };
@@ -792,7 +802,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     Some(e) => self.eval(e, env)?,
                     None => Value::Unit,
                 };
-                return Err(Exit::Return(v, *pos));
+                self.returned = Some((v, *pos));
+                return Err(Exit::Return);
             }
             Stmt::Expr(e) => return self.eval(e, env),
             // err.else.4: the `else` runs only on a failure.
@@ -962,7 +973,7 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn field_index(&self, s: usize, name: &str) -> usize {
-        self.prog.structs[s].fields.iter().position(|f| f.name == name).expect("checked: field exists")
+        self.prog.structs[s].fields.iter().position(|f| name_eq(&f.name, name)).expect("checked: field exists")
     }
 
     /// The hot expression forms, kept in a small frame: `eval_general`'s frame
@@ -1001,6 +1012,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 Ok(Value::Bool(self.eval(lhs, env)?.bool() || self.eval(rhs, env)?.bool()))
             }
             Expr::Unary { op: UnOp::Not, operand, .. } => Ok(Value::Bool(!self.eval(operand, env)?.bool())),
+            Expr::Call { callee, args, pos } => self.call_expr(callee, args, *pos, env),
+            Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env),
+            Expr::Field { recv, name, .. } => self.eval_field(recv, name, env),
+            Expr::Index { recv, index, pos } => self.eval_index(recv, index, *pos, env),
             _ => self.eval_general(e, env),
         }
     }
@@ -1045,6 +1060,46 @@ impl<'a, W: Write> Interp<'a, W> {
             let r = self.block(body, env);
             env.truncate(mark);
             return r;
+    }
+
+    /// `recv.name`: a field, or a unit variant `Enum.Variant` (type.struct.2, type.enum.2).
+    #[inline(never)]
+    fn eval_field(&mut self, recv: &'a Expr, name: &'a str, env: &mut Env<'a>) -> Flow<Value> {
+            if let Some(tn) = type_head(recv, env, self.prog) {
+                let e = self.enums[tn];
+                let v = self.variant_index(e, name);
+                return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
+            }
+            let Value::Struct(s, fields) = self.eval(recv, env)? else { unreachable!("checked: struct") };
+            Ok(fields[self.field_index(s, name)].clone())
+    }
+
+    /// `recv[index]` on a list or map, and `recv[lo..hi]` (type.coll.4, type.coll.10, type.map.3).
+    #[inline(never)]
+    fn eval_index(&mut self, recv: &'a Expr, index: &'a Expr, pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        let index: &'a Expr = index;
+            let items = match self.eval(recv, env)? {
+                Value::List(items) => items,
+                Value::Map(t) => {
+                    let k = self.eval(index, env)?;
+                    return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
+                }
+                other => unreachable!("checked: list or map, found {other:?}"),
+            };
+            if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
+                // type.coll.10: a missing bound is the start or the end.
+                let lo = match lo {
+                    Some(e) => self.eval(e, env)?.int(),
+                    None => 0,
+                };
+                let (hi, inclusive) = match hi {
+                    Some(e) => (self.eval(e, env)?.int(), *inclusive),
+                    None => (items.len() as i64, false),
+                };
+                return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, inclusive, *range_pos)?)));
+            }
+            let i = self.eval(index, env)?.int();
+            Ok(element(&items, i, pos)?.clone())
     }
 
     /// The value of an int local or literal, without cloning.
@@ -1121,7 +1176,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = self.eval(expr, env)?;
                 match v {
                     Value::None if self.resolved.optional_try.contains(pos) => {
-                        return Err(Exit::Return(Value::None, *pos));
+                        self.returned = Some((Value::None, *pos));
+                        return Err(Exit::Return);
                     }
                     Value::Fail(f) => {
                         let mut context_list = f.context.clone();
@@ -1132,7 +1188,8 @@ impl<'a, W: Write> Interp<'a, W> {
                         let mut trace = f.trace.clone();
                         trace.push(*pos);
                         let failure = Failure { error: f.error.clone(), context: context_list, trace };
-                        return Err(Exit::Return(Value::Fail(Rc::new(failure)), *pos));
+                        self.returned = Some((Value::Fail(Rc::new(failure)), *pos));
+                        return Err(Exit::Return);
                     }
                     v if self.resolved.optional_try.contains(pos) => Value::unwrap_present(v),
                     v => v,
@@ -1175,39 +1232,8 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Call { callee, args, pos } => self.call_expr(callee, args, *pos, env)?,
             Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env)?,
             Expr::TypeArgs { .. } => unreachable!("checked: type arguments only on a callee or receiver"),
-            Expr::Field { recv, name, .. } => {
-                if let Some(tn) = type_head(recv, env, self.prog) {
-                    let e = self.enums[tn];
-                    let v = self.variant_index(e, name);
-                    return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
-                }
-                let Value::Struct(s, fields) = self.eval(recv, env)? else { unreachable!("checked: struct") };
-                fields[self.field_index(s, name)].clone()
-            }
-            Expr::Index { recv, index, pos } => {
-                let items = match self.eval(recv, env)? {
-                    Value::List(items) => items,
-                    Value::Map(t) => {
-                        let k = self.eval(index, env)?;
-                        return Ok(map_value(&t, &k, || key_text(&k), *pos)?.clone());
-                    }
-                    other => unreachable!("checked: list or map, found {other:?}"),
-                };
-                if let Expr::Range { lo, hi, inclusive, pos: range_pos } = &**index {
-                    // type.coll.10: a missing bound is the start or the end.
-                    let lo = match lo {
-                        Some(e) => self.eval(e, env)?.int(),
-                        None => 0,
-                    };
-                    let (hi, inclusive) = match hi {
-                        Some(e) => (self.eval(e, env)?.int(), *inclusive),
-                        None => (items.len() as i64, false),
-                    };
-                    return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, inclusive, *range_pos)?)));
-                }
-                let i = self.eval(index, env)?.int();
-                element(&items, i, *pos)?.clone()
-            }
+            Expr::Field { recv, name, .. } => return self.eval_field(recv, name, env),
+            Expr::Index { recv, index, pos } => return self.eval_index(recv, index, *pos, env),
             Expr::Unary { op: UnOp::Neg, operand, pos } => {
                 let v = match self.eval(operand, env)? {
                     Value::Float(x) => return Ok(Value::Float(-x)),
@@ -1555,9 +1581,21 @@ impl<'a, W: Write> Interp<'a, W> {
     /// positional arguments, evaluated in the order written (type.struct.3,
     /// type.struct.7, type.enum.6).
     fn labelled(&mut self, fields: &'a [crate::ast::Field], args: &'a [Arg], env: &mut Env<'a>) -> Flow<Vec<Value>> {
+        // Which field each argument sets is fixed by the call site, so it is worked out once.
+        let slots = match self.field_slots.get(&(args.as_ptr() as usize)) {
+            Some(slots) => Rc::clone(slots),
+            None => {
+                let slots: Rc<[usize]> = crate::ast::field_slots(fields, args)
+                    .into_iter()
+                    .map(|(slot, _)| slot.expect("checked: field exists"))
+                    .collect();
+                self.field_slots.insert(args.as_ptr() as usize, Rc::clone(&slots));
+                slots
+            }
+        };
         let mut values = vec![Value::Unit; fields.len()];
-        for (a, (slot, _)) in args.iter().zip(crate::ast::field_slots(fields, args)) {
-            values[slot.expect("checked: field exists")] = self.eval(&a.value, env)?;
+        for (a, &slot) in args.iter().zip(slots.iter()) {
+            values[slot] = self.eval(&a.value, env)?;
         }
         Ok(values)
     }
