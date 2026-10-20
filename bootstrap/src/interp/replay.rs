@@ -347,7 +347,8 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                     at.join(",")
                 )
             }
-            Value::Ref(_) | Value::Handle(_) | Value::Tensor(_) | Value::Atomic(_) => return None,
+            // Function values have no text form (type.fn.1), so a recording can't hold them.
+            Value::Ref(_) | Value::Handle(_) | Value::Tensor(_) | Value::Atomic(_) | Value::Fn(_) => return None,
         })
     }
 
