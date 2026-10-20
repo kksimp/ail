@@ -1853,6 +1853,14 @@ impl<'a, W: Write> Interp<'a, W> {
     /// operators (ADR 0175). Every other form, and every fallback, is
     /// `eval_general`'s, so the two stay in step by construction.
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        // std.tensor.20: a chain of elementwise tensor operations, run fused.
+        if !self.resolved.fused.is_empty()
+            && matches!(e, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Method { .. })
+            && self.resolved.fused.contains(&e.pos())
+            && crate::fuse::plan(e).is_some()
+        {
+            return self.fused(e, env);
+        }
         match e {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
                 self.eval_binary(*op, lhs, rhs, *pos, env)

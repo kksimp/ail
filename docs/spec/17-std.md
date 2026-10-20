@@ -1128,6 +1128,23 @@ away from zero to an `int`, giving a `Tensor[int]` of the same shape. A NaN,
 an infinity or a value outside `int` traps. On a `Tensor[int]` it is a
 compile-time error. *(ADR 0523)*
 
+**std.tensor.20** — A chain of two or more elementwise operations on tensors
+(`+ - * /`, unary `-`, and `relu()`, `sigmoid()`, `tanh()` with no arguments)
+over names and float literals may run as one pass over the elements. The
+result is the same as the unfused calls, element by element, including traps
+and NaN, and the tree walker and the bytecode tier agree. A chain whose
+inputs don't share one shape, or that has a non-`float` input, runs unfused.
+Fusion is not visible in the program. *(ADR 0524)*
+
+```ail rules=std.tensor.20
+fn main()
+    a := tensor.from([1.0, -2.0, 3.0, 0.5], [2, 2])
+    b := tensor.from([4.0, 8.0, -1.0, 2.0], [2, 2])
+    print((a * b + a).relu())     # tensor.from([5.0, 0.0, 0.0, 1.5], [2, 2])
+    print(-(a - b) / b)           # tensor.from([0.75, 1.25, 4.0, 0.75], [2, 2])
+    print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
+```
+
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
