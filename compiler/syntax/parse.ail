@@ -1463,6 +1463,10 @@ fn Parser.call_args(mut self) List[ast.Arg]?
             param = take_name("a parameter name after `|`", "expr.key.1")?
             expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
         value := expression()?
+        # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
+        if at_sym("|")
+            diag("gram.foreign.1", here())
+            return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
             break
