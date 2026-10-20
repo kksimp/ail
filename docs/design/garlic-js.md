@@ -278,19 +278,32 @@ it comes later for speed, and these frames will move onto it).
   exception and why: an unsupported feature, a twin that is not the same
   script, a test made stale by a later edition, or a gap. A listed test that
   starts to behave is reported, so the list only shrinks.
-- `testdata/run`: 17 programs (operators, functions, classes, control flow,
+- `testdata/run`: 18 programs (operators, functions, classes, control flow,
   built-ins, numbers, JSON, collections, errors, strings, console layout,
-  promises, symbols, generators, async functions, `await` positions),
+  promises, symbols, generators, async functions, `await` positions,
+  `eval`, `Date` setters, assignment order),
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
-- `testdata/page`: 7 pages (tree, events, timers, forms, URL, a
-  Google-style script redirect), each with `NAME.out`: the console, the
+- `testdata/page`: 8 pages (tree, events, timers, forms, URL, a
+  Google-style script redirect, binary strings and beacons), each with `NAME.out`: the console, the
   body's `innerHTML` at the end, and the navigations asked for, as Chromium
   (Playwright's build 1194) gave them with the page at
   `https://example.test/dir/page.html`. `--test-page DIR` compares them.
 - `vm/jsmath.ail` has `@test`s for the math functions.
 - `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
   all of these in `./ail selftest`.
+
+Google's search page is the target page (captures from 2026-10-20 in the
+project's shared files, not in the repository: Google's code isn't ours to
+commit). It sends clients without JavaScript to an "enable JavaScript"
+page; with JavaScript, an obfuscated challenge script runs through `eval`,
+stores a token in the `SG_SS` cookie and reloads the search with `&sei=`.
+Chromium does the same with the captured page. On the engine the challenge
+takes 2.8 s and gives a token of the same form. Getting there needed
+indirect `eval`, `Date` setters, `Image`, `navigator.sendBeacon`, `btoa`
+on binary strings, and an assignment's target evaluated before its value.
+`--page --url URL FILE` loads a page at `URL` and lists every request and
+cookie, to compare with Chromium.
 
 As a larger check, acorn 8.14 (6,300 lines of JavaScript) runs in the
 interpreter, and its JSON tree with locations for a 240-character script
