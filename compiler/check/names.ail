@@ -1,0 +1,89 @@
+## Name tables and suggestions shared by the checker's passes, as in
+## `bootstrap/src/check.rs`, `stdlib.rs` and `foreign.rs`.
+
+## Names available without import (mod.main.3).
+pub PRELUDE_FNS := ["print", "unreachable", "assert", "assert_eq"]
+
+pub BUILTIN_TYPES := [
+    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
+    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
+]
+
+## Type names the spec defines that the bootstrap doesn't support yet.
+pub SPEC_TYPES_NOT_YET := ["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "Option"]
+
+pub SIZED := ["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32"]
+
+pub CONC_TYPES := ["Task", "TaskGroup", "Channel", "Mutex", "Atomic"]
+
+## The attributes the bootstrap knows (test.attr.1).
+pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated"]
+
+## The standard modules (std.use.1), sorted.
+pub STD_MODULES := ["env", "fs", "io", "net", "path", "proc", "random", "tensor", "task", "time", "ui"]
+
+## The standard modules written in AIL (std.ui.19).
+pub AIL_STD_MODULES := ["std.ui.widgets"]
+
+## Positions from here on are the prelude's.
+pub PRELUDE_LINE := 1073741824
+
+pub fn is_prelude_line(line int) bool
+    line >= PRELUDE_LINE
+
+## "`a`, `b` and `c`"
+pub fn list_names(names List[str]) str
+    quoted := ["`{n}`" for n in names]
+    n := quoted.len()
+    if n == 0
+        return ""
+    if n == 1
+        return quoted[0]
+    "{quoted[..n - 1].join(", ")} and {quoted[n - 1]}"
+
+pub fn count(n int, noun str) str
+    if n == 1 then "1 {noun}" else "{n} {noun}s"
+
+pub fn was_were(n int) str
+    if n == 1 then "1 was" else "{n} were"
+
+## The closest of `candidates` to `name`, within a third of its length
+## (gram.rec.3); ties go to the first in sorted order.
+pub fn suggest(name str, candidates List[str]) str?
+    len := name.len()
+    if len < 3
+        return none
+    limit := (len / 3).max(1)
+    mut best := ""
+    mut best_d := limit + 1
+    for c in candidates
+        d := edit_distance(name, c)
+        if d < best_d or (d == best_d and c < best)
+            best = c
+            best_d = d
+    if best_d <= limit then best else none
+
+pub fn edit_distance(a str, b str) int
+    x := a.chars()
+    y := b.chars()
+    mut prev := [j for j in 0..y.len() + 1]
+    for i in 1..x.len() + 1
+        mut cur := [i for _ in 0..y.len() + 1]
+        for j in 1..y.len() + 1
+            cost := if x[i - 1] != y[j - 1] then 1 else 0
+            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost)
+        prev = cur
+    prev[y.len()]
+
+## A type name from another language and the AIL type for it.
+pub fn foreign_type_word(name str) str?
+    match name
+        "Integer" | "Int" | "long" | "Long" | "short" | "Number" | "number" | "integer" | "int32" | "int64" | "size_t" => "int"
+        "String" | "string" | "std::string" | "Str" | "text" => "str"
+        "Boolean" | "boolean" | "Bool" => "bool"
+        "double" | "Double" | "float64" | "Float" | "float32" | "real" => "float"
+        "Vec" | "Array" | "array" | "list" | "ArrayList" | "vector" => "List"
+        "dict" | "Dict" | "HashMap" | "Dictionary" | "map" | "object" => "Map"
+        "HashSet" | "set" | "TreeSet" => "Set"
+        "Character" | "rune" => "char"
+        _ => none

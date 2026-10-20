@@ -1,0 +1,17 @@
+# The self-hosted front end's entry point (Stage 3, ADR 0022):
+#   ail run compiler check PROGRAM.json   the checker's diagnostics for a
+#                                         program dumped by `ail api --ast --program`
+use ast
+use check
+
+fn main() !
+    args := env.args()
+    if args.len() != 2 or args[0] != "check"
+        io.eprint("usage: ail run compiler check PROGRAM.json")
+        io.exit(2)
+    prog := ast.Program.from_json(parse_json(fs.read_text(args[1])?)?)?
+    diags := check.check_declarations(prog)
+    for d in diags
+        print(d.to_json(prog.files))
+    if [d for d in diags if not d.warning].len() > 0
+        io.exit(1)

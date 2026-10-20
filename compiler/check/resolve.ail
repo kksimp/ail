@@ -1,0 +1,304 @@
+## Types as written, resolved to `Ty` (ADR 0377): `resolve_type`,
+## `resolve_ret` and their diagnostics, as in `bootstrap/src/check.rs`.
+use ast
+
+## A function's return type, which may be fallible (err.type.1-2, err.decl.2-3).
+fn Checker.resolve_ret(mut self, t ast.TypeRef, fn_index int) Ty
+    match t.shape
+        Fallible(ok, errors) =>
+            mut ok_ty := Ty.Unit
+            if o := ok
+                ok_ty = resolve_type(o)
+            given := errors else []
+            if errors == none and is_error_type(ok_ty)
+                return Ty.Res(Ty.Unit, Errs.ErrSet([ok_ty]))
+            if is_error_type(ok_ty)
+                err_help(
+                    "err.decl.3",
+                    t.pos,
+                    "{show(ok_ty)} is an error type, so it can't also be the success value",
+                    "return it as an error, or declare the type without `error`",
+                )
+            if errors == none
+                return Ty.Res(ok_ty, Errs.Inferred(fn_index))
+            mut set := List[Ty]()
+            for e in given
+                et := resolve_type(e)
+                if et != Ty.Unknown and not is_error_type(et)
+                    err_help("err.decl.2", e.pos, "{show(et)} isn't an error type", "declare it with `error struct` or `error enum`")
+                elif et != Ty.Unknown and not set.contains(et)
+                    set.push(et)
+            Ty.Res(ok_ty, Errs.ErrSet(sort_errors(set)))
+        _ => resolve_type(t)
+
+fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
+    match t.shape
+        Optional(inner) => return Ty.Opt(resolve_type(inner))
+        RefTo(inner) =>
+            inner_ty := resolve_type(inner)
+            no_unique(inner_ty, inner.pos, "the contents of a `ref`")
+            return Ty.RefOf(inner_ty)
+        Fallible =>
+            unsupported(t.pos, "a type that can fail is only supported as a function's return type in the bootstrap (spec err.type.1)")
+            return Ty.Unknown
+        AnyTrait(tr) =>
+            if i := trait_named(tr, t.pos, "trait.any.1")
+                return Ty.AnyOf(i)
+            return Ty.Unknown
+        Named(n, args) => return resolve_named(n, args, t.pos)
+
+fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
+    for k in 0..scope.len()
+        s := scope[scope.len() - 1 - k]
+        if s.name == n
+            if args.len() > 0
+                err("gen.decl.1", at, "the type parameter `{n}` takes no type arguments")
+            return Ty.Param(s.id)
+    if t := std_type(n, args, at)
+        return t
+    mut ty := Ty.Unknown
+    if n == "int" or n == "i64"
+        ty = Ty.Int
+    elif n == "float" or n == "f64"
+        ty = Ty.Float
+    elif SIZED.contains(n)
+        ty = Ty.Num(n)
+    elif n == "str"
+        ty = Ty.Str
+    elif n == "char"
+        ty = Ty.Char
+    elif n == "bool"
+        ty = Ty.Bool
+    elif n == "Self"
+        if s := self_ty
+            ty = s
+        else
+            err_help("trait.self.1", at, "`Self` is only a type in a trait, a method, or an `impl` block", "write the type's name")
+            return Ty.Unknown
+    elif n == "List"
+        if args.len() != 1
+            err_help("gram.generic.1", at, "`List` takes 1 type argument, but {was_were(args.len())} given", "write e.g. `List[int]`")
+            return Ty.Unknown
+        return Ty.ListOf(resolve_type(args[0]))
+    elif n == "Map" or n == "Set"
+        want := if n == "Map" then 2 else 1
+        if args.len() != want
+            example := if want == 2 then "Map[str, int]" else "Set[str]"
+            err_help(
+                "gram.generic.1",
+                at,
+                "`{n}` takes {count(want, "type argument")}, but {was_were(args.len())} given",
+                "write e.g. `{example}`",
+            )
+            return Ty.Unknown
+        first := resolve_type(args[0])
+        mut out := Ty.SetOf(first)
+        if want == 2
+            out = Ty.MapOf(key: first, value: resolve_type(args[1]))
+        require_key(first, at)
+        return out
+    elif CONC_TYPES.contains(n)
+        return conc_type(n, args, at)
+    elif n == "Option" and args.len() == 1
+        err_help(
+            "type.opt.3",
+            at,
+            "an optional type is written `T?`, not `Option[T]`",
+            "write `int?` for `Option[int]`; the two mean the same and `T?` is the canonical form",
+        )
+        return Ty.Unknown
+    elif SPEC_TYPES_NOT_YET.contains(n)
+        unsupported(at, "type `{n}` is not supported by the bootstrap yet (spec 04-types)")
+        return Ty.Unknown
+    elif traits.contains(n)
+        err_help(
+            "trait.any.2",
+            at,
+            "`{n}` is a trait, not a type",
+            "for a value of any type implementing it, write `any {n}`; or use a type parameter `[T {n}]`",
+        )
+        return Ty.Unknown
+    elif d := types.get(n)
+        return generic_type(d, args, at)
+    else
+        unknown_type(n, at)
+        return Ty.Unknown
+    if args.len() > 0
+        err("gram.generic.1", at, "`{n}` takes no type arguments")
+    ty
+
+## `Name[args]` for a declared type, checking the count and bounds of its
+## arguments (gen.decl.1, gen.bound.3).
+fn Checker.generic_type(mut self, d Def, args List[ast.TypeRef], at ast.Pos) Ty
+    params := def_params(d)
+    n := def_name(d)
+    if args.len() != params.len()
+        if params.len() == 0
+            err("gram.generic.1", at, "`{n}` takes no type arguments")
+        else
+            names := [tparams[p].name for p in params]
+            err_help(
+                "gen.decl.1",
+                at,
+                "`{n}` takes {count(params.len(), "type argument")}, but {was_were(args.len())} given",
+                "write `{n}[{names.join(", ")}]` with types in place of the parameters",
+            )
+        return Ty.Unknown
+    tys := [resolve_type(a) for a in args]
+    for k in 0..tys.len()
+        no_unique(tys[k], args[k].pos, "a type argument")
+    for k in 0..params.len()
+        p := params[k]
+        for b in tparams[p].bounds
+            require(tys[k], b, at, "`{n}`'s parameter `{tparams[p].name}`")
+    def_ty(d, tys)
+
+## Report if `t` doesn't implement trait `tr`, which `what` requires
+## (gen.bound.3); while declarations are collected, the check waits.
+fn Checker.require(mut self, t Ty, tr int, at ast.Pos, what str)
+    if deferring
+        deferred.push(Deferred(ty: t, tr: tr, pos: at, what: what))
+        return
+    if implements(t, tr)
+        return
+    text := "{what} must implement `{prog.traits[tr].name}`, but {show(t)} doesn't"
+    if h := how_to_implement(t, tr)
+        err_help("gen.bound.3", at, text, h)
+    else
+        err("gen.bound.3", at, text)
+
+fn Checker.check_deferred_bounds(mut self)
+    deferring = false
+    waiting := deferred
+    deferred = []
+    for d in waiting
+        require(d.ty, d.tr, d.pos, d.what)
+
+## Whether a type was declared with `error` (err.decl.1).
+fn Checker.is_error_type(self, t Ty) bool
+    match t
+        Struct(i, _) => prog.structs[i].is_error
+        Enum(i, _) => prog.enums[i].is_error
+        _ => false
+
+fn Checker.errs_of(self, e Errs) List[Ty]
+    match e
+        ErrSet(v) => v
+        Inferred(j) => inferred[j]
+
+fn Checker.unknown_type(mut self, n str, at ast.Pos)
+    mut candidates := BUILTIN_TYPES
+    candidates.extend(types.keys())
+    mut d := new_diag("expr.name.1", at, "unknown type `{n}`")
+    if t := foreign_type_word(n)
+        d = d.with_help("write `{t}`")
+    elif s := suggest(n, candidates)
+        d = d.did_you_mean(s)
+    elif n.len() == 1 and n.chars()[0] >= 'A' and n.chars()[0] <= 'Z'
+        d = d.with_help("to make it a type parameter, declare it after the name: `fn name[{n}](...)`")
+    diags.push(d)
+
+fn Checker.ty_name(self, t Ty) str
+    match t
+        Int => "int"
+        Float => "float"
+        Num(n) => n
+        Str => "str"
+        Char => "char"
+        Bool => "bool"
+        Unit => "no value"
+        Never => "no value"
+        Unknown => "?"
+        Struct(i, args) => with_args(prog.structs[i].name, args)
+        Enum(i, args) => with_args(prog.enums[i].name, args)
+        ListOf(e) => "List[{ty_name(e)}]"
+        MapOf(k, v) => "Map[{ty_name(k)}, {ty_name(v)}]"
+        SetOf(e) => "Set[{ty_name(e)}]"
+        Opt(x) => "{ty_name(x)}?"
+        Res(ok, errs) =>
+            set := [ty_name(e) for e in errs_of(errs)]
+            okt := if ok == Ty.Unit then "" else "{ty_name(ok)} "
+            if set.len() == 0 then "!{okt.trim()}" else "{okt}! {set.join(" | ")}"
+        Union(m) => [ty_name(x) for x in m].join(" | ")
+        Param(p) => tparams[p].name
+        AnyOf(tr) => "any {prog.traits[tr].name}"
+        RefOf(x) => "ref {ty_name(x)}"
+        Conc(k, x) => if k == "TaskGroup" then "TaskGroup" else "{k}[{ty_name(x)}]"
+
+fn Checker.with_args(self, n str, args List[Ty]) str
+    if args.len() == 0 then n else "{n}[{[ty_name(a) for a in args].join(", ")}]"
+
+## A type for messages: "`int`", or "no value".
+fn Checker.show(self, t Ty) str
+    match t
+        Unit => "no value"
+        Never => "no value"
+        _ => "`{ty_name(t)}`"
+
+fn Checker.type_name_of(self, t Ty) str?
+    match t
+        Struct(i, _) => prog.structs[i].name
+        Enum(i, _) => prog.enums[i].name
+        _ => none
+
+## type.map.2: a map key or set element must be `Hash`.
+fn Checker.require_key(mut self, t Ty, at ast.Pos)
+    if is_unique(t)
+        no_unique(t, at, "a map key or set element")
+        return
+    if implements(t, std_hash)
+        return
+    err_help("type.map.2", at, "{show(t)} can't be a map key or set element (it isn't `Hash`)", hash_cause(t))
+
+## A handle type written in a signature or field (conc.task.5).
+fn Checker.conc_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
+    if n == "Task"
+        err_help(
+            "conc.task.5",
+            at,
+            "a task handle can't be stored, passed or returned; it stays in the block that spawned it",
+            "wait it with `t.wait()?`, or add it to a group with `g.add(t)`",
+        )
+        return Ty.Unknown
+    if n == "TaskGroup"
+        if args.len() == 0
+            return Ty.Conc("TaskGroup", Ty.Unit)
+        err("gram.generic.1", at, "`TaskGroup` takes no type arguments")
+        return Ty.Unknown
+    if args.len() != 1
+        err_help("gram.generic.1", at, "`{n}` takes 1 type argument, but {was_were(args.len())} given", "write e.g. `{n}[int]`")
+        return Ty.Unknown
+    inner := resolve_type(args[0])
+    if n == "Atomic" and inner != Ty.Int and inner != Ty.Bool and inner != Ty.Unknown
+        err_help(
+            "conc.atomic.3",
+            at,
+            "an `Atomic` holds an `int` or a `bool`, not {show(inner)}",
+            "share other values through a `Mutex`, e.g. `Mutex(value)`",
+        )
+        return Ty.Unknown
+    Ty.Conc(n, inner)
+
+## A module's type written `m.Type` (std.use.2); `none` without a module part.
+fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
+    dot := n.find(".") else return none
+    head := n.slice(0, dot)
+    item := n.slice(dot + 1, n.len())
+    if m := std_module(head)
+        if d := types.get("{m}.{item}")
+            return generic_type(d, args, at)
+        err("std.use.2", at, "module `{head}` has no type `{item}`")
+        return Ty.Unknown
+    if types.contains(n) and not STD_MODULES.contains(head)
+        return none
+    if STD_MODULES.contains(head)
+        diags.push(new_diag("std.use.2", at, "the standard module `{head}` is not imported")
+            .with_help("add `use std.{head}` at the top of the file"))
+    else
+        err_help(
+            "std.use.2",
+            at,
+            "unknown type `{n}`: `{head}` is not an imported module",
+            "the standard modules are {list_names(STD_MODULES)}",
+        )
+    Ty.Unknown

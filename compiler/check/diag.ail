@@ -1,0 +1,52 @@
+## A diagnostic, as `bootstrap/src/diag.rs` builds it: a rule, a position,
+## a message, and an optional help and notes.
+use ast
+
+pub struct Note
+    pub pos ast.Pos
+    pub message str
+
+pub struct Diag
+    pub rule str
+    pub pos ast.Pos
+    pub message str
+    pub help str?
+    pub notes List[Note]
+    pub warning bool
+
+pub fn new_diag(rule str, pos ast.Pos, message str) Diag
+    Diag(rule: rule, pos: pos, message: message, help: none, notes: [], warning: false)
+
+fn Diag.with_note(self, at ast.Pos, text str) Diag
+    mut d := self
+    d.notes.push(Note(pos: at, message: text))
+    d
+
+fn Diag.with_help(self, text str) Diag
+    mut d := self
+    d.help = text
+    d
+
+## `did you mean `s`?` (diag.rs `did_you_mean`).
+fn Diag.did_you_mean(self, s str) Diag
+    with_help("did you mean `{s}`?")
+
+## One line of JSON: severity, rule, file, local line and column, message
+## and help, in the order `ail check --json` writes them.
+pub fn Diag.to_json(self, files List[ast.SourceFile]) str
+    mut file := ""
+    mut line := pos.line
+    if line < 1073741824
+        for f in files
+            if f.base < line
+                file = f.path
+                line = pos.line - f.base
+    severity := if warning then "warning" else "error"
+    mut out := "\{\"severity\":\"{severity}\",\"rule\":\"{rule}\",\"file\":{quote(file)},\"line\":{line},\"col\":{pos.col},\"message\":{quote(message)}"
+    if h := help
+        out = "{out},\"help\":{quote(h)}"
+    "{out}}"
+
+## `s` as a JSON string.
+fn quote(s str) str
+    Json.Str(s).to_text()
