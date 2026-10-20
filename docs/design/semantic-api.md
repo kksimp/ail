@@ -58,9 +58,41 @@ Fixes today:
 | `expr.name.1`, `type.struct.4`, `type.struct.6`, `trait.impl.5` | a name close to a known one ("did you mean") | replace the name |
 | `expr.bind.4` | `x := e` or `mut x := e` again for a `mut` variable `x` | `x = e` |
 | `expr.bind.3` | `y = e` with `y` undeclared | `mut y := e` |
+| `expr.bind.3` | a `:=` binding that is assigned or mutated later | `mut ` before the name (`fix.edit.1`) |
+| `expr.if.1` | `else if` | `elif` (`fix.edit.2`) |
+| `err.use.1` | a fallible call as a statement or `:=` value, where the function's errors admit its own | `?` at the end of the line (`fix.edit.3`) |
+| `expr.match.2` | a `match` misses variants (or `true`/`false`, or a `_`) | one arm per missing case, each `=> todo` (`fix.edit.4`) |
+| `std.use.2` | a standard module used without `use std.NAME` | `use std.NAME` on line 1 (`fix.edit.5`) |
 
-Notes today: `mod.unit.1` on a type declared twice points at the first
-declaration.
+Notes today (`fix.note.1`): `mod.unit.1` on a type, function, method or
+constant declared twice, `expr.bind.4` on a local declared twice, and
+`expr.bind.5` on a local named like a function, type or constant, each point
+at the first declaration.
+
+An edit is always plain coordinates, but the checker may name two positions by
+rule and let the tool resolve them against the source (a block's end, a
+line's end; [ADR 0204](../decisions/0204-anchored-fix-edits.md)); a fix whose
+anchor doesn't resolve isn't reported.
+
+## ail fix: `ail fix FILE [--dry-run] [--json]` (ADR 0203)
+
+Applies fixes so an agent doesn't have to (`fix.apply.1`–`4`): the first fix of
+each diagnostic, skipping a fix that overlaps an earlier one, last to first;
+then re-check, up to 5 rounds. A file that was in canonical layout is
+formatted afterwards. `--dry-run` prints a diff and leaves the file.
+
+Text: one `fixed FILE:L:C: [rule] title` line per fix, then
+`applied N fix(es) in R round(s); E error(s) remain`, and the remaining
+diagnostics on stderr. With `--json`, stdout is one object per fix and a
+summary:
+
+```json
+{"api":1,"applied":{"round":1,"rule":"expr.bind.3","line":22,"col":5,"title":"declare `x` with `mut`"}}
+{"api":1,"summary":true,"applied":1,"rounds":1,"dry_run":false,"clean":true,"errors":0}
+```
+
+Exit 0 if no error remains (warnings such as `expr.hole.1` don't count), 1 if
+one does, 2 for a usage or read error.
 
 The text form (without `--json`) shows the same information:
 

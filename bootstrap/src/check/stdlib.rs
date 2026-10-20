@@ -8,7 +8,8 @@ use std::collections::HashMap;
 
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
 use crate::ast::{Arg, TypeRef};
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
+use crate::lexer::UNSUPPORTED;
 use crate::stdlib::{self, StdCall};
 
 impl<'p> Checker<'p> {
@@ -186,12 +187,13 @@ impl<'p> Checker<'p> {
 
     /// std.use.2: a standard module's name used without its import.
     fn not_imported(&mut self, module: &str, pos: Pos) {
-        self.error_help(
-            "std.use.2",
-            pos,
-            format!("the standard module `{module}` is not imported"),
-            format!("add `use std.{module}` at the top of the file"),
-        );
+        let d = Diagnostic::new("std.use.2", pos, format!("the standard module `{module}` is not imported"))
+            .help(format!("add `use std.{module}` at the top of the file"))
+            .fix(
+                format!("add `use std.{module}`"),
+                vec![Edit::insert(Pos { line: 1, col: 1 }, format!("use std.{module}\n"))],
+            );
+        self.diags.push(d);
     }
 
     /// A module's type written `m.Type` (std.use.2). `None` when `name` has
