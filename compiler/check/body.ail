@@ -154,6 +154,9 @@ fn Checker.check_fn(mut self, idx int)
     locals = []
     pending = []
     loop_depth = 0
+    unsafe_depth = 0
+    if f.unsafe_fn
+        unsafe_opt_in(f.pos)
     catching = 0
     fn_ret = sig.ret
     push_params(f, sig)
@@ -175,7 +178,10 @@ fn Checker.check_fn(mut self, idx int)
         if is_res_or_union(got) or is_error_type(got)
             mismatch("expr.block.2", at, sig.ret, got)
         else
-            err("expr.block.2", at, msg)
+            mut d := new_diag("expr.block.2", at, msg)
+            if r := f.ret
+                d = d.with_note(r.pos, "the return type is declared here")
+            diags.push(d)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
@@ -321,6 +327,12 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         With(mutex, var, var_pos, body, at) =>
             with_stmt(mutex, var, var_pos, body, at)
             Ty.Unit
+        Unsafe(body, at) =>
+            unsafe_opt_in(at)
+            unsafe_depth += 1
+            t := block(body, expect, need)
+            unsafe_depth -= 1
+            t
         Break(at) =>
             if loop_depth == 0
                 err("expr.loop.5", at, "`break` outside a loop")
@@ -973,7 +985,15 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
             fallback_rule = "own.param.1"
             text = "the parameter `{root}` is read-only"
             hint = "declare it `mut {root} Type`, and pass it with `mut`"
-    err_help(rule else fallback_rule, expr_pos(e), "{text}, so it can't be {action}", hint)
+    mut d := new_diag(
+        rule else fallback_rule,
+        expr_pos(e),
+        "{text}, so it can't be {action}",
+    ).with_help(hint)
+    # The binding's own position: where an agent changes the declaration.
+    if decl := l.decl
+        d = d.with_note(decl, "`{root}` is declared here")
+    diags.push(d)
 
 fn same_step(x Step, y Step, certain bool) bool
     match x
@@ -1049,6 +1069,7 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
             overlapping_use(target, body),
         )
         With(m, _, _, body, _) => either(overlap_in_expr(target, m), overlapping_use(target, body))
+        Unsafe(body, _) => overlapping_use(target, body)
         Return(v, _) =>
             e := v else return none
             overlap_in_expr(target, e)
@@ -1194,7 +1215,7 @@ fn stmt_breaks(s ast.Stmt) bool
         Assign(target, _, value, _) => breaks_in_expr(target) or breaks_in_expr(value)
         While(cond, _, _) => breaks_in_expr(cond)
         For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
-        Continue | Defer | With => false
+        Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool
     match o

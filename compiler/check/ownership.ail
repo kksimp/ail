@@ -225,6 +225,7 @@ fn Checker.defer_stmt(mut self, inner ast.Stmt, at ast.Pos)
         While => what = "a loop"
         For => what = "a loop"
         With => what = "a `with` block"
+        Unsafe => what = "an `unsafe` block"
     if what != ""
         err_help(
             "own.defer.3",

@@ -131,6 +131,7 @@ fn Checker.args_only(mut self, args List[ast.Arg])
     if i := fns.get(n)
         reject_test_call(i, npos)
         note_deprecated(i, npos)
+        note_unsafe_call(i, npos)
         declared_fns.add(pos_key(npos))
         mut s := sigs[i]
         # A test can fail (test.attr.4), but calling it is already an error.
@@ -849,6 +850,7 @@ fn Checker.inherent_call(
         require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
     targets[pos_key(at)] = i
     note_deprecated(i, at)
+    note_unsafe_call(i, at)
     move_receiver(i, recv)
     if gapped.contains(i) and is_inferred(sig.ret)
         gap("calls a gapped method")
@@ -980,6 +982,7 @@ fn Checker.associated(
     if b := explicit
         binds = zip_binds(sig.generics[..sig.owner], [x.ty for x in b])
     note_deprecated(i, at)
+    note_unsafe_call(i, at)
     targets[pos_key(at)] = i
     if gapped.contains(i) and is_inferred(sig.ret)
         gap("calls a gapped associated function")

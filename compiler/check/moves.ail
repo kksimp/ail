@@ -131,6 +131,7 @@ fn Mover.stmt(mut self, s ast.Stmt)
         While(c, body, _) =>
             expr(c)
             loop_body(body, none)
+        Unsafe(body, _) => block(body)
         With(mutex, _, _, body, _) =>
             expr(mutex)
             block(body)
@@ -315,6 +316,8 @@ fn Mover.expr(mut self, e ast.Expr)
                 flow = start
                 mark := names_in.len()
                 pattern(arm.pat)
+                if g := arm.guard
+                    expr(g)
                 block(arm.body)
                 names_in = names_in[..mark]
                 out = join(out, flow)
@@ -396,3 +399,4 @@ fn Mover.pattern(mut self, p ast.Pattern)
                 pattern(a)
         Wildcard => return
         Literal => return
+        Range => return

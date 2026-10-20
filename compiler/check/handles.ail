@@ -74,6 +74,7 @@ fn stmt_spawns(s ast.Stmt, mut diags List[Diag])
             spawns(value, mut diags)
             else_spawns(o, mut diags)
         Defer(inner, _) => stmt_spawns(inner, mut diags)
+        Unsafe(body, _) => handle_block(body, mut diags)
         Break => return
         Continue => return
 
@@ -146,6 +147,8 @@ enum Node
         Match(scrutinee, arms, _) =>
             out.push(Node.NExpr(scrutinee))
             for a in arms
+                if g := a.guard
+                    out.push(Node.NExpr(g))
                 out.push(Node.NBlock(a.body))
         _ => out = out
     out
@@ -278,6 +281,9 @@ fn stmt_uses(n str, s ast.Stmt, cond bool, mut u Uses)
             expr_uses(n, value, cond, mut u)
             else_uses(n, o, mut u)
         Defer(inner, _) => stmt_uses(n, inner, true, mut u)
+        Unsafe(body, _) =>
+            for x in body
+                stmt_uses(n, x, cond, mut u)
         Break => return
         Continue => return
 
@@ -333,6 +339,8 @@ fn else_uses(n str, o ast.Else, mut u Uses)
         Match(scrutinee, arms, _) =>
             expr_uses(n, scrutinee, cond, mut u)
             for a in arms
+                if g := a.guard
+                    expr_uses(n, g, true, mut u)
                 for x in a.body
                     stmt_uses(n, x, true, mut u)
             return

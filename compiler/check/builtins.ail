@@ -57,6 +57,12 @@ pub CHAR_METHODS := [
 ]
 
 pub INT_METHODS := [
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "bit_not",
+    "shl",
+    "shr",
     "checked_add",
     "checked_sub",
     "checked_mul",
@@ -225,6 +231,11 @@ fn read(params List[Ty], result Ty) Builtin?
             if n == "checked_neg"
                 return read([], Ty.Opt(Ty.Int))
             if n == "wrapping_neg" or n == "abs"
+                return read([], Ty.Int)
+            # expr.bit.1-2: bitwise operations on the 64-bit two's complement value.
+            if ["bit_and", "bit_or", "bit_xor", "shl", "shr"].contains(n)
+                return read([Ty.Int], Ty.Int)
+            if n == "bit_not"
                 return read([], Ty.Int)
             if [
                 "wrapping_add",

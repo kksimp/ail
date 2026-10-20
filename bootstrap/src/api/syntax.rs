@@ -299,6 +299,7 @@ fn program(p: &Program) -> J {
                 ("own", J::Bool(g.own)),
             ])
         })),
+        ("unsafe_allowed", opt(&p.unsafe_allowed, |l| arr(l, |p| s(p)))),
         ("generated", arr(&p.generated, |g| {
             J::Obj(vec![
                 ("file", n(g.file)),

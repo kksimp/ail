@@ -184,6 +184,7 @@ fn Scan.stmt(mut self, s ast.Stmt)
             otherwise(o)
         # `defer` runs at block exit; its statement is part of the body (own.defer.1).
         Defer(inner, _) => stmt(inner)
+        Unsafe(body, _) => block(body)
         # conc.share.6: holding a mutex synchronises with other tasks.
         With(mutex, v, _, body, p) =>
             expr(mutex)
@@ -388,6 +389,8 @@ fn Scan.expr(mut self, e ast.Expr)
         Match(scrutinee, arms, _) =>
             expr(scrutinee)
             for arm in arms
+                if g := arm.guard
+                    expr(g)
                 scoped(pattern_names(arm.pat), arm.body)
         Try(x, context, p) =>
             expr(x)
@@ -445,7 +448,7 @@ fn pattern_names(p ast.Pattern) List[str]
         Variant(_, _, bindings, _) =>
             bs := bindings else return []
             [b.name for b in bs if b.name != "_"]
-        Wildcard | Literal | Alt => []
+        Wildcard | Literal | Alt | Range => []
 
 ## Whether `n`, declared in `f`, holds an `int` (1), a float (0), or
 ## something the analysis can't tell (-1) (conc.par.4).
@@ -502,7 +505,7 @@ fn each_let(b List[ast.Stmt]) List[LetOf]
     for s in b
         match s
             Let(n, _, _, value, _) => out.push(LetOf(name: n, value: value))
-            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With => out = out
+            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe => out = out
         for inner in each_block(s)
             out.extend(each_let(inner))
     out
@@ -536,6 +539,7 @@ fn each_block(s ast.Stmt) List[List[ast.Stmt]]
             out.extend(expr_blocks(value))
             out.extend(else_blocks(o))
         Defer(inner, _) => out.extend(each_block(inner))
+        Unsafe(body, _) => out.push(body)
     out
 
 fn else_blocks(o ast.Else) List[List[ast.Stmt]]
@@ -557,6 +561,8 @@ fn else_blocks(o ast.Else) List[List[ast.Stmt]]
         Match(scrutinee, arms, _) =>
             out.extend(expr_blocks(scrutinee))
             for a in arms
+                if g := a.guard
+                    out.extend(expr_blocks(g))
                 out.push(a.body)
         OrElse(value, o, _) =>
             out.extend(expr_blocks(value))
@@ -902,7 +908,7 @@ fn Checker.check_par(self) List[Diag]
                     For(is_par, _, _, _, _, _, _) =>
                         if is_par
                             any_par = true
-                    Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With => any_par = any_par
+                    Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe => any_par = any_par
     if not any_par
         return []
     cx := par_context()
@@ -994,6 +1000,8 @@ struct ParComp
         Match(scrutinee, arms, _) =>
             par_comps_expr(scrutinee, mut out, fi)
             for a in arms
+                if g := a.guard
+                    par_comps_expr(g, mut out, fi)
                 par_comps_block(a.body, mut out, fi)
         OrElse(value, o, _) =>
             par_comps_expr(value, mut out, fi)
@@ -1032,6 +1040,7 @@ fn par_comps_stmt(s ast.Stmt, mut out List[ParComp], fi int)
             par_comps_expr(value, mut out, fi)
             par_comps_else(o, mut out, fi)
         Defer(inner, _) => par_comps_stmt(inner, mut out, fi)
+        Unsafe(body, _) => par_comps_block(body, mut out, fi)
         Break | Continue => return
 
 fn par_comps_block(b List[ast.Stmt], mut out List[ParComp], fi int)

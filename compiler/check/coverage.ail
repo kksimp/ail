@@ -62,6 +62,7 @@ pub COVERED_RULES := [
     "expr.loop.4",
     "expr.loop.5",
     "expr.loop.6",
+    "expr.match.12",
     "expr.match.2",
     "expr.match.3",
     "expr.match.4",
@@ -71,6 +72,7 @@ pub COVERED_RULES := [
     "expr.match.8",
     "expr.name.1",
     "expr.op.3",
+    "ffi.call.1",
     "gen.bound.1",
     "gen.bound.3",
     "gen.decl.1",
@@ -111,6 +113,7 @@ pub COVERED_RULES := [
     "std.tensor.1",
     "std.tensor.10",
     "std.tensor.11",
+    "std.tensor.13",
     "std.tensor.3",
     "std.tensor.8",
     "std.ui.17",
@@ -171,6 +174,8 @@ pub COVERED_RULES := [
     "type.struct.5",
     "type.struct.6",
     "type.struct.7",
+    "unsafe.block.2",
+    "unsafe.block.3",
 ]
 
 ## A range of lines of one file not checked yet: `first` to `last`, inclusive.

@@ -13,9 +13,12 @@ TENSOR_METHODS := [
     "max",
     "mean",
     "mul",
+    "relu",
     "reshape",
     "shape",
+    "sigmoid",
     "sum",
+    "tanh",
     "to_list",
     "transpose",
 ]
@@ -113,6 +116,15 @@ fn Checker.tensor_method(
             "convert first: `t.map(|x| x.to_float()).mean()`",
         )
         return Ty.Unknown
+    if (n == "relu" or n == "sigmoid" or n == "tanh") and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.13",
+            at,
+            "`{n}` is on `float` tensors, and this one holds `int`",
+            "convert first: `t.map(|x| x.to_float()).{n}()`",
+        )
+        return Ty.Unknown
     mut params := List[Ty]()
     mut ret := rt
     if n == "shape"
@@ -193,13 +205,10 @@ fn Checker.tensor_operator(mut self, sym str, arith bool, lt Ty, rt Ty, at ast.P
     re := tensor_elem(rt)
     if le == none and re == none
         return none
-    if not arith or not ["+", "-", "*"].contains(sym)
+    if not arith or not ["+", "-", "*", "/"].contains(sym)
         if not arith
             return none
-        mut help := "use `t.map(|x| ...)`"
-        if sym == "/"
-            help = "divide each element with `t.map(|x| x / d)`"
-        err_help("std.tensor.10", at, "`{sym}` is not defined for tensors", help)
+        err_help("std.tensor.10", at, "`{sym}` is not defined for tensors", "use `t.map(|x| ...)`")
         return Ty.Unknown
     mut ok := false
     if a := le
@@ -209,6 +218,14 @@ fn Checker.tensor_operator(mut self, sym str, arith bool, lt Ty, rt Ty, at ast.P
             ok = a == rt
     elif b := re
         ok = b == lt
+    if ok and sym == "/" and (le == Ty.Int or re == Ty.Int)
+        err_help(
+            "std.tensor.10",
+            at,
+            "`/` is not defined for `int` tensors",
+            "convert first: `t.map(|x| x.to_float())`",
+        )
+        return Ty.Unknown
     if ok
         if le != none
             return lt

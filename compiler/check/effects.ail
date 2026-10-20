@@ -400,6 +400,10 @@ fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
             expr(prog, fx, value)
             otherwise(prog, fx, o)
         Defer(inner, _) => stmt(prog, fx, inner)
+        # unsafe.block.5, eff.infer.4: an `unsafe` block gives `unsafe`.
+        Unsafe(body, _) =>
+            add("unsafe", "an `unsafe` block")
+            block(prog, fx, body)
 
 ## eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`.
 fn Walked.ref_write(mut self, fx Facts, place ast.Expr)
@@ -513,6 +517,8 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
         Match(scrutinee, arms, _) =>
             expr(prog, fx, scrutinee)
             for arm in arms
+                if g := arm.guard
+                    expr(prog, fx, g)
                 block(prog, fx, arm.body)
         Try(x, context, _) =>
             expr(prog, fx, x)

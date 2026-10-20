@@ -928,6 +928,7 @@ fn pattern_pos(p ast.Pattern) ast.Pos
         Literal(_, at) => at
         Alt(_, at) => at
         Variant(_, _, _, at) => at
+        Range(_, _, _, at) => at
 
 @allow("expr.match.3")
 fn Checker.match_expr(
@@ -976,6 +977,10 @@ fn Checker.match_expr(
     mut cov := Coverage(variants: [false for _ in 0..nvariants], literals: [], wildcard: false)
     mut agree := new_agree(expect, need, "arm", "`match`")
     for arm in arms
+        # expr.match.11: a guarded arm covers nothing, so what the pattern
+        # marks as covered is undone once it's checked.
+        kept := cov
+        first_diag := diags.len()
         mut bindings := List[Binding]()
         if enum_index >= 0
             bindings = pattern(enum_index, enum_args, arm.pat, mut cov)
@@ -987,7 +992,13 @@ fn Checker.match_expr(
                 Variant(_, _, names, _) =>
                     for nm in names else []
                         bindings.push(Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown))
-                Wildcard | Literal | Alt => bindings = []
+                Wildcard | Literal | Alt | Range => bindings = []
+        if arm.guard != none
+            cov = kept
+            # `_ if c` hides nothing, so the `_` warning doesn't apply.
+            mut tail := diags[first_diag..]
+            diags = diags[..first_diag]
+            diags.extend([d for d in tail if d.rule != "expr.match.3"])
         mark := locals.len()
         for b in bindings
             if b.name != "_" and declare(b.name, b.pos)
@@ -998,6 +1009,8 @@ fn Checker.match_expr(
                     how: LocalKind.Binding,
                     decl: none,
                 ))
+        if g := arm.guard
+            condition(g)
         agree_block(mut agree, arm.body, at)
         end_scope(mark)
     if enum_index >= 0 and not cov.wildcard
@@ -1045,7 +1058,7 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Variant => literal_pattern(t, a, mut cov)
+                    Literal | Alt | Variant | Range => literal_pattern(t, a, mut cov)
         Literal(lit, at) =>
             mut lt := Ty.Int
             match lit
@@ -1085,6 +1098,9 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
                 at,
                 "`{n}` is a variant pattern, but the value matched is {show(t)}",
             )
+        # expr.match.12: a range covers some values, never all, so it marks
+        # nothing as seen.
+        Range(lo, hi, inclusive, at) => range_pattern(t, lo, hi, inclusive, at, cov.wildcard)
 
 fn binds_names(names List[ast.Ident]?) bool
     for nm in names else []
@@ -1116,9 +1132,12 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt => pattern(e, args, a, mut cov)
+                    Literal | Alt | Range => pattern(e, args, a, mut cov)
             []
         Literal(_, at) =>
+            err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
+            []
+        Range(_, _, _, at) =>
             err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
             []
         Wildcard(at) =>
@@ -1207,3 +1226,66 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
     else
         d = d.with_help("no variable, function or type named `{n}` is in scope here; declare it first, e.g. `{n} := value`")
     diags.push(d)
+
+## expr.match.12: `lo..hi` or `lo..=hi` on a value of type `t`.
+fn Checker.range_pattern(
+    mut self,
+    t Ty,
+    lo ast.Literal,
+    hi ast.Literal,
+    inclusive bool,
+    at ast.Pos,
+    wildcard bool,
+)
+    ends := range_ends(lo, hi) else
+        err(
+            "expr.match.12",
+            at,
+            "the two ends of a range pattern must both be integers or both characters",
+        )
+        return
+    ok := ends.kind == t or (ends.kind == Ty.Int and num_name(t) != none and num_name(t) != "f32")
+    if not ok
+        err(
+            "expr.match.12",
+            at,
+            "this range is of {show(ends.kind)}, but the value matched is {show(t)}",
+        )
+    elif ends.lo > ends.hi or (ends.lo == ends.hi and not inclusive)
+        dots := if inclusive then "..=" else ".."
+        err_help(
+            "expr.match.12",
+            at,
+            "this range pattern is empty: the start is not below the end of `{dots}`",
+            "write the smaller bound first",
+        )
+    elif wildcard
+        err("expr.match.5", at, "this arm can never match; earlier arms cover every case")
+
+struct RangeEnds
+    kind Ty
+    lo int
+    hi int
+
+## The type and the two ends of a range pattern, as numbers; `none` when the
+## ends aren't both integers or both characters.
+@allow("expr.match.3") fn range_ends(lo ast.Literal, hi ast.Literal) RangeEnds?
+    match lo
+        IntLit(a) =>
+            match hi
+                IntLit(b) => return RangeEnds(
+                    kind: Ty.Int,
+                    lo: a.to_int() else 0,
+                    hi: b.to_int() else 0,
+                )
+                _ => return none
+        CharLit(a) =>
+            match hi
+                CharLit(b) => return RangeEnds(kind: Ty.Char, lo: char_code(a), hi: char_code(b))
+                _ => return none
+        _ => return none
+    none
+
+fn char_code(s str) int
+    cs := s.chars()
+    if cs.len() == 0 then 0 else cs[0].code()

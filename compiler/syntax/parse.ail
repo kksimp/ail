@@ -160,6 +160,7 @@ pub fn parse(tokens List[Token]) Parsed
         public: public,
         files: [],
         grants: [],
+        unsafe_allowed: none,
         generated: [],
     )
     Parsed(program: program, diags: p.diags)
