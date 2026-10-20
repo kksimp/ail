@@ -462,12 +462,14 @@ fn prepare(op: Operand, mutable: bool, env: &Env<'_>) -> Result<Prepared, Trap> 
 }
 
 /// own.excl.3: `mut` operands that overlap at run time trap before the call.
-fn check_overlap(places: &[(Option<Place>, bool)], pos: Pos) -> Result<(), Trap> {
-    for (j, (b, b_mut)) in places.iter().enumerate() {
-        for (a, a_mut) in &places[..j] {
+fn check_overlap(ops: &[Prepared], pos: Pos) -> Result<(), Trap> {
+    for (j, (b, _, b_mut)) in ops.iter().enumerate() {
+        if !*b_mut {
+            continue;
+        }
+        for (a, _, a_mut) in &ops[..j] {
             if let (Some(a), Some(b)) = (a, b)
                 && *a_mut
-                && *b_mut
                 && overlaps(a, b)
             {
                 return trap("own.excl.3", pos, "two `mut` arguments of this call overlap".into());
@@ -502,7 +504,7 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
         }
-        let mut env: Env<'a> = Vec::new();
+        let mut env: Env<'a> = Vec::with_capacity(16);
         if let Some(r) = recv {
             env.push(("self", r));
         }
@@ -522,7 +524,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         self.depth -= 1;
         env.truncate(n);
-        Ok((result, env.into_iter().map(|(_, v)| v).collect()))
+        // Only `mut` receivers and parameters are written back (own.param.2).
+        if f.receiver.is_some_and(|r| r.mutable) || f.params.iter().any(|p| p.mutable) {
+            Ok((result, env.into_iter().map(|(_, v)| v).collect()))
+        } else {
+            Ok((result, Vec::new()))
+        }
     }
 
     fn block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
@@ -1414,8 +1421,7 @@ impl<'a, W: Write> Interp<'a, W> {
             let op = self.operand(&a.value, env)?;
             ops.push(prepare(op, param.mutable, env)?);
         }
-        let places: Vec<(Option<Place>, bool)> = ops.iter().map(|(p, _, m)| (p.clone(), *m)).collect();
-        check_overlap(&places, pos)?;
+        check_overlap(&ops, pos)?;
         let mut values = Vec::with_capacity(ops.len());
         for (place, value, _) in &mut ops {
             values.push(match value.take() {
