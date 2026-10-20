@@ -546,3 +546,97 @@ Average a list, zero when empty:
         if not xs:
             return 0
         return sum(xs) // len(xs)
+
+## Common library calls
+
+    re.findall(r"ERROR code=(\d+)", text)       all matches of a pattern
+    re.search(r"user=(\w+)", line)              first match or None
+    m.group(1) if m else None                   read a capture group safely
+    re.sub(r"\s+", " ", text)                   replace matches
+    re.compile(r"^(\w+)\s+(\d+)$").match(line)  compiled pattern, anchored
+    datetime.date.fromisoformat("2026-10-20")   parse YYYY-MM-DD
+    date.isoformat(), date.strftime("%d %b %Y")
+    calendar.monthrange(2026, 2)                (weekday of day 1, days in month)
+    base64.b64encode(data).decode("ascii")
+    hashlib.md5(data).hexdigest()               not for security use
+    gzip.compress(data), gzip.decompress(data)  bytes in, bytes out
+    tarfile.open(path, "w:gz").add(directory)   archive a tree
+    zipfile.ZipFile(path).namelist()            list the entries of an archive
+    shlex.split('cp "a b" c')                   split a command string safely
+    argparse.ArgumentParser()                   named options with help text
+    parser.add_argument("--limit", type=int, default=10)
+    parser.parse_args()                         reads sys.argv; exits on error
+    logging.basicConfig(level=logging.INFO)     timestamped log lines on stderr
+    logging.getLogger(__name__).warning("x")
+    os.walk(root)                               (dirpath, dirnames, filenames)
+    os.stat(path).st_mode & 0o777               permission bits
+    os.chmod(path, 0o755)                       set permission bits
+    stat.S_IXUSR                                owner-execute flag
+    socket.create_connection((host, port), timeout=5)   raw TCP client
+    http.server.HTTPServer(("", 8000), Handler)         a small HTTP server
+    BaseHTTPRequestHandler.do_GET(self)         handle one GET request
+    self.send_response(200); self.wfile.write(body)
+    struct.pack(">I", 258)                      big-endian bytes from an int
+    struct.unpack("<HH", data[:4])              read two little-endian shorts
+    int.from_bytes(data[0:2], "big")            read an integer from bytes
+    bytes.fromhex("ff00")                       hex text to bytes
+    data.hex(" ")                               bytes to hex text
+    itertools.accumulate(xs)                    running totals
+    statistics.mean(xs), statistics.median(xs)  simple statistics
+    fractions.Fraction(1, 3) + Fraction(1, 6)   exact rational arithmetic
+
+## Command-line tools in depth
+
+    import sys
+    if len(sys.argv) != 2:
+        print("usage: tool FILE", file=sys.stderr)
+        sys.exit(2)
+    path = sys.argv[1]
+
+    def main() -> int:
+        try:
+            run(sys.argv[1:])
+        except OSError as err:
+            print(f"error: {err}", file=sys.stderr)
+            return 1
+        return 0
+    if __name__ == "__main__":
+        sys.exit(main())
+
+Write results to stdout and diagnostics to stderr. Exit status 0 means
+success; 1 means a failure the program reported; 2 means bad usage.
+
+## Tests in depth, with input data
+
+    import pytest
+    @pytest.mark.parametrize("text,want", [("a,1", {"a": 1}), ("", {})])
+    def test_totals(text, want):
+        assert totals(text) == want
+
+    def test_reads_file(tmp_path):
+        p = tmp_path / "in.csv"
+        p.write_text("a,1\n")
+        assert totals(p.read_text()) == {"a": 1}
+
+    def test_timeout_message(monkeypatch):
+        def boom(*a, **k):
+            raise subprocess.TimeoutExpired("sleep", 1)
+        monkeypatch.setattr(subprocess, "run", boom)
+        assert run_job(["sleep", "5"], 1) == "timed out after 1 s"
+
+Keep test data next to the tests, and make each test name say what it checks.
+A test that needs the network or the clock should fake it with monkeypatch.
+
+## Packages and program layout in depth
+
+    tool/
+        pyproject.toml
+        tool/__init__.py
+        tool/__main__.py                 python3 -m tool runs this
+        tool/parse.py
+        tests/test_parse.py
+    [project.scripts]
+    tool = "tool.__main__:main"          installed command name
+
+Keep the parsing code free of I/O so tests can call it with strings. Put
+the file and network code in one place, near main.
