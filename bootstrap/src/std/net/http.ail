@@ -1,0 +1,30 @@
+## std.net.http (spec std.net.18, ADR 0419): the handler form of the HTTP
+## server, written over `net.serve`, `Server.accept` and `Exchange.respond`.
+##
+## A handler is a declared function `fn(net.Request) net.Response`. `serve`
+## listens and answers until the server is closed; `run` does the same on a
+## server the program already holds, so it can `close` it.
+use std.net
+
+## Workers that answer requests at once. Each handles one request at a time.
+WORKERS := 4
+
+fn worker(srv net.Server, handler fn(net.Request) net.Response)
+    while true
+        ex := srv.accept() else err
+            return
+        # A client that has gone away is not the server's failure.
+        ex.respond(handler(ex.request)) else err
+            continue
+
+## Answers every request on `srv` with `handler` until `srv.close()`.
+pub fn run(srv net.Server, handler fn(net.Request) net.Response) !
+    g := TaskGroup()
+    for _ in 0..WORKERS
+        g.add(spawn worker(srv, handler))
+    g.wait_all()?
+
+## Listens on `addr` and answers every request with `handler`.
+pub fn serve(addr str, handler fn(net.Request) net.Response) !
+    srv := net.serve(addr)?
+    run(srv, handler)?
