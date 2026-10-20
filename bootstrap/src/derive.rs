@@ -144,6 +144,22 @@ fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
             continue;
         }
         let type_name = last(&imp.target.name).to_string();
+        // `impl X for Pair[int, str]` names types where the parameters go:
+        // the checker reports it (gen.method.2), so nothing is generated.
+        let declared: Vec<&str> = prog
+            .structs
+            .iter()
+            .filter(|s| s.name == type_name)
+            .map(|s| &s.generics)
+            .chain(prog.enums.iter().filter(|e| e.name == type_name).map(|e| &e.generics))
+            .next()
+            .map(|g| g.iter().map(|p| p.name.as_str()).collect())
+            .unwrap_or_default();
+        if let Some(ps) = &imp.target.params
+            && ps.iter().map(|p| p.name.as_str()).ne(declared.iter().copied())
+        {
+            continue;
+        }
         let Some(info) = type_info(prog, &type_name, prog.module_at(imp.pos)) else {
             errors.push(
                 Diagnostic::new(

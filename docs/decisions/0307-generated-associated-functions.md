@@ -1,6 +1,6 @@
 # 0307. Generated text may add associated functions of the deriving type
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0350](0350-default-and-generic-fromjson.md) (`FromJson` declares `from_json`, generic types derive it)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** 17 — Metaprogramming
