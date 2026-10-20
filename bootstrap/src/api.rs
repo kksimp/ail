@@ -197,6 +197,16 @@ impl Item {
     fn text(&self, depth: usize, out: &mut String) {
         let indent = "    ".repeat(depth);
         writeln!(out, "{:>5}  {indent}{}", self.pos.line, self.signature).unwrap();
+        // Contracts are part of the signature (contract.api.1).
+        for (key, value) in self.extra.iter().filter(|(k, _)| matches!(*k, "requires" | "ensures")) {
+            if let Json::Arr(conds) = value {
+                for c in conds {
+                    if let Json::Str(c) = c {
+                        writeln!(out, "       {indent}    {key} {c}").unwrap();
+                    }
+                }
+            }
+        }
         if let Some(doc) = &self.doc {
             for line in doc.lines() {
                 writeln!(out, "       {indent}    ## {line}").unwrap();
@@ -368,6 +378,14 @@ impl<'p> Api<'p> {
         extra.push(("params", Json::Arr(params)));
         extra.push(("returns", Json::opt(f.ret.as_ref().map(type_text))));
         extra.push(("effects", Json::Arr(self.effects(f))));
+        // contract.api.1: the conditions as written, when there are any.
+        for (key, ensures) in [("requires", false), ("ensures", true)] {
+            let conds: Vec<Json> =
+                f.contracts.iter().filter(|c| c.ensures == ensures).map(|c| Json::Str(c.text.clone())).collect();
+            if !conds.is_empty() {
+                extra.push((key, Json::Arr(conds)));
+            }
+        }
         if matches!(f.within, Within::Trait(_)) {
             extra.push(("default", Json::Bool(f.body.is_some())));
         }
@@ -612,6 +630,9 @@ impl<'p> Refs<'p> {
             }
             if let Some(t) = &f.ret {
                 self.type_ref(t);
+            }
+            for c in &f.contracts {
+                self.expr(&c.cond);
             }
             if let Some(body) = &f.body {
                 self.block(body);

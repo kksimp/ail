@@ -1,0 +1,18 @@
+# contract.decl.2-3, contract.ens.2: non-bool and impure conditions, and a
+# parameter named `result`.
+fn noisy(x int) bool
+    print("checking {x}")
+    x > 0
+
+fn f(x int) int
+    requires noisy(x)
+    requires x + 1
+    x
+
+fn g(result int) int
+    ensures result > 0
+    result
+
+fn main()
+    print(f(1))
+    print(g(1))

@@ -154,6 +154,19 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+    /// `requires` and `ensures` lines before the body (contract.decl.1).
+    pub contracts: Vec<Contract>,
+}
+
+/// `requires COND` or `ensures COND` (contract.decl.1-2).
+#[derive(Debug)]
+pub struct Contract {
+    /// `true` for `ensures`, `false` for `requires`.
+    pub ensures: bool,
+    pub cond: Expr,
+    /// The condition as written, for traps and `ail api` (contract.req.1).
+    pub text: String,
+    pub pos: Pos,
 }
 
 /// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.

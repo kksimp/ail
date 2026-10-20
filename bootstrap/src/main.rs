@@ -40,6 +40,8 @@ options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deny LIST   with run or check: reject a program whose `main` reaches a
                 denied capability (fs, env, proc, clock, net, or all) (eff.cap.1)
+  --no-contracts
+                with run or test: skip `requires`/`ensures` checks (contract.run.3)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -53,7 +55,7 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" => {}
+            "--json" | "--no-contracts" => {}
             "--deny" => i += 1,
             _ => words.push(i),
         }
@@ -64,7 +66,10 @@ fn main() -> ExitCode {
         _ => (args, Vec::new()),
     };
     let json = args.iter().any(|a| a == "--json");
-    let mut rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
+    // contract.run.3: `--no-contracts` skips the runtime contract checks.
+    interp::set_contracts(!args.iter().any(|a| a == "--no-contracts"));
+    let mut rest: Vec<&str> =
+        args.iter().map(String::as_str).filter(|a| *a != "--json" && *a != "--no-contracts").collect();
     let deny = match take_deny(&mut rest) {
         Ok(d) => d,
         Err(msg) => {

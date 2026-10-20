@@ -17,8 +17,10 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod contracts;
 mod stdlib;
 
+pub use contracts::set_enabled as set_contracts;
 pub use stdlib::set_program;
 mod testing;
 pub use testing::run_tests;
@@ -520,6 +522,10 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         env.extend(f.params.iter().map(|p| p.name.as_str()).zip(args));
         let n = env.len();
+        let checked = contracts::active(f);
+        if checked {
+            self.check_requires(f, &mut env, pos)?;
+        }
         let body = f.body.as_ref().expect("checked: the function has a body");
         let end = body.last().map_or(f.pos, Stmt::pos);
         let (mut result, at) = match self.block(body, &mut env) {
@@ -531,6 +537,9 @@ impl<'a, W: Write> Interp<'a, W> {
         // err.decl.3: an error value leaving a fallible function is its failure.
         if matches!(f.ret.as_ref().map(|t| &t.kind), Some(TypeKind::Fallible { .. })) && self.is_error(&result) {
             result = Value::Fail(Rc::new(Failure { error: result, context: Vec::new(), trace: vec![at] }));
+        }
+        if checked {
+            self.check_ensures(f, &mut env, &result, at)?;
         }
         self.depth -= 1;
         env.truncate(n);
