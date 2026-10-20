@@ -279,7 +279,7 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
     };
     match v {
         Value::Unit => s.push_str("()"),
-        Value::Str(_) | Value::Char(_) | Value::Int(_) | Value::Num(..) | Value::Bool(_) | Value::None => {
+        Value::Str(_) | Value::Bytes(_) | Value::Char(_) | Value::Int(_) | Value::Num(..) | Value::Bool(_) | Value::None => {
             s.push_str(&key_text(v))
         }
         Value::Nested(_) => s.push_str(&key_text(v)),

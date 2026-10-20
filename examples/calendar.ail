@@ -1,0 +1,30 @@
+## Calendar dates, times and zones (std.time.date and std.tz, ADRs 0447-0451).
+## Every value below is fixed, so the output is the same on every run.
+##   ./ail run examples/calendar.ail
+
+use std.time.date
+
+fn main() ! date.DateError
+    print("2024 leap: {date.is_leap(2024)}, 2100 leap: {date.is_leap(2100)}")
+    print("February 2024 has {date.days_in_month(2024, 2)} days")
+
+    d := date.parse_date("2024-02-28")?
+    print("{d.iso()} is weekday {d.weekday()} (1 = Monday), day {d.yday()} of the year")
+    print("two days later: {d.add_days(2).iso()}")
+    jan := date.parse_date("2024-01-31")?
+    print("31 January plus one month: {jan.add_months(1).iso()}")
+
+    # Spring forward in New York: 02:00 becomes 03:00 on 2024-03-10.
+    t := date.parse_in("2024-03-10T01:30:00", "America/New_York")?
+    print("start: {t.format("%Y-%m-%d %H:%M:%S %z")}")
+    print("one elapsed hour later: {t.add_ms(date.HOUR).format("%H:%M %z")}")
+    print("one wall-clock day later: {t.add_days(1).format("%Y-%m-%d %H:%M %z")}")
+
+    noon := date.utc(1719835200000)
+    print("noon UTC is {noon.iso()}")
+    paris := noon.in_zone("Europe/Paris")?
+    print("in Paris: {paris.format("%H:%M %z")}")
+
+    parsed := date.parse_iso("2024-07-01T14:00:00+02:00")?
+    print("ISO round trip: {parsed.iso()}")
+    print("same instant as noon UTC: {parsed.unix_ms() == noon.unix_ms()}")
