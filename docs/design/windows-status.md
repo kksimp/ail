@@ -24,3 +24,4 @@ selftest is the merge gate, so this list is for the designer's check on Windows.
 - Line endings: the lexer and formatter accept CRLF (`bootstrap/src/lexer.rs`, `bootstrap/src/fmt.rs`).
 - UI: Windows key and metric branches (`bootstrap/src/ui.rs`).
 - Not yet on the batch branch, so not reviewed here: bytes, FFI loading, dates and zones, compression, regex, and server sockets (lanes 123–129). Each adds a step here when it lands.
+- Native PE writer (ADRs 0597–0598): not runnable on Windows yet. `ail build --target x86_64-windows` is not wired, so there is no step for the designer here.

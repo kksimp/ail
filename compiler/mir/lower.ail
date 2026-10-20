@@ -1523,6 +1523,9 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if (name == "sqrt" or name == "abs" or name == "floor" or name == "ceil")
                 and vs.len() == 0
                 return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
+            # type.num.9
+            if name == "round" and vs.len() == 0
+                return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
         Str =>
             # type.str.3, type.str.5
             if name == "chars" and vs.len() == 0

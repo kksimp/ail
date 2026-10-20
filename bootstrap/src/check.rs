@@ -3948,8 +3948,13 @@ impl<'p> Checker<'p> {
                 self.error("type.struct.5", a.value.pos(), msg);
             }
         }
-        let missing: Vec<&str> =
-            fields.iter().zip(&given).filter(|(_, g)| !**g).map(|(f, _)| f.name.as_str()).collect();
+        // std.net.17: `net.Response(...)` may leave `all_headers` out.
+        let missing: Vec<&str> = fields
+            .iter()
+            .zip(&given)
+            .filter(|(f, g)| !**g && !(type_label == "net.Response" && f.name == "all_headers"))
+            .map(|(f, _)| f.name.as_str())
+            .collect();
         if !missing.is_empty() && !lost {
             let msg = format!(
                 "`{type_label}(...)` is missing {} {}",

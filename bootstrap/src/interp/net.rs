@@ -45,6 +45,8 @@ impl Default for Opts {
 pub struct Response {
     pub status: i64,
     pub headers: Vec<(String, String)>,
+    /// Each header's values one by one, in arrival order (std.net.17).
+    pub all: Vec<(String, Vec<String>)>,
     /// The body's bytes, undecoded (type.bytes.1).
     pub body: Vec<u8>,
 }
@@ -344,6 +346,7 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| protocol(format!("no status code in `{status_line}`")))?;
     let mut headers: Vec<(String, String)> = Vec::new();
+    let mut all: Vec<(String, Vec<String>)> = Vec::new();
     loop {
         let line = read_line(&mut r)?;
         if line.is_empty() {
@@ -353,6 +356,10 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
             return Err(protocol(format!("bad header line `{line}`")));
         };
         let (name, value) = (name.trim().to_ascii_lowercase(), value.trim().to_string());
+        match all.iter_mut().find(|(k, _)| *k == name) {
+            Some((_, vs)) => vs.push(value.clone()),
+            None => all.push((name.clone(), vec![value.clone()])),
+        }
         match headers.iter_mut().find(|(k, _)| *k == name) {
             Some((_, v)) => {
                 v.push_str(", ");
@@ -389,7 +396,7 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
     } else {
         r.read_to_end(&mut body).map_err(|e| (connect_kind(&e), e.to_string()))?;
     }
-    Ok(Response { status, headers, body })
+    Ok(Response { status, headers, all, body })
 }
 
 #[cfg(test)]

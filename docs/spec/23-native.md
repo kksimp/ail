@@ -30,10 +30,11 @@ lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-and the bit operations of expr.bit.1, in functions with at most eight `float`
-parameters (any number of others). Any other construct is reported at its
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1, in
+functions with at most eight `float` parameters (any number of others). Any
+other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393, 0532, 0533)*
+*(ADRs 0384, 0390, 0392, 0393, 0532, 0533, 0591)*
 
 ```ail
 fn steps(n int) int
@@ -65,6 +66,8 @@ name without `.ail`, in the current directory). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
+
+**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
 
 ```text
 $ ail build examples/hello.ail
