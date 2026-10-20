@@ -203,6 +203,20 @@ fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comm
             continue; // blank and comment-only lines don't affect blocks (lex.block note)
         }
 
+        // lex.stmt.2 (4): a line starting with `.name` continues the previous statement
+        // (a chained call); the statement's newline is taken back.
+        if lx.open.is_empty()
+            && !continuing
+            && line[lead] == '.'
+            && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+            && matches!(lx.tokens.last().map(|t| &t.tok), Some(Tok::Newline))
+            && lx.tokens.len() >= 2
+            && !matches!(lx.tokens[lx.tokens.len() - 2].tok, Tok::Indent | Tok::Dedent)
+        {
+            lx.tokens.pop();
+            continuing = true;
+        }
+
         if lx.open.is_empty() && !continuing {
             let width = lx.indent_width(&line[..lead], line_no);
             let top = *indents.last().unwrap();

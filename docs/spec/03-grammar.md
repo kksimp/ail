@@ -95,7 +95,8 @@ fn load(path str) Result[Map[str, User], DbError]
 
 **gram.attr.2** — Attributes precede the declaration they apply to, on the same
 line. The canonical formatter moves them to their own preceding line only when
-the line would otherwise exceed the line-length limit. *(ADR 0083)*
+the line would otherwise exceed the line-length limit. A newline may separate
+an attribute from the next attribute or the declaration. *(ADR 0083, ADR 0324)*
 
 ```ail fragment
 @inline fn hash(x u64) u64

@@ -54,6 +54,7 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 - A statement ends at the end of its line, unless the line ends inside
   `(`, `[` or `{`, or after a binary operator or a comma.
 - `#` starts a comment. `##` starts a doc comment.
+- A line starting with `.name` continues the previous statement (chained calls); attributes may sit on their own lines above a `fn`.
 - Write the layout `ail fmt` writes ([formatting.md](design/formatting.md)):
   one space around binary operators and after `,` and `:`; none inside
   brackets, around `.` and `..`, or before a call's `(`; lines up to 100
