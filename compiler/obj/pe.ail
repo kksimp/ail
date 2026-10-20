@@ -210,6 +210,38 @@ fn pe_imports(dlls List[PeDll], base int) PeImports
         slots: slots,
     )
 
+## A PE32+ executable for `img`, with its imports taken from the `imp:NAME`
+## relocations: each distinct name gets one address-table slot, grouped under
+## the DLL that `pe_dll_of` names for it (ADR 0598).
+pub fn pe_image(img codegen.Image) List[int]
+    mut names := List[str]()
+    for r in img.relocs
+        if r.sym.starts_with("imp:")
+            name := r.sym.replace("imp:", "")
+            if not names.contains(name)
+                names.push(name)
+    mut dlls := List[PeDll]()
+    for dll in PE_DLLS
+        mut funcs := List[str]()
+        for name in names
+            if pe_dll_of(name) == dll
+                funcs.push(name)
+        if funcs.len() > 0
+            dlls.push(PeDll(name: dll, funcs: funcs))
+    pe(img, dlls)
+
+## The DLL that exports `name`. kernel32 is the default; the socket and random
+## calls are named here (ADR 0598).
+fn pe_dll_of(name str) str
+    if name.starts_with("WSA") or name == "socket" or name == "connect" or name == "bind" or name == "listen" or name == "accept" or name == "recv" or name == "send" or name == "closesocket"
+        return "WS2_32.dll"
+    if name == "ProcessPrng"
+        return "bcryptprimitives.dll"
+    "KERNEL32.dll"
+
+## The DLLs `pe_dll_of` can return, in the order their descriptors are written.
+PE_DLLS := ["KERNEL32.dll", "WS2_32.dll", "bcryptprimitives.dll"]
+
 ## The code with its relocations resolved, for `.text` at RVA `code_rva`,
 ## `.rdata` at `rdata` and `.bss` at `bss`.
 fn pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int) List[int]
@@ -268,9 +300,11 @@ pub fn pe_sample() List[int]
     pe_call_import(mut img, "WriteFile")
     img.code.extend([49, 201])
     pe_call_import(mut img, "ExitProcess")
+    # After ExitProcess, so it never runs: its import puts WS2_32.dll in the table.
+    pe_call_import(mut img, "closesocket")
     img.data_syms["d:msg"] = img.data.len()
     img.data.extend(codegen.utf8("hello from AIL on Windows\n"))
-    pe(img, [PeDll(name: "KERNEL32.dll", funcs: ["GetStdHandle", "WriteFile", "ExitProcess"])])
+    pe_image(img)
 
 ## `call qword ptr [rip + slot]` through the import `name`: FF 15 and a rel32.
 fn pe_call_import(mut img codegen.Image, name str)

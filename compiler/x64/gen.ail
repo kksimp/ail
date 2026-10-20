@@ -786,6 +786,9 @@ fn Gen.push(mut self, i mir.Inst)
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
+    if i.name.starts_with("libsys.")
+        self.libsys_call(i)
+        return
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0

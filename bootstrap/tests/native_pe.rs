@@ -45,9 +45,10 @@ fn pe_headers_describe_a_windows_x64_executable() {
     // The import directory and the address table are in .idata at 0x3000.
     let dirs = pe + 24 + 112;
     assert_eq!(u32_at(&b, dirs + 8), 0x3000);
-    assert_eq!(u32_at(&b, dirs + 12), 40, "two descriptors: KERNEL32.dll and the null entry");
-    assert_eq!(u32_at(&b, dirs + 96), 0x3048);
-    assert_eq!(u32_at(&b, dirs + 100), 32, "three entries and a null, eight bytes each");
+    assert_eq!(u32_at(&b, dirs + 12), 60, "three descriptors: KERNEL32.dll, WS2_32.dll and the null entry");
+    let iat = u32_at(&b, dirs + 96);
+    assert_eq!(iat, 0x305c, "address table starts after the descriptors and KERNEL32 lookup table");
+    assert_eq!(u32_at(&b, dirs + 100), 48, "KERNEL32: three entries and a null; WS2_32: one and a null; eight bytes each");
 }
 
 // ADR 0598: each call goes through an import slot, and the slots name the three functions.
@@ -63,12 +64,13 @@ fn pe_imports_name_kernel32_functions_the_codegen_calls() {
         hint_name.push(0);
         assert!(idata.windows(hint_name.len()).any(|w| w == hint_name.as_slice()), "{name} hint/name entry");
     }
-    // The call to GetStdHandle is FF 15 with a displacement to its slot, 0x3048.
+    // The call to GetStdHandle is FF 15 with a displacement to its slot.
     let text = &b[0x400..0x600];
+    let iat = u32_at(&b, 0x80 + 24 + 112 + 96);
     let call = text.windows(2).position(|w| w == [0xff, 0x15]).unwrap();
     let next = 0x1000 + call as u32 + 6;
     let disp = i32::from_le_bytes(text[call + 2..call + 6].try_into().unwrap());
-    assert_eq!((next as i64 + disp as i64) as u32, 0x3048);
+    assert_eq!((next as i64 + disp as i64) as u32, iat);
 }
 
 // ADR 0597: `objdump` and `llvm-readobj` agree on the file, when installed.
@@ -88,4 +90,6 @@ fn pe_sample_reads_back_in_an_external_tool() {
     assert!(text.contains("pei-x86-64"), "{text}");
     assert!(text.contains("DLL Name: KERNEL32.dll"), "{text}");
     assert!(text.contains("ExitProcess"), "{text}");
+    assert!(text.contains("DLL Name: WS2_32.dll"), "{text}");
+    assert!(text.contains("closesocket"), "{text}");
 }
