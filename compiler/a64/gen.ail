@@ -576,7 +576,6 @@ fn Gen.add_sub(mut self, i mir.Inst)
     x := i.args[0]
     y := i.args[1]
     checked := i.site >= 0
-    ra := gpr(x, S0)
     d := out_checked(i.dst, i)
     mut op := i.op
     if k := imm(y)
@@ -585,10 +584,17 @@ fn Gen.add_sub(mut self, i mir.Inst)
             if k < 0
                 op = if op == "add" then "sub" else "add"
                 n = 0 - k
-            a.alu_ri(if checked then "{op}s" else op, d, ra, n)
+            a.alu_ri(if checked then "{op}s" else op, d, gpr(x, S0), n)
             finish_add(i, d)
             return
-    a.alu_rr(if checked then "{op}s" else op, d, ra, gpr(y, S1))
+    # `1 + n`: the constant goes second; the stub still reports `x + y`.
+    if op == "add"
+        if k := imm(x)
+            if k >= 0 and k < 4096
+                a.alu_ri(if checked then "adds" else "add", d, gpr(y, S0), k)
+                finish_add(i, d)
+                return
+    a.alu_rr(if checked then "{op}s" else op, d, gpr(x, S0), gpr(y, S1))
     finish_add(i, d)
 
 fn Gen.finish_add(mut self, i mir.Inst, d int)
