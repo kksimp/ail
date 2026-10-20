@@ -34,6 +34,22 @@ fn Shape.area(self) int
         Rect(w, h) => w * h
         Dot => 0
 
+trait Sized
+    fn size(self) int
+    fn twice(self) int
+        size() * 2
+
+impl Sized for Pen
+    fn size(self) int
+        marks.len()
+
+impl ToStr for Shape
+    fn to_str(self) str
+        match self
+            Circle(r) => "circle {r}"
+            Rect(w, h) => "rect {w}x{h}"
+            Dot => "dot"
+
 fn word(s str) str ! Short
     if s.len() < 2
         return Short(s)
@@ -98,3 +114,12 @@ fn main()
     s := "x"
     print(s == "x" and s != "y")
     print("{sum:>5}|{pen.count}")
+    # Calls through a trait: a default method, implementations, built-ins.
+    print(pen.twice())
+    print(c.twice())
+    print(pick(4).to_str())
+    print("{pick(3)} and {pick(5)}")
+    print(3.cmp(5))
+    print(7.min(2))
+    print("b".cmp("a"))
+    print(12.to_str().len())

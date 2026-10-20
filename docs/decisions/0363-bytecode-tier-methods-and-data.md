@@ -1,4 +1,4 @@
-# 0363. The bytecode tier compiles method calls, data construction, `match`, interpolation and `?`
+# 0363. The bytecode tier compiles method and trait calls, data construction, `match`, interpolation and `?`
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
@@ -70,6 +70,20 @@ A first version re-ran the whole call on the walker after a guard miss. That
 was correct only for receivers without effects, and it limited the tier to
 those, so it was replaced.
 
+### Calls through a trait
+
+`x.f(y)` where the checker resolved `f` through a trait (trait.res.1)
+evaluates the receiver into a register first, as the walker does.
+`TraitGuard` then asks the walker's own `dispatch` which implementation
+applies. That is the type's implementation, the trait's default method, or
+none, which means the built-in `eq`, `cmp` or `to_str` (trait.std.1–3).
+`dispatch` decides by the value's type constructor alone, so the guard keeps
+its last answer by that constructor. `TraitRun` calls the implementation as
+`invoke` would, or makes the built-in as `trait_method` does. A `ref`, handle
+or atomic receiver, or an implementation with a `mut` receiver or parameter,
+takes `MethodOn`. In the self-hosted parser this removed 92% of the
+hand-offs: `a.min(b)` and the `cmp` inside it, and `to_json`.
+
 ### Other constructs
 
 - **Struct and variant construction**, `Enum.Variant(...)`, list literals and
@@ -99,11 +113,10 @@ normal run pays nothing for it. `=2` lists hand-offs by kind and method name.
 
 ## Decision
 
-Adopt the method-call design (Option A), the receiver rules, and the other
-constructs as described above. Trait-qualified calls (`x.cmp(y)` through a
-trait, `Trait.name(x)`), associated functions, standard-module calls, calls
-with labelled or key-function arguments, and `mut` receivers that aren't a
-local's place stay on the walker.
+Adopt the method-call design (Option A), the receiver rules, trait calls and
+the other constructs as described above. `Trait.name(x)`, associated
+functions, standard-module calls, calls with labelled or key-function
+arguments, and `mut` receivers that aren't a local's place stay on the walker.
 
 ## Rationale
 
@@ -116,14 +129,16 @@ checks every program in the repository each selftest.
 ## Consequences
 
 - Results (Linux x86-64, [interpreter-performance.md](../design/interpreter-performance.md)):
-  `interp` 1.37x fewer instructions than the walker (slice 1: 1.06x), and
-  0.86x of CPython's time; `json` 1.14x and `sheet` 1.09x (both start-up
-  bound); `loops` 2.10x, 0.54x of CPython's time.
+  `interp` uses 1.36x fewer instructions than the walker (slice 1: 1.06x) and
+  runs at 0.81x of CPython's time. `json` is 1.14x and `sheet` 1.11x, both
+  bound by start-up. `loops` is 2.11x, at 0.52x of CPython's time. The
+  self-hosted parser and checker (`ail run compiler parse` and `check` on
+  `tools/edit/edit.ail`) are 1.32x and 1.34x.
 - On the tier: `interp` runs all 50 of its called functions, and 99.3% of the
-  instructions the tier runs are native; `json` 99.7%; `sheet` 97.2%; the ten
-  agent-corpus programs 99.5% together. The rest are hand-offs: field and
-  element assignments deeper than one step, trait-qualified calls,
-  comprehensions and slices.
+  instructions the tier runs are native. `json` is 99.8% native, `sheet`
+  99.1%, and the ten agent-corpus programs 99.5% together. The rest are
+  hand-offs: field and element assignments deeper than one step,
+  comprehensions, slices and `else` blocks that bind the error.
 - Splitting the walker's `method_call` and `builtin` so that the tier can enter
   after the receiver or the arguments costs the walker 0.9% on `interp`.
 - `interp`'s remaining cost is spread out: value clones and drops, the

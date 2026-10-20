@@ -283,21 +283,30 @@ numbers.
 
 [ADR 0363](../decisions/0363-bytecode-tier-methods-and-data.md) compiles
 method calls (a guard on the receiver's value, then the user or built-in
-method directly), struct and variant construction, list, map and set literals,
-`match`, interpolation, `?` and `else`, and `local.field = v`. String `==`
-skips the trait dispatch when no `Eq` implementation applies to `str`.
+method directly), calls through a trait (the walker's `dispatch`, cached by
+type), struct and variant construction, list, map and set literals, `match`,
+interpolation, `?` and `else`, and `local.field = v`. String `==` skips the
+trait dispatch when no `Eq` implementation applies to `str`.
 
 Results, measured as for slice 1:
 
 | Program | Walker s | Tier s | CPython s | Walker / CPython | Tier / CPython | Walker instr | Tier instr | Gain |
 |---|---|---|---|---|---|---|---|---|
-| interp | 0.133 | 0.097 | 0.113 | 1.18 | **0.86** | 818.4M | 599.0M | **1.37x** |
-| json | 0.011 | 0.009 | 0.044 | 0.25 | 0.20 | 31.3M | 27.5M | 1.14x |
-| sheet | 0.017 | 0.018 | 0.072 | 0.24 | 0.25 | 84.6M | 77.5M | 1.09x |
-| loops | 0.321 | 0.174 | 0.323 | 0.99 | **0.54** | 3,955.4M | 1,885.9M | **2.10x** |
-| collatz | 0.222 | 0.109 | 0.492 | 0.45 | 0.22 | 2,765.3M | 1,067.3M | 2.59x |
+| interp | 0.140 | 0.091 | 0.113 | 1.24 | **0.81** | 818.2M | 600.0M | **1.36x** |
+| json | 0.010 | 0.009 | 0.052 | 0.19 | 0.17 | 31.2M | 27.4M | 1.14x |
+| sheet | 0.019 | 0.019 | 0.065 | 0.29 | 0.29 | 84.3M | 75.6M | 1.11x |
+| loops | 0.323 | 0.163 | 0.312 | 1.04 | **0.52** | 3,952.7M | 1,874.5M | **2.11x** |
+| collatz | 0.232 | 0.103 | 0.438 | 0.53 | 0.24 | 2,765.4M | 1,058.5M | 2.61x |
 
-The walker is 0.7% slower on `interp` than in slice 1 (818.4M against
+The self-hosted front end (lane 114), on `tools/edit/edit.ail`. It has no
+Python twin. Wall time is the min of 5 runs.
+
+| Run | Walker s | Tier s | Walker instr | Tier instr | Gain |
+|---|---|---|---|---|---|
+| `ail run compiler parse` | 2.70 | 1.92 | 16,359M | 12,438M | 1.32x |
+| `ail run compiler check` (its `ail api --ast --program` dump) | 4.14 | 3.05 | 27,835M | 20,783M | 1.34x |
+
+The walker is 0.7% slower on `interp` than in slice 1 (818.2M against
 812.8M instructions), from splitting its method call so the tier can enter
 it after the receiver. `json` and `sheet` are mostly start-up: the front end
 is about 25M of their instructions.
@@ -307,19 +316,20 @@ hand-offs counted as one each):
 
 | Program | Functions compiled | Calls on the tier | Instructions | Hand-offs | Native |
 |---|---|---|---|---|---|
-| interp | 50 of 50 | 224,854 of 224,854 | 3,464,526 | 22,830 | 99.3% |
-| json | 30 of 30 | 5,242 of 5,242 | 94,147 | 254 | 99.7% |
-| sheet | 49 of 50 | 10,282 of 10,449 | 171,930 | 4,809 | 97.2% |
-| agent corpus (10 programs) | 76 of 79 | 3,922 of 3,950 | 66,051 | 324 | 99.5% |
+| interp | 50 of 50 | 224,854 of 224,854 | 3,465,174 | 22,722 | 99.3% |
+| json | 30 of 30 | 5,242 of 5,242 | 94,251 | 228 | 99.8% |
+| sheet | 49 of 50 | 10,282 of 10,449 | 185,927 | 1,638 | 99.1% |
+| agent corpus (10 programs) | 76 of 79 | 3,922 of 3,950 | 66,096 | 309 | 99.5% |
+| compiler parse | 172 of 172 | 2,843,288 of 2,843,288 | 68,375,350 | 71,821 | 99.9% |
 
 The agent corpus is the ten agent-tool programs of ADR 0217, run from
 `examples/` on their data. The hand-offs that remain are field and element
 assignments deeper than one step (`env.scopes[k][name] = v`, 16,620 in
-`interp`), trait-qualified calls (`.cmp` and `.to_str` in `sheet`),
-comprehensions, slices, and the functions the tier leaves whole to the walker.
+`interp`), comprehensions, slices, `else` blocks that bind the error, and the
+functions the tier leaves whole to the walker.
 
-`interp`'s profile on the tier has no single hot spot left: the loop's own
-work is 25%, bounds checks 6%, value drops 5%, allocation 7%, and call set-up
-(`run_body`, register files) 10%. A further large step needs frames without
-names (ADR 0361's Option B).
-
+On the tier no single cost dominates any more. On `interp`, the
+interpreter loop's own work is 25%, bounds checks 6%, value drops 5%,
+allocation 7%, and call set-up (`run_body`, register files) 10%. The parser
+adds the walker's `to_str` for interpolation (5%). A further large step needs
+frames without names (ADR 0361's Option B).

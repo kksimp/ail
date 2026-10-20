@@ -335,6 +335,28 @@ enum Ins<'a> {
         n: u32,
         set: bool,
     },
+    /// `recv.name(args)` through trait `tr` with the receiver in `recv`: jump
+    /// to `t` unless the tier can call the implementation `dispatch` picks,
+    /// which is left in `now` (`None`: the built-in `eq`, `cmp` or `to_str`).
+    /// `cache` keeps the last pick, by the type `dispatch` looks at.
+    TraitGuard {
+        recv: Opnd,
+        tr: usize,
+        name: &'a str,
+        t: u32,
+        cache: Cell<Option<(u8, usize, Option<&'a FnDecl>)>>,
+        now: Cell<Option<&'a FnDecl>>,
+    },
+    /// The call the `TraitGuard` at `guard` allowed.
+    TraitRun {
+        recv: Opnd,
+        tr: usize,
+        args: u32,
+        n: u32,
+        dst: Opnd,
+        pos: Pos,
+        guard: u32,
+    },
     /// `MethodGuard`'s fallback for a receiver already evaluated into
     /// `recv`: the walker's method call from there on (ADR 0363).
     MethodOn {
@@ -696,6 +718,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             | Ins::BrCmpK { t: x, .. }
             | Ins::IfNotListMap { t: x, .. }
             | Ins::MethodGuard { t: x, .. }
+            | Ins::TraitGuard { t: x, .. }
             | Ins::ElseTest { t: x, .. }
             | Ins::IfNotStruct { t: x, .. }
             | Ins::Arm { t: x, .. }
@@ -1401,6 +1424,17 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             None => Some(NONE),
         };
         let Some(mut recv_op) = chosen else { return self.delegate(e, dst) };
+        let plain = |a: &Arg| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved;
+        if let Some(&Call::Trait(tr)) = r.calls.get(&pos)
+            && !mutating
+            && !r.assoc_calls.contains_key(&pos)
+            && !r.std_calls.contains_key(&pos)
+            && !r.type_args.contains_key(&pos)
+            && args.iter().all(plain)
+            && (slot.is_some() || !matches!(at, Expr::Name(..)))
+        {
+            return self.trait_call(e, recv, tr, name, args, pos, dst);
+        }
         if r.calls.contains_key(&pos)
             || r.assoc_calls.contains_key(&pos)
             || r.std_calls.contains_key(&pos)
@@ -1444,6 +1478,39 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             let exit = self.exit();
             self.emit(Ins::MethodOn { recv: recv_op, e, dst, exit });
         }
+        let end = self.here();
+        self.patch(j, end);
+    }
+
+    /// `recv.name(args)` through a trait (trait.res.1): the receiver is
+    /// evaluated first, as the walker does, then the guard picks the
+    /// implementation the walker's `dispatch` picks (ADR 0363).
+    #[allow(clippy::too_many_arguments)]
+    fn trait_call(
+        &mut self,
+        e: &'a Expr,
+        recv: &'a Expr,
+        tr: usize,
+        name: &'a str,
+        args: &'a [Arg],
+        pos: Pos,
+        dst: Opnd,
+    ) {
+        let t = self.reg();
+        self.expr_to(recv, t);
+        let guard =
+            self.emit(Ins::TraitGuard { recv: t, tr, name, t: 0, cache: Cell::new(None), now: Cell::new(None) });
+        let first = self.next_reg;
+        let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+        for (a, r) in args.iter().zip(regs) {
+            self.expr_to(&a.value, r);
+        }
+        self.emit(Ins::TraitRun { recv: t, tr, args: first, n: args.len() as u32, dst, pos, guard });
+        let j = self.emit(Ins::Jump(0));
+        let general = self.here();
+        self.patch(guard, general);
+        let exit = self.exit();
+        self.emit(Ins::MethodOn { recv: t, e, dst, exit });
         let end = self.here();
         self.patch(j, end);
     }
@@ -2092,6 +2159,77 @@ impl<'a, W: Write> Interp<'a, W> {
                                 }
                             };
                             self.builtin_with(recv, name, a, *pos, env)?
+                        }
+                    };
+                    put(*dst, result, env, base, regs);
+                }
+                Ins::TraitGuard { recv, tr, name, t, cache, now } => {
+                    let v = get!(*recv);
+                    // What `dispatch` decides by: the value's type constructor.
+                    let key = match v {
+                        Value::Ref(_) | Value::Handle(_) | Value::Atomic(_) => None,
+                        Value::Struct(s, _) => Some((0, *s)),
+                        Value::Enum(e, _, _) => Some((1, *e)),
+                        Value::Int(_) => Some((2, 0)),
+                        Value::Float(_) => Some((3, 0)),
+                        Value::Str(_) => Some((4, 0)),
+                        Value::Char(_) => Some((5, 0)),
+                        Value::Bool(_) => Some((6, 0)),
+                        Value::List(_) => Some((7, 0)),
+                        _ => Some((8, 0)),
+                    };
+                    let pick = key.map(|(k, i)| match cache.get() {
+                        Some((ck, ci, f)) if ck == k && ci == i => f,
+                        _ => {
+                            let f = self.dispatch(*tr, name, v);
+                            cache.set(Some((k, i, f)));
+                            f
+                        }
+                    });
+                    // A `mut` receiver or parameter takes the walker's path.
+                    let ok = pick.is_some_and(|f| {
+                        f.is_none_or(|f| f.receiver.is_none_or(|r| !r.mutable) && f.params.iter().all(|p| !p.mutable))
+                    });
+                    if ok {
+                        now.set(pick.flatten());
+                        pc += 1;
+                    } else {
+                        pc = *t as usize;
+                    }
+                }
+                Ins::TraitRun { recv, tr, args, n, dst, pos, guard } => {
+                    pc += 1;
+                    let Ins::TraitGuard { now, .. } = &code.ins[*guard as usize] else { unreachable!("a guard") };
+                    let me = take!(*recv);
+                    let first = *args as usize;
+                    let result = match now.get() {
+                        // trait.method.2: the implementation, as `invoke` calls it.
+                        Some(f) => {
+                            let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                            callee.push(("self", me));
+                            for (k, p) in f.params.iter().enumerate() {
+                                callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
+                            }
+                            let result = self.run_body(f, &mut callee, *pos)?;
+                            callee.clear();
+                            self.env_pool.push(callee);
+                            result
+                        }
+                        // trait.std.1-3: the built-in `to_str`, `eq` and `cmp`, as `trait_method` makes them.
+                        None => {
+                            let std = self.resolved.std;
+                            if *tr == std.to_str {
+                                Value::Str(Rc::from(self.text(&me, *pos)?))
+                            } else {
+                                debug_assert!(*n == 1);
+                                let other = std::mem::replace(&mut regs[first], Value::Unit);
+                                if *tr == std.eq {
+                                    Value::Bool(self.equal(&me, &other, *pos)?)
+                                } else {
+                                    let o = self.compare(&me, &other, *pos)?;
+                                    self.ordering_value(o)
+                                }
+                            }
                         }
                     };
                     put(*dst, result, env, base, regs);
