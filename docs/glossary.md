@@ -54,6 +54,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Error type** | A struct or enum declared with `error` (`error enum ParseError`). Only error types can be errors (ADR 0120). |
 | **Escape analysis** | Compiler analysis that determines whether a value can outlive or leave its creating scope. A value that does not escape can be stack-allocated. |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
+| **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |
 | **Fix** | A machine-applicable edit a diagnostic carries (ADR 0145). `ail fix` applies the first fix of each diagnostic and re-checks (ADR 0203). |
 | **Fix (diagnostic)** | A machine-applicable edit attached to a diagnostic: a title and text replacements by line and column, applied all or nothing (ADR 0145). |
 | **Generated origin** | The provenance of generated code: the deriving `impl` and the generator, shown by `ail api --expanded` (`ct.gen.4`, ADR 0228). |

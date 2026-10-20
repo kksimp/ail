@@ -260,3 +260,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0253](0253-std-path.md) | `std.path`: `dir`, `base`, `ext` and `join` on path text *(delegated)* | Accepted | 2026-10-20 |
 | [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
 | [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |
+| [0285](0285-error-flow-diagnostics-and-fixes.md) | Error-flow diagnostics carry applicable helps and fixes *(delegated)* | Accepted | 2026-10-20 |
+| [0286](0286-failure-paths-check-errors.md) | `ail check --errors`: every failure path of a function as JSON *(delegated)* | Accepted | 2026-10-20 |
+| [0287](0287-inferred-error-sets-in-api-and-worked-explain.md) | Inferred error sets in `ail api`, worked examples in `ail explain` *(delegated)* | Accepted | 2026-10-20 |

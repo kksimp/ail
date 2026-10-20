@@ -1,0 +1,13 @@
+error enum A
+    X
+
+error enum B
+    Y
+
+fn f(n int) int ! A
+    if n < 0
+        return B.Y
+    n
+
+fn main()
+    print(f(1) else 0)

@@ -34,7 +34,8 @@ commands:
                 ARGS are the program's (std.env.1: `env.args()`)
   run DIR [ARGS...]
                 check and run the package whose root module is DIR
-  check FILE    check a program (or a package DIR) without running it
+  check FILE    check a program (or a package DIR) without running it;
+                --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;
                 --cases N (default 100) and --seed S set a property's inputs
   effects FILE  print each function's inferred effects (eff.infer.6);
@@ -131,6 +132,7 @@ fn main() -> ExitCode {
             interp::set_program(file, program_args);
             run_file(file, json, true, &deny)
         }
+        ["check", "--errors", file] | ["check", file, "--errors"] => api::errors::command(file, json),
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => match take_test_options(&mut flags) {
             Ok((cases, seed)) => run_tests(file, json, cases, seed),

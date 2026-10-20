@@ -21,6 +21,7 @@ mod builtins;
 pub mod conc;
 mod contracts;
 mod comprehension;
+pub mod errpaths;
 pub mod facts;
 mod keyfn;
 mod stdlib;
@@ -36,6 +37,7 @@ mod ui;
 use std::collections::HashMap;
 
 use builtins::builtin;
+pub use errpaths::FailPath;
 use traits::{Cand, bind, bound, subst, subst_unknown};
 
 use crate::ast::{
@@ -171,6 +173,11 @@ pub struct Resolved {
     /// The function each method or associated function call runs, by the
     /// position of its name, when that is known statically (eff.infer.3).
     pub targets: HashMap<Pos, usize>,
+    /// The error types each fallible function can fail with, by function
+    /// index; inferred sets are resolved (err.api.1, err.paths.1).
+    pub fn_errors: std::collections::BTreeMap<usize, Vec<String>>,
+    /// Every place a function can fail or hand a failure on (err.paths.1).
+    pub fail_paths: Vec<FailPath>,
     pub std: Std,
     /// Calls to the standard modules, by the position of the name (std.use.2).
     pub std_calls: HashMap<Pos, crate::stdlib::StdCall>,
@@ -251,6 +258,10 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         bound: HashMap::new(),
         catching: 0,
         caught: 0,
+        cur_fn: 0,
+        track: false,
+        fn_name: String::new(),
+        fn_head: Pos { line: 0, col: 0 },
     };
     c.list_param = c.new_param("T", Vec::new());
     c.collect_traits();
@@ -283,10 +294,13 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         }
     }
     c.record = record;
+    c.track = true;
     for (i, f) in prog.fns.iter().enumerate() {
         c.check_fn(i, f);
     }
     c.record = false;
+    c.track = false;
+    c.record_fn_errors();
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.check_drop_impls();
@@ -428,6 +442,13 @@ struct Checker<'p> {
     /// many optional `?` they caught (err.prop.4).
     catching: u32,
     caught: u32,
+    /// Index of the function being checked, and whether the failure paths
+    /// are being recorded (the final pass only, err.paths.1).
+    cur_fn: usize,
+    track: bool,
+    /// Name and header line of the function being checked (err.fix.1).
+    fn_name: String,
+    fn_head: Pos,
 }
 
 /// `a` and `b` are the same type, or an error already reported makes it moot.
@@ -1361,12 +1382,12 @@ impl<'p> Checker<'p> {
         if !matches!(t, Ty::Res(..)) {
             return false;
         }
-        self.error_help(
-            "err.use.1",
-            pos,
-            "this can fail, and the failure isn't handled",
-            "pass the error on with `?`, or handle it with `x := ... else ...`",
-        );
+        let help = if matches!(self.ret, Ty::Res(..)) {
+            "pass the error on with `?`, or handle it with `x := ... else ...`"
+        } else {
+            "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
+        };
+        self.error_help("err.use.1", pos, "this can fail, and the failure isn't handled", help);
         true
     }
 
@@ -1381,12 +1402,29 @@ impl<'p> Checker<'p> {
             Ty::Res(_, Errs::Set(want)) => errors.iter().all(|g| want.contains(g)),
             _ => false,
         };
+        // err.fix.1: a function that can't fail yet can be made to.
+        let sig = if admits { None } else { self.signature_fix(&errors) };
         let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
-        if admits && matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
+        if !matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
+            return;
+        }
+        if admits {
             d.fixes.push(Fix {
                 title: "pass the error on with `?`".into(),
                 edits: vec![Edit::at_line_end(e.pos(), "?")],
             });
+        } else if let Some((title, edit)) = sig {
+            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::at_line_end(e.pos(), "?")] });
+        }
+    }
+
+    /// err.fix.1: remove the name from `else name` on the diagnostic just reported.
+    fn drop_else_name(&mut self, name: &str, npos: Pos) {
+        let from = Pos { line: npos.line, col: npos.col.saturating_sub(1).max(1) };
+        let to = Pos { line: npos.line, col: npos.col + name.chars().count() };
+        if let Some(d) = self.diags.last_mut() {
+            let edit = Edit { pos: from, end: to, old: None, anchor: crate::diag::Anchor::Exact, text: String::new() };
+            d.fixes.push(Fix { title: format!("remove `{name}` from the `else`"), edits: vec![edit] });
         }
     }
 
@@ -1484,6 +1522,9 @@ impl<'p> Checker<'p> {
         self.loops = 0;
         self.catching = 0;
         self.ret = sig.ret.clone();
+        self.cur_fn = idx;
+        self.fn_name = f.name.clone();
+        self.fn_head = f.pos;
         if f.receiver.is_some() {
             let ty = self.self_ty.clone().unwrap_or(Ty::Err);
             let mutable = f.receiver.is_some_and(|r| r.mutable);
@@ -1678,21 +1719,65 @@ impl<'p> Checker<'p> {
             }
             None => {}
             Some(v) if ret == Ty::Unit => {
-                self.expr(v, None, true);
-                self.error_help(
-                    "expr.block.2",
-                    v.pos(),
-                    "this function doesn't return a value",
-                    "remove the value, or declare a return type after `)`",
-                );
+                let t = self.expr(v, None, true);
+                if self.is_error(&t) {
+                    self.return_error_in_infallible(v, &t);
+                } else {
+                    self.error_help(
+                        "expr.block.2",
+                        v.pos(),
+                        "this function doesn't return a value",
+                        "remove the value, or declare a return type after `)`",
+                    );
+                }
             }
             Some(v) => {
                 let t = self.expr(v, Some(&ret), true);
                 self.consume(v, &t);
-                if !self.accepts(&ret, &t) {
+                if self.accepts(&ret, &t) {
+                    match &t {
+                        t if self.is_error(t) => self.note_path(v.pos(), "return", None, None, std::slice::from_ref(t), false),
+                        Ty::Res(_, errs) => {
+                            let errors = self.errs_of(errs);
+                            self.note_path(v.pos(), "return", None, Some(v), &errors, false);
+                        }
+                        _ => {}
+                    }
+                } else if !matches!(ret, Ty::Res(..)) && self.is_error(&t) {
+                    self.return_error_in_infallible(v, &t);
+                } else if let (Ty::Res(..), true) = (&ret, self.is_error(&t)) {
+                    let help = match self.failing_ret(std::slice::from_ref(&t)) {
+                        Some(r) => format!("add it to the return type: `{r}`"),
+                        None => "add it to the return type".into(),
+                    };
+                    let msg = format!("`{}` isn't one of the errors this function can fail with", self.ty_name(&t));
+                    self.error_help("err.ret.3", v.pos(), msg, help);
+                } else if matches!((&ret, &t), (Ty::Res(..), Ty::Opt(_))) {
+                    self.error_help(
+                        "err.ret.2",
+                        v.pos(),
+                        "an optional can't be returned as a result; absence has no error to report",
+                        "turn absence into an error first: `x := ... else return SomeError`, then return `x`",
+                    );
+                } else {
                     self.mismatch("expr.block.2", v.pos(), &ret, &t);
                 }
             }
+        }
+    }
+
+    /// `return e` of an error value in a function that can't fail (err.ret.1).
+    fn return_error_in_infallible(&mut self, v: &Expr, t: &Ty) {
+        let sig = self.signature_fix(std::slice::from_ref(t));
+        let msg = format!("`{}` is an error, but this function can't fail", self.ty_name(t));
+        self.error_help(
+            "err.ret.1",
+            v.pos(),
+            msg,
+            "declare the failure in the return type (`T ! E`), or return a value instead",
+        );
+        if let (Some((title, edit)), Some(d)) = (sig, self.diags.last_mut()) {
+            d.fixes.push(Fix { title, edits: vec![edit] });
         }
     }
 
@@ -1768,6 +1853,15 @@ impl<'p> Checker<'p> {
                 (other.clone(), None)
             }
         };
+        if matches!(vt, Ty::Opt(_) | Ty::Res(..)) {
+            let how = match o {
+                Else::Value(_) => "default",
+                Else::Leave(_) => "leave",
+                Else::Block { .. } => "block",
+            };
+            let (kind, errs) = if errors.is_some() { ("handle", errors.clone().unwrap_or_default()) } else { ("absent", Vec::new()) };
+            self.note_path(pos, kind, Some(how), Some(value), &errs, false);
+        }
         match o {
             Else::Value(d) if ok == Ty::Unit => {
                 self.expr(d, None, true);
@@ -1803,12 +1897,15 @@ impl<'p> Checker<'p> {
                                 });
                             }
                         }
-                        None if ok != Ty::Err => self.error_help(
-                            "err.else.3",
-                            *npos,
-                            "only a failure has an error to bind; an optional is just absent",
-                            "write `else` without a name",
-                        ),
+                        None if ok != Ty::Err => {
+                            self.error_help(
+                                "err.else.3",
+                                *npos,
+                                "only a failure has an error to bind; an optional is just absent",
+                                "write `else` without a name",
+                            );
+                            self.drop_else_name(name, *npos);
+                        }
                         None => {}
                     }
                 }
@@ -2726,6 +2823,7 @@ impl<'p> Checker<'p> {
         let ret = self.ret.clone();
         match t {
             Ty::Opt(v) => {
+                self.note_path(pos, "absent", None, Some(inner), &[], context.is_some());
                 self.resolved.optional_try.insert(pos);
                 if self.catching > 0 {
                     // err.prop.4: an enclosing `else` handles the absence.
@@ -2743,26 +2841,37 @@ impl<'p> Checker<'p> {
             }
             Ty::Res(ok, errs) => {
                 let errors = self.errs_of(&errs);
+                self.note_path(pos, "propagate", None, Some(inner), &errors, context.is_some());
                 match &ret {
                     Ty::Res(_, want) => {
                         let missing = self.add_errors(want, &errors);
                         if !missing.is_empty() {
                             let names: Vec<String> = missing.iter().map(|t| self.ty_name(t)).collect();
                             let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                            let help = match self.failing_ret(&missing) {
+                                Some(r) => format!("change the return type to `{r}`, use `!T` to infer it, or handle the error with `else`"),
+                                None => "add them to the return type (`T ! A | B`), use `!T` to infer them, or handle them with `else`".into(),
+                            };
                             self.error_help(
                                 "err.prop.3",
                                 pos,
                                 format!("`?` passes on {}, which this function's error type doesn't include", list_names(&names)),
-                                "add them to the return type (`T ! A | B`), use `!T` to infer them, or handle them with `else`",
+                                help,
                             );
                         }
                     }
-                    _ => self.error_help(
-                        "err.prop.1",
-                        pos,
-                        "`?` passes the error on, but this function can't fail",
-                        "declare a return type with `!` (e.g. `!int`, or `fn main() !`), or handle it with `else`",
-                    ),
+                    _ => {
+                        let sig = self.signature_fix(&errors);
+                        let help = if matches!(ret, Ty::Opt(_)) {
+                            "this function returns an optional, which can't carry an error; handle the error with `else`, e.g. `x := ... else return none`"
+                        } else {
+                            "declare a return type with `! E` (e.g. `int ! E`, or `fn main() ! E`), or handle it with `else`"
+                        };
+                        self.error_help("err.prop.1", pos, "`?` passes the error on, but this function can't fail", help);
+                        if let (Some((title, edit)), Some(d)) = (sig, self.diags.last_mut()) {
+                            d.fixes.push(Fix { title, edits: vec![edit] });
+                        }
+                    }
                 }
                 *ok
             }
