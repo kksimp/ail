@@ -677,6 +677,20 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<()> {
+        // A plain local needs no `Place`: same steps as below with an empty path.
+        if let Expr::Name(n, _) = target {
+            let slot = env.iter().rposition(|(m, _)| m == n).expect("checked: a local");
+            let v = match op {
+                None => self.eval(value, env)?,
+                Some(op) => {
+                    let old = env[slot].1.clone();
+                    let rhs = self.eval(value, env)?;
+                    self.binop(op, old, rhs, pos)?
+                }
+            };
+            env[slot].1 = v;
+            return Ok(());
+        }
         let p = self.place(target, env)?;
         let v = match op {
             None => self.eval(value, env)?,
@@ -741,6 +755,24 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
                 let l = self.eval(lhs, env)?;
                 let r = self.eval(rhs, env)?;
+                // The common int cases inline; overflow and the rest go to `binop` (expr.arith.1).
+                if let (Value::Int(a), Value::Int(b)) = (&l, &r) {
+                    let fast = match op {
+                        BinOp::Add => a.checked_add(*b).map(Value::Int),
+                        BinOp::Sub => a.checked_sub(*b).map(Value::Int),
+                        BinOp::Mul => a.checked_mul(*b).map(Value::Int),
+                        BinOp::Eq => Some(Value::Bool(a == b)),
+                        BinOp::Ne => Some(Value::Bool(a != b)),
+                        BinOp::Lt => Some(Value::Bool(a < b)),
+                        BinOp::Le => Some(Value::Bool(a <= b)),
+                        BinOp::Gt => Some(Value::Bool(a > b)),
+                        BinOp::Ge => Some(Value::Bool(a >= b)),
+                        _ => None,
+                    };
+                    if let Some(v) = fast {
+                        return Ok(v);
+                    }
+                }
                 Ok(self.binop(*op, l, r, *pos)?)
             }
             _ => self.eval_general(e, env),
