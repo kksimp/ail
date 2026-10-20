@@ -13,7 +13,7 @@ pub const UNSUPPORTED: &str = "bootstrap.unsupported";
 pub const KEYWORDS: &[&str] = &[
     "and", "any", "as", "break", "continue", "defer", "elif", "else", "ensures", "enum", "error", "extern", "false",
     "fn", "for", "if", "impl", "in", "invariant", "match", "move", "mut", "none", "not", "or", "par", "pub", "ref", "requires",
-    "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe", "use", "while",
+    "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe", "use", "while", "with",
 ];
 
 /// Symbols, longest first so that `..=` wins over `..` and `.`.
@@ -201,6 +201,20 @@ fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comm
             lx.comment(line, lead, line_no);
             li += 1;
             continue; // blank and comment-only lines don't affect blocks (lex.block note)
+        }
+
+        // lex.stmt.2 (4): a line starting with `.name` continues the previous statement
+        // (a chained call); the statement's newline is taken back.
+        if lx.open.is_empty()
+            && !continuing
+            && line[lead] == '.'
+            && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+            && matches!(lx.tokens.last().map(|t| &t.tok), Some(Tok::Newline))
+            && lx.tokens.len() >= 2
+            && !matches!(lx.tokens[lx.tokens.len() - 2].tok, Tok::Indent | Tok::Dedent)
+        {
+            lx.tokens.pop();
+            continuing = true;
         }
 
         if lx.open.is_empty() && !continuing {

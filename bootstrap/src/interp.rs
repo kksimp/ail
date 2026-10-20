@@ -36,9 +36,11 @@ pub use random::seed as set_seed;
 pub use stdlib::set_program;
 mod prop;
 mod testing;
+mod generate;
 mod ui;
 pub use prop::PropInfo;
 pub use testing::run_tests;
+pub use generate::generate;
 pub use trace::{render_trap, take_options as take_trace_options, option_words as trace_option_words, take_snapshot};
 
 use builtins::{Key, Table, map_value};
@@ -451,7 +453,7 @@ fn has_defer(b: &Block) -> bool {
     }
     b.iter().any(|s| match s {
         Stmt::Defer(..) => true,
-        Stmt::While { body, .. } | Stmt::For { body, .. } => has_defer(body),
+        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } => has_defer(body),
         Stmt::Let { value, otherwise, .. } => {
             in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
         }
@@ -1131,7 +1133,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let body = f.body.as_ref().expect("checked: the function has a body");
         let mut outcome = self.block(body, env);
-        // own.uniq.3: a `move` parameter owns its value until the call ends.
+        // own.uniq.3: a `move` parameter, or a `move self` receiver
+        // (own.move.6), owns its value until the call ends.
+        if self.has_unique && f.receiver.is_some_and(|r| r.moved) {
+            let v = std::mem::replace(&mut env[0].1, Value::Unit);
+            keep_first(&mut outcome, self.release(v, pos).map_err(Exit::from));
+        }
         if self.has_unique && f.params.iter().any(|p| p.moved) {
             let first = usize::from(f.receiver.is_some());
             for (k, _) in f.params.iter().enumerate().filter(|(_, p)| p.moved) {
@@ -1258,11 +1265,15 @@ impl<'a, W: Write> Interp<'a, W> {
         result
     }
 
-    /// Whether a value is unique and so needs releasing (own.uniq.3).
+    /// Whether a value is unique and so needs releasing (own.uniq.3). A
+    /// list or map is when its elements are (own.uniq.8); they all have one
+    /// type, so the first present one decides.
     fn is_unique(&self, v: &Value) -> bool {
         match v {
             Value::Struct(s, _) => self.prog.structs[*s].unique,
             Value::Enum(e, _, _) => self.prog.enums[*e].unique,
+            Value::List(items) => items.iter().find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
+            Value::Map(t) => t.entries().map(|(_, x)| x).find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
             _ => false,
         }
     }
@@ -1274,9 +1285,22 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(());
         }
         let mut v = v;
-        let con = match &v {
-            Value::Struct(s, _) => Con::Struct(*s),
-            Value::Enum(e, _, _) => Con::Enum(*e),
+        let con = match v {
+            Value::Struct(s, _) => Con::Struct(s),
+            Value::Enum(e, _, _) => Con::Enum(e),
+            // own.uniq.8: a list's elements, or a map's values, last first.
+            Value::List(items) => {
+                for x in Rc::unwrap_or_clone(items).into_iter().rev() {
+                    self.release(x, pos)?;
+                }
+                return Ok(());
+            }
+            Value::Map(t) => {
+                for x in t.val_list().into_iter().rev() {
+                    self.release(x, pos)?;
+                }
+                return Ok(());
+            }
             _ => unreachable!("a unique value"),
         };
         if let Some(drop) = self.resolved.std.drop
@@ -1340,6 +1364,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.for_loop(var, iter, body, env)?;
                 }
             }
+            Stmt::With { mutex, var, body, pos, .. } => self.with_block(mutex, var, body, *pos, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
             Stmt::Return(value, pos) => {
@@ -1445,6 +1470,15 @@ impl<'a, W: Write> Interp<'a, W> {
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
             Value::Set(t) => Rc::new(t.key_list()),
+            // conc.share.7: each value received, until the channel is closed and empty.
+            Value::Handle(Handle::Channel(c)) => {
+                while let Some(v) = self.chan_next(c, iter.pos())? {
+                    if !self.loop_body(var, v, body, env)? {
+                        break;
+                    }
+                }
+                return Ok(());
+            }
             other => unreachable!("checked: iterable, found {other:?}"),
         };
         for item in items.iter() {
@@ -1490,11 +1524,46 @@ impl<'a, W: Write> Interp<'a, W> {
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
+                Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
         };
         for item in items.iter() {
             env.push((&c.var, item.clone()));
+            let r = match &c.cond {
+                Some(cond) => match self.eval(cond, env) {
+                    Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
+                    Ok(_) => Ok(true),
+                    Err(e) => Err(e),
+                },
+                None => self.comp(rest, elem, value, set, env, acc),
+            };
+            env.pop();
+            match r {
+                Ok(true) | Err(Exit::Continue) => {}
+                Ok(false) | Err(Exit::Break) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
+    }
+
+    /// A comprehension clause over a channel: one element per value
+    /// received, until it is closed and empty (conc.share.7, expr.comp.3).
+    #[allow(clippy::too_many_arguments)]
+    fn comp_channel(
+        &mut self,
+        ch: usize,
+        c: &'a CompFor,
+        rest: &'a [CompFor],
+        elem: &'a Expr,
+        value: Option<&'a Expr>,
+        set: bool,
+        env: &mut Env<'a>,
+        acc: &mut (Vec<Value>, Table),
+    ) -> Flow<bool> {
+        while let Some(item) = self.chan_next(ch, c.iter.pos())? {
+            env.push((&c.var, item));
             let r = match &c.cond {
                 Some(cond) => match self.eval(cond, env) {
                     Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
@@ -2062,6 +2131,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 } else {
                     Value::Map(Rc::new(t))
                 }
+            }
+            Expr::Comp { elem, clauses, .. }
+                if clauses.len() == 1
+                    && clauses[0].par
+                    && let Some(v) = self.par_comp(elem, &clauses[0], env)? =>
+            {
+                v
             }
             Expr::Comp { kind, elem, value, clauses, .. } => {
                 let mut acc = (Vec::new(), Table::default());

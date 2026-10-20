@@ -19,9 +19,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering as AtomicOrdering};
 
 use super::{Env, Failure, Flow, Interp, Table, Trap, Value, build};
-use crate::ast::{Block, Expr, FnDecl, Program, Stmt};
+use crate::ast::{Block, CompFor, Expr, FnDecl, Program, Stmt};
 use crate::check::Resolved;
-use crate::check::parallel::{Outcome, Plan, analyze, pure_fns};
+use crate::check::parallel::{Outcome, Plan, analyze, analyze_comps, pure_fns};
 use crate::diag::Pos;
 use crate::fasthash::FastMap as HashMap;
 use crate::num::Num;
@@ -90,11 +90,14 @@ pub(super) fn plans(prog: &Program, resolved: &Resolved) -> Option<Rc<Plans>> {
     if mode == Mode::Off || threads() < 2 {
         return None;
     }
-    if mode == Mode::ParOnly && !has_par(prog) {
+    // conc.par.12: `par for` comprehensions the checker accepted.
+    let comps = analyze_comps(prog, resolved);
+    if mode == Mode::ParOnly && !has_par(prog) && comps.is_empty() {
         return None;
     }
     let plans: Plans = analyze(prog, resolved)
         .into_iter()
+        .chain(comps)
         .filter(|v| match v.outcome {
             Outcome::Sequential => false,
             Outcome::Asserted => true,
@@ -109,7 +112,7 @@ fn has_par(prog: &Program) -> bool {
     fn block(b: &Block) -> bool {
         b.iter().any(|s| match s {
             Stmt::For { par: true, .. } => true,
-            Stmt::For { body, .. } | Stmt::While { body, .. } => block(body),
+            Stmt::For { body, .. } | Stmt::While { body, .. } | Stmt::With { body, .. } => block(body),
             Stmt::Expr(Expr::If { branches, els, .. }) => {
                 branches.iter().any(|(_, b)| block(b)) || els.as_ref().is_some_and(|b| block(b))
             }
@@ -448,6 +451,141 @@ fn chunk<'a>(
         }
     }
     Some(Chunk { elements, sums })
+}
+
+impl<'a, W: io::Write> Interp<'a, W> {
+    /// conc.par.12: `[elem par for c.var in c.iter if c.cond]` with a plan:
+    /// the elements computed on the pool, in order. `None` without a plan,
+    /// and the caller evaluates it as a plain comprehension.
+    pub(super) fn par_comp(&mut self, elem: &'a Expr, c: &'a CompFor, env: &mut Env<'a>) -> Flow<Option<Value>> {
+        let Some(plan) = self.par.as_ref().and_then(|p| p.get(&c.var_pos)).cloned() else { return Ok(None) };
+        let items: Vec<Value> = match &c.iter {
+            Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } => {
+                let lo = self.eval(lo, env)?.int();
+                let hi = self.eval(hi, env)?.int();
+                let hi = if *inclusive { hi } else { hi.saturating_sub(1) };
+                if lo > hi { Vec::new() } else { (lo..=hi).map(Value::Int).collect() }
+            }
+            iter => match self.eval(iter, env)? {
+                Value::List(items) => items.to_vec(),
+                Value::Set(t) => t.key_list(),
+                other => unreachable!("checked: iterable, found {other:?}"),
+            },
+        };
+        let threads = threads();
+        if items.len() >= 2 * threads
+            && let Some(out) = self.comp_on_pool(&plan, threads, elem, c, &items, env)
+        {
+            log(c.var_pos, &format!("comprehension: {} elements on {threads} threads", items.len()));
+            return Ok(Some(Value::List(Rc::new(out))));
+        }
+        log(c.var_pos, &format!("comprehension: {} elements in order", items.len()));
+        // conc.par.11: in order, from the same items.
+        let mut out = Vec::with_capacity(items.len());
+        for item in items {
+            env.push((&c.var, item));
+            let r = comp_element(self, elem, c, env);
+            env.pop();
+            match r {
+                Ok(Some(v)) => out.push(v),
+                Ok(None) | Err(super::Exit::Continue) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(Some(Value::List(Rc::new(out))))
+    }
+
+    /// The elements computed by `threads` workers, in order; `None` if
+    /// they must be computed in order instead (conc.par.11).
+    fn comp_on_pool(
+        &mut self,
+        plan: &Plan,
+        threads: usize,
+        elem: &'a Expr,
+        c: &'a CompFor,
+        items: &[Value],
+        env: &mut Env<'a>,
+    ) -> Option<Vec<Value>> {
+        let mut captures: Vec<(&'a str, Plain)> = Vec::new();
+        for name in &plan.captures {
+            if let Some((n, v)) = env.iter().rev().find(|(n, _)| *n == name.as_str()) {
+                captures.push((*n, plain(v)?));
+            }
+        }
+        let items: Vec<Plain> = items.iter().map(plain).collect::<Option<_>>()?;
+        let chunks = (threads * CHUNKS_PER_THREAD).min(items.len());
+        let bounds: Vec<(usize, usize)> =
+            (0..chunks).map(|k| (k * items.len() / chunks, (k + 1) * items.len() / chunks)).collect();
+        let next = AtomicUsize::new(0);
+        let failed = AtomicBool::new(false);
+        let out: Vec<std::sync::Mutex<Option<Vec<Plain>>>> = (0..chunks).map(|_| std::sync::Mutex::new(None)).collect();
+        let (prog, resolved, depth) = (self.prog, self.resolved, self.depth);
+        std::thread::scope(|s| {
+            for _ in 0..threads.min(chunks) {
+                let (next, failed, out, captures, items, bounds) = (&next, &failed, &out, &captures, &items, &bounds);
+                let spawned = std::thread::Builder::new().stack_size(WORKER_STACK).spawn_scoped(s, move || {
+                    let mut it = build(prog, resolved, io::sink());
+                    it.depth = depth;
+                    let mut env: Env<'a> = captures.iter().map(|(n, p)| (*n, value(p))).collect();
+                    loop {
+                        let k = next.fetch_add(1, AtomicOrdering::Relaxed);
+                        if k >= bounds.len() || failed.load(AtomicOrdering::Relaxed) {
+                            return;
+                        }
+                        let (lo, hi) = bounds[k];
+                        let mut done = Vec::with_capacity(hi - lo);
+                        for item in &items[lo..hi] {
+                            env.push((&c.var, value(item)));
+                            let r = comp_element(&mut it, elem, c, &mut env);
+                            env.pop();
+                            match r {
+                                Ok(Some(v)) => match plain(&v) {
+                                    Some(p) => done.push(p),
+                                    None => {
+                                        failed.store(true, AtomicOrdering::Relaxed);
+                                        return;
+                                    }
+                                },
+                                Ok(None) | Err(super::Exit::Continue) => {}
+                                Err(_) => {
+                                    failed.store(true, AtomicOrdering::Relaxed);
+                                    return;
+                                }
+                            }
+                        }
+                        *out[k].lock().unwrap_or_else(|e| e.into_inner()) = Some(done);
+                    }
+                });
+                if spawned.is_err() {
+                    failed.store(true, AtomicOrdering::Relaxed);
+                }
+            }
+        });
+        if failed.load(AtomicOrdering::Relaxed) {
+            return None;
+        }
+        let mut all = Vec::with_capacity(items.len());
+        for m in out {
+            all.extend(m.into_inner().unwrap_or_else(|e| e.into_inner())?.iter().map(value));
+        }
+        Some(all)
+    }
+}
+
+/// One element of a `par for` comprehension with its variable bound:
+/// `None` when the filter rejects it (expr.comp.3).
+fn comp_element<'a, W: io::Write>(
+    it: &mut Interp<'a, W>,
+    elem: &'a Expr,
+    c: &'a CompFor,
+    env: &mut Env<'a>,
+) -> Flow<Option<Value>> {
+    if let Some(cond) = &c.cond
+        && !matches!(it.eval(cond, env)?, Value::Bool(true))
+    {
+        return Ok(None);
+    }
+    it.eval(elem, env).map(Some)
 }
 
 /// A task that runs on its own thread outside the scheduler (conc.par.10):

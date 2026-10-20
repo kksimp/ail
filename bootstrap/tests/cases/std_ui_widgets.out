@@ -1,0 +1,32 @@
+acb 2 9 std.ui.widgets.Action.Submit
+| name: acb      |
+["alpha.ail", "gamma.ail", "delta.ail"]
+gamma.ail std.ui.widgets.Action.Submit
+| alpha.ail      |
+| gamma.ail      |
+| delta.ail      |
+std.ui.widgets.Action.Submit
+alpha.ail
+| no match       |
+|                |
+|                |
+true
+std.ui.widgets.Action.Submit std.ui.widgets.Action.Ignored
+0 std.ui.widgets.Action.Cancel
+std.ui.widgets.Action.Submit
+1
+4 2
+0
+|one             |
+|two             |
+|three           |
+|+ src           |
+|  README.md     |
+|                |
+main.ail std.ui.widgets.Action.Submit
+|- src           |
+|    main.ail    |
+|  README.md     |
+true
+1
+std.ui.widgets.Action.Ignored

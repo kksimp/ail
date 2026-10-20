@@ -196,6 +196,60 @@ fn main()
     print(m.get())
 ```
 
+**conc.share.6** — `with m as mut x` followed by a block holds mutex `m`
+(a `Mutex[T]`) for the block: it waits and takes the lock as `m.lock()`
+does, binds `x`, a `mut` local of type `T`, to a copy of the value, and runs
+the block. When the block ends by any path (its end, `break`, `continue`,
+`return` or `?`), the value of `x` is stored in `m` and the lock is
+released. If the block traps, the lock is released and `m` keeps the value
+it had before the block. The block MUST NOT name `m` again. A `with` whose
+`m` isn't a `Mutex`, a `with m as x` without `mut`, and a use of `m` in the
+block are compile-time errors. `with` is reserved (`lex.kw.1`). *(ADR 0301)*
+
+```ail
+fn add(m Mutex[int], n int)
+    with m as mut x
+        x += n
+
+fn main()
+    m := Mutex(0)
+    g := TaskGroup()
+    for i in 1..=4
+        g.add(spawn add(m, i))
+    g.wait_all() else
+        print("a task trapped")
+    print(m.get())
+```
+
+```ail error=conc.share.6
+fn main()
+    m := Mutex(0)
+    with m as x
+        print(x)
+```
+
+**conc.share.7** — `for v in ch`, where `ch` is a `Channel[T]`, receives
+values in turn as `ch.recv()` does and runs the body for each, ending when
+the channel is closed and empty; a comprehension clause `for v in ch` does
+the same (`expr.comp.2`). Like `recv`, it waits while the channel is empty
+and open, so a channel nobody closes makes the loop wait for ever, which is
+a deadlock once no other task can run (`conc.task.7`). A `break` leaves the
+values not yet received in the channel. *(ADR 0300)*
+
+```ail
+fn produce(out Channel[int])
+    for i in 1..=3
+        out.send(i)
+    out.close()
+
+fn main() !
+    ch := Channel[int](2)
+    p := spawn produce(ch)
+    for v in ch
+        print(v)
+    p.wait()?
+```
+
 ## Parallel execution
 
 **conc.par.1** — An implementation MAY run the iterations of an independent
@@ -208,8 +262,9 @@ the trap of the lowest-index trapping iteration. *(ADR 0236)*
 (1) has no `io`, `unsafe` or `spawn` effect and no capability, through every
 call (`eff.infer.3`); (2) doesn't leave the loop early: no `break` of this
 loop, `return`, `?`, or `else return`; (3) calls no method of a task,
-`TaskGroup`, `Channel` or `Mutex` handle, directly or through the functions
-it calls; and
+`TaskGroup`, `Channel` or `Mutex` handle, receives from no channel with
+`for v in ch` and holds no mutex with `with`, directly or through the
+functions it calls; and
 (4) writes only places that `conc.par.3` or `conc.par.4` allow, or places
 rooted at names declared in the body (including the loop variable). Calls
 with a `mut` argument and methods with `mut self` write their place. *(ADR 0236)*
@@ -309,3 +364,34 @@ fn main()
     print("{squares[63]} {total}")
 ```
 
+**conc.par.12** — `[e par for x in xs if c]` means `[e for x in xs if c]`
+(`expr.comp.1`) and computes the elements on the thread pool when the
+`par for` loop of the same body would run there (`conc.par.8–9`); the list
+is in source order and identical to the sequential one (`conc.par.1`). The
+comprehension MUST be a list comprehension with that one clause. Its
+element and filter MUST meet `conc.par.2` (1)–(3) and write nothing outside
+themselves; one that provably doesn't, like an element that prints or a
+clause over a channel, is a compile-time error. A trap, or a value the pool
+can't copy, makes it compute the elements in order (`conc.par.11`). A short
+list, one thread, or `--deterministic`, computes them in order.
+*(ADR 0302)*
+
+```ail
+fn square(x int) int
+    x * x
+
+fn main()
+    xs := [n for n in 1..=64]
+    squares := [square(x) par for x in xs]
+    print("{squares[0]} {squares[63]}")
+```
+
+```ail error=conc.par.12
+fn show(x int) int
+    print(x)
+    x
+
+fn main()
+    ys := [show(x) par for x in [1, 2, 3]]
+    print(ys)
+```

@@ -24,7 +24,7 @@ fn keep(f File) File
 fn main()
     b := Box(f: File(fd: 1))
     g := b.f
-    xs := [File(fd: 2)]
+    xs := Set[File]()
     r := ref File(fd: 3)
     h := File(fd: 4)
     close(h)

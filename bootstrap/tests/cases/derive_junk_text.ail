@@ -1,0 +1,14 @@
+## Generated text holds only method definitions (ct.gen.1).
+@derive(derive_junk) trait Junk
+    fn junk(self) int
+
+fn derive_junk(t TypeInfo) str ! DeriveError
+    "x := 1\nfn junk(self) int\n    1\n"
+
+struct Pair
+    a int
+
+impl Junk for Pair
+
+fn main()
+    print(Pair(a: 1).junk())

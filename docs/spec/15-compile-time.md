@@ -5,8 +5,10 @@ Chapter key: `ct`
 > **Status:** Drafted (partial). Specified: constants computed by calling
 > functions, the rules of compile-time evaluation, derive generators and
 > generated code. The bootstrap implements `ct.const.1–3` (with `if`,
-> `match` and `?` in a constant left to a function, `bootstrap.unsupported`);
-> `ct.eval.3–4`, `ct.derive.*` and `ct.gen.*` are not implemented yet. Design
+> `match` and `?` in a constant left to a function, `bootstrap.unsupported`),
+> `ct.derive.1–4` and `ct.gen.1–4` (ADRs 0306–0309; a derive's step and
+> memory limits, `ct.eval.3`, aren't counted yet); `ct.eval.4` is not
+> implemented yet. Design
 > notes: [compile-time-execution.md](../design/compile-time-execution.md),
 > [metaprogramming.md](../design/metaprogramming.md).
 
@@ -117,7 +119,7 @@ the trait (`trait.derive.1`). If the trait has a derive generator, the
 generator is called at compile time with the `TypeInfo` of `T`, and the text
 it returns is the body of the `impl` (`ct.gen.1`). *(ADR 0227)*
 
-```ail skip=bootstrap
+```ail
 @derive(derive_describe) trait Describe
     fn describe(self) str
 
@@ -134,21 +136,65 @@ struct Version
 impl Describe for Version
 
 fn main()
-    print(Version(1, 2).describe())    # Version with major, minor
+    print(Version(major: 1, minor: 2).describe()) # Version with major, minor
 ```
 
+The bootstrap runs generators while it loads the program, before checking
+it: a generator, and what it calls, can't use what other derives generate.
+*(ADR 0306)*
+
 **ct.derive.3** — A derive generator MUST be compile-time-safe
-(`ct.const.2`), and its evaluation follows `ct.eval.1–4`. *(ADR 0227)*
+(`ct.const.2`), and its evaluation follows `ct.eval.1–4`. The diagnostic
+names the chain of calls to each forbidden effect. *(ADR 0227, ADR 0306)*
+
+```ail error=ct.derive.3
+@derive(derive_loud) trait Loud
+    fn loud(self) str
+
+fn derive_loud(t TypeInfo) str ! DeriveError
+    print("deriving {t.name}")
+    "fn loud(self) str\n    \"{t.name}!\"\n"
+
+struct Bell
+    size int
+
+impl Loud for Bell
+
+fn main()
+    print(Bell(size: 1).loud())
+```
 
 **ct.derive.4** — A generator's `DeriveError`, a trap in it, and generated
 code that is not valid (`ct.gen.1–2`) are compile-time errors reported at the
 deriving `impl`. *(ADR 0227)*
 
+```ail error=ct.derive.4
+@derive(derive_size) trait Size
+    fn size(self) int
+
+fn derive_size(t TypeInfo) str ! DeriveError
+    if t.kind == TypeKind.Enum
+        return DeriveError("`Size` needs a struct; `{t.name}` is an enum")
+    "fn size(self) int\n    {t.fields.len()}\n"
+
+enum Light
+    On
+    Off
+
+impl Size for Light
+
+fn main()
+    print(Light.On.size())
+```
+
 ## Generated code
 
 **ct.gen.1** — Generated text MUST consist only of method definitions for the
-deriving `impl`. It is parsed, laid out canonically, and checked by every
-rule that applies to a hand-written `impl` of the trait. *(ADR 0228)*
+deriving `impl` and associated functions `fn T.name(...)` of its type `T`,
+which are declared at the top level of the `impl`'s module. It is parsed,
+laid out canonically, and checked by every rule that applies to a
+hand-written `impl` of the trait and to a hand-written associated function.
+*(ADR 0228, ADR 0307)*
 
 **ct.gen.2** — Generated code resolves names in the scope of the deriving
 `impl`: its module, that module's imports, and the private members the
@@ -159,7 +205,27 @@ qualified name. *(ADR 0228)*
 deriving `impl`, with a note at the position in the generated text, written
 `gen:impl:TYPE.TRAIT:LINE:COL`. *(ADR 0228)*
 
+```ail error=type.struct.6
+@derive(derive_first) trait First
+    fn first(self) str
+
+fn derive_first(t TypeInfo) str ! DeriveError
+    "fn first(self) str\n    {t.name}.nope\n"
+
+struct Pair
+    a int
+
+impl First for Pair
+
+fn main()
+    print(Pair(a: 1).first())
+```
+
 **ct.gen.4** — Each generated method has the stable id it would have if
 written by hand (`api.id.*`) and an origin naming the `impl` and the
 generator. `ail api --expanded` includes generated methods, their origin,
-and their text. *(ADR 0228)*
+and their text. *(ADR 0228)* In the bootstrap, each generated function sits
+under its `impl`'s `methods` with `origin` (`kind`, `impl`, `generator`,
+`at`) and `text`; the `impl` gets `derived_by`, the generator's id, or
+`built-in` for an empty `impl` of `Eq`, `Ord` or `ToStr` (OQ-096). Without
+`--expanded` the outline is unchanged. *(ADR 0309)*

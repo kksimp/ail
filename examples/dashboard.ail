@@ -1,0 +1,128 @@
+## A small dashboard on `std.ui.widgets`: the files of a directory with
+## their sizes, rescanned by a task, and the start of the selected file.
+## `ail run examples/dashboard.ail` prints one screen; add `--window` to
+## open it in a window (Up/Down choose, R rescans, Esc quits).
+use std.env
+use std.fs
+use std.path
+use std.ui
+use std.ui.widgets
+
+COLS := 60
+ROWS := 14
+
+struct Entry
+    name str
+    size int
+
+## Each file of `dir` and its size in bytes, sorted by name.
+fn scan(dir str) List[Entry] ! fs.IoError
+    mut out := List[Entry]()
+    for name in fs.list_dir(dir)?
+        text := fs.read_text(path.join(dir, name)) else continue
+        out.push(Entry(name: name, size: text.len()))
+    out
+
+struct Dashboard
+    dir str
+    entries List[Entry]
+    list widgets.ListView
+    preview widgets.Pane
+    refresh widgets.Button
+    scans int
+
+fn Dashboard.new(dir str) Dashboard
+    Dashboard(
+        dir: dir,
+        entries: [],
+        list: widgets.ListView.new([]),
+        preview: widgets.Pane.new([]),
+        refresh: widgets.Button(label: "R rescan", focused: false),
+        scans: 0,
+    )
+
+## Rescans the directory on a task and shows the result.
+fn Dashboard.rescan(mut self)
+    t := spawn scan(dir)
+    entries = t.wait() else []
+    scans += 1
+    mut rows := List[str]()
+    for e in entries
+        rows.push("{e.name.pad_right(24, ' ')}{e.size} bytes")
+    list.items = rows
+    list.selected = list.selected.min((rows.len() - 1).max(0))
+    show_preview()
+
+fn Dashboard.show_preview(mut self)
+    if list.selected >= entries.len()
+        preview = widgets.Pane.new([])
+        return
+    text := fs.read_text(path.join(dir, entries[list.selected].name)) else "(unreadable)"
+    preview = widgets.Pane.new(text.split("\n").take(6))
+
+LIST := widgets.Rect(col: 0, row: 1, cols: COLS, rows: 4)
+PREVIEW := widgets.Rect(col: 0, row: 6, cols: COLS, rows: 6)
+BUTTON := widgets.Rect(col: 0, row: 13, cols: 12, rows: 1)
+
+fn Dashboard.render(self, theme Map[str, int]) List[widgets.Run]
+    bar := widgets.Run(
+        col: 0,
+        row: 0,
+        text: widgets.fit(" {path.base(dir)}: {entries.len()} files, scan {scans}", COLS),
+        fg: widgets.color(theme, "status_fg"),
+        bg: widgets.color(theme, "status_bg"),
+        bold: true,
+    )
+    mut runs := [bar]
+    runs.extend(list.render(LIST, theme))
+    runs.push(widgets.Run(
+        col: 0,
+        row: 5,
+        text: widgets.fit(" preview", COLS),
+        fg: widgets.color(theme, "gutter_fg"),
+        bg: widgets.color(theme, "bg"),
+        bold: false,
+    ))
+    runs.extend(preview.render(PREVIEW, theme))
+    runs.extend(refresh.render(BUTTON, theme))
+    runs
+
+## One event: true to quit.
+fn Dashboard.on_event(mut self, ev ui.Event) bool
+    k := match ev
+        Close => "escape"
+        Key(k, _, _, _) => k
+        Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => ""
+    if k == "escape"
+        return true
+    if k == "r"
+        rescan()
+        return false
+    if refresh.on_event(ev, BUTTON) == widgets.Action.Submit
+        rescan()
+    elif list.on_event(ev, LIST) == widgets.Action.Changed
+        show_preview()
+    false
+
+fn window(mut d Dashboard) ! ui.UiError
+    mut w := ui.open("dashboard", COLS, ROWS)?
+    theme := Map[str, int]()
+    mut quit := false
+    while not quit
+        w.clear(widgets.color(theme, "bg"))
+        widgets.draw_runs(mut w, d.render(theme))
+        w.present()
+        quit = d.on_event(w.next_event())
+    w.close()
+
+fn main()
+    dir := path.join(path.dir(env.program()), "data")
+    mut d := Dashboard.new(dir)
+    d.rescan()
+    if env.args().contains("--window")
+        window(mut d) else err
+            print("no window ({err.kind}); printing the screen instead")
+    d.list.on_event(Key(key: "down", ctrl: false, alt: false, shift: false), LIST)
+    d.show_preview()
+    for row in widgets.text_rows(d.render(Map[str, int]()), COLS, ROWS)
+        print(row)

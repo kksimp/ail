@@ -66,8 +66,23 @@ statement with a comment inside it keeps its source line breaks, indented
 per fmt.indent, with trailing commas per fmt.comma. Comment text is not
 changed.
 
-**fmt.attr**: attributes stay on their declaration's line (ADR 0083). The
-formatter doesn't yet move a long line's attributes onto their own line.
+**fmt.chain** (ADR 0323): a line over 100 characters with two or more
+chained calls at its top level and no operator after the first (`xs.f().g()`)
+is split into the head and one `.method(...)` per line, indented one level; a
+call still too long splits by fmt.wrap. A chain that fits is joined.
+
+```ail
+names := people
+    .filter(|p| p.age >= 18)
+    .map(|p| p.name)
+    .sorted()
+```
+
+**fmt.attr** (ADR 0083, ADR 0324): attributes are sorted by name and stay on
+their declaration's line when the whole line fits in 100 characters. If it
+doesn't, each goes on its own line directly above, and the declaration then
+wraps by fmt.wrap. No blank line separates an attribute from its declaration; a
+comment between them leaves the layout as written.
 
 **fmt.newline**: lines end in `\n`; trailing whitespace is removed. A
 statement containing a multi-line string (`lex.str.3`) is written exactly as
@@ -98,10 +113,14 @@ and +0.6%), which have none today; `interp.ail` gains 0.3% from three
 statements over 100 characters being split. The other four examples were
 already canonical.
 
+Chains and attributes (ADRs 0323–0324): `ail fmt` changes no file under
+`examples/`, `tools/edit/` or `bootstrap/tests/cases/` (already canonical), so
+the measured change is 0 tokens (0.00%, budget 1%).
+
 ## Not yet done
 
-- Splitting a long line with no list in it (a long binary expression or
-  string) at an operator.
-- Moving attributes onto their own line when a line is too long (ADR 0083).
+- Splitting a long line with no list or chain in it (a long binary expression
+  or string) at an operator. A chain with an operator after its first call
+  (`a.b() or c.d()`) is also left to fmt.wrap.
 - Formatting files that don't parse.
 - Normalising the spacing inside `{...}` in interpolated strings.
