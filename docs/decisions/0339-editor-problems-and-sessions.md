@@ -29,7 +29,7 @@ next, Esc closes. With nothing to report it says so in the message line.
 The search prompt asks what to find (the word at the cursor to start),
 Enter, then the replacement, Enter. The pane previews every changed line
 of the directory's `.ail` files (open tabs as edited, as in project
-search) as `PATH:L:C: old → new`, with the line and file counts in the
+search) as `PATH:L:C: old -> new`, with the line and file counts in the
 title; Enter jumps to a row. Ctrl-Enter applies it to the buffers: each
 file is opened as a tab if it isn't one and replaced as one undo step.
 Nothing is saved, so the person reviews the tabs and saves.
