@@ -6,6 +6,7 @@
 mod api;
 mod ast;
 mod check;
+mod derive;
 mod diag;
 mod explain;
 mod fasthash;
@@ -74,8 +75,10 @@ options:
   --trace[=calls|effects|all]
                 with run: write each call, return, effect, task and contract
                 check to standard error (trace.run.1); --trace-limit N caps
-                the events shown (default 1000) before a summary line
-  --watch NAME  with run: show each assignment to a `mut` variable NAME (trace.watch.1)
+                the events shown (default 1000) before a summary line; with
+                test, only a failing test reports its events (trace.test.1)
+  --watch NAME  with run or test: show each assignment to a `mut` variable NAME,
+                through `mut` arguments and methods too (trace.watch.1, trace.watch.3)
   --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
 
@@ -133,8 +136,8 @@ fn main() -> ExitCode {
     };
     // trace.run.1, trace.watch.1, trace.snap.3: `ail run`'s tracing options.
     match interp::take_trace_options(&mut rest, json) {
-        Ok(true) if rest.first() != Some(&"run") => {
-            eprintln!("error: `--trace`, `--watch` and `--verbose` work with `ail run` (trace.run.1)");
+        Ok(true) if !matches!(rest.first(), Some(&"run" | &"test")) => {
+            eprintln!("error: `--trace`, `--watch` and `--verbose` work with `ail run` and `ail test` (trace.run.1)");
             return ExitCode::from(2);
         }
         Ok(_) => {}
@@ -468,7 +471,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         .spawn(move || {
             let outcomes = interp::run_tests(&program, &resolved, cases, seed)
                 .into_iter()
-                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop, o.snapshot))
+                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop, o.snapshot, o.trace))
                 .collect::<Vec<_>>();
             // test.cover.1: what the tests ran, read once they are all done.
             let cover = coverage.map(|_| interp::limits::report(&program, &cover_map));
@@ -485,6 +488,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         // test.doc.2-3: report under the example's name, at its own line.
         o.0 = t.name.clone();
         o.5 = None; // the example is generated code; its frame would name `doc_example_N`
+        o.6.clear();
         if o.2.is_none() {
             o.2 = doctest::check_output(t, &o.3);
             o.1 = diag::Pos { line: t.line(), col: 1 };
@@ -494,7 +498,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
     }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;
-    for (name, pos, failure, output, prop, snapshot) in &outcomes {
+    for (name, pos, failure, output, prop, snapshot, trace) in &outcomes {
         if json {
             let (status, message) = match failure {
                 Some(m) => ("fail", m.as_str()),
@@ -516,6 +520,10 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
             if let Some(snap) = snapshot {
                 line.push_str(&format!(",\"snapshot\":{}", diag::json_str(snap)));
             }
+            // trace.test.1: a failing test's events, as the objects `ail run --trace --json` writes.
+            if !trace.is_empty() {
+                line.push_str(&format!(",\"trace\":[{}]", trace.join(",")));
+            }
             println!("{line}}}");
         } else {
             let tail = match prop {
@@ -533,6 +541,9 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
                         for line in snap.lines() {
                             println!("  {line}");
                         }
+                    }
+                    for line in trace {
+                        println!("  {line}");
                     }
                     for line in output.lines() {
                         println!("  | {line}");

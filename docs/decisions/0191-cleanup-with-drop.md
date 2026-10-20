@@ -61,7 +61,7 @@ bootstrap that copies values.
 ## Consequences
 
 - `Drop` joins the prelude traits.
-- `List[File]` and generic helpers over files are rejected for now (OQ-050).
+- `List[File]` and generic helpers over files are rejected for now (OQ-050). Amended by [ADR 0318](0318-unique-values-in-lists-and-maps.md): lists and maps may now hold unique values.
 - The interpreter releases values only when the program declares a unique
   type, and runs `defer` only when the program uses it; other programs pay
   one flag test per block.

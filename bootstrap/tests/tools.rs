@@ -76,9 +76,10 @@ fn editor_key_table_matches_the_readme() {
     assert!(readme.contains(table.trim_end()), "tools/edit/README.md's key table differs from `--keys`; paste its output:\n{table}");
 }
 
-/// The agent panel against the real `ail` outputs (ADRs 0312–0313): Ctrl-I
-/// info, Shift-F5 trace with a trap, Ctrl-Shift-E failure paths and
-/// Ctrl-Shift-C coverage on a fixture, so an output change breaks a test.
+/// The agent panel against the real `ail` outputs (ADRs 0312–0313, 0331):
+/// Ctrl-I info, Shift-F5 trace with a trap, Ctrl-Shift-E failure paths,
+/// Ctrl-Shift-I program card and Ctrl-Shift-C coverage on a fixture, so an
+/// output change breaks a test.
 #[test]
 fn editor_agent_panel_reads_the_real_outputs() {
     let dir = std::env::temp_dir().join(format!("ail-edit-agent-{}", std::process::id()));
@@ -108,6 +109,12 @@ fn editor_agent_panel_reads_the_real_outputs() {
     for want in [" fn half fails with HalfError", "   8:16 return: HalfError", "   12:17 propagate half(): HalfError", "   18:15 handle (default) half(): HalfError"] {
         assert!(paths.contains(want), "failure paths lack {want:?}:\n{paths}");
     }
+    let card = screen(&["--key=ctrl+shift+i"]);
+    for want in [" program card ", " entry: main in agent.ail", " tests: halves", "   fn half(n int) int ! HalfError  [fail]", "       requires n >= 0", "       fails with HalfError"] {
+        assert!(card.contains(want), "program card lacks {want:?}:\n{card}");
+    }
+    let card_jump = screen(&["--key=ctrl+shift+i", "--key=down", "--key=down", "--key=down", "--key=down", "--key=down", "--key=enter"]);
+    assert!(card_jump.contains("Ln 5, Col 1"), "card jump:\n{card_jump}");
     let covered = screen(&["--key=ctrl+shift+c"]);
     assert!(covered.contains("\n  8!        return Odd(n)\n") && covered.contains("\n  9     n / 2\n") && covered.contains("| coverage: lines 2/7"), "coverage:\n{covered}");
     std::fs::remove_dir_all(&dir).ok();

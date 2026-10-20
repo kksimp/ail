@@ -1,0 +1,42 @@
+# own.uniq.8-9: lists and maps of unique values move, borrow and release.
+unique struct Conn
+    id int
+
+impl Drop for Conn
+    fn drop(mut self)
+        print("close {id}")
+
+fn Conn.bump(mut self)
+    id += 100
+
+fn count(xs List[Conn]) int
+    xs.len()
+
+fn keep(move xs List[Conn]) int
+    xs.len()
+
+fn main()
+    mut xs := [Conn(id: 1), Conn(id: 2)]
+    xs.insert(0, move Conn(id: 0))
+    mut more := [Conn(id: 3)]
+    xs.extend(move more)
+    print(count(xs))
+    xs[1].bump()
+    print(xs[1].id)
+    for mut c in xs
+        c.bump()
+    xs.swap(0, 3)
+    print([c.id for c in xs])
+    xs[0] = Conn(id: 7)
+    gone := xs.remove_at(1)
+    print("removed {gone.id}")
+    ys := xs
+    print(keep(move ys))
+    mut m := {"a": Conn(id: 8)}
+    m["b"] = Conn(id: 9)
+    m["a"] = Conn(id: 10)
+    if c := m.remove("b")
+        print("took {c.id}")
+    mut zs := [Conn(id: 11), Conn(id: 12)]
+    zs.clear()
+    print("end")

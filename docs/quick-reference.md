@@ -24,11 +24,12 @@
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
 ./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
 ./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
-./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
+./ail api --type FILE.ail L C   # type at a position (also --locals, --refs; `ail api DIR` and `--refs DIR FILE L C` cover a whole package)
+./ail api --expanded --text FILE.ail # also the code derives generated (ToJson, FromJson, @derive traits)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
-./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N)
+./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N; `ail test --trace` keeps a failing test's)
 ./ail run --watch n FILE.ail # each assignment to `mut` variable n, with value and position
 ./ail run --verbose FILE.ail # a trap shows every frame's values (default: 10 lines; --json: one object)
 ```
@@ -54,6 +55,7 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 - A statement ends at the end of its line, unless the line ends inside
   `(`, `[` or `{`, or after a binary operator or a comma.
 - `#` starts a comment. `##` starts a doc comment.
+- A line starting with `.name` continues the previous statement (chained calls); attributes may sit on their own lines above a `fn`.
 - Write the layout `ail fmt` writes ([formatting.md](design/formatting.md)):
   one space around binary operators and after `,` and `:`; none inside
   brackets, around `.` and `..`, or before a call's `(`; lines up to 100
@@ -534,6 +536,25 @@ Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
 `Obj(members)` (`JsonMember` has `key`, `value`). Write `Json.Num(1.0)` when
 the type isn't known. A program that declares its own `Json` keeps it.
 
+Derive the conversions of your own types (`json.derive.1-2`):
+
+```ail
+struct Todo
+    id str
+    hours float
+    tags List[str]
+    note str?              # may be missing; `none` writes `null`
+
+impl ToJson for Todo       # t.to_json() Json: an object of the fields in order
+impl FromJson for Todo     # Todo.from_json(j) Todo ! JsonError
+
+t := Todo.from_json(doc)?   # err.message: "missing hours", "expected a string, found number"
+doc.need("id")?.need_str()?  # the same checks by hand: need, need_str/num/int/bool/arr
+```
+
+Enums: a variant without fields is its name (`"Red"`); `FromJson` reads
+only those. `ail api --expanded FILE` prints the code a derive generated.
+
 ## Values and `mut`
 
 Assigning or passing a value copies it (cheaply): changing `b` after
@@ -580,8 +601,23 @@ f := File(fd: 3)
 close(move f)          # f can't be used after this
 ```
 
-A unique value can't be a list element, map value, `ref` contents or type
-argument yet (OQ-050).
+A `move self` method consumes its receiver; the call has no mark, and the
+receiver can't be used after it (own.move.6):
+
+```ail
+fn File.finish(move self) int
+    fd
+
+n := f.finish()        # f is moved
+```
+
+Lists and maps of a unique type are unique too (own.uniq.8-10).
+`xs.push(move x)`, `insert(i, move x)` and `extend(move ys)` move in;
+`pop()`, `remove_at(i)` and `m.remove(k)` move out; `xs[i]`, `m[k]` and
+`for x in xs` borrow in place. `first`, `last`, `min`, `max`, `sorted`,
+`take`, `get` and `values` would copy, so they are errors. A unique value
+still can't be a map key, set element, `ref` contents or type argument;
+task handles go in a `TaskGroup`, not a list.
 
 ## Modules
 

@@ -43,6 +43,27 @@ pub fn load(arg: &str) -> Result<(Program, Vec<Diagnostic>), String> {
     load_package(root, root_files, None)
 }
 
+/// Like `load` for the package directory `dir`, for a query about `target`
+/// (text `src`) in it (api.pkg.2). Also returns how many lines to add to a
+/// line of `target` to get a position in the program: 0 for a file of the
+/// root module, which is loaded first so nothing shifts, else its file base.
+pub fn load_in(dir: &str, target: &str, src: &str) -> Result<(Program, Vec<Diagnostic>, usize), String> {
+    let mut files = ail_files(Path::new(dir));
+    let want = std::fs::canonicalize(target).map_err(|e| format!("can't read {target}: {e}"))?;
+    let same = |f: &PathBuf| std::fs::canonicalize(f).is_ok_and(|c| c == want);
+    if let Some(at) = files.iter().position(same) {
+        let first = files.remove(at);
+        files.insert(0, first);
+        let (prog, diags) = load_package(PathBuf::from(dir), files, Some(src.to_string()))?;
+        return Ok((prog, diags, 0));
+    }
+    let (prog, diags) = load(dir)?;
+    let base = prog.files.iter().find(|f| same(&PathBuf::from(&f.path))).map(|f| f.base).ok_or_else(|| {
+        format!("{target} is not part of the package {dir}: no root file imports its module (api.pkg.2)")
+    })?;
+    Ok((prog, diags, base))
+}
+
 /// Like `load` for a single file whose text is `src` (for `ail api`).
 pub fn load_src(path: &str, src: &str) -> (Program, Vec<Diagnostic>) {
     let path = Path::new(path);
@@ -119,13 +140,32 @@ fn load_package(
     let end = Pos { line: files.len() * FILE_LINES, col: 1 };
     tokens.push(Token { tok: Tok::Eof, pos: end });
 
+    // ct.derive.2: a derive generator needs the parsed program, and its
+    // output is parsed again with it (`derive.rs`).
+    let again = (diags.is_empty() && crate::derive::wanted(&tokens)).then(|| (tokens.clone(), files.clone()));
+    let (mut prog, mut diags) = assemble(tokens, files, &packages, diags);
+    if let Some((tokens, files)) = again
+        && !diags.iter().any(|d| !d.warning)
+    {
+        (prog, diags) = crate::derive::expand(prog, diags, tokens, files, &|t, f| assemble(t, f, &packages, Vec::new()));
+    }
+    packages.finish(&mut prog, &mut diags);
+    Ok((prog, diags))
+}
+
+/// Parse the tokens of `files` after the prelude and resolve their names.
+fn assemble(
+    tokens: Vec<Token>,
+    files: Vec<SourceFile>,
+    packages: &crate::packages::Packages,
+    mut diags: Vec<Diagnostic>,
+) -> (Program, Vec<Diagnostic>) {
     let (mut prog, parse_diags) = crate::parser::parse_after_prelude(tokens);
     diags.extend(parse_diags);
     one_per_line(&mut diags);
     prog.files = files;
-    resolve(&mut prog, &mut diags, &packages);
-    packages.finish(&mut prog, &mut diags);
-    Ok((prog, diags))
+    resolve(&mut prog, &mut diags, packages);
+    (prog, diags)
 }
 
 /// The `.ail` files directly in `dir`, sorted (mod.unit.1).
@@ -880,7 +920,8 @@ pub fn report(files: &[SourceFile], diags: Vec<Diagnostic>, json: bool) {
         d.pos = local(d.pos);
         d.end = d.end.map(local);
         for n in d.notes.iter_mut() {
-            if index(n.pos) != fi {
+            // ct.gen.3: a note in generated code already gives its address.
+            if index(n.pos) != fi && !files[index(n.pos)].path.starts_with("gen:") {
                 n.message = format!("{} (in {})", n.message, files[index(n.pos)].path);
             }
             n.pos = local(n.pos);

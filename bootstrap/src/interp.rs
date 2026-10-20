@@ -37,9 +37,11 @@ pub use stdlib::set_program;
 pub use tasks::{schedule_seed, set_schedule};
 mod prop;
 mod testing;
+mod generate;
 mod ui;
 pub use prop::PropInfo;
 pub use testing::run_tests;
+pub use generate::generate;
 pub use trace::{render_trap, take_options as take_trace_options, option_words as trace_option_words, take_snapshot};
 
 use builtins::{Key, Table, map_value};
@@ -1116,7 +1118,19 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// Run `f`'s body in `env`, which holds its receiver and parameters; on
     /// return `env` holds just those again.
+    #[inline]
     fn run_body(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if self.tracing & trace::WATCH == 0 {
+            return self.run_body_inner(f, env, pos);
+        }
+        // trace.watch.3: the frame lives as long as the body.
+        self.watch_enter(f);
+        let result = self.run_body_inner(f, env, pos);
+        self.watch_leave();
+        result
+    }
+
+    fn run_body_inner(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
         self.depth += 1;
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
@@ -1133,7 +1147,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let body = f.body.as_ref().expect("checked: the function has a body");
         let mut outcome = self.block(body, env);
-        // own.uniq.3: a `move` parameter owns its value until the call ends.
+        // own.uniq.3: a `move` parameter, or a `move self` receiver
+        // (own.move.6), owns its value until the call ends.
+        if self.has_unique && f.receiver.is_some_and(|r| r.moved) {
+            let v = std::mem::replace(&mut env[0].1, Value::Unit);
+            keep_first(&mut outcome, self.release(v, pos).map_err(Exit::from));
+        }
         if self.has_unique && f.params.iter().any(|p| p.moved) {
             let first = usize::from(f.receiver.is_some());
             for (k, _) in f.params.iter().enumerate().filter(|(_, p)| p.moved) {
@@ -1260,11 +1279,15 @@ impl<'a, W: Write> Interp<'a, W> {
         result
     }
 
-    /// Whether a value is unique and so needs releasing (own.uniq.3).
+    /// Whether a value is unique and so needs releasing (own.uniq.3). A
+    /// list or map is when its elements are (own.uniq.8); they all have one
+    /// type, so the first present one decides.
     fn is_unique(&self, v: &Value) -> bool {
         match v {
             Value::Struct(s, _) => self.prog.structs[*s].unique,
             Value::Enum(e, _, _) => self.prog.enums[*e].unique,
+            Value::List(items) => items.iter().find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
+            Value::Map(t) => t.entries().map(|(_, x)| x).find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
             _ => false,
         }
     }
@@ -1276,9 +1299,22 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(());
         }
         let mut v = v;
-        let con = match &v {
-            Value::Struct(s, _) => Con::Struct(*s),
-            Value::Enum(e, _, _) => Con::Enum(*e),
+        let con = match v {
+            Value::Struct(s, _) => Con::Struct(s),
+            Value::Enum(e, _, _) => Con::Enum(e),
+            // own.uniq.8: a list's elements, or a map's values, last first.
+            Value::List(items) => {
+                for x in Rc::unwrap_or_clone(items).into_iter().rev() {
+                    self.release(x, pos)?;
+                }
+                return Ok(());
+            }
+            Value::Map(t) => {
+                for x in t.val_list().into_iter().rev() {
+                    self.release(x, pos)?;
+                }
+                return Ok(());
+            }
             _ => unreachable!("a unique value"),
         };
         if let Some(drop) = self.resolved.std.drop
@@ -2791,7 +2827,27 @@ impl<'a, W: Write> Interp<'a, W> {
     /// and arguments are moved out of their places for the call and written
     /// back afterwards (trait.method.3, own.param.2), so the callee mutates
     /// them without copying.
+    #[inline]
     fn invoke(
+        &mut self,
+        f: &'a FnDecl,
+        recv: Option<Operand>,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        if self.tracing & trace::WATCH != 0 {
+            // trace.watch.3: which names in the callee stand for the watched variable.
+            let root = match &recv {
+                Some(Operand::Place(p)) if p.slot != IN_CELL => env.get(p.slot).map(|(n, _)| *n),
+                _ => None,
+            };
+            self.watch_call(f, root, args);
+        }
+        self.invoke_inner(f, recv, args, pos, env)
+    }
+
+    fn invoke_inner(
         &mut self,
         f: &'a FnDecl,
         recv: Option<Operand>,

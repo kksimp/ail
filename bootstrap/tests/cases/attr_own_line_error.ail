@@ -1,0 +1,6 @@
+# ail fmt: off
+@test
+x := 1
+
+fn main()
+    print(x)

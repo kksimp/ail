@@ -13,9 +13,11 @@ use crate::ast::*;
 use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
 use crate::docs;
+use crate::modules;
 
 pub mod card;
 pub mod errors;
+mod expanded;
 mod query;
 
 /// Whether `pos` is outside the file being outlined: in the prelude or in
@@ -27,7 +29,7 @@ fn is_prelude(pos: Pos) -> bool {
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api FILE [--text | --pretty] [--symbols] [--json]\n       ail api (--locals | --type | --refs) FILE LINE COL [--pretty] [--json]\n";
+pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api [--outline] DIR|FILE [--text | --pretty] [--symbols] [--expanded] [--json]\n       ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]\n";
 
 /// How the outline is written (api.out.2, api.text.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,12 +52,15 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
     }
     let mut form = Form::Json;
     let mut symbols = false;
+    let mut expanded = false;
     let mut file = None;
     for a in args {
         match *a {
             "--text" if form == Form::Json => form = Form::Text,
             "--pretty" if form == Form::Json => form = Form::Pretty,
             "--symbols" => symbols = true,
+            "--outline" => {}
+            "--expanded" => expanded = true,
             f if !f.starts_with("--") && file.is_none() => file = Some(f),
             _ => {
                 eprint!("{USAGE}");
@@ -67,6 +72,23 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         eprint!("{USAGE}");
         return ExitCode::from(2);
     };
+    // api.pkg.1: a package directory is outlined whole, with module-prefixed ids.
+    if std::path::Path::new(path).is_dir() {
+        return match package_outline(path, symbols, form) {
+            Ok(out) => {
+                print!("{out}");
+                ExitCode::SUCCESS
+            }
+            Err(PackageFailure::Message(m)) => {
+                eprintln!("error: {m}");
+                ExitCode::from(2)
+            }
+            Err(PackageFailure::Diags(files, diags)) => {
+                modules::report(&files, diags, json);
+                ExitCode::from(2)
+            }
+        };
+    }
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -74,7 +96,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match outline(path, &src, symbols, form) {
+    match outline_with(path, &src, symbols, form, expanded) {
         Ok(out) => {
             print!("{out}");
             ExitCode::SUCCESS
@@ -88,7 +110,20 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
 
 /// The outline of `src` as JSON (or text), or the diagnostics that stopped
 /// it: a rejected program has no reliable outline (api.out.5).
+#[cfg(test)]
 pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<String, Vec<diag::Diagnostic>> {
+    outline_with(path, src, symbols, form, false)
+}
+
+/// `outline`; with `expanded`, also the code derive generators wrote
+/// (ct.gen.4) and which `impl`s are built-in derives (`api/expanded.rs`).
+pub fn outline_with(
+    path: &str,
+    src: &str,
+    symbols: bool,
+    form: Form,
+    expanded: bool,
+) -> Result<String, Vec<diag::Diagnostic>> {
     // The file and the modules it imports (mod.unit.3); only the file's own
     // declarations are outlined.
     let (mut prog, mut diags) = crate::modules::load_src(path, src);
@@ -104,6 +139,7 @@ pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<Strin
     docs::attach(&mut prog, src);
     let effects = check::effects::effects_of(&prog, &resolved);
     let mut api = Api::new(&prog, effects);
+    api.expanded = expanded;
     api.errors = std::mem::take(&mut resolved.fn_errors);
     if form == Form::Text {
         return Ok(api.text());
@@ -116,6 +152,106 @@ pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<Strin
     Json::Obj(top).write(&mut out, (form == Form::Pretty).then_some(0));
     out.push('\n');
     Ok(out)
+}
+
+enum PackageFailure {
+    Message(String),
+    Diags(Vec<crate::ast::SourceFile>, Vec<diag::Diagnostic>),
+}
+
+/// The outline of the package directory `dir` (api.pkg.1): every module's
+/// declarations in one list, ordered by file then position. An item's `id`
+/// is prefixed with its module (`fn:net.get`, `type:ui.Window`), and it gains
+/// `module` and `file` keys after the single-file ones; `line` counts from
+/// the top of its own file. `--symbols` adds `references` with a `file` key.
+fn package_outline(dir: &str, symbols: bool, form: Form) -> Result<String, PackageFailure> {
+    let (mut prog, mut diags) = modules::load(dir).map_err(PackageFailure::Message)?;
+    let mut resolved = Resolved::default();
+    if diags.is_empty() {
+        (diags, resolved) = check::check(&prog);
+    }
+    diags.retain(|d| d.rule != "mod.main.1");
+    if diags.iter().any(|d| !d.warning) {
+        return Err(PackageFailure::Diags(prog.files, diags));
+    }
+    let mut by_line = HashMap::new();
+    for f in prog.files.iter().filter(|f| f.path.ends_with(".ail")) {
+        for (line, doc) in docs::by_line(&f.src) {
+            by_line.insert(f.base + line, doc);
+        }
+    }
+    docs::attach_lines(&mut prog, &by_line);
+    let effects = check::effects::effects_of(&prog, &resolved);
+    let mut api = Api::new(&prog, effects);
+    api.errors = std::mem::take(&mut resolved.fn_errors);
+    api.whole = true;
+    let mut items = api.outline_items();
+    items.sort_by_key(|i| (i.pos.line, i.pos.col));
+    for i in &mut items {
+        localize(&prog, i);
+    }
+    if form == Form::Text {
+        let mut out = String::new();
+        let mut file = String::new();
+        for i in &items {
+            let here = i.extra.iter().find_map(|(k, v)| if *k == "file" { if let Json::Str(s) = v { Some(s.as_str()) } else { None } } else { None });
+            if here.is_some_and(|h| h != file) {
+                file = here.unwrap_or_default().to_string();
+                writeln!(out, "# {file}").unwrap();
+            }
+            i.text(0, &mut out);
+        }
+        return Ok(out);
+    }
+    let mut top = vec![
+        ("api", Json::Int(API_VERSION)),
+        ("package", Json::Str(dir.to_string())),
+        ("items", Json::Arr(items.into_iter().map(Item::json).collect())),
+    ];
+    if symbols {
+        let mut refs = Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
+        refs.program();
+        let mut found = refs.found;
+        found.retain(|(p, _)| !crate::ast::is_prelude(*p));
+        found.sort_by(|a, b| (a.0.line, a.0.col, &a.1).cmp(&(b.0.line, b.0.col, &b.1)));
+        found.dedup();
+        let list = found.into_iter().map(|(p, id)| {
+            let (file, line) = match prog.file_at(p) {
+                Some(f) => (f.path.clone(), p.line - f.base),
+                None => (String::new(), p.line),
+            };
+            Json::Obj(vec![
+                ("id", Json::Str(id)),
+                ("line", Json::Int(line as i64)),
+                ("col", Json::Int(p.col as i64)),
+                ("file", Json::Str(file)),
+            ])
+        });
+        top.push(("references", Json::Arr(list.collect())));
+    }
+    let mut out = String::new();
+    Json::Obj(top).write(&mut out, (form == Form::Pretty).then_some(0));
+    out.push('\n');
+    Ok(out)
+}
+
+/// Make an item's lines count from the top of its file, and say which file
+/// and module it is in (api.pkg.1).
+fn localize(prog: &Program, item: &mut Item) {
+    if let Some(f) = prog.file_at(item.pos) {
+        item.extra.push(("module", Json::Str(f.module.clone())));
+        item.extra.push(("file", Json::Str(f.path.clone())));
+        shift_lines(item, f.base);
+    }
+}
+
+fn shift_lines(item: &mut Item, base: usize) {
+    item.pos.line = item.pos.line.saturating_sub(base);
+    for (_, ms) in &mut item.members {
+        for m in ms {
+            shift_lines(m, base);
+        }
+    }
 }
 
 /// A JSON value whose objects keep their keys in the order given (api.out.2).
@@ -238,6 +374,12 @@ impl Item {
             let names: Vec<&str> = errs.iter().filter_map(|e| if let Json::Str(s) = e { Some(s.as_str()) } else { None }).collect();
             writeln!(out, "       {indent}    fails with {}", names.join(" | ")).unwrap();
         }
+        // ct.gen.4: `--expanded` shows generated code under its signature.
+        if let Some((_, Json::Str(code))) = self.extra.iter().find(|(k, _)| *k == "text") {
+            for line in code.lines().skip(1) {
+                writeln!(out, "       {indent}{line}").unwrap();
+            }
+        }
         if let Some(doc) = &self.doc {
             for line in doc.lines() {
                 writeln!(out, "       {indent}    ## {line}").unwrap();
@@ -262,6 +404,8 @@ struct Api<'p> {
     errors: std::collections::BTreeMap<usize, Vec<String>>,
     /// Also describe the modules the file imports (`--refs`).
     whole: bool,
+    /// Include generated code (`--expanded`, ct.gen.4).
+    expanded: bool,
 }
 
 impl<'p> Api<'p> {
@@ -277,7 +421,7 @@ impl<'p> Api<'p> {
                 fn_ids[i] = fn_id(prog, f, true);
             }
         }
-        Api { prog, fn_ids, effects, errors: std::collections::BTreeMap::new(), whole: false }
+        Api { prog, fn_ids, effects, errors: std::collections::BTreeMap::new(), whole: false, expanded: false }
     }
 
     /// Whether `pos` is a declaration the outline leaves out.
@@ -376,11 +520,14 @@ impl<'p> Api<'p> {
                 id: format!("impl:{}.{}", im.target.name, im.trait_name),
                 doc: None,
                 signature: format!("impl {} for {target}", im.trait_name),
-                extra: vec![
+                extra: [
                     ("trait", Json::Str(format!("trait:{}", im.trait_name))),
                     ("type", Json::Str(format!("type:{}", im.target.name))),
-                ],
-                members: vec![("methods", im.methods.iter().map(|&m| self.fn_item(m)).collect())],
+                ]
+                .into_iter()
+                .chain(self.derive_extra(im))
+                .collect(),
+                members: vec![("methods", self.impl_methods(im))],
             });
         }
         for c in prog.consts.iter().filter(|c| !self.outside(c.pos)) {
@@ -436,7 +583,7 @@ impl<'p> Api<'p> {
         let method = owner_name(self.prog, f).is_some();
         let mut extra = Vec::new();
         if method {
-            let receiver = f.receiver.map(|r| if r.mutable { "mut self" } else { "self" }.to_string());
+            let receiver = f.receiver.map(|r| receiver_text(r).to_string());
             extra.push(("receiver", Json::opt(receiver)));
         }
         extra.push(("params", Json::Arr(params)));
@@ -594,7 +741,7 @@ fn fn_signature(f: &FnDecl) -> String {
     s.push_str(&generics_text(&f.generics));
     let mut parts: Vec<String> = Vec::new();
     if let Some(r) = f.receiver {
-        parts.push(if r.mutable { "mut self" } else { "self" }.to_string());
+        parts.push(receiver_text(r).to_string());
     }
     for p in &f.params {
         let mode = if p.mutable {
@@ -636,7 +783,7 @@ fn generics_text(gs: &[GenericParam]) -> String {
 }
 
 /// A type as written in source (type.opt.2, err.type.1-2, err.type.5, trait.any.1).
-fn type_text(t: &TypeRef) -> String {
+pub(crate) fn type_text(t: &TypeRef) -> String {
     match &t.kind {
         TypeKind::Named { name, args } if args.is_empty() => name.clone(),
         TypeKind::Named { name, args } => {
@@ -1221,5 +1368,16 @@ fn main()
                 }
             }
         }
+    }
+}
+
+/// `self`, `mut self` or `move self` (trait.method.1, own.move.6).
+fn receiver_text(r: crate::ast::Receiver) -> &'static str {
+    if r.mutable {
+        "mut self"
+    } else if r.moved {
+        "move self"
+    } else {
+        "self"
     }
 }

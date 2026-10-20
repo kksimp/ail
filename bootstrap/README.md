@@ -28,14 +28,14 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run bootstrap/tests/cases/packages/geometry   # a package: root module plus `use`d modules
 ./ail run bootstrap/tests/cases/packages/deps_path  # an ail.pkg with path dependencies and capability grants
 ./ail check --json FILE            # diagnostics as JSON lines
-./ail test [--json] [--cases N] [--seed S] FILE  # run tests, properties, doc examples
+./ail test [--json] [--cases N] [--seed S] FILE  # run tests, properties, doc examples (--trace: a failing test's events)
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
 ./ail api --card [--budget N] DIR|FILE  # a program's own card: modules, entry, tests, manifest, examples, trimmed to a token budget
-./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols); `fails_with` per fallible fn
+./ail api FILE|DIR                 # declarations as JSON (--pretty, --text, --symbols); a DIR outlines the whole package with module-prefixed ids; `fails_with` per fallible fn
 ./ail check --errors FILE          # each function's error types and failure paths, JSON
-./ail api --locals|--type|--refs FILE LINE COL   # names in scope, type at a position, references
+./ail api --locals|--type|--refs [DIR] FILE LINE COL   # names in scope, type at a position, references
 ./ail fix FILE [--dry-run]         # apply the fixes diagnostics carry, re-check, repeat (ADR 0203)
 ./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
 ./ail selftest                     # the bootstrap's own tests, incl. a 200-program fuzz smoke
@@ -51,17 +51,17 @@ reported but don't stop a program from running.
 | File | Stage | Spec rules enforced |
 |---|---|---|
 | `src/lexer.rs` | Text to tokens, including INDENT/DEDENT and interpolated strings | `lex.block.1–4`, `lex.stmt.1–3`, `lex.kw.1–2` (incl. `todo`), `lex.comment.*`, `lex.str.1–5`, `lex.str.7`, `lex.num.1–3` |
-| `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr`, `Hash`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–3` |
+| `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr`, `Hash`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker, with its `ToJson`/`FromJson` part (`## @module jsonderive`) only when the program names them; then the `derive` module (`TypeInfo`, `DeriveError`), read with `std.json`, `@derive` or its names | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–4`, `json.derive.1–2`, `refl.info.1–3` |
 | `src/modules.rs` | Loads a file or package and the modules it imports; renames each module's items to qualified names; import and item-privacy errors; per-file diagnostics | `mod.unit.1–5`, `mod.use.1–6`, `mod.vis.1`, `expr.bind.5` (for imported modules) |
 | `src/parser.rs` | Tokens to syntax tree (`use`, `pub` and qualified names in `src/parser/modules.rs`: `mod.use.1`, `mod.vis.1–2`, `mod.unit.4`) | `mod.use.1`, `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `gram.attr.1–2`, `gen.decl.1`, `gen.bound.1`, `gen.method.1–3`, `gen.infer.2`, `trait.decl.1–2`, `trait.impl.1`, `trait.any.1`, `type.struct.1–3`, `type.enum.1–2`, `type.opt.2`, `err.decl.1`, `err.type.1–2`, `err.type.5`, `err.else.1–3`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.if.5–6`, `expr.if.8`, `expr.loop.1–3`, `expr.loop.6`, `expr.match.1`, `expr.match.6`, `expr.prec.1–2`, `expr.op.1–3`, `expr.comp.1–2` |
 | `src/packages.rs` | Reads `ail.pkg` manifests of the root and every path dependency, maps `use` paths to packages and directories, adds manifests to the program's files; after checking, checks each package's code against its capability grants | `mod.pkg.1–6`, `eff.cap.2`, `eff.cap.4–5` |
 | `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.hole.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.coll.14`, `type.str.2–3`, `type.str.13–14`, `type.str.11`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2`, `own.excl.5`, `type.opt.4–5`, `type.enum.6`, `type.str.4–5`, `expr.loop.6`, `expr.match.6`, `err.decl.1–3`, `err.type.1–2`, `err.type.5–6`, `err.prop.1–3`, `err.use.1–2`, `err.else.1–3`, `err.ctx.2`, `err.text.1`, `expr.if.5–6`, `expr.cmp.1`, `gen.decl.1–2`, `gen.bound.1–4`, `gen.method.1–3`, `gen.infer.1–2`, `gen.anon.1`, `trait.decl.1–2`, `trait.impl.1–6`, `trait.self.1`, `trait.res.1`, `trait.any.1–5`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–4` (traits and generics in `src/check/traits.rs`), `ct.const.1`, `ct.const.3`, `test.attr.1–4`, `test.assert.2` (in `src/check/testing.rs`), `mod.vis.1`, `mod.vis.3` (private fields and methods, in `src/check/privacy.rs`), `test.prop.2`, `expr.comp.1–4`, `expr.match.10`, `src/check/comprehension.rs`, `err.prop.1–4`, `expr.key.1–3`, `src/check/keyfn.rs` |
-| `src/check/ownership.rs`, `src/check/moves.rs` | Unique types, `move`, `ref` and `defer` while typing; then use after move on every path | `own.uniq.1–2`, `own.uniq.5–6`, `own.move.2–5`, `own.ref.1`, `own.ref.3–6`, `own.defer.3`, `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3` |
+| `src/check/ownership.rs`, `src/check/moves.rs` | Unique types, `move`, `ref` and `defer` while typing; then use after move on every path | `own.uniq.1–2`, `own.uniq.5–6`, `own.uniq.8–10`, `own.move.2–6`, `own.ref.1`, `own.ref.3–6`, `own.defer.3`, `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3` |
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel`; `par for` comprehensions | `conc.par.2–6`, `conc.par.12` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `Atomic`, `with`, `cancel`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6`, `conc.atomic.3–5`, `conc.cancel.1` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
-| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–2`, `trace.snap.1–4` |
+| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–3`, `trace.test.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186) or a seeded random one; channels, `for v in ch`, mutexes, `with`, groups, cancellation, deadlock traps | `conc.task.1–9`, `conc.share.1–7`, `conc.cancel.1–2`, `conc.sched.1` |
 | `src/interp/atomic.rs` | `Atomic[int]` and `Atomic[bool]` as shared hardware atomics | `conc.atomic.3–6` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
@@ -86,8 +86,9 @@ reported but don't stop a program from running.
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
+| `src/derive.rs`, `src/parser/derive.rs`, `src/interp/generate.rs`, `src/api/expanded.rs` | Derive generators: `@derive(f) trait`; while loading, runs each empty `impl`'s generator on a wrapper program and splices its text in as a `gen:impl:T.Trait` file; reports generated-code problems at the `impl`; `ail api --expanded` | `ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3` (ADRs 0306–0309) |
 | `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
-| `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
+| `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1`, `api.pkg.1–4` |
 | `src/check/errpaths.rs`, `src/api/errors.rs` | failure paths and error sets the checker records; `ail check --errors`, `fails_with` in `ail api`; the `err.ret.*` diagnostics and error fixes | `err.ret.1–3`, `err.fix.1`, `err.api.1`, `err.paths.1` |
 | `src/api/query.rs`, `src/check/facts.rs` | `ail api --locals/--type/--refs`: position queries from facts the checker records | `api.query.1`, `api.loc.1–2`, `api.type.1–2`, `api.refs.1–3` |
 
@@ -128,7 +129,11 @@ package's are reported file by file.
   `ToStr`, and `impl`s for `int`, `float`, `str`, `char`, `bool` and `List`;
   top-level constants `NAME := expr`, which may call compile-time-safe
   functions and methods (`ct.const.1–3`; `if`, `match` and `?` in a
-  constant are `bootstrap.unsupported`: call a function instead)
+  constant are `bootstrap.unsupported`: call a function instead);
+  derive generators: `@derive(f) trait X` and empty `impl X for T`, with
+  `TypeInfo`, the `ToJson` and `FromJson` derives, and `ail api --expanded`
+  (`ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3`, `json.derive.1–2`; step
+  limits aren't counted)
 - **Statements:** `x := v`, `mut x := v`, `x := v else fallback`,
   `x := v else return ...`, `x := v else` or `else err` with a block,
   `p = v`, `p op= v` (for `+ - * / %`), `if`/`elif`/`else`, including
@@ -177,7 +182,9 @@ package's are reported file by file.
   path is an error with the move as a note; `impl Drop` cleanups run once,
   in reverse order with `defer`, on every exit including traps; `ref e`
   cells, read and changed through any copy, compared by identity
-  (ADRs 0190–0193)
+  (ADRs 0190–0193); `move self` methods consume their receiver, and lists
+  and maps of unique values move in with `push(move x)`, out with `pop`,
+  `remove_at` and `remove`, and borrow by index and `for` (ADRs 0317–0319)
 - **Semantics:** value semantics with copy-on-write; `mut` operands are moved
   into calls and written back; a read-only argument that overlaps a `mut` one
   is a copy; overflow, division, index and overlapping-`mut` traps; failures
@@ -216,8 +223,10 @@ writes calls, returns, effects, tasks and contract checks to stderr (JSON
 lines with `--json`), up to `--trace-limit N` events plus a summary;
 `--watch NAME` shows assignments to a `mut` variable; a trap reports the
 source line and each frame's arguments and locals (ten lines; `--verbose`
-for all; one object with `--json`). Not yet: `ail test --trace`, watching
-mutations through methods and `mut` arguments, exact expression end columns.
+for all; one object with `--json`). `ail test --trace` keeps a failing test's
+events (`"trace"` in its JSON entry, ADR 0326) and `--watch` follows `mut`
+arguments and `mut self` calls (ADR 0327). Not yet: watching builtin mutating
+methods (`push`), exact expression end columns.
 
 Effects (ADRs 0163–0165): every function's effect set is inferred and
 printed by `ail effects`; `@pure` and `--deny` are checked at compile time.
@@ -263,8 +272,8 @@ Not yet: `s.bytes()`, `T ! E` outside
 return types, matching on a set of error types, range patterns and guards,
 the arithmetic operator traits, trait functions without `self` and
 supertraits (OQ-039), associated types (OQ-037), methods for one
-instantiation only, user modules and `pub`, unique values in collections and
-generic code and `move self` (OQ-050), `select`, `Atomic[T]`, `unsafe` and FFI. Known gaps: a constant expression that would call a user
+instantiation only, user modules and `pub`, unique values in sets, `ref` cells and
+generic code, and `move self` in traits (OQ-050), `select`, `Atomic[T]`, `unsafe` and FFI. Known gaps: a constant expression that would call a user
 `impl` of `Eq`, `Ord` or `ToStr` (`mod.const.2`) isn't rejected yet, a
 constant whose evaluation fails traps before `main` rather than at check
 time, and compile-time step and memory limits (`ct.eval.3`) aren't enforced.

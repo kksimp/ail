@@ -373,3 +373,196 @@ fn Json.set(mut self, key str, value Json)
     else
         members.push(JsonMember(key: key, value: value))
     self = Json.Obj(members)
+
+## A whole number, or `none` unless this is a number without a fraction.
+fn Json.as_int(self) int?
+    n := as_num()?
+    if n.floor() != n
+        return none
+    n.to_int()
+
+fn Json.int(self, key str) int?
+    get(key)?.as_int()
+
+## The JSON kind of this value, for messages: `null`, `bool`, `number`, ...
+fn Json.kind(self) str
+    match self
+        Null => "null"
+        Bool(_) => "bool"
+        Num(_) => "number"
+        Str(_) => "string"
+        Arr(_) => "array"
+        Obj(_) => "object"
+
+## Member `key`, or a `JsonError` naming it (json.query.4). The `need_*`
+## forms fail with the kind they expected; derived `from_json` uses them.
+## `at` is -1: the value isn't tied to a place in a text.
+fn Json.need(self, key str) Json ! JsonError
+    v := get(key) else return JsonError(-1, "missing {key}")
+    v
+
+fn Json.need_str(self) str ! JsonError
+    v := as_str() else return JsonError(-1, "expected a string, found {kind()}")
+    v
+
+fn Json.need_num(self) float ! JsonError
+    v := as_num() else return JsonError(-1, "expected a number, found {kind()}")
+    v
+
+fn Json.need_int(self) int ! JsonError
+    v := as_int() else return JsonError(-1, "expected a whole number, found {to_text()}")
+    v
+
+fn Json.need_bool(self) bool ! JsonError
+    v := as_bool() else return JsonError(-1, "expected a bool, found {kind()}")
+    v
+
+fn Json.need_arr(self) List[Json] ! JsonError
+    v := as_arr() else return JsonError(-1, "expected an array, found {kind()}")
+    v
+
+## @module jsonderive
+## A value with a JSON form. `impl ToJson for T` with no methods derives
+## `to_json` with `derive_to_json` (ct.derive.2, ADR 0307).
+@derive(derive_to_json) trait ToJson
+    fn to_json(self) Json
+
+impl ToJson for Json
+    fn to_json(self) Json
+        self
+
+impl ToJson for str
+    fn to_json(self) Json
+        Json.Str(self)
+
+impl ToJson for int
+    fn to_json(self) Json
+        Json.Num(self.to_float())
+
+impl ToJson for float
+    fn to_json(self) Json
+        Json.Num(self)
+
+impl ToJson for bool
+    fn to_json(self) Json
+        Json.Bool(self)
+
+impl ToJson for List[T ToJson]
+    fn to_json(self) Json
+        Json.Arr([x.to_json() for x in self])
+
+## A type that can be read from JSON. `impl FromJson for T` derives the
+## associated function `T.from_json(j Json) T ! JsonError` with
+## `derive_from_json` (ct.derive.2, ct.gen.1, ADR 0307).
+@derive(derive_from_json) trait FromJson
+
+## A struct becomes an object of its fields in declaration order; an enum
+## variant without fields becomes its name, one with fields an object
+## `{"Name": {fields}}`. A field `T?` that is `none` becomes `null`.
+fn derive_to_json(t TypeInfo) str ! DeriveError
+    if t.kind == TypeKind.Struct
+        return "fn to_json(self) Json\n    Json.Obj({json_members(t.fields, "self.", "    ")})\n"
+    mut out := ["fn to_json(self) Json\n    match self\n"]
+    for v in t.variants
+        if v.fields.len() == 0
+            out.push("        {v.name} => Json.Str(\"{v.name}\")\n")
+        else
+            names := [f.name for f in v.fields]
+            body := "Json.Obj([JsonMember(\"{v.name}\", Json.Obj({json_members(v.fields, "", "            ")}))])"
+            out.push("        {v.name}({names.join(", ")}) => {body}\n")
+    out.join("")
+
+## `[JsonMember(...), ...]` for `fields`, one per line after `indent`.
+fn json_members(fields List[FieldInfo], prefix str, indent str) str
+    if fields.len() == 0
+        return "List[JsonMember]()"
+    mut parts := []
+    for f in fields
+        value := if f.type_text.ends_with("?")
+            "{prefix}{f.name}?.to_json() else Json.Null"
+        else
+            "{prefix}{f.name}.to_json()"
+        parts.push("{indent}    JsonMember(\"{f.name}\", {value}),\n")
+    "[\n{parts.join("")}{indent}]"
+
+## A struct reads each field from the member of its name; a field `T?` may
+## be missing. An enum reads a variant's name; variants with fields aren't
+## supported yet.
+fn derive_from_json(t TypeInfo) str ! DeriveError
+    if t.params.len() > 0
+        return DeriveError("`FromJson` can't be derived for the generic type `{t.name}` yet")
+    head := "fn {t.name}.from_json(j Json) {t.name} ! JsonError\n"
+    if t.kind == TypeKind.Struct
+        mut args := []
+        for f in t.fields
+            value := json_field(f)?
+            args.push("{f.name}: {value}")
+        return "{head}    {t.name}({args.join(", ")})\n"
+    mut out := [head, "    name := j.need_str()?\n"]
+    for v in t.variants
+        if v.fields.len() > 0
+            return DeriveError("`FromJson` can't read the variant `{t.name}.{v.name}`: variants with fields aren't supported yet")
+        out.push("    if name == \"{v.name}\"\n        return {t.name}.{v.name}\n")
+    out.push("    return JsonError(-1, \"unknown {t.name} `\{name}`\")\n")
+    out.join("")
+
+fn json_field(f FieldInfo) str ! DeriveError
+    key := "\"{f.name}\""
+    if f.type_text.ends_with("?")
+        reader := match f.type_text
+            "str?" => "str"
+            "float?" => "num"
+            "int?" => "int"
+            "bool?" => "bool"
+            "Json?" => "get"
+            _ => return DeriveError("`FromJson` can't read the optional field `{f.name} {f.type_text}` yet")
+        return "j.{reader}({key})"
+    json_value(f.type_text, "j.need({key})?", 0)
+
+## Text that reads a `type_text` from the `Json` expression `v`.
+fn json_value(type_text str, v str, nesting int) str ! DeriveError
+    match type_text
+        "str" => "{v}.need_str()?"
+        "float" => "{v}.need_num()?"
+        "int" => "{v}.need_int()?"
+        "bool" => "{v}.need_bool()?"
+        "Json" => v
+        _ =>
+            if inner := type_text.strip_prefix("List[")
+                item := "e{nesting}"
+                elem := json_value(inner.slice(0, inner.chars().len() - 1), item, nesting + 1)?
+                return "[{elem} for {item} in {v}.need_arr()?]"
+            if type_text.contains("[") or type_text.contains("?") or type_text.contains(" ")
+                return DeriveError("`FromJson` can't read the type `{type_text}` yet")
+            "{type_text}.from_json({v})?"
+## @module derive
+## Derive generators (ct.derive.1-4, refl.info.1-3, ADRs 0227, 0229, 0306):
+## the compiler passes a generator the `TypeInfo` of the deriving type.
+
+## One struct or enum as declared (refl.info.1).
+struct TypeInfo
+    name str
+    id str
+    module str
+    kind TypeKind
+    is_error bool
+    params List[str]
+    fields List[FieldInfo]
+    variants List[VariantInfo]
+
+enum TypeKind
+    Struct
+    Enum
+
+struct FieldInfo
+    name str
+    type_text str
+    public bool
+
+struct VariantInfo
+    name str
+    fields List[FieldInfo]
+
+## Why a generator can't derive its trait for a type (ct.derive.4).
+error struct DeriveError
+    message str

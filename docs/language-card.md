@@ -194,6 +194,10 @@ fn main()
 - `impl Ord for Version` with no body compares the fields in order. `<` and
   friends work on `int`, `str`, lists and `Ord` types. Customise with
   `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
+- `impl ToJson for T` and `impl FromJson for T` with no body derive
+  `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name). A trait
+  `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
+  that writes an empty `impl`'s methods; `ail api --expanded` shows them.
 
 ## Control flow
 
@@ -320,7 +324,7 @@ bump(mut q)            # `mut` again at the call, on a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
-`ref x` is a cell copies share. `unique` types move: `f(move x)`.
+`ref x` is a cell copies share. `unique` types move: `f(move x)`; `fn T.close(move self)` consumes `x.close()`; lists of them move in with `xs.push(move x)`, out with `pop`, and `xs[i]` borrows.
 
 ## Tasks
 

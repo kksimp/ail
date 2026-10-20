@@ -1,0 +1,9 @@
+fn tidy(text str) str
+    return text
+        .trim()
+        .replace("the quick brown fox", "the quick brown fox jumps")
+        .replace("over the lazy dog", "over the lazy dog today")
+        .to_upper()
+
+fn main()
+    print(tidy("  the quick brown fox over the lazy dog  "))

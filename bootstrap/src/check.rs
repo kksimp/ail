@@ -323,6 +323,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     c.diags.extend(effects::check_constants(prog, &c.resolved));
     c.diags.extend(parallel::check_par(prog, &c.resolved));
     c.diags.extend(parallel::check_par_comps(prog, &c.resolved));
+    crate::derive::remap(prog, &mut c.diags);
     (c.diags, c.resolved)
 }
 
@@ -1153,7 +1154,6 @@ impl<'p> Checker<'p> {
                     return Ty::Err;
                 }
                 let elem = self.resolve_type(&args[0]);
-                self.no_unique(&elem, args[0].pos, "a list element");
                 return Ty::List(Box::new(elem));
             }
             "Map" | "Set" => {
@@ -1171,7 +1171,6 @@ impl<'p> Checker<'p> {
                 let first = self.resolve_type(&args[0]);
                 let ty = if want == 2 {
                     let second = self.resolve_type(&args[1]);
-                    self.no_unique(&second, args[1].pos, "a map value");
                     Ty::Map(Box::new(first.clone()), Box::new(second))
                 } else {
                     Ty::Set(Box::new(first.clone()))
@@ -2552,7 +2551,7 @@ impl<'p> Checker<'p> {
             Expr::List(elems, pos) => {
                 let t = self.list(elems, *pos, expect);
                 if let Ty::List(e) = &t {
-                    self.no_unique(e, *pos, "a list element");
+                    self.consume_elems(elems, e);
                 }
                 t
             }
@@ -2581,7 +2580,13 @@ impl<'p> Checker<'p> {
             }
             Expr::Unary { op, operand, pos } => self.unary(*op, operand, *pos),
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
-            Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
+            Expr::Map(pairs, pos) => {
+                let t = self.map_literal(pairs, *pos, expect);
+                if let Ty::Map(_, v) = &t {
+                    self.consume_elems(pairs.iter().map(|(_, v)| v), v);
+                }
+                t
+            }
             Expr::Set(items, pos) => self.set_literal(items, *pos, expect),
             Expr::Comp { kind, elem, value, clauses, .. } => {
                 self.comprehension(*kind, elem, value.as_deref(), clauses, expect)
@@ -3144,10 +3149,7 @@ impl<'p> Checker<'p> {
         }
         let first = self.resolve_type(&targs[0]);
         Some(match name {
-            "List" => {
-                self.no_unique(&first, pos, "a list element");
-                Ty::List(Box::new(first))
-            }
+            "List" => Ty::List(Box::new(first)),
             "Set" => {
                 self.require_key(&first, pos);
                 Ty::Set(Box::new(first))
@@ -3155,7 +3157,6 @@ impl<'p> Checker<'p> {
             _ => {
                 self.require_key(&first, pos);
                 let second = self.resolve_type(&targs[1]);
-                self.no_unique(&second, pos, "a map value");
                 Ty::Map(Box::new(first), Box::new(second))
             }
         })
@@ -3785,6 +3786,7 @@ impl<'p> Checker<'p> {
                         }
                         self.resolved.targets.insert(pos, *i);
                         self.note_deprecated(*i, pos);
+                        self.move_receiver(*i, recv);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
                                 sig.generics[..sig.owner].iter().copied().zip(a.iter().cloned()).collect()

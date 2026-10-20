@@ -374,6 +374,13 @@ pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     diags
 }
 
+/// ct.derive.3 (ADR 0227): the effects that keep function `f` from running
+/// at compile time, each with the chain of calls that gives it.
+pub fn impure_chains(prog: &Program, resolved: &Resolved, f: usize) -> Vec<String> {
+    let fx = Effects::infer(prog, resolved);
+    fx.of(f).iter().filter(|e| impure(e)).map(|e| format!("effect `{e}` via {}", fx.chain(f, e))).collect()
+}
+
 /// eff.cap.1: `main` must not reach a denied capability. One diagnostic
 /// per capability, at `main`.
 pub fn check_denied(prog: &Program, resolved: &Resolved, denied: &[&str]) -> Vec<Diagnostic> {

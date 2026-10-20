@@ -555,7 +555,12 @@ impl<'p> Checker<'p> {
                 }
             }
             let built_in = is_prelude(trait_decl.pos);
-            if built_in && imp.methods.is_empty() {
+            // ct.derive.2: a generator fills in an empty `impl` before checking
+            // (`derive.rs`); one it couldn't fill is already reported.
+            let by_generator = trait_decl.derive.is_some() && (imp.methods.is_empty() || trait_decl.methods.is_empty());
+            if by_generator {
+                // Nothing more to check.
+            } else if built_in && imp.methods.is_empty() {
                 self.check_derived(i, tr, &target);
             } else {
                 let missing: Vec<usize> = trait_decl

@@ -173,7 +173,8 @@ pub fn report(prog: &Program, line_map: &[usize]) -> Vec<FileCover> {
     };
     let mut files: Vec<FileCover> = Vec::new();
     for f in prog.fns.iter().filter(|f| f.top_level() && !f.is_test() && f.body.is_some()) {
-        let Some(sf) = prog.file_at(f.pos) else { continue };
+        // Generated code (ct.gen.1) isn't the program's own lines.
+        let Some(sf) = prog.file_at(f.pos).filter(|sf| !sf.path.starts_with("gen:")) else { continue };
         let mut lines = Vec::new();
         lines_of(f.body.as_ref().unwrap(), &mut lines);
         let all: BTreeSet<usize> = lines.iter().copied().collect();
