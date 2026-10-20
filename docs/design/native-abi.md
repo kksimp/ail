@@ -184,7 +184,12 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free.
+flag), 40-47 `fmt.ail` (the byte builder), 48-63 free. Each slot is a
+constant `NAME := N` read as `global(NAME)`; two names may share a slot only
+if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
+`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
+past `Image.globals`, an undeclared name, or a code generator constant of
+the same name with another value.
 
 **Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
 after `main` and by `io.exit`); every trap; before reading standard input;
@@ -281,16 +286,6 @@ The AIL source of record (`compiler/rt/*.ail`) is today written against a
 and is tested under the interpreter. When lane 126 lands raw pointers the same
 modules switch their load/store helpers to `unsafe` pointer operations; the
 algorithms don't change (ADR 0404).
-
-**Global slots.** The runtime's globals are 8-byte slots in the image's zeroed
-data (`Image.globals`, 64 slots), read through `global(NAME)` where `NAME := N`
-is a constant in `compiler/rt/native/`. Each name has its own slot; a name
-may share one only if its doc comment says it `shares` it (`TRAP_LEN` and
-`PARSE_OK`). Slots in use: 0-8 core (8 is the stack limit), 32-39 the OS
-layer, 40-42 number text. Take the next free slot for a new global.
-`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot at
-or past the count, an undeclared name, or a code generator constant (such as
-`STACK_LIMIT`) that differs from the runtime's.
 
 ## 9. FFI hook (lane 126, ADRs 0431–0436)
 
