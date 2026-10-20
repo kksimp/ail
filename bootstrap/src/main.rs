@@ -27,6 +27,7 @@ mod num;
 mod packages;
 mod parser;
 mod regex;
+mod snapshot;
 mod stdlib;
 mod tensor;
 mod ui;
@@ -45,7 +46,9 @@ commands:
   check FILE    check a program (or a package DIR) without running it;
                 --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;
-                --cases N (default 100) and --seed S set a property's inputs
+                --cases N (default 100) and --seed S set a property's inputs;
+                --update [--dry-run]: rewrite failing `assert_eq(x, LITERAL)`
+                literals, `# =>` lines and FILE's `.out`, showing the diff (snap.update.1)
   effects FILE  print each function's inferred effects (eff.infer.6);
                 --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
@@ -161,6 +164,15 @@ fn main() -> ExitCode {
         for name in ["--cases", "--seed"] {
             if let Some(at) = rest.iter().position(|a| *a == name) {
                 flags.extend(rest.drain(at..(at + 2).min(rest.len())));
+            }
+        }
+        // snap.update.1, snap.update.6: `ail test --update [--dry-run]`.
+        if let Some(at) = rest.iter().position(|a| *a == "--update") {
+            rest.remove(at);
+            snapshot::enable();
+            if let Some(at) = rest.iter().position(|a| *a == "--dry-run") {
+                rest.remove(at);
+                snapshot::set_dry_run();
             }
         }
     }
@@ -534,14 +546,24 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
                 .collect::<Vec<_>>();
             // test.cover.1: what the tests ran, read once they are all done.
             let cover = coverage.map(|_| interp::limits::report(&program, &cover_map));
-            (outcomes, cover)
+            // snap.update.2: the literals to rewrite, by file.
+            let found: Vec<snapshot::Located> = snapshot::take()
+                .into_iter()
+                .filter(|(pos, _)| !ast::is_prelude(*pos))
+                .map(|(pos, text)| {
+                    let (file, p) = modules::locate(&program.files, pos);
+                    (file.to_string(), p.line, p.col, text)
+                })
+                .collect();
+            (outcomes, cover, found)
         })
         .expect("spawn interpreter thread")
         .join();
-    let Ok((mut outcomes, cover)) = outcomes else {
+    let Ok((mut outcomes, cover, found)) = outcomes else {
         eprintln!("{path}: internal error in the bootstrap interpreter");
         return ExitCode::from(1);
     };
+    let mut doc_updates = Vec::new();
     for o in &mut outcomes {
         let Some(t) = doc_tests.iter().find(|t| t.fn_name == o.0) else { continue };
         // test.doc.2-3: report under the example's name, at its own line.
@@ -551,9 +573,17 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         if o.2.is_none() {
             o.2 = doctest::check_output(t, &o.3);
             o.1 = diag::Pos { line: t.line(), col: 1 };
+            // snap.update.4: under `--update` the example's `# =>` lines take its output.
+            if o.2.is_some() && snapshot::enabled() {
+                doc_updates.push((t.expected_lines(), o.3.clone()));
+                o.2 = None;
+            }
         } else if let Some(&line) = line_map.get(o.1.line.wrapping_sub(1)).filter(|l| **l != 0) {
             o.1.line = line;
         }
+    }
+    if snapshot::enabled() {
+        snapshot::write(path, &src, found, doc_updates, json);
     }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;

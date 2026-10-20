@@ -14,13 +14,13 @@ pub const MODULES: &[(&str, &[&str])] = &[
     (
         "fs",
         &[
-            "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_text", "remove", "rename",
-            "walk", "write_text",
+            "append_bytes", "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_bytes",
+            "read_text", "remove", "rename", "walk", "write_bytes", "write_text",
         ],
     ),
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
-    ("io", &["eprint", "exit", "read_all", "read_line"]),
     ("net", &["connect", "connect_tls", "get", "listen", "options", "post", "request", "serve"]),
+    ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["kill", "run", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),

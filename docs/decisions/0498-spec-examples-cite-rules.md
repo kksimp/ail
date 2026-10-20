@@ -51,5 +51,5 @@ were first written this way; they now run against the built modules.)
 
 Not applicable: this changes the test harness and the spec's examples, not the
 language syntax, so `tools/tokbench` does not apply. Example count after this
-change: 370 checked, 50 skipped (`skip=bootstrap`); zero uncovered rules in the
+change: 381 checked, 50 skipped (`skip=bootstrap`); zero uncovered rules in the
 five batch chapters.

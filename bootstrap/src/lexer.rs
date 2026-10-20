@@ -57,6 +57,8 @@ pub enum Tok {
     Kw(&'static str),
     Sym(&'static str),
     Str(String),
+    /// `b"..."` (lex.bytes.1)
+    Bytes(Vec<u8>),
     /// A string literal containing `{expression}` parts (lex.str.2).
     Interp(Vec<Part>),
     /// `'a'` (lex.str.4)
@@ -509,6 +511,8 @@ impl Lexer {
                     }
                     i = self.raw_string(line, i, line_no);
                 }
+                // lex.bytes.1: `b"..."` is a `bytes` literal.
+                'b' if line.get(i + 1) == Some(&'"') => i = self.bytes_literal(line, i, line_no),
                 '\'' => i = self.char_literal(line, i, line_no),
                 ';' => {
                     let rest = line[i + 1..].iter().position(|c| *c != ' ' && *c != '\t');
@@ -646,6 +650,66 @@ impl Lexer {
                 line.len()
             }
         }
+    }
+
+    /// `b"..."`: ASCII text with the escapes `\n \t \r \0 \\ \" \xHH` and no
+    /// interpolation (lex.bytes.1). `line[start]` is the `b`.
+    fn bytes_literal(&mut self, line: &[char], start: usize, line_no: usize) -> usize {
+        let pos = Pos { line: line_no, col: start + 1 };
+        let mut out = Vec::new();
+        let mut i = start + 2;
+        while i < line.len() {
+            let here = Pos { line: line_no, col: i + 1 };
+            match line[i] {
+                '"' => {
+                    self.push(Tok::Bytes(out), pos);
+                    return i + 1;
+                }
+                '\\' => {
+                    let hex = |k: usize| line.get(i + k).and_then(|c| c.to_digit(16));
+                    let simple = match line.get(i + 1) {
+                        Some('n') => Some(b'\n'),
+                        Some('t') => Some(b'\t'),
+                        Some('r') => Some(b'\r'),
+                        Some('0') => Some(0),
+                        Some('\\') => Some(b'\\'),
+                        Some('"') => Some(b'"'),
+                        _ => None,
+                    };
+                    if let Some(b) = simple {
+                        out.push(b);
+                        i += 2;
+                    } else if line.get(i + 1) == Some(&'x')
+                        && let (Some(h), Some(l)) = (hex(2), hex(3))
+                    {
+                        out.push((h * 16 + l) as u8);
+                        i += 4;
+                    } else {
+                        self.diags.push(
+                            Diagnostic::new("lex.bytes.1", here, "invalid escape in a `bytes` literal")
+                                .help("valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\xHH"),
+                        );
+                        i += 2;
+                    }
+                }
+                c if c.is_ascii() => {
+                    out.push(c as u8);
+                    i += 1;
+                }
+                c => {
+                    self.diags.push(
+                        Diagnostic::new("lex.bytes.1", here, format!("`{c}` is not ASCII, so it can't be in a `bytes` literal"))
+                            .help("write its UTF-8 bytes as `\\xHH` escapes, or use `\"...\".to_bytes()`"),
+                    );
+                    i += 1;
+                }
+            }
+        }
+        self.diags.push(
+            Diagnostic::new("lex.bytes.1", pos, "unterminated `bytes` literal").help("close the literal with `\"`"),
+        );
+        self.forget_brackets(line_no);
+        line.len()
     }
 
     /// After a string error, the brackets opened on its line don't continue
