@@ -13,7 +13,7 @@ fn expanded_api_shows_generated_json_code() {
     for want in [
         "\"signature\":\"fn from_json(j Json) Self ! JsonError\"",
         "name := j.variant_name()?",
-        "return Shape.Poly(v_points)",
+        "return Shape.Poly(points: v_points)",
         "return e.under(\\\"points[{v_points_i}]\\\")",
         "JsonMember(\\\"kind\\\", Json.Str(\\\"Circle\\\"))",
         "\"generator\":\"fn:derive_from_json\"",

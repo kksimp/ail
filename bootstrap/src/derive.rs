@@ -149,9 +149,9 @@ fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
         let declared: Vec<&str> = prog
             .structs
             .iter()
-            .filter(|s| s.name == type_name)
+            .filter(|s| last(&s.name) == type_name)
             .map(|s| &s.generics)
-            .chain(prog.enums.iter().filter(|e| e.name == type_name).map(|e| &e.generics))
+            .chain(prog.enums.iter().filter(|e| last(&e.name) == type_name).map(|e| &e.generics))
             .next()
             .map(|g| g.iter().map(|p| p.name.as_str()).collect())
             .unwrap_or_default();
@@ -190,17 +190,40 @@ fn last(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or(name)
 }
 
+/// `text` with the module's own prefix `a.b.` removed from its names: the
+/// generated code is read inside that module, which names its own types
+/// bare (mod.unit.2).
+fn unqualify(text: &str, module: &str) -> String {
+    if module.is_empty() {
+        return text.to_string();
+    }
+    let prefix = format!("{module}.");
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find(&prefix) {
+        let in_name = rest[..i].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.');
+        out.push_str(&rest[..i]);
+        if in_name {
+            out.push_str(&prefix);
+        }
+        rest = &rest[i + prefix.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The `TypeInfo(...)` expression describing the struct or enum `name`,
 /// preferring one declared in `module` (refl.info.1, refl.info.3).
 fn type_info(prog: &Program, name: &str, module: &str) -> Option<String> {
     let pick = |pos: Pos| prog.module_at(pos) == module;
-    let s = prog.structs.iter().filter(|s| s.name == name).min_by_key(|s| !pick(s.pos));
-    let e = prog.enums.iter().filter(|e| e.name == name).min_by_key(|e| !pick(e.pos));
+    // A module's types are named `a.b.T` by now (mod.unit.2).
+    let s = prog.structs.iter().filter(|s| last(&s.name) == name).min_by_key(|s| !pick(s.pos));
+    let e = prog.enums.iter().filter(|e| last(&e.name) == name).min_by_key(|e| !pick(e.pos));
     let field = |f: &Field| {
         format!(
             "FieldInfo(name: {}, type_text: {}, public: {})",
             quote(&f.name),
-            quote(&crate::api::type_text(&f.ty)),
+            quote(&unqualify(&crate::api::type_text(&f.ty), prog.module_at(f.pos))),
             prog.public.contains(&f.pos.line)
         )
     };

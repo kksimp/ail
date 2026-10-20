@@ -1,0 +1,24 @@
+# Derived JSON for a recursive enum whose variants have two fields of one
+# type (json.derive.1-2): the generated code names them (type.struct.7).
+# A program function named like a prelude local doesn't clash with it
+# (expr.bind.5).
+
+enum Expr
+    Num(value int)
+    Add(lhs Expr, rhs Expr)
+
+impl ToJson for Expr
+impl FromJson for Expr
+
+fn depth(e Expr) int
+    match e
+        Num => 1
+        Add(l, r) => 1 + depth(l).max(depth(r))
+
+fn main() !
+    e := Expr.Add(lhs: Num(1), rhs: Add(lhs: Num(2), rhs: Num(3)))
+    t := e.to_json().to_text()
+    print(t)
+    back := Expr.from_json(parse_json(t)?)?
+    print(back == e)
+    print(depth(back))

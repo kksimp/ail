@@ -1,0 +1,15 @@
+## Types of a module that derive JSON (ct.derive.2, mod.unit.2): the
+## generated code names them bare, inside the module.
+pub struct Point
+    pub x int
+    pub y int
+
+pub enum Shape
+    Dot(at Point)
+    Line(from Point, to Point)
+    Group(items List[Shape])
+
+impl ToJson for Point
+impl FromJson for Point
+impl ToJson for Shape
+impl FromJson for Shape
