@@ -715,8 +715,11 @@ error that lists them. *(ADR 0328)*
 
 **std.tensor.4** — `a.add(b)` and `a.mul(b)` are elementwise `+` and `*`;
 `a.dot(b) T` is the sum of the elementwise products. `a` and `b` have the
-same element type (checked) and MUST have equal shapes: otherwise the call
-traps. *(ADR 0328)*
+same element type (checked). `add`, `mul` and the operators broadcast
+NumPy-style (std.tensor.10): the shapes line up from the right, and per axis
+the sizes are equal or one is 1, which stretches to the other; a missing
+leading axis counts as 1. The result has the broadcast shape. `dot` needs
+equal shapes. Shapes that don't broadcast trap. *(ADR 0328, amended by ADR 0512)*
 
 **std.tensor.5** — On `float` tensors, `add`, `mul` and `/` round each element
 as `+`, `*` and `/` do. `sum` and `dot` add in this order: element `i` (or
@@ -750,14 +753,15 @@ isn't 1-D. *(ADR 0328)*
 
 **std.tensor.10** — `a + b`, `a - b`, `a * b` and `a / b` with a tensor
 operand are elementwise, with no other arithmetic operator defined for
-tensors. Both operands are tensors with one element type and equal shapes
-(`a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the
+tensors. Both operands are tensors with one element type and broadcastable
+shapes (std.tensor.4; `a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one
+is a tensor and the
 other a scalar of its element type, on either side, which is taken with
 every element: `t * 2.0`, `1.0 - t`, `8.0 / t`. `/` is defined on `float`
 tensors only; `/` on a `Tensor[int]` is a compile-time error. An `int`
 literal beside a `Tensor[float]` is a `float` (`type.num.10`). Rounding is
 std.tensor.5's and overflow std.tensor.6's; other operand types are a
-compile-time error, and unequal shapes trap. `+=`, `-=` and `*=` follow.
+compile-time error, and shapes that don't broadcast trap. `+=`, `-=` and `*=` follow.
 Matrix product stays `a.matmul(b)`. *(ADR 0344, ADR 0507)*
 
 **std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
