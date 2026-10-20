@@ -1,0 +1,22 @@
+## std.net.16: a raw TCP connection reads and writes bytes.
+use std.net
+
+fn serve(l net.Listener) !
+    c := l.accept()?
+    data := c.read_bytes(64)?
+    c.write_bytes(data + b"\x00\xff")?
+    c.close()
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    port := (l.addr().split(":").last() else "0").to_int() else 0
+    t := spawn serve(l)
+    c := net.connect("127.0.0.1", port)?
+    c.write_bytes(b"ping\x80")?
+    got := c.read_bytes(64)?
+    print(got)
+    end := c.read_bytes(8)?
+    print(end.len())
+    c.close()
+    l.close()
+    t.wait()?

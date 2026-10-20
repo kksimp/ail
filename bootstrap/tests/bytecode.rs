@@ -6,7 +6,9 @@
 //! be the same bytes. Files with a `.test` expectation also run `ail test
 //! --json` both ways. Programs that read the clock or unseeded random
 //! numbers live in `tests/deterministic/`, which isn't included; programs
-//! that open a window (`ui.open(`) wait for it to close, so they're skipped.
+//! that open a window (`ui.open(`) wait for it to close, so they're skipped,
+//! and so are programs marked `# bytecode.skip` because their output holds a
+//! run-specific address (a trap snapshot that shows a raw pointer).
 //! A run that takes longer than `LIMIT` is killed and fails the test.
 //!
 //! Programs without tasks also run with `--max-steps 300`, which stops most
@@ -34,7 +36,7 @@ fn ail_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in entries {
         let p = e.unwrap().path();
         if p.extension().is_some_and(|x| x == "ail")
-            && !fs::read_to_string(&p).is_ok_and(|src| src.contains("ui.open("))
+            && !fs::read_to_string(&p).is_ok_and(|src| src.contains("ui.open(") || src.contains("# bytecode.skip"))
         {
             out.push(p);
         }
@@ -43,7 +45,8 @@ fn ail_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// Words that mark a program whose tasks or threads make its step count and
 /// trace order vary between runs.
-const CONCURRENT: [&str; 6] = ["spawn", "par ", "TaskGroup", "Atomic", "Channel", "Mutex"];
+/// A raw pointer's address (`mem.cstr`) shows in a snapshot taken while it is live.
+const CONCURRENT: [&str; 8] = ["spawn", "par ", "TaskGroup", "Atomic", "Channel", "Mutex", "mem.cstr(", "mem.alloc("];
 
 /// The command lines to compare, without the tier flag: `run [ARGS] FILE`,
 /// the same with a step limit and with a trace, and `test --json FILE`.

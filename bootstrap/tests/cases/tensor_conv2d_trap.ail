@@ -1,0 +1,4 @@
+# std.tensor.16: a kernel bigger than the image traps.
+fn main()
+    img := tensor.from([1.0, 2.0], [1, 2])
+    print(img.conv2d(tensor.from([1.0, 1.0, 1.0, 1.0], [2, 2])))
