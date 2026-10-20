@@ -368,5 +368,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
 | [0430](0430-unsafe-blocks-and-functions-built.md) | `unsafe` blocks and `unsafe fn`, with a manifest opt-in, are built *(delegated)* | Accepted | 2026-10-20 |
+| [0431](0431-extern-c-fn-and-dynamic-loading.md) | `extern c fn` declares a C function, loaded dynamically on first call *(delegated)* | Accepted | 2026-10-20 |
+| [0432](0432-c-calls-through-two-register-files.md) | C calls use two register-file trampolines, with no foreign-function library *(delegated)* | Accepted | 2026-10-20 |
+| [0433](0433-raw-pointer-type.md) | `*T` is a raw pointer type with a C-layout target *(delegated)* | Accepted | 2026-10-20 |
+| [0434](0434-std-mem-c-strings.md) | `std.mem` hands out C strings from C's allocator and traps on bad frees *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |

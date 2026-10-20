@@ -152,6 +152,9 @@ impl<'p> Checker<'p> {
         };
         self.resolved.std_calls.insert(pos, StdCall::Fn(module, f));
         let what = format!("{head}.{f}");
+        if module == "mem" {
+            self.note_unsafe_op(&format!("`{what}`"), pos);
+        }
         if module == "tensor" {
             return Some(self.tensor_call(f, args, pos, expect));
         }
@@ -211,6 +214,10 @@ impl<'p> Checker<'p> {
                 if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
                 Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
             ),
+            // unsafe.mem.1: C strings in memory the program frees itself.
+            ("mem", "cstr") => (vec![Str], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
+            ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
+            ("mem", "free") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Unit),
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),

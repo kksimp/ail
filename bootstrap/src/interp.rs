@@ -22,6 +22,7 @@ mod assoc;
 mod atomic;
 mod builtins;
 mod bytecode;
+mod ffi;
 mod keyfn;
 pub mod limits;
 mod contracts;
@@ -1165,6 +1166,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn run_body_inner(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if f.ext.is_some() {
+            return self.call_extern(f, env, pos);
+        }
         self.depth += 1;
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));

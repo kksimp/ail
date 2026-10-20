@@ -2,7 +2,7 @@
 //! 0102, 0104, 0430): an unsafe operation is allowed only inside an `unsafe`
 //! block, and only a package whose manifest allows it may contain one.
 
-use super::Checker;
+use super::{Checker, Ty};
 use crate::diag::Pos;
 
 impl<'p> Checker<'p> {
@@ -40,6 +40,93 @@ impl<'p> Checker<'p> {
             pos,
             format!("{what} is an unsafe operation, allowed only inside an `unsafe` block"),
             "wrap the call in `unsafe`, ideally inside a safe AIL function that checks the preconditions",
+        );
+    }
+}
+
+impl<'p> Checker<'p> {
+    /// unsafe.ptr.1: a raw pointer points to a type with a fixed C layout:
+    /// a number, a `bool` or another pointer.
+    pub(super) fn ptr_target(&mut self, inner: &Ty, pos: Pos) {
+        let ok = matches!(inner, Ty::Int | Ty::Float | Ty::Bool | Ty::Num(_) | Ty::Ptr(_) | Ty::Err);
+        if !ok {
+            let shown = self.show(inner);
+            self.error_help(
+                "unsafe.ptr.1",
+                pos,
+                format!("a raw pointer can't point to {shown}, which has no fixed C layout"),
+                "point to `int`, `float`, `bool`, a sized number such as `u8`, or another pointer",
+            );
+        }
+    }
+}
+
+/// The widest C call the bootstrap's trampolines make (ffi.decl.3): six
+/// arguments in integer registers and eight in floating-point registers.
+pub const MAX_INT_ARGS: usize = 6;
+pub const MAX_FLOAT_ARGS: usize = 8;
+
+impl<'p> Checker<'p> {
+    /// ffi.decl.3: an `extern c fn` has only types with a C layout
+    /// (`int`, `float`, `bool`, sized numbers, raw pointers; no result, or one of
+    /// these), no `mut` parameters, and fits the registers of a C call.
+    pub(super) fn check_extern(&mut self, idx: usize, f: &'p crate::ast::FnDecl) {
+        let sig = self.sigs[idx].clone();
+        let c_type = |t: &Ty| matches!(t, Ty::Int | Ty::Float | Ty::Bool | Ty::Num(_) | Ty::Ptr(_) | Ty::Err);
+        let (mut ints, mut floats) = (0, 0);
+        for (p, (_, t)) in f.params.iter().zip(&sig.params) {
+            if p.mutable {
+                self.error_help(
+                    "ffi.decl.3",
+                    p.pos,
+                    "an `extern c fn` parameter is passed by value, not `mut`",
+                    "pass a raw pointer `*T` to let C write to memory",
+                );
+            }
+            if !c_type(t) {
+                let shown = self.show(t);
+                self.error_help(
+                    "ffi.decl.3",
+                    p.ty.pos,
+                    format!("{shown} has no C layout, so it can't be a parameter of an `extern c fn`"),
+                    "use `int`, `float`, `bool`, a sized number such as `i32` or `u8`, or a raw pointer `*T`",
+                );
+            }
+            if matches!(t, Ty::Float | Ty::Num(crate::num::Num::F32)) { floats += 1 } else { ints += 1 }
+        }
+        if ints > MAX_INT_ARGS || floats > MAX_FLOAT_ARGS {
+            self.error_help(
+                "ffi.decl.3",
+                f.pos,
+                format!("`{}` takes {ints} integer-like and {floats} float arguments; a C call takes at most {MAX_INT_ARGS} and {MAX_FLOAT_ARGS}", f.name),
+                "declare a smaller wrapper, or pass a pointer to a struct-like buffer",
+            );
+        }
+        if !c_type(&sig.ret) && sig.ret != Ty::Unit {
+            let shown = self.show(&sig.ret);
+            let at = f.ret.as_ref().map_or(f.pos, |t| t.pos);
+            self.error_help(
+                "ffi.decl.3",
+                at,
+                format!("{shown} has no C layout, so it can't be the result of an `extern c fn`"),
+                "return `int`, `float`, `bool`, a sized number or a raw pointer, or nothing",
+            );
+        }
+    }
+}
+
+impl<'p> Checker<'p> {
+    /// unsafe.op.1: `what` is an unsafe operation (raw memory, a pointer
+    /// access), allowed only inside an `unsafe` block.
+    pub(super) fn note_unsafe_op(&mut self, what: &str, pos: Pos) {
+        if self.unsafe_depth > 0 {
+            return;
+        }
+        self.error_help(
+            "unsafe.op.1",
+            pos,
+            format!("{what} is an unsafe operation, allowed only inside an `unsafe` block"),
+            "wrap it in `unsafe`, ideally inside a safe AIL function that checks the preconditions",
         );
     }
 }

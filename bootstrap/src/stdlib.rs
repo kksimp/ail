@@ -18,6 +18,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
         ],
     ),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
+    ("mem", &["cstr", "free", "from_cstr"]),
     ("net", &["get", "post"]),
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["run", "which"]),

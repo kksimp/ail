@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -244,6 +244,27 @@ fn main() !
         return
     r := proc.run("sort", [], "b\na\n", 2000)?
     print(r.out)
+```
+
+## Memory for C: `std.mem`
+
+**std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new
+NUL-terminated copy of `s`; `from_cstr(p *u8) str`, which reads a
+NUL-terminated string (invalid UTF-8 becomes U+FFFD); and `free(p *u8)`, which
+frees a block. Each is an unsafe operation (`unsafe.op.1`), and a block that is
+not freed leaks. The rules for bad pointers are `unsafe.mem.1-2`. *(ADR 0434)*
+
+```ail
+use std.mem
+
+extern c fn strlen(s *u8) int
+
+fn c_length(text str) int
+    unsafe
+        p := mem.cstr(text)
+        n := strlen(p)
+        mem.free(p)
+        n
 ```
 
 ## Network: `std.net`

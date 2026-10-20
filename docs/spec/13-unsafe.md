@@ -63,3 +63,20 @@ fn main()
 
 **unsafe.op.2** — Creating or copying a raw pointer value is not an unsafe
 operation. *(ADR 0106)*
+
+## Raw pointers and memory
+
+**unsafe.ptr.1** — `*T` is a raw pointer type: an address with no ownership
+and no lifetime. `T` is `int`, `float`, `bool`, a sized number, or another
+pointer. A pointer is passed, compared with `==` and stored freely
+(`unsafe.op.2`); it is not a number and does not convert to one. *(ADR 0106,
+ADR 0433)*
+
+**unsafe.mem.1** — `std.mem` (`std.mem.1`) allocates memory from C's own
+allocator, so a block may be handed to C and freed there, or the reverse. Every
+`std.mem` function is an unsafe operation. `from_cstr` of a null pointer, or of
+a block of the program's own that has no NUL, is a run-time trap. *(ADR 0434)*
+
+**unsafe.mem.2** — `mem.free` of a null pointer, or of a block of the program's
+own that is already freed, is a run-time trap. Freeing a block that came from C
+is the program's claim that C allocated it with `malloc`. *(ADR 0434)*

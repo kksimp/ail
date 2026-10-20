@@ -393,6 +393,8 @@ pub enum TypeKind {
     Any(String),
     /// `ref T` (own.ref.1)
     Ref(Box<TypeRef>),
+    /// `*T`, a raw pointer (unsafe.ptr.1)
+    Ptr(Box<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;

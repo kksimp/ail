@@ -279,6 +279,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            ("mem", _) => return self.mem_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());
                 if lo > hi {

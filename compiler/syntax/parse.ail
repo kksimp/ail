@@ -88,7 +88,7 @@ fn tok_text(t Tok) str
 
 ## Keywords the spec defines that the bootstrap doesn't implement yet.
 fn not_yet(k str) bool
-    k == "extern" or k == "as"
+    k == "as"
 
 fn assign_op(s str) ast.BinOp?
     match s
@@ -178,7 +178,7 @@ fn Parser.top_level(mut self)
         elif tag == "kw" and text == "fn"
             if f := function(ast.Within.TopLevel)
                 fns.push(f)
-        elif tag == "kw" and text == "unsafe" and kw_at(1) == "fn"
+        elif tag == "kw" and (text == "unsafe" and kw_at(1) == "fn" or text == "extern" and at_extern_fn())
             if f := function(ast.Within.TopLevel)
                 fns.push(f)
         elif tag == "kw" and text == "use"
@@ -501,9 +501,9 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                     break
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
-        while at_newline() and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe")
+        while at_newline() and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe" or kw_at(1) == "extern")
             i += 1
-    if not at_kw("fn") and not (at_kw("unsafe") and kw_at(1) == "fn")
+    if not at_kw("fn") and not (at_kw("unsafe") and kw_at(1) == "fn") and not at_extern_fn()
         diag("gram.attr.2", here())
         skip_statement()
         return none
@@ -511,13 +511,38 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
     f.attrs = attrs
     f
 
+## At `extern c ["lib"] fn`.
+fn Parser.at_extern_fn(self) bool
+    if not at_kw("extern") or tag_at(1) != "id"
+        return false
+    kw_at(2) == "fn" or tag_at(2) == "str" and kw_at(3) == "fn"
+
 fn in_trait(w ast.Within) bool
     match w
         InTrait(_) => true
         TopLevel | InImpl(_) => false
 
 fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
-    unsafe_fn := eat_kw("unsafe")
+    mut unsafe_fn := false
+    mut ext := absent[ast.Extern]()
+    if eat_kw("unsafe")
+        unsafe_fn = true
+    elif at_kw("extern")
+        kw_pos := bump().pos
+        lang := take_name("`c` after `extern`", "ffi.decl.2")?
+        if lang.name != "c"
+            diag("ffi.decl.2", lang.pos)
+            return none
+        mut lib := absent[str]()
+        match peek()
+            Str(text) =>
+                i += 1
+                lib = text
+            Ident(_) | Kw(_) | Sym(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+        if within != ast.Within.TopLevel
+            diag("ffi.decl.2", kw_pos)
+            return none
+        ext = ast.Extern(lib: lib)
     bump()
     first := take_name("a function name after `fn`", "gram.fn.1")?
     # `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
@@ -583,12 +608,20 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         error_fix("gram.fn.2", here(), "there is no `{sym}`; the return type follows `)` directly")
         i += 1
     mut ret := absent[ast.TypeRef]()
-    if tag_at(0) == "id" or at_sym("!") or at_kw("any") or at_kw("ref")
+    if tag_at(0) == "id" or at_sym("!") or at_sym("*") or at_kw("any") or at_kw("ref")
         ret = type_ref("a return type", "gram.fn.2")?
     full := if o := owner then "`{o.name}.{name}`" else "`{name}`"
     # A trait method without a default ends with its signature (trait.decl.2).
     mut fb := FnBody(body: none, contracts: [])
-    if in_trait(within) and tag_at(1) != "indent"
+    if ext != none and (owner != none or receiver != none or generics.len() > 0)
+        diag("ffi.decl.2", pos)
+        return none
+    if ext != none
+        # ffi.decl.2: a C function has a signature and no body.
+        if not eat_newline()
+            unexpected("end of line after the signature of an `extern c fn`", "ffi.decl.2")
+            return none
+    elif in_trait(within) and tag_at(1) != "indent"
         if not eat_newline()
             unexpected("end of line after the signature", "trait.decl.1")
             return none
@@ -609,7 +642,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         contracts: fb.contracts,
         inherits: none,
         unsafe_fn: unsafe_fn,
-        ext: none,
+        ext: ext,
     )
 
 ## `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -777,6 +810,10 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         pos := bump().pos
         inner := named_type("a type after `ref`", "own.ref.1")?
         return ast.TypeRef(shape: ast.TypeShape.RefTo(inner), pos: pos)
+    if at_sym("*")
+        pos := bump().pos
+        inner := named_type("a type after `*`", "unsafe.ptr.1")?
+        return ast.TypeRef(shape: ast.TypeShape.PtrTo(inner), pos: pos)
     n := dotted_name(expected, rule)?
     mut args := List[ast.TypeRef]()
     if at_sym("<")

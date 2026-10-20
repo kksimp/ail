@@ -123,7 +123,7 @@ fn Checker.implements_in(self, t Ty, tr int, mut seen List[str]) bool
                     return true
             return false
         AnyOf(a) => return a == tr and whole_trait_through_any(tr)
-        RefOf => return tr == eq
+        RefOf | PtrOf => return tr == eq
         Num(k) => return tr == eq or tr == std_ord or (tr == std_hash and k != "f32")
         Union => return tr == eq or tr == std_hash
         Opt(inner) => return (tr == eq or tr == std_hash) and implements_in(inner, tr, mut seen)
