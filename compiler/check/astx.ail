@@ -1,0 +1,199 @@
+## Helpers over the syntax tree that `bootstrap/src/ast.rs` gives the
+## checker: positions, places, and the field each argument of a literal sets.
+use ast
+
+## Where an expression is reported: its first token, as `Expr::pos`.
+pub fn expr_pos(e ast.Expr) ast.Pos
+    match e
+        Str(_, p) => p
+        Interp(_, p) => p
+        Int(_, p) => p
+        Float(_, p) => p
+        Char(_, p) => p
+        Bool(_, p) => p
+        NoneLit(p) => p
+        Hole(p) => p
+        Name(_, p) => p
+        TypeArgs(_, _, p) => p
+        ListLit(_, p) => p
+        Unary(_, _, p) => p
+        If(_, _, _, p) => p
+        Match(_, _, p) => p
+        MapLit(_, p) => p
+        SetLit(_, p) => p
+        NewRef(_, p) => p
+        Comp(_, _, _, _, p) => p
+        Range(lo, _, _, p) =>
+            if l := lo
+                return expr_pos(l)
+            p
+        Call(callee, _, _) => expr_pos(callee)
+        Method(recv, _, _, _) => expr_pos(recv)
+        Member(recv, _, _) => expr_pos(recv)
+        Index(recv, _, _) => expr_pos(recv)
+        Binary(_, lhs, _, _) => expr_pos(lhs)
+        Try(inner, _, _) => expr_pos(inner)
+        OrElse(value, _, _) => expr_pos(value)
+
+## Where a statement is reported, as `Stmt::pos`.
+pub fn stmt_pos(s ast.Stmt) ast.Pos
+    match s
+        Let(_, p, _, _, _) => p
+        While(_, _, p) => p
+        For(_, _, _, _, _, _, p) => p
+        With(_, _, _, _, p) => p
+        Assign(target, _, _, _) => expr_pos(target)
+        Break(p) => p
+        Continue(p) => p
+        Return(_, p) => p
+        Defer(_, p) => p
+        Eval(e) => expr_pos(e)
+        Handle(e, _) => expr_pos(e)
+
+## A step of a place: a field, or an index.
+pub enum Step
+    SField(name str)
+    SIndex(index ast.Expr)
+
+## A place expression: a local and the steps into it.
+pub struct Place
+    pub root str
+    pub steps List[Step]
+
+@allow("expr.match.3") fn is_range(e ast.Expr) bool
+    match e
+        Range => true
+        _ => false
+
+## `x`, `x.f`, `x[i]` and so on, as `place_path`; `none` for anything else.
+@allow("expr.match.3") fn place_path(e ast.Expr) Place?
+    match e
+        Name(n, _) => Place(root: n, steps: [])
+        Member(recv, n, _) =>
+            mut p := place_path(recv)?
+            p.steps.push(Step.SField(n))
+            p
+        Index(recv, i, _) =>
+            if is_range(i)
+                return none
+            mut p := place_path(recv)?
+            p.steps.push(Step.SIndex(i))
+            p
+        _ => none
+
+## The root local of a place, as `place_root`.
+@allow("expr.match.3") fn place_root(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Member(recv, _, _) => place_root(recv)
+        Index(recv, i, _) =>
+            if is_range(i)
+                return none
+            place_root(recv)
+        _ => none
+
+## How an argument of a struct literal or variant sets a field.
+pub enum ArgKind
+    Named
+    Shorthand
+    Positional
+
+## The field an argument sets (`-1` for none) and how (type.struct.3-4, 7).
+pub struct Slot
+    pub field int
+    pub how ArgKind
+
+fn field_index(fields List[ast.Field], n str) int
+    for i in 0..fields.len()
+        if fields[i].name == n
+            return i
+    -1
+
+## The field a bare name, or a bare member made `self.n`, sets (trait.method.6).
+@allow("expr.match.3") fn shorthand_field(fields List[ast.Field], value ast.Expr) int
+    match value
+        Name(n, _) => field_index(fields, n)
+        Member(recv, n, np) =>
+            match recv
+                Name(s, p) => if s == "self" and p == np then field_index(fields, n) else -1
+                _ => -1
+        _ => -1
+
+## The field each argument sets, as `field_slots`.
+pub fn field_slots(fields List[ast.Field], args List[ast.Arg]) List[Slot]
+    mut slots := List[Slot]()
+    for a in args
+        if l := a.label
+            slots.push(Slot(field: field_index(fields, l.name), how: ArgKind.Named))
+            continue
+        k := shorthand_field(fields, a.value)
+        if k >= 0
+            slots.push(Slot(field: k, how: ArgKind.Shorthand))
+        else
+            slots.push(Slot(field: -1, how: ArgKind.Positional))
+    mut taken := List[int]()
+    for s in slots
+        if s.field >= 0
+            taken.push(s.field)
+    mut next := 0
+    for k in 0..slots.len()
+        if slots[k].how == ArgKind.Positional
+            while next < fields.len() and taken.contains(next)
+                next += 1
+            if next < fields.len()
+                slots[k].field = next
+                next += 1
+    slots
+
+## The symbol of a binary operator, as `BinOp::symbol`.
+pub fn op_symbol(op ast.BinOp) str
+    match op
+        Add => "+"
+        Sub => "-"
+        Mul => "*"
+        Div => "/"
+        Rem => "%"
+        Eq => "=="
+        Ne => "!="
+        Lt => "<"
+        Le => "<="
+        Gt => ">"
+        Ge => ">="
+        And => "and"
+        Or => "or"
+
+@allow("expr.match.3") fn is_arithmetic(op ast.BinOp) bool
+    match op
+        Add => true
+        Sub => true
+        Mul => true
+        Div => true
+        Rem => true
+        _ => false
+
+## `fn Type.name` or `name`, as `FnDecl::full_name`.
+pub fn full_name(f ast.FnDecl) str
+    if o := f.owner
+        return "{o.name}.{f.name}"
+    f.name
+
+pub fn has_attr(f ast.FnDecl, n str) bool
+    for a in f.attrs
+        if a.name == n
+            return true
+    false
+
+## The module a position is in (mod.unit.2): empty for the root and the prelude.
+pub fn module_at(p ast.Program, at ast.Pos) str
+    if at.line >= 1073741824
+        return ""
+    mut out := ""
+    for f in p.files
+        if f.base < at.line
+            out = f.module
+    out
+
+## Whether the declaration at `decl` is hidden from code at `at` (mod.vis.1).
+pub fn hidden(p ast.Program, decl ast.Pos, at ast.Pos) bool
+    is_pub := decl.line >= 1073741824 or p.public.contains(decl.line)
+    not is_pub and module_at(p, decl) != module_at(p, at)

@@ -51,7 +51,7 @@ pub struct Bind
     pub ty Ty
 
 ## `a` and `b` are the same type, or an error already reported makes it moot.
-pub fn same(a Ty, b Ty) bool
+@allow("expr.match.3") fn same(a Ty, b Ty) bool
     if a == Ty.Unknown or b == Ty.Unknown
         return true
     match a
@@ -85,7 +85,7 @@ pub fn same(a Ty, b Ty) bool
                 _ => false
         _ => a == b
 
-fn elem_of_list(t Ty) Ty?
+@allow("expr.match.3") fn elem_of_list(t Ty) Ty?
     match t
         ListOf(x) => x
         _ => none
@@ -99,7 +99,7 @@ fn same_all(xs List[Ty], ys List[Ty]) bool
     true
 
 ## Whether `t` contains an unknown part.
-pub fn has_unknown(t Ty) bool
+@allow("expr.match.3") fn has_unknown(t Ty) bool
     match t
         Unknown => true
         ListOf(x) => has_unknown(x)
@@ -120,7 +120,7 @@ fn any_unknown(xs List[Ty]) bool
     false
 
 ## Sort key that keeps error sets in a canonical order.
-pub fn ty_key(t Ty) int
+@allow("expr.match.3") fn ty_key(t Ty) int
     match t
         Struct(i, _) => i
         Enum(i, _) => 1000000000 + i
@@ -131,7 +131,7 @@ pub fn sort_errors(ts List[Ty]) List[Ty]
     ts.sorted(by: |t| ty_key(t))
 
 ## Replace the type parameters bound in `binds`.
-pub fn subst(t Ty, binds List[Bind]) Ty
+@allow("expr.match.3") fn subst(t Ty, binds List[Bind]) Ty
     match t
         Param(p) =>
             for b in binds
@@ -156,7 +156,7 @@ pub fn subst_all(ts List[Ty], binds List[Bind]) List[Ty]
     [subst(t, binds) for t in ts]
 
 ## Whether `t` mentions the type parameter `p`.
-pub fn mentions(t Ty, p int) bool
+@allow("expr.match.3") fn mentions(t Ty, p int) bool
     match t
         Param(q) => q == p
         Struct(_, xs) => mentions_any(xs, p)
@@ -181,7 +181,7 @@ fn mentions_any(xs List[Ty], p int) bool
 
 ## The type constructor of a type that can have an `impl` (trait.impl.6),
 ## as a key: `int`, `list`, `s3` for struct 3, `e2` for enum 2.
-pub fn con_of(t Ty) str?
+@allow("expr.match.3") fn con_of(t Ty) str?
     match t
         Int => "int"
         Float => "float"
@@ -194,7 +194,7 @@ pub fn con_of(t Ty) str?
         _ => none
 
 ## The type arguments of a struct, enum or list.
-pub fn args_of(t Ty) List[Ty]
+@allow("expr.match.3") fn args_of(t Ty) List[Ty]
     match t
         Struct(_, a) => a
         Enum(_, a) => a

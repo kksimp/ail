@@ -1,0 +1,1336 @@
+## Calls, methods, fields, indexing and literals of collections, structs
+## and variants (ADR 0377), as `list` to `index` in `bootstrap/src/check.rs`.
+use ast
+
+@allow("expr.match.3") fn Checker.list(mut self, elems List[ast.Expr], at ast.Pos, expect Ty?) Ty
+    mut hint := no_ty()
+    if t := expect
+        match opt_inner(t)
+            ListOf(x) => hint = x
+            _ => hint = none
+    if elems.len() == 0
+        if h := hint
+            return Ty.ListOf(h)
+        err_help(
+            "type.coll.3",
+            at,
+            "the element type of this empty list isn't known",
+            "use `[]` where a `List[...]` is expected, e.g. as an argument or struct field",
+        )
+        return Ty.Unknown
+    # A known element type: each element must fit it.
+    if h := hint
+        if not has_unknown(h)
+            for e in elems
+                t := expr(e, h, true)
+                if reject_unhandled(t, expr_pos(e))
+                    continue
+                if t == Ty.Unit
+                    err("type.coll.2", expr_pos(e), "a list element must be a value")
+                elif not accepts(h, t)
+                    err(
+                        "type.coll.2",
+                        expr_pos(e),
+                        "the elements of this list are {show(h)}, but this is {show(t)}",
+                    )
+            return Ty.ListOf(h)
+    mut first := no_ty()
+    for e in elems
+        mut want := first
+        if want == none
+            want = hint
+        t := expr(e, want, true)
+        if reject_unhandled(t, expr_pos(e))
+            continue
+        if t == Ty.Unit
+            err("type.coll.2", expr_pos(e), "a list element must be a value")
+        elif t == Ty.Never
+            continue
+        elif f := first
+            if not same(t, f)
+                err(
+                    "type.coll.2",
+                    expr_pos(e),
+                    "list elements must all have one type: this is {show(t)}, the first is {show(f)}",
+                )
+        else
+            first = t
+    if f := first
+        return Ty.ListOf(f)
+    Ty.ListOf(hint else Ty.Unknown)
+
+## Check arguments without a signature to check them against.
+fn Checker.args_only(mut self, args List[ast.Arg])
+    for a in args
+        expr(a.value, none, true)
+
+@allow("expr.match.3") fn Checker.call(mut self, callee ast.Expr, args List[ast.Arg], expect Ty?) Ty
+    mut n := ""
+    mut npos := expr_pos(callee)
+    mut targs := List[ast.TypeRef]()
+    mut has_targs := false
+    match callee
+        Name(x, p) =>
+            n = x
+            npos = p
+        TypeArgs(x, a, p) =>
+            n = x
+            npos = p
+            targs = a
+            has_targs = true
+        _ =>
+            expr(callee, none, true)
+            args_only(args)
+            unsupported(
+                expr_pos(callee),
+                "calling the result of an expression is not supported by the bootstrap yet",
+            )
+            return Ty.Unknown
+    if not has_targs and local(n) != none
+        args_only(args)
+        err("expr.call.1", npos, "`{n}` is a value, not a function")
+        return Ty.Unknown
+    if n == "print"
+        return print_call(args, npos)
+    # err.model.2: `unreachable(message)` traps; it never returns.
+    if n == "unreachable"
+        s := plain_sig(none, [Ty.Str], Ty.Unit)
+        check_call(n, s, [], args, none, npos, none)
+        return Ty.Never
+    if n == "assert" or n == "assert_eq"
+        return assert_call(n, args, npos)
+    if CONC_TYPES.contains(n)
+        return conc_constructor(n, targs, has_targs, args, npos, expect)
+    if has_targs and (n == "List" or n == "Set" or n == "Map")
+        t := collection_constructor(n, targs, npos)
+        if args.len() > 0
+            args_only(args)
+            err_help(
+                "type.coll.8",
+                npos,
+                "`{n}[...]()` makes an empty collection and takes no arguments",
+                "write the elements as a literal, e.g. `[1, 2]`",
+            )
+        return t
+    if d := types.get(n)
+        match d
+            DStruct(s) =>
+                mut explicit := no_binds()
+                if has_targs
+                    explicit = explicit_args(n, struct_params[s], targs, npos)
+                return struct_literal(s, explicit, args, npos, expect)
+            DEnum(e) =>
+                args_only(args)
+                err_help(
+                    "expr.name.1",
+                    npos,
+                    "`{n}` is an enum, not a function",
+                    "use one of its variants, e.g. `{n}.{prog.enums[e].variants[0].name}`",
+                )
+                return Ty.Unknown
+    if i := fns.get(n)
+        reject_test_call(i, npos)
+        note_deprecated(i, npos)
+        declared_fns.add(pos_key(npos))
+        mut s := sigs[i]
+        # A test can fail (test.attr.4), but calling it is already an error.
+        if has_attr(prog.fns[i], "test") and prog.fns[i].ret == none
+            s.ret = Ty.Unit
+        if gapped.contains(i) and is_inferred(s.ret)
+            gap("calls a gapped function")
+        mut binds := List[Bind]()
+        if has_targs
+            binds = explicit_args(n, s.generics[s.owner..s.owner + s.declared], targs, npos)
+        return check_call(n, s, binds, args, none, npos, expect)
+    if v := bare_variant(n, npos, expect)
+        return variant_literal(v.enum_index, v.variant, none, args, npos, expect)
+    args_only(args)
+    if traits.contains(n)
+        err_help(
+            "expr.name.1",
+            npos,
+            "`{n}` is a trait, not a function",
+            "call a method of it, e.g. `{n}.method(x)`",
+        )
+    elif variant_owners(n).len() == 0
+        unknown_name(n, npos, args.len())
+    Ty.Unknown
+
+fn no_binds() List[Bind]?
+    none
+
+fn no_tys() List[Ty]?
+    none
+
+fn plain_sig(receiver bool?, params List[Ty], result Ty) Sig
+    Sig(
+        receiver: receiver,
+        params: [SigParam(mutable: false, ty: t) for t in params],
+        moves: [],
+        ret: result,
+        generics: [],
+        owner: 0,
+        declared: 0,
+    )
+
+## `List[T]()`: an empty collection of a given type (type.coll.8).
+fn Checker.collection_constructor(mut self, n str, targs List[ast.TypeRef], at ast.Pos) Ty
+    want := if n == "Map" then 2 else 1
+    if targs.len() != want
+        err_help(
+            "gram.generic.1",
+            at,
+            "`{n}` takes {count(want, "type argument")}, but {was_were(targs.len())} given",
+            "write e.g. `{n}[int]()`",
+        )
+        return Ty.Unknown
+    first := resolve_type(targs[0])
+    if n == "List"
+        return Ty.ListOf(first)
+    require_key(first, at)
+    if n == "Set"
+        return Ty.SetOf(first)
+    second := resolve_type(targs[1])
+    Ty.MapOf(key: first, value: second)
+
+## `{k: v, ...}`, or `{}` where a map or set is expected (type.coll.2-3).
+@allow("expr.match.3")
+fn Checker.map_literal(mut self, entries List[ast.MapEntry], at ast.Pos, expect Ty?) Ty
+    expected := opt_inner(expect else Ty.Unknown)
+    if entries.len() == 0
+        if is_set_ty(expected) or is_map_ty(expected)
+            return expected
+        err_help(
+            "type.coll.3",
+            at,
+            "the type of this empty `\{}` isn't known",
+            "use `\{}` where a map or set is expected, or write `Map[K, V]()` or `Set[T]()`",
+        )
+        return Ty.Unknown
+    mut kh := no_ty()
+    mut vh := no_ty()
+    match expected
+        MapOf(k, v) =>
+            kh = k
+            vh = v
+        _ => kh = none
+    keys := [en.key for en in entries]
+    vals := [en.value for en in entries]
+    k := elements(keys, kh, "map keys")
+    v := elements(vals, vh, "map values")
+    require_key(k, at)
+    duplicate_literals(keys, "key")
+    Ty.MapOf(key: k, value: v)
+
+## `{a, b, ...}` (type.coll.2).
+@allow("expr.match.3")
+fn Checker.set_literal(mut self, items List[ast.Expr], at ast.Pos, expect Ty?) Ty
+    mut hint := no_ty()
+    match opt_inner(expect else Ty.Unknown)
+        SetOf(x) => hint = x
+        _ => hint = none
+    t := elements(items, hint, "set elements")
+    require_key(t, at)
+    duplicate_literals(items, "element")
+    Ty.SetOf(t)
+
+## A literal key or element as text, to compare (type.map.1).
+@allow("expr.match.3") fn literal_text(e ast.Expr) str?
+    match e
+        Int(n, _) => "i{n}"
+        Unary(op, operand, _) =>
+            if op != ast.UnOp.Neg
+                return none
+            match operand
+                Int(n, _) => if n == "0" then "i0" else "i-{n}"
+                _ => none
+        Str(s, _) => "s{s}"
+        Char(c, _) => "c{c}"
+        Bool(b, _) => "b{b}"
+        _ => none
+
+## Report a key or element written twice as the same literal (type.map.1).
+fn Checker.duplicate_literals(mut self, items List[ast.Expr], what str)
+    mut seen := List[str]()
+    mut first_at := List[ast.Pos]()
+    for e in items
+        lit := literal_text(e) else continue
+        if k := seen.index_of(lit)
+            p := first_at[k]
+            err_help(
+                "type.map.1",
+                expr_pos(e),
+                "this {what} is written twice in the literal",
+                "the first is at {p.line}:{p.col}; remove one",
+            )
+        else
+            seen.push(lit)
+            first_at.push(expr_pos(e))
+
+## The common type of a literal's elements: the expected one, which each
+## must fit, or else the first element's.
+fn Checker.elements(mut self, items List[ast.Expr], hint Ty?, what str) Ty
+    mut known := no_ty()
+    if h := hint
+        if not has_unknown(h)
+            known = h
+    mut first := no_ty()
+    for e in items
+        mut want := known
+        if want == none
+            want = first
+        t := expr(e, want, true)
+        if reject_unhandled(t, expr_pos(e))
+            continue
+        if t == Ty.Unit
+            err("type.coll.2", expr_pos(e), "{what} must be values")
+            continue
+        if w := want
+            if not accepts(w, t)
+                err(
+                    "type.coll.2",
+                    expr_pos(e),
+                    "{what} must all have one type: this is {show(t)}, the others are {show(w)}",
+                )
+        elif t != Ty.Never
+            first = t
+    if k := known
+        return k
+    first else Ty.Unknown
+
+## Explicit type arguments for `params` (gen.infer.2).
+fn Checker.explicit_args(
+    mut self,
+    what str,
+    params List[int],
+    refs List[ast.TypeRef],
+    at ast.Pos,
+) List[Bind]
+    if refs.len() != params.len()
+        if params.len() == 0
+            err("gen.infer.2", at, "`{what}` takes no type arguments")
+        else
+            err(
+                "gen.infer.2",
+                at,
+                "`{what}` takes {count(params.len(), "type argument")}, but {was_were(refs.len())} given",
+            )
+        return [Bind(param: p, ty: Ty.Unknown) for p in params]
+    [Bind(param: params[k], ty: resolve_type(refs[k])) for k in 0..params.len()]
+
+## `Variant(field: value, ...)` (type.enum.6), inferring the enum's type
+## arguments (gen.infer.1).
+fn Checker.variant_literal(
+    mut self,
+    e int,
+    v int,
+    explicit List[Bind]?,
+    args List[ast.Arg],
+    at ast.Pos,
+    expect Ty?,
+) Ty
+    variant := prog.enums[e].variants[v]
+    if variant.fields.len() == 0
+        args_only(args)
+        err_help(
+            "type.enum.6",
+            at,
+            "the variant `{variant.name}` carries no data",
+            "write `{variant.name}` without parentheses",
+        )
+        if b := explicit
+            return enum_value(e, [x.ty for x in b], expect, at, variant.name)
+        return enum_value(e, none, expect, at, variant.name)
+    params := enum_params[e]
+    mut binds := explicit else expected_binds(Def.DEnum(e), expect)
+    label := "{prog.enums[e].name}.{variant.name}"
+    before := diags.len()
+    fields_literal(label, variant.fields, variant_types[e][v], params, mut binds, args, at)
+    quiet := diags.len() > before
+    finish(label, params, mut binds, at, quiet)
+    Ty.Enum(e, [bound(binds, p) for p in params])
+
+## Check a call's arguments against a signature (expr.call.1-2, own.param.2,
+## own.excl.1-2), inferring its type parameters (gen.infer.1) and checking
+## their bounds (gen.bound.3). Returns the type of the call.
+fn Checker.check_call(
+    mut self,
+    what str,
+    sig Sig,
+    given List[Bind],
+    args List[ast.Arg],
+    recv ast.Expr?,
+    at ast.Pos,
+    expect Ty?,
+) Ty
+    mut binds := given
+    for a in args
+        if p := a.param
+            key_misplaced(p.pos)
+        elif l := a.label
+            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+    vars := sig.generics
+    if args.len() != sig.params.len()
+        args_only(args)
+        err(
+            "expr.call.1",
+            at,
+            "`{what}` takes {count(sig.params.len(), "argument")}, but {was_were(args.len())} given",
+        )
+        return subst_unknown(sig.ret, binds, vars)
+    before := diags.len()
+    for k in 0..args.len()
+        a := args[k]
+        p := sig.params[k]
+        hint := subst_unknown(p.ty, binds, vars)
+        mut want_hint := no_ty()
+        if hint != Ty.Unknown
+            want_hint = hint
+        t := expr(a.value, want_hint, true)
+        move_arg(a, k < sig.moves.len() and sig.moves[k])
+        bind(p.ty, t, vars, mut binds)
+        want := subst_unknown(p.ty, binds, vars)
+        if p.mutable and not a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "this parameter is `mut`, so the argument must be marked `mut`",
+                "write `mut` before the argument",
+            )
+        elif p.mutable
+            require_mutable(a.value, "own.param.2", "passed `mut`")
+        elif a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "this parameter isn't `mut`",
+                "remove the `mut`",
+            )
+        if not accepts(want, t)
+            mismatch("expr.call.2", expr_pos(a.value), want, t)
+    # Type parameters that only the result mentions come from the expected type.
+    if e := expect
+        mut open := false
+        for v in vars
+            if not is_bound(binds, v)
+                open = true
+        if open
+            bind(sig.ret, e, vars, mut binds)
+    quiet := diags.len() > before
+    finish(what, vars, mut binds, at, quiet)
+    # own.uniq.5: generic code may copy its values, so a unique type can't be
+    # a function's type argument.
+    own := vars[sig.owner.min(vars.len())..]
+    for b in binds
+        if own.contains(b.param)
+            no_unique(b.ty, at, "a type argument")
+    # own.excl.1-2: two `mut` places must not overlap.
+    mut items := List[ast.Expr]()
+    mut muts := List[bool]()
+    if r := recv
+        items.push(r)
+        muts.push(sig.receiver == true)
+    for k in 0..args.len()
+        items.push(args[k].value)
+        muts.push(sig.params[k].mutable and args[k].mutable)
+    for j in 0..items.len()
+        for i in 0..j
+            if muts[i] and muts[j] and certainly_overlap(items[i], items[j])
+                hint := if is_index(items[j]) then "to exchange two list elements, use `xs.swap(i, j)`" else "pass `mut` only once; the function already sees the change through it"
+                err_help(
+                    "own.excl.2",
+                    expr_pos(items[j]),
+                    "this `mut` argument overlaps another `mut` argument of the same call",
+                    hint,
+                )
+    subst(sig.ret, binds)
+
+@allow("expr.match.3") fn is_index(e ast.Expr) bool
+    match e
+        Index => true
+        _ => false
+
+## Report the type parameters among `vars` that inference left unknown
+## (gen.infer.1), unless an error was already reported (`quiet`), and check
+## every bound (gen.bound.3). A trait's `Self` already implements it.
+fn Checker.finish(mut self, what str, vars List[int], mut binds List[Bind], at ast.Pos, quiet bool)
+    missing := [v for v in vars if not is_bound(binds, v)]
+    if missing.len() > 0 and not quiet
+        names := [tparams[m].name for m in missing]
+        mut example := "{what}[...](...)"
+        if k := what.find(".")
+            example = "{what.slice(0, k)}[...].{what.slice(k + 1, what.len())}(...)"
+        err_help(
+            "gen.infer.1",
+            at,
+            "the type of {list_names(names)} for `{what}` can't be inferred from the arguments or the expected type",
+            "write the type arguments, e.g. `{example}`",
+        )
+    for m in missing
+        binds.push(Bind(param: m, ty: Ty.Unknown))
+    for v in vars
+        if trait_self.contains(v)
+            continue
+        t := bound(binds, v)
+        for b in tparams[v].bounds
+            require(t, b, at, "the type parameter `{tparams[v].name}` of `{what}`")
+
+fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    for a in args
+        if l := a.label
+            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "`print`'s parameter isn't `mut`",
+                "remove the `mut`",
+            )
+    if args.len() != 1
+        args_only(args)
+        err_help(
+            "mod.main.3",
+            at,
+            "`print` takes exactly one argument, but {was_were(args.len())} given",
+            "print one string that interpolates the values: `print(\"\{a} \{b}\")`",
+        )
+        return Ty.Unit
+    v := args[0].value
+    t := expr(v, none, true)
+    if t == Ty.Unit
+        err("mod.main.3", expr_pos(v), "this expression produces no value to print")
+    else
+        text_form(t, expr_pos(v), "mod.main.3")
+    Ty.Unit
+
+## `Type(field: value, ...)` (type.struct.3-5), inferring the struct's type
+## arguments (gen.infer.1).
+fn Checker.struct_literal(
+    mut self,
+    s int,
+    explicit List[Bind]?,
+    args List[ast.Arg],
+    at ast.Pos,
+    expect Ty?,
+) Ty
+    decl := prog.structs[s]
+    params := struct_params[s]
+    mut binds := explicit else expected_binds(Def.DStruct(s), expect)
+    before := diags.len()
+    private_literal(s, at)
+    fields_literal(decl.name, decl.fields, field_types[s], params, mut binds, args, at)
+    quiet := diags.len() > before
+    finish(decl.name, params, mut binds, at, quiet)
+    Ty.Struct(s, [bound(binds, p) for p in params])
+
+## The `(field: value, ...)` of a struct literal or a variant with data
+## (type.struct.3-5, type.enum.6).
+fn Checker.fields_literal(
+    mut self,
+    label str,
+    fields List[ast.Field],
+    ts List[Ty],
+    vars List[int],
+    mut binds List[Bind],
+    args List[ast.Arg],
+    at ast.Pos,
+)
+    mut given := [false for _ in fields]
+    slots := field_slots(fields, args)
+    positional_types(label, fields, ts, args, slots)
+    mut lost := false
+    for k in 0..args.len()
+        a := args[k]
+        slot := slots[k]
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "`mut` can't mark a struct field's value",
+                "remove the `mut`",
+            )
+        if slot.field < 0
+            expr(a.value, none, true)
+            lost = true
+            if l := a.label
+                names := [f.name for f in fields]
+                mut d := new_diag("type.struct.4", l.pos, "`{label}` has no field `{l.name}`")
+                if s := suggest(l.name, names)
+                    d = d.did_you_mean(s)
+                diags.push(d)
+            else
+                err(
+                    "type.struct.4",
+                    expr_pos(a.value),
+                    "too many arguments: `{label}` has {count(fields.len(), "field")}",
+                )
+            continue
+        i := slot.field
+        fname := fields[i].name
+        if given[i]
+            mut where := expr_pos(a.value)
+            if l := a.label
+                where = l.pos
+            how := if slot.how
+                == ArgKind.Shorthand then " (a local named like it sets it too)" else ""
+            err("type.struct.4", where, "field `{fname}` is given more than once{how}")
+        given[i] = true
+        hint := subst_unknown(ts[i], binds, vars)
+        mut want_hint := no_ty()
+        if hint != Ty.Unknown
+            want_hint = hint
+        t := expr(a.value, want_hint, true)
+        if reject_unhandled(t, expr_pos(a.value))
+            continue
+        consume(a.value, t)
+        bind(ts[i], t, vars, mut binds)
+        ft := subst_unknown(ts[i], binds, vars)
+        if not accepts(ft, t)
+            err(
+                "type.struct.5",
+                expr_pos(a.value),
+                "field `{fname}` is {show(ft)}, but this is {show(t)}",
+            )
+    missing := [fields[k].name for k in 0..fields.len() if not given[k]]
+    if missing.len() > 0 and not lost
+        word := if missing.len() == 1 then "field" else "fields"
+        err_help(
+            "type.struct.4",
+            at,
+            "`{label}(...)` is missing {word} {list_names(missing)}",
+            "every field must be given; there are no defaults yet; `todo` stands in for a value you haven't written",
+        )
+
+## type.struct.7: positional arguments may only fill fields whose types all
+## differ, so that swapping two of them is a type error.
+fn Checker.positional_types(
+    mut self,
+    label str,
+    fields List[ast.Field],
+    ts List[Ty],
+    args List[ast.Arg],
+    slots List[Slot],
+)
+    filled := [s.field for s in slots if s.how == ArgKind.Positional and s.field >= 0]
+    mut a := -1
+    mut b := -1
+    for n in 0..filled.len()
+        if a >= 0
+            break
+        for m in n + 1..filled.len()
+            if may_be_same(ts[filled[n]], ts[filled[m]])
+                a = filled[n]
+                b = filled[m]
+                break
+    if a < 0
+        return
+    mut where := ast.Pos(line: 0, col: 0)
+    for k in 0..args.len()
+        if slots[k].how == ArgKind.Positional and slots[k].field == b
+            where = expr_pos(args[k].value)
+            break
+    fa := fields[a].name
+    fb := fields[b].name
+    err_help(
+        "type.struct.7",
+        where,
+        "fields `{fa}` and `{fb}` of `{label}` are both {show(ts[a])}, so they can't be given by position",
+        "name them: `{label}({fa}: ..., {fb}: ...)`",
+    )
+
+## What `x.name(...)` can refer to (trait.res.1).
+pub enum Cand
+    CBuiltin
+    CInherent(index int)
+    CTrait(index int)
+
+fn Checker.method_index(self, tn str, n str) int?
+    methods.get("{tn}.{n}")
+
+@allow("expr.match.3") fn Checker.candidates(self, t Ty, n str) List[Cand]
+    mut found := List[Cand]()
+    if builtin(t, n) != none
+        found.push(Cand.CBuiltin)
+    if tn := type_name_of(t)
+        if i := method_index(tn, n)
+            found.push(Cand.CInherent(i))
+    for tr in 0..prog.traits.len()
+        if trait_method(tr, n) == none
+            continue
+        # A built-in method of the same name takes precedence over a standard
+        # trait's (`xs.max()`) (trait.auto.4, trait.res.2).
+        standard := tr == std_eq or tr == std_ord or tr == std_to_str or tr == std_hash
+        if found.len() > 0 and standard
+            continue
+        mut has := false
+        match t
+            AnyOf(a) => has = a == tr or tr == std_to_str
+            _ => has = implements(t, tr)
+        if has
+            found.push(Cand.CTrait(tr))
+    found
+
+## The pending local named by `recv`, if any (type.coll.13).
+fn Checker.pending_recv(self, recv ast.Expr) int?
+    n := name_of(recv)?
+    pending_of(n)
+
+@allow("expr.match.3")
+fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
+    # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
+    if k := pending_recv(recv)
+        if args.len() == 1
+            if n == "push" and not pending[k].brace
+                t := quiet_type(args[0].value)
+                if k2 := pending_recv(recv)
+                    settle(k2, Ty.ListOf(t))
+            elif n == "add" and pending[k].brace
+                t := quiet_type(args[0].value)
+                if k2 := pending_recv(recv)
+                    settle(k2, Ty.SetOf(t))
+    # type.coll.13: `m.push(k, x)` makes a pending `{}` a `Map[K, List[X]]`.
+    if k := pending_recv(recv)
+        if n == "push" and pending[k].brace and args.len() == 2
+            kt := quiet_type(args[0].value)
+            vt := quiet_type(args[1].value)
+            if k2 := pending_recv(recv)
+                settle(k2, Ty.MapOf(key: kt, value: Ty.ListOf(vt)))
+    # `Type.name(...)`: an associated function or a variant; `Trait.name(x,
+    # ...)`: a qualified trait method call (trait.res.1).
+    mut head := ""
+    mut targs := List[ast.TypeRef]()
+    mut has_targs := false
+    match recv
+        Name(x, _) =>
+            if local(x) == none
+                head = x
+        TypeArgs(x, a, _) =>
+            head = x
+            targs = a
+            has_targs = true
+        _ => head = ""
+    if head != ""
+        if not has_targs
+            if t := std_call(head, n, at, args, expect)
+                return t
+        if not has_targs
+            if t := param_assoc_call(head, n, at, args, expect)
+                return t
+        if d := types.get(head)
+            mut explicit := no_binds()
+            if has_targs
+                explicit = explicit_args(head, def_params(d), targs, at)
+            return associated(d, explicit, n, at, args, expect)
+        # type.char.4: `char.from_code(n)`.
+        if head == "char" and not has_targs
+            if n != "from_code"
+                args_only(args)
+                err("expr.name.1", at, "`char` has no associated function `{n}`")
+                return Ty.Unknown
+            return check_call(
+                "char.from_code",
+                plain_sig(none, [Ty.Int], Ty.Opt(Ty.Char)),
+                [],
+                args,
+                none,
+                at,
+                expect,
+            )
+        if not has_targs
+            if tr := traits.get(head)
+                return qualified(tr, n, at, args)
+    rt0 := expr(recv, none, true)
+    if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
+        args_only(args)
+        return Ty.Unknown
+    # own.ref.3: a method of a `ref T` is called on the `T` in the cell.
+    mut rt := rt0
+    match rt0
+        RefOf(t) => rt = t
+        _ => rt = rt0
+    if reject_drop_call(rt, n, at)
+        args_only(args)
+        return Ty.Unknown
+    match rt
+        Conc(k, inner) => return conc_method(k, inner, n, at, args)
+        Struct(s, _) =>
+            sn := prog.structs[s].name
+            if sn == "ui.Window" or sn == "tensor.Tensor"
+                args_only(args)
+                return gap("std.ui or std.tensor method")
+        _ => rt = rt
+    cands := candidates(rt, n)
+    if cands.len() == 0
+        args_only(args)
+        if not hidden_std_module(recv, n, at)
+            no_method(rt, n, at)
+        return Ty.Unknown
+    if cands.len() > 1
+        args_only(args)
+        forms := [cand_form(c, rt, n) for c in cands]
+        err_help(
+            "trait.res.1",
+            at,
+            "`{n}` could mean any of {list_names(forms)} here",
+            "call a trait's method in the qualified form, e.g. `Trait.name(x, ...)`",
+        )
+        return Ty.Unknown
+    match cands[0]
+        CBuiltin => builtin_call(recv, rt, n, at, args)
+        CInherent(i) => inherent_call(i, recv, rt, n, at, args, expect)
+        CTrait(tr) =>
+            if m := trait_method(tr, n)
+                if prog.fns[m].receiver == none
+                    args_only(args)
+                    err_help(
+                        "trait.assoc.2",
+                        at,
+                        "`{n}` is an associated function of `{prog.traits[tr].name}`, not a method",
+                        "call it on the type: `{ty_name(rt)}.{n}(...)`",
+                    )
+                    return Ty.Unknown
+            trait_call(tr, rt, recv, n, at, args, expect)
+
+## A name that `ail check` treats as a standard module even when not imported.
+fn Checker.std_like(self, n str) bool
+    undeclared := not types.contains(n)
+        and not traits.contains(n)
+        and not consts.contains(n)
+        and not fns.contains(n)
+    undeclared and STD_MODULES.contains(n)
+
+fn Checker.cand_form(self, c Cand, rt Ty, n str) str
+    match c
+        CTrait(t) => "{prog.traits[t].name}.{n}(x)"
+        CBuiltin | CInherent => "{ty_name(rt)}.{n}"
+
+@allow("expr.match.3")
+fn Checker.inherent_call(
+    mut self,
+    i int,
+    recv ast.Expr,
+    rt Ty,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    private_fn(i, at)
+    sig := sigs[i]
+    tn := type_name_of(rt) else ""
+    mutable := sig.receiver else
+        args_only(args)
+        err_help(
+            "trait.method.4",
+            at,
+            "`{n}` is an associated function, not a method",
+            "call it as `{tn}.{n}(...)`",
+        )
+        return Ty.Unknown
+    if mutable
+        require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
+    note_deprecated(i, at)
+    move_receiver(i, recv)
+    if gapped.contains(i) and is_inferred(sig.ret)
+        gap("calls a gapped method")
+    owner_args := args_of(rt)
+    mut binds := List[Bind]()
+    match rt
+        Struct => binds = zip_binds(sig.generics[..sig.owner], owner_args)
+        Enum => binds = zip_binds(sig.generics[..sig.owner], owner_args)
+        _ => binds = []
+    check_call(n, sig, binds, args, recv, at, expect)
+
+@allow("expr.match.3") fn is_any(t Ty) bool
+    match t
+        AnyOf => true
+        _ => false
+
+fn zip_binds(params List[int], ts List[Ty]) List[Bind]
+    [Bind(param: params[k], ty: ts[k]) for k in 0..params.len().min(ts.len())]
+
+## `x.name(...)` where `name` comes from trait `tr`, which `x`'s type implements.
+fn Checker.trait_call(
+    mut self,
+    tr int,
+    rt Ty,
+    recv ast.Expr,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    f := trait_method(tr, n) else return Ty.Unknown
+    sig := sigs[f]
+    if is_any(rt) and not callable_through_any(tr, f)
+        args_only(args)
+        err_help(
+            "trait.any.4",
+            at,
+            "`{n}` can't be called on {show(rt)}: its signature uses `Self` other than as the receiver",
+            "call it on a value of a concrete type, or use a type parameter `[T {prog.traits[tr].name}]` instead of `any`",
+        )
+        return Ty.Unknown
+    if sig.receiver == true
+        require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
+    check_call(n, sig, [Bind(param: trait_self[tr], ty: rt)], args, recv, at, expect)
+
+## `Trait.name(x, ...)`: a trait's method called on `x` (trait.res.1).
+fn Checker.qualified(mut self, tr int, n str, at ast.Pos, args List[ast.Arg]) Ty
+    tname := prog.traits[tr].name
+    if trait_method(tr, n) == none
+        args_only(args)
+        names := [prog.fns[m].name for m in prog.traits[tr].methods]
+        mut d := new_diag("expr.name.1", at, "`{tname}` has no method `{n}`")
+        if s := suggest(n, names)
+            d = d.did_you_mean(s)
+        diags.push(d)
+        return Ty.Unknown
+    if args.len() == 0
+        err_help(
+            "expr.call.1",
+            at,
+            "`{tname}.{n}` needs the value to call it on as its first argument",
+            "write `{tname}.{n}(x, ...)`",
+        )
+        return Ty.Unknown
+    recv := args[0].value
+    rt := expr(recv, none, true)
+    if reject_unhandled(rt, expr_pos(recv)) or rt == Ty.Unknown
+        args_only(args[1..])
+        return Ty.Unknown
+    if not implements(rt, tr) and rt != Ty.AnyOf(tr)
+        args_only(args[1..])
+        text := "{show(rt)} doesn't implement `{tname}`"
+        if h := how_to_implement(rt, tr)
+            err_help("gen.bound.3", expr_pos(recv), text, h)
+        else
+            err("gen.bound.3", expr_pos(recv), text)
+        return Ty.Unknown
+    trait_call(tr, rt, recv, n, at, args[1..], none)
+
+## `Type.name(...)` or `Type[int].name(...)`: an associated function
+## (trait.method.4), or a variant with data (type.enum.6).
+fn Checker.associated(
+    mut self,
+    d Def,
+    explicit List[Bind]?,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    tn := def_name(d)
+    if e := enum_of_def(d)
+        if v := variant_index(e, n)
+            return variant_literal(e, v, explicit, args, at, expect)
+    i := method_index(tn, n) else
+        if t := impl_assoc_call(d, explicit, n, at, args, expect)
+            return t
+        args_only(args)
+        err("expr.name.1", at, "`{tn}` has no associated function `{n}`")
+        return Ty.Unknown
+    private_fn(i, at)
+    sig := sigs[i]
+    if sig.receiver != none
+        args_only(args)
+        err_help(
+            "trait.method.4",
+            at,
+            "`{n}` is a method, so it's called on a value",
+            "call it as `x.{n}(...)` where `x` is a `{tn}`",
+        )
+        return Ty.Unknown
+    mut binds := List[Bind]()
+    if b := explicit
+        binds = zip_binds(sig.generics[..sig.owner], [x.ty for x in b])
+    note_deprecated(i, at)
+    declared_assoc.add(pos_key(at))
+    if gapped.contains(i) and is_inferred(sig.ret)
+        gap("calls a gapped associated function")
+    check_call("{tn}.{n}", sig, binds, args, none, at, expect)
+
+fn enum_of_def(d Def) int?
+    match d
+        DEnum(e) => e
+        DStruct => none
+
+## Report a method call on a type without that method.
+@allow("expr.match.3") fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos)
+    mut names := List[str]()
+    if tn := type_name_of(rt)
+        for k in methods.keys()
+            if k.starts_with("{tn}.")
+                names.push(k.slice(tn.len() + 1, k.len()))
+    else
+        names = builtin_names(rt)
+    for t in 0..prog.traits.len()
+        if implements(rt, t) or rt == Ty.AnyOf(t)
+            for m in prog.traits[t].methods
+                names.push(prog.fns[m].name)
+    match rt
+        Struct(s, _) =>
+            for f in prog.structs[s].fields
+                if f.name == n
+                    err_help(
+                        "expr.name.1",
+                        at,
+                        "`{n}` is a field of {show(rt)}, not a method",
+                        "remove the `()`",
+                    )
+                    return
+        _ => names = names
+    mut d := new_diag("expr.name.1", at, "{show(rt)} has no method `{n}`")
+    if s := suggest(n, names)
+        d = d.did_you_mean(s)
+    diags.push(d)
+
+## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`.
+fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
+    x := name_of(recv) else return false
+    if local(x) == none or not STD_MODULES.contains(x)
+        return false
+    gap("a local hides a standard module")
+    true
+
+@allow("expr.match.3") fn Checker.field(mut self, recv ast.Expr, n str, at ast.Pos, expect Ty?) Ty
+    mut head := ""
+    mut targs := List[ast.TypeRef]()
+    mut has_targs := false
+    match recv
+        Name(x, _) =>
+            if local(x) == none
+                head = x
+        TypeArgs(x, a, _) =>
+            head = x
+            targs = a
+            has_targs = true
+        _ => head = ""
+    if head != "" and not has_targs and std_module(head) != none
+        return gap("a standard module's field")
+    # `Enum.Variant` and `Enum[int].Variant` (type.enum.3).
+    if head != ""
+        if d := types.get(head)
+            match d
+                DEnum(e) =>
+                    if v := variant_index(e, n)
+                        fields := prog.enums[e].variants[v].fields
+                        if fields.len() > 0
+                            shown := ["{f.name}: ..." for f in fields]
+                            err_help(
+                                "type.enum.6",
+                                at,
+                                "the variant `{n}` carries data",
+                                "build it with `{head}.{n}({shown.join(", ")})`",
+                            )
+                            return Ty.Unknown
+                        mut explicit := no_tys()
+                        if has_targs
+                            explicit = [b.ty for b in explicit_args(
+                                head,
+                                enum_params[e],
+                                targs,
+                                at,
+                            )]
+                        return enum_value(e, explicit, expect, at, n)
+                    names := [x.name for x in prog.enums[e].variants]
+                    mut diag := new_diag("expr.name.1", at, "`{head}` has no variant `{n}`")
+                    if s := suggest(n, names)
+                        diag = diag.did_you_mean(s)
+                    diags.push(diag)
+                DStruct => err(
+                    "type.struct.6",
+                    at,
+                    "`{head}` is a type; fields are read from values",
+                )
+            return Ty.Unknown
+    rt0 := expr(recv, none, true)
+    if reject_unhandled(rt0, expr_pos(recv)) or rt0 == Ty.Unknown
+        return Ty.Unknown
+    mut rt := rt0
+    match rt0
+        RefOf(t) => rt = t
+        _ => rt = rt0
+    if candidates(rt, n).len() > 0
+        err_help("expr.op.3", at, "`{n}` is a method, so calling it needs `()`", "write `.{n}()`")
+        return Ty.Unknown
+    if is_tensor(rt)
+        return gap("a tensor's field")
+    match rt
+        Struct(s, args) =>
+            decl := prog.structs[s]
+            for i in 0..decl.fields.len()
+                if decl.fields[i].name == n
+                    private_field(s, i, at)
+                    return subst(field_types[s][i], binds_of(struct_params[s], args))
+            names := [f.name for f in decl.fields]
+            mut d := new_diag("type.struct.6", at, "`{decl.name}` has no field `{n}`")
+            if s2 := suggest(n, names)
+                d = d.did_you_mean(s2)
+            elif names.len() == 0
+                d = d.with_help("`{decl.name}` has no fields")
+            else
+                d = d.with_help("`{decl.name}` has the fields {list_names(names)}")
+            diags.push(d)
+            Ty.Unknown
+        _ =>
+            err_help(
+                "type.struct.6",
+                at,
+                "{show(rt)} has no fields",
+                "only structs have fields; the built-in types have methods, written with `()`",
+            )
+            Ty.Unknown
+
+@allow("expr.match.3") fn map_key(t Ty) Ty
+    match t
+        MapOf(k, _) => k
+        _ => Ty.Unknown
+
+@allow("expr.match.3") fn map_value(t Ty) Ty
+    match t
+        MapOf(_, v) => v
+        _ => Ty.Unknown
+
+@allow("expr.match.3") fn is_negative_literal(e ast.Expr) bool
+    match e
+        Unary(op, operand, _) => op == ast.UnOp.Neg and is_int_literal(operand)
+        _ => false
+
+## `xs[i]` and `xs[a..b]` (type.coll.4, type.str.2).
+@allow("expr.match.3") fn Checker.index_expr(mut self, recv ast.Expr, index ast.Expr) Ty
+    rt := expr(recv, none, true)
+    if reject_unhandled(rt, expr_pos(recv))
+        return Ty.Unknown
+    # `m[k]` (type.map.3).
+    if is_map_ty(rt)
+        if is_range(index)
+            err("type.map.3", expr_pos(index), "a map can't be sliced")
+            return Ty.Unknown
+        k := map_key(rt)
+        kt := expr(index, k, true)
+        if not accepts(k, kt)
+            mismatch("type.map.3", expr_pos(index), k, kt)
+        return map_value(rt)
+    # type.coll.4: indexes start at 0; there are no negative indexes.
+    mut bad := List[ast.Pos]()
+    match index
+        Range(lo, hi, _, _) =>
+            for b in [lo, hi]
+                if x := b
+                    if is_negative_literal(x) and bad.len() == 0
+                        bad.push(expr_pos(x))
+        _ =>
+            if is_negative_literal(index)
+                bad.push(expr_pos(index))
+    if bad.len() > 0
+        err_help(
+            "type.coll.4",
+            bad[0],
+            "a list has no negative indexes",
+            "count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`",
+        )
+    slice := is_range(index)
+    match index
+        Range(lo, hi, _, _) => range_bounds(lo, hi)
+        _ =>
+            it := expr(index, Ty.Int, true)
+            if not accepts(Ty.Int, it)
+                err("type.coll.4", expr_pos(index), "a list index must be `int`, found {show(it)}")
+    match rt
+        ListOf(t) => if slice then rt else t
+        Unknown => Ty.Unknown
+        Str =>
+            err_help(
+                "type.str.2",
+                expr_pos(recv),
+                "a `str` can't be indexed",
+                "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
+            )
+            Ty.Unknown
+        _ =>
+            err("type.coll.4", expr_pos(recv), "only lists and maps can be indexed, not {show(rt)}")
+            Ty.Unknown
+
+## ---- Testing (testing.rs) ----
+
+## test.attr.3: a test is run by `ail test`, never called.
+fn Checker.reject_test_call(mut self, i int, at ast.Pos)
+    f := prog.fns[i]
+    if has_attr(f, "test")
+        err_help(
+            "test.attr.3",
+            at,
+            "`{f.name}` is a test and can't be called",
+            "move shared code into an ordinary function that the test calls",
+        )
+
+## `assert(cond)` and `assert_eq(a, b)` (test.assert.1-2).
+fn Checker.assert_call(mut self, n str, args List[ast.Arg], at ast.Pos) Ty
+    want := if n == "assert" then 1 else 2
+    for a in args
+        if l := a.label
+            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "`{n}`'s parameters aren't `mut`",
+                "remove the `mut`",
+            )
+    if args.len() != want
+        args_only(args)
+        err(
+            "test.assert.2",
+            at,
+            "`{n}` takes exactly {want} argument(s), but {was_were(args.len())} given",
+        )
+        return Ty.Unit
+    if n == "assert"
+        v := args[0].value
+        t := expr(v, Ty.Bool, true)
+        if t != Ty.Unknown and t != Ty.Never and not reject_unhandled(
+            t,
+            expr_pos(v),
+        ) and not accepts(Ty.Bool, t)
+            err("test.assert.2", expr_pos(v), "`assert` needs a `bool`, found {show(t)}")
+    else
+        lt := expr(args[0].value, none, true)
+        rt := expr(args[1].value, lt, true)
+        operator(ast.BinOp.Eq, lt, rt, at)
+        text_form(lt, expr_pos(args[0].value), "test.assert.2")
+    Ty.Unit
+
+## gram.attr.4: using a function marked `@deprecated("why")` warns.
+fn Checker.note_deprecated(mut self, i int, at ast.Pos)
+    f := prog.fns[i]
+    for a in f.attrs
+        if a.name == "deprecated"
+            if why := a.arg
+                mut d := new_diag("gram.attr.4", at, "`{f.name}` is deprecated: {why}")
+                d.warning = true
+                diags.push(d)
+            return
+
+## ---- Privacy (privacy.rs) ----
+
+## `x.f` on a private field of a struct from another module (mod.vis.1).
+fn Checker.private_field(mut self, s int, i int, at ast.Pos)
+    decl := prog.structs[s]
+    f := decl.fields[i]
+    if hidden(prog, f.pos, at)
+        err_help(
+            "mod.vis.1",
+            at,
+            "field `{f.name}` of `{decl.name}` is private to its module",
+            "mark the field `pub {f.name} ...` to use it here",
+        )
+
+## `T(...)` for a struct from another module with a private field.
+fn Checker.private_literal(mut self, s int, at ast.Pos)
+    decl := prog.structs[s]
+    for f in decl.fields
+        if hidden(prog, f.pos, at)
+            err_help(
+                "mod.vis.1",
+                at,
+                "`{decl.name}` can't be built here: its field `{f.name}` is private to its module",
+                "call a `pub` function of its module that builds it",
+            )
+            return
+
+## A call of a private method or associated function of another module.
+fn Checker.private_fn(mut self, i int, at ast.Pos)
+    f := prog.fns[i]
+    if f.within == ast.Within.TopLevel and hidden(prog, f.pos, at)
+        err_help(
+            "mod.vis.1",
+            at,
+            "`{full_name(f)}` is private to its module",
+            "mark it `pub` to use it here",
+        )
+
+## ---- Comprehensions (comprehension.rs) ----
+
+@allow("expr.match.3")
+fn Checker.comprehension(
+    mut self,
+    form ast.CompKind,
+    elem ast.Expr,
+    value ast.Expr?,
+    clauses List[ast.CompFor],
+    expect Ty?,
+) Ty
+    want := opt_inner(expect else Ty.Unknown)
+    mut hint := no_ty()
+    mut vhint := no_ty()
+    match form
+        ListComp =>
+            match want
+                ListOf(t) => hint = t
+                _ => hint = none
+        SetComp =>
+            match want
+                SetOf(t) => hint = t
+                _ => hint = none
+        MapComp =>
+            match want
+                MapOf(k, v) =>
+                    hint = k
+                    vhint = v
+                _ => hint = none
+    # conc.par.12: `par for` is the only clause of a list comprehension.
+    for c in clauses
+        if c.is_par
+            if form != ast.CompKind.ListComp or clauses.len() > 1
+                err_help(
+                    "conc.par.12",
+                    c.var_pos,
+                    "`par for` computes the elements of a list comprehension with one `for`",
+                    "use one `par for` clause in a `[...]` comprehension, or drop `par`",
+                )
+            break
+    mark := locals.len()
+    # expr.comp.4: `continue` skips an element and `break` ends the comprehension.
+    loop_depth += 1
+    for c in clauses
+        t := iterable(c.iter)
+        if declare(c.var, c.var_pos)
+            locals.push(Local(
+                name: c.var,
+                ty: t,
+                mutable: false,
+                how: LocalKind.LoopVar,
+                decl: none,
+            ))
+        if cond := c.cond
+            condition(cond)
+    t := comp_part(elem, hint)
+    mut vt := Ty.Unknown
+    if v := value
+        vt = comp_part(v, vhint)
+    loop_depth -= 1
+    end_scope(mark)
+    if form != ast.CompKind.ListComp and not has_unknown(t) and t != Ty.Never
+        require_key(t, expr_pos(elem))
+    match form
+        ListComp => Ty.ListOf(t)
+        SetComp => Ty.SetOf(t)
+        MapComp => Ty.MapOf(key: t, value: vt)
+
+## The element (or key, or value) of a comprehension (expr.comp.3).
+fn Checker.comp_part(mut self, e ast.Expr, hint Ty?) Ty
+    mut h := no_ty()
+    if x := hint
+        if not has_unknown(x)
+            h = x
+    t := expr(e, h, true)
+    if reject_unhandled(t, expr_pos(e))
+        return Ty.Unknown
+    if t == Ty.Unit
+        err("expr.comp.3", expr_pos(e), "a comprehension's element must be a value")
+        return Ty.Unknown
+    w := h else return t
+    if not accepts(w, t)
+        err("expr.comp.3", expr_pos(e), "the elements here are {show(w)}, but this is {show(t)}")
+    w

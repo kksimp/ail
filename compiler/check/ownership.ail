@@ -1,0 +1,238 @@
+## Ownership checks made while typing (ADR 0377), as `check/ownership.rs`:
+## unique values (own.uniq.1-10), `move` (own.move.1-6), `ref T`
+## (own.ref.1-7) and `defer` (own.defer.1-3). The names whose use moves a
+## value are kept in `moved` for the flow check (slice 3).
+use ast
+
+## own.uniq.6: only a unique type has a cleanup, and it is written out.
+fn Checker.check_drop_impls(mut self)
+    d := std_drop else return
+    for i in 0..prog.impls.len()
+        imp := prog.impls[i]
+        if impl_info[i].tr != d
+            continue
+        target := impl_info[i].target
+        if target != Ty.Unknown and not is_unique(target)
+            n := imp.target.name
+            err_help(
+                "own.uniq.6",
+                imp.target.pos,
+                "only a unique type has a cleanup, and `{n}` can be copied",
+                "declare it `unique struct {n}` or `unique enum {n}`",
+            )
+        elif imp.methods.len() == 0
+            err_help(
+                "own.uniq.6",
+                imp.pos,
+                "a cleanup has no automatic form",
+                "write `fn drop(mut self)` with the cleanup indented below",
+            )
+
+## own.uniq.6: `x.drop()` would run the cleanup twice.
+fn Checker.reject_drop_call(mut self, rt Ty, n str, at ast.Pos) bool
+    reject := n == "drop" and is_unique(rt) and std_drop != none
+    if reject
+        err_help(
+            "own.uniq.6",
+            at,
+            "the cleanup runs by itself when the value's owner goes out of scope",
+            "to release it early, pass it to a function that takes it: `fn close(move f File)`",
+        )
+    reject
+
+## `e` gives its value away; a unique value moves (own.uniq.2).
+fn Checker.consume(mut self, e ast.Expr, t Ty)
+    if is_unique(t)
+        take(e, "own.uniq.2")
+
+## Move the value of `e` out of its binding.
+@allow("expr.match.3") fn Checker.take(mut self, e ast.Expr, rule str)
+    match e
+        Name(n, at) =>
+            l := local(n) else return
+            match l.how
+                Binding => moved.push(Moved(pos: at, rule: rule))
+                MoveParam => moved.push(Moved(pos: at, rule: rule))
+                SelfParam =>
+                    # own.move.6: a `move self` method owns its receiver.
+                    if (prog.fns[cur_fn].receiver?.moved else false)
+                        moved.push(Moved(pos: at, rule: rule))
+                    else
+                        err_help(
+                            "own.move.3",
+                            at,
+                            "`self` belongs to the caller, so it can't be moved",
+                            "declare the method `move self` to take ownership of its receiver",
+                        )
+                LoopVar =>
+                    err_help(
+                        "own.move.3",
+                        at,
+                        "the loop variable `{n}` belongs to the loop, so it can't be moved",
+                        "move the whole collection instead",
+                    )
+                ParamLocal =>
+                    err_help(
+                        "own.move.3",
+                        at,
+                        "the parameter `{n}` belongs to the caller, so it can't be moved",
+                        "declare it `move {n} Type` to take ownership",
+                    )
+        _ =>
+            root := place_root(e) else return
+            if rule == "own.move.2" or rule == "own.move.6"
+                err_help(
+                    "own.move.3",
+                    expr_pos(e),
+                    "only a whole local binding can be moved, and this is part of `{root}`",
+                    "move `{root}` itself, or pass a new value",
+                )
+            else
+                err_help(
+                    "own.uniq.1",
+                    expr_pos(e),
+                    "this value is unique and belongs to `{root}`, so it can't be copied out of it",
+                    "move the whole of `{root}`, or use the value where it is",
+                )
+
+## own.move.2: an argument to a `move` parameter is marked `move`, and only
+## such an argument is.
+fn Checker.move_arg(mut self, a ast.Arg, param_moves bool)
+    if param_moves and a.moved
+        take(a.value, "own.move.2")
+    elif param_moves
+        err_help(
+            "own.move.2",
+            expr_pos(a.value),
+            "this parameter is `move`, so the argument must be marked `move`",
+            "write `move` before the argument; the value can't be used after the call",
+        )
+    elif a.moved
+        err_help(
+            "own.move.2",
+            expr_pos(a.value),
+            "this parameter isn't `move`",
+            "remove the `move`",
+        )
+
+## own.move.6: calling a `move self` method on `recv` moves it.
+fn Checker.move_receiver(mut self, f int, recv ast.Expr)
+    if (prog.fns[f].receiver?.moved else false)
+        take(recv, "own.move.6")
+
+## The elements of a list literal, or the values of a map literal, of a
+## unique type move into it (own.uniq.8).
+fn Checker.consume_elems(mut self, es List[ast.Expr], elem Ty)
+    if is_unique(elem)
+        for e in es
+            take(e, "own.uniq.8")
+
+## own.uniq.9-10: a built-in method of a list or map whose elements are
+## unique: which parameters take ownership; one that would copy is an error.
+@allow("expr.match.3")
+fn Checker.unique_builtin(mut self, rt Ty, n str, at ast.Pos, nparams int) List[bool]
+    mut elem := Ty.Unknown
+    mut is_list := false
+    match rt
+        ListOf(e) =>
+            elem = e
+            is_list = true
+        MapOf(_, v) => elem = v
+        _ => return []
+    if not is_unique(elem)
+        return []
+    mut hint := ""
+    if is_list
+        if n == "push" or n == "extend"
+            return [true]
+        if n == "insert"
+            return [false, true]
+        if [
+            "pop",
+            "remove_at",
+            "len",
+            "swap",
+            "clear",
+            "reverse",
+            "sort",
+            "contains",
+            "index_of",
+        ].contains(n)
+            return [false for _ in 0..nparams]
+        if n == "first" or n == "last"
+            hint = "borrow it with `xs[0]` or `xs[xs.len() - 1]`, or take it out with `xs.pop()`"
+        elif n == "min" or n == "max"
+            hint = "find its index and borrow it with `xs[i]`"
+        else
+            hint = "use a comprehension that reads what it needs, e.g. `[c.id for c in xs]`"
+    else
+        if ["remove", "len", "contains", "keys"].contains(n)
+            return [false for _ in 0..nparams]
+        if n == "push"
+            return [false, true]
+        if n == "get"
+            hint = "borrow it with `m[k]`, or take it out with `m.remove(k)`"
+        else
+            hint = "iterate the keys and borrow each value: `for k in m.keys()` then `m[k]`"
+    what := if is_list then "list elements" else "map values"
+    err_help("own.uniq.10", at, "`{n}` would copy {what}, and {show(elem)} is unique", hint)
+    []
+
+## `ref e` (own.ref.1).
+@allow("expr.match.3") fn Checker.ref_expr(mut self, value ast.Expr, at ast.Pos, expect Ty?) Ty
+    mut hint := no_ty()
+    if e := expect
+        match e
+            RefOf(t) => hint = t
+            _ => hint = none
+    t := expr(value, hint, true)
+    if reject_unhandled(t, expr_pos(value))
+        return Ty.Unknown
+    if t == Ty.Unit
+        err("own.ref.5", expr_pos(value), "`ref` needs a value, and this expression produces none")
+        return Ty.Unknown
+    no_unique(t, at, "the contents of a `ref`")
+    Ty.RefOf(t)
+
+@allow("expr.match.3") fn is_ref(t Ty) bool
+    match t
+        RefOf => true
+        _ => false
+
+## own.ref.4: `e` is reached through a `ref`, so it may be changed whatever
+## its binding. A `mut self` method may be called on a `ref` itself.
+@allow("expr.match.3") fn Checker.writes_through_ref(mut self, e ast.Expr, receiver bool) bool
+    if receiver and is_ref(quiet_type(e))
+        return true
+    match e
+        Member(recv, _, _) => is_ref(quiet_type(recv)) or writes_through_ref(recv, false)
+        Index(recv, _, _) => is_ref(quiet_type(recv)) or writes_through_ref(recv, false)
+        _ => false
+
+## `defer S` (own.defer.1-3): `S` runs when the block exits, so it can't
+## leave the block or declare anything.
+fn Checker.defer_stmt(mut self, inner ast.Stmt, at ast.Pos)
+    mut what := ""
+    match inner
+        Eval => what = ""
+        Assign => what = ""
+        Handle => what = ""
+        Return => what = "`return`"
+        Break => what = "`break`"
+        Continue => what = "`continue`"
+        Let => what = "a binding"
+        Defer => what = "another `defer`"
+        While => what = "a loop"
+        For => what = "a loop"
+        With => what = "a `with` block"
+    if what != ""
+        err_help(
+            "own.defer.3",
+            at,
+            "a deferred statement can't be {what}",
+            "defer a call or an assignment, e.g. `defer f.close()`",
+        )
+        return
+    t := stmt(inner, none, false)
+    if is_stmt_eval(inner)
+        reject_unhandled(t, stmt_pos(inner))

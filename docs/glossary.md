@@ -71,6 +71,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
+| **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Generated code** | The text a derive generator returned, checked as if written in its `impl`; addressed `gen:impl:TYPE.TRAIT:LINE:COL` and shown by `ail api --expanded` (`ct.gen.*`, ADRs 0228, 0309). |
 | **Generated origin** | The provenance of generated code: the deriving `impl` and the generator, shown by `ail api --expanded` (`ct.gen.4`, ADR 0228). |
 | **Glob** | A path pattern with `*` and `?` inside a component and `**` for any number of directories; `fs.glob` returns the matching paths, sorted (`std.fs.9`, ADR 0281). |

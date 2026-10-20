@@ -1,0 +1,334 @@
+## Tasks and their communication types (ADR 0377), as `check/conc.rs`:
+## `spawn f(args)` (conc.task.1), `TaskGroup` (conc.task.4, conc.task.8),
+## `Channel[T]` (conc.share.3-4), `Mutex[T]` (conc.share.2, conc.share.5)
+## and `Atomic[T]` (conc.atomic.3-7). The handle checks of conc.task.5 are
+## a flow pass (slice 3).
+use ast
+
+## The prelude's `enum AtomicOrder` (conc.atomic.7, ADR 0352).
+ATOMIC_ORDERS := ["SeqCst", "Acquire", "Release", "AcqRel", "Relaxed"]
+
+## `TaskGroup()`, `Channel[T](capacity)`, `Mutex(value)`, `Atomic(value)`
+## or one of these with its type argument; `Task(...)` is an error.
+@allow("expr.match.3")
+fn Checker.conc_constructor(
+    mut self,
+    n str,
+    targs List[ast.TypeRef],
+    has_targs bool,
+    args List[ast.Arg],
+    at ast.Pos,
+    expect Ty?,
+) Ty
+    if n == "Task"
+        args_only(args)
+        err_help(
+            "conc.task.1",
+            at,
+            "a task is started with `spawn`, not built",
+            "write `spawn f(args)`",
+        )
+        return Ty.Unknown
+    mut inner := Ty.Unit
+    if n == "TaskGroup"
+        if has_targs
+            args_only(args)
+            err("gram.generic.1", at, "`TaskGroup` takes no type arguments")
+            return Ty.Unknown
+    elif has_targs
+        match conc_type(n, targs, at)
+            Conc(_, x) => inner = x
+            _ =>
+                args_only(args)
+                return Ty.Unknown
+    elif t := expected_conc(n, expect)
+        inner = t
+    elif (n == "Mutex" or n == "Atomic") and args.len() == 1
+        # `Mutex(v)`: the type of the first value.
+        v := args[0].value
+        t := expr(v, none, true)
+        if reject_unhandled(t, expr_pos(v))
+            return Ty.Unknown
+        if n == "Atomic" and not atomic_inner(t, expr_pos(v))
+            return Ty.Unknown
+        return Ty.Conc(n, t)
+    else
+        args_only(args)
+        err_help(
+            "conc.share.4",
+            at,
+            "`Channel` needs its element type",
+            "write e.g. `Channel[int](8)`",
+        )
+        return Ty.Unknown
+    mut params := List[Ty]()
+    if n == "Channel"
+        params = [Ty.Int]
+    elif n != "TaskGroup"
+        params = [inner]
+    check_call(n, plain_sig(none, params, Ty.Unit), [], args, none, at, none)
+    Ty.Conc(n, inner)
+
+## The element type of an expected handle of kind `n`.
+@allow("expr.match.3") fn expected_conc(n str, expect Ty?) Ty?
+    e := expect?
+    match e
+        Conc(k, x) => if k == n then x else none
+        _ => none
+
+## A method of a handle: `t.wait()`, `g.add(t)`, `g.wait_all()`,
+## `ch.send(v)`, `ch.recv()`, `ch.close()`, `m.get()`, `m.set(v)`,
+## `m.swap(v)`, `m.lock()`, `m.unlock(v)`, `a.load()`, `a.store(v)`,
+## `a.add(n)`, `a.cas(old, new)`, and `cancel`.
+@allow("expr.match.3")
+fn Checker.conc_method(mut self, kind str, t Ty, n str, at ast.Pos, given List[ast.Arg]) Ty
+    mut args := given
+    # conc.atomic.7: a trailing `order:` names a weaker ordering.
+    if kind == "Atomic" and args.len() > 0
+        last := args[args.len() - 1]
+        if (last.label?.name == "order" else false)
+            atomic_order(n, last)
+            args = args[..args.len() - 1]
+    mut params := List[Ty]()
+    mut ret := Ty.Unit
+    trapped := std_struct("Trapped")
+    if kind == "Task" and n == "wait"
+        # conc.task.6: the task's result, or `Trapped`; a fallible task's
+        # errors pass through.
+        mut ok := t
+        mut errs := List[Ty]()
+        match t
+            Res(o, e) =>
+                ok = o
+                errs = errs_of(e)
+            _ => ok = t
+        if not errs.contains(trapped)
+            errs.push(trapped)
+            errs = sort_errors(errs)
+        ret = Ty.Res(ok, Errs.ErrSet(errs))
+    elif kind == "TaskGroup" and n == "add" and args.len() == 1
+        group_add(args[0].value)
+        return Ty.Unit
+    elif kind == "TaskGroup" and n == "wait_all"
+        ret = Ty.Res(Ty.Unit, Errs.ErrSet([trapped]))
+    elif kind == "Channel" and n == "send"
+        params = [t]
+    elif kind == "Channel" and n == "recv"
+        ret = Ty.Opt(t)
+    elif kind == "Channel" and n == "close"
+        ret = Ty.Unit
+    elif kind == "Mutex" and (n == "get" or n == "lock")
+        ret = t
+    elif kind == "Mutex" and (n == "set" or n == "unlock")
+        params = [t]
+    elif kind == "Mutex" and n == "swap"
+        params = [t]
+        ret = t
+    elif (kind == "Task" or kind == "TaskGroup") and n == "cancel"
+        # conc.cancel.1: ask a task, or every task of a group, to stop.
+        ret = Ty.Unit
+    elif kind == "Atomic" and n == "load"
+        ret = t
+    elif kind == "Atomic" and n == "store"
+        params = [t]
+    elif kind == "Atomic" and n == "add" and t == Ty.Int
+        params = [Ty.Int]
+        ret = Ty.Int
+    elif kind == "Atomic" and n == "cas"
+        params = [t, t]
+        ret = Ty.Bool
+    else
+        args_only(args)
+        err_help(
+            "expr.name.1",
+            at,
+            "`{kind}` has no method `{n}`",
+            "its methods are {conc_methods(kind, t)}",
+        )
+        return Ty.Unknown
+    check_call(n, plain_sig(false, params, ret), [], args, none, at, none)
+
+fn conc_methods(kind str, t Ty) str
+    if kind == "Task"
+        return "`wait` and `cancel`"
+    if kind == "TaskGroup"
+        return "`add`, `wait_all` and `cancel`"
+    if kind == "Channel"
+        return "`send`, `recv` and `close`"
+    if kind == "Mutex"
+        return "`get`, `set`, `swap`, `lock` and `unlock`"
+    if t == Ty.Int
+        return "`load`, `store`, `add` and `cas`"
+    "`load`, `store` and `cas` (`add` needs `Atomic[int]`)"
+
+## `g.add(t)` (conc.task.8): a group holds tasks that return nothing.
+@allow("expr.match.3") fn Checker.group_add(mut self, v ast.Expr)
+    t := expr(v, none, true)
+    if t == Ty.Unknown
+        return
+    match t
+        Conc(k, r) =>
+            if k == "Task"
+                if r != Ty.Unit and r != Ty.Unknown
+                    err_help(
+                        "conc.task.8",
+                        expr_pos(v),
+                        "a `TaskGroup` holds tasks that return nothing; this one returns {show(r)}",
+                        "wait it with `t.wait()?` to use its result, or spawn a function that returns nothing",
+                    )
+                return
+        _ => t == t
+    mismatch("expr.call.2", expr_pos(v), Ty.Conc("Task", Ty.Unit), t)
+
+## `with m as mut x` (conc.share.6): `m` is a `Mutex[T]` and `x` a `mut`
+## local of type `T` for the body, which can't name `m` again.
+@allow("expr.match.3")
+fn Checker.with_stmt(mut self, mutex ast.Expr, var str, var_pos ast.Pos, body List[ast.Stmt])
+    t := expr(mutex, none, true)
+    mut inner := Ty.Unknown
+    match t
+        Conc(k, x) =>
+            if k == "Mutex"
+                inner = x
+            else
+                not_mutex(mutex, t)
+        Unknown => inner = Ty.Unknown
+        _ => not_mutex(mutex, t)
+    if at := overlapping_use(mutex, body)
+        err_help(
+            "conc.share.6",
+            at,
+            "the body of `with` can't use the mutex it holds",
+            "use `{var}`, which is stored back into the mutex when the block ends",
+        )
+    mark := locals.len()
+    if declare(var, var_pos)
+        locals.push(Local(name: var, ty: inner, mutable: true, how: LocalKind.Binding, decl: none))
+    block(body, none, false)
+    end_scope(mark)
+
+fn Checker.not_mutex(mut self, mutex ast.Expr, t Ty)
+    err_help(
+        "conc.share.6",
+        expr_pos(mutex),
+        "`with` holds a `Mutex`, but this is {show(t)}",
+        "make it with `Mutex(value)`",
+    )
+
+## `spawn f(args)` (conc.task.1): a `Task[T]` for a call of a declared
+## function or associated function that returns `T`.
+@allow("expr.match.3") fn Checker.spawn_expr(mut self, operand ast.Expr, at ast.Pos) Ty
+    mut args := List[ast.Arg]()
+    mut callee := at
+    mut assoc := false
+    mut ok := false
+    match operand
+        Call(c, a, _) =>
+            match c
+                Name(_, p) =>
+                    ok = true
+                    callee = p
+                TypeArgs(_, _, p) =>
+                    ok = true
+                    callee = p
+                _ => ok = false
+            args = a
+        Method(recv, _, p, a) =>
+            match recv
+                Name(r, _) =>
+                    ok = true
+                    assoc = types.get(r) != none
+                TypeArgs(r, _, _) =>
+                    ok = true
+                    assoc = types.get(r) != none
+                _ => ok = false
+            callee = p
+            args = a
+        _ => ok = false
+    if not ok
+        quiet_type(operand)
+        return not_spawnable(at)
+    t := expr(operand, none, false)
+    key := pos_key(callee)
+    declared := declared_fns.contains(key) or (assoc and declared_assoc.contains(key))
+    if t == Ty.Unknown
+        return Ty.Unknown
+    if not declared
+        return not_spawnable(at)
+    # conc.share.1: the task gets its own copies, so nothing is passed `mut`.
+    for a in args
+        if a.mutable
+            err_help(
+                "conc.share.1",
+                expr_pos(a.value),
+                "a spawned call can't take a `mut` argument; the task works on its own copy",
+                "remove the `mut`, and send results back through the task's result or a `Channel`",
+            )
+    Ty.Conc("Task", if t == Ty.Never then Ty.Unit else t)
+
+fn Checker.not_spawnable(mut self, at ast.Pos) Ty
+    err_help(
+        "conc.task.1",
+        at,
+        "`spawn` takes a call of a declared function, e.g. `spawn work(x)`",
+        "wrap the work in a function and spawn a call of it; to wait at once, bind it: `t := spawn work(x)`",
+    )
+    Ty.Unknown
+
+## A position as one number, for the sets of resolved calls.
+fn pos_key(p ast.Pos) int
+    p.line * 65536 + p.col
+
+## conc.atomic.7 (ADR 0352): `order: O` on an atomic method, where `O` is a
+## prelude ordering the method can use.
+@allow("expr.match.3") fn Checker.atomic_order(mut self, method str, arg ast.Arg)
+    mut want := no_ty()
+    if d := types.get("AtomicOrder")
+        match d
+            DEnum(i) => want = Ty.Enum(i, [])
+            DStruct => want = none
+    if expr(arg.value, want, true) == Ty.Unknown
+        return
+    mut o := ""
+    match arg.value
+        Name(x, _) =>
+            if ATOMIC_ORDERS.contains(x)
+                o = x
+        _ => o = ""
+    if o == ""
+        err_help(
+            "conc.atomic.7",
+            expr_pos(arg.value),
+            "an atomic's ordering is written as its name, so the checker can see it",
+            "write `order: Relaxed`, `Acquire`, `Release`, `AcqRel` or `SeqCst`",
+        )
+        return
+    mut allowed := ""
+    mut why := ""
+    if method == "load"
+        allowed = "`SeqCst`, `Acquire` or `Relaxed`"
+        why = "a load only reads"
+    elif method == "store"
+        allowed = "`SeqCst`, `Release` or `Relaxed`"
+        why = "a store only writes"
+    else
+        return
+    if not allowed.contains("`{o}`")
+        err_help(
+            "conc.atomic.7",
+            expr_pos(arg.value),
+            "`{method}` can't use `{o}`: {why}",
+            "use {allowed}",
+        )
+
+## conc.atomic.3: an atomic holds an `int` or a `bool`.
+fn Checker.atomic_inner(mut self, t Ty, at ast.Pos) bool
+    if t == Ty.Int or t == Ty.Bool or t == Ty.Unknown
+        return true
+    err_help(
+        "conc.atomic.3",
+        at,
+        "an `Atomic` holds an `int` or a `bool`, not {show(t)}",
+        "share other values through a `Mutex`, e.g. `Mutex(value)`",
+    )
+    false

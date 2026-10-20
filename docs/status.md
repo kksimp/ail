@@ -27,7 +27,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 - `ail api --tokens` and `ail api --ast [--program]` print the Rust lexer's tokens and parser's tree, the targets the AIL front end is compared with (ADR 0371); a name is letters, ASCII digits and `_` (ADR 0372).
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
-- `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slice 1 (declarations) agrees with `ail check` on every corpus program; the selftest `self_hosted_check` holds it there. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
+- `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slices 1 (declarations) and 2 (function bodies, ADR 0378) agree with `ail check` on every corpus program, and type 1,819 of 1,848 bodies; the selftest `self_hosted_check` holds it there. `@allow("expr.match.3")` (ADR 0379) keeps `ail check compiler` warning-free. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 
 ### Language (2026-10-20 batch)
 

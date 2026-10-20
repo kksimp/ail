@@ -1,0 +1,249 @@
+## Calls to the standard modules (ADR 0377), as `check/stdlib.rs`:
+## `m.f(...)` and `m.Type(...)` (std.use.2), with each function's signature.
+use ast
+
+## The functions of standard module `m`.
+fn std_functions(m str) List[str]
+    if m == "env"
+        return ["args", "cwd", "get", "home", "program", "vars"]
+    if m == "fs"
+        return [
+            "append_text",
+            "copy",
+            "exists",
+            "glob",
+            "list_dir",
+            "make_dir",
+            "metadata",
+            "read_text",
+            "remove",
+            "rename",
+            "walk",
+            "write_text",
+        ]
+    if m == "io"
+        return ["eprint", "exit", "read_all", "read_line"]
+    if m == "net"
+        return ["get", "post"]
+    if m == "path"
+        return ["base", "dir", "ext", "join"]
+    if m == "proc"
+        return ["run", "which"]
+    if m == "random"
+        return ["float", "int", "seed", "shuffle"]
+    if m == "tensor"
+        return ["from", "zeros"]
+    if m == "task"
+        return ["cancelled", "check"]
+    if m == "time"
+        return ["now_ms", "sleep_ms"]
+    if m == "ui"
+        return ["clipboard_get", "clipboard_set", "open"]
+    []
+
+## `m.f(...)` or `m.Type(...)` where `head` may name a standard module.
+## `none` when it doesn't, so the caller goes on.
+fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty?
+    module := std_module(head) else
+        if std_like(head)
+            args_only(args)
+            err_help(
+                "std.use.2",
+                at,
+                "the standard module `{head}` is not imported",
+                "add `use std.{head}` at the top of the file",
+            )
+            return Ty.Unknown
+        return none
+    if module == "tensor"
+        args_only(args)
+        return gap("a std.tensor function")
+    if s := struct_named("{module}.{n}")
+        return struct_literal(s, none, args, at, expect)
+    fns_of := std_functions(module)
+    if not fns_of.contains(n)
+        args_only(args)
+        mut d := new_diag("std.use.2", at, "module `{head}` has no function `{n}`")
+        if s := suggest(n, fns_of)
+            d = d.with_help("did you mean `{head}.{s}`?")
+        else
+            d = d.with_help("`std.{module}` provides {list_names(fns_of)}")
+        diags.push(d)
+        return Ty.Unknown
+    if module == "io" and n == "eprint"
+        return eprint_call(args, at)
+    if module == "random" and n == "shuffle"
+        return shuffle_call(args, at)
+    mut params := std_params(module, n)
+    if module == "proc" and n == "run"
+        # std.proc.2: `input str?` and `timeout_ms int?` may be left off.
+        params = params[..args.len().max(2).min(4)]
+    check_call(
+        "{head}.{n}",
+        plain_sig(none, params, std_result(module, n)),
+        [],
+        args,
+        none,
+        at,
+        expect,
+    )
+
+fn Checker.struct_named(self, n str) int?
+    d := types.get(n)?
+    match d
+        DStruct(s) => s
+        DEnum => none
+
+## A standard module's struct, by its qualified name.
+fn Checker.std_struct(self, n str) Ty
+    d := types.get(n) else return Ty.Unknown
+    match d
+        DStruct(s) => Ty.Struct(s, [])
+        DEnum => Ty.Unknown
+
+fn std_params(module str, f str) List[Ty]
+    key := "{module}.{f}"
+    if [
+        "fs.read_text",
+        "fs.exists",
+        "fs.list_dir",
+        "fs.remove",
+        "fs.make_dir",
+        "fs.walk",
+        "fs.glob",
+        "fs.metadata",
+    ].contains(key)
+        return [Ty.Str]
+    if ["fs.write_text", "fs.append_text", "fs.rename", "fs.copy", "path.join"].contains(key)
+        return [Ty.Str, Ty.Str]
+    if [
+        "env.get",
+        "path.dir",
+        "path.base",
+        "path.ext",
+        "proc.which",
+        "net.get",
+        "ui.clipboard_set",
+    ].contains(key)
+        return [Ty.Str]
+    if key == "io.exit" or key == "random.seed" or key == "time.sleep_ms"
+        return [Ty.Int]
+    if key == "proc.run"
+        return [Ty.Str, Ty.ListOf(Ty.Str), Ty.Opt(Ty.Str), Ty.Opt(Ty.Int)]
+    if key == "net.post"
+        return [Ty.Str, Ty.Str, Ty.Str]
+    if key == "random.int"
+        return [Ty.Int, Ty.Int]
+    if key == "ui.open"
+        return [Ty.Str, Ty.Int, Ty.Int]
+    []
+
+fn Checker.std_result(self, module str, f str) Ty
+    key := "{module}.{f}"
+    io_err := Errs.ErrSet([std_struct("fs.IoError")])
+    if key == "fs.read_text"
+        return Ty.Res(Ty.Str, io_err)
+    if [
+        "fs.write_text",
+        "fs.append_text",
+        "fs.remove",
+        "fs.make_dir",
+        "fs.rename",
+        "fs.copy",
+    ].contains(key)
+        return Ty.Res(Ty.Unit, io_err)
+    if key == "fs.exists"
+        return Ty.Bool
+    if key == "fs.list_dir" or key == "fs.walk"
+        return Ty.Res(Ty.ListOf(Ty.Str), io_err)
+    if key == "fs.glob" or key == "env.args"
+        return Ty.ListOf(Ty.Str)
+    if key == "fs.metadata"
+        return Ty.Res(std_struct("fs.Metadata"), io_err)
+    if ["env.get", "env.home", "io.read_line", "proc.which", "ui.clipboard_get"].contains(key)
+        return Ty.Opt(Ty.Str)
+    if [
+        "env.cwd",
+        "env.program",
+        "path.dir",
+        "path.base",
+        "path.ext",
+        "path.join",
+        "io.read_all",
+    ].contains(key)
+        return Ty.Str
+    if key == "env.vars"
+        return Ty.MapOf(key: Ty.Str, value: Ty.Str)
+    # std.io.4: `exit` never returns.
+    if key == "io.exit"
+        return Ty.Never
+    if key == "proc.run"
+        return Ty.Res(std_struct("proc.Output"), Errs.ErrSet([std_struct("proc.ProcError")]))
+    if key == "net.get" or key == "net.post"
+        return Ty.Res(std_struct("net.Response"), Errs.ErrSet([std_struct("net.NetError")]))
+    if key == "random.int" or key == "time.now_ms"
+        return Ty.Int
+    if key == "random.float"
+        return Ty.Float
+    if key == "task.cancelled"
+        return Ty.Bool
+    # conc.cancel.2
+    if key == "task.check"
+        return Ty.Res(Ty.Unit, Errs.ErrSet([std_struct("Cancelled")]))
+    if key == "ui.open"
+        return Ty.Res(std_struct("ui.Window"), Errs.ErrSet([std_struct("ui.UiError")]))
+    Ty.Unit
+
+## std.random.4: `random.shuffle(mut xs)` reorders any `List[T]` in place.
+fn Checker.shuffle_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    if args.len() != 1
+        args_only(args)
+        err(
+            "std.random.4",
+            at,
+            "`shuffle` takes exactly one argument, but {was_were(args.len())} given",
+        )
+        return Ty.Unit
+    a := args[0]
+    t := expr(a.value, none, true)
+    if not a.mutable
+        err_help(
+            "own.param.2",
+            expr_pos(a.value),
+            "this parameter is `mut`, so the argument must be marked `mut`",
+            "write `mut` before the argument",
+        )
+    else
+        require_mutable(a.value, "own.param.2", "passed `mut`")
+    if not is_list_ty(t) and t != Ty.Unknown
+        err_help(
+            "std.random.4",
+            expr_pos(a.value),
+            "`shuffle` needs a list, not {ty_name(t)}",
+            "to pick one element, use `xs[random.int(0, xs.len() - 1)]`",
+        )
+    Ty.Unit
+
+## std.io.3: `io.eprint(value)` takes one value with a text form.
+fn Checker.eprint_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    for a in args
+        if l := a.label
+            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "`eprint`'s parameter isn't `mut`",
+                "remove the `mut`",
+            )
+    if args.len() != 1
+        args_only(args)
+        err("std.io.3", at, "`eprint` takes exactly one argument, but {was_were(args.len())} given")
+        return Ty.Unit
+    v := args[0].value
+    t := expr(v, none, true)
+    if t == Ty.Unit
+        err("std.io.3", expr_pos(v), "this expression produces no value to print")
+    else
+        text_form(t, expr_pos(v), "std.io.3")
+    Ty.Unit

@@ -105,7 +105,7 @@ fn Checker.implements(self, t Ty, tr int) bool
     mut seen := List[str]()
     implements_in(t, tr, mut seen)
 
-fn Checker.implements_in(self, t Ty, tr int, mut seen List[str]) bool
+@allow("expr.match.3") fn Checker.implements_in(self, t Ty, tr int, mut seen List[str]) bool
     if tr == std_to_str
         return match t
             Unit => false
@@ -170,7 +170,7 @@ fn Checker.impl_applies(self, i int, t Ty, con str, mut seen List[str]) bool
     ok
 
 ## Whether `t` has an `impl Eq` with its own `fn eq` (not a derived one).
-fn Checker.custom_eq(self, t Ty) bool
+@allow("expr.match.3") fn Checker.custom_eq(self, t Ty) bool
     match t
         Struct => custom_eq_con(t)
         Enum => custom_eq_con(t)
@@ -183,7 +183,7 @@ fn Checker.custom_eq_con(self, t Ty) bool
 
 ## Structural `==` (trait.auto.1) or hashing (trait.auto.5): every part
 ## implements `tr`.
-fn Checker.auto_derives(self, t Ty, con str, tr int, mut seen List[str]) bool
+@allow("expr.match.3") fn Checker.auto_derives(self, t Ty, con str, tr int, mut seen List[str]) bool
     match t
         Int => return true
         Bool => return true
@@ -207,7 +207,7 @@ fn Checker.auto_derives(self, t Ty, con str, tr int, mut seen List[str]) bool
 
 ## The types of every field of a struct, or every variant of an enum, with
 ## its type arguments filled in.
-fn Checker.field_types_of(self, t Ty) List[Ty]
+@allow("expr.match.3") fn Checker.field_types_of(self, t Ty) List[Ty]
     match t
         Struct(s, args) =>
             if s >= field_types.len()
@@ -226,7 +226,7 @@ fn binds_of(params List[int], args List[Ty]) List[Bind]
     [Bind(param: params[k], ty: args[k]) for k in 0..params.len().min(args.len())]
 
 ## Why `t` isn't `Hash` (trait.auto.5), naming the part that isn't.
-fn Checker.hash_cause(self, t Ty) str
+@allow("expr.match.3") fn Checker.hash_cause(self, t Ty) str
     match t
         Float => "`float` isn't `Hash`, since NaN isn't equal to itself"
         Num(k) =>
@@ -271,7 +271,7 @@ fn Checker.whole_trait_through_any(self, tr int) bool
     true
 
 ## Help for a type that doesn't implement a trait it needs.
-fn Checker.how_to_implement(self, t Ty, tr int) str?
+@allow("expr.match.3") fn Checker.how_to_implement(self, t Ty, tr int) str?
     trait_name := prog.traits[tr].name
     match t
         Param(p) => return "add the constraint where `{tparams[p].name}` is declared, e.g. `[{tparams[p].name} {trait_name}]`"
@@ -399,7 +399,7 @@ fn Checker.check_impls(mut self)
             )
 
 ## Two result types are the same, including their error sets.
-fn Checker.same_result(self, a Ty, b Ty) bool
+@allow("expr.match.3") fn Checker.same_result(self, a Ty, b Ty) bool
     match a
         Res(x, ea) =>
             match b
@@ -409,7 +409,7 @@ fn Checker.same_result(self, a Ty, b Ty) bool
 
 ## An empty `impl` of a standard trait derives it: every field's type must
 ## implement the trait (trait.derive.1).
-fn Checker.check_derived(mut self, i int, tr int, target Ty)
+@allow("expr.match.3") fn Checker.check_derived(mut self, i int, tr int, target Ty)
     imp := prog.impls[i]
     mut names := List[str]()
     mut tys := List[Ty]()

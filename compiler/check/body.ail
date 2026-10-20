@@ -1,0 +1,1294 @@
+## Function bodies (ADR 0377): blocks, statements, bindings, `else`,
+## loops and assignment, as `check_fn` onward in `bootstrap/src/check.rs`.
+use ast
+
+## What the checker found, and the functions it couldn't type yet.
+pub struct Report
+    pub diags List[Diag]
+    pub gapped List[int]
+    pub gapped_structs List[int]
+    pub gapped_consts List[int]
+    ## Lines of generated code's `impl` whose functions are gapped.
+    pub gapped_lines List[int]
+
+## Every pass of `check_with` this checker has, in its order.
+pub fn check_program(p ast.Program) Report
+    mut c := new_checker(p)
+    c.list_param = c.new_param("T", [])
+    c.collect_traits()
+    c.collect_types()
+    c.collect_impls()
+    c.resolve_fields()
+    c.check_unique_fields()
+    c.collect_fns()
+    c.collect_consts()
+    c.check_uses()
+    c.check_deferred_bounds()
+    c.check_main()
+    c.check_attrs()
+    c.check_impls()
+    for i in 0..p.structs.len()
+        c.gap_now = false
+        c.check_invariants(i)
+        if c.gap_now
+            c.gapped_structs.add(i)
+    # err.type.6: inferred error sets are the least fixed point, found by
+    # re-checking the functions silently until nothing changes.
+    inferring := [i for i in 0..p.fns.len() if is_inferred(c.sigs[i].ret)]
+    if inferring.len() > 0
+        for _ in 0..p.fns.len() + 1
+            before := c.inferred
+            saved := c.diags.len()
+            for i in inferring
+                c.check_fn(i)
+            c.diags = c.diags[..saved]
+            if c.inferred == before
+                break
+    for i in 0..p.fns.len()
+        c.check_fn(i)
+    c.check_drop_impls()
+    c.remap_generated()
+    Report(
+        diags: c.diags,
+        gapped: c.gapped.sorted(),
+        gapped_structs: c.gapped_structs.sorted(),
+        gapped_consts: c.gapped_consts.sorted(),
+        gapped_lines: c.gapped_impl_lines(),
+    )
+
+## The diagnostics of the declaration passes only (slice 1).
+pub fn check_declarations(p ast.Program) List[Diag]
+    check_program(p).diags
+
+## ct.gen.3: a diagnostic in generated code is reported at the deriving `impl`.
+fn Checker.remap_generated(mut self)
+    for g in prog.generated
+        base := prog.files[g.file].base
+        for k in 0..diags.len()
+            at := diags[k].pos
+            if at.line > base and at.line <= base + 1048576
+                diags[k] = diags[k].with_note(
+                    at,
+                    "in the code `{g.generator}` generated for this `impl`",
+                )
+                diags[k].pos = g.impl_pos
+                diags[k] = json_field_problem(g, diags[k])
+
+## json.derive.1-2: a derived JSON conversion that calls `to_json` or
+## `from_json` on a field type with none says so in the user's terms.
+fn json_field_problem(g ast.Generated, d Diag) Diag
+    mut trait_name := "FromJson"
+    mut method := "from_json"
+    if g.generator == "derive_to_json"
+        trait_name = "ToJson"
+        method = "to_json"
+    elif g.generator != "derive_from_json"
+        return d
+    suffix := " has no method `{method}`"
+    if d.rule != "expr.name.1" or not d.message.ends_with(suffix)
+        return d
+    ty := d.message.slice(0, d.message.len() - suffix.len())
+    owner := g.label.split(".")[0]
+    mut out := d
+    out.rule = if method == "to_json" then "json.derive.1" else "json.derive.2"
+    out.message = "can't derive `{trait_name}` for `{owner}`: a field has type {ty}, which has no JSON form"
+    out.help = "give {ty} its own `impl {trait_name}`, or change the field to `int`, `float`, `bool`, `str`, `Json`, a `List`, a `Map[str, _]`, an optional or a derived type"
+    out
+
+## The deriving `impl` lines of generated code with a gapped function,
+## where `ail check` reports that code's diagnostics (ct.gen.3).
+fn Checker.gapped_impl_lines(self) List[int]
+    mut out := List[int]()
+    for g in prog.generated
+        base := prog.files[g.file].base
+        for k in gapped
+            line := prog.fns[k].pos.line
+            if line > base and line <= base + 1048576 and not out.contains(g.impl_pos.line)
+                out.push(g.impl_pos.line)
+    out
+
+## A construct this checker doesn't type yet: the function's lines are left
+## out of the comparison, and its value is unknown.
+fn Checker.gap(mut self, why str) Ty
+    gap_now = true
+    if env.get("AIL_CHECK_GAPS") != none
+        io.eprint("gap {why}")
+    Ty.Unknown
+
+fn Checker.warn(mut self, rule str, at ast.Pos, text str, hint str)
+    mut d := new_diag(rule, at, text).with_help(hint)
+    d.warning = true
+    diags.push(d)
+
+fn Checker.local(self, n str) Local?
+    for k in 0..locals.len()
+        l := locals[locals.len() - 1 - k]
+        if l.name == n
+            return l
+    none
+
+fn Checker.check_fn(mut self, idx int)
+    f := prog.fns[idx]
+    gap_now = false
+    cur_fn = idx
+    allow_wildcards = [
+        a
+        for a in f.attrs if a.name == "allow" and a.arg == "expr.match.3"
+    ].len() > 0
+    if f.body == none
+        if f.contracts.len() > 0
+            check_bodyless_contracts(idx, f)
+        end_fn(idx)
+        return
+    body := f.body else []
+    sig := sigs[idx]
+    scope = fn_scopes[idx]
+    self_ty = fn_self[idx]
+    locals = []
+    pending = []
+    loop_depth = 0
+    catching = 0
+    fn_ret = sig.ret
+    push_params(f, sig)
+    check_contracts(f, sig.ret)
+    need := not returns_nothing(sig.ret)
+    mut want := no_ty()
+    if need
+        want = sig.ret
+    got := block(body, want, need)
+    if need and not accepts(sig.ret, got)
+        mut at := f.pos
+        if r := f.ret
+            at = r.pos
+        mut msg := "`{full_name(f)}` must end with an expression of type {show(sig.ret)}"
+        if e := last_value(body)
+            if got != Ty.Unit
+                at = expr_pos(e)
+                msg = "`{full_name(f)}` returns {show(sig.ret)}, but its body ends with {show(got)}"
+        if is_res_or_union(got) or is_error_type(got)
+            mismatch("expr.block.2", at, sig.ret, got)
+        else
+            err("expr.block.2", at, msg)
+    end_fn(idx)
+
+fn Checker.end_fn(mut self, idx int)
+    scope = []
+    self_ty = none
+    if gap_now
+        gapped.add(idx)
+
+## The receiver and parameters of `f` as locals.
+fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
+    if f.receiver != none
+        locals.push(Local(
+            name: "self",
+            ty: self_ty else Ty.Unknown,
+            mutable: receiver_of(f) == true,
+            how: LocalKind.SelfParam,
+            decl: none,
+        ))
+    for k in 0..f.params.len()
+        p := f.params[k]
+        if declare(p.name, p.pos)
+            how := if p.moved then LocalKind.MoveParam else LocalKind.ParamLocal
+            locals.push(Local(
+                name: p.name,
+                ty: sig.params[k].ty,
+                mutable: p.mutable,
+                how: how,
+                decl: none,
+            ))
+
+## The expression a block ends with, if it ends with one.
+@allow("expr.match.3") fn last_value(body List[ast.Stmt]) ast.Expr?
+    s := body.last()?
+    match s
+        Eval(e) => e
+        _ => none
+
+@allow("expr.match.3") fn is_res_or_union(t Ty) bool
+    match t
+        Res => true
+        Union => true
+        _ => false
+
+## A function result with no success value (`Unit`, `!` or `! E`).
+@allow("expr.match.3") fn returns_nothing(t Ty) bool
+    match t
+        Unit => true
+        Res(ok, _) => ok == Ty.Unit
+        _ => false
+
+## The success type of a value that may be a failure.
+@allow("expr.match.3") fn ok_type(t Ty) Ty
+    match t
+        Res(ok, _) => ok
+        _ => t
+
+@allow("expr.match.3") fn is_stmt_eval(s ast.Stmt) bool
+    match s
+        Eval => true
+        _ => false
+
+## A block's type: its last statement's (expr.block.1), or `Never` if a
+## statement always leaves (expr.block.3).
+fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
+    mark := locals.len()
+    mut ty := Ty.Unit
+    mut leaves := false
+    for i in 0..stmts.len()
+        s := stmts[i]
+        last := i + 1 == stmts.len()
+        mut want := no_ty()
+        if last
+            want = expect
+        ty = stmt(s, want, last and need)
+        if ty == Ty.Never
+            leaves = true
+        # own.uniq.2: a block's value leaves it.
+        if last and need
+            if e := eval_of(s)
+                consume(e, ty)
+        # err.use.1: a failure can't be discarded.
+        if (not last or not need) and is_stmt_eval(s) and reject_unhandled(ty, stmt_pos(s))
+            ty = Ty.Unknown
+    end_scope(mark)
+    if leaves then Ty.Never else ty
+
+@allow("expr.match.3") fn eval_of(s ast.Stmt) ast.Expr?
+    match s
+        Eval(e) => e
+        _ => none
+
+@allow("expr.match.3") fn is_empty_literal(e ast.Expr) bool
+    match e
+        ListLit(xs, _) => xs.len() == 0
+        SetLit(xs, _) => xs.len() == 0
+        MapLit(xs, _) => xs.len() == 0
+        _ => false
+
+@allow("expr.match.3") fn is_list_literal(e ast.Expr) bool
+    match e
+        ListLit => true
+        _ => false
+
+fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
+    match s
+        Let(n, at, mutable, value, otherwise) =>
+            let_stmt(n, at, mutable, value, otherwise)
+            Ty.Unit
+        Assign(target, op, value, at) =>
+            assign(target, op, value, at)
+            Ty.Unit
+        While(cond, body, _) =>
+            condition(cond)
+            loop_depth += 1
+            block(body, none, false)
+            loop_depth -= 1
+            # expr.loop.7: `while true` with no `break` of its own never finishes.
+            if is_true(cond) and not breaks(body) then Ty.Never else Ty.Unit
+        Handle(value, otherwise) =>
+            handle(value, otherwise)
+            Ty.Unit
+        For(_, var, var_pos, mutable, iter, body, _) =>
+            elem := if mutable then mut_iterable(iter, var, body) else iterable(iter)
+            mark := locals.len()
+            if declare(var, var_pos)
+                locals.push(Local(
+                    name: var,
+                    ty: elem,
+                    mutable: mutable,
+                    how: LocalKind.LoopVar,
+                    decl: none,
+                ))
+            loop_depth += 1
+            block(body, none, false)
+            loop_depth -= 1
+            end_scope(mark)
+            Ty.Unit
+        With(mutex, var, var_pos, body, _) =>
+            with_stmt(mutex, var, var_pos, body)
+            Ty.Unit
+        Break(at) =>
+            if loop_depth == 0
+                err("expr.loop.5", at, "`break` outside a loop")
+            Ty.Never
+        Continue(at) =>
+            if loop_depth == 0
+                err("expr.loop.5", at, "`continue` outside a loop")
+            Ty.Never
+        Return(value, at) =>
+            return_stmt(value, at)
+            Ty.Never
+        Eval(e) => expr(e, expect, need)
+        Defer(inner, at) =>
+            defer_stmt(inner, at)
+            Ty.Unit
+
+@allow("expr.match.3") fn is_true(e ast.Expr) bool
+    match e
+        Bool(b, _) => b
+        _ => false
+
+fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, otherwise ast.Else?)
+    # type.coll.13: `x := []` or `{}` is typed by its first use.
+    if is_empty_literal(value) and otherwise == none
+        if declare(n, at)
+            index := locals.len()
+            locals.push(Local(
+                name: n,
+                ty: Ty.Unknown,
+                mutable: mutable,
+                how: LocalKind.Binding,
+                decl: at,
+            ))
+            pending.push(Pending(
+                name: n,
+                lit: expr_pos(value),
+                brace: not is_list_literal(value),
+                index: index,
+            ))
+        return
+    mut vt := Ty.Unit
+    if otherwise != none
+        vt = else_value(value, otherwise)
+    else
+        vt = expr(value, none, true)
+    consume(value, vt)
+    mut ty := vt
+    if o := otherwise
+        ty = else_part(vt, value, o)
+    elif reject_unhandled(vt, expr_pos(value))
+        ty = ok_type(vt)
+    if ty == Ty.Unit
+        text := "`{n}` would be bound to an expression that produces no value"
+        if method_name(value) == "sort"
+            err_help(
+                "expr.bind.1",
+                expr_pos(value),
+                text,
+                "`sort()` changes the list in place; `xs.sorted()` gives a new sorted list",
+            )
+        else
+            err("expr.bind.1", expr_pos(value), text)
+    if declare(n, at)
+        locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+
+@allow("expr.match.3") fn method_name(e ast.Expr) str
+    match e
+        Method(_, n, _, _) => n
+        _ => ""
+
+fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
+    want := fn_ret
+    v := value else
+        if not returns_nothing(want)
+            err("expr.block.2", at, "this function returns {show(want)}, so `return` needs a value")
+        return
+    if want == Ty.Unit
+        t := expr(v, none, true)
+        if is_error_type(t)
+            return_error_in_infallible(v, t)
+        else
+            err_help(
+                "expr.block.2",
+                expr_pos(v),
+                "this function doesn't return a value",
+                "remove the value, or declare a return type after `)`",
+            )
+        return
+    t := expr(v, want, true)
+    consume(v, t)
+    if accepts(want, t)
+        return
+    want_res := is_res(want)
+    if not want_res and is_error_type(t)
+        return_error_in_infallible(v, t)
+    elif want_res and is_error_type(t)
+        mut hint := "add it to the return type"
+        if r := failing_ret([t])
+            hint = "add it to the return type: `{r}`"
+        err_help(
+            "err.ret.3",
+            expr_pos(v),
+            "`{ty_name(t)}` isn't one of the errors this function can fail with",
+            hint,
+        )
+    elif want_res and is_opt(t)
+        err_help(
+            "err.ret.2",
+            expr_pos(v),
+            "an optional can't be returned as a result; absence has no error to report",
+            "turn absence into an error first: `x := ... else return SomeError`, then return `x`",
+        )
+    else
+        mismatch("expr.block.2", expr_pos(v), want, t)
+
+@allow("expr.match.3") fn is_res(t Ty) bool
+    match t
+        Res => true
+        _ => false
+
+@allow("expr.match.3") fn is_opt(t Ty) bool
+    match t
+        Opt => true
+        _ => false
+
+## `return e` of an error value in a function that can't fail (err.ret.1).
+fn Checker.return_error_in_infallible(mut self, v ast.Expr, t Ty)
+    err_help(
+        "err.ret.1",
+        expr_pos(v),
+        "`{ty_name(t)}` is an error, but this function can't fail",
+        "declare the failure in the return type (`T ! E`), or return a value instead",
+    )
+
+## The value of `e else ...`. An optional `?` inside it goes to the `else`
+## (err.prop.4), which makes the value optional if it wasn't.
+@allow("expr.match.3") fn Checker.else_value(mut self, value ast.Expr, o ast.Else?) Ty
+    before := caught
+    catching += 1
+    vt := expr(value, none, true)
+    catching -= 1
+    if caught > before and is_res(vt)
+        if nm := else_name(o)
+            err_help(
+                "err.prop.4",
+                nm.pos,
+                "`{nm.name}` would have no error when a `?` inside the value finds `none`",
+                "handle the optional separately: `x := opt else ...`, then the result",
+            )
+    match vt
+        Opt => vt
+        Res => vt
+        Unknown => vt
+        _ => if caught > before then Ty.Opt(vt) else vt
+
+## The name of `else name` and a block.
+fn else_name(o ast.Else?) ast.Ident?
+    e := o else return none
+    match e
+        Handler(name, _, _) => name
+        Fallback | Leave => none
+
+## `f(x) else ...` for a result with no success value (err.else.4).
+@allow("expr.match.3") fn Checker.handle(mut self, value ast.Expr, otherwise ast.Else)
+    vt := expr(value, none, true)
+    match vt
+        Res(ok, _) =>
+            if ok == Ty.Unit
+                else_part(vt, value, otherwise)
+                return
+            handle_has_value(value, vt, "can fail")
+        Opt => handle_has_value(value, vt, "may be absent")
+        Unknown => return
+        _ =>
+            err_help(
+                "err.else.4",
+                expr_pos(value),
+                "`else` handles a failure, but this is {show(vt)} and can't fail",
+                "remove the `else`",
+            )
+
+fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
+    err_help(
+        "err.else.4",
+        expr_pos(value),
+        "this {what}, and has a value ({show(vt)}); `else` on its own handles only results with no value",
+        "bind the value: `x := ... else ...`",
+    )
+
+## Help for `else` on a value that is never absent (expr.name.2).
+@allow("expr.match.3") fn never_absent_help(value ast.Expr) str?
+    match value
+        Index => "indexing traps when the index or key is missing; for a map, `m.get(k)` gives an optional"
+        Method(_, n, _, _) =>
+            if n == "to_int"
+                return "`x.to_int()` on a float traps on NaN or out of range; it never returns `none`"
+            none
+        _ => none
+
+## The `else` part of `x := e else ...`; returns the type bound to `x`
+## (err.else.1-3).
+@allow("expr.match.3") fn Checker.else_part(mut self, vt Ty, value ast.Expr, o ast.Else) Ty
+    at := expr_pos(value)
+    mut ok := vt
+    mut errors := List[Ty]()
+    mut fails := false
+    match vt
+        Opt(t) => ok = t
+        Res(t, e) =>
+            ok = t
+            errors = errs_of(e)
+            fails = true
+        Unknown => ok = Ty.Unknown
+        _ =>
+            text := "`else` handles a value that can be absent (`T?`) or fail (`T ! E`), but this is {show(vt)}"
+            if h := never_absent_help(value)
+                err_help("err.else.1", at, text, h)
+            else
+                err("err.else.1", at, text)
+    match o
+        Fallback(d) =>
+            if ok == Ty.Unit
+                expr(d, none, true)
+                err_help(
+                    "err.else.4",
+                    expr_pos(d),
+                    "this result has no value, so there's nothing to fall back to",
+                    "write `else return`, or `else err` with a block that handles the error",
+                )
+            else
+                dt := expr(d, ok, true)
+                if not accepts(ok, dt)
+                    mismatch("err.else.1", expr_pos(d), ok, dt)
+        Leave(st) => stmt(st, none, false)
+        Handler(name, body, bpos) =>
+            mark := locals.len()
+            if nm := name
+                if fails
+                    t := if errors.len() == 1 then errors[0] else Ty.Union(errors)
+                    if declare(nm.name, nm.pos)
+                        locals.push(Local(
+                            name: nm.name,
+                            ty: t,
+                            mutable: false,
+                            how: LocalKind.Binding,
+                            decl: none,
+                        ))
+                elif ok != Ty.Unknown
+                    err_help(
+                        "err.else.3",
+                        nm.pos,
+                        "only a failure has an error to bind; an optional is just absent",
+                        "write `else` without a name",
+                    )
+            # err.else.4: with no value to supply, the block may just end.
+            unit := ok == Ty.Unit
+            t := if unit then block(body, none, false) else block(body, ok, true)
+            end_scope(mark)
+            if not unit and not accepts(ok, t)
+                err(
+                    "err.else.2",
+                    bpos,
+                    "this `else` block must leave (with `return`, `break` or `continue`) or end with {show(ok)}",
+                )
+    ok
+
+## Check a new local name against the no-shadowing rules; true if it can be
+## added (expr.bind.4-5).
+fn Checker.declare(mut self, n str, at ast.Pos) bool
+    if l := local(n)
+        mut d := new_diag("expr.bind.4", at, "`{n}` is already declared in this function")
+        if first := l.decl
+            d = d.with_note(first, "`{n}` is first declared here")
+        if l.mutable
+            d = d.with_help("`{n}` is a `mut` variable; to change it, write `{n} = ...`")
+        else
+            d = d.with_help("choose a different name; names can't be shadowed")
+        diags.push(d)
+        return false
+    # The prelude's own locals never meet the program's items, and a
+    # module's locals meet only its own (expr.bind.5).
+    if is_prelude_line(at.line) or module_at(prog, at) != ""
+        return true
+    mut what := ""
+    if fns.contains(n) or PRELUDE_FNS.contains(n)
+        what = "a function"
+    elif types.contains(n) or BUILTIN_TYPES.contains(n)
+        what = "a type"
+    elif consts.contains(n)
+        what = "a constant"
+    elif std_imported(n) != none
+        what = "an imported module"
+    else
+        return true
+    mut d := new_diag(
+        "expr.bind.5",
+        at,
+        "`{n}` is already {what} name",
+    ).with_help("choose a different name for the local")
+    if j := fns.get(n)
+        if not is_prelude_line(prog.fns[j].pos.line)
+            d = d.with_note(prog.fns[j].pos, "`{n}` is declared here")
+    elif t := types.get(n)
+        if not is_prelude_line(def_pos(t).line)
+            d = d.with_note(def_pos(t), "`{n}` is declared here")
+    elif j := consts.get(n)
+        d = d.with_note(prog.consts[j].pos, "`{n}` is declared here")
+    diags.push(d)
+    false
+
+## The pending entry of local `n`, if its type isn't known yet (type.coll.13).
+fn Checker.pending_of(self, n str) int?
+    for k in 0..pending.len()
+        p := pending[k]
+        if p.name == n and p.index < locals.len() and locals[p.index].name == n
+            return k
+    none
+
+## Give pending local `k` its type, now known.
+fn Checker.settle(mut self, k int, t Ty)
+    p := pending.remove_at(k)
+    locals[p.index].ty = t
+
+## Report a use of pending local `k` before its type is known.
+fn Checker.unsettled(mut self, k int, at ast.Pos)
+    p := pending.remove_at(k)
+    ctor := if p.brace then "`Map[K, V]()` or `Set[T]()`" else "`List[T]()`"
+    first := if p.brace then "`{p.name}.add(x)` or `{p.name}[k] = v`" else "`{p.name}.push(x)`"
+    err_help(
+        "type.coll.13",
+        at,
+        "the type of `{p.name}` isn't known yet",
+        "its first use should fix it, such as {first}; or declare it with {ctor}",
+    )
+    locals[p.index].ty = Ty.Unknown
+
+## The type of `e`, reporting nothing: to fix a pending local's type first.
+fn Checker.quiet_type(mut self, e ast.Expr) Ty
+    n := diags.len()
+    was := gap_now
+    t := expr(e, none, true)
+    diags = diags[..n]
+    gap_now = was or gap_now
+    t
+
+## Leave a block: its locals go out of scope, and one never typed is an
+## error (type.coll.13).
+fn Checker.end_scope(mut self, mark int)
+    mut k := 0
+    while k < pending.len()
+        if pending[k].index >= mark
+            p := pending.remove_at(k)
+            ctor := if p.brace then "`Map[K, V]()` or `Set[T]()`" else "`List[T]()`"
+            err_help(
+                "type.coll.13",
+                p.lit,
+                "nothing fixes the type of `{p.name}`",
+                "declare it with {ctor}",
+            )
+        else
+            k += 1
+    locals = locals[..mark]
+
+fn Checker.condition(mut self, cond ast.Expr)
+    t := expr(cond, Ty.Bool, true)
+    if reject_unhandled(t, expr_pos(cond))
+        return
+    if accepts(Ty.Bool, t)
+        return
+    hint := truthiness_help(t)
+    err_help("expr.if.2", expr_pos(cond), "a condition must be `bool`, found {show(t)}", hint)
+
+## The test that the other languages' truthiness stands for.
+@allow("expr.match.3") fn truthiness_help(t Ty) str
+    match t
+        Int => "compare explicitly, e.g. `n != 0`"
+        Str => "compare explicitly, e.g. `s != \"\"`"
+        ListOf => "test the length, e.g. `xs.len() > 0`"
+        MapOf => "test the length, e.g. `xs.len() > 0`"
+        SetOf => "test the length, e.g. `xs.len() > 0`"
+        Opt => "compare with `none`, e.g. `x != none`, or bind it with `if v := x`"
+        _ => "write a comparison that gives `bool`"
+
+## The element type of a `for` loop's iterable (expr.loop.4).
+@allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr) Ty
+    if is_range(iter)
+        return range_loop(iter)
+    t := expr(iter, none, true)
+    at := expr_pos(iter)
+    match t
+        ListOf(e) => e
+        SetOf(e) => e
+        Conc(k, e) =>
+            if k == "Channel"
+                return e
+            iterate_error(t, at)
+        Unknown => Ty.Unknown
+        Res =>
+            reject_unhandled(t, at)
+            Ty.Unknown
+        MapOf =>
+            err_help(
+                "type.map.5",
+                at,
+                "`for` iterates a map's keys or values explicitly",
+                "write `for k in m.keys()`, or `m.values()`",
+            )
+            Ty.Unknown
+        Str =>
+            err_help("expr.loop.4", at, "`for` can't iterate over a `str`", "iterate `s.chars()`")
+            Ty.Unknown
+        _ => iterate_error(t, at)
+
+@allow("expr.match.3") fn Checker.range_loop(mut self, iter ast.Expr) Ty
+    match iter
+        Range(lo, hi, _, at) => loop_range(lo, hi, at)
+        _ => return Ty.Int
+    Ty.Int
+
+fn Checker.iterate_error(mut self, t Ty, at ast.Pos) Ty
+    text := "`for` can't iterate over {show(t)}"
+    if t == Ty.Int
+        err_help("expr.loop.4", at, text, "iterate over a range, e.g. `0..n`")
+    elif is_opt(t)
+        err_help(
+            "expr.loop.4",
+            at,
+            text,
+            "`recv()` gives one value or `none`; to receive until the channel is closed, write `for v in ch`",
+        )
+    else
+        err_help(
+            "expr.loop.4",
+            at,
+            text,
+            "`for` takes a list, a range `a..b`, a `keys()` or `values()` list, or a channel",
+        )
+    Ty.Unknown
+
+## `for mut x in e`: `e` is a mutable list place that the body doesn't
+## otherwise use (expr.loop.6, own.excl.5). Returns the element type.
+@allow("expr.match.3")
+fn Checker.mut_iterable(mut self, iter ast.Expr, var str, body List[ast.Stmt]) Ty
+    if is_range(iter)
+        err_help(
+            "expr.loop.6",
+            expr_pos(iter),
+            "`for mut` changes the elements of a list, and a range has none",
+            "remove the `mut`",
+        )
+        return Ty.Int
+    t := expr(iter, none, true)
+    mut elem := Ty.Unknown
+    match t
+        ListOf(e) => elem = e
+        Unknown => return Ty.Unknown
+        _ =>
+            err("expr.loop.6", expr_pos(iter), "`for mut` needs a list, found {show(t)}")
+            return Ty.Unknown
+    require_mutable(iter, "expr.loop.6", "changed by `for mut`")
+    if at := overlapping_use(iter, body)
+        err_help(
+            "own.excl.5",
+            at,
+            "the loop body can't use this while `for mut` is changing its elements",
+            "change the current element through `{var}`",
+        )
+    elem
+
+## The bounds of a `for` range, which needs both (expr.loop.3).
+fn Checker.loop_range(mut self, lo ast.Expr?, hi ast.Expr?, at ast.Pos)
+    if lo == none or hi == none
+        err_help(
+            "expr.loop.3",
+            at,
+            "a `for` range needs both bounds",
+            "write `a..b`; open ranges are only for slices, `xs[a..]`",
+        )
+    range_bounds(lo, hi)
+
+fn Checker.range_bounds(mut self, lo ast.Expr?, hi ast.Expr?)
+    for b in [lo, hi]
+        if e := b
+            t := expr(e, Ty.Int, true)
+            if not accepts(Ty.Int, t)
+                err("expr.loop.3", expr_pos(e), "range bounds must be `int`, found {show(t)}")
+
+## ---- Assignment and places ----
+
+fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at ast.Pos)
+    # type.coll.13: `m[k] = v`, `m[k] += n` or `x = e` can fix a pending
+    # local's type; `op=` starts a missing key at zero.
+    settle_by_assign(target, op, value)
+    if n := name_of(target)
+        if local(n) == none
+            expr(value, none, true)
+            if n == "self"
+                expr(target, none, true)
+            else
+                err_help(
+                    "expr.bind.3",
+                    expr_pos(target),
+                    "`{n}` isn't declared",
+                    "declare it with `mut {n} := ...`",
+                )
+                # Later uses don't report the same name again (gram.rec.2).
+                locals.push(Local(
+                    name: n,
+                    ty: Ty.Unknown,
+                    mutable: true,
+                    how: LocalKind.Binding,
+                    decl: none,
+                ))
+            return
+    mut rooted := false
+    if root := place_root(target)
+        rooted = local(root) != none
+    tt := expr(target, none, true)
+    if not rooted
+        if tt != Ty.Unknown
+            err(
+                "expr.bind.6",
+                expr_pos(target),
+                "only a variable, or a field or element of one, can be assigned",
+            )
+        expr(value, none, true)
+        return
+    require_mutable(target, none, "assigned")
+    vt := expr(value, tt, true)
+    consume(value, vt)
+    if o := op
+        operator(o, tt, vt, at)
+    elif not accepts(tt, vt)
+        mismatch("expr.bind.6", expr_pos(value), tt, vt)
+
+@allow("expr.match.3")
+fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr)
+    match target
+        Index(recv, index, _) =>
+            n := name_of(recv) else return
+            k := pending_of(n) else return
+            if not pending[k].brace
+                return
+            kt := quiet_type(index)
+            vt := quiet_type(value)
+            if op == none or vt == Ty.Int or vt == Ty.Float
+                if k2 := pending_of(n)
+                    settle(k2, Ty.MapOf(key: kt, value: vt))
+        Name(n, _) =>
+            if op != none
+                return
+            k := pending_of(n) else return
+            vt := quiet_type(value)
+            brace := pending[k].brace
+            if (not brace and is_list_ty(vt)) or (brace and (is_map_ty(vt) or is_set_ty(vt)))
+                settle(k, vt)
+        _ => return
+
+@allow("expr.match.3") fn name_of(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        _ => none
+
+@allow("expr.match.3") fn is_list_ty(t Ty) bool
+    match t
+        ListOf => true
+        _ => false
+
+@allow("expr.match.3") fn is_map_ty(t Ty) bool
+    match t
+        MapOf => true
+        _ => false
+
+@allow("expr.match.3") fn is_set_ty(t Ty) bool
+    match t
+        SetOf => true
+        _ => false
+
+## Report if `e` isn't a mutable place (own.place.1). `rule` is the rule for
+## this context; without one, it is chosen by the kind of root.
+fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
+    # own.ref.4: a `ref` cell's contents are mutable through any copy.
+    if writes_through_ref(e, rule == "trait.method.3")
+        return
+    root := place_root(e) else
+        err(
+            rule else "expr.bind.6",
+            expr_pos(e),
+            "only a variable, or a field or element of one, can be {action}",
+        )
+        return
+    l := local(root) else return
+    if l.mutable
+        return
+    mut fallback_rule := ""
+    mut text := ""
+    mut hint := ""
+    match l.how
+        Binding =>
+            fallback_rule = "expr.bind.3"
+            text = "`{root}` is immutable"
+            hint = "declare it with `mut {root} := ...`"
+        SelfParam =>
+            fallback_rule = "trait.method.1"
+            text = "`self` is read-only in this method"
+            hint = "declare the method with `mut self`"
+        LoopVar =>
+            fallback_rule = "expr.loop.4"
+            text = "the loop variable `{root}` is immutable"
+            hint = "copy it into a `mut` binding first"
+        ParamLocal =>
+            fallback_rule = "own.param.1"
+            text = "the parameter `{root}` is read-only"
+            hint = "declare it `mut {root} Type`, and pass it with `mut`"
+        MoveParam =>
+            fallback_rule = "own.param.1"
+            text = "the parameter `{root}` is read-only"
+            hint = "declare it `mut {root} Type`, and pass it with `mut`"
+    err_help(rule else fallback_rule, expr_pos(e), "{text}, so it can't be {action}", hint)
+
+fn same_step(x Step, y Step, certain bool) bool
+    match x
+        SField(f) =>
+            match y
+                SField(g) => f == g
+                SIndex => not certain
+        SIndex(i) =>
+            match y
+                SField => not certain
+                SIndex(j) => same_index(i, j, certain)
+
+## Whether two index expressions are the same (certain) or may be (not certain).
+@allow("expr.match.3") fn same_index(i ast.Expr, j ast.Expr, certain bool) bool
+    match i
+        Int(m, _) =>
+            match j
+                Int(n, _) => m == n
+                _ => not certain
+        Name(m, _) =>
+            match j
+                Name(n, _) => if certain then m == n else true
+                _ => not certain
+        _ => not certain
+
+## Whether two argument places certainly overlap (own.excl.2).
+fn Checker.certainly_overlap(self, a ast.Expr, b ast.Expr) bool
+    pa := place_path(a) else return false
+    pb := place_path(b) else return false
+    if pa.root != pb.root or local(pa.root) == none
+        return false
+    for k in 0..pa.steps.len().min(pb.steps.len())
+        if not same_step(pa.steps[k], pb.steps[k], true)
+            return false
+    true
+
+## Whether two places may overlap: same root, and no step that proves them
+## apart (a different field, or a different constant index).
+fn Checker.may_overlap(self, a ast.Expr, b ast.Expr) bool
+    pa := place_path(a) else return false
+    pb := place_path(b) else return false
+    if pa.root != pb.root or local(pa.root) == none
+        return false
+    for k in 0..pa.steps.len().min(pb.steps.len())
+        if not same_step(pa.steps[k], pb.steps[k], false)
+            return false
+    true
+
+## The first use in `body` of a place that may overlap `target` (own.excl.5).
+fn Checker.overlapping_use(self, target ast.Expr, body List[ast.Stmt]) ast.Pos?
+    for s in body
+        if at := overlap_in_stmt(target, s)
+            return at
+    none
+
+fn Checker.overlap_in_else(self, target ast.Expr, o ast.Else) ast.Pos?
+    match o
+        Fallback(d) => overlap_in_expr(target, d)
+        Leave(st) => overlap_in_stmt(target, st)
+        Handler(_, body, _) => overlapping_use(target, body)
+
+fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
+    match s
+        Let(_, _, _, value, otherwise) =>
+            if at := overlap_in_expr(target, value)
+                return at
+            o := otherwise else return none
+            overlap_in_else(target, o)
+        Assign(t, _, value, _) => either(overlap_in_expr(target, t), overlap_in_expr(target, value))
+        While(cond, body, _) => either(overlap_in_expr(target, cond), overlapping_use(target, body))
+        For(_, _, _, _, iter, body, _) => either(
+            overlap_in_expr(target, iter),
+            overlapping_use(target, body),
+        )
+        With(m, _, _, body, _) => either(overlap_in_expr(target, m), overlapping_use(target, body))
+        Return(v, _) =>
+            e := v else return none
+            overlap_in_expr(target, e)
+        Eval(e) => overlap_in_expr(target, e)
+        Handle(value, otherwise) => either(
+            overlap_in_expr(target, value),
+            overlap_in_else(target, otherwise),
+        )
+        Defer(st, _) => overlap_in_stmt(target, st)
+        Break => none
+        Continue => none
+
+fn either(a ast.Pos?, b ast.Pos?) ast.Pos?
+    if x := a
+        return x
+    b
+
+fn Checker.overlap_in_list(self, target ast.Expr, xs List[ast.Expr]) ast.Pos?
+    for x in xs
+        if at := overlap_in_expr(target, x)
+            return at
+    none
+
+fn Checker.overlap_in_args(self, target ast.Expr, args List[ast.Arg]) ast.Pos?
+    for a in args
+        if at := overlap_in_expr(target, a.value)
+            return at
+    none
+
+fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
+    e := x else return none
+    overlap_in_expr(target, e)
+
+@allow("expr.match.3") fn Checker.overlap_in_expr(self, target ast.Expr, x ast.Expr) ast.Pos?
+    if p := place_path(x)
+        if may_overlap(target, x)
+            return expr_pos(x)
+        for step in p.steps
+            match step
+                SIndex(i) =>
+                    if at := overlap_in_expr(target, i)
+                        return at
+                SField => continue
+        return none
+    match x
+        Interp(parts, _) =>
+            for part in parts
+                match part
+                    Hole(y) =>
+                        if at := overlap_in_expr(target, y)
+                            return at
+                    Fmt(y, _) =>
+                        if at := overlap_in_expr(target, y)
+                            return at
+                    Lit => continue
+            none
+        ListLit(items, _) => overlap_in_list(target, items)
+        SetLit(items, _) => overlap_in_list(target, items)
+        Call(callee, args, _) => either(
+            overlap_in_expr(target, callee),
+            overlap_in_args(target, args),
+        )
+        Method(recv, _, _, args) => either(
+            overlap_in_expr(target, recv),
+            overlap_in_args(target, args),
+        )
+        Member(recv, _, _) => overlap_in_expr(target, recv)
+        Index(recv, index, _) => either(
+            overlap_in_expr(target, recv),
+            overlap_in_expr(target, index),
+        )
+        Unary(_, operand, _) => overlap_in_expr(target, operand)
+        NewRef(value, _) => overlap_in_expr(target, value)
+        Binary(_, lhs, rhs, _) => either(overlap_in_expr(target, lhs), overlap_in_expr(target, rhs))
+        Range(lo, hi, _, _) => either(overlap_in_opt(target, lo), overlap_in_opt(target, hi))
+        MapLit(entries, _) =>
+            for en in entries
+                if at := overlap_in_expr(target, en.key)
+                    return at
+                if at := overlap_in_expr(target, en.value)
+                    return at
+            none
+        Comp(_, elem, value, clauses, _) =>
+            for c in clauses
+                if at := overlap_in_expr(target, c.iter)
+                    return at
+                if at := overlap_in_opt(target, c.cond)
+                    return at
+            either(overlap_in_expr(target, elem), overlap_in_opt(target, value))
+        If(branches, els, _, _) =>
+            for b in branches
+                match b.cond
+                    Test(c) =>
+                        if at := overlap_in_expr(target, c)
+                            return at
+                    Bind(_, _, c) =>
+                        if at := overlap_in_expr(target, c)
+                            return at
+                if at := overlapping_use(target, b.body)
+                    return at
+            e := els else return none
+            overlapping_use(target, e)
+        Match(scrutinee, arms, _) =>
+            if at := overlap_in_expr(target, scrutinee)
+                return at
+            for a in arms
+                if at := overlapping_use(target, a.body)
+                    return at
+            none
+        Try(inner, context, _) => either(
+            overlap_in_expr(target, inner),
+            overlap_in_opt(target, context),
+        )
+        OrElse(value, otherwise, _) =>
+            if at := overlap_in_expr(target, value)
+                return at
+            match otherwise
+                Fallback(d) => overlap_in_expr(target, d)
+                Leave | Handler => none
+        _ => none
+
+## Whether a loop body has a `break` that ends this loop (not one of a
+## nested loop's).
+fn breaks(body List[ast.Stmt]) bool
+    for s in body
+        if stmt_breaks(s)
+            return true
+    false
+
+fn stmt_breaks(s ast.Stmt) bool
+    match s
+        Break => true
+        Eval(e) => breaks_in_expr(e)
+        Return(v, _) =>
+            e := v else return false
+            breaks_in_expr(e)
+        Let(_, _, _, value, otherwise) =>
+            if breaks_in_expr(value)
+                return true
+            o := otherwise else return false
+            breaks_in_else(o)
+        Handle(value, otherwise) => breaks_in_expr(value) or breaks_in_else(otherwise)
+        Assign(target, _, value, _) => breaks_in_expr(target) or breaks_in_expr(value)
+        While(cond, _, _) => breaks_in_expr(cond)
+        For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
+        Continue | Defer | With => false
+
+@allow("expr.match.3") fn breaks_in_else(o ast.Else) bool
+    match o
+        Leave(st) =>
+            match st
+                Break => true
+                _ => false
+        Handler(_, body, _) => breaks(body)
+        Fallback(v) => breaks_in_expr(v)
+
+fn any_breaks(xs List[ast.Expr]) bool
+    for x in xs
+        if breaks_in_expr(x)
+            return true
+    false
+
+fn args_break(args List[ast.Arg]) bool
+    for a in args
+        if breaks_in_expr(a.value)
+            return true
+    false
+
+@allow("expr.match.3") fn breaks_in_expr(e ast.Expr) bool
+    match e
+        If(branches, els, _, _) =>
+            for b in branches
+                if breaks(b.body)
+                    return true
+            body := els else return false
+            breaks(body)
+        Match(scrutinee, arms, _) =>
+            if breaks_in_expr(scrutinee)
+                return true
+            for a in arms
+                if breaks(a.body)
+                    return true
+            false
+        Unary(_, operand, _) => breaks_in_expr(operand)
+        Binary(_, lhs, rhs, _) => breaks_in_expr(lhs) or breaks_in_expr(rhs)
+        Call(callee, args, _) => breaks_in_expr(callee) or args_break(args)
+        Method(recv, _, _, args) => breaks_in_expr(recv) or args_break(args)
+        Member(recv, _, _) => breaks_in_expr(recv)
+        Index(recv, index, _) => breaks_in_expr(recv) or breaks_in_expr(index)
+        ListLit(items, _) => any_breaks(items)
+        SetLit(items, _) => any_breaks(items)
+        MapLit(entries, _) =>
+            for en in entries
+                if breaks_in_expr(en.key) or breaks_in_expr(en.value)
+                    return true
+            false
+        Try(inner, _, _) => breaks_in_expr(inner)
+        OrElse(value, otherwise, _) => breaks_in_expr(value) or breaks_in_else(otherwise)
+        _ => false
+
+## ---- Contracts and invariants (contracts.rs) ----
+
+## A trait method without a body still has its contracts checked
+## (contract.inh.1), with its parameters in scope.
+fn Checker.check_bodyless_contracts(mut self, idx int, f ast.FnDecl)
+    sig := sigs[idx]
+    scope = fn_scopes[idx]
+    self_ty = fn_self[idx]
+    locals = []
+    if f.receiver != none
+        locals.push(Local(
+            name: "self",
+            ty: self_ty else Ty.Unknown,
+            mutable: receiver_of(f) == true,
+            how: LocalKind.SelfParam,
+            decl: none,
+        ))
+    for k in 0..f.params.len()
+        p := f.params[k]
+        locals.push(Local(
+            name: p.name,
+            ty: sig.params[k].ty,
+            mutable: p.mutable,
+            how: LocalKind.ParamLocal,
+            decl: none,
+        ))
+    check_contracts(f, sig.ret)
+
+## contract.inv.1: a struct's invariants see its fields by bare name and
+## must be `bool`.
+fn Checker.check_invariants(mut self, struct_index int)
+    st := prog.structs[struct_index]
+    if st.invariants.len() == 0
+        return
+    locals = []
+    declared := struct_params[struct_index]
+    scope = scope_of(declared)
+    t := Ty.Struct(struct_index, [Ty.Param(p) for p in declared])
+    self_ty = t
+    locals.push(Local(name: "self", ty: t, mutable: false, how: LocalKind.SelfParam, decl: none))
+    for c in st.invariants
+        got := expr(c.cond, Ty.Bool, true)
+        if not accepts(Ty.Bool, got)
+            mismatch("contract.decl.2", expr_pos(c.cond), Ty.Bool, got)
+    locals = []
+
+## Check `f`'s contracts with its parameters in scope; `ensures` also sees
+## `result`, the success value (contract.ens.1).
+fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
+    for c in f.contracts
+        mark := locals.len()
+        # contract.ens.3: `old(e)` is `e` typed in the parameters' scope.
+        mut olds := List[Local]()
+        for o in c.olds
+            t := expr(o.value, none, true)
+            olds.push(Local(
+                name: o.name,
+                ty: t,
+                mutable: false,
+                how: LocalKind.Binding,
+                decl: none,
+            ))
+        if c.is_ensures and not returns_nothing(result_ty)
+            mut clash := false
+            for p in f.params
+                if p.name == "result" and not clash
+                    clash = true
+                    err_help(
+                        "contract.ens.2",
+                        p.pos,
+                        "`{full_name(f)}` has an `ensures` line, where `result` names its return value",
+                        "rename the parameter",
+                    )
+            if not clash
+                locals.push(Local(
+                    name: "result",
+                    ty: ok_type(result_ty),
+                    mutable: false,
+                    how: LocalKind.Binding,
+                    decl: none,
+                ))
+        for l in olds
+            locals.push(l)
+        in_requires = not c.is_ensures
+        got := expr(c.cond, Ty.Bool, true)
+        in_requires = false
+        if not accepts(Ty.Bool, got)
+            mismatch("contract.decl.2", expr_pos(c.cond), Ty.Bool, got)
+        locals = locals[..mark]

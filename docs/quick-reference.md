@@ -819,7 +819,8 @@ implementation.
 
 `@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
 area")` before a function warns at each call, with the reason (required).
-Unknown attributes are errors.
+`@allow("expr.match.3")` silences the warning for `_` arms that cover enum
+variants in that function. Unknown attributes are errors.
 
 ## Contracts
 

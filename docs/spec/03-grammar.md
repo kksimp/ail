@@ -110,10 +110,29 @@ it. The bootstrap accepts it and ignores it. *(ADR 0196)*
 **gram.attr.4** — `@deprecated("reason")` marks a function as deprecated. The
 reason is one string literal and is required. Each call of the function is a
 warning that names the function and gives the reason; the program still runs.
-The attributes known to the bootstrap are `@test`, `@pure`, `@inline` and
-`@deprecated`; any other attribute is an error (`test.attr.1`). *(ADR 0197)*
+The attributes known to the bootstrap are `@test`, `@pure`, `@inline`,
+`@deprecated` and `@allow`; any other attribute is an error (`test.attr.1`).
+*(ADR 0197, ADR 0379)*
 
 ```ail fragment
 @deprecated("use hash") fn old_hash(x u64) u64
     x * 17
+```
+
+**gram.attr.5** — `@allow("rule")` before a function allows the warning with
+that rule ID anywhere in the function: the checker doesn't report it. The
+argument is one string literal naming a warning that can be allowed; the
+bootstrap allows `expr.match.3` only. A missing or other argument is a
+compile-time error. *(ADR 0379)*
+
+```ail fragment
+enum Role
+    Admin
+    Editor
+    Guest
+
+@allow("expr.match.3") fn is_admin(r Role) bool
+    match r
+        Admin => true
+        _ => false
 ```

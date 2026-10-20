@@ -1,8 +1,9 @@
 //! The checker written in AIL (`compiler/check/`, ADR 0377) against this
 //! one: on every example, case, mistake, package and `tools/edit`, the AIL
 //! checker's diagnostics must equal `ail check --json`'s (rule, file, line,
-//! column, in order), counting only the rules it reports and the lines it
-//! checks so far. It prints those with each program's diagnostics.
+//! column, in order), counting on both sides only the rules it reports and
+//! the lines it checks so far. It prints those with each program's
+//! diagnostics.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -133,7 +134,14 @@ fn ail_checker_agrees_with_the_bootstrap() {
     });
     let mut sections: std::collections::HashMap<String, Section> = Default::default();
     let mut current = String::new();
+    let (mut checked, mut bodies) = (0usize, 0usize);
     for line in outputs.iter().flat_map(|o| o.lines()) {
+        if let Some(b) = line.strip_prefix("bodies ") {
+            let mut w = b.split(' ').map(|n| n.parse::<usize>().unwrap());
+            checked += w.next().unwrap();
+            bodies += w.next().unwrap();
+            continue;
+        }
         if let Some(p) = line.strip_prefix("== ") {
             current = p.to_string();
             sections.insert(current.clone(), Section { diags: Vec::new(), rules: Vec::new(), skips: Vec::new() });
@@ -154,22 +162,20 @@ fn ail_checker_agrees_with_the_bootstrap() {
     for (prog, path) in &dumps {
         let sec = sections.get(&path.to_string_lossy().into_owned()).expect("a section per dump");
         let out = ail().args(["check", "--json", prog]).output().unwrap();
-        let want: Vec<Key> = String::from_utf8_lossy(&out.stderr)
-            .lines()
-            .filter(|l| l.starts_with('{'))
-            .map(key)
-            .filter(|(rule, file, line, _)| {
-                sec.rules.contains(rule)
-                    && !sec.skips.iter().any(|(f, a, b)| f == file && (*a..=*b).contains(line))
-            })
-            .collect();
-        if want == sec.diags {
+        let counted = |(rule, file, line, _): &Key| {
+            sec.rules.contains(rule) && !sec.skips.iter().any(|(f, a, b)| f == file && (*a..=*b).contains(line))
+        };
+        let want: Vec<Key> =
+            String::from_utf8_lossy(&out.stderr).lines().filter(|l| l.starts_with('{')).map(key).filter(counted).collect();
+        let got: Vec<Key> = sec.diags.iter().filter(|k| counted(k)).cloned().collect();
+        if want == got {
             agree += 1;
         } else {
-            failures.push(format!("{prog}\n  ail check: {want:?}\n  AIL:       {:?}", sec.diags));
+            failures.push(format!("{prog}\n  ail check: {want:?}\n  AIL:       {got:?}"));
         }
     }
     let _ = fs::remove_dir_all(&dir);
     println!("self-hosted checker agrees on {agree} of {} programs", dumps.len());
+    println!("it types {checked} of {bodies} function bodies");
     assert!(failures.is_empty(), "{} disagreements:\n{}", failures.len(), failures.join("\n"));
 }
