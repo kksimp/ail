@@ -8,6 +8,7 @@ fn main()
     fs := [2.5, -1.0, 9.25]
     print(fs.sorted(by: |f| f.to_int() * -1))
     words := ["pear", "fig", "banana", "kiwi", "apple"]
+    print(words.sorted(by: |w| w.len()))
     print(words.sorted(by: |w| w.len()).join(","))
     empty := List[int]()
     print(empty.sorted(by: |x| x))
