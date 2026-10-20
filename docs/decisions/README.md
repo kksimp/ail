@@ -196,3 +196,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
 | [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
 | [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0214](0214-list-editing-methods.md) | List `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first` (resolves OQ-047) *(delegated)* | Accepted | 2026-10-20 |
+| [0215](0215-str-slice-and-search-methods.md) | `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper` (resolves OQ-048) *(delegated)* | Accepted | 2026-10-20 |

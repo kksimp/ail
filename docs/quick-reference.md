@@ -381,7 +381,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`.
+  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -401,7 +401,7 @@ mut out := []          # typed by its first use: out.push("a") makes a List[str]
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
-Also: `xs.pop()` and `xs.last()` (give `T?`), `xs.contains(x)`,
+Also: `xs.insert(i, x)`, `xs.remove_at(i)`, `xs.extend(ys)`, `xs.clear()`, `xs.reverse()`; `xs.pop()`, `xs.first()` and `xs.last()` (give `T?`), `xs.contains(x)`,
 `xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
 (a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
 `xs.sum()` (ints or floats). Slices don't clamp, and negative indexes are

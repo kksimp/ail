@@ -212,23 +212,7 @@ on every call chain); (c) nothing at the package level. Waits on Topic 13
 **Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).
 
 ## OQ-047 — Inserting into and removing from lists
-`List` has `push`, `pop` and `swap` but no `insert(i, x)`, `remove(i)`,
-`extend(xs)` or concatenation, so the editor in `tools/edit/edit.ail`
-([ADR 0180](decisions/0180-editor-written-in-ail.md)) rebuilds its line list
-with a hand-written `splice` for every line edit. Options: (a) `insert`,
-`remove_at` and `extend` methods (recommended: one token each, the common
-names an agent reaches for, and the interpreter can do them in place);
-(b) `+` on lists (concise, but hides an O(n) copy); (c) a general
-`splice(from, to, items)` (one method, less obvious). *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0214](decisions/0214-list-editing-methods.md) (`insert`, `remove_at`, `extend`, `clear`, `reverse`, `first`).
 
 ## OQ-048 — Editing text without string indexing
-`str` has no indexing, slicing or `len()` (OQ-043), and `to_lower` exists
-only on `char`. The editor goes through `s.chars()`, slices the list, and
-joins it back with `join("")`: 19 `chars()` and 10 `join("")` in about 1,000
-lines, a few tokens and an O(n) copy each. Options: (a) character slicing
-`s.slice(a, b)` and `s.char_count()` (explicit about counting characters);
-(b) decide OQ-043 and add `s[a..b]` in the unit it picks; (c) keep
-`chars()` and add `str.to_lower`/`to_upper` only. Recommendation: (a) now,
-since it doesn't prejudge OQ-043, plus `str.to_lower`. *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
