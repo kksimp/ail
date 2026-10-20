@@ -461,6 +461,8 @@ pub enum Cond {
 pub enum InterpPart {
     Lit(String),
     Expr(Expr),
+    /// `{expression:spec}` (lex.str.7).
+    Fmt(Expr, crate::lexer::FormatSpec),
 }
 
 /// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).

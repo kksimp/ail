@@ -194,7 +194,7 @@ impl Cx<'_> {
             }
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.expr(x);
                     }
                 }

@@ -22,7 +22,7 @@ parameters and no type parameters. Its return type is absent or `!`.
 ignores tests, so a program's output is the same with or without them.
 *(ADR 0167)*
 
-```ail
+```ail fragment
 fn double(x int) int
     x * 2
 

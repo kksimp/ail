@@ -177,14 +177,7 @@ behaves as if it required `Eq` (a `[T Hash]` bound allows `==`,
 **Resolved** by [ADR 0144](decisions/0144-else-as-an-expression.md) (`e else d` is the loosest operator).
 
 ## OQ-041 — Format specifications in interpolation
-`"{x}"` gives only the default text form. Width, fill, precision and radix
-(`f"{x:>8}"`, `f"{n:04x}"`, `f"{r:.2f}"` in Python) are written today with
-`pad_left(width, fill)` and `to_hex()` ([ADR 0135](decisions/0135-string-literals-and-methods.md)),
-and fixed decimal places can't be written at all. Options: a spec after `:`
-inside the braces (Python, Rust; compact, but a mini-language to learn),
-methods only (`x.to_fixed(2)`; one way, longer), or both. Recommendation:
-measure on programs that print tables and money before deciding.
-*Owner: AI under ADR 0076.*
+**Resolved** by [ADR 0173](decisions/0173-format-specifications-in-interpolation.md) (`{x:>8}`, `{r:.2}`, `{n:0>4x}`).
 
 ## OQ-042 — Custom hashing
 `Hash` is automatic and can't be implemented by hand

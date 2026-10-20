@@ -17,7 +17,7 @@ except through a `ref` (`own.ref.1`). *(ADR 0060)*
 **own.val.2** — An implementation MAY share storage between values (e.g.
 copy-on-write), provided `own.val.1` holds. *(ADR 0060)*
 
-```ail
+```ail skip=context
 a := Point(x: 1.0, y: 2.0)
 mut b := a
 b.x = 6.0
@@ -34,7 +34,7 @@ only when `m[k]` is the whole target of `=` does it insert a missing key or
 replace the value. Every other use of an entry as a place needs `k` to be
 present and traps if it isn't. *(ADR 0117, ADR 0131)*
 
-```ail
+```ail fragment
 mut counts := Map[str, int]()
 counts["a"] = 1      # inserts
 counts["a"] += 1     # fine: "a" is present
@@ -52,7 +52,7 @@ call. The argument MUST be a mutable place and MUST be written with a leading
 `mut` at the call site. *(ADR 0061)* Method receivers are the exception: see
 `trait.method.3`.
 
-```ail
+```ail skip=context
 fn shift(mut p Point, dx f64)
     p.x = p.x + dx
 
@@ -86,7 +86,7 @@ values counts as an overlap, and so does one that depends on map keys:
 inside `for mut x in m[k]`, `m[j]` may overlap `m[k]`. Violations are
 compile-time errors. *(ADR 0121, ADR 0131)*
 
-```ail
+```ail skip=context
 xs.push(xs[0])               # xs[0] is copied before the call
 f(mut x, mut x)              # compile-time error
 swap(mut a[i], mut a[j])     # traps if i == j; a.swap(i, j) doesn't
@@ -106,7 +106,7 @@ argument. *(ADR 0068)*
 leading `move` at the call site. Any later use of the moved-from binding is a
 compile-time error. *(ADR 0068)*
 
-```ail
+```ail skip=bootstrap
 unique struct File
     fd int
 
@@ -136,7 +136,7 @@ through any copy is observable through all of them. *(ADR 0063)*
 unless it is wrapped in a synchronised type defined by the concurrency
 chapter. *(ADR 0063, ADR 0025)*
 
-```ail
+```ail skip=bootstrap
 struct Node
     value int
     children List[ref Node]
@@ -148,7 +148,7 @@ struct Node
 **own.ref.4** — The contents of a `ref` cell MAY be mutated through any copy
 of the reference, including one held in an immutable binding. *(ADR 0067)*
 
-```ail
+```ail skip=bootstrap
 root := ref Node(value: 1, children: [])
 root.value = 2
 ```

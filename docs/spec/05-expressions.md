@@ -25,7 +25,7 @@ or an enclosing local scope of the same function is a compile-time error. This
 applies to variables, parameters, and loop and pattern bindings. *(ADR 0039,
 ADR 0044)*
 
-```ail
+```ail skip=context
 fn total(items List[Item]) i64
     mut sum := 0
     for item in items
@@ -152,7 +152,7 @@ apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
 value), its blocks are indented one level deeper than that statement's line,
 and its `elif` and `else` lines are at that statement's level. *(ADR 0111)*
 
-```ail
+```ail skip=context
 kind := if n < 0
     "negative"
 elif n == 0
@@ -171,7 +171,7 @@ of type `T ! E`, its `else` may be written `else name`, which binds the error
 value to `name` within the `else` block. The type of `name` is given by
 `err.else.3`. *(ADR 0125, ADR 0139)*
 
-```ail
+```ail skip=context
 if cfg := parse(lines)
     print("ok: {cfg.width}x{cfg.height}")
 else err
@@ -216,7 +216,7 @@ ordering comparison with NaN is false. *(ADR 0129, ADR 0127, ADR 0130)*
 literal is a compile-time error. The help says that `index_of` returns `none`
 when the element is absent, not `-1`. *(ADR 0136)*
 
-```ail
+```ail skip=context
 i := xs.index_of(x)
 if i == -1        # compile-time error: index_of returns none when absent
     print("absent")
@@ -231,7 +231,7 @@ one-line statement on the arm's line (`expr.match.9`). A result consisting of
 several statements is written as an indented block following `=>`.
 *(ADR 0054, ADR 0138)*
 
-```ail
+```ail skip=context
 area := match s
     Circle(r) => pi * r * r
     Rect(w, h) => w * h
@@ -282,7 +282,7 @@ arm's line: `return x`, `break`, `continue`, `total += n`, `x = y` or
 the match's type is expected. Any other statement gives the arm no value, so
 the match can't be used as a value (`expr.if.4`). *(ADR 0138, ADR 0139)*
 
-```ail
+```ail skip=context
 fn class(c char) int
     match c
         '0' | '1' => 1
