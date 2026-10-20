@@ -376,6 +376,8 @@ match c              # as a statement, arms can just do things
 match ch             # literals and `|`; ints, strings and chars need `_`
     '+' | '-' => continue           # a one-line statement arm
     '0' => total += 1
+    'a'..='z' => lower += 1         # ranges: `lo..hi` or `lo..=hi`, ints or chars
+    _ if ch == ' ' => skip += 1     # guard: `pattern if cond =>`; a guarded arm covers nothing
     _ => return ch
 ```
 

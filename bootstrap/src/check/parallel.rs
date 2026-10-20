@@ -547,6 +547,9 @@ impl<'a> Scan<'a> {
             Expr::Match { scrutinee, arms, .. } => {
                 self.expr(scrutinee);
                 for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.scoped(pattern_names(&arm.pat), &arm.body);
                 }
             }
@@ -698,7 +701,12 @@ fn expr_blocks<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Block)) {
         }
         Expr::Match { scrutinee, arms, .. } => {
             expr_blocks(scrutinee, f);
-            arms.iter().for_each(|a| f(&a.body));
+            for a in arms {
+                if let Some(g) = &a.guard {
+                    expr_blocks(g, f);
+                }
+                f(&a.body);
+            }
         }
         Expr::Else { value, otherwise, .. } => {
             expr_blocks(value, f);
@@ -1185,7 +1193,12 @@ fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
             }
             Expr::Match { scrutinee, arms, .. } => {
                 walk(scrutinee, f);
-                arms.iter().for_each(|a| block(&a.body, f));
+                for a in arms {
+                    if let Some(g) = &a.guard {
+                        walk(g, f);
+                    }
+                    block(&a.body, f);
+                }
             }
             Expr::Else { value, otherwise, .. } => {
                 walk(value, f);

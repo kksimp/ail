@@ -315,6 +315,7 @@ pub struct Arg
 
 pub struct Arm
     pub pat Pattern
+    pub guard Expr?
     pub body List[Stmt]
 
 pub enum Pattern
@@ -322,6 +323,7 @@ pub enum Pattern
     Literal(value Literal, pos Pos)
     Alt(alts List[Pattern], pos Pos)
     Variant(qualifier str?, name str, bindings List[Ident]?, pos Pos)
+    Range(lo Literal, hi Literal, inclusive bool, pos Pos)
 
 pub enum Literal
     IntLit(value str)

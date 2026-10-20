@@ -309,6 +309,8 @@ label := match c     # must cover every variant; `_` covers the rest
 match ch             # literals and `|`; ints, strings and chars need `_`
     '+' | '-' => continue           # a one-line statement arm
     '0' => total += 1
+    'a'..='z' => lower += 1         # `lo..hi` or `lo..=hi`, int or char
+    _ if ch == ' ' => skip += 1     # guard; a guarded arm covers nothing
     _ => return ch
 ```
 

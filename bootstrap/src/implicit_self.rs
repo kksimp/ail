@@ -195,7 +195,7 @@ impl Cx<'_> {
                 }
             }
             Pattern::Or(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
-            Pattern::Wildcard(_) | Pattern::Literal(..) => {}
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
 
@@ -303,6 +303,9 @@ impl Cx<'_> {
                 self.expr(scrutinee);
                 for arm in arms.iter_mut() {
                     self.pattern(&arm.pat);
+                    if let Some(g) = &mut arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&mut arm.body);
                 }
             }

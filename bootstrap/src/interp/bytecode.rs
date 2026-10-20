@@ -564,7 +564,7 @@ fn compilable(b: &Block) -> bool {
                     expr(c) && compilable(b)
                 }) && els.as_ref().is_none_or(|b| compilable(b))
             }
-            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| compilable(&a.body)),
+            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(expr) && compilable(&a.body)),
             Expr::Binary { lhs, rhs, .. } => expr(lhs) && expr(rhs),
             Expr::Unary { operand, .. } => expr(operand),
             Expr::Method { recv, args, .. } => expr(recv) && args.iter().all(|a| expr(&a.value)),
@@ -893,12 +893,24 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
                         self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
                     }
+                    // expr.match.11: a false guard drops the bindings and tries the next arm.
+                    let fails = arm.guard.as_ref().map(|g| self.cond_jump(g, false));
                     self.block(&arm.body, t);
-                    if self.depth() > mark {
+                    let bound = self.depth() > mark;
+                    if bound {
                         self.scope.truncate(mark as usize);
                         self.emit(Ins::Truncate(mark));
                     }
                     ends.push(self.emit(Ins::Jump(0)));
+                    if let Some(fails) = fails {
+                        let here = self.here();
+                        for f in fails {
+                            self.patch(f, here);
+                        }
+                        if bound {
+                            self.emit(Ins::Truncate(mark));
+                        }
+                    }
                     let next = self.here();
                     self.patch(test, next);
                 }

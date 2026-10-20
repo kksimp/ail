@@ -18,6 +18,7 @@ fn main() !
             [ast.Pattern.Literal(ast.Literal.CharLit("a"), p), ast.Pattern.Wildcard(p)],
             p,
         ),
+        guard: ast.Expr.Bool(true, p),
         body: [ast.Stmt.Eval(sum)],
     )
     body := [
