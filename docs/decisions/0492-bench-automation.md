@@ -74,5 +74,9 @@ The worktree and its build are removed on exit, so the script leaves no
 - Every batch can attach one table. Timing on a shared machine is noisy;
   the minimum over several runs is the number to compare, and the report says
   how many runs were used.
+- `tools/perfbench/race.py` ([ADR 0460](0460-drag-race-harness.md)) is the
+  drag race against C, Python and native AIL. This table is the before and
+  after view of the same programs. The two keep separate scripts because the
+  drag race times native binaries and needs the C compiler and `ail build`.
 - The corpus and perfbench list live in the script. Adding a program to either
   set adds it to the table with no other change.
