@@ -1,0 +1,571 @@
+## std.ui.widgets (spec std.ui.19-24, ADR 0314): text fields, lists, buttons,
+## dialogs, panes and trees for a `ui.Window`. Each widget renders to runs
+## of styled text in a rectangle (`render`), draws them (`draw`, `draw_runs`), and turns
+## an event into an `Action` (`on_event`). Rendering is pure, so a program
+## can test its screens without a window.
+use std.ui
+
+## A rectangle of cells: its top-left corner and its size.
+pub struct Rect
+    pub col int
+    pub row int
+    pub cols int
+    pub rows int
+
+## One run of text: where it starts, its colors, and whether it is bold.
+pub struct Run
+    pub col int
+    pub row int
+    pub text str
+    pub fg int
+    pub bg int
+    pub bold bool
+
+## What an event did to a widget (std.ui.21).
+pub enum Action
+    ## The event isn't for this widget.
+    Ignored
+    ## The widget's state changed; draw it again.
+    Changed
+    ## Enter, a click on a choice, or a press: the widget's value is chosen.
+    Submit
+    ## Escape.
+    Cancel
+
+## The color of `kind` in a theme (std.ui.20): the editor's theme kinds,
+## with dark defaults for the ones a theme leaves out.
+pub fn color(theme Map[str, int], kind str) int
+    if c := theme.get(kind)
+        return c
+    if kind == "bg"
+        return 0x1e1e1e
+    if kind == "pane_bg"
+        return 0x252526
+    if kind == "line_bg"
+        return 0x2a2a2a
+    if kind == "select_bg"
+        return 0x264f78
+    if kind == "status_bg"
+        return 0x007acc
+    if kind == "status_fg"
+        return 0xffffff
+    if kind == "gutter_fg"
+        return 0x858585
+    0xd4d4d4
+
+## Draws runs on a window.
+pub fn draw_runs(mut w ui.Window, runs List[Run])
+    for r in runs
+        if r.bold
+            w.put_styled(
+                r.col,
+                r.row,
+                r.text,
+                r.fg,
+                r.bg,
+                ui.Style(bold: true, italic: false, underline: false),
+            )
+        else
+            w.put(r.col, r.row, r.text, r.fg, r.bg)
+
+## The text of `runs` on a grid of `cols` by `rows` cells, row by row: what
+## a window would show, for printing or testing without one (std.ui.21).
+pub fn text_rows(runs List[Run], cols int, rows int) List[str]
+    mut grid := List[List[char]]()
+    for _ in 0..rows
+        grid.push(" ".repeat(cols).chars())
+    for r in runs
+        if r.row < 0 or r.row >= rows
+            continue
+        cs := r.text.chars()
+        for i in 0..cs.len()
+            c := r.col + i
+            if c >= 0 and c < cols
+                grid[r.row][c] = cs[i]
+    mut out := List[str]()
+    for row in grid
+        mut end := row.len()
+        while end > 0 and row[end - 1] == ' '
+            end -= 1
+        out.push(row[..end].join(""))
+    out
+
+## `text` cut or padded to exactly `n` characters.
+pub fn fit(text str, n int) str
+    cs := text.chars()
+    if cs.len() >= n
+        return cs[..n.max(0)].join("")
+    text.pad_right(n, ' ')
+
+## Whether `item` holds the letters of `filter` in order, ignoring case
+## (std.ui.22).
+pub fn fuzzy(item str, filter str) bool
+    want := filter.chars()
+    mut i := 0
+    for c in item.chars()
+        if i < want.len() and c.to_lower() == want[i].to_lower()
+            i += 1
+    i == want.len()
+
+## Whether a mouse event is a left press inside `r`; the cell it hit.
+fn clicked(ev ui.Event, r Rect) Rect?
+    match ev
+        Mouse(c, row, button, kind) =>
+            if button == "left" and kind == "down" and c >= r.col and c < r.col + r.cols and row >= r.row and row < r.row + r.rows
+                return Rect(col: c - r.col, row: row - r.row, cols: 1, rows: 1)
+            none
+        Key(_, _, _, _) | Resize(_, _) | Close | Scroll(_) => none
+
+## The key of a key event without Ctrl or Alt.
+fn plain_key(ev ui.Event) str?
+    match ev
+        Key(k, ctrl, alt, _) =>
+            if ctrl or alt
+                return none
+            k
+        Resize(_, _) | Close | Mouse(_, _, _, _) | Scroll(_) => none
+
+# ---- TextField -------------------------------------------------------------
+
+## A one-line text input with a label (std.ui.23).
+pub struct TextField
+    pub label str
+    pub text str
+    pub cursor int
+
+pub fn TextField.new(label str, text str) TextField
+    TextField(label: label, text: text, cursor: text.chars().len())
+
+pub fn TextField.on_event(mut self, ev ui.Event) Action
+    k := plain_key(ev) else return Ignored
+    cs := text.chars()
+    if k == "enter"
+        return Submit
+    if k == "escape"
+        return Cancel
+    if k == "backspace"
+        if cursor == 0
+            return Ignored
+        text = "{cs[..cursor - 1].join("")}{cs[cursor..].join("")}"
+        cursor -= 1
+    elif k == "delete"
+        if cursor >= cs.len()
+            return Ignored
+        text = "{cs[..cursor].join("")}{cs[cursor + 1..].join("")}"
+    elif k == "left"
+        cursor = (cursor - 1).max(0)
+    elif k == "right"
+        cursor = (cursor + 1).min(cs.len())
+    elif k == "home"
+        cursor = 0
+    elif k == "end"
+        cursor = cs.len()
+    elif k.chars().len() == 1
+        text = "{cs[..cursor].join("")}{k}{cs[cursor..].join("")}"
+        cursor += 1
+    else
+        return Ignored
+    Changed
+
+pub fn TextField.render(self, r Rect, theme Map[str, int]) List[Run]
+    [Run(
+        col: r.col,
+        row: r.row,
+        text: fit(" {label}{text}", r.cols),
+        fg: color(theme, "status_fg"),
+        bg: color(theme, "select_bg"),
+        bold: false,
+    )]
+
+## The column of the caret on the screen.
+pub fn TextField.caret_col(self, r Rect) int
+    r.col + 1 + label.chars().len() + cursor
+
+pub fn TextField.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+    w.set_cursor(caret_col(r), r.row, Bar)
+
+# ---- ListView --------------------------------------------------------------
+
+## A list to choose from, narrowed by a fuzzy filter as the user types
+## (std.ui.22).
+pub struct ListView
+    pub items List[str]
+    pub filter str
+    pub selected int
+    pub top int
+    ## What the list shows when nothing matches.
+    pub empty str
+
+pub fn ListView.new(items List[str]) ListView
+    ListView(items: items, filter: "", selected: 0, top: 0, empty: "no match")
+
+## The items the filter keeps, in order.
+pub fn ListView.shown(self) List[str]
+    mut out := List[str]()
+    for it in items
+        if fuzzy(it, filter)
+            out.push(it)
+    out
+
+## The selected item, if any item is shown.
+pub fn ListView.chosen(self) str?
+    s := shown()
+    if selected < s.len()
+        return s[selected]
+    none
+
+pub fn ListView.on_event(mut self, ev ui.Event, r Rect) Action
+    n := shown().len()
+    if at := clicked(ev, r)
+        if top + at.row < n
+            selected = top + at.row
+            return Submit
+        return Ignored
+    k := plain_key(ev) else return Ignored
+    if k == "enter"
+        return Submit
+    if k == "escape"
+        return Cancel
+    if k == "up"
+        selected = (selected - 1).max(0)
+    elif k == "down"
+        selected = (selected + 1).min((n - 1).max(0))
+    elif k == "pageup"
+        selected = (selected - r.rows).max(0)
+    elif k == "pagedown"
+        selected = (selected + r.rows).min((n - 1).max(0))
+    elif k == "backspace"
+        cs := filter.chars()
+        if cs.len() == 0
+            return Ignored
+        filter = cs[..cs.len() - 1].join("")
+        selected = 0
+    elif k.chars().len() == 1
+        filter = "{filter}{k}"
+        selected = 0
+    else
+        return Ignored
+    scroll_to(r.rows)
+    Changed
+
+## Keeps the selection within the `rows` shown.
+pub fn ListView.scroll_to(mut self, rows int)
+    if selected < top
+        top = selected
+    if selected >= top + rows
+        top = selected - rows + 1
+
+pub fn ListView.render(self, r Rect, theme Map[str, int]) List[Run]
+    s := shown()
+    mut out := List[Run]()
+    for i in 0..r.rows
+        at := top + i
+        mut bg := color(theme, "pane_bg")
+        if at == selected
+            bg = color(theme, "select_bg")
+        mut text := ""
+        if at < s.len()
+            text = " {s[at]}"
+        out.push(Run(
+            col: r.col,
+            row: r.row + i,
+            text: fit(text, r.cols),
+            fg: color(theme, "fg"),
+            bg: bg,
+            bold: false,
+        ))
+    if s.len() == 0 and r.rows > 0
+        out[0] = Run(
+            col: r.col,
+            row: r.row,
+            text: fit(" {empty}", r.cols),
+            fg: color(theme, "gutter_fg"),
+            bg: color(theme, "pane_bg"),
+            bold: false,
+        )
+    out
+
+pub fn ListView.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- Button ------------------------------------------------------------------
+
+## A labelled button: Enter or Space when focused, or a click, presses it.
+pub struct Button
+    pub label str
+    pub focused bool
+
+pub fn Button.on_event(mut self, ev ui.Event, r Rect) Action
+    if _ := clicked(ev, r)
+        return Submit
+    k := plain_key(ev) else return Ignored
+    if focused and (k == "enter" or k == " ")
+        return Submit
+    Ignored
+
+pub fn Button.render(self, r Rect, theme Map[str, int]) List[Run]
+    mut bg := color(theme, "line_bg")
+    if focused
+        bg = color(theme, "status_bg")
+    [Run(
+        col: r.col,
+        row: r.row,
+        text: fit("[ {label} ]", r.cols),
+        fg: color(theme, "status_fg"),
+        bg: bg,
+        bold: focused,
+    )]
+
+pub fn Button.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- Dialog ------------------------------------------------------------------
+
+## A message with choices; Left, Right and Tab move between them (std.ui.24).
+pub struct Dialog
+    pub message str
+    pub choices List[str]
+    pub selected int
+
+pub fn Dialog.new(message str, choices List[str]) Dialog
+    Dialog(message: message, choices: choices, selected: 0)
+
+## The columns each choice's button takes on the last row of `r`.
+fn Dialog.button_col(self, r Rect, i int) int
+    mut c := r.col + 1
+    for j in 0..i
+        c += choices[j].chars().len() + 5
+    c
+
+pub fn Dialog.on_event(mut self, ev ui.Event, r Rect) Action
+    if at := clicked(ev, r)
+        if at.row == r.rows - 1
+            for i in 0..choices.len()
+                c := button_col(r, i) - r.col
+                if at.col >= c and at.col < c + choices[i].chars().len() + 4
+                    selected = i
+                    return Submit
+        return Ignored
+    k := plain_key(ev) else return Ignored
+    n := choices.len()
+    if k == "enter"
+        return Submit
+    if k == "escape"
+        return Cancel
+    if k == "left"
+        selected = (selected + n - 1) % n
+    elif k == "right" or k == "tab"
+        selected = (selected + 1) % n
+    else
+        return Ignored
+    Changed
+
+pub fn Dialog.render(self, r Rect, theme Map[str, int]) List[Run]
+    mut out := List[Run]()
+    bg := color(theme, "pane_bg")
+    for i in 0..r.rows
+        out.push(Run(
+            col: r.col,
+            row: r.row + i,
+            text: fit("", r.cols),
+            fg: color(theme, "fg"),
+            bg: bg,
+            bold: false,
+        ))
+    lines := message.split("\n")
+    for i in 0..lines.len().min((r.rows - 2).max(0))
+        out.push(Run(
+            col: r.col + 1,
+            row: r.row + i,
+            text: fit(lines[i], r.cols - 2),
+            fg: color(theme, "fg"),
+            bg: bg,
+            bold: false,
+        ))
+    for i in 0..choices.len()
+        b := Button(label: choices[i], focused: i == selected)
+        for run in b.render(
+            Rect(
+                col: button_col(r, i),
+                row: r.row + r.rows - 1,
+                cols: choices[i].chars().len() + 4,
+                rows: 1,
+            ),
+            theme,
+        )
+            out.push(run)
+    out
+
+pub fn Dialog.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- Pane ----------------------------------------------------------------------
+
+## Scrolling text with a cursor line (std.ui.24).
+pub struct Pane
+    pub lines List[str]
+    pub top int
+    pub cursor int
+
+pub fn Pane.new(lines List[str]) Pane
+    Pane(lines: lines, top: 0, cursor: 0)
+
+## Moves the cursor to the last line, scrolled into the `rows` shown.
+pub fn Pane.to_end(mut self, rows int)
+    cursor = (lines.len() - 1).max(0)
+    top = (lines.len() - rows).max(0)
+
+pub fn Pane.on_event(mut self, ev ui.Event, r Rect) Action
+    last := (lines.len() - 1).max(0)
+    lines_scrolled := match ev
+        Scroll(n) => n
+        Key(_, _, _, _) | Resize(_, _) | Close | Mouse(_, _, _, _) => 0
+    if lines_scrolled != 0
+        top = (top + lines_scrolled).max(0).min((lines.len() - r.rows).max(0))
+        return Changed
+    if at := clicked(ev, r)
+        if top + at.row < lines.len()
+            cursor = top + at.row
+            return Submit
+        return Ignored
+    k := plain_key(ev) else return Ignored
+    if k == "enter"
+        return Submit
+    if k == "escape"
+        return Cancel
+    if k == "up"
+        cursor = (cursor - 1).max(0)
+    elif k == "down"
+        cursor = (cursor + 1).min(last)
+    elif k == "pageup"
+        cursor = (cursor - r.rows).max(0)
+    elif k == "pagedown"
+        cursor = (cursor + r.rows).min(last)
+    elif k == "home"
+        cursor = 0
+    elif k == "end"
+        cursor = last
+    else
+        return Ignored
+    if cursor < top
+        top = cursor
+    if cursor >= top + r.rows
+        top = cursor - r.rows + 1
+    Changed
+
+pub fn Pane.render(self, r Rect, theme Map[str, int]) List[Run]
+    mut out := List[Run]()
+    for i in 0..r.rows
+        at := top + i
+        mut bg := color(theme, "pane_bg")
+        if at == cursor
+            bg = color(theme, "line_bg")
+        mut text := ""
+        if at < lines.len()
+            text = lines[at]
+        out.push(Run(
+            col: r.col,
+            row: r.row + i,
+            text: fit(text, r.cols),
+            fg: color(theme, "fg"),
+            bg: bg,
+            bold: false,
+        ))
+    out
+
+pub fn Pane.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))
+
+# ---- Tree ----------------------------------------------------------------------
+
+## A node of a tree, in depth-first order: its depth and whether it is open.
+pub struct Node
+    pub label str
+    pub depth int
+    pub open bool
+
+## An outline: nodes in depth-first order; a node's children follow it at a
+## greater depth (std.ui.24).
+pub struct Tree
+    pub nodes List[Node]
+    pub selected int
+
+pub fn Tree.new(nodes List[Node]) Tree
+    Tree(nodes: nodes, selected: 0)
+
+## Whether node `i` has children.
+pub fn Tree.has_children(self, i int) bool
+    i + 1 < nodes.len() and nodes[i + 1].depth > nodes[i].depth
+
+## The indices of the nodes not hidden under a closed node.
+pub fn Tree.visible(self) List[int]
+    mut out := List[int]()
+    mut hide_below := -1
+    for i in 0..nodes.len()
+        if hide_below >= 0 and nodes[i].depth > hide_below
+            continue
+        hide_below = -1
+        out.push(i)
+        if not nodes[i].open and has_children(i)
+            hide_below = nodes[i].depth
+    out
+
+pub fn Tree.on_event(mut self, ev ui.Event, r Rect) Action
+    vis := visible()
+    at := vis.index_of(selected) else 0
+    if hit := clicked(ev, r)
+        if hit.row < vis.len()
+            selected = vis[hit.row]
+            if has_children(selected)
+                nodes[selected].open = not nodes[selected].open
+                return Changed
+            return Submit
+        return Ignored
+    k := plain_key(ev) else return Ignored
+    if k == "escape"
+        return Cancel
+    if k == "up"
+        selected = vis[(at - 1).max(0)]
+    elif k == "down"
+        selected = vis[(at + 1).min(vis.len() - 1)]
+    elif k == "right" and has_children(selected)
+        nodes[selected].open = true
+    elif k == "left" and has_children(selected) and nodes[selected].open
+        nodes[selected].open = false
+    elif k == "enter"
+        if not has_children(selected)
+            return Submit
+        nodes[selected].open = not nodes[selected].open
+    else
+        return Ignored
+    Changed
+
+pub fn Tree.render(self, r Rect, theme Map[str, int]) List[Run]
+    vis := visible()
+    mut out := List[Run]()
+    for i in 0..r.rows
+        mut text := ""
+        mut bg := color(theme, "pane_bg")
+        if i < vis.len()
+            n := nodes[vis[i]]
+            mut mark := "  "
+            if has_children(vis[i])
+                mark = "+ "
+                if n.open
+                    mark = "- "
+            text = "{" ".repeat(n.depth * 2)}{mark}{n.label}"
+            if vis[i] == selected
+                bg = color(theme, "select_bg")
+        out.push(Run(
+            col: r.col,
+            row: r.row + i,
+            text: fit(text, r.cols),
+            fg: color(theme, "fg"),
+            bg: bg,
+            bold: false,
+        ))
+    out
+
+pub fn Tree.draw(self, mut w ui.Window, r Rect, theme Map[str, int])
+    draw_runs(mut w, render(r, theme))

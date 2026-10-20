@@ -1,0 +1,6 @@
+echo: build ok
+false: exit 1
+sleep: timed_out
+no-such-tool: not_found
+echo: tests ok
+3 steps failed

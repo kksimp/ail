@@ -1,0 +1,7 @@
+# Int updates in place still trap on overflow and on a zero divisor (expr.arith.1, expr.arith.3).
+fn main()
+    mut n := 9223372036854775800
+    n += 7
+    print(n)
+    n += 1
+    print(n)

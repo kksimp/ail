@@ -1,0 +1,28 @@
+
+struct Found
+    name str
+    lines int
+    hash str
+
+fn scan(root str) !List[Found]
+    mut out := []
+    for file in fs.glob("{root}/**/*")
+        name := file.strip_prefix("{root}/") else file
+        text := fs.read_text(file) else continue
+        r := proc.run("git", ["hash-object", "--stdin"], text)? "hashing {name}"
+        out.push(Found(name: name, lines: text.lines().len(), hash: r.out.trim().slice(0, 8)))
+    out
+
+fn main() !
+    found := scan("{path.dir(env.program())}/data")?
+    mut by_ext := {}
+    mut by_hash := {}
+    for f in found
+        by_ext[path.ext(f.name)] += f.lines
+        by_hash.push(f.hash, f.name)
+    for ext in by_ext.keys().sorted()
+        print("{ext:<5}{by_ext[ext]:>5} lines")
+    for hash in by_hash.keys()
+        if by_hash[hash].len() > 1
+            print("duplicate {hash}: {by_hash[hash].join(", ")}")
+    print("{found.len()} files, {[f.lines for f in found].sum()} lines")

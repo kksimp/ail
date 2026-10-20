@@ -3,11 +3,10 @@
 Chapter key: `contract`
 
 > **Status:** Drafted (partial). Specified: `requires` and `ensures` lines,
-> their typing and purity, `result`, the runtime checks and their traps,
-> `--no-contracts`, and contracts in `ail api`. Not yet designed: `old(x)`
-> (the value of a parameter on entry), invariants on types, loop invariants,
-> contracts on trait methods without a body and whether implementations
-> inherit them, and static proof (see [open-questions.md](../open-questions.md),
+> their typing and purity, `result`, `old(e)`, contracts on trait methods and
+> their inheritance, struct `invariant` lines, the runtime checks and their
+> traps, `--no-contracts`, and contracts in `ail api`. Not yet designed: loop
+> invariants and static proof (see [open-questions.md](../open-questions.md),
 > OQ-060).
 
 A contract states what a function needs and what it promises, in the
@@ -101,19 +100,144 @@ fn log(mut lines List[str], line str)
     lines.push(line)
 ```
 
+**contract.ens.3** — In an `ensures` condition, `old(e)` is the value that
+`e` had when the function was called, after its parameters were bound. `e` is
+an expression over the parameters and `self`, typed and pure like the
+condition; it is evaluated once on entry, and only when checks are on
+(`contract.run.3`). `old` takes one expression and only means something in an
+`ensures` line: anywhere else it is an error. A trap shows each `old(e)` as
+its own name among the condition's values. *(ADR 0303)*
+
+```ail fragment
+fn bump(mut xs List[int])
+    ensures xs.len() == old(xs.len()) + 1
+    xs.push(7)
+```
+
+```ail error=contract.ens.3
+fn f(x int) int
+    requires old(x) > 0
+    x
+```
+
+## Trait contracts
+
+**contract.inh.1** — A trait method, with or without a default body, may have
+`requires` and `ensures` lines under its signature (`contract.decl.1`); they
+see the trait method's parameters. An implementation of the method inherits
+them. For a call, an implementation's own `requires` lines **weaken** the
+trait's: the call is accepted when every inherited `requires` holds or every
+one of the implementation's own holds. An implementation with no `requires` of
+its own accepts exactly what the trait does. Failing both traps with
+`contract.req.1`, naming the trait method the condition came from. *(ADR 0304)*
+
+**contract.inh.2** — An implementation's own `ensures` lines **add** to the
+trait's: every inherited `ensures` and every one of its own must hold, in that
+order. A failure traps with `contract.ens.1` in the implementation, and names
+the trait method when the condition is inherited. *(ADR 0304)*
+
+**contract.inh.3** — Inherited conditions are checked on every call of the
+implementation, through the trait (`trait.any.1`) and through the concrete
+type alike. They read the arguments under the trait method's parameter names,
+whatever names the implementation uses. A default method's own contracts check
+its body and are inherited by implementations that override it, as above.
+*(ADR 0304)*
+
+```ail
+trait Shape
+    fn scale(self, k int) int
+        requires k > 0
+        ensures result >= 0
+
+struct Square
+    side int
+
+impl Shape for Square
+    fn scale(self, k int) int
+        requires k == -1
+        ensures result < 1000
+        self.side * k * k
+
+fn main()
+    s := Square(side: 2)
+    print(s.scale(3))
+    print(s.scale(-1))
+```
+
+```ail error=contract.decl.2
+trait Shape
+    fn area(self) int
+        ensures result
+
+struct Square
+    side int
+
+impl Shape for Square
+    fn area(self) int
+        self.side * self.side
+```
+
+## Invariants
+
+**contract.inv.1** — A struct's declaration may contain `invariant COND`
+lines among its fields. A condition has type `bool`, is pure like any
+contract (`contract.decl.3`), and sees the fields by bare name and `self`.
+*(ADR 0305)*
+
+**contract.inv.2** — Every value built with the struct's literal form
+satisfies each invariant, in written order. If one is `false`, the program
+traps with `contract.inv.2` at the construction. The message names the struct,
+the condition, the value and where it was built. *(ADR 0305)*
+
+**contract.inv.3** — When a method with a `mut self` receiver returns, each
+invariant holds for the receiver, whether the method returned a value or a
+failure. If one is `false`, the program traps with `contract.inv.3` at the
+invariant line, naming the method, where it returned and the receiver's value.
+Other writes (a field assigned in a function that received the struct as a
+`mut` parameter) aren't checked until the value passes through one of these
+two points. *(ADR 0305)*
+
+```ail
+struct Account
+    balance int
+    limit int
+    invariant balance >= 0
+    invariant balance <= limit
+
+fn Account.deposit(mut self, n int)
+    balance += n
+
+fn main()
+    mut a := Account(balance: 5, limit: 10)
+    a.deposit(3)
+    print(a.balance)
+```
+
+```ail error=contract.decl.3
+fn noisy(n int) bool
+    print("checking {n}")
+    n > 0
+
+struct Account
+    balance int
+    invariant noisy(balance)
+```
+
 ## Running
 
 **contract.run.1** — Contracts are part of the signature: they are checked
 at every call, including calls through a trait (`trait.any.1`), direct
-recursion, and calls from tests (`test.run.1`). *(ADR 0211)*
+recursion, and calls from tests (`test.run.1`). Invariants are checked at the
+points `contract.inv.2` and `contract.inv.3` name. *(ADR 0211, ADR 0305)*
 
 **contract.run.2** — Calls made while evaluating a condition don't check
 their own contracts, so a condition may call the function it describes:
 `ensures n == 0 or result == n * fact(n - 1)`. *(ADR 0211)*
 
 **contract.run.3** — `ail run --no-contracts` and `ail test --no-contracts`
-evaluate no condition. Because conditions are pure (`contract.decl.3`), the
-only difference a program can show is that a contract trap doesn't occur.
+evaluate no condition, including `old(e)` and invariants. Because conditions
+are pure (`contract.decl.3`), the only difference a program can show is that a
+contract trap doesn't occur.
 Checks are on by default. *(ADR 0212)*
 
 ## Tools
@@ -122,3 +246,11 @@ Checks are on by default. *(ADR 0212)*
 under the keys `requires` and `ensures` (arrays of strings, present only when
 non-empty), and `ail api --text` prints them under the signature.
 *(ADR 0213)*
+
+**contract.api.2** — For a method that implements a trait method with
+contracts, `ail api` adds `"inherits"` (the trait method's name) and the
+trait's conditions as written under `"inherited_requires"` and
+`"inherited_ensures"`, each present only when non-empty; `ail api --text`
+prints them after the method's own, marked `(inherited)`. A struct's
+invariants are listed under `"invariants"`, and `--text` prints each as an
+`invariant` line under the struct. *(ADR 0303, ADR 0304, ADR 0305)*

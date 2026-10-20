@@ -1,0 +1,4 @@
+trace: call main() at 7:4
+trace:   call step(n = 0) at 10:13
+trace:   step returned 1
+trace: summary: 3 events shown, 9 dropped (call 6, return 6)

@@ -1,0 +1,13 @@
+## std.use.4: standard modules are in scope without `use`; a local or a
+## declaration of the program with the same name hides one.
+fn load(name str) str ! fs.IoError
+    fs.read_text(name)
+
+fn main()
+    print(path.dir("a/b/c.txt"))
+    print(path.ext("c.txt"))
+    text := load("std_implicit_missing.txt") else err
+        err.kind
+    print(text)
+    path := "x/y"
+    print(path.len())

@@ -1,0 +1,18 @@
+## `?` outside an `else` still needs an optional-returning function, and an
+## `else err` can't bind an error a caught `?` never made (err.prop.2, err.prop.4).
+fn name(j Json) str
+    j.get("name")?.as_str() else "?"
+
+fn bad(j Json) str
+    j.get("name")?.as_str()
+
+fn mixed(j Json) !int
+    n := parse_json(j.str("x")?) else err
+        print(err)
+        return 0
+    1
+
+fn main()
+    print(name(Json.Null))
+    print(bad(Json.Null))
+    print(mixed(Json.Null) else 0)

@@ -1,6 +1,0 @@
-## std.use.2: a standard module must be imported before use.
-fn save(e fs.IoError)
-    print(e)
-
-fn main()
-    print(fs.read_text("a.txt"))

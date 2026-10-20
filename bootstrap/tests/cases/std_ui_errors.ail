@@ -9,3 +9,4 @@ fn main()
     v.put(0, 0, 1, 0, 0)
     n := v.size() + 1
     ui.open("t", 80) else return
+    c := ui.PINK

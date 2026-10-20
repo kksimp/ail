@@ -1,0 +1,5 @@
+## Reading a missing key still traps; only `op=` starts from zero (type.map.3, type.map.7).
+fn main()
+    mut m := {"a": 1}
+    m["b"] += 1
+    print(m["c"])

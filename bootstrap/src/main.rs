@@ -5,13 +5,16 @@
 
 mod api;
 mod ast;
+mod bump;
 mod check;
+mod derive;
 mod diag;
 mod explain;
 mod fasthash;
 mod doctest;
 mod docs;
 mod fix;
+mod foreign;
 mod fmt;
 mod implicit_self;
 mod interp;
@@ -21,6 +24,7 @@ mod num;
 mod packages;
 mod parser;
 mod stdlib;
+mod tensor;
 mod ui;
 
 use std::process::ExitCode;
@@ -34,13 +38,18 @@ commands:
                 ARGS are the program's (std.env.1: `env.args()`)
   run DIR [ARGS...]
                 check and run the package whose root module is DIR
-  check FILE    check a program (or a package DIR) without running it
+  check FILE    check a program (or a package DIR) without running it;
+                --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;
                 --cases N (default 100) and --seed S set a property's inputs
-  effects FILE  print each function's inferred effects (eff.infer.6)
+  effects FILE  print each function's inferred effects (eff.infer.6);
+                --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
+  explain       list every rule with its chapter and whether `ail fix` repairs it (--json)
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
+  api --card [--budget N] DIR|FILE
+                a program's card: modules, signatures, tests, manifest, examples
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
@@ -51,14 +60,34 @@ options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deterministic
                 with run or check: same as `--deny clock,random,proc,net`, so
-                the same inputs always give the same output (std.random.5)
+                the same inputs always give the same output (std.random.5),
+                and runs every loop on one thread (conc.par.9)
+  --parallel    with run: run every loop proven independent on the thread
+                pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
+  --schedule=random[:SEED]
+                with test or run: switch tasks at random points picked from
+                SEED (a new one if left off), so a test that fails on one
+                interleaving can be replayed; a failing test prints the
+                seed (conc.sched.1-2)
   --deny LIST   with run or check: reject a program whose `main` reaches a
                 denied capability (fs, env, proc, clock, random, net, ui,
                 or all) (eff.cap.1)
   --no-contracts
                 with run or test: skip `requires`/`ensures` checks (contract.run.3)
+  --trace[=calls|effects|all]
+                with run: write each call, return, effect, task and contract
+                check to standard error (trace.run.1); --trace-limit N caps
+                the events shown (default 1000) before a summary line; with
+                test, only a failing test reports its events (trace.test.1)
+  --watch NAME  with run or test: show each assignment to a `mut` variable NAME,
+                through `mut` arguments and methods too (trace.watch.1, trace.watch.3)
+  --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
+
+// ADR 0332: commands that only read a program use the front-end allocator.
+#[global_allocator]
+static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
 const STACK_BYTES: usize = 256 * 1024 * 1024;
@@ -71,8 +100,11 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" | "--deterministic" | "--no-contracts" => {}
-            "--deny" | "--seed" => i += 1,
+            "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
+            a if a == "--coverage" || a.starts_with("--coverage=") => {}
+            a if a.starts_with("--schedule") => {}
+            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" => i += 1,
+            a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
         }
         i += 1;
@@ -96,6 +128,31 @@ fn main() -> ExitCode {
             }
         }
     }
+    // conc.sched.1: `--schedule=random[:SEED]` for `ail run` and `ail test`.
+    if let Err(msg) = take_schedule(&mut rest) {
+        eprintln!("error: {msg}");
+        return ExitCode::from(2);
+    }
+    // run.limit.1-4, test.cover.1-3: limits for `ail run` and `ail test`, coverage for `ail test`.
+    let coverage = match take_limit_options(&mut rest) {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    };
+    // trace.run.1, trace.watch.1, trace.snap.3: `ail run`'s tracing options.
+    match interp::take_trace_options(&mut rest, json) {
+        Ok(true) if !matches!(rest.first(), Some(&"run" | &"test")) => {
+            eprintln!("error: `--trace`, `--watch` and `--verbose` work with `ail run` and `ail test` (trace.run.1)");
+            return ExitCode::from(2);
+        }
+        Ok(_) => {}
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    }
     let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
         Ok(d) => d,
         Err(msg) => {
@@ -103,21 +160,30 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // ADR 0332: `check`, `api` and `effects` make one pass over the program
+    // and exit, so they use the front-end allocator.
+    // `AIL_SYSTEM_ALLOC=1` keeps the system allocator, to compare the two.
+    if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
+        ALLOC.enable();
+    }
     match rest.as_slice() {
         ["run", file] => {
             interp::set_program(file, program_args);
             run_file(file, json, true, &deny)
         }
+        ["check", "--errors", file] | ["check", file, "--errors"] => api::errors::command(file, json),
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => match take_test_options(&mut flags) {
-            Ok((cases, seed)) => run_tests(file, json, cases, seed),
+            Ok((cases, seed)) => run_tests(file, json, cases, seed, coverage),
             Err(msg) => {
                 eprintln!("error: {msg}");
                 ExitCode::from(2)
             }
         },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
+        ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
         ["fix", rest @ ..] => fix::command(rest, json),
+        ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
@@ -130,6 +196,85 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+/// Remove `--timeout MS`, `--max-memory MB`, `--max-steps N` and `--coverage[=lines]`,
+/// and set them. Returns whether coverage was asked for, and whether with `=lines`.
+fn take_limit_options(rest: &mut Vec<&str>) -> Result<Option<bool>, String> {
+    let cmd = rest.first().copied().unwrap_or("");
+    let mut config = interp::limits::Config::default();
+    let mut coverage = None;
+    let mut i = 0;
+    while i < rest.len() {
+        let name = rest[i];
+        let number = |rest: &Vec<&str>, unit: &str| -> Result<u64, String> {
+            rest.get(i + 1)
+                .and_then(|v| v.parse::<u64>().ok())
+                .filter(|n| *n > 0)
+                .ok_or_else(|| format!("`{name}` needs a positive number of {unit}, e.g. `{name} 100` (run.limit.4)"))
+        };
+        match name {
+            "--timeout" | "--max-memory" | "--max-steps" => {
+                if cmd != "run" && cmd != "test" {
+                    return Err(format!("`{name}` works with `ail run` and `ail test` (run.limit.4)"));
+                }
+                match name {
+                    "--timeout" => config.timeout_ms = Some(number(rest, "milliseconds")?),
+                    "--max-memory" => {
+                        if !interp::limits::memory_supported() {
+                            return Err("`--max-memory` is not available on Windows yet (run.limit.2)".into());
+                        }
+                        config.memory_mb = Some(number(rest, "megabytes")?)
+                    }
+                    _ => config.steps = Some(number(rest, "steps")?),
+                }
+                rest.drain(i..i + 2);
+            }
+            "--coverage" | "--coverage=lines" => {
+                if cmd != "test" {
+                    return Err("`--coverage` works with `ail test` (test.cover.1)".into());
+                }
+                coverage = Some(name.ends_with("lines"));
+                rest.remove(i);
+            }
+            a if a.starts_with("--coverage=") => {
+                return Err(format!("`{a}` isn't a coverage mode; use `--coverage` or `--coverage=lines` (test.cover.2)"));
+            }
+            _ => i += 1,
+        }
+    }
+    config.coverage = coverage.is_some();
+    interp::limits::configure(config);
+    Ok(coverage)
+}
+
+/// Remove `--schedule=random[:SEED]` and set the random schedule
+/// (conc.sched.1). Without a seed, one is made from the clock, and a
+/// failing test prints it (conc.sched.2). Pooled loops and tasks run on
+/// the scheduler instead, so the seed decides every interleaving.
+fn take_schedule(args: &mut Vec<&str>) -> Result<(), String> {
+    let Some(at) = args.iter().position(|a| a.starts_with("--schedule")) else { return Ok(()) };
+    let word = args.remove(at);
+    if !matches!(args.first(), Some(&"run" | &"test")) {
+        return Err("`--schedule` works with `ail run` and `ail test` (conc.sched.1)".into());
+    }
+    let seed = match word {
+        "--schedule=random" => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| d.as_nanos() as u64 % 1_000_000_000),
+        "--schedule=fixed" => return Ok(()),
+        w => match w.strip_prefix("--schedule=random:").map(str::parse::<u64>) {
+            Some(Ok(n)) => n,
+            _ => {
+                return Err(format!(
+                    "`{w}` isn't a schedule; use `--schedule=random` or `--schedule=random:SEED` with a non-negative SEED (conc.sched.1)"
+                ));
+            }
+        },
+    };
+    interp::set_schedule(Some(seed));
+    interp::parallel::set_mode(interp::parallel::Mode::Off);
+    Ok(())
 }
 
 /// `--cases N` and `--seed S` for `ail test` (test.prop.3).
@@ -168,8 +313,17 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
         args.drain(at..at + 2);
         interp::set_seed(seed);
     }
+    // conc.par.8: `run --parallel` puts every proven loop on the pool.
+    if args.first() == Some(&"run")
+        && let Some(at) = args.iter().position(|a| *a == "--parallel")
+    {
+        args.remove(at);
+        interp::parallel::set_mode(interp::parallel::Mode::Proven);
+    }
     if let Some(at) = args.iter().position(|a| *a == "--deterministic") {
         args.remove(at);
+        // conc.par.9: deterministic runs keep every loop on one thread.
+        interp::parallel::set_mode(interp::parallel::Mode::Off);
         deny.extend(check::effects::DETERMINISTIC_DENY);
         deny.sort_unstable();
         deny.dedup();
@@ -181,6 +335,18 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
 fn effects_file(path: &str, json: bool) -> ExitCode {
     let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
     print!("{}", check::effects::render(&check::effects::effects_of(&program, &resolved), json));
+    ExitCode::SUCCESS
+}
+
+/// `ail effects --parallel FILE [--json]`: each loop's verdict (conc.par.6).
+fn parallel_file(path: &str, json: bool) -> ExitCode {
+    let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
+    let at = |pos| {
+        let (file, p) = modules::locate(&program.files, pos);
+        let file = if file.is_empty() { path } else { file };
+        format!("{file}:{}:{}", p.line, p.col)
+    };
+    print!("{}", check::parallel::render(&check::parallel::analyze(&program, &resolved), json, &at));
     ExitCode::SUCCESS
 }
 
@@ -244,7 +410,8 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
             format!("{file}:{}:{}", p.line, p.col)
         };
         interp::run(&program, &resolved).map_err(|stop| match stop {
-            interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
+            // trace.snap.1-4: the trap with its snapshot.
+            interp::Stop::Trap(t) => interp::render_trap(&program, &t, interp::take_snapshot(), json),
             interp::Stop::Failed(report) => report.render_with(at),
         })
     });
@@ -265,7 +432,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
 /// own, report in source order. Exit 0 if all pass, 1 if any fails, 2 if
 /// the program is rejected. Doc examples run after the file's own tests
 /// (test.doc.1), and properties run `cases` inputs (test.prop.3).
-fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode {
+fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Option<bool>) -> ExitCode {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -312,17 +479,21 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
     if rejected {
         return ExitCode::from(2);
     }
+    let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
         .spawn(move || {
-            interp::run_tests(&program, &resolved, cases, seed)
+            let outcomes = interp::run_tests(&program, &resolved, cases, seed)
                 .into_iter()
-                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop))
-                .collect::<Vec<_>>()
+                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop, o.snapshot, o.trace))
+                .collect::<Vec<_>>();
+            // test.cover.1: what the tests ran, read once they are all done.
+            let cover = coverage.map(|_| interp::limits::report(&program, &cover_map));
+            (outcomes, cover)
         })
         .expect("spawn interpreter thread")
         .join();
-    let Ok(mut outcomes) = outcomes else {
+    let Ok((mut outcomes, cover)) = outcomes else {
         eprintln!("{path}: internal error in the bootstrap interpreter");
         return ExitCode::from(1);
     };
@@ -330,6 +501,8 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
         let Some(t) = doc_tests.iter().find(|t| t.fn_name == o.0) else { continue };
         // test.doc.2-3: report under the example's name, at its own line.
         o.0 = t.name.clone();
+        o.5 = None; // the example is generated code; its frame would name `doc_example_N`
+        o.6.clear();
         if o.2.is_none() {
             o.2 = doctest::check_output(t, &o.3);
             o.1 = diag::Pos { line: t.line(), col: 1 };
@@ -339,7 +512,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
     }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;
-    for (name, pos, failure, output, prop) in &outcomes {
+    for (name, pos, failure, output, prop, snapshot, trace) in &outcomes {
         if json {
             let (status, message) = match failure {
                 Some(m) => ("fail", m.as_str()),
@@ -358,6 +531,13 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
                     line.push_str(&format!(",\"input\":{}", diag::json_str(input)));
                 }
             }
+            if let Some(snap) = snapshot {
+                line.push_str(&format!(",\"snapshot\":{}", diag::json_str(snap)));
+            }
+            // trace.test.1: a failing test's events, as the objects `ail run --trace --json` writes.
+            if !trace.is_empty() {
+                line.push_str(&format!(",\"trace\":[{}]", trace.join(",")));
+            }
             println!("{line}}}");
         } else {
             let tail = match prop {
@@ -371,6 +551,14 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
                     if let Some(input) = prop.as_ref().and_then(|p| p.input.as_ref()) {
                         println!("  input: {input}");
                     }
+                    if let Some(snap) = snapshot {
+                        for line in snap.lines() {
+                            println!("  {line}");
+                        }
+                    }
+                    for line in trace {
+                        println!("  {line}");
+                    }
                     for line in output.lines() {
                         println!("  | {line}");
                     }
@@ -378,10 +566,39 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
             }
         }
     }
+    // conc.sched.2: a failure under a random schedule names its seed.
+    let schedule = interp::schedule_seed().filter(|_| failed > 0);
     if json {
-        println!("{{\"summary\":true,\"passed\":{passed},\"failed\":{failed}}}");
+        let seed = schedule.map_or(String::new(), |s| format!(",\"schedule_seed\":{s}"));
+        println!("{{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{seed}}}");
     } else {
         println!("{passed} passed, {failed} failed");
+        if let Some(s) = schedule {
+            println!("schedule seed {s}: replay with `ail test --schedule=random:{s} {path}`");
+        }
+    }
+    // test.cover.2-3: the table, or per-file JSON lines; `=lines` lists the unexecuted ranges.
+    for c in cover.iter().flatten() {
+        let pct = if c.lines == 0 { 100 } else { c.lines_hit * 100 / c.lines };
+        let ranges: Vec<String> =
+            c.missed.iter().map(|&(a, b)| if a == b { a.to_string() } else { format!("{a}-{b}") }).collect();
+        if json {
+            let missed: Vec<String> = c.missed.iter().map(|(a, b)| format!("[{a},{b}]")).collect();
+            println!(
+                "{{\"coverage\":true,\"file\":{},\"lines\":{},\"lines_hit\":{},\"functions\":{},\"functions_hit\":{},\"missed\":[{}]}}",
+                diag::json_str(&c.file),
+                c.lines,
+                c.lines_hit,
+                c.fns,
+                c.fns_hit,
+                missed.join(",")
+            );
+        } else {
+            println!("coverage {}: lines {}/{} ({pct}%), functions {}/{}", c.file, c.lines_hit, c.lines, c.fns_hit, c.fns);
+            if coverage == Some(true) && !ranges.is_empty() {
+                println!("  not run: {}", ranges.join(", "));
+            }
+        }
     }
     if failed == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }

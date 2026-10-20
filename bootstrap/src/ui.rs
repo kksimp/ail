@@ -25,16 +25,46 @@ pub const DEFAULT_BG: u32 = 0x000000;
 /// The largest grid `ui.open` accepts in each direction (std.ui.1).
 pub const MAX_CELLS: i64 = 1000;
 
-/// One text cell: a character the font can draw, and its colors (0xRRGGBB).
+/// std.ui.16: the style bits of a cell.
+pub const BOLD: u8 = 1;
+pub const ITALIC: u8 = 2;
+pub const UNDERLINE: u8 = 4;
+
+/// std.ui.17: the named colors of `std.ui`, as `ui.NAME` ints (0xRRGGBB).
+pub const COLORS: &[(&str, i64)] = &[
+    ("BLACK", 0x000000),
+    ("BLUE", 0x2472C8),
+    ("CYAN", 0x11A8CD),
+    ("GRAY", 0x808080),
+    ("GREEN", 0x0DBC79),
+    ("MAGENTA", 0xBC3FBC),
+    ("ORANGE", 0xCE9178),
+    ("RED", 0xCD3131),
+    ("WHITE", 0xFFFFFF),
+    ("YELLOW", 0xE5E510),
+];
+
+/// std.ui.18: how the caret is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum CaretShape {
+    #[default]
+    Bar,
+    Block,
+    Underline,
+}
+
+/// One text cell: a character the font can draw, its colors (0xRRGGBB) and
+/// its style bits (std.ui.16).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cell {
     pub ch: char,
     pub fg: u32,
     pub bg: u32,
+    pub style: u8,
 }
 
 impl Cell {
-    const BLANK: Cell = Cell { ch: ' ', fg: DEFAULT_FG, bg: DEFAULT_BG };
+    const BLANK: Cell = Cell { ch: ' ', fg: DEFAULT_FG, bg: DEFAULT_BG, style: 0 };
 }
 
 /// std.ui.4: the character a cell shows: printable Latin-1 as is, anything
@@ -59,12 +89,12 @@ impl Grid {
     /// std.ui.3: every cell blank on `bg`.
     pub fn clear(&mut self, bg: i64) {
         let bg = color(bg);
-        self.cells.fill(Cell { ch: ' ', fg: DEFAULT_FG, bg });
+        self.cells.fill(Cell { ch: ' ', fg: DEFAULT_FG, bg, style: 0 });
     }
 
     /// std.ui.4: `text` from (`col`, `row`) rightwards, one character per
-    /// cell, clipped to the grid on every side.
-    pub fn put(&mut self, col: i64, row: i64, text: &str, fg: i64, bg: i64) {
+    /// cell, clipped to the grid on every side, in `style` (std.ui.16).
+    pub fn put(&mut self, col: i64, row: i64, text: &str, fg: i64, bg: i64, style: u8) {
         let Ok(row) = usize::try_from(row) else { return };
         if row >= self.rows {
             return;
@@ -76,7 +106,7 @@ impl Grid {
                 break;
             }
             if c >= 0 {
-                self.cells[row * self.cols + c as usize] = Cell { ch: glyph(ch), fg, bg };
+                self.cells[row * self.cols + c as usize] = Cell { ch: glyph(ch), fg, bg, style };
             }
             c += 1;
         }
@@ -112,6 +142,23 @@ pub enum Event {
     Scroll { lines: i64 },
 }
 
+/// Ctrl, Alt and Shift as they were when an event happened (std.ui.14).
+pub type Modifiers = [bool; 3];
+
+/// An event and the modifiers held when it happened.
+type Tagged = (Event, Modifiers);
+
+/// The font sizes a window can use, as cell heights in pixels (std.ui.15).
+pub const FONT_SIZES: &[i64] = &[10, 12, 13, 14, 15, 18, 20, 24, 26, 28, 30, 36, 40];
+
+/// The font size a window opens with (std.ui.15).
+pub const DEFAULT_FONT_SIZE: i64 = 20;
+
+/// std.ui.15: the available size nearest `px`, the smaller on a tie.
+pub fn nearest_font_size(px: i64) -> i64 {
+    *FONT_SIZES.iter().min_by_key(|s| ((**s - px).abs(), **s)).expect("sizes")
+}
+
 /// Why `ui.open` failed: `UiError.kind` and `UiError.message` (std.ui.1).
 pub type OpenError = (&'static str, String);
 
@@ -123,8 +170,12 @@ struct Session {
     id: i64,
     grid: Grid,
     cursor: (i64, i64),
+    shape: CaretShape,
     /// Set once the window has closed (std.ui.8).
     closed: bool,
+    /// The modifiers of the last event returned (std.ui.14).
+    mods: Modifiers,
+    font_size: i64,
 }
 
 thread_local! {
@@ -135,10 +186,11 @@ thread_local! {
 /// A request from the interpreter thread to the host.
 enum Msg {
     Open { title: String, cols: usize, rows: usize, reply: Sender<Result<(), OpenError>> },
-    Present { grid: Grid, cursor: (i64, i64) },
+    Present { grid: Grid, cursor: (i64, i64), shape: CaretShape },
     Title(String),
-    Poll(Sender<Option<Event>>),
-    Wait(Sender<Event>),
+    Font(i64),
+    Poll(Sender<Option<Tagged>>),
+    Wait(Sender<Tagged>),
     Close,
     /// The interpreter thread has ended.
     Done,
@@ -170,7 +222,7 @@ pub fn open(title: &str, cols: i64, rows: i64) -> Result<i64, OpenError> {
         *n += 1;
         *n - 1
     });
-    SESSION.set(Some(Session { id, grid: Grid::new(cols, rows), cursor: (-1, -1), closed: false }));
+    SESSION.set(Some(Session { id, grid: Grid::new(cols, rows), cursor: (-1, -1), shape: CaretShape::Bar, closed: false, mods: [false; 3], font_size: DEFAULT_FONT_SIZE }));
     Ok(id)
 }
 
@@ -188,19 +240,27 @@ pub fn clear(id: i64, bg: i64) {
     with(id, |s| s.grid.clear(bg));
 }
 
-pub fn put(id: i64, col: i64, row: i64, text: &str, fg: i64, bg: i64) {
-    with(id, |s| s.grid.put(col, row, text, fg, bg));
+pub fn put(id: i64, col: i64, row: i64, text: &str, fg: i64, bg: i64, style: u8) {
+    with(id, |s| s.grid.put(col, row, text, fg, bg, style));
 }
 
 /// std.ui.5: where the caret is drawn; off the grid hides it.
 pub fn cursor(id: i64, col: i64, row: i64) {
-    with(id, |s| s.cursor = (col, row));
+    set_cursor(id, col, row, CaretShape::Bar);
+}
+
+/// std.ui.18: where the caret is drawn, and its shape.
+pub fn set_cursor(id: i64, col: i64, row: i64, shape: CaretShape) {
+    with(id, |s| {
+        s.cursor = (col, row);
+        s.shape = shape;
+    });
 }
 
 /// std.ui.5: show the grid. Asynchronous: the host draws it in order.
 pub fn present(id: i64) {
-    if let Some(Some((grid, cursor))) = with(id, |s| (!s.closed).then(|| (s.grid.clone(), s.cursor))) {
-        send(Msg::Present { grid, cursor });
+    if let Some(Some((grid, cursor, shape))) = with(id, |s| (!s.closed).then(|| (s.grid.clone(), s.cursor, s.shape))) {
+        send(Msg::Present { grid, cursor, shape });
     }
 }
 
@@ -211,21 +271,49 @@ pub fn next_event(id: i64, wait: bool) -> Option<Event> {
     if !live {
         return Some(Event::Close);
     }
-    let event = if wait {
+    let closed = (Event::Close, [false; 3]);
+    let (event, mods) = if wait {
         let (reply, answer) = mpsc::channel();
         send(Msg::Wait(reply));
-        answer.recv().unwrap_or(Event::Close)
+        answer.recv().unwrap_or(closed)
     } else {
         let (reply, answer) = mpsc::channel();
         send(Msg::Poll(reply));
-        answer.recv().unwrap_or(Some(Event::Close))?
+        answer.recv().unwrap_or(Some(closed))?
     };
-    with(id, |s| match &event {
-        Event::Resize { cols, rows } => s.grid.resize(*cols, *rows),
-        Event::Close => s.closed = true,
-        _ => {}
+    with(id, |s| {
+        s.mods = mods;
+        match &event {
+            Event::Resize { cols, rows } => s.grid.resize(*cols, *rows),
+            Event::Close => s.closed = true,
+            _ => {}
+        }
     });
     Some(event)
+}
+
+/// std.ui.14: Ctrl, Alt and Shift as they were at the last event returned.
+pub fn modifiers(id: i64) -> Modifiers {
+    with(id, |s| s.mods).unwrap_or([false; 3])
+}
+
+/// std.ui.15: change the font size. The window keeps its pixel size, so the
+/// grid follows with a `Resize` when the number of cells changes.
+pub fn set_font_size(id: i64, px: i64) {
+    let size = nearest_font_size(px);
+    let changed = with(id, |s| {
+        let changed = !s.closed && s.font_size != size;
+        s.font_size = size;
+        changed
+    });
+    if changed == Some(true) {
+        send(Msg::Font(size));
+    }
+}
+
+/// std.ui.15: the font size, as a cell height in pixels.
+pub fn font_size(id: i64) -> i64 {
+    with(id, |s| s.font_size).unwrap_or(DEFAULT_FONT_SIZE)
 }
 
 /// std.ui.13: the window's title.
@@ -349,7 +437,7 @@ const TICK: Duration = Duration::from_millis(8);
 
 fn serve(rx: &Receiver<Msg>) {
     let mut window: Option<backend::Backend> = None;
-    let mut waiter: Option<Sender<Event>> = None;
+    let mut waiter: Option<Sender<Tagged>> = None;
     loop {
         let msg = if window.is_some() {
             match rx.recv_timeout(TICK) {
@@ -380,8 +468,9 @@ fn serve(rx: &Receiver<Msg>) {
                 };
                 let _ = reply.send(result);
             }
-            Some(Msg::Present { grid, cursor }) => {
+            Some(Msg::Present { grid, cursor, shape }) => {
                 if let Some(w) = &mut window {
+                    w.shape = shape;
                     w.present(grid, cursor);
                 }
             }
@@ -391,7 +480,7 @@ fn serve(rx: &Receiver<Msg>) {
                         w.pump();
                         w.events.pop_front()
                     }
-                    None => Some(Event::Close),
+                    None => Some((Event::Close, [false; 3])),
                 };
                 let _ = reply.send(event);
             }
@@ -400,6 +489,11 @@ fn serve(rx: &Receiver<Msg>) {
                     w.pump();
                 }
                 waiter = Some(reply);
+            }
+            Some(Msg::Font(size)) => {
+                if let Some(w) = &mut window {
+                    w.set_font(size);
+                }
             }
             Some(Msg::Title(t)) => {
                 if let Some(w) = &mut window {
@@ -417,7 +511,7 @@ fn serve(rx: &Receiver<Msg>) {
                     None => waiter = Some(reply),
                 },
                 None => {
-                    let _ = reply.send(Event::Close);
+                    let _ = reply.send((Event::Close, [false; 3]));
                 }
             }
         }
@@ -478,7 +572,8 @@ fn chord_char(key: minifb::Key) -> Option<char> {
         K::Comma => ',',
         K::Equal => '=',
         K::LeftBracket => '[',
-        K::Minus => '-',
+        K::Minus | K::NumPadMinus => '-',
+        K::NumPadPlus => '+',
         K::Period => '.',
         K::RightBracket => ']',
         K::Semicolon => ';',
@@ -494,7 +589,7 @@ mod backend {
     use std::collections::{HashMap, VecDeque};
     use std::rc::Rc;
 
-    use embedded_graphics::mono_font::{MonoFont, MonoTextStyle, iso_8859_1::FONT_10X20};
+    use embedded_graphics::mono_font::{MonoFont, MonoTextStyle, iso_8859_1 as fonts};
     use embedded_graphics::pixelcolor::BinaryColor;
     use embedded_graphics::prelude::*;
     use embedded_graphics::text::{Baseline, Text};
@@ -502,10 +597,24 @@ mod backend {
 
     use super::{Cell, Event, Grid, OpenError, key_name};
 
-    const FONT: MonoFont<'static> = FONT_10X20;
-    /// One cell in pixels: the font's glyph size.
-    const CW: usize = 10;
-    const CH: usize = 20;
+    /// std.ui.15: the font for a cell height, and how many times to scale it.
+    fn font(size: i64) -> (&'static MonoFont<'static>, usize) {
+        match size {
+            10 => (&fonts::FONT_6X10, 1),
+            12 => (&fonts::FONT_6X12, 1),
+            13 => (&fonts::FONT_7X13, 1),
+            14 => (&fonts::FONT_7X14, 1),
+            15 => (&fonts::FONT_9X15, 1),
+            18 => (&fonts::FONT_9X18, 1),
+            24 => (&fonts::FONT_6X12, 2),
+            26 => (&fonts::FONT_7X13, 2),
+            28 => (&fonts::FONT_7X14, 2),
+            30 => (&fonts::FONT_9X15, 2),
+            36 => (&fonts::FONT_9X18, 2),
+            40 => (&fonts::FONT_10X20, 2),
+            _ => (&fonts::FONT_10X20, 1),
+        }
+    }
 
     /// Keyboard input in the order it happened, from minifb's callback. A
     /// press and release between two pumps still counts (std.ui.7).
@@ -558,7 +667,15 @@ mod backend {
         h: usize,
         /// The grid last presented, and its caret; `None` before the first.
         shown: Option<(Grid, (i64, i64))>,
-        glyphs: HashMap<char, Vec<bool>>,
+        /// Glyph bitmaps by character and style bits (std.ui.16).
+        glyphs: HashMap<(char, u8), Vec<bool>>,
+        /// The caret's shape (std.ui.18).
+        pub shape: super::CaretShape,
+        /// The font, its scale, and one cell in pixels (std.ui.15).
+        font: &'static MonoFont<'static>,
+        scale: usize,
+        cw: usize,
+        ch: usize,
         cells: (usize, usize),
         closed: bool,
         /// Each mouse button's state at the last pump, and the cell the
@@ -568,7 +685,7 @@ mod backend {
         last_drag: (i64, i64),
         /// Scrolling not yet reported as whole lines (std.ui.11).
         scroll: f32,
-        pub events: VecDeque<Event>,
+        pub events: VecDeque<(Event, [bool; 3])>,
     }
 
     impl Backend {
@@ -579,7 +696,9 @@ mod backend {
             {
                 return Err(("no_display", "no X11 display: DISPLAY is not set".to_string()));
             }
-            let (w, h) = (cols * CW, rows * CH);
+            let (font, scale) = font(super::DEFAULT_FONT_SIZE);
+            let (cw, ch) = (font.character_size.width as usize * scale, font.character_size.height as usize * scale);
+            let (w, h) = (cols * cw, rows * ch);
             let options = WindowOptions {
                 resize: true,
                 scale_mode: minifb::ScaleMode::UpperLeft,
@@ -603,6 +722,11 @@ mod backend {
                 h,
                 shown: None,
                 glyphs: HashMap::new(),
+                shape: super::CaretShape::Bar,
+                font,
+                scale,
+                cw,
+                ch,
                 cells: (cols, rows),
                 closed: false,
                 buttons: [false; 3],
@@ -615,6 +739,39 @@ mod backend {
             Ok(b)
         }
 
+        /// Queue `e` with the modifiers held now (std.ui.14).
+        fn queue(&mut self, e: Event) {
+            let m = &self.mods;
+            self.events.push_back((e, [m.ctrl, m.alt, m.shift]));
+        }
+
+        /// std.ui.15: switch fonts, keep the window's pixel size, and redraw.
+        pub fn set_font(&mut self, size: i64) {
+            let (font, scale) = font(size);
+            self.font = font;
+            self.scale = scale;
+            self.cw = font.character_size.width as usize * scale;
+            self.ch = font.character_size.height as usize * scale;
+            self.glyphs.clear();
+            self.relayout();
+        }
+
+        /// Fit the cells to the window, queue a `Resize` if their number
+        /// changed, and redraw what was shown (std.ui.7).
+        fn relayout(&mut self) {
+            self.fb.resize(self.w * self.h, super::DEFAULT_BG);
+            self.fb.fill(super::DEFAULT_BG);
+            let cells = ((self.w / self.cw).max(1), (self.h / self.ch).max(1));
+            if cells != self.cells {
+                self.cells = cells;
+                self.queue(Event::Resize { cols: cells.0, rows: cells.1 });
+            }
+            if let Some((grid, cursor)) = self.shown.take() {
+                self.draw(grid, cursor, None);
+            }
+            self.flush();
+        }
+
         pub fn set_title(&mut self, title: &str) {
             self.window.set_title(title);
         }
@@ -624,7 +781,7 @@ mod backend {
         fn pump_mouse(&mut self) {
             use minifb::{MouseButton, MouseMode};
             if let Some((x, y)) = self.window.get_mouse_pos(MouseMode::Discard) {
-                self.mouse = ((x.max(0.0) as usize / CW) as i64, (y.max(0.0) as usize / CH) as i64);
+                self.mouse = ((x.max(0.0) as usize / self.cw) as i64, (y.max(0.0) as usize / self.ch) as i64);
             }
             let (col, row) = self.mouse;
             let moved = self.mouse != self.last_drag;
@@ -642,7 +799,7 @@ mod backend {
                 };
                 self.buttons[i] = down;
                 if col >= 0 {
-                    self.events.push_back(Event::Mouse { col, row, button: name, kind });
+                    self.queue(Event::Mouse { col, row, button: name, kind });
                 }
             }
             self.last_drag = self.mouse;
@@ -654,7 +811,7 @@ mod backend {
                 let lines = self.scroll.trunc();
                 if lines != 0.0 {
                     self.scroll -= lines;
-                    self.events.push_back(Event::Scroll { lines: lines as i64 });
+                    self.queue(Event::Scroll { lines: lines as i64 });
                 }
             }
         }
@@ -671,22 +828,14 @@ mod backend {
             self.flush();
             if !self.window.is_open() {
                 self.closed = true;
-                self.events.push_back(Event::Close);
+                self.queue(Event::Close);
                 return;
             }
             let (w, h) = self.window.get_size();
             if (w, h) != (self.w, self.h) && w > 0 && h > 0 {
                 self.w = w;
                 self.h = h;
-                self.fb = vec![super::DEFAULT_BG; w * h];
-                let cells = ((w / CW).max(1), (h / CH).max(1));
-                if cells != self.cells {
-                    self.cells = cells;
-                    self.events.push_back(Event::Resize { cols: cells.0, rows: cells.1 });
-                }
-                if let Some((grid, cursor)) = self.shown.take() {
-                    self.draw(grid, cursor, None);
-                }
+                self.relayout();
             }
             self.pump_mouse();
             let typed = std::mem::take(&mut *self.typed.borrow_mut());
@@ -703,7 +852,8 @@ mod backend {
                     Input::Char(c) => char::from_u32(c).filter(|c| !m.ctrl && *c >= ' ' && *c != '\u{7f}').map(String::from),
                 };
                 if let Some(key) = key {
-                    self.events.push_back(Event::Key { key, ctrl: m.ctrl, alt: m.alt, shift: m.shift });
+                    let (ctrl, alt, shift) = (m.ctrl, m.alt, m.shift);
+                    self.queue(Event::Key { key, ctrl, alt, shift });
                 }
             }
         }
@@ -723,6 +873,10 @@ mod backend {
             let caret = at(cursor);
             let old = before.as_ref().filter(|(g, _)| g.cols == grid.cols && g.rows == grid.rows);
             let old_caret = old.and_then(|(_, c)| at(*c));
+            if old.is_none() {
+                // A full redraw: clear what a larger grid or font left behind.
+                self.fb.fill(super::DEFAULT_BG);
+            }
             for r in 0..grid.rows {
                 for c in 0..grid.cols {
                     let cell = grid.cells[r * grid.cols + c];
@@ -739,21 +893,33 @@ mod backend {
         }
 
         fn cell(&mut self, col: usize, row: usize, cell: Cell, caret: bool) {
-            let (x0, y0) = (col * CW, row * CH);
+            let (cw, ch, scale) = (self.cw, self.ch, self.scale);
+            let (x0, y0) = (col * cw, row * ch);
             if x0 >= self.w || y0 >= self.h {
                 return;
             }
-            let bitmap = self.glyphs.entry(cell.ch).or_insert_with(|| render(cell.ch));
+            let font = self.font;
+            let bitmap = self.glyphs.entry((cell.ch, cell.style)).or_insert_with(|| styled(render(font, cell.ch), font, cell.style));
             let caret_color = contrast(cell.bg);
-            for y in 0..CH.min(self.h - y0) {
-                let line = &mut self.fb[(y0 + y) * self.w + x0..][..CW.min(self.w - x0)];
+            let gw = cw / scale;
+            // std.ui.18: a block caret swaps the cell's colors.
+            let block = caret && self.shape == super::CaretShape::Block;
+            let (fg, bg) = if block { (cell.bg, caret_color) } else { (cell.fg, cell.bg) };
+            for y in 0..ch.min(self.h - y0) {
+                let line = &mut self.fb[(y0 + y) * self.w + x0..][..cw.min(self.w - x0)];
                 for (x, px) in line.iter_mut().enumerate() {
-                    *px = if caret && x < 2 {
+                    let mark = caret
+                        && match self.shape {
+                            super::CaretShape::Bar => x < 2 * scale,
+                            super::CaretShape::Underline => y + 2 * scale >= ch,
+                            super::CaretShape::Block => false,
+                        };
+                    *px = if mark {
                         caret_color
-                    } else if bitmap[y * CW + x] {
-                        cell.fg
+                    } else if bitmap[y / scale * gw + x / scale] {
+                        fg
                     } else {
-                        cell.bg
+                        bg
                     };
                 }
             }
@@ -767,12 +933,43 @@ mod backend {
         if r * 299 + g * 587 + b * 114 < 128_000 { 0xFF_FFFF } else { 0 }
     }
 
-    /// One glyph as `CW` by `CH` pixels, row by row.
-    fn render(ch: char) -> Vec<bool> {
-        struct Bits(Vec<bool>);
+    /// std.ui.16: a glyph with its style drawn in: bold thickens each stroke
+    /// one pixel to the right, italic slants the upper rows right, and
+    /// underline fills the row below the baseline.
+    fn styled(mut bits: Vec<bool>, font: &MonoFont<'static>, style: u8) -> Vec<bool> {
+        let (w, h) = (font.character_size.width as usize, font.character_size.height as usize);
+        if style & super::ITALIC != 0 {
+            let step = (h / 3).max(1);
+            for y in 0..h {
+                let shift = (h - 1 - y) / step;
+                let row = &mut bits[y * w..][..w];
+                row.rotate_right(shift.min(w));
+                row[..shift.min(w)].fill(false);
+            }
+        }
+        if style & super::BOLD != 0 {
+            for y in 0..h {
+                for x in (1..w).rev() {
+                    if bits[y * w + x - 1] {
+                        bits[y * w + x] = true;
+                    }
+                }
+            }
+        }
+        if style & super::UNDERLINE != 0 {
+            let y = (font.baseline as usize + 2).min(h - 1);
+            bits[y * w..][..w].fill(true);
+        }
+        bits
+    }
+
+    /// One glyph at the font's own size, row by row.
+    fn render(font: &MonoFont<'static>, ch: char) -> Vec<bool> {
+        let (w, h) = (font.character_size.width as i32, font.character_size.height as i32);
+        struct Bits(Vec<bool>, i32, i32);
         impl OriginDimensions for Bits {
             fn size(&self) -> Size {
-                Size::new(CW as u32, CH as u32)
+                Size::new(self.1 as u32, self.2 as u32)
             }
         }
         impl DrawTarget for Bits {
@@ -780,16 +977,16 @@ mod backend {
             type Error = core::convert::Infallible;
             fn draw_iter<I: IntoIterator<Item = Pixel<BinaryColor>>>(&mut self, pixels: I) -> Result<(), Self::Error> {
                 for Pixel(p, c) in pixels {
-                    if (0..CW as i32).contains(&p.x) && (0..CH as i32).contains(&p.y) {
-                        self.0[p.y as usize * CW + p.x as usize] = c.is_on();
+                    if (0..self.1).contains(&p.x) && (0..self.2).contains(&p.y) {
+                        self.0[(p.y * self.1 + p.x) as usize] = c.is_on();
                     }
                 }
                 Ok(())
             }
         }
-        let mut bits = Bits(vec![false; CW * CH]);
+        let mut bits = Bits(vec![false; (w * h) as usize], w, h);
         let mut buf = [0u8; 4];
-        let style = MonoTextStyle::new(&FONT, BinaryColor::On);
+        let style = MonoTextStyle::new(font, BinaryColor::On);
         let _ = Text::with_baseline(ch.encode_utf8(&mut buf), Point::zero(), style, Baseline::Top).draw(&mut bits);
         bits.0
     }
@@ -802,24 +999,24 @@ mod tests {
     #[test]
     fn put_clips_on_every_side() {
         let mut g = Grid::new(4, 2);
-        g.put(-2, 0, "abcdef", 0x112233, 0x445566);
+        g.put(-2, 0, "abcdef", 0x112233, 0x445566, 0);
         let row0: String = g.cells[..4].iter().map(|c| c.ch).collect();
         assert_eq!(row0, "cdef");
-        g.put(2, 1, "xyz", 1, 2);
+        g.put(2, 1, "xyz", 1, 2, 0);
         let row1: String = g.cells[4..].iter().map(|c| c.ch).collect();
         assert_eq!(row1, "  xy");
-        assert_eq!(g.cells[6], Cell { ch: 'x', fg: 1, bg: 2 });
+        assert_eq!(g.cells[6], Cell { ch: 'x', fg: 1, bg: 2, style: 0 });
         let before = g.clone();
-        g.put(0, 2, "zz", 0, 0);
-        g.put(0, -1, "zz", 0, 0);
-        g.put(4, 0, "zz", 0, 0);
+        g.put(0, 2, "zz", 0, 0, 0);
+        g.put(0, -1, "zz", 0, 0, 0);
+        g.put(4, 0, "zz", 0, 0, 0);
         assert_eq!(g, before);
     }
 
     #[test]
     fn put_draws_unknown_glyphs_as_question_marks() {
         let mut g = Grid::new(5, 1);
-        g.put(0, 0, "é\tλ😀a", -1, 0x1_000000);
+        g.put(0, 0, "é\tλ😀a", -1, 0x1_000000, 0);
         let row: String = g.cells.iter().map(|c| c.ch).collect();
         assert_eq!(row, "é???a");
         assert_eq!((g.cells[0].fg, g.cells[0].bg), (0xFF_FFFF, 0));
@@ -828,11 +1025,20 @@ mod tests {
     #[test]
     fn resize_keeps_what_fits() {
         let mut g = Grid::new(3, 2);
-        g.put(0, 0, "abc", 0, 0);
-        g.put(0, 1, "def", 0, 0);
+        g.put(0, 0, "abc", 0, 0, 0);
+        g.put(0, 1, "def", 0, 0, 0);
         g.resize(2, 3);
         let all: String = g.cells.iter().map(|c| c.ch).collect();
         assert_eq!(all, "abde  ");
+    }
+
+    #[test]
+    fn font_sizes_round_to_the_nearest() {
+        assert_eq!(nearest_font_size(20), 20);
+        assert_eq!(nearest_font_size(16), 15);
+        assert_eq!(nearest_font_size(19), 18);
+        assert_eq!(nearest_font_size(1), 10);
+        assert_eq!(nearest_font_size(99), 40);
     }
 
     #[test]

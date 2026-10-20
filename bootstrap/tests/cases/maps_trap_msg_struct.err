@@ -1,1 +1,4 @@
 $FILE:8:12: trap[type.map.3]: the map has no key Pos(x: 3, y: 4)
+  8 |     print(m[Pos(x: 3, y: 4)])
+    |            ^
+  at 8:12 in main(); m = {Pos(x: 1, y: 2): "a"}

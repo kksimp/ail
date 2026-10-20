@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 
-use super::{Env, Failure, Flow, Interp, Trap, Value, build};
-use crate::ast::{Arg, Expr, FnDecl, Program};
+use super::{Env, Exit, Failure, Flow, Interp, Trap, Value, build};
+use crate::ast::{Arg, Block, Expr, FnDecl, Program};
 use crate::check::Resolved;
 use crate::diag::Pos;
 
@@ -75,6 +75,10 @@ struct TaskRec {
     deadlock: bool,
     /// What it is blocked on, for the deadlock message.
     waiting: &'static str,
+    /// A task running outside the scheduler (conc.par.10), until joined.
+    pooled: Option<super::parallel::Pooled>,
+    /// Asked to stop by `cancel` (conc.cancel.1).
+    cancelled: bool,
 }
 
 struct Chan {
@@ -97,6 +101,10 @@ struct State {
     chans: Vec<Chan>,
     cells: Vec<Cell>,
     groups: Vec<Vec<usize>>,
+    /// Per group: `cancel` was called, so tasks added later start cancelled (conc.cancel.1).
+    groups_cancelled: Vec<bool>,
+    /// The random schedule's state, under `--schedule=random` (conc.sched.1).
+    rng: Option<u64>,
     /// What tasks other than the main one printed, in order, until the main
     /// task copies it to standard output.
     output: Vec<u8>,
@@ -117,7 +125,7 @@ struct Turned<T>(T);
 unsafe impl<T> Send for Turned<T> {}
 
 fn new_task(status: Status) -> TaskRec {
-    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "" }
+    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "", pooled: None, cancelled: false }
 }
 
 impl Sched {
@@ -131,6 +139,25 @@ impl Sched {
             st.tasks[id].status = Status::Ready;
             st.ready.push_back(id);
         }
+    }
+
+    /// The next ready task to run: the oldest, or under a random schedule
+    /// one picked from the seed (conc.sched.1).
+    fn next_ready(st: &mut State) -> Option<usize> {
+        match st.rng.as_mut() {
+            Some(r) if st.ready.len() > 1 => {
+                let i = (next_random(r) % st.ready.len() as u64) as usize;
+                st.ready.remove(i)
+            }
+            _ => st.ready.pop_front(),
+        }
+    }
+
+    /// conc.cancel.1: mark task `t` cancelled and wake it if it is blocked,
+    /// so a blocking call can return early.
+    fn cancel(st: &mut State, t: usize) {
+        st.tasks[t].cancelled = true;
+        Sched::wake(st, t);
     }
 
     /// Give the turn to `next`.
@@ -167,7 +194,7 @@ impl Sched {
             return Err(cancelled(pos));
         }
         st.tasks[me].waiting = waiting;
-        match st.ready.pop_front() {
+        match Sched::next_ready(&mut st) {
             Some(next) => {
                 st.tasks[me].status = Status::Blocked;
                 self.hand_to(&mut st, next);
@@ -176,6 +203,23 @@ impl Sched {
             // conc.task.7: nothing else can run, so nothing can wake `me`.
             None => Err(deadlock(&st, me, pos)),
         }
+    }
+
+    /// conc.sched.1: a switch point. Under a random schedule, `me` may hand
+    /// the turn to another ready task, picked from the seed, before it goes on.
+    fn switch<'s>(&'s self, mut st: MutexGuard<'s, State>, me: usize, pos: Pos) -> Result<MutexGuard<'s, State>, Trap> {
+        if st.ready.is_empty() {
+            return Ok(st);
+        }
+        let Some(r) = st.rng.as_mut() else { return Ok(st) };
+        if next_random(r) & 1 == 0 {
+            return Ok(st);
+        }
+        let next = Sched::next_ready(&mut st).expect("not empty");
+        st.tasks[me].status = Status::Ready;
+        st.ready.push_back(me);
+        self.hand_to(&mut st, next);
+        self.await_turn(st, me, pos)
     }
 
     /// `me` has finished: record its result, wake its waiters, and pass the turn on.
@@ -189,7 +233,7 @@ impl Sched {
         if st.shutdown {
             return;
         }
-        if let Some(next) = st.ready.pop_front() {
+        if let Some(next) = Sched::next_ready(&mut st) {
             self.hand_to(&mut st, next);
         } else if let Some(stuck) = st.tasks.iter().position(|t| t.status == Status::Blocked) {
             // conc.task.7: every task left is blocked; the first one traps.
@@ -197,6 +241,31 @@ impl Sched {
             self.hand_to(&mut st, stuck);
         }
     }
+}
+
+/// The random schedule's seed (conc.sched.1): `None` for the fixed order.
+static SCHEDULE: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
+
+/// `--schedule=random:SEED` (conc.sched.1): every scheduler created after
+/// this picks its switch points from `seed`.
+pub fn set_schedule(seed: Option<u64>) {
+    *SCHEDULE.lock().unwrap_or_else(|e| e.into_inner()) = seed;
+}
+
+/// The random schedule's seed, if one is set.
+pub fn schedule_seed() -> Option<u64> {
+    *SCHEDULE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// xorshift64*: small, fast and the same on every target, so a seed
+/// replays the same interleaving everywhere (conc.sched.1).
+fn next_random(state: &mut u64) -> u64 {
+    let mut x = *state;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    *state = x;
+    x.wrapping_mul(0x2545_f491_4f6c_dd1d)
 }
 
 /// conc.task.7: `me` and every other unfinished task are blocked.
@@ -220,11 +289,16 @@ fn cancelled(pos: Pos) -> Trap {
 /// still only one thread touches values, and wait for every thread.
 pub(super) fn shutdown(ctx: Option<Ctx>) {
     let Some(ctx) = ctx else { return };
-    let threads = {
+    let (threads, pooled) = {
         let mut st = ctx.sched.lock();
         st.shutdown = true;
-        std::mem::take(&mut st.threads)
+        let pooled: Vec<_> = st.tasks.iter_mut().filter_map(|t| t.pooled.take()).collect();
+        (std::mem::take(&mut st.threads), pooled)
     };
+    // conc.par.10: pooled tasks have no effects; let them finish.
+    for task in pooled {
+        let _ = task.join();
+    }
     for (id, t) in threads {
         {
             let mut st = ctx.sched.lock();
@@ -248,12 +322,31 @@ impl<'a, W: Write> Interp<'a, W> {
                 chans: Vec::new(),
                 cells: Vec::new(),
                 groups: Vec::new(),
+                groups_cancelled: Vec::new(),
+                // A zero state would stay zero.
+                rng: schedule_seed().map(|s| s ^ 0x9e37_79b9_7f4a_7c15 | 1),
                 output: Vec::new(),
                 shutdown: false,
                 threads: Vec::new(),
             };
             Ctx { sched: Arc::new(Sched { state: Mutex::new(state), turn: Condvar::new() }), me: 0 }
         })
+    }
+
+    /// conc.cancel.2: whether the running task was cancelled. The main
+    /// task and a task outside the scheduler never are.
+    pub(super) fn cancelled(&self) -> bool {
+        self.conc.as_ref().is_some_and(|ctx| ctx.sched.lock().tasks[ctx.me].cancelled)
+    }
+
+    /// conc.sched.1: a switch point outside a handle's methods (an atomic
+    /// operation, `task.cancelled()`); does nothing without a random schedule.
+    pub(super) fn switch_point(&mut self, pos: Pos) -> Result<(), Trap> {
+        let Some(ctx) = &self.conc else { return Ok(()) };
+        let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
+        let st = sched.lock();
+        drop(sched.switch(st, me, pos)?);
+        Ok(())
     }
 
     /// Print from a task other than the main one, or copy what tasks printed
@@ -296,9 +389,21 @@ impl<'a, W: Write> Interp<'a, W> {
         for a in args {
             values.push(self.eval(&a.value, env)?);
         }
+        if self.tracing & super::trace::EFFECTS != 0 {
+            self.trace_task(true, &f.full_name(), &values, pos);
+        }
+        let pooled = self.pool_task(f, &values, pos);
         let ctx = self.ctx();
         let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
         let mut st = sched.lock();
+        // conc.par.10: a pure task runs on its own thread, outside the
+        // scheduler; `wait` joins it.
+        if let Some(task) = pooled {
+            let mut rec = new_task(Status::Done);
+            rec.pooled = Some(task);
+            st.tasks.push(rec);
+            return Ok(Value::Handle(Handle::Task(st.tasks.len() - 1)));
+        }
         // Reclaim the threads of finished tasks.
         let (done, live) = std::mem::take(&mut st.threads).into_iter().partition(|(_, t)| t.is_finished());
         st.threads = live;
@@ -306,7 +411,10 @@ impl<'a, W: Write> Interp<'a, W> {
             let _ = t.join();
         }
         let id = st.tasks.len();
-        st.tasks.push(new_task(Status::Ready));
+        let mut rec = new_task(Status::Ready);
+        // conc.cancel.1: a task started by a cancelled task starts cancelled.
+        rec.cancelled = st.tasks[me].cancelled;
+        st.tasks.push(rec);
         // SAFETY: `run` and `run_tests` stop and join every task thread
         // before the program and checker facts they borrow are dropped.
         let (prog, resolved, f) = unsafe {
@@ -356,7 +464,15 @@ impl<'a, W: Write> Interp<'a, W> {
                 return Err(Trap { rule: "conc.task.3", pos, message: format!("can't start a task: {e}") }.into());
             }
         }
-        // The new task runs first; its spawner resumes next.
+        // The new task runs first; its spawner resumes next. Under a random
+        // schedule, a coin decides whether the spawner goes on instead
+        // (conc.sched.1).
+        if let Some(r) = st.rng.as_mut()
+            && next_random(r) & 1 == 0
+        {
+            st.ready.push_back(id);
+            return Ok(Value::Handle(Handle::Task(id)));
+        }
         st.tasks[me].status = Status::Ready;
         st.ready.push_front(me);
         sched.hand_to(&mut st, id);
@@ -389,6 +505,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             _ => {
                 st.groups.push(Vec::new());
+                st.groups_cancelled.push(false);
                 Handle::Group(st.groups.len() - 1)
             }
         }))
@@ -404,9 +521,13 @@ impl<'a, W: Write> Interp<'a, W> {
         let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
         let sched = &*sched;
         let mut st = sched.lock();
+        st = sched.switch(st, me, pos)?;
         let trap = |rule: &'static str, message: String| -> Flow<Value> { Err(Trap { rule, pos, message }.into()) };
         Ok(match (h, name) {
             (Handle::Task(t), "wait") => {
+                if self.tracing & super::trace::EFFECTS != 0 {
+                    self.trace_task(false, &Handle::Task(t).text(), &[], pos);
+                }
                 st.tasks[t].consumed = true;
                 drop(st);
                 return Ok(match self.join(sched, me, t, pos)? {
@@ -414,8 +535,22 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(trap) => self.trapped(&trap, pos),
                 });
             }
+            (Handle::Task(t), "cancel") => {
+                Sched::cancel(&mut st, t);
+                Value::Unit
+            }
+            (Handle::Group(g), "cancel") => {
+                st.groups_cancelled[g] = true;
+                for t in st.groups[g].clone() {
+                    Sched::cancel(&mut st, t);
+                }
+                Value::Unit
+            }
             (Handle::Group(g), "add") => {
                 let Value::Handle(Handle::Task(t)) = a[0] else { unreachable!("checked: a task") };
+                if st.groups_cancelled[g] {
+                    Sched::cancel(&mut st, t);
+                }
                 st.tasks[t].consumed = true;
                 st.groups[g].push(t);
                 Value::Unit
@@ -447,6 +582,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Unit
             }
             (Handle::Channel(c), "recv") => loop {
+                let cancelled = st.tasks[me].cancelled;
                 let ch = &mut st.chans[c];
                 if let Some(v) = ch.items.pop_front() {
                     for w in std::mem::take(&mut ch.waiters) {
@@ -454,7 +590,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     break v;
                 }
-                if ch.closed {
+                // conc.cancel.2: a cancelled task's `recv` returns early.
+                if ch.closed || cancelled {
                     break Value::None;
                 }
                 ch.waiters.push(me);
@@ -519,8 +656,60 @@ impl<'a, W: Write> Interp<'a, W> {
         })
     }
 
+    /// The next value of channel `c` for `for v in ch` (conc.share.7): the
+    /// oldest value, or `None` once it is closed and empty. Waits like `recv`.
+    pub(super) fn chan_next(&mut self, c: usize, pos: Pos) -> Flow<Option<Value>> {
+        let ctx = self.ctx();
+        let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
+        let mut st = sched.lock();
+        st = sched.switch(st, me, pos)?;
+        loop {
+            let cancelled = st.tasks[me].cancelled;
+            let ch = &mut st.chans[c];
+            if let Some(v) = ch.items.pop_front() {
+                for w in std::mem::take(&mut ch.waiters) {
+                    Sched::wake(&mut st, w);
+                }
+                return Ok(Some(v));
+            }
+            // conc.cancel.2: a cancelled task's loop ends like a closed channel's.
+            if ch.closed || cancelled {
+                return Ok(None);
+            }
+            ch.waiters.push(me);
+            st = sched.block(st, me, "a value from a channel", pos)?;
+        }
+    }
+
+    /// `with m as mut x` body (conc.share.6): take the lock, run the body
+    /// with the value in `x`, then store `x` and release it, however the
+    /// body ends. A trap releases it and keeps the value from before.
+    pub(super) fn with_block(&mut self, mutex: &'a Expr, var: &'a str, body: &'a Block, pos: Pos, env: &mut Env<'a>) -> Flow<()> {
+        let Value::Handle(h @ Handle::Mutex(m)) = self.eval(mutex, env)? else { unreachable!("checked: a mutex") };
+        let v = self.handle_method(h, "lock", &[], pos, env)?;
+        let depth = env.len();
+        env.push((var, v));
+        let r = self.block(body, env);
+        let v = env.drain(depth..).next().map(|(_, v)| v);
+        let ctx = self.ctx();
+        let mut st = ctx.sched.lock();
+        let cell = &mut st.cells[m];
+        if let (Some(v), false) = (v, matches!(r, Err(Exit::Trap(_)))) {
+            cell.value = v;
+        }
+        cell.holder = None;
+        for w in std::mem::take(&mut cell.waiters) {
+            Sched::wake(&mut st, w);
+        }
+        r.map(|_| ())
+    }
+
     /// Wait for task `t` (conc.task.6): its result, or its trap.
     fn join(&mut self, sched: &Sched, me: usize, t: usize, pos: Pos) -> Result<Result<Value, Trap>, Trap> {
+        let pooled = sched.lock().tasks[t].pooled.take();
+        if let Some(task) = pooled {
+            return Ok(super::parallel::unpool(task, pos));
+        }
         let mut st = sched.lock();
         while st.tasks[t].status != Status::Done {
             st.tasks[t].waiters.push(me);

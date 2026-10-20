@@ -1,0 +1,19 @@
+tensor.from([1.0, 4.0, 2.0, 5.0, 3.0, 6.0], [3, 2])
+tensor.from([5.0, 7.0, 9.0])
+tensor.from([6.0, 15.0])
+tensor.from([4.0, 5.0, 6.0])
+tensor.from([2.0, 5.0])
+6.0
+3.5
+tensor.from([2.0, 4.0, 6.0, 8.0, 10.0, 12.0], [2, 3])
+tensor.from([-1.0, -2.0, -3.0, -4.0, -5.0, -6.0], [2, 3])
+tensor.from([2.0, 4.0, 6.0, 8.0, 10.0, 12.0], [2, 3])
+tensor.from([0.0, -1.0, -2.0, -3.0, -4.0, -5.0], [2, 3])
+tensor.from([5, 3])
+tensor.from([12, 21])
+tensor.from([10, 11, 11, 29], [2, 2])
+true
+true
+tensor.from([2.0, 4.0, 10.0, 12.0], [2, 2])
+tensor.from([3.0, nan])
+tensor.from([0.75, 3.75])

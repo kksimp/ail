@@ -36,6 +36,31 @@ fn tag(k Kind) str
 **err.decl.1** — `error struct Name` and `error enum Name` declare error
 types. Apart from that, they are ordinary structs and enums. *(ADR 0120)*
 
+**err.msg.1** — An error type may carry a message, a string literal written
+after `error struct Name` or after a variant of an `error enum`. The message
+is the type's display text: it defines `impl ToStr` for the type, with the
+struct's or variant's fields in scope by name (for an enum, the variant's
+fields; a field the message doesn't name is skipped). An `error struct` with a
+message may have no fields. A message on a type that isn't an error type is a
+compile-time error. *(ADR 0278)*
+
+**err.msg.2** — Either every variant of an `error enum` has a message or none
+does, and a generic error type has none; otherwise it's a compile-time error.
+A type with messages can't also have an `impl ToStr` (`trait.impl.6`).
+*(ADR 0278)*
+
+```ail
+error enum LoadError
+    MissingEquals "missing '='"
+    BadName(text str) "bad cell name '{text}'"
+
+error struct NotFound "nothing at {path}"
+    path str
+
+fn main()
+    print(LoadError.BadName(text: "Z9"))   # bad cell name 'Z9'
+```
+
 **err.decl.2** — Only error types can be errors: the `E` of `T ! E`, the
 members of an error union (`err.type.5`), and the members of an inferred
 error set. *(ADR 0120)*
@@ -54,6 +79,22 @@ fn parse_qty(s str) int ! ParseError
         return Empty
     n := s.to_int() else return BadNumber(text: s)
     n
+```
+
+```ail error=err.decl.3
+error enum Oops
+    Bad
+
+fn f() Oops ! Oops
+    Oops.Bad
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn f() int ! Oops
+    return Oops.Bad
 ```
 
 **err.type.1** — `T ! E` is the type of a value that is either a success value
@@ -126,18 +167,241 @@ or returns absence. *(ADR 0045, ADR 0048)*
 
 **err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
 is a compile-time error unless the enclosing function's return type is an
-optional type. *(ADR 0051)*
+optional type, its errors are inferred (`err.prop.5`), or the `?` is inside
+the value of an `else` (`err.prop.4`). *(ADR 0051, ADR 0252, ADR 0279)*
 
 **err.prop.3** — If the enclosing function states its error type, every error
 type `e` can fail with MUST be a member of it. Otherwise `e?` is a
 compile-time error that names the missing types. *(ADR 0122)*
 
+**err.prop.4** — A `?` on an optional inside the value `e` of `e else ...`
+(`err.else.1`, `err.else.6`) goes to the nearest such `else` instead of
+leaving the function: when it finds `none`, the rest of `e` is skipped and the
+`else` part runs as if `e` were absent. If `e` contains such a `?` and its type
+`T` isn't optional or a result, `e` has type `T?` for the `else`. A result
+`?` inside `e` still leaves the function (`err.prop.1`). When `e` is a result
+and also contains such a `?`, `else err` is a compile-time error: an absent
+value has no error to bind. *(ADR 0252)*
+
+```ail
+fn label(j Json) str
+    j.get("user")?.str("name") else "anonymous"
+
+fn main()
+    print(label(Json.Null))   # anonymous
+```
+
+**err.prop.5** — In a function whose error set is inferred (`!T` or `!`,
+`err.type.2`), and that doesn't return an optional, `e?` on an optional `e`
+evaluates to the contained value, or fails with the prelude's
+`error struct Absent` (display text `a value is absent`), which then joins the
+inferred set. `e? m` attaches the context `m` (`err.ctx.2`). A function that
+states its errors must handle absence with `else`. *(ADR 0279)*
+
+```ail
+fn port(text str) !int
+    text.to_int()? "port {text}"
+
+fn main()
+    print(port("8080") else 0)   # 8080
+    print(port("http") else -1)  # -1
+```
+
+A `?` that has nowhere to go is rejected with the signature change that would
+make it legal, as a fix (`err.fix.1`):
+
+```ail error=err.prop.1
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    n := risky()?
+    print(n)
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main() ! Oops
+    n := risky()?
+    print(n)
+```
+
+```ail error=err.prop.2
+fn first(xs List[int]) int
+    xs.max()?
+```
+
+```ail fragment
+fn first(xs List[int]) int
+    xs.max() else 0
+```
+
+```ail error=err.prop.3
+error enum A
+    X
+error enum B
+    Y
+
+fn a() int ! A
+    return A.X
+
+fn b() int ! B
+    return B.Y
+
+fn both() int ! A
+    return a()? + b()?
+```
+
+```ail fragment
+error enum A
+    X
+error enum B
+    Y
+
+fn a() int ! A
+    return A.X
+
+fn b() int ! B
+    return B.Y
+
+fn both() int ! A | B
+    return a()? + b()?
+```
+
 **err.use.1** — A value of type `T ! E` MUST be handled with `?` or `else`,
 or returned from a function whose result can hold it. Discarding it, or
 using it where a `T` is expected, is a compile-time error. *(ADR 0122)*
 
+```ail error=err.use.1
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    n := risky()
+    print(n)
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+n := risky() else 0
+print(n)
+```
+
 **err.use.2** — An `if` whose condition binds a value of type `T ! E`
 (`expr.if.5`) MUST have an `else`. *(ADR 0125)*
+
+```ail error=err.use.2
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    if n := risky()
+        print(n)
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+if n := risky()
+    print(n)
+else err
+    print("failed: {err}")
+```
+
+**err.ret.1** — `return e`, with `e` of an error type, is a compile-time error
+in a function whose return type can't fail. The help names the return type
+that would allow it. *(ADR 0285)*
+
+**err.ret.2** — `return e`, with `e` of type `T?`, is a compile-time error in
+a function that returns `T ! E`: absence has no error to report. *(ADR 0285)*
+
+**err.ret.3** — `return e`, with `e` of an error type that isn't in the
+function's stated error type, is a compile-time error. The help gives the
+return type with it added. *(ADR 0285)*
+
+```ail error=err.ret.1
+error enum Oops
+    Bad
+
+fn check(n int) int
+    if n < 0
+        return Oops.Bad
+    n
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn check(n int) int ! Oops
+    if n < 0
+        return Oops.Bad
+    n
+```
+
+```ail error=err.ret.2
+error enum Oops
+    Bad
+
+fn first(xs List[int]) int ! Oops
+    return xs.max()
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn first(xs List[int]) int ! Oops
+    m := xs.max() else return Oops.Bad
+    m
+```
+
+```ail error=err.ret.3
+error enum A
+    X
+error enum B
+    Y
+
+fn f(n int) int ! A
+    if n < 0
+        return B.Y
+    n
+```
+
+```ail fragment
+error enum A
+    X
+error enum B
+    Y
+
+fn f(n int) int ! A | B
+    if n < 0
+        return B.Y
+    n
+```
 
 ## Handling with `else`
 
@@ -174,6 +438,44 @@ value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
 `T ! E` with a success value, statement `else` is a compile-time error whose
 help says to bind the value: `x := ... else ...`. *(ADR 0139)*
 
+```ail error=err.else.3
+fn main()
+    n := [1, 2].max() else err
+        0
+    print(n)
+```
+
+```ail fragment
+n := [1, 2].max() else
+    0
+print(n)
+```
+
+```ail error=err.else.4
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    risky() else err
+        print("failed: {err}")
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+n := risky() else err
+    print("failed: {err}")
+    0
+print(n)
+```
+
 ```ail skip=context
 port := env("PORT") else 8080
 user := find(id) else return NotFound
@@ -198,7 +500,8 @@ is evaluated only when needed. `e else return x`, `else break` and
 loosely than every other operator and associates to the right
 (`expr.prec.1`). An `else` followed by an indented block is the binding or
 statement form (`err.else.1–5`); at the start of a statement,
-`e else return ...` is the statement form. *(ADR 0144)*
+`e else return ...` is the statement form. A `for` header's iterable may be
+`e else d`: `for x in j.arr("items") else []`. *(ADR 0144, ADR 0252)*
 
 ```ail skip=context
 fn smallest(nums List[int]) int
@@ -237,3 +540,26 @@ source location, a stack trace and, where applicable, the spec rule ID.
 **err.trap.3** — A trap in the program's main task, or one that nothing
 observes up to the main task, terminates the program with the diagnostic and
 a non-zero exit status. *(ADR 0047)*
+
+## Tooling
+
+**err.fix.1** — A diagnostic about error handling carries a machine-applicable
+fix (`fix.edit.1`) where one is mechanical: `?` for an unhandled failure the
+function can pass on (`err.use.1`); the signature change `! E` for a function
+that can't yet fail (`err.use.1` with `?`, `err.prop.1`, `err.ret.1`); and
+removing the name of an `else` on an optional (`err.else.3`). A fix never
+changes an explicit error type. *(ADR 0285)*
+
+**err.api.1** — `ail api` gives every function with a failing return type a
+`fails_with` list: the names of the error types it can fail with, sorted and
+without duplicates. For an inferred set (`err.type.2`) it is the inferred set,
+and `ail api --text` spells it out as `fails with A | B`. *(ADR 0287)*
+
+**err.paths.1** — `ail check --errors FILE` prints, as JSON, every function in
+the file that can fail or touches a failure, with its `fails_with` list and its
+failure paths in source order. A path has `line`, `col`, `kind` and `errors`,
+and where they apply `how`, `call` and `context`. `kind` is `propagate` (`?`
+on a result), `handle` (`else` on a result), `return` (of an error value, or
+of a result), or `absent` (`?` or `else` on an optional, which has no error).
+`how` is `default`, `leave` or `block`. A trap isn't a failure path
+(`err.trap.1`). *(ADR 0286)*

@@ -32,6 +32,22 @@ fn main()
     w.put(0, 0, "ignored", 0xFFFFFF, 0)
     w.cursor(-1, -1)
     w.set_title("ignored")
+    m := w.modifiers()
+    print("{m.ctrl} {m.alt} {m.shift}")
+    # std.ui.16-18: styles, named colors and caret shapes.
+    w.put_styled(
+        0,
+        0,
+        "ignored",
+        ui.YELLOW,
+        ui.BLACK,
+        ui.Style(bold: true, italic: false, underline: true),
+    )
+    w.set_cursor(0, 0, Block)
+    print("{ui.RED} {ui.WHITE} {ui.BLACK}")
+    # std.ui.15: a window that is not open keeps the default font size.
+    w.set_font_size(13)
+    print(w.font_size())
     w.present()
     print(describe(w.next_event()))
     if e := w.poll_event()

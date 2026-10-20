@@ -1,0 +1,40 @@
+## An agent-style log tailer: one task streams lines through a channel, the
+## main task batches them, and the batches are summarised on every core.
+
+BATCH := 10
+
+struct Tally
+    lines int
+    warns int
+    errors int
+
+fn stream(lines List[str], out Channel[str])
+    for line in lines
+        out.send(line)
+    out.close()
+
+fn tally(batch List[str]) Tally
+    Tally(
+        lines: batch.len(),
+        warns: [l for l in batch if l.contains(" WARN ")].len(),
+        errors: [l for l in batch if l.contains(" ERROR ")].len(),
+    )
+
+fn main() !
+    ch := Channel[str](8)
+    feed := spawn stream(fs.read_text("{path.dir(env.program())}/data/logscan.log")?.lines(), ch)
+    mut batches := []
+    mut cur := List[str]()
+    for line in ch
+        cur.push(line)
+        if cur.len() == BATCH
+            batches.push(cur)
+            cur = []
+    feed.wait()?
+    if cur.len() > 0
+        batches.push(cur)
+    tallies := [tally(b) par for b in batches]
+    for i in 0..tallies.len()
+        t := tallies[i]
+        print("batch {i + 1}: {t.lines} lines, {t.warns} warn, {t.errors} error")
+    print("total {[t.lines for t in tallies].sum()} lines, {[t.errors for t in tallies].sum()} errors")

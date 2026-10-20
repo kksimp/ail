@@ -1,0 +1,9 @@
+## FromJson can't read a set field (json.derive.2, ct.derive.4).
+struct Scores
+    names Set[str]
+
+impl FromJson for Scores
+
+fn main()
+    s := Scores.from_json(Json.Null) else return
+    print(s)

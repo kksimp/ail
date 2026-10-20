@@ -3,9 +3,10 @@
 Chapter key: `conc`
 
 > **Status:** Drafted (partial). Specified: memory-model foundations, the task
-> model, scope-bound tasks, and communication through `Channel[T]` and
-> `Mutex[T]`. Not yet designed: cancellation, `select`, parallel loops,
-> `Atomic[T]`, and the formal model.
+> model, scope-bound tasks, communication through `Channel[T]` and
+> `Mutex[T]`, `Atomic[int]` and `Atomic[bool]`, cancellation, random-schedule
+> testing, and parallel loops. Not yet designed: weaker atomic orderings,
+> `select`, and the formal model.
 
 ## Memory model
 
@@ -42,6 +43,57 @@ acquire-release and relaxed orderings. *(ADR 0025)*
 > **Note:** an implementation SHOULD report atomic operations whose ordering
 > could be weakened without changing behaviour. It MUST NOT weaken an
 > ordering on its own initiative.
+
+**conc.atomic.3** — `Atomic(v)` (or `Atomic[T](v)`) makes an atomic cell
+holding `v`. `T` MUST be `int` or `bool`. An atomic is a handle: copies of
+it, copies passed to tasks, and the copies a parallel loop's iterations see
+are the same cell, so tasks and `par for` share it without a `ref` or a
+`Mutex`. *(ADR 0320)*
+
+**conc.atomic.4** — `a.load()` returns the value, `a.store(v)` replaces it,
+and `a.cas(old, new)` replaces it with `new` only if it equals `old`,
+returning whether it did. Each is one indivisible step, sequentially
+consistent (`conc.atomic.1`). *(ADR 0320)*
+
+**conc.atomic.5** — On an `Atomic[int]`, `a.add(n)` adds `n` in one
+indivisible step and returns the value from before. An add whose result
+would leave `int` traps and leaves the cell unchanged. *(ADR 0320)*
+
+```ail
+fn count(hits Atomic[int], n int)
+    for _ in 0..n
+        hits.add(1)
+
+fn main() !
+    hits := Atomic(0)
+    g := TaskGroup()
+    for _ in 0..4
+        g.add(spawn count(hits, 100))
+    g.wait_all()?
+    print(hits.load())
+```
+
+**conc.atomic.6** — A call of an atomic's method, directly or through the
+functions a loop body calls, makes a `for` loop not proven independent
+(`conc.par.2`), since the operations may see the order of the iterations.
+`par for` asserts that the result doesn't depend on it, and such a loop
+may run on the pool (`conc.par.8`): iterations then update the one cell in
+any order. Iterations that already ran can't be undone, so if one traps
+the loop reports that trap instead of running again in order
+(`conc.par.11`). A task that calls atomic methods but has no other
+ordering effect may still run on its own thread (`conc.par.10`).
+*(ADR 0320)*
+
+```ail
+fn main()
+    total := Atomic(0)
+    par for i in 0..1000
+        total.add(i)
+    print(total.load())
+```
+
+> **Note:** `conc.atomic.2`'s weaker orderings aren't provided yet; every
+> operation is SeqCst (ADR 0320).
 
 ## Tasks
 
@@ -128,6 +180,40 @@ fn main() !
     g.wait_all()?
 ```
 
+## Cancellation
+
+**conc.cancel.1** — `t.cancel()` asks task `t` to stop, and `g.cancel()`
+asks every task of group `g` to stop, including tasks added to it later.
+A task started by a cancelled task starts cancelled. Cancelling doesn't end
+a task and doesn't consume its handle: the scope still waits for it
+(`conc.task.4`, `conc.task.5`). *(ADR 0321)*
+
+**conc.cancel.2** — `task.cancelled()` returns whether the running task was
+cancelled; it is `false` in the main task. `task.check()` returns
+`! Cancelled`, failing with the prelude error
+`error struct Cancelled "the task was cancelled"` once the task is
+cancelled, so `task.check()?` stops a task at a point of its choosing. In a
+cancelled task, blocking calls return early: `ch.recv()` returns `none` and
+`for v in ch` ends, even if a value could arrive later, and a blocked call
+is woken by the cancel; `time.sleep_ms` returns at once; and `proc.run`
+fails with `ProcError` of kind `"cancelled"` without starting the process.
+*(ADR 0321)*
+
+```ail
+fn worker(jobs Channel[int])
+    for v in jobs
+        print("got {v}")
+    print("stopped: {task.cancelled()}")
+
+fn main() !
+    jobs := Channel[int](4)
+    g := TaskGroup()
+    g.add(spawn worker(jobs))
+    jobs.send(1)
+    g.cancel()
+    g.wait_all()?
+```
+
 **conc.task.9** — The order in which ready tasks run is unspecified. A
 program's output MUST NOT depend on it except through `wait`, channels and
 mutexes. *(ADR 0186)*
@@ -136,6 +222,21 @@ mutexes. *(ADR 0186)*
 > order, so its output is repeatable: a new task runs at once until it
 > blocks or finishes, its spawner resumes next, and other ready tasks run
 > first in, first out. Native code runs tasks in parallel (`conc.task.3`).
+
+**conc.sched.1** — `ail test --schedule=random:SEED` (and `ail run` with the
+same option) runs tasks on a random schedule decided by `SEED`: at each
+`spawn` a coin picks whether the new task or its spawner goes first; at
+every method call of a task, group, channel or mutex, every atomic
+operation, `task.cancelled()` and `task.check()`, a coin picks whether the
+running task hands the turn to another ready task; and the next task is
+picked at random from the ready ones. Pooled loops and tasks
+(`conc.par.8–10`) run on the scheduler instead. The same seed gives the
+same interleaving on every run and target, so a failure can be replayed;
+`--schedule=random` without a seed picks one. *(ADR 0322)*
+
+**conc.sched.2** — When a test fails under a random schedule, `ail test`
+prints `schedule seed SEED: replay with ...` after its summary, and with
+`--json` adds `"schedule_seed":SEED` to the summary object. *(ADR 0322)*
 
 ## Communication
 
@@ -194,4 +295,204 @@ fn main()
     g.wait_all() else
         print("a task trapped")
     print(m.get())
+```
+
+**conc.share.6** — `with m as mut x` followed by a block holds mutex `m`
+(a `Mutex[T]`) for the block: it waits and takes the lock as `m.lock()`
+does, binds `x`, a `mut` local of type `T`, to a copy of the value, and runs
+the block. When the block ends by any path (its end, `break`, `continue`,
+`return` or `?`), the value of `x` is stored in `m` and the lock is
+released. If the block traps, the lock is released and `m` keeps the value
+it had before the block. The block MUST NOT name `m` again. A `with` whose
+`m` isn't a `Mutex`, a `with m as x` without `mut`, and a use of `m` in the
+block are compile-time errors. `with` is reserved (`lex.kw.1`). *(ADR 0301)*
+
+```ail
+fn add(m Mutex[int], n int)
+    with m as mut x
+        x += n
+
+fn main()
+    m := Mutex(0)
+    g := TaskGroup()
+    for i in 1..=4
+        g.add(spawn add(m, i))
+    g.wait_all() else
+        print("a task trapped")
+    print(m.get())
+```
+
+```ail error=conc.share.6
+fn main()
+    m := Mutex(0)
+    with m as x
+        print(x)
+```
+
+**conc.share.7** — `for v in ch`, where `ch` is a `Channel[T]`, receives
+values in turn as `ch.recv()` does and runs the body for each, ending when
+the channel is closed and empty; a comprehension clause `for v in ch` does
+the same (`expr.comp.2`). Like `recv`, it waits while the channel is empty
+and open, so a channel nobody closes makes the loop wait for ever, which is
+a deadlock once no other task can run (`conc.task.7`). A `break` leaves the
+values not yet received in the channel. *(ADR 0300)*
+
+```ail
+fn produce(out Channel[int])
+    for i in 1..=3
+        out.send(i)
+    out.close()
+
+fn main() !
+    ch := Channel[int](2)
+    p := spawn produce(ch)
+    for v in ch
+        print(v)
+    p.wait()?
+```
+
+## Parallel execution
+
+**conc.par.1** — An implementation MAY run the iterations of an independent
+loop (`conc.par.2`) concurrently, on any number of cores and vector lanes.
+The observable result MUST be identical to running the iterations in order:
+the same values, bit for bit (floats included), and, if iterations trap,
+the trap of the lowest-index trapping iteration. *(ADR 0236)*
+
+**conc.par.2** — A `for` loop's iterations are *independent* when its body:
+(1) has no `io`, `unsafe` or `spawn` effect and no capability, through every
+call (`eff.infer.3`); (2) doesn't leave the loop early: no `break` of this
+loop, `return`, `?`, or `else return`; (3) calls no method of a task,
+`TaskGroup`, `Channel` or `Mutex` handle, receives from no channel with
+`for v in ch` and holds no mutex with `with`, directly or through the
+functions it calls; and
+(4) writes only places that `conc.par.3` or `conc.par.4` allow, or places
+rooted at names declared in the body (including the loop variable). Calls
+with a `mut` argument and methods with `mut self` write their place. *(ADR 0236)*
+
+**conc.par.3** — In a loop over a range, a write to `r[i]` (optionally
+followed by more fields or indexes), where `r` is declared outside the body,
+`i` is the loop variable, and the steps before `[i]` are fields, literals or
+names declared outside the body, is allowed when every write to `r` in the
+body uses the same steps up to `[i]` and every read of `r` either starts with
+those steps or only takes a `len()`. *(ADR 0236)*
+
+**conc.par.4** — A variable declared outside the body as an `int` (a
+parameter of type `int`, or bound to an integer literal) may be written by
+`x += e` when the body neither reads it nor writes it otherwise. Such
+accumulators combine in a fixed order; a sum overflows, and traps, exactly
+where the sequential sum would. A float accumulator is not allowed: float
+`+` isn't associative. *(ADR 0236)*
+
+```ail
+fn main()
+    mut squares := [0, 0, 0, 0]
+    mut total := 0
+    for i in 0..4
+        squares[i] = i * i
+        total += i
+    print("{squares} {total}")
+```
+
+**conc.par.5** — `par for x in e` means `for x in e` and asserts that the
+iterations are independent. The obligations of `conc.par.2–4` that the
+checker can decide still apply, and a `par for` that provably fails one is a
+compile-time error. The assertion covers only what the checker can't
+decide: that writes `r[e]` with another index pick distinct elements, that
+reads of other elements of `r` don't meet those writes, and that an
+accumulator is an `int`. A checked build MAY trap when two iterations write
+the same element. `par` is reserved (`lex.kw.1`) and is followed only by
+`for`. *(ADR 0237)*
+
+```ail error=conc.par.5
+fn main()
+    xs := [1, 2, 3]
+    par for x in xs
+        print(x)
+```
+
+**conc.par.6** — `ail effects --parallel FILE` prints one line per `for`
+loop in source order: `FILE:LINE:COL ID for VAR: VERDICT (RULE: REASON)`,
+with ` at FILE:LINE:COL` after the reason when it points at a write or exit
+inside the body. `ID` is the enclosing function's stable id (`eff.infer.6`),
+`par for` replaces `for` for an annotated loop, and `VERDICT` is
+`parallel`, `asserted` (a `par for` that holds only by its assertion) or
+`sequential`. With `--json` it prints one object
+`{"ail_api":1,"loops":[{"at","fn","var","par","verdict","rule","reason","reason_at"},...]}`. *(ADR 0236)*
+
+**conc.par.7** — Scheduling is the implementation's choice and MUST NOT
+change results (`conc.par.1`). The native runtime uses one work-stealing
+pool for tasks and parallel loops, runs a loop with too little work
+sequentially, and finishes a parallel loop before the statement after it
+starts, so it is scope-bound like `conc.task.4`. *(ADR 0238)*
+
+**conc.par.8** — A `par for` loop that `conc.par.5` accepts runs on the
+thread pool. With `ail run --parallel`, so does every loop `conc.par.2–4`
+prove independent. A loop on the pool must also write only list elements
+and `int` accumulators, each accumulator by one `+=` outside nested loops;
+any other loop, a loop that captures a handle or a `ref`, and a loop with
+fewer than twice as many iterations as the pool has threads, runs in order. *(ADR 0272, ADR 0275)*
+
+**conc.par.9** — The pool has one thread per hardware thread, at most 8,
+unless the environment variable `AIL_THREADS` sets the number. With one
+thread, or under `--deterministic`, every loop and task runs as if there
+were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
+how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
+
+**conc.par.10** — A task whose function has no `io`, `unsafe`, `spawn` or
+capability effect and calls no method of a handle, directly or through the
+functions it calls, and whose arguments hold no handle, runs on its own
+thread outside the one-at-a-time scheduler (`conc.task.3`); `wait`, a
+group's `wait_all` and the end of its block join it. Any other task runs on
+the scheduler. A pooled task that returns a handle traps. *(ADR 0273)*
+
+**conc.par.11** — If an iteration on the pool traps, a captured value holds a
+handle, an accumulator doesn't hold an `int`, or the running total of an
+accumulator would leave `int`, the loop discards what the pool computed and
+runs in order from its first iteration. Because the body has no effect, the
+result, and the trap if any, is the sequential one (`conc.par.1`). A body on
+the pool can't block on another task: it has no handle. *(ADR 0274)*
+
+```ail
+fn main()
+    mut squares := List[int]()
+    for _ in 0..64
+        squares.push(0)
+    mut total := 0
+    par for i in 0..64
+        squares[i] = i * i
+        total += i
+    print("{squares[63]} {total}")
+```
+
+**conc.par.12** — `[e par for x in xs if c]` means `[e for x in xs if c]`
+(`expr.comp.1`) and computes the elements on the thread pool when the
+`par for` loop of the same body would run there (`conc.par.8–9`); the list
+is in source order and identical to the sequential one (`conc.par.1`). The
+comprehension MUST be a list comprehension with that one clause. Its
+element and filter MUST meet `conc.par.2` (1)–(3) and write nothing outside
+themselves; one that provably doesn't, like an element that prints or a
+clause over a channel, is a compile-time error. A trap, or a value the pool
+can't copy, makes it compute the elements in order (`conc.par.11`). A short
+list, one thread, or `--deterministic`, computes them in order.
+*(ADR 0302)*
+
+```ail
+fn square(x int) int
+    x * x
+
+fn main()
+    xs := [n for n in 1..=64]
+    squares := [square(x) par for x in xs]
+    print("{squares[0]} {squares[63]}")
+```
+
+```ail error=conc.par.12
+fn show(x int) int
+    print(x)
+    x
+
+fn main()
+    ys := [show(x) par for x in [1, 2, 3]]
+    print(ys)
 ```

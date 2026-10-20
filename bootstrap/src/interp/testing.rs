@@ -13,6 +13,10 @@ pub struct Outcome {
     pub output: String,
     /// Set for a property test (test.prop.4).
     pub prop: Option<PropInfo>,
+    /// The trap's source line, values and frames, when a trap failed it (test.run.5).
+    pub snapshot: Option<String>,
+    /// The failing test's trace events, one per line (trace.test.1).
+    pub trace: Vec<String>,
 }
 
 impl<'a, W: Write> Interp<'a, W> {
@@ -50,13 +54,20 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
     }
     for f in prog.fns.iter().filter(|f| f.top_level() && f.owner.is_none() && f.is_test()) {
         it.depth = 0;
+        // run.limit.1-3: each test gets the whole time, memory and step allowance.
+        let _watch = limits::watch();
+        it.reset_limits();
+        it.snap = Some(Box::default());
+        super::trace::capture_begin();
         if !f.params.is_empty() && const_failure.is_none() {
             let (pos, failure, info) = it.run_property(f, cases, seed.unwrap_or_else(|| super::prop::default_seed(&f.name)));
             let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
             it.out.get_mut().clear();
-            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: Some(info) });
+            super::trace::capture_end();
+            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: Some(info), snapshot: None, trace: Vec::new() });
             continue;
         }
+        let mut trapped = None;
         let (pos, failure) = match &const_failure {
             Some(t) => (t.pos, Some(format!("trap[{}]: {}", t.rule, t.message))),
             None => match it.call(f, None, Vec::new(), f.pos) {
@@ -65,9 +76,20 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
                     (fail.trace.first().copied().unwrap_or(f.pos), Some(format!("error: {text}")))
                 }
                 Ok(_) => (f.pos, None),
-                Err(t) => (t.pos, Some(format!("trap[{}]: {}", t.rule, t.message))),
+                Err(t) => {
+                    let shown = (t.pos, Some(format!("trap[{}]: {}", t.rule, t.message)));
+                    trapped = Some(t);
+                    shown
+                }
             },
         };
+        // test.run.5: the trap's snapshot, without its first line (the failure repeats it).
+        let mut snapshot = None;
+        if let (Some(t), Some(snap)) = (&trapped, it.snap.take()) {
+            super::trace::keep(prog, *snap, t);
+            let text = super::render_trap(prog, t, super::take_snapshot(), false);
+            snapshot = text.split_once('\n').map(|(_, rest)| rest.to_string());
+        }
         // conc.task.4: a test's tasks end with it; copy what they printed.
         if it.conc.is_some() {
             it.task_print("");
@@ -76,7 +98,9 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         let _ = it.out.flush();
         let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
         it.out.get_mut().clear();
-        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: None });
+        let events = super::trace::capture_end();
+        let trace = if failure.is_some() { events } else { Vec::new() };
+        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: None, snapshot, trace });
     }
     outcomes
 }

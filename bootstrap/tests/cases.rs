@@ -7,6 +7,9 @@
 //!   if any of them is an error; with only warnings, it is accepted (exit 0).
 //! - `NAME.ail` + `NAME.test`: `ail test --json` must print exactly this on
 //!   stdout, exiting 0 if no line has `"status":"fail"`, else 1.
+//! - `NAME.ail` + `NAME.stderr` (+ `NAME.args`, `ail run` options on one
+//!   line): must print exactly `NAME.stderr` on standard error, `$FILE`
+//!   standing for the path, and `NAME.out` if that exists (trace.run.1).
 //! - `NAME.ail` + `NAME.trap`: must trap (exit 1) with the rule ID in the
 //!   file, after printing exactly `NAME.out` if that exists.
 //! - `NAME.ail` + `NAME.err`: `main` must fail (exit 1) with exactly this
@@ -47,7 +50,27 @@ fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String
     let err_file = expect("err");
     let test_file = expect("test");
     let name = path.display();
-    if test_file.exists() {
+    let stderr_file = expect("stderr");
+    if stderr_file.exists() {
+        // trace.run.1: `ail run` with the options in NAME.args (one line),
+        // printing exactly NAME.stderr ($FILE: the path) and NAME.out.
+        let args = fs::read_to_string(expect("args")).unwrap_or_default();
+        let out = ail().arg("run").args(args.split_whitespace()).arg(path).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let want = fs::read_to_string(&stderr_file).unwrap().replace("$FILE", &path.display().to_string());
+        if out.status.code() == Some(2) || stderr != want {
+            return Err(format!(
+                "{name}: standard error differs\n--- expected\n{want}--- actual (exit {:?})\n{stderr}",
+                out.status.code()
+            ));
+        }
+        let expected = fs::read_to_string(&out_file).unwrap_or_default();
+        if stdout != expected {
+            return Err(format!("{name}: output differs\n--- expected\n{expected}--- actual\n{stdout}"));
+        }
+        Ok(())
+    } else if test_file.exists() {
         let out = ail().args(["test", "--json"]).arg(path).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         let expected = fs::read_to_string(&test_file).unwrap();
@@ -185,9 +208,9 @@ fn explain_prints_rules() {
     let out = ail().args(["explain", "expr.hole.2"]).output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0));
-    assert!(stdout.starts_with("expr.hole.2 (docs/spec/05-expressions.md:"), "{stdout}");
+    assert!(stdout.starts_with("expr.hole.2 (05-expressions.md:"), "{stdout}");
     assert!(stdout.contains("Evaluating a hole MUST trap"), "{stdout}");
-    assert!(stdout.contains("ADR 0147: Typed holes"), "{stdout}");
+    assert!(stdout.contains("(ADR 0147)"), "{stdout}");
 
     let out = ail().args(["explain", "--json", "expr.bind.4"]).output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -245,6 +268,28 @@ fn property_options_replay() {
     assert_eq!(out.status.code(), Some(2));
 }
 
+/// trace.test.1-2: `ail test --trace` puts a failing test's events in its JSON
+/// entry, none for a passing test, and a plain run has no `trace` key.
+#[test]
+fn test_trace_failing_only() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace/test_trace_fail.ail");
+    let run = |extra: &[&str]| {
+        let out = ail().args(["test", "--json"]).args(extra).arg(&path).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let plain = run(&[]);
+    assert!(!plain.contains("\"trace\""), "{plain}");
+    let traced = run(&["--trace=calls"]);
+    let lines: Vec<&str> = traced.lines().collect();
+    assert!(lines[0].contains("\"test\":\"passes\"") && !lines[0].contains("\"trace\""), "{traced}");
+    assert!(lines[1].contains("\"test\":\"fails\"") && lines[1].contains("\"trace\":[{"), "{traced}");
+    assert!(lines[1].contains("\"fn\":\"Counter.bump\""), "{traced}");
+    let limited = run(&["--trace", "--trace-limit", "1"]);
+    assert!(limited.contains("\"trace\":\"dropped\""), "{limited}");
+    let human = ail().args(["test", "--trace=calls"]).arg(&path).output().unwrap();
+    assert!(String::from_utf8_lossy(&human.stdout).contains("  trace: call fails()"));
+}
+
 /// Related notes (fix.note.1): a duplicate declaration points at the first.
 #[test]
 fn duplicates_carry_notes() {
@@ -257,4 +302,28 @@ fn duplicates_carry_notes() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(stderr.contains(note), "{case}: {stderr}");
     }
+}
+
+/// trace.run.1, trace.run.4, trace.watch.1: tracing options are `ail run`'s,
+/// and a malformed one is rejected (exit 2) before anything runs.
+#[test]
+fn trace_options_rejected() {
+    let hello = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/hello.ail");
+    for (args, want) in [
+        (&["check", "--trace"][..], "work with `ail run` and `ail test`"),
+        (&["run", "--trace=bogus"][..], "trace.run.1"),
+        (&["run", "--trace-limit", "many"][..], "trace.run.4"),
+        (&["run", "--watch"][..], "trace.watch.1"),
+    ] {
+        let out = ail().args(args).arg(&hello).output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {stderr}");
+        assert!(stderr.contains(want), "{args:?}: {stderr}");
+        assert!(out.stdout.is_empty(), "{args:?} ran the program");
+    }
+    // trace.run.2: a trace goes to standard error; standard output is unchanged.
+    let plain = ail().arg("run").arg(&hello).output().unwrap();
+    let traced = ail().args(["run", "--trace"]).arg(&hello).output().unwrap();
+    assert_eq!(plain.stdout, traced.stdout);
+    assert!(String::from_utf8_lossy(&traced.stderr).contains("trace: summary:"));
 }

@@ -1,0 +1,8 @@
+200
+text/plain; charset=utf-8
+1, 2
+hello, agent
+200 hello, agent
+Wikipedia
+404 no such page
+POST /echo application/x-www-form-urlencoded 8 name=ail

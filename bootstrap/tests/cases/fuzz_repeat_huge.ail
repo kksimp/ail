@@ -1,0 +1,3 @@
+fn main()
+    print("a".repeat(2))
+    print("a".pad_left(9223372036854775807, ' '))

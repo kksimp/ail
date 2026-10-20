@@ -1,0 +1,6 @@
+## type.map.8: `push` needs a list-valued map, and an item of the list's type.
+fn main()
+    mut counts := {"a": 1}
+    counts.push("b", 2)
+    mut lists := {"a": ["x"]}
+    lists.push("b", 3)

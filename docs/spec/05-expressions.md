@@ -126,7 +126,9 @@ next iteration. *(ADR 0091)*
 immutable binding scoped to the loop body. The loop iterates the value `e` had
 when the loop started. `e` MUST NOT be a `Map`: `for k in m` is a
 compile-time error, and its help says to iterate `m.keys()` (the habit is
-ambiguous between keys and pairs). *(ADR 0117, ADR 0131)*
+ambiguous between keys and pairs). `e` may also be a `Channel[T]`, giving `x`
+type `T`: the loop receives until the channel is closed and empty
+(`conc.share.7`). *(ADR 0117, ADR 0131, ADR 0300)*
 
 **expr.loop.5** — `break` and `continue` outside a loop are compile-time
 errors. *(ADR 0117)*
@@ -176,6 +178,22 @@ if cfg := parse(lines)
     print("ok: {cfg.width}x{cfg.height}")
 else err
     print("error: {err}")
+```
+
+**expr.if.8** — `if c then a else b` is the one-line form of an `if` with one
+condition and an `else`: `a` and `b` are expressions on the same line, and its
+value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
+`then` is a keyword only right after the condition, so it stays usable as a
+name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
+without `else` is a compile-time error. *(ADR 0280)*
+
+```ail
+fn sign(n int) str
+    if n < 0 then "negative" else "non-negative"
+
+fn main()
+    print(sign(-2))
+    print("{if 3 > 2 then "big" else "small"}")
 ```
 
 **expr.if.4** — An `if` or `match` whose value is used (bound, passed,
@@ -337,7 +355,8 @@ by `if condition`. The iterable is anything a `for` loop accepts
 (`expr.loop.3`). The name is a new immutable binding (`expr.bind.4`: it MUST
 NOT repeat a name already declared), visible in the condition, in later
 clauses and in the element; it ends with the comprehension. `for mut` is a
-compile-time error. *(ADR 0182)*
+compile-time error. A clause may be `par for` (`conc.par.12`). *(ADR 0182,
+ADR 0302)*
 
 **expr.comp.3** — The clauses run like nested `for` loops, outermost first.
 For each combination whose conditions are all `true`, the element (and, in a
@@ -360,6 +379,38 @@ fn main()
     print(sizes["bcd"])                          # 3
     print([r * 10 + c for r in 1..3 for c in 0..2])   # [10, 11, 20, 21]
     print([t.to_int() else continue for t in ["1", "x", "3"]])  # [1, 3]
+```
+
+## Key functions
+
+**expr.key.1** — An argument written `by: |x| e` is a key function. It is
+allowed only as the one argument of a list's `sorted`, `sort`, `min` and
+`max`, and of a set's `sorted`; anywhere else, and a `by:` argument without
+`|x|`, is a compile-time error. A key function isn't a value: it can't be
+bound, returned, stored or passed to a user function. *(ADR 0250)*
+
+**expr.key.2** — `x` is a new immutable binding of the element type
+(`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in
+`e`. `e` is an ordinary expression and sees the enclosing locals. *(ADR 0250)*
+
+**expr.key.3** — `e` MUST be `Ord`. It is evaluated once per element, in the
+collection's order, before any comparison. *(ADR 0250)*
+
+**expr.key.4** — `sorted(by:)` and `sort(by:)` order the elements by their
+keys and are stable; `min(by:)` and `max(by:)` return the first element with
+the least (greatest) key as a `T?`, or `none` if the list is empty.
+*(ADR 0250)*
+
+```ail
+struct Person
+    name str
+    age int
+
+fn main()
+    people := [Person(name: "bo", age: 30), Person(name: "al", age: 25)]
+    print([p.name for p in people.sorted(by: |p| p.age)])   # ["al", "bo"]
+    counts := {"b": 2, "a": 2, "c": 5}
+    print(counts.keys().sorted().sorted(by: |k| -counts[k]).take(2))   # ["c", "a"]
 ```
 
 ## Integer arithmetic

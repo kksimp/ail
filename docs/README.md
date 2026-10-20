@@ -5,7 +5,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | Document | What it's for |
 |---|---|
 | [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
-| [language-card.md](language-card.md) | The whole language in one read, under 4,000 tokens, for AI agents (non-normative) |
+| [language-card.md](language-card.md) | The whole language in one read, under 8,000 tokens, for AI agents (non-normative) |
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
 | [roadmap.md](roadmap.md) | Phased development plan |
@@ -20,10 +20,14 @@ Design notes:
   token-efficiency and performance levels are realistic?
 - [design/performance-beyond-c.md](design/performance-beyond-c.md): research
   on matching or beating C for systems and allocation-heavy code.
+- [design/automatic-parallelism.md](design/automatic-parallelism.md): using
+  every core, SIMD and NPUs automatically without changing results.
 - [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
   make AIL easiest and most efficient for an AI author (proposals).
+- [design/diagnostics-audit.md](design/diagnostics-audit.md): 109 plausible AI
+  mistakes, what each diagnostic says, and what `ail fix` resolves.
 - [design/ai-first-plan.md](design/ai-first-plan.md): the 2026-10-20 plan
   for the AI-as-operator features (semantic API, effects and capabilities,
   standard modules), efficiency, and the buildout lanes.

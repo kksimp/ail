@@ -138,6 +138,7 @@ impl<'p> Checker<'p> {
                     "Ord" => self.std.ord = i,
                     "ToStr" => self.std.to_str = i,
                     "Hash" => self.std.hash = i,
+                    "Drop" => self.std.drop = Some(i),
                     _ => {}
                 }
             }
@@ -211,7 +212,8 @@ impl<'p> Checker<'p> {
                     Con::Enum(e) => is_prelude(prog.enums[e].pos),
                     _ => true,
                 };
-                if is_prelude(prog.traits[t].pos) && built_in_type {
+                // The prelude's own impls (an error type's message, err.msg.1) are allowed.
+                if is_prelude(prog.traits[t].pos) && built_in_type && !is_prelude(imp.pos) {
                     self.error(
                         "trait.impl.4",
                         imp.pos,
@@ -261,6 +263,8 @@ impl<'p> Checker<'p> {
                 .iter()
                 .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
+            // own.ref.6: references compare by identity, and aren't keys or ordered.
+            Ty::Ref(_) => tr == eq,
             // type.num.14: sized numbers are `Eq` and `Ord`; every one but `f32` is `Hash`.
             Ty::Num(k) => tr == eq || tr == self.std.ord || (tr == self.std.hash && !k.is_float()),
             Ty::Union(_) => tr == eq || tr == self.std.hash,
@@ -551,7 +555,12 @@ impl<'p> Checker<'p> {
                 }
             }
             let built_in = is_prelude(trait_decl.pos);
-            if built_in && imp.methods.is_empty() {
+            // ct.derive.2: a generator fills in an empty `impl` before checking
+            // (`derive.rs`); one it couldn't fill is already reported.
+            let by_generator = trait_decl.derive.is_some() && (imp.methods.is_empty() || trait_decl.methods.is_empty());
+            if by_generator {
+                // Nothing more to check.
+            } else if built_in && imp.methods.is_empty() {
                 self.check_derived(i, tr, &target);
             } else {
                 let missing: Vec<usize> = trait_decl

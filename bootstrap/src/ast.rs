@@ -1,6 +1,5 @@
 //! Syntax tree for the subset the bootstrap supports.
 
-use std::collections::HashSet;
 
 use crate::diag::Pos;
 
@@ -18,13 +17,29 @@ pub struct Program {
     pub uses: Vec<Use>,
     /// The lines that start with `pub`: a declaration or struct field on one
     /// of them is public (mod.vis.1). Every declaration starts its own line.
-    pub public: HashSet<usize>,
+    pub public: crate::fasthash::FastSet<usize>,
     /// The source files of a package, in line order (`modules.rs`). Empty
     /// for a single-file program without imports.
     pub files: Vec<SourceFile>,
     /// The capabilities each package manifest grants (eff.cap.4-5,
     /// `packages.rs`). Empty without an `ail.pkg`.
     pub grants: Vec<Grant>,
+    /// The code derive generators wrote, one per deriving `impl`; each is
+    /// a file of `files` (ct.gen.1-4, `derive.rs`).
+    pub generated: Vec<Generated>,
+}
+
+/// The methods a derive generator wrote for one `impl` (ct.gen.1-4).
+#[derive(Debug, Clone)]
+pub struct Generated {
+    /// Index into `Program::files`: its path is `gen:impl:TYPE.TRAIT`.
+    pub file: usize,
+    /// The deriving `impl`'s position.
+    pub impl_pos: Pos,
+    /// `Version.ToJson`
+    pub label: String,
+    /// The generator's name, `derive_to_json`.
+    pub generator: String,
 }
 
 /// `caps LIST` on a manifest line: the code of `package` (empty for the
@@ -139,6 +154,9 @@ pub struct TraitDecl {
     pub doc: Option<String>,
     /// Indexes into `Program::fns`.
     pub methods: Vec<usize>,
+    /// `@derive(f)` before `trait`: the derive generator's name and where it
+    /// is written (ct.derive.1).
+    pub derive: Option<(String, Pos)>,
 }
 
 /// `impl Trait for Type`, optionally with an indented block of functions
@@ -164,8 +182,12 @@ pub struct StructDecl {
     /// by `docs::attach`.
     pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique struct` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
+    /// `invariant COND` lines (contract.inv.1).
+    pub invariants: Vec<Contract>,
 }
 
 #[derive(Debug)]
@@ -188,6 +210,8 @@ pub struct EnumDecl {
     /// by `docs::attach`.
     pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique enum` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
 }
@@ -226,9 +250,14 @@ pub struct FnDecl {
     pub within: Within,
     /// `requires` and `ensures` lines before the body (contract.decl.1).
     pub contracts: Vec<Contract>,
+    /// For an `impl` method: the trait's method of the same name, when that
+    /// has contracts, which the implementation inherits (contract.inh.1);
+    /// an index into `Program::fns`. Set by `parser::contracts::link`.
+    pub inherits: Option<usize>,
 }
 
-/// `requires COND` or `ensures COND` (contract.decl.1-2).
+/// `requires COND`, `ensures COND` or a struct's `invariant COND`
+/// (contract.decl.1-2, contract.inv.1).
 #[derive(Debug)]
 pub struct Contract {
     /// `true` for `ensures`, `false` for `requires`.
@@ -237,6 +266,10 @@ pub struct Contract {
     /// The condition as written, for traps and `ail api` (contract.req.1).
     pub text: String,
     pub pos: Pos,
+    /// The `old(e)` calls of an `ensures` condition, in order: the hidden
+    /// name the condition reads instead and `e`, evaluated on entry
+    /// (contract.ens.3).
+    pub olds: Vec<(String, Expr)>,
 }
 
 /// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
@@ -287,18 +320,22 @@ impl FnDecl {
     }
 }
 
-/// `self` or `mut self` (trait.method.1).
+/// `self`, `mut self` or `move self` (trait.method.1, own.move.6).
 #[derive(Debug, Clone, Copy)]
 pub struct Receiver {
     pub mutable: bool,
+    /// `move self`: the method consumes its receiver (own.move.6).
+    pub moved: bool,
 }
 
-/// `name Type` or `mut name Type` (gram.fn.2, own.param.1-2).
+/// `name Type`, `mut name Type` or `move name Type` (gram.fn.2,
+/// own.param.1-2, own.move.1).
 #[derive(Debug)]
 pub struct Param {
     pub name: String,
     pub pos: Pos,
     pub mutable: bool,
+    pub moved: bool,
     pub ty: TypeRef,
 }
 
@@ -320,6 +357,8 @@ pub enum TypeKind {
     Fallible { ok: Option<Box<TypeRef>>, errors: Option<Vec<TypeRef>> },
     /// `any Trait` (trait.any.1)
     Any(String),
+    /// `ref T` (own.ref.1)
+    Ref(Box<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;
@@ -347,8 +386,10 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
-    /// `for x in e`, or `for mut x in e` (expr.loop.6).
+    /// `for x in e`, or `for mut x in e` (expr.loop.6); `par` when written
+    /// `par for` (conc.par.5).
     For {
+        par: bool,
         var: String,
         var_pos: Pos,
         mutable: bool,
@@ -366,14 +407,26 @@ pub enum Stmt {
         value: Expr,
         otherwise: Else,
     },
+    /// `defer S` (own.defer.1); `pos` is the `defer`'s.
+    Defer(Box<Stmt>, Pos),
+    /// `with m as mut x`: hold mutex `m` for the block, with its value in
+    /// `x`, written back when the block ends (conc.share.6); `pos` is the
+    /// `with`'s.
+    With {
+        mutex: Expr,
+        var: String,
+        var_pos: Pos,
+        body: Block,
+        pos: Pos,
+    },
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
-            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) => *p,
+            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
         }
     }
@@ -552,6 +605,11 @@ pub enum Expr {
         otherwise: Box<Else>,
         pos: Pos,
     },
+    /// `ref e`: a new shared cell holding the value of `e` (own.ref.1, ADR 0067).
+    Ref {
+        value: Box<Expr>,
+        pos: Pos,
+    },
 }
 
 impl Expr {
@@ -574,6 +632,7 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Ref { pos: p, .. }
             | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
             Expr::Range { lo: Some(e), .. } => e.pos(),
@@ -600,6 +659,8 @@ pub enum CompKind {
 /// filter (expr.comp.2).
 #[derive(Debug)]
 pub struct CompFor {
+    /// Written `par for` (conc.par.12).
+    pub par: bool,
     pub var: String,
     pub var_pos: Pos,
     pub iter: Expr,
@@ -622,12 +683,17 @@ pub enum InterpPart {
     Fmt(Expr, crate::lexer::FormatSpec),
 }
 
-/// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).
+/// A call argument: `value`, `mut place` (own.param.2), `move name`
+/// (own.move.2) or `label: value` (type.struct.3).
 #[derive(Debug)]
 pub struct Arg {
     pub label: Option<(String, Pos)>,
     pub mutable: bool,
+    pub moved: bool,
     pub value: Expr,
+    /// `|x|` before the value: a key function, whose value is evaluated
+    /// once per element with `x` bound to it (expr.key.1, ADR 0250).
+    pub param: Option<(String, Pos)>,
 }
 
 #[derive(Debug)]
@@ -686,6 +752,17 @@ pub fn place_path(e: &Expr) -> Option<(&str, Vec<PathStep<'_>>)> {
             path.push(PathStep::Index(index));
             Some((root, path))
         }
+        _ => None,
+    }
+}
+
+/// The root name of a place expression, as `place_path(e).map(|(root, _)| root)`
+/// but without building the path (ADR 0219).
+pub fn place_root(e: &Expr) -> Option<&str> {
+    match e {
+        Expr::Name(n, _) => Some(n.as_str()),
+        Expr::Field { recv, .. } => place_root(recv),
+        Expr::Index { recv, index, .. } if !matches!(**index, Expr::Range { .. }) => place_root(recv),
         _ => None,
     }
 }

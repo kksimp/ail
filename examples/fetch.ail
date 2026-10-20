@@ -1,0 +1,19 @@
+# Fetch a URL and summarise the response (std.net, ADR 0283). With no
+# argument it asks an https URL, which the bootstrap can't reach yet (no TLS),
+# so it reports why and falls back to the copy in examples/data.
+#   ./ail run examples/fetch.ail http://127.0.0.1:8000/tasks.json
+
+fn main() !
+    url := env.args().first() else "https://example.com/tasks.json"
+    body := fetch(url) else err
+        print("{err.kind}: {err.message}")
+        fs.read_text(path.join(path.dir(env.program()), "data/{path.base(url)}"))?
+    lines := body.lines()
+    print("{path.base(url)}: {lines.len()} lines, {body.len()} characters")
+    print(lines[0])
+
+fn fetch(url str) str ! net.NetError
+    r := net.get(url)?
+    if r.status != 200
+        return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
+    r.body

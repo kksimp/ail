@@ -11,9 +11,9 @@ Chapter key: `lex`
 
 **lex.kw.1** — These words are reserved keywords and MUST NOT be used as
 names: `and any as break continue defer elif else ensures enum error extern
-false fn for if impl in match move mut none not or pub ref requires return
-self spawn struct todo trait true unique unsafe use while`. *(ADR 0114,
-ADR 0120, ADR 0147, ADR 0210)*
+false fn for if impl in invariant match move mut none not or par pub ref requires
+return self spawn struct todo trait true unique unsafe use while with`.
+*(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305)*
 
 **lex.kw.2** — `c` is not reserved. It has its FFI meaning only directly
 after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*
@@ -50,7 +50,12 @@ indentation. *(ADR 0040)*
 **lex.stmt.2** — A newline does not end a statement when it occurs:
 1. inside an unclosed `(`, `[` or `{`,
 2. immediately after a binary operator or a comma, or
-3. inside a multi-line string literal that is not yet closed (`lex.str.3`).
+3. inside a multi-line string literal that is not yet closed (`lex.str.3`), or
+4. when the next line's first token is `.` followed by a name (a chained call,
+   ADR 0323), or
+5. when the next line's first token is `and`, `or`, `+`, `*`, `/`, `%`, `==`,
+   `!=`, `<`, `<=`, `>` or `>=` (a long expression split before an operator,
+   ADR 0346). `-` is left out because it can begin a statement.
 
 The next line is then a continuation of the same statement. Continuation lines
 do not open or close blocks. *(ADR 0034, ADR 0135)*

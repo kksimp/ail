@@ -1,0 +1,15 @@
+# std.tensor operators, axis reductions and transpose (ADRs 0344-0345) on a
+# 256x256 matrix, ten rounds. `tensor_ops_loops.ail` is the same work in
+# plain loops, and `tensor_ops.py` in Python without NumPy. Every value is a
+# multiple of 1/64 well under 2^53 and n is a power of two, so each
+# summation order gives the same exact result.
+fn main()
+    n := 256
+    a := tensor.from([(i % 17).to_float() * 0.25 for i in 0..n * n], [n, n])
+    b := tensor.from([(i % 13).to_float() * 0.5 for i in 0..n * n], [n, n])
+    mut total := 0.0
+    for r in 0..10
+        d := (a + b) * a - b * 0.5
+        t := d.transpose()
+        total += t.sum(0).sum() + a.max(0).sum() + b.mean(1).sum() + t.sum(1).max()
+    print(total)

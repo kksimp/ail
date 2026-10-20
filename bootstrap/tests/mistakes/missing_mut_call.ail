@@ -1,0 +1,7 @@
+fn bump(mut p int)
+    p += 1
+
+fn main()
+    mut n := 1
+    bump(n)
+    print(n)

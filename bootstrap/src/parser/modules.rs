@@ -15,8 +15,24 @@ impl Parser {
         let pos = self.bump().pos; // use
         let parsed = (|| {
             let mut path = vec![self.name("a module path after `use`", "mod.use.1")?];
-            while self.eat_sym(".") {
-                path.push(self.name("a module name after `.`", "mod.use.1")?);
+            loop {
+                if self.at_sym(":") && matches!(self.peek_at(1), Tok::Sym(":")) && self.adjacent(self.i) {
+                    let at = self.pos();
+                    self.error_fix(
+                        "gram.foreign.1",
+                        at,
+                        "AIL writes paths with `.`, not `::`",
+                        "write `use std.fs`",
+                        "write `.`",
+                        vec![crate::diag::Edit::span(at, Pos { col: at.col + 2, ..at }, ".")],
+                    );
+                    self.i += 2;
+                    path.push(self.name("a module name after `.`", "mod.use.1")?);
+                } else if self.eat_sym(".") {
+                    path.push(self.name("a module name after `.`", "mod.use.1")?);
+                } else {
+                    break;
+                }
             }
             let alias = if self.eat_kw("as") { Some(self.name("a name after `as`", "mod.use.1")?) } else { None };
             if !self.eat(&Tok::Newline) && !matches!(self.peek(), Tok::Eof) {

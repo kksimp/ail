@@ -1,0 +1,43 @@
+# conc.par.8: `par for` runs on the thread pool; the result is the
+# sequential one (conc.par.1), list writes and `int` sums included.
+struct Cell
+    row int
+    text str
+
+fn weight(i int) int
+    mut w := 0
+    for k in 0..(i % 7)
+        w += k * i
+    w
+
+fn main()
+    n := 200
+    mut squares := List[int]()
+    mut cells := List[Cell]()
+    mut grid := List[List[int]]()
+    for i in 0..n
+        squares.push(0)
+        cells.push(Cell(0, ""))
+        grid.push([0, 0])
+    mut total := 0
+    par for i in 0..n
+        squares[i] = i * i
+        cells[i] = Cell(i, "c{i}")
+        grid[i][1] = weight(i)
+        total += weight(i)
+    print(squares[199])
+    print(cells[42])
+    print(grid[100])
+    print(total)
+    perm := [x * 7 % n for x in 0..n]
+    mut placed := List[int]()
+    for _ in 0..n
+        placed.push(-1)
+    par for i in 0..n
+        placed[perm[i]] = i
+    print(placed[0..5])
+    words := ["alpha", "beta", "gamma", "delta"]
+    mut lengths := [0, 0, 0, 0]
+    par for i in 0..4
+        lengths[i] = words[i].len()
+    print(lengths)

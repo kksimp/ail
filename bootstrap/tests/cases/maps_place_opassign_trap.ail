@@ -1,6 +1,11 @@
+## `op=` on a missing key starts from zero, but only at the last step:
+## a missing outer key still traps (type.map.3, type.map.7).
 fn main()
     mut m := {'a': 1}
     m['a'] += 10
     print(m)
     m['q'] += 1
     print(m)
+    mut g := Map[char, Map[char, int]]()
+    g['x']['y'] += 1
+    print(g)

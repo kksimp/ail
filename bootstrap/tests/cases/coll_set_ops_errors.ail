@@ -1,0 +1,7 @@
+## type.coll.16: the argument has the receiver's kind and element type, and
+## the elements must be `Hash`.
+fn main()
+    a := {1, 2}
+    print(a.union([1]))
+    print(a.union({"x"}))
+    print([1.5].union([2.5]))

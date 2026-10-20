@@ -59,6 +59,55 @@ pub fn format(src: &str) -> Result<String, Refusal> {
 /// The tokens that carry meaning: everything but a comma before a closing bracket (ADR 0118).
 /// Positions are left out, including those inside interpolated strings.
 fn significant(tokens: &[Token]) -> Vec<String> {
+    attributes_canonical(significant_raw(tokens))
+}
+
+/// Attributes in a fixed order, on one line (fmt.attr): a run of `@name(...)`
+/// groups at the start of a statement is sorted by name, and a newline between
+/// the run and the item is dropped, so layout and order don't count as a change.
+fn attributes_canonical(toks: Vec<String>) -> Vec<String> {
+    let at = "Sym(\"@\")";
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    let mut starts = true;
+    while i < toks.len() {
+        if starts && toks[i] == at {
+            let mut groups: Vec<Vec<String>> = Vec::new();
+            while i < toks.len() && toks[i] == at {
+                let from = i;
+                i += 2; // `@` and the name
+                if toks.get(i).is_some_and(|t| t == "Sym(\"(\")") {
+                    let mut depth = 0;
+                    while i < toks.len() {
+                        match toks[i].as_str() {
+                            "Sym(\"(\")" => depth += 1,
+                            "Sym(\")\")" => depth -= 1,
+                            _ => {}
+                        }
+                        i += 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                }
+                groups.push(toks[from..i.min(toks.len())].to_vec());
+                if toks.get(i).is_some_and(|t| t == "Newline") && toks.get(i + 1).is_some_and(|t| t == at || t == "Kw(\"fn\")") {
+                    i += 1;
+                }
+            }
+            groups.sort_by(|a, b| a.get(1).cmp(&b.get(1)));
+            out.extend(groups.into_iter().flatten());
+            starts = false;
+            continue;
+        }
+        starts = matches!(toks[i].as_str(), "Newline" | "Indent" | "Dedent");
+        out.push(toks[i].clone());
+        i += 1;
+    }
+    out
+}
+
+fn significant_raw(tokens: &[Token]) -> Vec<String> {
     let mut out = Vec::new();
     for (i, t) in tokens.iter().enumerate() {
         let closes = matches!(tokens.get(i + 1).map(|t| &t.tok), Some(Tok::Sym(")" | "]" | "}")));
@@ -181,7 +230,23 @@ impl<'a> Formatter<'a> {
                 }
             }
         }
-        Formatter { lines, logicals, comments: comments.to_vec(), out: Vec::new() }
+        // fmt.attr: an attributes-only line joins the item below it, unless a comment sits between.
+        let mut merged: Vec<Logical> = Vec::new();
+        for l in logicals {
+            match merged.last_mut() {
+                Some(prev)
+                    if attributes_only(&prev.toks)
+                        && prev.depth == l.depth
+                        && !comments.iter().any(|c| c.pos.line >= prev.end && c.pos.line < l.start) =>
+                {
+                    prev.toks.extend(l.toks);
+                    prev.end = l.end;
+                    prev.opens_block = l.opens_block;
+                }
+                _ => merged.push(l),
+            }
+        }
+        Formatter { lines, logicals: merged, comments: comments.to_vec(), out: Vec::new() }
     }
 
     fn run(mut self) -> String {
@@ -310,7 +375,7 @@ impl<'a> Formatter<'a> {
         if interior {
             return self.render_as_broken(l, comments);
         }
-        let mut lines = layout(&l.toks, l.depth);
+        let mut lines = layout_item(&l.toks, l.depth);
         if let Some(c) = trailing {
             let last = lines.last_mut().unwrap();
             last.push(' ');
@@ -417,6 +482,10 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
     if a.is("..") || a.is("..=") || b.is("..") || b.is("..=") {
         return false;
     }
+    // `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.
+    if a.is("|") && before.is_some_and(opens_key) {
+        return false;
+    }
     if prefix(before, a) {
         return false;
     }
@@ -424,6 +493,11 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
         return !a.ends_operand();
     }
     true
+}
+
+/// A `|` after this token opens a key function's parameter (expr.key.1).
+fn opens_key(t: &FTok) -> bool {
+    t.is("(") || t.is(",") || t.is(":")
 }
 
 /// `a` is a prefix operator: `-x`, `!T`.
@@ -441,14 +515,21 @@ fn flat(toks: &[FTok]) -> String {
     let mut out = String::new();
     let mut prev: Option<&FTok> = None;
     let mut before: Option<&FTok> = None;
+    // The opening `|` of a key function `|x|` (expr.key.1), whose closing `|` is unspaced.
+    let mut open_bar = None;
     for (i, t) in toks.iter().enumerate() {
         if t.is(",") && toks.get(i + 1).is_some_and(FTok::closes) {
             continue;
         }
+        let closing_bar = t.is("|") && i >= 2 && open_bar == Some(i - 2);
         if let Some(p) = prev
+            && !closing_bar
             && spaced(before, p, t)
         {
             out.push(' ');
+        }
+        if t.is("|") && prev.is_some_and(opens_key) {
+            open_bar = Some(i);
         }
         out.push_str(&t.text);
         before = prev;
@@ -502,6 +583,85 @@ fn with_trailing_commas(toks: &[FTok]) -> Vec<FTok> {
     out
 }
 
+/// The end of the attribute starting at `toks[i]` (`@name` or `@name(...)`).
+fn attribute_end(toks: &[FTok], i: usize) -> usize {
+    let mut j = i + 2;
+    if toks.get(j).is_some_and(|t| t.is("(")) {
+        let mut level = 0;
+        while j < toks.len() {
+            if toks[j].opens() {
+                level += 1;
+            } else if toks[j].closes() {
+                level -= 1;
+            }
+            j += 1;
+            if level == 0 {
+                break;
+            }
+        }
+    }
+    j.min(toks.len())
+}
+
+/// The statement is only attributes: the item they apply to is on a later line.
+fn attributes_only(toks: &[FTok]) -> bool {
+    let mut i = 0;
+    while i < toks.len() && toks[i].is("@") {
+        i = attribute_end(toks, i);
+    }
+    i == toks.len() && !toks.is_empty()
+}
+
+/// fmt.attr: attributes sorted by name; on the item's line if it all fits,
+/// otherwise one per line above the item.
+fn layout_item(toks: &[FTok], depth: usize) -> Vec<String> {
+    let mut groups: Vec<&[FTok]> = Vec::new();
+    let mut i = 0;
+    while i < toks.len() && toks[i].is("@") {
+        let end = attribute_end(toks, i);
+        groups.push(&toks[i..end]);
+        i = end;
+    }
+    if groups.is_empty() || i == toks.len() {
+        return layout(toks, depth);
+    }
+    groups.sort_by(|a, b| a.get(1).map(|t| &t.text).cmp(&b.get(1).map(|t| &t.text)));
+    let rest = &toks[i..];
+    let all: Vec<FTok> = groups.iter().flat_map(|g| g.iter().cloned()).chain(rest.iter().cloned()).collect();
+    let one = format!("{}{}", indent(depth), flat(&all));
+    if one.chars().count() <= WIDTH {
+        return vec![one];
+    }
+    let mut lines: Vec<String> = groups.iter().map(|g| format!("{}{}", indent(depth), flat(g))).collect();
+    lines.extend(layout(rest, depth));
+    lines
+}
+
+/// The start of each `.method(` call at the top level: a chained call.
+fn chain_dots(toks: &[FTok]) -> Vec<usize> {
+    let mut level = 0;
+    let mut out: Vec<usize> = Vec::new();
+    for (i, t) in toks.iter().enumerate() {
+        // An operator after the first call ends the chain's shape: `a.b() or c.d()` isn't a chain.
+        if level == 0 && !out.is_empty() && !(t.is(".") || t.is("?") || t.kind == Kind::Word || t.opens() || t.closes()) {
+            return Vec::new();
+        }
+        if t.opens() {
+            level += 1;
+        } else if t.closes() {
+            level -= 1;
+        } else if level == 0
+            && t.is(".")
+            && i > 0
+            && toks.get(i + 1).is_some_and(|n| n.kind == Kind::Word)
+            && toks.get(i + 2).is_some_and(|n| n.is("("))
+        {
+            out.push(i);
+        }
+    }
+    out
+}
+
 /// fmt.wrap: one line if it fits in `WIDTH`. Otherwise the longest
 /// top-level list is split one element per line, each with a trailing comma
 /// (fmt.comma). When that list's last element ends in a list that holds most
@@ -512,6 +672,84 @@ fn layout(toks: &[FTok], depth: usize) -> Vec<String> {
     if one.chars().count() <= WIDTH {
         return vec![one];
     }
+    // fmt.chain: two or more chained calls split one `.method(...)` per line.
+    let dots = chain_dots(toks);
+    if dots.len() >= 2 {
+        let mut lines = layout(&toks[..dots[0]], depth);
+        for (k, &from) in dots.iter().enumerate() {
+            let to = dots.get(k + 1).copied().unwrap_or(toks.len());
+            lines.extend(layout(&toks[from..to], depth + 1));
+        }
+        return lines;
+    }
+    let lines = layout_lists(toks, depth, one);
+    if lines.iter().any(|l| l.chars().count() > WIDTH)
+        && let Some(split) = layout_operators(toks, depth)
+    {
+        return split;
+    }
+    lines
+}
+
+/// The binary-operator precedence of `toks[i]` for splitting, or `None` (fmt.op).
+/// `<` and `>` are left out: they also bracket type arguments.
+fn split_prec(toks: &[FTok], i: usize) -> Option<u8> {
+    let t = &toks[i];
+    let binary = i > 0 && toks[i - 1].ends_operand();
+    match t.kind {
+        Kind::Kw("or") => Some(1),
+        Kind::Kw("and") => Some(2),
+        Kind::Sym("==" | "!=" | "<=" | ">=") => Some(3),
+        Kind::Sym("+" | "-") if binary => Some(4),
+        Kind::Sym("*" | "/" | "%") if binary => Some(5),
+        _ => None,
+    }
+}
+
+/// fmt.op: a line still too long is split before each top-level operator of the
+/// lowest precedence, the operator first on the continuation line and one indent
+/// deeper (lex.stmt.2 (5)). `-` ends its line instead, because a line may not start with it.
+fn layout_operators(toks: &[FTok], depth: usize) -> Option<Vec<String>> {
+    let mut level = 0;
+    let mut points: Vec<(usize, u8)> = Vec::new();
+    for (i, t) in toks.iter().enumerate() {
+        if t.opens() {
+            level += 1;
+        } else if t.closes() {
+            level -= 1;
+        } else if level == 0 {
+            if t.is("|") {
+                return None; // a closure body runs to the end of the expression
+            }
+            if let Some(p) = split_prec(toks, i) {
+                points.push((i, p));
+            }
+        }
+    }
+    let lowest = points.iter().map(|&(_, p)| p).min()?;
+    let cuts: Vec<usize> = points
+        .iter()
+        .filter(|&&(_, p)| p == lowest)
+        .map(|&(i, _)| i)
+        .filter(|&i| i > 0 && i + 1 < toks.len())
+        .collect();
+    if cuts.is_empty() {
+        return None;
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut from = 0;
+    for &cut in &cuts {
+        let minus = toks[cut].is("-");
+        let end = if minus { cut + 1 } else { cut };
+        lines.extend(layout(&toks[from..end], if from == 0 { depth } else { depth + 1 }));
+        from = end;
+    }
+    lines.extend(layout(&toks[from..], depth + 1));
+    Some(lines)
+}
+
+/// fmt.wrap's list splitting, for a line that has no chain (see `layout`).
+fn layout_lists(toks: &[FTok], depth: usize, one: String) -> Vec<String> {
     let Some(mut group) = groups(toks, 0, toks.len()).into_iter().rev().max_by_key(|g| g.len) else {
         return vec![one]; // nothing to split: leave it long
     };
@@ -796,6 +1034,46 @@ mod tests {
     }
 
     #[test]
+    fn chained_calls_split_one_per_line() {
+        let src = "fn main()\n    names := people.filter(|p| p.age > 18 and p.active).map(|p| p.name.to_upper()).sorted().join(\", \")\n    print(names)\n";
+        let out = fmt(src);
+        assert_eq!(
+            out,
+            "fn main()\n    names := people\n        .filter(|p| p.age > 18 and p.active)\n        .map(|p| p.name.to_upper())\n        .sorted()\n        .join(\", \")\n    print(names)\n"
+        );
+        assert_eq!(fmt(&out), out);
+        // A chain that fits is joined onto one line.
+        assert_eq!(fmt("fn main()\n    x := a\n        .b()\n        .c()\n"), "fn main()\n    x := a.b().c()\n");
+    }
+
+    #[test]
+    fn long_conditions_split_before_the_lowest_operator() {
+        let src = "fn main()\n    if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000 or alpha_value == beta_value or beta_value == 77\n        print(1)\n";
+        let out = fmt(src);
+        assert_eq!(
+            out,
+            "fn main()\n    if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000\n        or alpha_value == beta_value\n        or beta_value == 77\n        print(1)\n"
+        );
+        assert_eq!(fmt(&out), out);
+        let sum = "fn f() int\n    alpha_value_long_name * beta_value_long_name + alpha_value_long_name * beta_value_long_name - gamma_value_long_name\n";
+        let out = fmt(sum);
+        assert!(out.contains("\n        + alpha_value_long_name * beta_value_long_name -\n"), "{out}");
+        assert_eq!(fmt(&out), out);
+        // Short enough: joined.
+        assert_eq!(fmt("fn f() bool\n    a\n        and b\n"), "fn f() bool\n    a and b\n");
+    }
+
+    #[test]
+    fn attributes_are_sorted_and_move_up_only_when_long() {
+        assert_eq!(fmt("@test\nfn a()\n    assert(true)\n"), "@test fn a()\n    assert(true)\n");
+        assert_eq!(fmt("@test @pure fn a()\n    assert(true)\n"), "@pure @test fn a()\n    assert(true)\n");
+        let long = "@test @pure fn a_function_with_a_long_name(first_parameter int, second_parameter int, third_parameter int) int\n    first_parameter\n";
+        let out = fmt(long);
+        assert!(out.starts_with("@pure\n@test\nfn a_function_with_a_long_name("), "{out}");
+        assert_eq!(fmt(&out), out);
+    }
+
+    #[test]
     fn idempotent_and_canonical_over_the_repository() {
         let mut formatted = 0;
         for (name, src) in sources() {
@@ -822,6 +1100,7 @@ mod tests {
         );
         assert_eq!(fmt("fn f(a int,b int) !int\n    a\n"), "fn f(a int, b int) !int\n    a\n");
         assert_eq!(fmt("fn f() int ! E\n    1\n"), "fn f() int ! E\n    1\n");
+        assert_eq!(fmt("fn f()\n    xs.sorted(by:| x |-x)\n"), "fn f()\n    xs.sorted(by: |x| -x)\n");
         assert_eq!(fmt("x := xs[1 ..]\ny := a [0]\n"), "x := xs[1..]\ny := a[0]\n");
     }
 

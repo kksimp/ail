@@ -13,6 +13,8 @@ pub(super) enum Need {
     Nothing,
     Eq,
     Ord,
+    /// `Hash` (the set operations, type.coll.16).
+    Hash,
     /// `int` or `float` (`sum`).
     Number,
 }
@@ -88,10 +90,10 @@ pub(super) const F32_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt
 pub(super) const LIST_METHODS: &[&str] =
     &[
         "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
-        "index_of", "join", "sum", "min", "max", "sorted", "sort",
+        "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference",
     ];
 pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
-pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset"];
+pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
 
 /// `to_i8` ... `to_f32`: the sized type a conversion method names (type.num.15).
 fn convert(name: &str) -> Option<Num> {
@@ -187,6 +189,8 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "swap" => make(true, vec![Int, Int], Unit, Need::Nothing),
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
                 "last" | "first" => read(vec![], opt(e)),
+                "take" => read(vec![Int], list(e)),
+                "union" | "intersect" | "difference" => make(false, vec![list(e.clone())], Ty::Set(Box::new(e)), Need::Hash),
                 "insert" => make(true, vec![Int, e], Unit, Need::Nothing),
                 "remove_at" => make(true, vec![Int], e, Need::Nothing),
                 "extend" => make(true, vec![list(e)], Unit, Need::Nothing),
@@ -210,6 +214,11 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "remove" => make(true, vec![k], opt(v), Need::Nothing),
                 "keys" => read(vec![], list(k)),
                 "values" => read(vec![], list(v)),
+                // type.map.8: `m.push(k, x)` for a list-valued map.
+                "push" => match v {
+                    Ty::List(e) => make(true, vec![k, *e], Unit, Need::Nothing),
+                    _ => None,
+                },
                 _ => None,
             }
         }
@@ -222,6 +231,9 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "contains" => read(vec![e], Bool),
                 "sorted" => make(false, vec![], list(e), Need::Ord),
                 "is_subset" => read(vec![Ty::Set(Box::new(e))], Bool),
+                "union" | "intersect" | "difference" => {
+                    make(false, vec![Ty::Set(Box::new(e.clone()))], Ty::Set(Box::new(e)), Need::Hash)
+                }
                 _ => None,
             }
         }
@@ -248,6 +260,9 @@ pub(super) fn builtin_names(t: &Ty) -> &'static [&'static str] {
 impl<'p> Checker<'p> {
     /// `x.name(args)` for a built-in method of `x`'s type.
     pub(super) fn builtin_call(&mut self, recv: &'p Expr, rt: &Ty, name: &str, pos: Pos, args: &'p [Arg]) -> Ty {
+        if let Some(t) = self.keyed_call(recv, rt, name, pos, args) {
+            return t;
+        }
         let b = builtin(rt, name).expect("a built-in method");
         // type.str.6: these take a `str` or a `char`.
         if *rt == Ty::Str && matches!(name, "contains" | "starts_with" | "ends_with" | "split") && args.len() == 1 {
@@ -280,18 +295,21 @@ impl<'p> Checker<'p> {
             Need::Nothing => true,
             Need::Eq => self.implements(&elem, self.std.eq),
             Need::Ord => self.implements(&elem, self.std.ord),
+            Need::Hash => self.implements(&elem, self.std.hash),
             Need::Number => matches!(elem, Ty::Int | Ty::Float | Ty::Num(_) | Ty::Err),
         };
         if !ok {
             let what = match b.need {
                 Need::Eq => "elements that can be compared with `==` (`Eq`)",
                 Need::Ord => "elements that can be ordered (`Ord`)",
+                Need::Hash => "elements that can be hashed (`Hash`)",
                 _ => "`int` or `float` elements",
             };
             let msg = format!("`{name}` needs {what}, and {} has {}", self.show(rt), self.show(&elem));
             let help = match b.need {
                 Need::Ord => self.how_to_implement(&elem, self.std.ord),
                 Need::Eq => self.how_to_implement(&elem, self.std.eq),
+                Need::Hash => self.how_to_implement(&elem, self.std.hash),
                 _ => None,
             };
             match help {
@@ -302,7 +320,9 @@ impl<'p> Checker<'p> {
         if b.mutates {
             self.require_mutable(recv, Some("trait.method.3"), &format!("the receiver of `{name}`"));
         }
-        let sig = Sig::plain(Some(b.mutates), b.params.into_iter().map(|t| (false, t)).collect(), b.ret);
+        let moves = self.unique_builtin(rt, name, pos, b.params.len());
+        let mut sig = Sig::plain(Some(b.mutates), b.params.into_iter().map(|t| (false, t)).collect(), b.ret);
+        sig.moves = moves;
         self.check_call(name, &sig, Vec::new(), args, Some(recv), pos, None)
     }
 }
@@ -356,6 +376,7 @@ pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
         (Ty::Char, "to_int") => "write `c.code()` for its scalar value, or `c.to_digit(10)` for a digit's value",
         (Ty::Char, "to_uppercase") => "write `c.to_upper()`",
         (Ty::Char, "to_lowercase") => "write `c.to_lower()`",
+        (Ty::Map(..), "push") => "`m.push(k, x)` needs a map whose values are lists, `Map[K, List[T]]`; for other values write `m[k] = v`",
         (Ty::List(_), "append" | "add") => "write `xs.push(x)`",
         (Ty::List(_), "length" | "size" | "count") => "write `xs.len()`",
         (Ty::List(_), "index" | "find" | "indexOf") => "write `xs.index_of(x)`, which gives `int?` (`none` if absent)",
@@ -367,6 +388,39 @@ pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
         (Ty::Set(_), "has") => "write `s.contains(x)`",
         (Ty::Set(_), "discard" | "delete") => "write `s.remove(x)`",
         (_, "to_string" | "toString" | "__str__") => "write `x.to_str()`, or interpolate: `\"{x}\"`",
+        _ => return None,
+    })
+}
+
+/// The AIL method for another language's name for it, when the arguments
+/// carry over unchanged (gram.foreign.1, ADR 0262). The fix renames the call.
+pub(super) fn method_rename(t: &Ty, name: &str) -> Option<&'static str> {
+    Some(match (t, name) {
+        (Ty::Str | Ty::List(_) | Ty::Map(..) | Ty::Set(_), "length" | "size" | "count") => "len",
+        (Ty::Str, "strip" | "lstrip" | "rstrip" | "trim_start" | "trim_end") => "trim",
+        (Ty::Str, "startswith" | "startsWith") => "starts_with",
+        (Ty::Str, "endswith" | "endsWith") => "ends_with",
+        (Ty::Str, "splitlines") => "lines",
+        (Ty::Str, "lower" | "lowercase" | "toLowerCase") => "to_lower",
+        (Ty::Str, "upper" | "uppercase" | "toUpperCase") => "to_upper",
+        (Ty::Str, "includes") => "contains",
+        (Ty::Str, "indexOf") => "find",
+        (Ty::Str, "substring" | "substr") => "slice",
+        (Ty::Char, "is_alphabetic") => "is_alpha",
+        (Ty::Char, "is_whitespace") => "is_space",
+        (Ty::Char, "is_alphanumeric") => "is_alnum",
+        (Ty::Char, "is_numeric" | "is_ascii_digit" | "isdigit") => "is_digit",
+        (Ty::Char, "to_uppercase") => "to_upper",
+        (Ty::Char, "to_lowercase") => "to_lower",
+        (Ty::List(_), "append" | "add" | "push_back") => "push",
+        (Ty::List(_), "includes" | "has") => "contains",
+        (Ty::List(_), "indexOf") => "index_of",
+        (Ty::List(_), "pop_back") => "pop",
+        (Ty::Map(..), "has" | "has_key" | "contains_key") => "contains",
+        (Ty::Map(..), "delete") => "remove",
+        (Ty::Set(_), "insert" | "push") => "add",
+        (Ty::Set(_), "has") => "contains",
+        (Ty::Set(_), "discard" | "delete") => "remove",
         _ => return None,
     })
 }

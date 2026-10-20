@@ -1,21 +1,19 @@
 # AIL language card
 
-> Non-normative: the [spec](spec/) rules; the [quick reference](quick-reference.md)
-> is longer. Budget: 4,000 tokens on every tokenizer
-> (`tools/tokbench/run.sh docs/language-card.md`).
+> v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
+> [quick reference](quick-reference.md) has the long form. Budget 8,000 tokens
+> on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs
 
 ```sh
-./ail run FILE.ail           # check, then run; --deterministic forbids clock/random/proc
+./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail test|fmt|fix|api|effects|explain ...   # tests, layout, apply fixes, outline, effects, rule text
 ```
 
-`@test fn t()` is a test (`assert`, `assert_eq`); `@pure`; `todo` is a typed hole.
-`ail.pkg` lists a package's `dep`s and the `caps` each may use.
-
-Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
+Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
+need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
 
@@ -41,7 +39,9 @@ fn half(n int) int
     n / 2
 ```
 
-`return x` (or bare `return`) exits early.
+`return x` or bare `return` exits early. In `ensures`, `old(e)` is `e` on entry. A trait
+method's contracts bind its impls; a struct's `invariant COND` lines hold after
+construction and each `mut self` method.
 
 ## Bindings
 
@@ -52,8 +52,8 @@ n = 5            # `=` changes an existing `mut` name
 n += 1           # also -= *= /= %=
 ```
 
-A name can't be declared twice in one function, even in an inner block. To
-update a `mut` variable in a loop, use `=`, not `:=`.
+A name can't be declared twice in one function, even in an inner block: to
+update a `mut` variable in a loop, use `=`.
 
 ## Types
 
@@ -61,9 +61,15 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-`use std.random`: `random.int(1, 6)` (inclusive), `float()`, `seed(n)`, `shuffle(mut xs)`.
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
-Constants: top-level `NAME := value` (no calls).
+`t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
+
+`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
+
+Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
 ## Structs, enums and methods
 
@@ -90,6 +96,7 @@ fn main()
     p.shift(3)                    # `mut self` methods need a `mut` variable
     print(p.sum())                # method calls always have ()
     c := Color.Red                # qualified, unless the type is known: `c = Green`
+    p.x = 10                      # fields of a `mut` variable can be assigned
 ```
 
 `==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
@@ -117,8 +124,8 @@ fn find(names List[str], wanted str) int?   # an int, or `none`
     none
 
 error enum ParseError                       # only `error` types can be errors
-    Empty
-    BadNumber(text str)
+    Empty "empty input"                     # optional message: its display text
+    BadNumber(text str) "bad number {text}"
 
 fn parse(s str) int ! ParseError            # an int, or a ParseError
     if s == ""
@@ -136,7 +143,7 @@ fn main() !                                 # main can fail; the error is report
     i := find(["a", "b"], "b") else -1      # `else`: a fallback value...
     n := parse("12") else return            # ...or leave...
     t := total(["1", "x"]) else err         # ...or handle the error
-        print("bad input: {err}")           # ParseError.BadNumber(text: "x")
+        print("bad input: {err}")           # bad input: bad number x
         0
     print("{i} {n} {t}")
     if v := parse("7")                      # handle both outcomes, then go on
@@ -145,6 +152,9 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
+- `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
+- In a function with inferred errors (`!T`, `!`) and in `@test` functions,
+  `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
 - A result that can fail must be handled: with `?`, `else`, or by returning it.
   `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
 - Several error types: `fn load() Config ! IoError | ParseError`. No success
@@ -172,8 +182,8 @@ fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
             best = x
     best
 
-struct Stack[T]                      # generic type
-    items List[T]
+struct Stack[T]                      # a generic type; its methods use `T`
+    items List[T]                    # and `Self` (for `Stack[T]`) directly
 
 fn main()
     c := Circle(r: 2)
@@ -183,20 +193,30 @@ fn main()
     shapes.push(c)
 ```
 
-- `impl Ord for Version` with no body compares the fields in order. `<` works
-  on `int`, `str`, lists and `Ord` types. Customise: `impl ToStr` (`fn to_str`),
-  `impl Eq` (`fn eq`), `fn cmp`.
+- `impl Ord for Version` with no body compares the fields in order. `<` and
+  friends work on `int`, `str`, lists and `Ord` types. Customise with
+  `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
+- `impl ToJson for T` and `impl FromJson for T` with no body derive
+  `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name; lists,
+  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
+  `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
+  that writes an empty `impl`'s methods; `ail api --expanded` shows them.
 
 ## Control flow
 
-```ail skip=context
-if a < b             # then `elif`, `else`
+```ail
+if a < b
     print("less")
+elif a == b
+    print("equal")
+else
+    print("greater")
 
 kind := if n < 0     # `if` used as a value needs `else`;
     "negative"       # elif/else line up with the line the `if` starts on
 else
     "non-negative"
+sign := if n < 0 then "-" else "+"   # the one-line form
 
 while n > 0
     n -= 1
@@ -229,14 +249,13 @@ match ch             # literals and `|`; ints, strings and chars need `_`
   `if n != 0`, not `if n`.
 - `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
   `x.to_int()`. An int literal works where a float is expected.
-- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32`: literals take the type from
-  context; same-type operands only; overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`), `wrapping_add`,
-  `saturating_add`.
+- Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
+  overflow traps; `x.to_u8()` converts.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`).
 
 ## Strings and characters
 
-```ail skip=context
+```ail
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
@@ -249,7 +268,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `repeat`, `pad_left`, `pad_right`, `slice(a, b)` (characters), `char_at(i)` (`char?`), `find(x)` (`int?`), `replace(a, b)`, `to_lower()`, `to_upper()`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -257,19 +276,21 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 
 ## Lists
 
-```ail skip=context
+```ail
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
-part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
+part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..], xs[..2]
 xs.push(4)             # push, pop, sort and swap need a `mut` variable
 xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
+n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
 Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`; `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
-`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`. Slices don't clamp
-and negative indexes are errors.
+`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`. Slices
+don't clamp and negative indexes are errors. Order by a key (stable):
+`xs.sorted(by: |p| -p.age)`, also `sort`, `min`, `max`.
 
 Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
 `{k: v for ...}`.
@@ -282,7 +303,8 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 ```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
-ages["ann"] += 1                       # the key must exist, or the program stops
+ages["dan"] += 1                       # `op=` on a missing key starts at 0
+mut counts := {}                       # typed by first use: counts[w] += 1
 b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
 for name in ages.keys()                # `for k in m` is an error; also values()
     print("{name}: {ages[name]}")
@@ -291,32 +313,39 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`. Keys can't be floats.
+Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`). Keys can't be floats.
 
 ## Values and `mut`
 
-Assigning or passing a value copies it: changing `b` after `b := a` never
-changes `a`.
+Assigning or passing copies: changing `b` after `b := a` never changes `a`.
 
-```ail skip=context
+```ail
 fn bump(mut p Point)   # the caller sees the change
     p.x += 1
 
-bump(mut q)            # `mut` again at the call; q must be a `mut` variable
+bump(mut q)            # `mut` again at the call, on a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+`ref x` is a cell copies share. `unique` types move: `f(move x)`; `fn T.close(move self)` consumes `x.close()`; lists of them move in with `xs.push(move x)`, out with `pop`, and `xs[i]` borrows.
 
 ## Tasks
 
-```ail skip=context
+```ail
 t := spawn load(1)          # a task; args are copies
 p := t.wait()?              # result, or fails with Trapped
 g := TaskGroup()            # tasks returning nothing; waited at block end
 g.add(spawn work(2))
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
-m := Mutex(0)               # get, set, swap; x := m.lock() then m.unlock(x + 1)
+for v in ch                 # receives until closed and empty
+    print(v)
+m := Mutex(0)               # get, set, swap
+with m as mut x             # holds m; stores x back on any exit
+    x += 1
+n := Atomic(0)              # int/bool: load, store, add (old value), cas
+g.cancel()                  # task.cancelled(), task.check()? in the task
+ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
 Wait or `add` each task exactly once, on every path. A deadlock traps.

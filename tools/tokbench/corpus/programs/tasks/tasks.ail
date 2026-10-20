@@ -1,12 +1,5 @@
-use std.env
-use std.fs
-use std.proc
 
 MAX_HOURS := 3.0
-
-error struct TaskError
-    id str
-    field str
 
 struct Todo
     id str
@@ -14,43 +7,18 @@ struct Todo
     status str
     hours float
 
-fn str_field(j Json, key str) str?
-    j.get(key)?.as_str()
-
-fn num_field(j Json, key str) float?
-    j.get(key)?.as_num()
-
-fn load_task(j Json) Todo ! TaskError
-    id := str_field(j, "id") else return TaskError(id: "?", field: "id")
-    title := str_field(j, "title") else return TaskError(id: id, field: "title")
-    status := str_field(j, "status") else return TaskError(id: id, field: "status")
-    hours := num_field(j, "hours") else 0.0
-    Todo(id: id, title: title, status: status, hours: hours)
-
-fn with_status(j Json, status str) Json
-    members := j.as_obj() else []
-    mut out := []
-    for m in members
-        if m.key == "status"
-            out.push(JsonMember(key: m.key, value: Json.Str(status)))
-        else
-            out.push(m)
-    Json.Obj(out)
-
-fn data_dir() str
-    parts := env.program().split("/")
-    "{parts[..parts.len() - 1].join("/")}/data"
+impl FromJson for Todo
+impl ToJson for Todo
 
 fn main() !
-    dir := data_dir()
+    dir := "{path.dir(env.program())}/data"
     doc := parse_json(fs.read_text("{dir}/tasks.json")? "reading tasks")? "parsing tasks"
-    items := (doc.get("tasks") else Json.Null).as_arr() else []
     mut updated := []
     mut ran := 0
     mut failed := 0
-    for item in items
-        task := load_task(item) else err
-            print("skip {err.id}: missing {err.field}")
+    for item in doc.arr("tasks") else []
+        mut task := Todo.from_json(item) else err
+            print("skip {item.str("id") else "?"}: {err.message}")
             updated.push(item)
             continue
         if task.status != "todo" or task.hours > MAX_HOURS
@@ -61,29 +29,29 @@ fn main() !
         ran += 1
         if r.status != 0
             failed += 1
+        task.status = if r.status == 0 then "done" else "failed"
         print("{task.id}: {r.out.trim()}")
-        if r.status == 0
-            updated.push(with_status(item, "done"))
-        else
-            updated.push(with_status(item, "failed"))
+        updated.push(task.to_json())
     out := Json.Obj([JsonMember(key: "tasks", value: Json.Arr(updated))]).to_text()
     fs.write_text("{dir}/tasks.out.json", out)?
     back := parse_json(fs.read_text("{dir}/tasks.out.json")?)?
     fs.remove("{dir}/tasks.out.json")?
-    count := (back.get("tasks") else Json.Null).as_arr() else []
-    print("ran {ran}, failed {failed}, wrote {count.len()} tasks ({out.chars().len()} chars)")
+    print("ran {ran}, failed {failed}, wrote {back.arr("tasks")?.len()} tasks ({out.len()} chars)")
 
 @test fn loads_a_task()
-    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}") else return
-    t := load_task(doc) else return
+    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}")?
+    t := Todo.from_json(doc)?
     assert_eq(t.title, "t")
     assert_eq(t.hours, 2.0)
-    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}") else return
-    missing := load_task(bad) else err
-        assert_eq(err.field, "title")
+    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}")?
+    missing := Todo.from_json(bad) else err
+        assert_eq(err.message, "missing title")
         return
     assert_eq(missing.id, "rejected")
 
-@test fn sets_status()
-    doc := parse_json("\{\"status\":\"todo\",\"n\":1}") else return
-    assert_eq(with_status(doc, "done").to_text(), "\{\"status\":\"done\",\"n\":1.0}")
+@test fn writes_a_task()
+    t := Todo(id: "a", title: "t", status: "done", hours: 1.0)
+    assert_eq(
+        t.to_json().to_text(),
+        "\{\"id\":\"a\",\"title\":\"t\",\"status\":\"done\",\"hours\":1.0}",
+    )

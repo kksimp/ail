@@ -1,0 +1,10 @@
+@inline
+@pure
+fn a_function_with_a_rather_long_name_and_params(first_value int, second_value int, third int) int
+    first_value + second_value + third
+
+@test fn short()
+    assert(true)
+
+fn main()
+    print(a_function_with_a_rather_long_name_and_params(1, 2, 3))

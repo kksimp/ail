@@ -3,9 +3,10 @@
 Chapter key: `own`
 
 > **Status:** Drafted (partial). Specified: the value model, parameter modes,
-> exclusivity, copy reporting, borrows, unique resource types, `defer`, and
-> shared references, and `move` parameters, with map entries as places. Not yet
-> designed: closures, and element projections.
+> exclusivity, copy reporting, borrows, unique resource types and their
+> cleanup, `defer`, shared references, and `move` parameters, with map entries
+> as places. Not yet designed: closures, element projections, `move self`, and
+> unique values in collections and generic code.
 
 ## Values
 
@@ -104,16 +105,92 @@ argument. *(ADR 0068)*
 
 **own.move.2** — An argument passed to a `move` parameter MUST be written with a
 leading `move` at the call site. Any later use of the moved-from binding is a
-compile-time error. *(ADR 0068)*
+compile-time error. *(ADR 0068)* An argument written `move` to a parameter
+that isn't `move` is a compile-time error. *(ADR 0190)*
 
-```ail skip=bootstrap
+**own.move.3** — Only a value the current scope owns can be moved: a local
+binding, a `move` parameter, or a new value such as a call's result. Moving a
+read-only or `mut` parameter, `self`, a loop variable, or a field or element
+of another value is a compile-time error. *(ADR 0190)*
+
+**own.move.4** — "Later use" is decided on every path through the function.
+A use that some path reaches after a move is a compile-time error, and so is a
+move inside a loop of a binding declared outside it, unless every path from
+the move leaves the loop or gives the binding a new value first. Assigning a
+whole binding a new value (`x = e`) makes it usable again. *(ADR 0190)*
+
+**own.move.5** — A `move` argument of a copyable type moves too: the binding
+can't be used afterwards, and no copy is made. *(ADR 0190)*
+
+**own.move.6** — A method declared `fn T.m(move self, ...)` takes ownership
+of its receiver. The call is written `x.m(...)`, with no mark: calling it on
+a local binding or `move` parameter moves it (`own.move.2`, `own.move.4`),
+and calling it on a part of another value (`w.f.m()`, `xs[i].m()`) is a
+compile-time error (`own.move.3`). Inside the method, `self` is owned like a
+`move` parameter: it can be moved, and it is released when the method
+returns unless it was moved (`own.uniq.7`). `move self` is not allowed in a
+`trait` or `impl` block. *(ADR 0317)*
+
+```ail fragment
 unique struct File
     fd int
 
 fn close(move f File)
-    ...
+    print("closing {f.fd}")
 
+f := File(fd: 3)
 close(move f)
+```
+
+```ail fragment
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    print("finishing {id}")
+    id
+
+c := Conn(id: 1)
+n := c.finish()
+```
+
+```ail error=own.move.6
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    id
+
+fn main()
+    c := Conn(id: 1)
+    n := c.finish()
+    print(c.id)
+```
+
+```ail
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    id
+
+fn main()
+    c := Conn(id: 1)
+    print(c.id)
+    n := c.finish()
+```
+
+```ail error=own.move.2
+unique struct File
+    fd int
+
+fn close(move f File)
+    print("closing {f.fd}")
+
+fn main()
+    f := File(fd: 3)
+    close(move f)
+    print(f.fd)
 ```
 
 ## Borrows
@@ -136,7 +213,7 @@ through any copy is observable through all of them. *(ADR 0063)*
 unless it is wrapped in a synchronised type defined by the concurrency
 chapter. *(ADR 0063, ADR 0025)*
 
-```ail skip=bootstrap
+```ail fragment
 struct Node
     value int
     children List[ref Node]
@@ -148,9 +225,42 @@ struct Node
 **own.ref.4** — The contents of a `ref` cell MAY be mutated through any copy
 of the reference, including one held in an immutable binding. *(ADR 0067)*
 
-```ail skip=bootstrap
+```ail fragment
+struct Node
+    value int
+    children List[ref Node]
+
 root := ref Node(value: 1, children: [])
 root.value = 2
+```
+
+**own.ref.5** — `ref e` creates a new cell holding the value of `e`, which is
+then independent of `e` (`own.val.1`). `ref T?` is an optional reference. A
+constant's value can't contain a `ref` (`mod.const.2`). *(ADR 0067, ADR 0192)*
+
+**own.ref.6** — Two `ref` values are equal (`==`) when they refer to the same
+cell. A `ref` type isn't `Ord` or `Hash`, so it can't be a map key or set
+element. The text form of a `ref` is `ref` followed by its contents' text
+form; a cell met again inside its own text form is shown as `ref ...`.
+*(ADR 0192)*
+
+**own.ref.7** — While a `mut` access to a cell's contents is in progress (a
+`mut self` method called on a `ref`, a `mut` argument or `for mut` loop that
+reaches into a cell), using that cell through any other copy of the reference
+traps. *(ADR 0193, ADR 0064)*
+
+```ail fragment
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    n += 1
+
+a := ref Counter(n: 0)
+b := a
+b.bump()
+assert(a.n == 1)
+assert(a == b)
 ```
 
 ## Unique types and cleanup
@@ -171,8 +281,125 @@ exactly once, when the scope that owns the value exits by any path
 **own.uniq.4** — Cleanup operations for values owned by the same scope run in
 reverse order of declaration. *(ADR 0066)*
 
+**own.uniq.5** — A field of a unique type makes its struct or enum unique:
+declaring it in a type that isn't `unique` is a compile-time error. A unique
+type can't be a map key or set element, the contents of a `ref`, or a type
+argument of a generic type or function. Optionals and results of a unique
+type are unique. *(ADR 0191)* It can be a list element or a map value
+(`own.uniq.8`). *(ADR 0318)*
+
+**own.uniq.6** — A unique type's cleanup is its implementation of the
+prelude trait `Drop`, whose one method is `fn drop(mut self)`. Only a unique
+type may implement `Drop`, and its `drop` MUST NOT be called directly.
+*(ADR 0191)*
+
+**own.uniq.7** — When a unique value is released, its `drop` runs first, then
+its unique fields are released, last field first. Assigning a new value to a
+place releases the unique value it held. A call's unique result that a
+statement doesn't use is released at the end of that statement. The binding
+of `if x := e` owns its value until the branch ends. A function's `move`
+parameters are released when it returns. *(ADR 0191)*
+
+```ail fragment
+unique struct Lock
+    id int
+
+impl Drop for Lock
+    fn drop(mut self)
+        print("unlock {id}")
+
+fn release(move l Lock)
+    print("releasing {l.id}")
+
+a := Lock(id: 1)
+b := Lock(id: 2)
+release(move a)
+# prints "releasing 1", "unlock 1", then "unlock 2" when the block ends
+```
+
+```ail error=own.uniq.5
+unique struct File
+    fd int
+
+struct Holder
+    f File
+```
+
+## Unique values in lists and maps
+
+**own.uniq.8** — `List[T]` and `Map[K, T]` of a unique `T` are unique: they
+move instead of being copied (`own.uniq.2`), and a struct with such a field
+is unique (`own.uniq.5`). The elements of a list literal, and the values of a
+map literal, move into it. When the collection is released, its elements are
+released, last first; `xs.clear()` releases the elements it removes, and
+assigning to `xs[i]` or `m[k]` releases the value it replaces. *(ADR 0318)*
+
+**own.uniq.9** — For a list or map of a unique type: `xs.push(move x)`,
+`xs.insert(i, move x)` and `xs.extend(move ys)` take ownership of their
+argument, which is marked `move` (`own.move.2`); `xs.pop()`,
+`xs.remove_at(i)` and `m.remove(k)` move an element out to the caller.
+Indexing (`xs[i]`, `m[k]`) and iteration (`for x in xs`) borrow an element in
+place: it can be read, passed to a parameter without `move`, and changed
+through `mut` (`xs[i].f = v`, `for mut x in xs`), but binding, returning or
+moving it is a compile-time error (`own.uniq.1`, `own.move.3`). *(ADR 0318)*
+
+**own.uniq.10** — A built-in method that would copy an element of a list or
+map of a unique type is a compile-time error: `first`, `last`, `min`, `max`,
+`sorted` and `take` of a list, and `get` and `values` of a map.
+*(ADR 0319)* A task handle is not a unique value in this sense: it can't be
+stored in a list (`conc.task.5`); a `TaskGroup` holds many tasks. *(ADR 0319)*
+
+```ail fragment
+unique struct Conn
+    id int
+
+impl Drop for Conn
+    fn drop(mut self)
+        print("close {id}")
+
+mut pool := List[Conn]()
+pool.push(move Conn(id: 1))
+pool.push(move Conn(id: 2))
+for c in pool
+    print("open {c.id}")
+if c := pool.pop()
+    print("took {c.id}")
+# prints "open 1", "open 2", "took 2", "close 2", then "close 1" when the block ends
+```
+
+```ail error=own.uniq.10
+unique struct Conn
+    id int
+
+fn main()
+    pool := [Conn(id: 1)]
+    first := pool.first()
+```
+
+```ail
+unique struct Conn
+    id int
+
+fn main()
+    pool := [Conn(id: 1)]
+    print(pool[0].id)
+```
+
 **own.defer.1** — `defer S` schedules statement `S` to run when the enclosing
 block exits by any path, including a trap. *(ADR 0066)*
 
 **own.defer.2** — Deferred statements in the same block run in reverse order
-of their `defer` statements. *(ADR 0066)*
+of their `defer` statements. *(ADR 0066)* Deferred statements and the cleanup
+of values owned by the block run together in reverse order of the `defer`
+statements and declarations. *(ADR 0191)*
+
+**own.defer.3** — A deferred statement is a call, another expression, or an
+assignment. It can't be `return`, `break`, `continue`, a binding, a loop or
+another `defer`; it can't move a value; and a binding it uses MUST NOT be
+moved before the block ends. *(ADR 0191)*
+
+```ail fragment
+defer print("second")
+defer print("first")
+print("body")
+```

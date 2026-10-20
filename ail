@@ -52,6 +52,14 @@ install_private_rust() {
     echo "ail: Rust $pin installed" >&2
 }
 
+# Fast path: when nothing the bootstrap builds from is newer than its binary, run it without
+# looking for a toolchain. Cargo's freshness check and the Rust version probe cost about 0.1 s per run.
+if [ "${1:-}" != selftest ] && [ -x "$binary" ] &&
+    [ -z "$(find "$root/bootstrap/src" "$manifest" "$root/bootstrap/Cargo.lock" "$root/bootstrap/build.rs" \
+        "$root/bootstrap/rust-toolchain.toml" -newer "$binary" 2>/dev/null | head -n 1)" ]; then
+    exec "$binary" "$@"
+fi
+
 # Pick cargo: the system's if it matches the pin, otherwise the private copy.
 if command -v cargo >/dev/null 2>&1 && [ "$(rustc --version 2>/dev/null | cut -d' ' -f2)" = "$pin" ]; then
     cargo="cargo"
@@ -71,7 +79,9 @@ if [ "$(uname -s)" = Darwin ] && ! xcrun --find cc >/dev/null 2>&1; then
 fi
 
 if [ "${1:-}" = selftest ]; then
-    exec "$cargo" test --quiet --release --manifest-path "$manifest"
+    shift
+    # Extra words go to `cargo test` (fuzz.run.1: `./ail selftest --test fuzz`).
+    exec "$cargo" test --quiet --release --manifest-path "$manifest" "$@"
 fi
 
 [ -x "$binary" ] || echo "ail: building the bootstrap (first run only) ..." >&2

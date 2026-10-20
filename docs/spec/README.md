@@ -81,8 +81,10 @@ aren't run.
 | 18 | [Effects and capabilities](18-effects.md) | `eff` | Drafted (partial) |
 | 19 | [Testing](19-testing.md) | `test` | Drafted (partial) |
 | 20 | [Contracts](20-contracts.md) | `contract` | Drafted (partial) |
-| 15 | Compile-time execution and metaprogramming | `ct` | Not started |
-| 16 | Reflection | `refl` | Not started |
+| 15 | [Compile-time execution and metaprogramming](15-compile-time.md) | `ct` | Drafted (partial) |
+| 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
+| 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace` | Drafted (partial) |
+| 22 | [Tool lookups: api, explain, fix](22-tools.md) | `api`, `explain`, `fix` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 

@@ -16,20 +16,23 @@ source. *(ADR 0163)*
 
 **eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
 `!T` or `!`, and `mutates` if it has a `mut` parameter or `mut self`. Both
-come from its own signature only. *(ADR 0163)*
+come from its own signature only. *(ADR 0163)* A function also has `mutates`
+if its body writes through a `ref` (`own.ref.4`): assigns to a place in a
+cell, passes one `mut`, or calls a `mut self` method on a `ref`. *(ADR 0192)*
 
 **eff.infer.3** — A function has every effect other than `fail` and
 `mutates` that any function it may call has. The effect sets of a program
 are the least sets that satisfy this rule (a fixed point over the call
-graph, so recursion is allowed). Constants contribute nothing, because a
-constant expression runs no code (`mod.const.2–3`). *(ADR 0163)*
+graph, so recursion is allowed). Constants contribute nothing: they are
+computed at compile time and may call only compile-time-safe code
+(`ct.const.2`). *(ADR 0163, ADR 0225)*
 
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
-`env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`, and
-`time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
+`env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`,
+`net.*` gives `net` and `io` (`std.net.1`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
 of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
-`spawn`. Nothing gives `net` yet. *(ADR 0163)*
+`spawn`. *(ADR 0163, ADR 0283)*
 
 **eff.infer.5** — A call whose target is known from the types (a free
 function, an inherent method, an associated function, or a trait method on a

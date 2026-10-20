@@ -1,0 +1,13 @@
+## type.map.8: `m.push(k, x)` appends to the list at `k`, starting an empty
+## list when `k` is missing; an untyped `{}` becomes `Map[K, List[X]]`.
+fn main()
+    mut groups := {}
+    for w in ["apple", "avocado", "banana", "blueberry", "cherry"]
+        groups.push(w.chars()[0], w)
+    for k in groups.keys()
+        print("{k}: {groups[k].join(", ")}")
+    mut typed := Map[int, List[str]]()
+    typed.push(1, "a")
+    typed.push(1, "b")
+    print(typed[1])
+    print(typed.len())

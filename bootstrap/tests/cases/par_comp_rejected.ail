@@ -1,0 +1,15 @@
+# A `par for` comprehension: one clause of a list, no effects, no handles
+# (conc.par.12).
+
+fn show(x int) int
+    print(x)
+    x
+
+fn main()
+    mut total := 0
+    a := [show(x) par for x in [1, 2, 3]]
+    ch := Channel[int](4)
+    b := [v par for v in ch]
+    c := [x + y par for x in [1] for y in [2]]
+    d := {x par for x in [1, 2]}
+    print("{a} {b} {c} {d} {total}")

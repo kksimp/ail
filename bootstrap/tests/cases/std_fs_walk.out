@@ -1,0 +1,24 @@
+std_fs_walk_case.tmp/.git/HEAD
+std_fs_walk_case.tmp/README
+std_fs_walk_case.tmp/src/deep/util.ail
+std_fs_walk_case.tmp/src/main.ail
+std_fs_walk_case.tmp/src/notes.txt
+["std_fs_walk_case.tmp/src/main.ail"]
+["std_fs_walk_case.tmp/src/deep/util.ail", "std_fs_walk_case.tmp/src/main.ail"]
+["std_fs_walk_case.tmp/README", "std_fs_walk_case.tmp/src"]
+["std_fs_walk_case.tmp/src/main.ail"]
+[]
+5
+false
+true
+true
+hello
+false
+hello
+fs.IoError(path: "std_fs_walk_case.tmp/src", kind: "is_dir")
+fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
+fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
+5
+fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
+[]
+false

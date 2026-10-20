@@ -1,0 +1,17 @@
+# trace.test.1-2: `ail test --trace` keeps the events of a failing test only.
+
+struct Counter
+    n int
+
+fn Counter.bump(mut self, by int)
+    self.n += by
+
+@test fn passes()
+    mut c := Counter(n: 0)
+    c.bump(1)
+    assert_eq(c.n, 1)
+
+@test fn fails()
+    mut c := Counter(n: 0)
+    c.bump(2)
+    assert_eq(c.n, 99)

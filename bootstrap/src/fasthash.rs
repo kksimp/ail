@@ -29,6 +29,27 @@ impl Hasher for FastHasher {
     fn write_usize(&mut self, n: usize) {
         self.0 = (self.0 ^ n as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15).rotate_left(29);
     }
+
+    // Integers (map keys, enum tags) in one step, not byte by byte.
+    fn write_u8(&mut self, n: u8) {
+        self.write_usize(usize::from(n));
+    }
+
+    fn write_u32(&mut self, n: u32) {
+        self.write_usize(n as usize);
+    }
+
+    fn write_u64(&mut self, n: u64) {
+        self.write_usize(n as usize);
+    }
+
+    fn write_i64(&mut self, n: i64) {
+        self.write_usize(n as usize);
+    }
+
+    fn write_isize(&mut self, n: isize) {
+        self.write_usize(n as usize);
+    }
 }
 
 pub type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<FastHasher>>;

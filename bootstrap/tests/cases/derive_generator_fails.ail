@@ -1,0 +1,25 @@
+## A generator's DeriveError, a missing generator and a non-type target (ct.derive.1-2, ct.derive.4).
+@derive(derive_size) trait Size
+    fn size(self) int
+
+@derive(derive_nothing) trait Nothing
+    fn nothing(self) int
+
+fn derive_size(t TypeInfo) str ! DeriveError
+    if t.kind == TypeKind.Enum
+        return DeriveError("`Size` needs a struct; `{t.name}` is an enum")
+    "fn size(self) int\n    {t.fields.len()}\n"
+
+enum Light
+    On
+    Off
+
+struct Box
+    w int
+
+impl Size for Light
+impl Size for int
+impl Nothing for Box
+
+fn main()
+    print(Light.On.size())

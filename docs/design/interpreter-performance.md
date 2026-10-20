@@ -1,7 +1,9 @@
 # Interpreter performance
 
-Non-normative. Measurements for [ADR 0175](../decisions/0175-interpreter-fast-paths.md)
-and [ADR 0176](../decisions/0176-keep-name-based-locals.md). The interpreter is
+Non-normative. Measurements for [ADR 0175](../decisions/0175-interpreter-fast-paths.md),
+[ADR 0176](../decisions/0176-keep-name-based-locals.md) (round 1) and
+[ADR 0219](../decisions/0219-interpreter-speed-round-two.md)–[0220](../decisions/0220-interpreter-site-caches.md)
+(round 2, at the end). The interpreter is
 the permanent oracle ([ADR 0032](../decisions/0032-keep-rust-interpreter-as-oracle.md)),
 so every change had to keep it simple and leave output byte-identical.
 
@@ -10,7 +12,10 @@ so every change had to keep it simple and leave output byte-identical.
 `tools/perfbench/run.sh [RUNS]` builds the bootstrap and prints the min and
 median wall time of `examples/interp.ail`, `json.ail`, `sheet.ail` and
 `tools/perfbench/programs/loops.ail` (integer loops, list pushes, map updates,
-string building). It also times the matching Python program for reference.
+string building). It also times the matching Python program (the tokbench
+corpus twin, or `programs/NAME.py`) and prints `ratio`: AIL's min over Python's
+min, so below 1 beats CPython. It times the binary directly: the `./ail`
+wrapper's toolchain probe used to add about 0.1 s ([ADR 0221](../decisions/0221-ail-skips-toolchain-probe.md)).
 Wall time on a shared machine is noisy, so each change was judged by
 instruction counts from `valgrind --tool=callgrind` on a release build with
 debug info, which are stable to a fraction of a percent.
@@ -60,3 +65,173 @@ and in-place string appends for `s = "{s}x"` (quadratic, but only visible for
 strings of tens of thousands of characters). Next steps if more speed is wanted
 are caching call targets per call site and a bytecode form, which belongs in
 Stage 3 rather than in the oracle.
+
+## Round 2: beating CPython (lane 36)
+
+Goal: AIL at or below CPython's wall time on the benchmark programs. Python
+3 on the same machine (min of 15 runs, process start-up included on both sides;
+CPython's is about 17 ms).
+
+### Where the time went (before round 2)
+
+callgrind on `interp.ail` (1,383M instructions) and a 3,000-start collatz
+loop (397M):
+
+- A call to `eval` for every operand, even names and literals, and a `Value`
+  built and dropped for every int operation (collatz: 1,700 instructions per
+  loop iteration).
+- 1.46 million allocations in `interp.ail`: a call environment, an operand
+  vector and an argument vector per call; a path vector per place; a field
+  vector per struct; an empty list per unit variant; a copy of every string
+  literal; a pair vector per struct construction to work out which field each
+  argument sets. About 17% of the instructions were `malloc` and `free`.
+- Hashing: three string-keyed lookups per call, three per method call, the
+  checker's call table per method call; SipHash on every `Map` key.
+- Trait dispatch (`dispatch`, a table probe and name scan) on every `==`,
+  ordering and text conversion of a char, string or enum, though the program
+  implemented none of the traits.
+- Locals: counters showed 1.7 million lookups scanning 2.7 entries on average,
+  about 5% of the run. Below ADR 0176's threshold, so still name-based.
+
+### Changes kept
+
+Each was kept only with a measured drop in instructions on `interp.ail` or the
+collatz loop, and byte-identical output (stdout, stderr and exit code) on every
+example and test case against the build before it. Percentages are of the
+instruction count at that step.
+
+| Change | Effect |
+|---|---|
+| Int locals and literals read in place; `n % 2`, `3 * n`, conditions as `bool`; `/ %` inline | collatz −45% |
+| Call environments pooled; no-`mut` calls skip places and overlap check | interp −12% |
+| Inline `Value::clone`; string literals shared | interp −3% |
+| `mut` operands move into the callee environment: no operand or value vectors | interp −7% |
+| `return` value kept in the interpreter (`Flow` 48 to 32 bytes); field and index reads in own frames | collatz −4% |
+| Int locals overwritten in place; `if` statements skip `eval` | collatz −8% |
+| Place roots without a path vector; read-only receivers and arguments by value | interp −7% |
+| No trait dispatch when the program defines none of `Eq`, `Ord`, `ToStr` | interp −2% |
+| Per-site caches: call target, method resolution, field slots (ADR 0220) | interp −10% |
+| Field and index reads borrowed; shared empty field lists | interp −3% |
+| `local.field = e` without a place | interp −2% |
+| `mut` operands that are plain locals moved without places | interp −8% |
+| Fast integer hashing for map keys; pooled builtin argument lists | interp −2%, list push loop −12% |
+
+### Tried and dropped
+
+Two inline steps in `Place` (+1.5% on `interp.ail`), fat LTO with one codegen
+unit (no change in instructions, build 60 s instead of 25 s), `#[inline(never)]`
+on the cold statement arms and assignment inside `block` (more instructions on
+collatz), reading int operands two operators deep (no gain), a hand-written
+allocator (allocation is already down to 0.37 million calls).
+
+### Results (Linux x86-64)
+
+| Program | Instructions before → after | Wall, AIL vs CPython (min of 15) | Ratio before → after |
+|---|---|---|---|
+| interp | 1,383M → 739M (−46.5%) | 0.097 s vs 0.096 s | 1.95 → 1.01 |
+| json | 42.2M → 28.5M (−32%) | 0.008 s vs 0.041 s | → 0.20 |
+| sheet | 130.5M → 82.7M (−37%) | 0.014 s vs 0.055 s | → 0.25 |
+| loops | 6,736M → 3,629M (−46%) | 0.249 s vs 0.244 s | 2.85 → 1.02 |
+
+After merging the plan branch (ownership, `ref` cells, tracing, tasks, thread pool), wall time was interp 0.093 s vs 0.088 s (1.06) and loops 0.244 s vs 0.232 s (1.05); the plan-branch binary took 0.178 s and 0.66 s on the same two. The fast paths step aside when a program has unique types or runs with `--watch`.
+
+Ratio is AIL min / CPython min; below 1.0 means AIL is faster. Instruction counts come from callgrind and are stable; wall time varies a few percent.
+
+### Which programs beat CPython, and why not the rest
+
+json and sheet beat CPython clearly. interp and loops are at parity (within noise), not ahead.
+
+Where loops still loses: the map-update section (AIL about 0.027 s against CPython's 0.011 s) and the string-build section, where `s = "{s}x"` copies twice and CPython appends in place when it holds the only reference. The collatz section beats CPython (0.19 s against about 0.21 s) and list push/sum ties. The remaining profile is flat: name lookup is about 5% of instructions, so the name-based environment of ADR 0176 stays. Closing the last gap needs resolved local slots or a bytecode tier, which is a separate decision.
+
+### Left alone
+
+Slot-resolved locals (about 5% of a run, [ADR 0176](../decisions/0176-keep-name-based-locals.md)),
+`Rc<[Value]>` struct fields (halves struct allocations but touches every
+builtin), a 24-byte `Value`, in-place string appends (`s = "{s}x"` copies the
+string, which CPython avoids by reusing its buffer when the count is one), and
+the bytecode form, which belongs in Stage 3 and not in the oracle.
+
+## Round 3: where the time goes now (lane 61)
+
+Profile of `examples/interp.ail` (callgrind, 783M instructions, plan branch
+at ecd6d75), self cost of the top ten, as a share of the run:
+
+| # | Cost | Share | What it is |
+|---|---|---|---|
+| 1 | `eval` | 9.1% | the hot expression arms and the leaf reads |
+| 2 | `method_call` | 5.7% | site-cache lookup, receiver kind, `ref` cell and handle checks |
+| 3 | malloc, free | 5.9% | struct and enum construction allocates twice (`Rc` and its `Vec`) |
+| 4 | `stmt` | 5.1% | statement dispatch, `let`, watch and `else` checks |
+| 5 | `eval_general` | 4.4% | construction, `match`, interpolation |
+| 6 | `invoke` | 3.2% | operand preparation, env pool |
+| 7 | `eval_binary` | 3.0% | operators that are not int-on-int |
+| 8 | `block` | 2.8% | scope marks, task and unique checks |
+| 9 | `Value` drop glue | 2.3% | releasing `Rc` fields when an environment is cleared |
+| 10 | `run_body`, `matches` | 3.4% | frame set-up, enum pattern tests |
+
+No entry is above 10%. The next step per cost is not another local fast
+path: a name scan is about 5% inside `eval`, one hash lookup per site is
+under 3%, and removing the float-literal probes from the literal arms saved
+0.4% on `interp` and 3% on a collatz loop. To get from parity to the
+1.5x-faster target the work has to remove whole layers (name search, `Flow`
+results, `Rc` indirection and per-node dispatch together), which is what a
+compiled form does.
+
+Measured and rejected this round: fat LTO with one codegen unit (collatz 12%
+faster by wall time, `interp` 8% slower, so no net win).
+
+Kept: a one-word mask over the lines that hold sized or float-typed literals,
+so the common int literal skips two table probes ([ADR 0297](../decisions/0297-no-bytecode-tier-in-the-oracle.md)).
+
+## Front end (lane 81)
+
+Agents and the editor run `ail check`, `ail api` and `ail effects` after
+nearly every edit, so their latency matters more than one long run
+([ADR 0332](../decisions/0332-front-end-allocator.md)–[0334](../decisions/0334-fast-hashing-and-lexing-in-the-front-end.md)).
+Wall time: best of 15, base and new binaries run alternately, directly (not
+through `./ail`), Linux x86-64, plan branch at c9799b5. Instructions:
+callgrind on a release build with debug info.
+
+| Command | Before ms | After ms | Speed-up |
+|---|---|---|---|
+| `ail check tools/edit/edit.ail` (4,800 lines) | 33.0 | 26.4 | 1.25x |
+| `ail api --symbols tools/edit/edit.ail` | 40.4 | 33.5 | 1.20x |
+| `ail api tools/edit/edit.ail` | 38.6 | 29.8 | 1.29x |
+| `ail effects tools/edit/edit.ail` | 35.4 | 27.3 | 1.29x |
+| `ail check examples/sheet.ail` | 5.0 | 4.6 | 1.08x |
+| `ail check examples/json.ail` | 3.6 | 3.3 | 1.08x |
+| `ail check examples/hello.ail` | 1.7 | 1.8 | 0.95x |
+| `ail version` (process start) | 1.3 | 1.3 | 1.00x |
+| `ail test tools/edit/edit.ail` (system allocator) | 86.6 | 82.7 | 1.05x (noise) |
+
+Where `ail check tools/edit/edit.ail` spent its instructions (inclusive):
+
+| Phase | Before | After |
+|---|---|---|
+| Total | 163.3M | 106.3M (-35%) |
+| Lex (edit.ail, `std.ui.widgets`, `themes`) | 45.1M | about 31M |
+| Lex the prelude, std declarations | 4.6M | about 3M |
+| Parse | 37.0M | 24.6M |
+| Resolve modules | 26.9M | 12.7M |
+| Check | 43.8M | 32.2M |
+| Process start (`ail version`) | about 0.4M | same |
+
+Before the change, `malloc` and `free` took 25%, SipHash 8%, and the lexer's
+keyword and symbol search (a `String` per word, compared with every keyword)
+about 6%. Wall time was a third kernel: about 3,350 page faults on fresh heap.
+After: page faults about 150 (huge pages), no SipHash in the front end.
+
+The prelude and the standard modules cost about 0.3 ms of a 1.7 ms `ail check
+hello`, so an on-disk cache of them would save little
+([ADR 0333](../decisions/0333-no-front-end-disk-cache-yet.md)). The target
+was 2x on the editor check; this round reached 1.25x wall and 1.54x
+instructions. Next costs, in order: the lexer turns each line into a
+`Vec<char>` (lexing is a third of what remains), the checker clones `Ty`
+values, and every name is a `String`; each needs a change across `lexer.rs`,
+`parser.rs` and `check.rs`.
+
+Run programs (`ail run`, system allocator) are unchanged within noise:
+interp 120 → 116 ms, json 6.6 → 6.6, sheet 13.7 → 14.2, loops 277 → 288.
+`bootstrap/tests/front_end_alloc.rs` checks that `ail check` and `ail api
+--symbols` print the same bytes with and without the front-end allocator
+(`AIL_SYSTEM_ALLOC=1`) on every example and test case.

@@ -7,6 +7,12 @@ error struct IoError
     path str
     kind str
 
+## std.fs.10 (ADR 0281)
+struct Metadata
+    size int
+    modified_ms int
+    is_dir bool
+
 ## std.proc
 struct Output
     status int
@@ -17,6 +23,17 @@ error struct ProcError
     cmd str
     kind str
 
+## std.net (ADR 0283)
+struct Response
+    status int
+    headers Map[str, str]
+    body str
+
+error struct NetError
+    url str
+    kind str
+    message str
+
 ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
 struct Window
     handle int
@@ -25,6 +42,11 @@ struct Size
     cols int
     rows int
 
+struct Modifiers
+    ctrl bool
+    alt bool
+    shift bool
+
 enum Event
     Key(key str, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
@@ -32,6 +54,25 @@ enum Event
     Mouse(col int, row int, button str, kind str)
     Scroll(lines int)
 
+## std.ui.16: how `put_styled` draws text.
+struct Style
+    bold bool
+    italic bool
+    underline bool
+
+## std.ui.18: the caret's shape.
+enum Cursor
+    Bar
+    Block
+    Underline
+
 error struct UiError
     kind str
     message str
+
+## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
+## `tensor.zeros(shape)`, read with its methods. The elements live in the
+## bootstrap (`tensor.rs`). The field is a placeholder the checker rejects
+## (std.tensor.1), so a tensor is `Eq` but neither ordered nor a key.
+struct Tensor[T]
+    elements Map[int, T]

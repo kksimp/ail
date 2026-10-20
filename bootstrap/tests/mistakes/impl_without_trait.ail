@@ -1,0 +1,9 @@
+struct Point
+    x int
+
+impl Point
+    fn get(self) int
+        x
+
+fn main()
+    print(1)

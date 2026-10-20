@@ -419,6 +419,9 @@ t := s.replace("l", "L") # "HéLLo"
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
 
+**type.str.15** — `repeat` and `pad_left`/`pad_right` MUST trap, rather than
+exhaust memory, when the text they would build is over 2^30 bytes. *(ADR 0271)*
+
 **type.str.12** — `s.len()` returns the number of characters (Unicode scalar
 values) of `s`, the same as `s.chars().len()` without building the list; it
 takes time proportional to the length. `s.byte_len()` returns the number of
@@ -585,22 +588,35 @@ the bounds rule of `type.coll.4`. Open ranges exist only inside `[]`;
 `T?`: the first least (greatest) element, or `none` if the list is empty. An
 inherent method takes precedence over a method of the same name from `Ord`
 (`trait.res.2`), so `xs.min()` isn't `Ord`'s `min(other)`. A binding of
-`xs.sort()`'s result gets a help suggesting `sorted()`. *(ADR 0136, ADR 0137)*
+`xs.sort()`'s result gets a help suggesting `sorted()`. Each also takes a key
+function, `by: |x| key` (`expr.key.1`); `s.sorted(by: ...)` works on a set.
+*(ADR 0136, ADR 0137, ADR 0250)*
+
+**type.coll.15** — `xs.take(n)` returns a new list of the first `n`
+elements, or all of them when the list is shorter. A negative `n` traps.
+*(ADR 0250)*
 
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
 and `List[float]`, returning a `float`. It is a built-in special case that user
-code can't declare (ADR 0128 is unchanged for user code). It starts at `0` or
-`0.0` and adds left to right with `+`: an `int` overflow traps, and an empty
-list gives `0` or `0.0`. For `float` it matches a Python loop, not Python
-3.12's compensated `sum()`. *(ADR 0136)*
+code can't declare (ADR 0128 is unchanged for user code). An empty list
+gives `0` or `0.0`. For `int` it adds left to right from `0`, and an overflow
+of any partial sum traps. For `float` the sum `S(xs)` is a fixed tree that
+depends only on the length: if it has at most 32 elements, four partial sums
+`p0`–`p3`, where `pk` adds the elements whose index is `k` modulo 4 left to
+right from `0.0`, and `S = (p0 + p1) + (p2 + p3)`; otherwise
+`S(xs[..m]) + S(xs[m..])` with `m = 32 × ⌈len / 64⌉`. Vector and parallel
+implementations compute the same tree (`conc.par.1`). *(ADR 0136,
+ADR 0239)*
 
 **type.coll.13** — A local declared with `:=` from `[]` or `{}` with no
 expected type takes its type from the first statement that determines it:
-`x.push(e)` (a `List`), `x.add(e)` (a `Set`), `x[k] = v` (a `Map`), `x = e`,
+`x.push(e)` (a `List`), `x.add(e)` (a `Set`), `x[k] = v` or `x[k] op= v`
+with a number `v` (a `Map`, ADR 0251, ADR 0280), `x.push(k, e)` (a
+`Map[K, List[E]]`, ADR 0341), `x = e`,
 passing `x` where a parameter's type is known, returning `x`, or using it as
 a field's value. Any other use before then, or none at all, is a
 compile-time error whose help suggests `List[T]()`, `Map[K, V]()` or
-`Set[T]()`. *(ADR 0143)*
+`Set[T]()`. *(ADR 0143, ADR 0280)*
 
 ```ail fragment
 mut out := []
@@ -624,25 +640,37 @@ compile-time error that names the cause. *(ADR 0131, ADR 0133)*
 **type.map.3** — `m[k]` reads the value for `k` and traps if `k` is missing;
 the message shows the key's text form. An entry `m[k]` of a map place is a
 place (`own.place.1` amended), but only when `m[k]` is the whole target of `=`
-does it insert or replace. Every other use traps if `k` is missing:
-- the target of `op=` (`m[k] += 1`);
+does it insert or replace, and when it is the whole target of `op=` a missing
+`k` starts from zero (`type.map.7`). Every other use traps if `k` is missing:
 - a step before the last one in a longer place (`m[k].f = v`, `m[k][j] = v`);
   `m[a][b] = v` needs `m[a]` to exist and inserts `b`;
 - the receiver of a `mut self` method (`m[k].push(x)`);
 - a `mut` argument, and `for mut x in m[k]`.
 
-`k` is evaluated once, before the right-hand side. *(ADR 0131)*
+`k` is evaluated once, before the right-hand side. *(ADR 0131, ADR 0251)*
 
 ```ail fragment
 mut m := Map[str, int]()
 m["a"] = 1              # inserts
 m["a"] = 2              # replaces; "a" keeps its position
 m["a"] += 1             # 3
-m["z"] += 1             # traps: key "z" is missing
+x := m["z"]             # traps: key "z" is missing
 mut g := Map[int, Map[int, str]]()
 g[1] = Map[int, str]()
 g[1][2] = "x"           # inserts key 2 into g[1]
 g[3][4] = "y"           # traps: g has no key 3
+```
+
+**type.map.7** — When `m[k]` is the whole target of an arithmetic `op=`
+(`expr.op.2`) and `k` is missing, the operation starts from zero (`0`, `0.0`,
+or the sized type's zero) and inserts `k` at the end. Only the last step
+defaults: `m[a][b] += 1` still needs `m[a]`. `V` is numeric, since `op=` needs
+an arithmetic type. *(ADR 0251)*
+
+```ail fragment
+mut counts := Map[str, int]()
+for w in ["a", "b", "a"]
+    counts[w] += 1      # {"a": 2, "b": 1}
 ```
 
 **type.map.4** — Two maps are `==` when they have the same keys with equal
@@ -667,6 +695,17 @@ both plausible readings. `for mut` over a set, or over `m.keys()` or
   was added; `s.remove(x)` (`mut self`) returns whether `x` was there;
   `s.contains(x)` returns a `bool`; `s.sorted()` returns a `List[T]` (`T` MUST
   be `Ord`); `s.is_subset(t)` returns a `bool`.
+
+**type.coll.16** — `s.union(t)`, `s.intersect(t)` and `s.difference(t)`
+return a new `Set[T]` (`T` MUST be `Hash`): the elements in either set, in
+both, or in `s` but not `t`. The result keeps `s`'s order, then (for `union`)
+the new elements of `t` in order. A `List[T]` has the same three methods
+taking a `List[T]`, so `m.keys().union(n.keys())` works; the result is still a
+set. *(ADR 0340)*
+
+**type.map.8** — On a `Map[K, List[T]]`, `m.push(k, x)` (`mut self`) appends
+`x` to the list at `k`, and starts an empty list first when `k` is missing. On
+a map with any other value type it is a compile-time error. *(ADR 0341)*
 
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `v := m.get(k) else d`, `contains`, and iterating `keys()` and indexing.

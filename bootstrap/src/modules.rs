@@ -16,7 +16,7 @@
 //! (mod.vis.1) are checked here; private fields and methods, which need
 //! types, in the checker (`Program::hidden`).
 
-use std::collections::{HashMap, HashSet};
+use crate::fasthash::{FastMap as HashMap, FastSet as HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::ast::{
@@ -43,6 +43,27 @@ pub fn load(arg: &str) -> Result<(Program, Vec<Diagnostic>), String> {
     load_package(root, root_files, None)
 }
 
+/// Like `load` for the package directory `dir`, for a query about `target`
+/// (text `src`) in it (api.pkg.2). Also returns how many lines to add to a
+/// line of `target` to get a position in the program: 0 for a file of the
+/// root module, which is loaded first so nothing shifts, else its file base.
+pub fn load_in(dir: &str, target: &str, src: &str) -> Result<(Program, Vec<Diagnostic>, usize), String> {
+    let mut files = ail_files(Path::new(dir));
+    let want = std::fs::canonicalize(target).map_err(|e| format!("can't read {target}: {e}"))?;
+    let same = |f: &PathBuf| std::fs::canonicalize(f).is_ok_and(|c| c == want);
+    if let Some(at) = files.iter().position(same) {
+        let first = files.remove(at);
+        files.insert(0, first);
+        let (prog, diags) = load_package(PathBuf::from(dir), files, Some(src.to_string()))?;
+        return Ok((prog, diags, 0));
+    }
+    let (prog, diags) = load(dir)?;
+    let base = prog.files.iter().find(|f| same(&PathBuf::from(&f.path))).map(|f| f.base).ok_or_else(|| {
+        format!("{target} is not part of the package {dir}: no root file imports its module (api.pkg.2)")
+    })?;
+    Ok((prog, diags, base))
+}
+
 /// Like `load` for a single file whose text is `src` (for `ail api`).
 pub fn load_src(path: &str, src: &str) -> (Program, Vec<Diagnostic>) {
     let path = Path::new(path);
@@ -64,7 +85,7 @@ fn load_package(
     let mut files: Vec<SourceFile> = Vec::new();
     let mut tokens: Vec<Token> = Vec::new();
     let mut diags = Vec::new();
-    let mut seen: HashSet<String> = HashSet::from([String::new()]);
+    let mut seen: HashSet<String> = HashSet::from_iter([String::new()]);
     let mut queue: Vec<(String, Vec<PathBuf>)> = vec![(String::new(), root_files)];
     // The manifests come first: they say where each package is (mod.pkg.1-3).
     let packages = crate::packages::Packages::read(&root);
@@ -76,7 +97,10 @@ fn load_package(
             }
             let src = match first_src.take() {
                 Some(src) => src,
-                None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                None => match crate::stdlib::ail_module_source(&p.display().to_string()) {
+                    Some(src) => src.to_string(),
+                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                },
             };
             let base = files.len() * FILE_LINES;
             let (mut toks, lex_diags) = lex(&src);
@@ -84,10 +108,21 @@ fn load_package(
             shift(&mut toks, base);
             diags.extend(lex_diags.into_iter().map(|mut d| {
                 d.pos.line += base;
+                for e in d.fixes.iter_mut().flat_map(|f| f.edits.iter_mut()) {
+                    e.pos.line += base;
+                    e.end.line += base;
+                }
                 d
             }));
             for import in scan_uses(&toks) {
                 if import.first().is_some_and(|s| s == "std") {
+                    // std.ui.19: a standard module written in AIL.
+                    let dotted = import.join(".");
+                    if let Some(path) = crate::stdlib::ail_module_path(&dotted)
+                        && seen.insert(dotted.clone())
+                    {
+                        queue.push((dotted, vec![PathBuf::from(path)]));
+                    }
                     continue;
                 }
                 let target = packages.target(&module, &import);
@@ -105,12 +140,32 @@ fn load_package(
     let end = Pos { line: files.len() * FILE_LINES, col: 1 };
     tokens.push(Token { tok: Tok::Eof, pos: end });
 
-    let (mut prog, parse_diags) = crate::parser::parse_after_prelude(tokens);
-    diags.extend(parse_diags);
-    prog.files = files;
-    resolve(&mut prog, &mut diags, &packages);
+    // ct.derive.2: a derive generator needs the parsed program, and its
+    // output is parsed again with it (`derive.rs`).
+    let again = (diags.is_empty() && crate::derive::wanted(&tokens)).then(|| (tokens.clone(), files.clone()));
+    let (mut prog, mut diags) = assemble(tokens, files, &packages, diags);
+    if let Some((tokens, files)) = again
+        && !diags.iter().any(|d| !d.warning)
+    {
+        (prog, diags) = crate::derive::expand(prog, diags, tokens, files, &|t, f| assemble(t, f, &packages, Vec::new()));
+    }
     packages.finish(&mut prog, &mut diags);
     Ok((prog, diags))
+}
+
+/// Parse the tokens of `files` after the prelude and resolve their names.
+fn assemble(
+    tokens: Vec<Token>,
+    files: Vec<SourceFile>,
+    packages: &crate::packages::Packages,
+    mut diags: Vec<Diagnostic>,
+) -> (Program, Vec<Diagnostic>) {
+    let (mut prog, parse_diags) = crate::parser::parse_after_prelude(tokens);
+    diags.extend(parse_diags);
+    one_per_line(&mut diags);
+    prog.files = files;
+    resolve(&mut prog, &mut diags, packages);
+    (prog, diags)
 }
 
 /// The `.ail` files directly in `dir`, sorted (mod.unit.1).
@@ -120,6 +175,42 @@ fn ail_files(dir: &Path) -> Vec<PathBuf> {
     files.retain(|p| p.is_file() && p.extension().is_some_and(|x| x == "ail"));
     files.sort();
     files
+}
+
+/// One syntax diagnostic per line (gram.rec.1, ADR 0263): a mistake on a line
+/// often breaks the lexer and the parser in turn, and the first report, the
+/// leftmost, names it. Fixes of the reports it absorbs join its own when they
+/// don't overlap, so `ail fix` still settles the whole line in one round.
+/// String errors stay: they are independent of the rest.
+fn one_per_line(diags: &mut Vec<Diagnostic>) {
+    diags.sort_by_key(|d| (d.pos.line, d.pos.col));
+    let mut kept: Vec<Diagnostic> = Vec::new();
+    for d in std::mem::take(diags) {
+        let same_line = kept.last().is_some_and(|k| !k.warning && k.pos.line == d.pos.line);
+        if d.warning || d.rule.starts_with("lex.str.") || !same_line {
+            kept.push(d);
+            continue;
+        }
+        let last = kept.last_mut().unwrap();
+        if let (Some(into), Some(from)) = (last.fixes.first_mut(), d.fixes.first())
+            && explicit(&into.edits)
+            && explicit(&from.edits)
+            && !from.edits.iter().any(|e| into.edits.iter().any(|o| overlaps(o, e)))
+        {
+            let more: Vec<_> = d.fixes.into_iter().next().unwrap().edits;
+            into.edits.extend(more);
+        }
+    }
+    *diags = kept;
+}
+
+fn explicit(edits: &[crate::diag::Edit]) -> bool {
+    edits.iter().all(|e| e.old.is_none() && e.anchor == crate::diag::Anchor::Exact)
+}
+
+fn overlaps(a: &crate::diag::Edit, b: &crate::diag::Edit) -> bool {
+    let key = |p: Pos| (p.line, p.col);
+    key(a.pos) <= key(b.end) && key(b.pos) <= key(a.end)
 }
 
 fn shift(tokens: &mut [Token], base: usize) {
@@ -191,7 +282,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
     let module_of = |prog: &Program, pos: Pos| prog.module_at(pos).to_string();
 
     // Every module's top-level names (mod.unit.1), before renaming.
-    let mut items: Items = modules.iter().map(|m| (m.clone(), HashMap::new())).collect();
+    let mut items: Items = modules.iter().map(|m| (m.clone(), HashMap::default())).collect();
     {
         let mut add = |name: &str, pos: Pos| {
             if is_prelude(pos) {
@@ -218,7 +309,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
     }
 
     // Imports, per file (mod.use.1, mod.use.3-6).
-    let mut imports: Vec<HashMap<String, Target>> = vec![HashMap::new(); prog.files.len()];
+    let mut imports: Vec<HashMap<String, Target>> = vec![HashMap::default(); prog.files.len()];
     let mut first_decl: Vec<usize> = vec![usize::MAX; prog.files.len()];
     {
         let decls = prog
@@ -238,7 +329,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         }
     }
     let mut edges: Vec<(String, String, Pos)> = Vec::new();
-    let mut unresolved: Vec<HashSet<String>> = vec![HashSet::new(); prog.files.len()];
+    let mut unresolved: Vec<HashSet<String>> = vec![HashSet::default(); prog.files.len()];
     for u in &prog.uses {
         let Some(fi) = file_index(prog, u.pos) else { continue };
         let module = prog.files[fi].module.clone();
@@ -254,7 +345,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         // checker's (`check/stdlib.rs`); their uses are left as written.
         let path: Vec<String> = u.path.iter().map(|(s, _)| s.clone()).collect();
         let found = packages.target(&module, &path);
-        let target = if u.path[0].0 == "std" {
+        let target = if u.path[0].0 == "std" && crate::stdlib::ail_module_path(&dotted).is_some() {
+            Some(Target::Module(dotted.clone()))
+        } else if u.path[0].0 == "std" {
             Some(Target::Std)
         } else if found.module == module {
             diags.push(
@@ -265,8 +358,12 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         } else if found.undeclared {
             let head = &u.path[0].0;
             diags.push(
-                Diagnostic::new("mod.pkg.3", u.path[0].1, format!("package `{head}` is not a dependency of this package"))
-                    .help(format!("add `dep {head} path DIR` to this package's `ail.pkg`")),
+                Diagnostic::new(
+                    "mod.pkg.3",
+                    u.path[0].1,
+                    format!("package `{head}` is not a dependency of this package"),
+                )
+                .help(format!("add `dep {head} path DIR` to this package's `ail.pkg`")),
             );
             None
         } else if items.contains_key(&found.module) && !found.module.is_empty() {
@@ -373,6 +470,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             for f in s.fields.iter_mut() {
                 cx.type_ref(&mut f.ty);
             }
+            for c in s.invariants.iter_mut() {
+                cx.expr(&mut c.cond);
+            }
             diags.extend(cx.diags);
         }
     }
@@ -416,6 +516,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         // contract.decl.2: conditions name the module's items as the body does.
         for c in f.contracts.iter_mut() {
             cx.expr(&mut c.cond);
+            for (_, e) in c.olds.iter_mut() {
+                cx.expr(e);
+            }
         }
         if let Some(b) = &mut f.body {
             cx.block(b);
@@ -430,6 +533,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             diags.extend(cx.diags);
         }
     }
+    crate::parser::link_inherited_contracts(prog);
 }
 
 /// mod.use.5: imports must not form a cycle. Each cycle is reported once,
@@ -437,7 +541,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
 fn report_cycles(edges: &[(String, String, Pos)], diags: &mut Vec<Diagnostic>) {
     let mut sorted: Vec<&(String, String, Pos)> = edges.iter().collect();
     sorted.sort_by_key(|(_, _, p)| (p.line, p.col));
-    let mut reported: HashSet<Vec<String>> = HashSet::new();
+    let mut reported: HashSet<Vec<String>> = HashSet::default();
     for (from, to, pos) in &sorted {
         // A path back from `to` to `from` closes a cycle through this import.
         let Some(mut path) = find_path(edges, to, from) else { continue };
@@ -457,9 +561,9 @@ fn report_cycles(edges: &[(String, String, Pos)], diags: &mut Vec<Diagnostic>) {
 
 /// A path of imports from `from` to `to`, both included.
 fn find_path(edges: &[(String, String, Pos)], from: &str, to: &str) -> Option<Vec<String>> {
-    let mut prev: HashMap<&str, &str> = HashMap::new();
+    let mut prev: HashMap<&str, &str> = HashMap::default();
     let mut todo = vec![from];
-    let mut seen: HashSet<&str> = HashSet::from([from]);
+    let mut seen: HashSet<&str> = HashSet::from_iter([from]);
     while let Some(m) = todo.pop() {
         if m == to {
             let mut path = vec![to.to_string()];
@@ -555,7 +659,7 @@ impl Cx<'_> {
                 *name = self.type_name(name, t.pos);
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
-            TypeKind::Optional(inner) => self.type_ref(inner),
+            TypeKind::Optional(inner) | TypeKind::Ref(inner) => self.type_ref(inner),
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {
                     self.type_ref(ok);
@@ -612,7 +716,7 @@ impl Cx<'_> {
                 self.expr(cond);
                 self.block(body);
             }
-            Stmt::For { var, var_pos, iter, body, .. } => {
+            Stmt::For { var, var_pos, iter, body, .. } | Stmt::With { mutex: iter, var, var_pos, body, .. } => {
                 self.expr(iter);
                 self.local(var, *var_pos);
                 self.block(body);
@@ -622,6 +726,7 @@ impl Cx<'_> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Stmt::Defer(inner, _) => self.stmt(inner),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
         }
     }
@@ -732,7 +837,7 @@ impl Cx<'_> {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);
@@ -815,7 +920,8 @@ pub fn report(files: &[SourceFile], diags: Vec<Diagnostic>, json: bool) {
         d.pos = local(d.pos);
         d.end = d.end.map(local);
         for n in d.notes.iter_mut() {
-            if index(n.pos) != fi {
+            // ct.gen.3: a note in generated code already gives its address.
+            if index(n.pos) != fi && !files[index(n.pos)].path.starts_with("gen:") {
                 n.message = format!("{} (in {})", n.message, files[index(n.pos)].path);
             }
             n.pos = local(n.pos);

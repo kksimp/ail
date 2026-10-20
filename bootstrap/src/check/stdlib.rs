@@ -1,13 +1,13 @@
-//! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc` and
-//! `std.time` (spec 17-std): their imports (std.use.1-3), the types of
-//! their functions (std.fs.1-7, std.env.1-4, std.io.1-4, std.proc.1,
-//! std.time.1-2), and their types `fs.IoError`, `proc.Output` and
-//! `proc.ProcError` (std.err.1).
+//! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
+//! `std.net` and `std.time` (spec 17-std): their imports (std.use.1-3), the
+//! types of their functions (std.fs.1-12, std.env.1-5, std.io.1-4,
+//! std.proc.1-3, std.net.1-4, std.time.1-2), and their types `fs.IoError`,
+//! `proc.Output`, `proc.ProcError` and `net.NetError` (std.err.1).
 
 use std::collections::HashMap;
 
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
-use crate::ast::{Arg, TypeRef};
+use crate::ast::{Arg, Expr, TypeRef};
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::stdlib::{self, StdCall};
 
@@ -41,6 +41,7 @@ impl<'p> Checker<'p> {
                     );
                     continue;
                 }
+                [(root, _), _, _, ..] if root == "std" && stdlib::ail_module_path(&u.dotted()).is_some() => continue,
                 [(root, _), _, _, ..] if root == "std" => {
                     let (_, last) = u.path.last().expect("a path");
                     self.error_help(
@@ -69,9 +70,36 @@ impl<'p> Checker<'p> {
         }
     }
 
-    /// The standard module imported under `name`, if any (std.use.1).
+    /// The standard module that `name` names, if any: the one imported
+    /// under `name` (std.use.1), or else the standard module called `name`,
+    /// which is in scope without a `use` unless the program declares or
+    /// imports something else under that name (std.use.4). Locals are
+    /// checked first by the callers, so a local also hides it.
     pub(super) fn std_module(&self, name: &str) -> Option<&'static str> {
-        stdlib::imported(self.prog, name)
+        stdlib::imported(self.prog, name).or_else(|| {
+            let hidden = self.types.contains_key(name)
+                || self.traits.contains_key(name)
+                || self.consts.contains_key(name)
+                || self.fns.contains_key(name)
+                || self.prog.uses.iter().any(|u| u.name().0 == name);
+            if hidden { None } else { stdlib::module_names().into_iter().find(|m| *m == name) }
+        })
+    }
+
+    /// std.use.4: `n.f(...)` where the local `n` hides the standard module
+    /// `n`, which has a function `f`. Reports it and returns true.
+    pub(super) fn hidden_std_module(&mut self, recv: &Expr, name: &str, pos: Pos) -> bool {
+        let Expr::Name(n, _) = recv else { return false };
+        if self.local(n).is_none() || !stdlib::functions(n).contains(&name) {
+            return false;
+        }
+        self.error_help(
+            "std.use.4",
+            pos,
+            format!("the local `{n}` hides the standard module `std.{n}`, so `{n}.{name}` isn't found"),
+            format!("rename the local, or import the module under another name: `use std.{n} as {n}_mod`"),
+        );
+        true
     }
 
     /// `m.f(...)` or `m.Type(...)` where `m` may be a standard module
@@ -96,6 +124,16 @@ impl<'p> Checker<'p> {
             }
             return None;
         };
+        if (module, name) == ("tensor", "Tensor") {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.1",
+                pos,
+                "a tensor isn't built from fields",
+                format!("use `{head}.from(xs, shape)` or `{head}.zeros(shape)`"),
+            );
+            return Some(Ty::Err);
+        }
         let qualified = format!("{module}.{name}");
         if let Some(Def::Struct(s)) = self.types.get(qualified.as_str()).copied() {
             self.resolved.std_calls.insert(pos, StdCall::Type(s));
@@ -114,13 +152,21 @@ impl<'p> Checker<'p> {
         };
         self.resolved.std_calls.insert(pos, StdCall::Fn(module, f));
         let what = format!("{head}.{f}");
+        if module == "tensor" {
+            return Some(self.tensor_call(f, args, pos, expect));
+        }
         if (module, f) == ("io", "eprint") {
             return Some(self.eprint_call(args, pos));
         }
         if (module, f) == ("random", "shuffle") {
             return Some(self.shuffle_call(args, pos));
         }
-        let (params, ret) = self.std_signature(module, f);
+        let (mut params, ret) = self.std_signature(module, f);
+        if (module, f) == ("proc", "run") {
+            // std.proc.2: `input str?` and `timeout_ms int?` may be left off
+            // from the end.
+            params.truncate(args.len().clamp(2, 4));
+        }
         let sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
         Some(self.check_call(&what, &sig, Vec::new(), args, None, pos, expect))
     }
@@ -141,20 +187,36 @@ impl<'p> Checker<'p> {
             ("fs", "exists") => (vec![Str], Bool),
             ("fs", "list_dir") => (vec![Str], io(list(Str))),
             ("fs", "remove" | "make_dir") => (vec![Str], io(Unit)),
+            ("fs", "walk") => (vec![Str], io(list(Str))),
+            ("fs", "glob") => (vec![Str], list(Str)),
+            ("fs", "metadata") => (vec![Str], io(std_ty("fs.Metadata"))),
+            ("fs", "rename" | "copy") => (vec![Str, Str], io(Unit)),
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
+            ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
+            ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
+            ("path", "dir" | "base" | "ext") => (vec![Str], Str),
+            ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
             // std.io.4: `exit` never returns (ADR 0139).
             ("io", "exit") => (vec![Int], Ty::Never),
             ("proc", "run") => (
-                vec![Str, list(Str)],
+                vec![Str, list(Str), opt(Str), opt(Int)],
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
+            ("proc", "which") => (vec![Str], opt(Str)),
+            ("net", "get" | "post") => (
+                if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
+                Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
             ),
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
+            // conc.cancel.2
+            ("task", "cancelled") => (vec![], Bool),
+            ("task", "check") => (vec![], Ty::Res(Box::new(Unit), Errs::Set(vec![self.prelude_error("Cancelled")]))),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
             ("ui", "clipboard_get") => (vec![], opt(Str)),
@@ -164,6 +226,14 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
             ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
+        }
+    }
+
+    /// A prelude error type, such as `Cancelled` (conc.cancel.2).
+    fn prelude_error(&self, name: &str) -> Ty {
+        match self.types.get(name) {
+            Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
+            _ => Ty::Err,
         }
     }
 
@@ -266,6 +336,34 @@ impl<'p> Checker<'p> {
             Some(def) => Some(self.generic_type(def, args, pos)),
             None => {
                 self.error("std.use.2", pos, format!("module `{head}` has no type `{item}`"));
+                Some(Ty::Err)
+            }
+        }
+    }
+
+    /// `ui.NAME`, a named color (std.ui.17); `None` when `recv` isn't an
+    /// imported standard module.
+    pub(super) fn std_constant(&mut self, recv: &Expr, name: &str, pos: Pos) -> Option<Ty> {
+        let Expr::Name(n, _) = recv else { return None };
+        if self.local(n).is_some() {
+            return None;
+        }
+        let module = self.std_module(n)?;
+        let consts: &[(&str, i64)] = if module == "ui" { crate::ui::COLORS } else { &[] };
+        match consts.iter().find(|(c, _)| *c == name) {
+            Some(&(_, v)) => {
+                self.resolved.std_calls.insert(pos, StdCall::Const(v));
+                Some(Ty::Int)
+            }
+            None if consts.is_empty() => None,
+            None => {
+                let names: Vec<&str> = consts.iter().map(|(c, _)| *c).collect();
+                self.error_help(
+                    "std.ui.17",
+                    pos,
+                    format!("module `{n}` has no color `{name}`"),
+                    format!("the colors are {}", list_names(&names)),
+                );
                 Some(Ty::Err)
             }
         }

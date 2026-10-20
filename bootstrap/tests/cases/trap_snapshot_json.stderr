@@ -1,0 +1,1 @@
+{"api":1,"severity":"trap","rule":"expr.arith.3","file":"$FILE","line":8,"col":11,"message":"division by zero in `0 / 0`","source":"    total / count","stack":[{"fn":"average","file":"$FILE","line":8,"col":11,"args":{"xs":"[]"},"locals":{"total":"0","count":"0"}},{"fn":"main","file":"$FILE","line":13,"col":11,"args":{},"locals":{"scores":"[3, 4]"}}],"omitted_frames":0}
