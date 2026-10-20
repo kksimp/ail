@@ -1,0 +1,2 @@
+pub fn twice(v int) int
+    v * 2

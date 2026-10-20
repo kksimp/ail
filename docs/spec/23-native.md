@@ -19,7 +19,7 @@ with its own encoders and object writers (ADR 0010).
 
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct (no generics or
-contracts) over `int`, `float`, `bool`, `str`, structs without generics or
+contracts), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
 invariants, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
 on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
@@ -32,7 +32,7 @@ lists of them or an interpolation of them (with
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 and the bit operations of expr.bit.1. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392)*
+*(ADRs 0384, 0390, 0392, 0393)*
 
 ```ail
 fn steps(n int) int

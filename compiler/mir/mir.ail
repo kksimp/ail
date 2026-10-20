@@ -145,6 +145,8 @@ pub struct Site
     pub line int
     pub col int
     pub func str
+    ## The source file, an index into `Module.files` (ADR 0393).
+    pub file int
 
 pub struct Module
     pub path str
@@ -153,6 +155,9 @@ pub struct Module
     pub sites List[Site]
     ## The source text's lines, for trap excerpts.
     pub lines List[str]
+    ## Every source file of the program and its lines; file 0 is `path`.
+    pub files List[str]
+    pub file_lines List[List[str]]
 
 ## Whether an instruction may be removed when its value is unused.
 pub fn Inst.is_pure(self) bool
