@@ -1,0 +1,50 @@
+## Bit operations on `int` (expr.bit.1-2, ADR 0465): permission flags, a
+## bitset and a hash mix. Each bit is one flag; `shr` is arithmetic, so a
+## negative number keeps its sign.
+##   ./ail run examples/bits.ail
+
+READ := 1.shl(2)
+WRITE := 1.shl(1)
+EXEC := 1.shl(0)
+
+fn mode_text(mode int) str
+    r := if mode.bit_and(READ) != 0
+        "r"
+    else
+        "-"
+    w := if mode.bit_and(WRITE) != 0
+        "w"
+    else
+        "-"
+    x := if mode.bit_and(EXEC) != 0
+        "x"
+    else
+        "-"
+    "{r}{w}{x}"
+
+fn count_bits(n int) int
+    mut left := n
+    mut count := 0
+    while left != 0
+        count = count + left.bit_and(1)
+        left = left.shr(1)
+    count
+
+fn mix(h int) int
+    mut x := h
+    x = x.bit_xor(x.shr(7))
+    x = x.bit_xor(x.shl(3))
+    x.bit_and(0xFFFF)
+
+fn main()
+    print("mode 6 is {mode_text(6)}, mode 5 is {mode_text(5)}")
+    print("set bits in 0b1011: {count_bits(11)}")
+    print("not 0 is {0.bit_not()}, shr of -8 by 1 is {(-8).shr(1)}")
+    print("hash of 1234: {mix(1234)}")
+
+    mut set := 0
+    for i in [1, 4, 9, 40]
+        set = set.bit_or(1.shl(i))
+    print("bitset has 4: {set.bit_and(1.shl(4)) != 0}, has 5: {set.bit_and(1.shl(5)) != 0}")
+    print("bitset count: {count_bits(set)}")
+    print("bitset as int: {set}")
