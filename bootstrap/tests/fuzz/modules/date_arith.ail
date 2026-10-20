@@ -1,0 +1,23 @@
+# fuzz-input: date
+# fuzz-needs: std.time.date
+# Calendar arithmetic at extreme day counts and zones: no crash, and days()
+# inverts from_days().
+use std.time.date
+
+fn main()
+    n := {{INT}}
+    d := date.Date.from_days(n % 3_000_000)
+    if d.days() != n % 3_000_000
+        print("FAIL from_days then days changed the day number")
+    print(d.add_months(n % 5000).iso().len() > 0)
+    print(d.add_years(n % 500).iso().len() > 0)
+    print(d.add_days(n % 100_000).since(d))
+    w := d.weekday()
+    if w < 1 or w > 7
+        print("FAIL weekday out of range {w}")
+    t := date.at(n, {{TEXT}}) else err
+        print("rejected {err.why.len() > 0}")
+        return
+    u := t.in_zone("UTC") else return
+    print(u.iso().len() > 0)
+    print(t.add_months(n % 40).iso().len() > 0)
