@@ -15,6 +15,12 @@
 ./ail explain RULE           # a rule's text, its ADRs and an example
 ./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
 ./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
+./ail edit FILE.ail --test <<E   # change code by declaration name, then fmt, check, test
+average                          # the declaration
+-total / xs.len()                # one -/+ pair: replaces a unique part of a line
++total / xs.len().max(1)         # more lines: whole lines; ` line` keeps one; `rename f g`
+E
+./ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
 ```
 
 `todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
