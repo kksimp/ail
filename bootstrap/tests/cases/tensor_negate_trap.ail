@@ -1,0 +1,3 @@
+# std.tensor.6, std.tensor.14: negating the smallest `int` overflows and traps.
+fn main()
+    print(-tensor.from([1, -9223372036854775807 - 1]))

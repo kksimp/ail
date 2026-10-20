@@ -145,3 +145,71 @@ fn https_against_a_local_tls_server() {
     let _ = server.kill();
     let _ = server.wait();
 }
+
+/// std.net.13: a raw TLS `Conn` against the same kind of local server.
+#[test]
+fn tls_conn_against_a_local_tls_server() {
+    let version = Command::new("openssl").arg("version").output();
+    let Ok(version) = version else {
+        eprintln!("note: no `openssl`; skipping the TLS Conn test");
+        return;
+    };
+    let text = String::from_utf8_lossy(&version.stdout);
+    if !(text.starts_with("OpenSSL 3") || text.starts_with("OpenSSL 1.1.1")) {
+        eprintln!("note: `openssl` is `{}`; skipping the TLS Conn test", text.trim());
+        return;
+    }
+    let data = concat!(env!("CARGO_MANIFEST_DIR"), "/src/net/x509/testdata");
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let mut server = Command::new("openssl")
+        .args(["s_server", "-quiet", "-www", "-tls1_3", "-accept", &port.to_string()])
+        .args(["-key", "localhost_leaf.key.pem", "-cert", "localhost_leaf.pem", "-cert_chain", "inter.pem"])
+        .current_dir(data)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = std::time::Instant::now();
+    while TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(start.elapsed().as_secs() < 30, "openssl s_server didn't start");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .args(["run", "bootstrap/tests/net/tls_conn.ail", &port.to_string()])
+        .env("SSL_CERT_FILE", format!("{data}/root.pem"))
+        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
+        .output()
+        .unwrap();
+    let _ = server.kill();
+    let _ = server.wait();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "HTTP/1.0 200 ok\n\
+         tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
+    );
+}
+
+/// std.net.14: serving is a capability of its own, on top of `net`.
+#[test]
+fn serve_is_a_capability() {
+    let program = "bootstrap/tests/cases/std_net_serve.ail";
+    let out = ail(&["run", "--deny", "net.serve", program]);
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("eff.cap.1") && stderr.contains("`net.serve`"), "{stderr}");
+    // Denying `net` denies serving too, and so does `--deterministic`.
+    for flag in ["--deny=net", "--deterministic"] {
+        let args: Vec<&str> = if flag == "--deny=net" { vec!["check", "--deny", "net", program] } else { vec!["check", flag, program] };
+        assert_eq!(ail(&args).status.code(), Some(2), "{flag}");
+    }
+    // A client-only program is not denied `net.serve`.
+    let out = ail(&["check", "--deny", "net.serve", "bootstrap/tests/net/client.ail"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = ail(&["effects", program]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("fn:main {fail, io, net, net.serve, spawn}"), "{text}");
+    assert!(text.contains("fn:worker {fail, io, net}"), "{text}");
+}
+

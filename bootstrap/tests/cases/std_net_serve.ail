@@ -1,0 +1,61 @@
+## std.net.9-11: an HTTP server in the same program as its clients. Two
+## worker tasks share one server; the client uses request options.
+use std.net
+
+fn answer(ex net.Exchange) !
+    r := ex.request
+    token := r.headers.get("x-token") else "none"
+    if r.path == "/missing"
+        ex.respond(net.Response(status: 404, headers: {}, body: "no {r.path}"))?
+        return
+    if r.path == "/moved"
+        ex.respond(net.Response(status: 302, headers: {"location": "/hello"}, body: ""))?
+        return
+    name := r.query.get("name") else "world"
+    body := "hello {name} [{r.body}] token={token}"
+    ex.respond(net.Response(
+        status: 200,
+        headers: {"x-method": r.method, "content-type": "text/plain"},
+        body: body,
+    ))?
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            print("worker stops: {err.kind}")
+            return
+        answer(ex)?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    a := spawn worker(srv)
+    b := spawn worker(srv)
+    base := "http://{srv.addr()}"
+
+    r := net.get("{base}/hello?name=ail")?
+    print("{r.status} {r.headers["x-method"]} {r.body}")
+
+    p := net.post("{base}/p", "data", "text/plain")?
+    print("{p.status} {p.body}")
+
+    mut o := net.options()
+    o.headers["X-Token"] = "abc"
+    o.query["name"] = "a b&c"
+    o.body = "payload"
+    u := net.request("put", "{base}/x", o)?
+    print("{u.status} {u.headers["x-method"]} {u.body}")
+
+    m := net.get("{base}/missing")?
+    print("{m.status} {m.body}")
+
+    # A redirect is followed up to max_redirects.
+    f := net.get("{base}/moved")?
+    print("followed: {f.status} {f.body}")
+    mut o2 := net.options()
+    o2.max_redirects = 0
+    n := net.request("GET", "{base}/moved", o2)?
+    print("max 0: {n.status} {n.headers["location"]}")
+
+    srv.close()
+    a.wait()?
+    b.wait()?

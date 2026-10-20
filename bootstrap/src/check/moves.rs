@@ -136,6 +136,7 @@ impl<'p> Walker<'p> {
                 self.expr(cond);
                 self.loop_body(body, None);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::With { mutex, body, .. } => {
                 self.expr(mutex);
                 self.block(body);
@@ -366,6 +367,9 @@ impl<'p> Walker<'p> {
                     self.state = start.clone();
                     let mark = self.scope.len();
                     self.pattern(&arm.pat);
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&arm.body);
                     self.scope.truncate(mark);
                     out = join(out, self.state.take());
@@ -432,7 +436,7 @@ impl<'p> Walker<'p> {
                 }
             }
             Pattern::Or(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
-            Pattern::Wildcard(_) | Pattern::Literal(..) => {}
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
 }

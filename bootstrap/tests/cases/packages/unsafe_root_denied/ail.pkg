@@ -1,0 +1,2 @@
+# unsafe.block.3: the root package has a manifest without `unsafe allow`.
+package app

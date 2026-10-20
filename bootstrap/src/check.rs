@@ -26,6 +26,7 @@ mod comprehension;
 pub mod errpaths;
 pub mod facts;
 mod keyfn;
+mod net;
 mod stdlib;
 mod tensor;
 pub mod effects;
@@ -34,6 +35,7 @@ mod moves;
 mod ownership;
 mod privacy;
 mod testing;
+mod unsafety;
 mod traits;
 mod ui;
 
@@ -283,6 +285,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         ret: Ty::Unit,
         assoc: None,
         loops: 0,
+        unsafe_depth: 0,
         record: false,
         anchored: 0,
         anchors: HashMap::default(),
@@ -388,6 +391,8 @@ struct Pending {
     /// The literal, and whether it is `{}` (a map or a set).
     lit: Pos,
     brace: bool,
+    /// Whether it is `none`, typed by its first assignment (type.opt.9).
+    opt: bool,
     /// Its index in `locals`.
     index: usize,
 }
@@ -475,6 +480,8 @@ struct Checker<'p> {
     /// parameters, and the owner's field names (gram.rec.2).
     assoc: Option<(Pos, bool, Vec<String>)>,
     loops: usize,
+    /// How many `unsafe` blocks enclose the code being checked (unsafe.block.1).
+    unsafe_depth: usize,
     /// Record `resolved.facts` (api.loc.1); on for the final pass only.
     record: bool,
     /// The locals below this index already have an anchor (`anchors`).
@@ -1578,6 +1585,10 @@ impl<'p> Checker<'p> {
         self.anchored = 0;
         self.anchors.clear();
         self.loops = 0;
+        self.unsafe_depth = 0;
+        if f.unsafe_fn {
+            self.unsafe_opt_in(f.pos);
+        }
         self.catching = 0;
         self.ret = sig.ret.clone();
         self.assoc = f.owner.as_ref().filter(|_| f.receiver.is_none()).and_then(|o| {
@@ -1679,11 +1690,14 @@ impl<'p> Checker<'p> {
                 let empty = match value {
                     Expr::List(xs, _) | Expr::Set(xs, _) => xs.is_empty(),
                     Expr::Map(xs, _) => xs.is_empty(),
+                    // type.opt.9: a `mut` local that starts as `none`.
+                    Expr::None(_) => *mutable,
                     _ => false,
                 };
                 if empty && otherwise.is_none() {
                     if self.declare(name, *pos) {
-                        let brace = !matches!(value, Expr::List(..));
+                        let opt = matches!(value, Expr::None(_));
+                        let brace = !matches!(value, Expr::List(..) | Expr::None(_));
                         let index = self.locals.len();
                         self.locals.push(Local {
                             name: name.clone(),
@@ -1692,7 +1706,7 @@ impl<'p> Checker<'p> {
                             kind: Kind::Binding,
                             decl: Some(*pos),
                         });
-                        self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, index });
+                        self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, opt, index });
                     }
                     return Ty::Unit;
                 }
@@ -1756,6 +1770,13 @@ impl<'p> Checker<'p> {
                 self.loops -= 1;
                 self.end_scope(mark);
                 Ty::Unit
+            }
+            Stmt::Unsafe { body, pos } => {
+                self.unsafe_opt_in(*pos);
+                self.unsafe_depth += 1;
+                let ty = self.block(body, expect, need);
+                self.unsafe_depth -= 1;
+                ty
             }
             Stmt::With { mutex, var, var_pos, body, pos } => {
                 self.with_stmt(mutex, var, *var_pos, body, *pos);
@@ -2019,7 +2040,9 @@ impl<'p> Checker<'p> {
         let what = if is_prelude(pos) || !self.prog.module_at(pos).is_empty() {
             return true;
         } else if self.fns.contains_key(name) || PRELUDE.contains(&name) {
-            "a function"
+            // A local may shadow a function (ADR 0469); a call of it in the
+            // local's block is expr.call.1.
+            return true;
         } else if self.types.contains_key(name) || BUILTIN_TYPES.contains(&name) {
             "a type"
         } else if self.consts.contains_key(name) {
@@ -2060,6 +2083,16 @@ impl<'p> Checker<'p> {
     /// Report a use of pending local `k` before its type is known.
     fn unsettled(&mut self, k: usize, at: Pos) {
         let p = self.pending.remove(k);
+        if p.opt {
+            self.error_help(
+                "type.opt.9",
+                at,
+                format!("the type of `{}` isn't known yet", p.name),
+                format!("its first assignment should fix it, such as `{} = e`", p.name),
+            );
+            self.locals[p.index].ty = Ty::Err;
+            return;
+        }
         let ctor = if p.brace { "`Map[K, V]()` or `Set[T]()`" } else { "`List[T]()`" };
         let first =
             if p.brace { format!("`{0}.add(x)` or `{0}[k] = v`", p.name) } else { format!("`{}.push(x)`", p.name) };
@@ -2086,6 +2119,15 @@ impl<'p> Checker<'p> {
     fn end_scope(&mut self, mark: usize) {
         while let Some(k) = self.pending.iter().position(|p| p.index >= mark) {
             let p = self.pending.remove(k);
+            if p.opt {
+                self.error_help(
+                    "type.opt.9",
+                    p.lit,
+                    format!("nothing fixes the type of `{}`", p.name),
+                    format!("assign it a value with `{} = e` first", p.name),
+                );
+                continue;
+            }
             let ctor = if p.brace { "`Map[K, V]()` or `Set[T]()`" } else { "`List[T]()`" };
             self.error_help(
                 "type.coll.13",
@@ -2297,9 +2339,17 @@ impl<'p> Checker<'p> {
                 Expr::Name(n, _) => {
                     if let Some(k) = self.pending_of(n) {
                         let vt = self.quiet_type(value);
-                        match (&vt, self.pending[k].brace) {
-                            (Ty::List(_), false) | (Ty::Map(..) | Ty::Set(_), true) => self.settle(k, vt),
-                            _ => {}
+                        if self.pending[k].opt {
+                            // type.opt.9: the first value gives `T?` (type.opt.5).
+                            if !matches!(vt, Ty::Err | Ty::Unit | Ty::Never) {
+                                let t = if matches!(vt, Ty::Opt(_)) { vt } else { Ty::Opt(Box::new(vt)) };
+                                self.settle(k, t);
+                            }
+                        } else {
+                            match (&vt, self.pending[k].brace) {
+                                (Ty::List(_), false) | (Ty::Map(..) | Ty::Set(_), true) => self.settle(k, vt),
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -2459,6 +2509,7 @@ impl<'p> Checker<'p> {
                 Else::Block { body, .. } => self.overlapping_use(target, body),
             }),
             Stmt::Return(None, _) | Stmt::Break(_) | Stmt::Continue(_) => None,
+            Stmt::Unsafe { body, .. } => self.overlapping_use(target, body),
             Stmt::Defer(st, _) => self.overlap_in_stmt(target, st),
         }
     }
@@ -2513,7 +2564,7 @@ impl<'p> Checker<'p> {
                 })
                 .or_else(|| els.as_ref().and_then(|b| self.overlapping_use(target, b))),
             Expr::Match { scrutinee, arms, .. } => {
-                e(scrutinee).or_else(|| arms.iter().find_map(|a| self.overlapping_use(target, &a.body)))
+                e(scrutinee).or_else(|| arms.iter().find_map(|a| a.guard.as_ref().and_then(e).or_else(|| self.overlapping_use(target, &a.body))))
             }
             Expr::Try { expr, context, .. } => e(expr).or_else(|| context.as_deref().and_then(e)),
             Expr::Else { value, otherwise, .. } => e(value).or_else(|| match &**otherwise {
@@ -2696,7 +2747,7 @@ impl<'p> Checker<'p> {
                 e => e,
             };
             return match want {
-                Some(t @ Ty::List(_)) if !self.pending[k].brace => {
+                Some(t @ Ty::List(_)) if !self.pending[k].brace && !self.pending[k].opt => {
                     let t = t.clone();
                     self.settle(k, t.clone());
                     t
@@ -3148,6 +3199,7 @@ impl<'p> Checker<'p> {
         if let Some(&i) = self.fns.get(n.as_str()) {
             self.reject_test_call(i, npos);
             self.note_deprecated(i, npos);
+            self.note_unsafe_call(i, npos);
             self.resolved.symbols.insert(npos, format!("fn:{n}"));
             let mut sig = self.sigs[i].clone();
             // A test can fail (test.attr.4), but calling it is already an
@@ -3733,6 +3785,7 @@ impl<'p> Checker<'p> {
         // type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
         if let Expr::Name(n, _) = recv
             && let Some(k) = self.pending_of(n)
+            && !self.pending[k].opt
             && let [arg] = args
         {
             match (name, self.pending[k].brace) {
@@ -3822,6 +3875,9 @@ impl<'p> Checker<'p> {
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
+        if let Some(t) = self.net_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
@@ -3857,6 +3913,7 @@ impl<'p> Checker<'p> {
                         }
                         self.resolved.targets.insert(pos, *i);
                         self.note_deprecated(*i, pos);
+                        self.note_unsafe_call(*i, pos);
                         self.move_receiver(*i, recv);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
@@ -4037,6 +4094,7 @@ impl<'p> Checker<'p> {
         };
         self.resolved.targets.insert(pos, i);
         self.note_deprecated(i, pos);
+        self.note_unsafe_call(i, pos);
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 
@@ -4309,6 +4367,10 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&t, operand.pos()) {
             return Ty::Err;
         }
+        // std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
+        if op == UnOp::Neg && self.tensor_elem(&t).is_some() {
+            return t;
+        }
         if op == UnOp::Neg && t == Ty::Float {
             return Ty::Float;
         }
@@ -4521,7 +4583,28 @@ impl<'p> Checker<'p> {
             agree.block(self, body, pos);
             self.end_scope(mark);
         }
-        if need && els.is_none() { Ty::Err } else { agree.result() }
+        if need && els.is_none() {
+            return Ty::Err;
+        }
+        let nones = agree.none_at.clone();
+        let t = agree.result();
+        // type.opt.10: a bare `none` branch takes `T?` from the other branches.
+        match t {
+            _ if nones.is_empty() => t,
+            Ty::Opt(_) | Ty::Err => t,
+            Ty::Never => {
+                for at in nones {
+                    self.error_help(
+                        "type.opt.4",
+                        at,
+                        "the type of `none` isn't known here",
+                        "use `none` where a `T?` is expected, e.g. as an argument or a return value",
+                    );
+                }
+                Ty::Err
+            }
+            _ => Ty::Opt(Box::new(t)),
+        }
     }
 
     /// Help for `else` or `if name :=` on a value that is never absent, when
@@ -4591,6 +4674,9 @@ impl<'p> Checker<'p> {
         let mut wildcard = false;
         let mut agree = Agree::new(expect, need, "arm", "`match`");
         for arm in arms {
+            // expr.match.11: a guarded arm covers nothing, so what the pattern
+            // marks as covered is undone once it's checked.
+            let kept = arm.guard.as_ref().map(|_| (covered.clone(), seen.clone(), wildcard, self.diags.len()));
             let bindings = match (&e, &literal, &arm.pat) {
                 (Some((e, args)), _, _) => self.pattern(*e, args, &arm.pat, &mut covered, &mut wildcard),
                 (_, Some(t), _) => {
@@ -4604,11 +4690,20 @@ impl<'p> Checker<'p> {
                 }
                 _ => Vec::new(),
             };
+            if let Some((c, sn, w, n)) = kept {
+                (covered, seen, wildcard) = (c, sn, w);
+                // `_ if c` hides nothing, so the `_` warning doesn't apply.
+                let tail = self.diags.split_off(n);
+                self.diags.extend(tail.into_iter().filter(|d| d.rule != "expr.match.3"));
+            }
             let mark = self.locals.len();
             for (name, npos, ty) in bindings {
                 if name != "_" && self.declare(&name, npos) {
                     self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding, decl: None });
                 }
+            }
+            if let Some(g) = &arm.guard {
+                self.condition(g);
             }
             agree.block(self, &arm.body, pos);
             self.end_scope(mark);
@@ -4734,6 +4829,34 @@ impl<'p> Checker<'p> {
                 let msg = format!("`{name}` is a variant pattern, but the value matched is {}", self.show(t));
                 self.error("expr.match.4", *pos, msg);
             }
+            // expr.match.12: a range covers some values, never all, so it
+            // marks nothing as seen.
+            Pattern::Range { lo, hi, inclusive, pos } => {
+                let ends = match (lo, hi) {
+                    (Literal::Int(a), Literal::Int(b)) => Some((Ty::Int, i128::from(*a), i128::from(*b))),
+                    (Literal::Char(a), Literal::Char(b)) => Some((Ty::Char, i128::from(*a as u32), i128::from(*b as u32))),
+                    _ => None,
+                };
+                let Some((kind, a, b)) = ends else {
+                    self.error("expr.match.12", *pos, "the two ends of a range pattern must both be integers or both characters");
+                    return;
+                };
+                let ok = kind == *t || (kind == Ty::Int && matches!(t, Ty::Num(k) if !k.is_float()));
+                if !ok {
+                    let msg = format!("this range is of {}, but the value matched is {}", self.show(&kind), self.show(t));
+                    self.error("expr.match.12", *pos, msg);
+                } else if a > b || (a == b && !*inclusive) {
+                    let dots = if *inclusive { "..=" } else { ".." };
+                    self.error_help(
+                        "expr.match.12",
+                        *pos,
+                        format!("this range pattern is empty: the start is not below the end of `{dots}`"),
+                        "write the smaller bound first",
+                    );
+                } else if *wildcard {
+                    self.error("expr.match.5", *pos, "this arm can never match; earlier arms cover every case");
+                }
+            }
         }
     }
 
@@ -4777,7 +4900,7 @@ impl<'p> Checker<'p> {
                 }
                 Vec::new()
             }
-            Pattern::Literal(_, pos) => {
+            Pattern::Literal(_, pos) | Pattern::Range { pos, .. } => {
                 let msg = format!("`{}` is an enum; match it with its variants", decl.name);
                 self.error("expr.match.4", *pos, msg);
                 Vec::new()
@@ -4913,14 +5036,23 @@ struct Agree {
     failed: bool,
     part: &'static str,
     construct: &'static str,
+    /// The `none` branches, typed once the other branches are (type.opt.10).
+    none_at: Vec<Pos>,
 }
 
 impl Agree {
     fn new(expect: Option<&Ty>, need: bool, part: &'static str, construct: &'static str) -> Self {
-        Agree { expect: expect.cloned(), need, first: None, failed: false, part, construct }
+        Agree { expect: expect.cloned(), need, first: None, failed: false, part, construct, none_at: Vec::new() }
     }
 
     fn block<'p>(&mut self, c: &mut Checker<'p>, body: &'p Block, pos: Pos) {
+        if self.need
+            && self.expect.is_none()
+            && let [Stmt::Expr(Expr::None(at))] = body.as_slice()
+        {
+            self.none_at.push(*at);
+            return;
+        }
         let hint = self.expect.clone().or_else(|| self.first.clone());
         let t = c.block(body, hint.as_ref(), self.need);
         if !self.need {
@@ -5110,7 +5242,13 @@ mod tests {
     #[test]
     fn no_shadowing() {
         assert_eq!(rules("fn main()\n    x := 1\n    x := 2\n"), vec!["expr.bind.4"]);
-        assert_eq!(rules("fn main()\n    main := 1\n"), vec!["expr.bind.5"]);
+        assert_eq!(rules("struct Point\n    x int\nfn main()\n    Point := 1\n"), vec!["expr.bind.5"]);
+        // A local may shadow a function, and a call of it in the block is expr.call.1 (ADR 0469).
+        assert!(rules("fn word(s str) str\n    s\nfn main()\n    word := \"x\"\n    print(word)\n").is_empty());
+        assert_eq!(
+            rules("fn word(s str) str\n    s\nfn main()\n    word := \"x\"\n    print(word(\"y\"))\n"),
+            vec!["expr.call.1"]
+        );
         assert_eq!(rules("fn main()\n    x := 1\n    for i in 0..3\n        x := i\n"), vec!["expr.bind.4"]);
         // Sibling blocks may reuse a name.
         assert!(rules("fn main()\n    if true\n        x := 1\n    else\n        x := 2\n").is_empty());

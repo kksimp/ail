@@ -34,7 +34,10 @@ fn total(items List[Item]) i64
 ```
 
 **expr.bind.5** — Declaring a local name equal to a visible module-level
-item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
+type, constant, imported name, or prelude type is a compile-time error. A
+local may have the name of a function, module-level or prelude: it shadows
+the function for the rest of its block, and a call of that name there is
+`expr.call.1`. *(ADR 0084; ADR 0469)*
 
 **expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
 (`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
@@ -187,6 +190,9 @@ value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
 name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
 without `else` is a compile-time error. *(ADR 0280)*
 
+An `if` used as an operand is written in parentheses: `col + (if raw then 4 else 3)`.
+Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
+
 ```ail
 fn sign(n int) str
     if n < 0 then "negative" else "non-negative"
@@ -335,11 +341,41 @@ fn main()
     print(has_area(Shape.Circle(r: 1)))
 ```
 
-> **Note:** not yet designed: range patterns (`'0'..='9'`), guards
-> (`x if x > 0`), or-patterns that bind names, patterns nested inside a
-> variant's fields (`expr.match.6`), and warning-suppression syntax. The
-> diagnostics for range patterns and guards suggest an `if` chain.
-> *(ADR 0138)*
+**expr.match.11** — An arm may carry a guard, `pattern if cond => result`.
+`cond` is a `bool` expression checked after the pattern matches, with the
+pattern's bindings in scope. When it is `false`, matching goes on with the
+next arm. A guarded arm covers no values for exhaustiveness (`expr.match.2`)
+or redundancy (`expr.match.5`), so a `match` whose arms are all guarded needs
+an unguarded one. A guard on an or-pattern applies to every alternative.
+*(ADR 0452)*
+
+**expr.match.12** — A range pattern is `lo..hi` or `lo..=hi`, where `lo` and
+`hi` are both `int` literals (with an optional `-`) or both `char` literals.
+It matches the values from `lo` up to but not including `hi` (`..`), or up to
+and including it (`..=`), as `for` ranges do (`expr.loop.3`). The range MUST
+be non-empty, and its type MUST be the scrutinee's. A range covers some
+values, never all, so a `match` that uses ranges needs a `_` arm, and an
+arm after `_` is still unreachable (`expr.match.5`). A range may be an
+alternative of an or-pattern. *(ADR 0453)*
+
+```ail
+fn grade(score int) str
+    match score
+        90..=100 => "A"
+        _ if score >= 60 => "pass"
+        0..60 => "fail"
+        _ => "?"
+
+fn main()
+    print(grade(95))
+    print(grade(70))
+    print(grade(30))
+```
+
+> **Note:** not yet designed: or-patterns that bind names, patterns nested
+> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+> scrutinee (`n if n > 0`), open-ended ranges (`10..`), and warning-
+> suppression syntax. *(ADR 0138, ADR 0452, ADR 0453)*
 
 ## Comprehensions
 

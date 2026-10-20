@@ -9,6 +9,9 @@ struct Metadata  ## std.fs.10 (ADR 0281)
     size int
     modified_ms int
     is_dir bool
+error struct CompressError  ## std.compress (ADR 0443)
+    kind str
+    message str
 struct Output  ## std.proc
     status int
     out str
@@ -16,6 +19,11 @@ struct Output  ## std.proc
 error struct ProcError
     cmd str
     kind str
+unique struct Child  ## std.proc.4 (ADR 0424): a child; `stdin` takes `send` and `close`, `out` and `err` give lines.
+    pid int
+    stdin Channel[str]
+    out Channel[str]
+    err Channel[str]
 struct Response  ## std.net (ADR 0283)
     status int
     headers Map[str, str]
@@ -24,6 +32,28 @@ error struct NetError
     url str
     kind str
     message str
+struct Options  ## std.net.6: what a request can set beyond its method and URL.
+    headers Map[str, str]
+    query Map[str, str]
+    body str
+    timeout_ms int
+    max_redirects int
+struct Request  ## std.net.9-11: a request the server received, and the server.
+    method str
+    path str
+    query Map[str, str]
+    headers Map[str, str]
+    body str
+    peer str
+struct Server
+    handle int
+struct Exchange
+    request net.Request
+    handle int
+struct Listener  ## std.net.12: raw TCP.
+    handle int
+struct Conn
+    handle int
 struct Window  ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
     handle int
 struct Size
@@ -52,4 +82,21 @@ error struct UiError
     message str
 struct Tensor[T]  ## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
     elements Map[int, T]
+struct Regex  ## std.regex (ADR 0438). A regex is its pattern; compiled programs are cached
+    pat str
+error struct RegexError
+    pattern str
+    at int
+    kind str
+    rule str
+    message str
+struct Match
+    start int
+    end int
+    text str
+struct Captures  ## `groups[0]` is the whole match; a group that didn't take part is `none`.
+    start int
+    end int
+    groups List[str?]
+    named Map[str, str]
 ```

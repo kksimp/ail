@@ -1,0 +1,48 @@
+# std.proc.4-7, conc.select.1: a child's streams are channels; `task.select`
+# waits on several; `wait` and `kill` consume the child.
+use std.proc
+use std.task
+
+fn main() !
+    # Text in, lines out.
+    c := proc.start("cat", [])?
+    c.stdin.send("one\ntwo\r\nthree")
+    c.stdin.close()
+    for line in c.out
+        print("[{line}]")
+    print(proc.wait(move c)?)
+
+    # Select between output and error; the child waits for a line on its
+    # input so the order is fixed.
+    s := proc.start("sh", ["-c", "echo first; read go; echo second >&2; exit 4"])?
+    mut open := true
+    mut seen := 0
+    while open
+        i := task.select([s.out, s.err])
+        if i == none
+            open = false
+        elif i == 0
+            print("out {s.out.recv()}")
+            s.stdin.send("go\n")
+        else
+            print("err {s.err.recv()}")
+        seen += 1
+    print("events {seen}")
+    print(proc.wait(move s)?)
+
+    # A time limit kills the child, and `wait` says so.
+    t := proc.start("sleep", ["5"], 100)?
+    r := proc.wait(move t) else err
+        print("{err.cmd}: {err.kind}")
+        -1
+    print(r)
+
+    # `kill` ends a child that is still running (128 + SIGKILL).
+    k := proc.start("cat", [])?
+    print(proc.kill(move k))
+
+    # A program that can't start is a `ProcError`.
+    bad := proc.start("ail-no-such-program", []) else err
+        print(err.kind)
+        return
+    print(bad.pid)
