@@ -132,21 +132,33 @@ impl Tensor {
         })
     }
 
-    /// std.tensor.4, std.tensor.10: elementwise `op`.
+    /// std.tensor.4, std.tensor.10: elementwise `op`, with NumPy-style
+    /// broadcasting (std.tensor.4): shapes line up from the right, and an
+    /// axis of size 1, or a missing axis, stretches to the other size.
     pub fn zip(&self, other: &Tensor, op: Op) -> Result<Tensor, Fault> {
-        self.same_shape(other, op.name())?;
-        let data = match (&self.data, &other.data) {
-            (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, op)),
-            (Data::I(a), Data::I(b)) => {
-                let mut out = Vec::with_capacity(a.len());
-                for (x, y) in a.iter().zip(b) {
-                    out.push(op.i(*x, *y).ok_or_else(overflow)?);
-                }
-                Data::I(out)
-            }
-            _ => unreachable!("checked: one element type"),
+        if self.shape == other.shape {
+            return Ok(Tensor { shape: self.shape.clone(), data: zip_data(&self.data, &other.data, op)? });
+        }
+        let Some(shape) = broadcast_shape(&self.shape, &other.shape) else {
+            return fault(
+                "std.tensor.4",
+                format!("`{}` can't broadcast shapes {:?} and {:?}", op.name(), self.shape, other.shape),
+            );
         };
-        Ok(Tensor { shape: self.shape.clone(), data })
+        let data = zip_data(&self.expanded(&shape), &other.expanded(&shape), op)?;
+        Ok(Tensor { shape, data })
+    }
+
+    /// The elements of `self` broadcast to `shape` (std.tensor.4), copied
+    /// row-major. A tensor already of `shape` is cloned as is.
+    fn expanded(&self, shape: &[usize]) -> Data {
+        if self.shape == shape {
+            return self.data.clone();
+        }
+        match &self.data {
+            Data::F(v) => Data::F(expand(v, &self.shape, shape)),
+            Data::I(v) => Data::I(expand(v, &self.shape, shape)),
+        }
     }
 
     /// std.tensor.10: `t op s` (`left`: `false`) or `s op t` (`true`),
@@ -165,6 +177,142 @@ impl Tensor {
             _ => unreachable!("checked: the scalar has the element type"),
         };
         Ok(Tensor { shape: self.shape.clone(), data })
+    }
+
+    /// std.tensor.15: row `i` of a tensor with at least one axis; the
+    /// result drops that axis, so `t[i]` of a 1-D tensor has shape `[]`.
+    pub fn row(&self, i: i64) -> Result<Tensor, Fault> {
+        let n = self.rows_or_fault("index")?;
+        let Some(i) = usize::try_from(i).ok().filter(|&i| i < n) else {
+            return fault("std.tensor.15", format!("index {i} is out of bounds for a tensor of {n} rows"));
+        };
+        let mut t = self.rows_between(i, i + 1)?;
+        t.shape.remove(0);
+        Ok(t)
+    }
+
+    /// std.tensor.15: rows `lo..hi` (or `lo..=hi`, when `inclusive`) along
+    /// axis 0, so the result keeps the axis.
+    pub fn slice_rows(&self, lo: i64, hi: i64, inclusive: bool) -> Result<Tensor, Fault> {
+        let n = self.rows_or_fault("slice")?;
+        let end = if inclusive { hi.checked_add(1) } else { Some(hi) };
+        match (usize::try_from(lo), end.and_then(|e| usize::try_from(e).ok())) {
+            (Ok(a), Some(b)) if a <= b && b <= n => self.rows_between(a, b),
+            _ => fault(
+                "std.tensor.15",
+                format!("rows {lo}..{hi} are out of bounds for a tensor of {n} rows"),
+            ),
+        }
+    }
+
+    /// std.tensor.15: the one element of a tensor of shape `[]` (`t[i].item()`).
+    pub fn item(&self) -> Result<Scalar, Fault> {
+        if self.len() != 1 {
+            return fault("std.tensor.15", format!("`item` needs one element, but the shape is {:?}", self.shape));
+        }
+        Ok(match &self.data {
+            Data::F(v) => Scalar::F(v[0]),
+            Data::I(v) => Scalar::I(v[0]),
+        })
+    }
+
+    fn rows_or_fault(&self, what: &str) -> Result<usize, Fault> {
+        match self.shape.first() {
+            Some(&n) => Ok(n),
+            None => fault("std.tensor.15", format!("`{what}` of a tensor of shape [], which has no rows")),
+        }
+    }
+
+    /// Rows `a..b` along axis 0, with every other axis kept.
+    fn rows_between(&self, a: usize, b: usize) -> Result<Tensor, Fault> {
+        let row: usize = self.shape[1..].iter().product();
+        let (lo, hi) = (a * row, b * row);
+        let data = match &self.data {
+            Data::F(v) => Data::F(v[lo..hi].to_vec()),
+            Data::I(v) => Data::I(v[lo..hi].to_vec()),
+        };
+        let mut shape = self.shape.clone();
+        shape[0] = b - a;
+        Ok(Tensor { shape, data })
+    }
+
+    /// std.tensor.16: the valid 2-D convolution of an `h x w` image with an
+    /// `kh x kw` kernel, stride 1, no padding: the result is
+    /// `(h - kh + 1) x (w - kw + 1)`. Each output adds its products in
+    /// row-major order of the kernel, one at a time, so the order is fixed.
+    pub fn conv2d(&self, kernel: &Tensor) -> Result<Tensor, Fault> {
+        let (&[h, w], &[kh, kw]) = (self.shape.as_slice(), kernel.shape.as_slice()) else {
+            return fault(
+                "std.tensor.16",
+                format!("`conv2d` needs two 2-D tensors, but the shapes are {:?} and {:?}", self.shape, kernel.shape),
+            );
+        };
+        if kh > h || kw > w {
+            return fault("std.tensor.16", format!("`conv2d`: a {kh}x{kw} kernel doesn't fit a {h}x{w} image"));
+        }
+        let (Data::F(img), Data::F(k)) = (&self.data, &kernel.data) else {
+            return fault("std.tensor.16", "`conv2d` is on `float` tensors".into());
+        };
+        let (oh, ow) = (h - kh + 1, w - kw + 1);
+        let mut out = vec![0.0; oh * ow];
+        for oy in 0..oh {
+            for ox in 0..ow {
+                let mut s = 0.0;
+                for ky in 0..kh {
+                    for kx in 0..kw {
+                        s += img[(oy + ky) * w + ox + kx] * k[ky * kw + kx];
+                    }
+                }
+                out[oy * ow + ox] = s;
+            }
+        }
+        Ok(Tensor { shape: vec![oh, ow], data: Data::F(out) })
+    }
+
+    /// std.tensor.17: the index of the largest (`max`) or smallest element
+    /// along `axis`, or over every element when `axis` is `None` (a result
+    /// of shape `[]`). The first of equal elements wins, and a NaN never
+    /// replaces the running best, as with `max`.
+    pub fn arg_reduce(&self, axis: Option<i64>, max: bool) -> Result<Tensor, Fault> {
+        let (before, n, after, shape) = self.split(axis, if max { "argmax" } else { "argmin" })?;
+        if n == 0 && before * after > 0 {
+            return fault("std.tensor.17", format!("`argmax` of an empty axis of a tensor of shape {:?}", self.shape));
+        }
+        let data = match &self.data {
+            Data::F(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
+            Data::I(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
+        };
+        Ok(Tensor { shape, data })
+    }
+
+    /// std.tensor.18: each element clamped to `[lo, hi]`; a NaN stays NaN.
+    pub fn clamp(&self, lo: f64, hi: f64) -> Result<Tensor, Fault> {
+        if lo.is_nan() || hi.is_nan() || lo > hi {
+            return fault("std.tensor.18", format!("`clamp({lo}, {hi})`: the bounds must satisfy lo <= hi"));
+        }
+        let Data::F(v) = &self.data else {
+            return fault("std.tensor.18", "`clamp` is on `float` tensors".into());
+        };
+        let data = v.iter().map(|&x| if x.is_nan() { x } else { x.clamp(lo, hi) }).collect();
+        Ok(Tensor { shape: self.shape.clone(), data: Data::F(data) })
+    }
+
+    /// std.tensor.19: each element rounded half away from zero to an `int`.
+    /// A NaN, an infinity or a value outside `int` traps.
+    pub fn round_int(&self) -> Result<Tensor, Fault> {
+        let Data::F(v) = &self.data else {
+            return fault("std.tensor.19", "`round` is on `float` tensors".into());
+        };
+        let mut out = Vec::with_capacity(v.len());
+        for &x in v {
+            let r = x.round();
+            // `i64::MAX as f64` rounds up to 2^63, which is out of range.
+            if !(-9.223_372_036_854_776e18..9.223_372_036_854_776e18).contains(&r) {
+                return fault("std.tensor.19", format!("`round` of {x}, which isn't a finite `int` value"));
+            }
+            out.push(r as i64);
+        }
+        Ok(Tensor { shape: self.shape.clone(), data: Data::I(out) })
     }
 
     /// std.tensor.14: `-t`, elementwise. A `float` is negated exactly; an
@@ -356,6 +504,88 @@ impl Activation {
             Activation::Tanh => x.tanh(),
         }
     }
+}
+
+/// `a op b` elementwise over two buffers of one length (std.tensor.5, 6).
+fn zip_data(a: &Data, b: &Data, op: Op) -> Result<Data, Fault> {
+    Ok(match (a, b) {
+        (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, op)),
+        (Data::I(a), Data::I(b)) => {
+            let mut out = Vec::with_capacity(a.len());
+            for (x, y) in a.iter().zip(b) {
+                out.push(op.i(*x, *y).ok_or_else(overflow)?);
+            }
+            Data::I(out)
+        }
+        _ => unreachable!("checked: one element type"),
+    })
+}
+
+/// The shape two shapes broadcast to, or `None` when they don't:
+/// per axis from the right, sizes are equal, or one of them is 1.
+fn broadcast_shape(a: &[usize], b: &[usize]) -> Option<Vec<usize>> {
+    let rank = a.len().max(b.len());
+    (0..rank)
+        .map(|k| {
+            let da = if k + a.len() >= rank { a[k + a.len() - rank] } else { 1 };
+            let db = if k + b.len() >= rank { b[k + b.len() - rank] } else { 1 };
+            match (da, db) {
+                _ if da == db => Some(da),
+                (1, _) => Some(db),
+                (_, 1) => Some(da),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// `v` (of `src` shape) copied to `out` shape: the source's size-1 axes
+/// repeat, so their stride is 0. Walks `out` row-major with a counter.
+fn expand<T: Copy>(v: &[T], src: &[usize], out: &[usize]) -> Vec<T> {
+    let rank = out.len();
+    let mut stride = vec![0usize; rank];
+    let mut s = 1;
+    for k in (0..rank).rev() {
+        let d = if k + src.len() >= rank { src[k + src.len() - rank] } else { 1 };
+        stride[k] = if d == 1 { 0 } else { s };
+        s *= d;
+    }
+    let n: usize = out.iter().product();
+    let mut res = Vec::with_capacity(n);
+    let mut idx = vec![0usize; rank];
+    let mut off = 0;
+    for _ in 0..n {
+        res.push(v[off]);
+        for k in (0..rank).rev() {
+            idx[k] += 1;
+            off += stride[k];
+            if idx[k] < out[k] {
+                break;
+            }
+            off -= stride[k] * idx[k];
+            idx[k] = 0;
+        }
+    }
+    res
+}
+
+/// The index along the axis of each result (std.tensor.17): the first
+/// element, then each later one that `better` prefers over the best so far.
+fn arg_axis<T: Copy>(v: &[T], before: usize, n: usize, after: usize, better: impl Fn(T, T) -> bool) -> Vec<i64> {
+    let mut out = Vec::with_capacity(before * after);
+    for b in 0..before {
+        for a in 0..after {
+            let at = |k: usize| v[(b * n + k) * after + a];
+            let mut best = 0;
+            for k in 1..n {
+                if better(at(k), at(best)) {
+                    best = k;
+                }
+            }
+            out.push(best as i64);
+        }
+    }
+    out
 }
 
 fn overflow() -> Fault {

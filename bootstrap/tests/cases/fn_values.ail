@@ -1,0 +1,44 @@
+struct Op
+    name str
+    run fn(int, int) int
+
+fn add(a int, b int) int
+    a + b
+
+fn mul(a int, b int) int
+    a * b
+
+fn double(n int) int
+    n * 2
+
+fn shout(s str)
+    print(s.to_upper())
+
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn twice(f fn(int) int, x int) int
+    f(f(x))
+
+fn pick(name str) fn(int, int) int
+    if name == "add"
+        return add
+    mul
+
+fn main()
+    f := double
+    print("{f(21)}")
+    print("{apply(double, 4)}")
+    print("{twice(double, 3)}")
+    ops := [Op(name: "add", run: add), Op(name: "mul", run: mul)]
+    for op in ops
+        print("{op.name} {(op.run)(6, 7)}")
+    g := pick("add")
+    print("{g(1, 2)} {pick("mul")(3, 4)}")
+    say := shout
+    say("hi")
+    fs := [double, double]
+    mut total := 0
+    for h in fs
+        total += h(5)
+    print("{total}")

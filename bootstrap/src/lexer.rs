@@ -767,7 +767,8 @@ impl Lexer {
                     let Some(close) = find_close(&line[..to], i) else {
                         self.diags.push(
                             Diagnostic::new("lex.str.2", here, "this `{` in a string is never closed")
-                                .help("close it with `}`, or write `\\{` for a literal brace"),
+                                .help("close it with `}`, or write `\\{` for a literal brace")
+                                .fix("write `\\{` for a literal brace", vec![crate::fix::string::literal_brace(here)]),
                         );
                         self.forget_brackets(line_no);
                         return quoted.then_some(to);
@@ -792,7 +793,8 @@ impl Lexer {
                     if code.len() == 1 {
                         self.diags.push(
                             Diagnostic::new("lex.str.2", here, "empty `{}` in a string")
-                                .help("put an expression inside, or write `\\{` for a literal brace"),
+                                .help("put an expression inside, or write `\\{` for a literal brace")
+                                .fix("write `\\{` for a literal brace", vec![crate::fix::string::literal_brace(here)]),
                         );
                     } else {
                         if !value.is_empty() {

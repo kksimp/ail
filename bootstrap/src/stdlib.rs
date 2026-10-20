@@ -19,12 +19,11 @@ pub const MODULES: &[(&str, &[&str])] = &[
         ],
     ),
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
-    ("io", &["eprint", "exit", "read_all", "read_line"]),
-    ("net", &["connect", "connect_tls", "get", "listen", "options", "post", "request", "serve"]),
+    ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
-    ("net", &["get", "post"]),
+    ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
     ("path", &["base", "dir", "ext", "join"]),
-    ("proc", &["kill", "run", "start", "wait", "which"]),
+    ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("regex", &["captures", "compile", "escape", "find", "find_all", "is_match", "replace", "replace_first", "split"]),
     ("tensor", &["from", "zeros"]),
@@ -60,23 +59,26 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Server", "addr", "net.Server.addr"),
     ("Server", "close", "net.Server.close"),
     ("Exchange", "respond", "net.Exchange.respond"),
+    ("Exchange", "respond_bytes", "net.Exchange.respond_bytes"),
     ("Listener", "accept", "net.Listener.accept"),
     ("Listener", "addr", "net.Listener.addr"),
     ("Listener", "close", "net.Listener.close"),
     ("Conn", "close", "net.Conn.close"),
     ("Conn", "peer", "net.Conn.peer"),
     ("Conn", "read", "net.Conn.read"),
+    ("Conn", "read_bytes", "net.Conn.read_bytes"),
     ("Conn", "read_line", "net.Conn.read_line"),
     ("Conn", "set_timeout", "net.Conn.set_timeout"),
     ("Conn", "write", "net.Conn.write"),
+    ("Conn", "write_bytes", "net.Conn.write_bytes"),
 ];
 
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
     &[
-        "add", "dot", "len", "map", "matmul", "max", "mean", "mul", "relu", "reshape", "shape", "sigmoid", "sum", "tanh",
-        "to_list", "transpose",
+        "add", "argmax", "argmin", "clamp", "conv2d", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu",
+        "reshape", "round", "shape", "sigmoid", "sum", "tanh", "to_list", "transpose",
     ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
@@ -93,6 +95,24 @@ pub enum StdCall {
     Tensor(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
+    /// `p.m(...)` on a raw pointer (unsafe.ptr.3-5): the method's name and
+    /// the type the pointer points to.
+    Ptr(&'static str, PtrElem),
+}
+
+/// What a raw pointer points to (unsafe.ptr.1), as memory holds it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PtrElem {
+    /// `int`: 8 bytes.
+    Int,
+    /// `float`: 8 bytes.
+    Float,
+    /// `bool`: 1 byte.
+    Bool,
+    /// A sized number: its width.
+    Num(crate::num::Num),
+    /// Another pointer: 8 bytes.
+    Ptr,
 }
 
 /// Each type of a standard module, declared in `std/types.ail`: its name
@@ -102,6 +122,8 @@ const TYPES: &[(&str, &str)] = &[
     ("IoError", "fs"),
     ("Metadata", "fs"),
     ("Response", "net"),
+    ("RawResponse", "net"),
+    ("RawOutput", "proc"),
     ("NetError", "net"),
     ("Options", "net"),
     ("Request", "net"),

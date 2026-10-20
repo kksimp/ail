@@ -323,7 +323,7 @@ fn out_list_deep(xs List[int], depth int, leaf int)
         out_list_deep(list_at(load64(data + 8 * i)), depth - 1, leaf)
     out_byte(93)
 
-## A heap object of `size` bytes after its header word (native-abi.md §3):
+## A heap object of `size` bytes after its header word (native-abi.md §2):
 ## bits 0-7 the kind, 16-63 the size. The pointer is to the first byte
 ## after the header.
 fn obj_new(size int, kind int) int

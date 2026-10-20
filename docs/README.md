@@ -55,6 +55,8 @@ Design notes:
 - [design/garlic-browser.md](design/garlic-browser.md): Garlic, a web
   browser written in AIL: architecture, text-mode first milestone, the page
   model agents read, JavaScript and dependencies.
+- [design/pdf-viewer.md](design/pdf-viewer.md): the PDF reader and viewer
+  in AIL that searches the text layer without OCR, and what pixels need.
 - [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
   moves from the bootstrap's crate shim to platform APIs through `extern c`.
 - [design/semantic-api.md](design/semantic-api.md): the machine-readable
@@ -64,6 +66,8 @@ Design notes:
   and per-dependency capability grants.
 - [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
   writes.
+- [design/garlic-js.md](design/garlic-js.md): the JavaScript engine of the
+  Garlic browser, written in AIL: lexer, parser, testing, plan.
 - [design/compile-time-execution.md](design/compile-time-execution.md),
   [design/metaprogramming.md](design/metaprogramming.md),
   [design/reflection.md](design/reflection.md),

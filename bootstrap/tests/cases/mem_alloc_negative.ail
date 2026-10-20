@@ -1,0 +1,7 @@
+# unsafe.mem.3: a negative element count traps.
+use std.mem
+
+fn main()
+    unsafe
+        p := mem.alloc(0 - 1, 0)
+        mem.free(p)
