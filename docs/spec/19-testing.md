@@ -138,3 +138,27 @@ declaration's name (`doc:Type.method` for a method, `doc:Enum.Variant` for a
 variant). A second block on the same declaration is `doc:NAME#2`, and so on. A
 failure is reported at the failing line inside the doc comment, or at the
 opening fence for an output mismatch. *(ADR 0200)*
+
+## Failure detail and coverage
+
+**test.run.5** — When a trap fails a test, `ail test` prints the trap's
+snapshot (trace.snap.1-2) under the failure: the source line, the values a
+failed contract condition read, and the stack. With `--json`, the failing
+line carries it as `"snapshot"`. A contract failure (contract.req.1,
+contract.ens.1) names the contract in the failure message. *(ADR 0290)*
+
+**test.cover.1** — `ail test --coverage` runs the tests and then prints, for
+each source file of the program, the lines and functions they ran. A line
+counts when it starts a statement of a function that is not a test. A
+function counts as run when its first statement ran. The prelude and test
+functions are not counted. *(ADR 0289)*
+
+**test.cover.2** — The text form is one line per file:
+`coverage FILE: lines H/T (P%), functions H/T`. `--coverage=lines` adds
+`  not run: 7-8, 12` listing the unexecuted line ranges. *(ADR 0289)*
+
+**test.cover.3** — With `--json`, each file is a line
+`{"coverage":true,"file","lines","lines_hit","functions","functions_hit","missed":[[from,to],...]}`
+after the summary line; `missed` is always present. Coverage is off unless
+asked for and then costs one flag test per statement; a run without it is
+unchanged. *(ADR 0289)*
