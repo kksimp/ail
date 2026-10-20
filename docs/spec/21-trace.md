@@ -6,8 +6,8 @@ Chapter key: `trace`
 > budget and summary, `--watch NAME`, and the snapshot a trap carries.
 > The exact line and JSON formats are non-normative and live in
 > [semantic-api.md](../design/semantic-api.md#runtime-traces-ail-run---trace-adr-0265).
-> Not yet designed: tracing tests (`ail test --trace`), breakpoints, and a
-> trace of one function only.
+> Tests are traced by `ail test --trace` (trace.test.*). Not yet designed:
+> breakpoints, and a trace of one function only.
 
 A trace lets the person or agent who ran a program see what it did without
 adding prints: which functions ran with which values, which effects it
@@ -21,8 +21,9 @@ event per line to standard error. `calls` traces calls, returns and contract
 checks; `effects` traces effects reached and tasks spawned and waited; `all`
 (the default for a bare `--trace`) traces both. With `--json`, each event is
 one JSON object. The tracing options (`--trace`, `--trace-limit`, `--watch`,
-`--verbose`) belong to `ail run`; with another command, or malformed, they
-are an error before anything runs (exit 2). *(ADR 0265)*
+`--verbose`) belong to `ail run` and `ail test` (trace.test.1); with another
+command, or malformed, they are an error before anything runs (exit 2).
+*(ADRs 0265, 0326)*
 
 **trace.run.2** — A `call` event names the function, its receiver and
 arguments with their values, its call depth (`main` is 1), and the position
@@ -82,9 +83,36 @@ assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
 the variable's whole new value and the position of the assignment. It counts
 against the event budget (trace.run.4). *(ADR 0268)*
 
-**trace.watch.2** — A change made through a `mut` argument or a mutating
-method (`NAME.push(x)`) is not an assignment and isn't shown; the next
-assignment shows its effect. *(ADR 0268)*
+**trace.watch.2** — A builtin mutating method (`NAME.push(x)`) is not an
+assignment and isn't shown; the next assignment shows its effect. A change
+made by a user function through a `mut` argument or `mut self` is shown
+(trace.watch.3). *(ADRs 0268, 0327)*
+
+**trace.watch.3** — A user function or method called with the watched variable
+(or a name that stands for it) as a `mut` argument or `mut` receiver follows it
+under the callee's own name for it: an assignment rooted in that name shows the
+watched variable's whole new value in that frame, until the call returns. The
+event names the frame, the function that wrote, and, when the callee's name
+differs, that name (`via`). In JSON: `"frame":"Counter.bump","via":"self"`;
+in text, ` in Counter.bump (as \`self\`)` after the position, left out for the
+first frame so a plain run reads as before. A call that passes the value by
+copy (not `mut`) does not follow it. *(ADR 0327)*
+
+## Tracing tests
+
+**trace.test.1** — `ail test --trace[=calls|effects|all]` (and `--trace-limit`,
+`--watch`) trace each test as `ail run` traces a program, but keep each
+test's events instead of writing them: only a failing test reports them. With
+`--json` the failing test's entry gets `"trace"`, a list of the event objects
+`ail run --trace --json` writes (without the summary line); a passing test,
+a property test, and a run without `--trace` have no `trace` key. In the human
+form the events are printed under `FAIL`, indented, before the test's output.
+*(ADR 0326)*
+
+**trace.test.2** — The budget (trace.run.4) applies per test. When it drops
+events, the list ends with `{"api":1,"trace":"dropped","count":N}` (text:
+`trace: N more events dropped`). Tracing never changes a test's result.
+*(ADR 0326)*
 
 ## Trap snapshots
 

@@ -293,6 +293,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0304](0304-trait-contract-inheritance.md) | Implementations inherit trait method contracts: own `requires` weaken, own `ensures` add *(delegated)* | Accepted | 2026-10-20 |
 | [0305](0305-struct-invariants.md) | Struct `invariant` lines, checked at construction and after `mut self` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0312](0312-editor-agent-panel.md) | The editor's agent panel: info (Ctrl-I), trace (Shift-F5) and failure paths (Ctrl-Shift-E) in one pane *(delegated)* | Accepted | 2026-10-20 |
+| [0325](0325-ail-api-on-package-directories.md) | `ail api` on package directories: outline, symbols, refs, type *(delegated)* | Accepted | 2026-10-20 |
+| [0326](0326-ail-test-trace.md) | `ail test --trace` keeps a failing test's trace *(delegated)* | Accepted | 2026-10-20 |
+| [0327](0327-watch-through-calls.md) | `--watch` follows a variable through `mut` calls *(delegated)* | Accepted | 2026-10-20 |
 | [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
 | [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
 | [0306](0306-derive-generators-run-while-loading.md) | The bootstrap runs derive generators while it loads the program; `TypeInfo.is_error` *(delegated)* | Accepted | 2026-10-20 |

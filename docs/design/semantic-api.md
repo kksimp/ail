@@ -426,6 +426,33 @@ use of the name within its scope (api.loc.2). Locals can't be shadowed
 (expr.bind.4), so the name identifies the binding. Only locals of the file
 asked about are supported.
 
+### Package directories
+
+**api.pkg.1** — `ail api [--outline] [--symbols] [--text|--pretty] DIR` outlines
+a whole package: the root module's files and every module they import
+([ADR 0325](../decisions/0325-ail-api-on-package-directories.md)). The object
+has `api`, `package` (the path as given), `items` and, with `--symbols`,
+`references`. Items are ordered by file (root files first, then modules in
+load order) and line. Each item has the single-file keys, with its `id` prefixed
+by its module (`fn:geo.origin`, `type:geo.P`, `method:geo.P.shift`; api.id.1),
+and ends with `module` (the import path, empty for the root) and `file`.
+`line` counts from the top of the item's file. A reference has `id`, `line`,
+`col` and `file`. `--text` prints a `# FILE` line before each file's items.
+
+**api.pkg.2** — `--locals|--type|--refs DIR FILE LINE COL` asks about `FILE`
+in the context of the whole package `DIR`, so `--refs` lists uses in every file
+of every module, whichever file declares or uses the symbol. `FILE` is a root
+file of `DIR` or a file of a module the root imports. A file the package does
+not load is an error (`api.pkg.2`, exit 2). `--locals` and locals in `--type` and
+`--refs` need a root file (api.refs.3).
+
+**api.pkg.3** — The cursor may be on the name after a module qualifier
+(`geo.origin` at `origin`) as well as on the qualifier (api.refs.2); both ask
+about the same symbol. This holds for `--refs` with or without `DIR`.
+
+**api.pkg.4** — The single-file forms and their JSON are unchanged (api.out.1,
+api.refs.1). `refs` always names the file each position is in.
+
 ```json
 {"api":1,"file":"t.ail","line":14,"col":9,"locals":[{"name":"items","type":"List[Point]","mut":false,"kind":"param","line":10,"col":10},{"name":"sum","type":"int","mut":true,"kind":"binding","line":11,"col":9}]}
 ```

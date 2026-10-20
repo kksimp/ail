@@ -152,6 +152,9 @@ failed contract condition read, and the stack. With `--json`, the failing
 line carries it as `"snapshot"`. A contract failure (contract.req.1,
 contract.ens.1) names the contract in the failure message. *(ADR 0290)*
 
+**test.run.6** — `ail test --trace` adds the failing test's trace to its
+report (trace.test.1-2). *(ADR 0326)*
+
 **test.cover.1** — `ail test --coverage` runs the tests and then prints, for
 each source file of the program, the lines and functions they ran. A line
 counts when it starts a statement of a function that is not a test. A

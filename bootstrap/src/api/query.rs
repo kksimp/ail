@@ -40,9 +40,14 @@ pub fn command(q: Query, args: &[&str], json: bool) -> ExitCode {
             }
         }
     }
-    let [path, line, col] = pos_args[..] else {
-        eprint!("{USAGE}");
-        return ExitCode::from(2);
+    // api.pkg.2: `DIR FILE LINE COL` asks about a file in the context of its whole package.
+    let (pkg, path, line, col) = match pos_args[..] {
+        [path, line, col] => (None, path, line, col),
+        [dir, path, line, col] if std::path::Path::new(dir).is_dir() => (Some(dir), path, line, col),
+        _ => {
+            eprint!("{USAGE}");
+            return ExitCode::from(2);
+        }
     };
     let (Ok(line), Ok(col)) = (line.parse::<usize>(), col.parse::<usize>()) else {
         eprint!("{USAGE}");
@@ -55,7 +60,7 @@ pub fn command(q: Query, args: &[&str], json: bool) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match run(q, path, &src, line, col) {
+    match run_pkg(q, pkg, path, &src, line, col) {
         Ok(j) => {
             let mut out = String::new();
             j.write(&mut out, pretty.then_some(0));
@@ -88,8 +93,24 @@ pub enum Failure {
 }
 
 /// The answer to one query as JSON. A rejected program has no answer (api.out.5).
+#[cfg(test)]
 pub fn run(q: Query, path: &str, src: &str, line: usize, col: usize) -> Result<Json, Failure> {
-    let (mut prog, mut diags) = crate::modules::load_src(path, src);
+    run_pkg(q, None, path, src, line, col)
+}
+
+/// `run` for a file inside the package directory `pkg` (api.pkg.2): the
+/// package's other root files and modules are loaded too, so `--refs` finds
+/// uses in every one of them.
+pub fn run_pkg(q: Query, pkg: Option<&str>, path: &str, src: &str, line: usize, col: usize) -> Result<Json, Failure> {
+    let (mut prog, mut diags, base) = match pkg {
+        None => {
+            let (p, d) = crate::modules::load_src(path, src);
+            (p, d, 0)
+        }
+        Some(dir) => crate::modules::load_in(dir, path, src).unwrap_or_else(|e| {
+            (Program::default(), vec![diag::Diagnostic::new("api.pkg.2", Pos { line: 1, col: 1 }, e)], 0)
+        }),
+    };
     let mut resolved = Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check_recording(&prog);
@@ -98,8 +119,21 @@ pub fn run(q: Query, path: &str, src: &str, line: usize, col: usize) -> Result<J
     if diags.iter().any(|d| !d.warning) {
         return Err(Failure::Diags(diags));
     }
-    docs::attach(&mut prog, src);
+    if pkg.is_some() {
+        // A package has a file per module: each file's doc comments, by line.
+        let mut by_line = std::collections::HashMap::new();
+        for f in prog.files.iter().filter(|f| f.path.ends_with(".ail")) {
+            let text = if f.base == base { src } else { f.src.as_str() };
+            for (l, doc) in docs::by_line(text) {
+                by_line.insert(f.base + l, doc);
+            }
+        }
+        docs::attach_lines(&mut prog, &by_line);
+    } else {
+        docs::attach(&mut prog, src);
+    }
     let lines: Vec<&str> = src.lines().collect();
+    // `cursor` is in the file; `at` is the same place in the program (api.pkg.2).
     let cursor = Pos { line, col };
     let head = |extra: Vec<(&'static str, Json)>| {
         let mut kvs = vec![
@@ -119,12 +153,13 @@ pub fn run(q: Query, path: &str, src: &str, line: usize, col: usize) -> Result<J
         }
         Query::Type => {
             let tok = token_at(&lines, cursor).ok_or_else(|| Failure::Nothing(format!("no name or literal at {line}:{col}")))?;
-            let start = Pos { line, col: tok.start };
+            let start = Pos { line: line + base, col: tok.start };
             let effects = check::effects::effects_of(&prog, &resolved);
             let api = Api::new(&prog, effects);
             let refs = Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
             let symbol = refs.resolved_at(start, &tok.text);
-            let local = visible_locals(&resolved, &lines, cursor).into_iter().find(|l| l.name == tok.text);
+            // Locals are tracked for the first file only.
+            let local = if base == 0 { visible_locals(&resolved, &lines, cursor).into_iter().find(|l| l.name == tok.text) } else { None };
             // The checker's type of the innermost expression starting here.
             let ty = resolved
                 .facts
@@ -154,7 +189,7 @@ pub fn run(q: Query, path: &str, src: &str, line: usize, col: usize) -> Result<J
             kvs.push(("callee", callee.unwrap_or(Json::Null)));
             Ok(head(kvs))
         }
-        Query::Refs => refs_query(&prog, &resolved, &lines, cursor, path, head),
+        Query::Refs => refs_query(&prog, &resolved, &lines, cursor, base, path, head),
     }
 }
 
@@ -233,11 +268,12 @@ fn refs_query(
     resolved: &Resolved,
     lines: &[&str],
     cursor: Pos,
+    base: usize,
     path: &str,
     head: impl Fn(Vec<(&'static str, Json)>) -> Json,
 ) -> Result<Json, Failure> {
     let tok = token_at(lines, cursor).ok_or_else(|| Failure::Nothing(format!("no name at {}:{}", cursor.line, cursor.col)))?;
-    let start = Pos { line: cursor.line, col: tok.start };
+    let start = Pos { line: cursor.line + base, col: tok.start };
     let effects = check::effects::effects_of(prog, resolved);
     let mut api = Api::new(prog, effects);
     api.whole = true;
@@ -252,7 +288,17 @@ fn refs_query(
         .iter()
         .find(|(p, _)| *p == start)
         .map(|(_, id)| id.clone())
-        .or_else(|| decls.iter().find(|(p, _)| *p == start).map(|(_, id)| id.clone()));
+        .or_else(|| decls.iter().find(|(p, _)| *p == start).map(|(_, id)| id.clone()))
+        .or_else(|| {
+            // api.pkg.3: a use through a module (`geo.origin`) is recorded at the qualifier; the
+            // name after the dot asks the same question.
+            let chars: Vec<char> = lines.get(cursor.line.checked_sub(1)?)?.chars().collect();
+            let dot = tok.start.checked_sub(2).filter(|&i| chars.get(i) == Some(&'.'))?;
+            let word = |c: &char| c.is_alphanumeric() || *c == '_' || *c == '.';
+            let from = chars[..dot].iter().rposition(|c| !word(c)).map_or(0, |i| i + 1);
+            let q = Pos { line: cursor.line + base, col: from + 1 };
+            found.iter().find(|(p, _)| *p == q).map(|(_, id)| id.clone())
+        });
     let mut at: Vec<(Pos, bool)> = Vec::new();
     let symbol;
     if let Some(id) = id {
@@ -261,7 +307,8 @@ fn refs_query(
         at.extend(decls.iter().filter(|(_, i)| *i == id).map(|(p, _)| (*p, true)));
     } else {
         // A local: its binding and the unresolved names in its scope.
-        let me = visible_locals(resolved, lines, cursor)
+        let scoped = if base == 0 { visible_locals(resolved, lines, cursor) } else { Vec::new() };
+        let me = scoped
             .into_iter()
             .find(|l| l.name == tok.text)
             .or_else(|| resolved.facts.locals.iter().find(|l| l.at == Some(start)).cloned());
@@ -284,9 +331,10 @@ fn refs_query(
     let out = at
         .into_iter()
         .map(|(p, def)| {
+            // Every file knows its own path; in a package the first file is not always the queried one.
             let (file, line) = match prog.file_at(p) {
-                Some(f) if f.base > 0 => (f.path.clone(), p.line - f.base),
-                _ => (path.to_string(), p.line),
+                Some(f) => (f.path.clone(), p.line - f.base),
+                None => (path.to_string(), p.line),
             };
             Json::Obj(vec![
                 ("file", Json::Str(file)),

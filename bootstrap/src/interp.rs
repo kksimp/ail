@@ -1111,7 +1111,19 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// Run `f`'s body in `env`, which holds its receiver and parameters; on
     /// return `env` holds just those again.
+    #[inline]
     fn run_body(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if self.tracing & trace::WATCH == 0 {
+            return self.run_body_inner(f, env, pos);
+        }
+        // trace.watch.3: the frame lives as long as the body.
+        self.watch_enter(f);
+        let result = self.run_body_inner(f, env, pos);
+        self.watch_leave();
+        result
+    }
+
+    fn run_body_inner(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
         self.depth += 1;
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
@@ -2792,7 +2804,27 @@ impl<'a, W: Write> Interp<'a, W> {
     /// and arguments are moved out of their places for the call and written
     /// back afterwards (trait.method.3, own.param.2), so the callee mutates
     /// them without copying.
+    #[inline]
     fn invoke(
+        &mut self,
+        f: &'a FnDecl,
+        recv: Option<Operand>,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        if self.tracing & trace::WATCH != 0 {
+            // trace.watch.3: which names in the callee stand for the watched variable.
+            let root = match &recv {
+                Some(Operand::Place(p)) if p.slot != IN_CELL => env.get(p.slot).map(|(n, _)| *n),
+                _ => None,
+            };
+            self.watch_call(f, root, args);
+        }
+        self.invoke_inner(f, recv, args, pos, env)
+    }
+
+    fn invoke_inner(
         &mut self,
         f: &'a FnDecl,
         recv: Option<Operand>,

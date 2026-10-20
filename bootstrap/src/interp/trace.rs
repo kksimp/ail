@@ -51,7 +51,24 @@ const FRAME_LIMIT: usize = 64;
 /// Lines of a default human trap report (trace.snap.3).
 const REPORT_LINES: usize = 10;
 
+/// One function being run while `--watch` is on: its name, and the names
+/// in it that stand for the watched variable (trace.watch.3).
+struct WatchFrame {
+    name: String,
+    aliases: Vec<String>,
+}
+
+/// Events kept for a test (trace.test.1).
+struct Capture {
+    lines: Vec<String>,
+    dropped: u64,
+}
+
 thread_local! {
+    static FRAMES: std::cell::RefCell<Vec<WatchFrame>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Aliases found at a call site, until the callee's body starts (trace.watch.3).
+    static PENDING: std::cell::RefCell<Vec<(usize, Vec<String>)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static CAPTURE: std::cell::RefCell<Option<Capture>> = const { std::cell::RefCell::new(None) };
     /// The snapshot of the trap that ended `run`, for `main.rs` to render.
     static LAST: std::cell::RefCell<Option<Snapshot>> = const { std::cell::RefCell::new(None) };
 }
@@ -135,6 +152,22 @@ pub(super) fn mode() -> u8 {
 /// `line` builds the text only when it is shown.
 fn emit(kind: usize, line: impl FnOnce(bool) -> String) {
     let Some(cfg) = CONFIG.get() else { return };
+    // trace.test.1: inside a test the events are kept, not written.
+    let mut line = Some(line);
+    let kept = CAPTURE.with(|c| {
+        let mut c = c.borrow_mut();
+        let cap = c.as_mut()?;
+        if (cap.lines.len() as u64) < cfg.limit {
+            cap.lines.push(line.take()?(cfg.json));
+        } else {
+            cap.dropped += 1;
+        }
+        Some(())
+    });
+    if kept.is_some() {
+        return;
+    }
+    let Some(line) = line else { return };
     let mut st = STATE.lock().unwrap_or_else(|e| e.into_inner());
     st.kinds[kind] += 1;
     if st.shown >= cfg.limit {
@@ -630,23 +663,76 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// trace.watch.1: after an assignment or `let mut`, show the watched
-    /// variable if `name` is it.
+    /// variable if `name` is it, or (trace.watch.3) stands for it in this
+    /// frame because a `mut` receiver or argument passed it on.
     #[inline(never)]
     pub(super) fn trace_watch(&self, name: &str, env: &Env<'_>, pos: Pos) {
         let Some(cfg) = CONFIG.get() else { return };
-        if cfg.watch != name {
+        let (frame, depth, via) = FRAMES.with(|f| {
+            let f = f.borrow();
+            let top = f.last();
+            let via = top.is_some_and(|t| t.aliases.iter().any(|a| a == name));
+            (top.map(|t| t.name.clone()), f.len(), via)
+        });
+        if cfg.watch != name && !via {
             return;
         }
         let Some(v) = lookup(env, name) else { return };
         let prog = self.prog;
+        let watched = cfg.watch.as_str();
         emit(6, |json| {
             let value = show(v, LONG);
+            let through = if via && name != watched { format!(" (as `{name}`)") } else { String::new() };
             if json {
-                format!("{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{},{}}}", json_str(name), json_str(&value), at_json(prog, pos))
+                let frame = frame.as_deref().map_or(String::new(), |f| format!(",\"frame\":{}", json_str(f)));
+                let via = if via && name != watched { format!(",\"via\":{}", json_str(name)) } else { String::new() };
+                format!("{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{}{frame}{via},{}}}", json_str(watched), json_str(&value), at_json(prog, pos))
             } else {
-                format!("watch: {name} = {value} at {}", at_text(prog, pos))
+                // The frame is named only below the first, so a plain run reads as before.
+                let in_frame = match &frame {
+                    Some(f) if depth > 1 => format!(" in {f}"),
+                    _ => String::new(),
+                };
+                format!("watch: {watched} = {value} at {}{in_frame}{through}", at_text(prog, pos))
             }
         });
+    }
+
+    /// trace.watch.3: before a call, find which names in the callee will
+    /// hold the watched variable: a `mut` receiver or `mut` argument that
+    /// is rooted in it. `args` are the call's argument expressions.
+    #[inline(never)]
+    pub(super) fn watch_call(&self, f: &FnDecl, recv_root: Option<&str>, args: &[crate::ast::Arg]) {
+        let Some(cfg) = CONFIG.get() else { return };
+        let watched = |n: &str| -> bool {
+            cfg.watch == n || FRAMES.with(|fr| fr.borrow().last().is_some_and(|t| t.aliases.iter().any(|a| a == n)))
+        };
+        let mut aliases = Vec::new();
+        if f.receiver.is_some_and(|r| r.mutable) && recv_root.is_some_and(&watched) {
+            aliases.push("self".to_string());
+        }
+        for (a, p) in args.iter().zip(&f.params) {
+            if p.mutable && crate::ast::place_root(&a.value).is_some_and(&watched) {
+                aliases.push(p.name.clone());
+            }
+        }
+        PENDING.with(|p| p.borrow_mut().push((f as *const FnDecl as usize, aliases)));
+    }
+
+    /// trace.watch.3: a body starts; it takes the aliases its call site found.
+    #[inline(never)]
+    pub(super) fn watch_enter(&self, f: &FnDecl) {
+        let key = f as *const FnDecl as usize;
+        let aliases = PENDING.with(|p| {
+            let mut p = p.borrow_mut();
+            if p.last().is_some_and(|(k, _)| *k == key) { p.pop().map(|(_, a)| a) } else { None }
+        });
+        FRAMES.with(|fr| fr.borrow_mut().push(WatchFrame { name: f.full_name(), aliases: aliases.unwrap_or_default() }));
+    }
+
+    #[inline(never)]
+    pub(super) fn watch_leave(&self) {
+        FRAMES.with(|fr| fr.borrow_mut().pop());
     }
 
     /// trace.snap.2: a trap is leaving a block; keep the frame's locals
@@ -690,4 +776,30 @@ impl<'a, W: Write> Interp<'a, W> {
             s.condition = values;
         }
     }
+}
+
+/// trace.test.1: from here, a test's events are kept for its report.
+pub(super) fn capture_begin() {
+    if CONFIG.get().is_none() {
+        return;
+    }
+    FRAMES.with(|f| f.borrow_mut().clear());
+    PENDING.with(|p| p.borrow_mut().clear());
+    CAPTURE.with(|c| *c.borrow_mut() = Some(Capture { lines: Vec::new(), dropped: 0 }));
+}
+
+/// The events kept since `capture_begin`, with a closing line saying how many
+/// the budget dropped (trace.test.2).
+pub(super) fn capture_end() -> Vec<String> {
+    let Some(cap) = CAPTURE.with(|c| c.borrow_mut().take()) else { return Vec::new() };
+    let mut lines = cap.lines;
+    if cap.dropped > 0 {
+        let json = CONFIG.get().is_some_and(|c| c.json);
+        lines.push(if json {
+            format!("{{\"api\":1,\"trace\":\"dropped\",\"count\":{}}}", cap.dropped)
+        } else {
+            format!("trace: {} more events dropped", cap.dropped)
+        });
+    }
+    lines
 }

@@ -1,0 +1,5 @@
+watch: c = Counter(n: 0) at 12:9
+watch: c = Counter(n: 2) at 5:5 in Counter.bump (as `self`)
+watch: c = Counter(n: 7) at 8:5 in add
+watch: c = Counter(n: 8) at 5:5 in Counter.bump (as `self`)
+trace: summary: 4 events shown, 0 dropped (watch 4)
