@@ -7,88 +7,83 @@ Lane 181 of the native self-compile push. Owner of the survey:
 compiler builds itself (ADR [0022](../decisions/0022-staged-self-hosting.md)),
 then the stdlib, module loading and the `ail` command leave Rust.
 
-## Snapshot
+## Snapshot: whole-compiler build (module loading landed)
 
-Two snapshots. The first is the base of this PR; the second is the
-structs branch, which is what the next survey should be compared with.
+Measured on `origin/lane/120-native-modules` at 395e6df (PR #183, stacked on
+#178). `ail build compiler/main.ail` now loads the modules and lowers the
+whole compiler in one run. It exits 1 with **1079** `native.subset.1`
+problems in 30 files. The survey script builds the whole compiler, not each
+module alone (see ADR 0585).
 
-- **Base** `lane/120-native-opt` at 512cc79 (PR #164): 937 problems in 30
-  modules. Top: methods and generic functions (454), parameter types (184),
-  struct declarations (88), result types (70).
-- **Structs branch** `lane/120-native-structs` at 5680f91: 953 problems in
-  30 modules. Methods are now accepted, so their count moved into
-  "methods of X" (71) and "X outside a method" (1). Field types (112) and
-  struct-typed parameters and results now dominate.
-- `./ail build compiler/main.ail` exits 1 on both. Module loading is not in
-  yet, so the other 29 modules are never lowered by it; the survey lowers
-  each module alone instead.
-- Cross-module artifacts: calls of functions in other modules (54 on base,
-  69 on structs) and qualified constants like `codegen.SLOT_BASE` (6). They
-  are real blockers only after module loading, so they are listed apart.
-- Interpreted-vs-native comparison of `mir` and `build` output on the
-  perfbench programs: not run, because the build does not succeed.
+Earlier snapshots, for comparison: the base `lane/120-native-opt` at 512cc79
+had 937 problems when each module was lowered alone, and
+`lane/120-native-structs` at 5680f91 had 953 in the same mode.
+
+Top files: `mir/lower.ail` 166, `syntax/parse.ail` 117,
+`check/checker.ail` 111, `syntax/lex.ail` 85, `syntax/recover.ail` 68,
+`ast/ast.ail` 51, `x64/gen.ail` 48, `a64/gen.ail` 48.
 
 To reproduce, from the repository root:
 
     tools/self-compile/run.sh /path/to/outdir
 
-## Top blocking constructs (structs branch)
+## What blocks it, by the open PR that covers it
 
-Counts are from the survey on 5680f91. Owners are from the lane briefs and
-lane 120's note of 2026-10-20.
+Problems are grouped by message and by the type named in the source line.
+The coverage column is the open or announced lane that is expected to
+remove the group. These are estimates, not a measurement of a merge.
 
-| # | Construct | Problems | Owner |
-|---|---|---|---|
-| 1 | Parameters whose type is not in the subset (mostly `List[T]` and struct types) | 313 | 120 (structs), 171 and 176 (lists) |
-| 2 | Struct fields whose type is not in the subset | 112 | 120, 171 (heap) |
-| 3 | Results whose type is not in the subset | 83 | 120, 171 |
-| 4 | Operators and methods on types not in the subset: `==` on `str`, `.extend()` on `List`, `.code()` on `str` | 77 | 172 (strings), 176 (lists), 173 (maps) |
-| 5 | Methods of structs | 71 | 120 (lands on the structs branch; check its remaining cases) |
-| 6 | Calls of functions in other modules (cross-module) | 69 | 120 (multi-file modules) |
-| 7 | Locals-only restriction on assignment targets | 59 | 120 |
-| 8 | Functions that end in a `match` on a string or enum: "must end with its result" | 37 | 120; 179 (enums, match) |
-| 9 | Enum declarations | 19 | 179 (enums and match) |
-| 10 | Top-level constants that are not literals | 17 | 179 (announced by lane 120) |
+| Group | Problems | Covered by |
+|---|---|---|
+| Optional types (`str?`, `Val?`, `int?`, ...) in parameters, results and fields | 164 | #177 (optionals and results) |
+| `if x := e` bindings, `none`, `else` | 80 | #177 |
+| `==` and `!=` on `str` | 140 | #179 (strings: comparison) |
+| String interpolation outside `print`, `char`, `starts_with`, `split`, `code` | 81 | #179, and #184 for Unicode tables |
+| Enum types (`Ty`, `ast.Expr`, `Tok`, `Def`, ...) and enum declarations | 200 | lane 179 (enums and match, announced, not open) |
+| `match`, and functions that must end with a value | 60 | lane 179 |
+| Non-literal top-level constants | 19 | lane 179 (announced) |
+| Map and Set types and operations | 36 | #180 (maps and sets) |
+| `List[T]` types (`List[char]`, `List[Ty]`, ...) | 85 | partly #177 and lane 179; `List[char]` needs #179 |
+| List methods on `List[...]` and on unknown types (`.extend`, `.contains`, `.remove_at`, `.sorted`, ...) | 56 | no open PR (lists) |
+| Indexing a list or map | 29 | #181 (lane 176) for lists; maps need #180 |
+| Comprehensions | 63 | no open PR |
+| Names that are not locals, parameters or constants, used as values | 23 | no open PR (function values, lane 174 or 130) |
+| Other struct, generic and call forms | 19 | lane 120 |
+| Calls with more than 6 integer or 8 float parameters | 9 | lane 120 (calling convention) |
+| Calls of functions not in the subset | 7 | cross-check after the lanes above |
+| Type mismatch cascades | 12 | follow the types |
 
-Smaller, still open: string interpolation outside `print` (13, 172),
-indexing a list or map (14, 176 and 173), more than 6 integer or 8 float
-parameters (8, 120 calling convention), comprehensions (6), `else` on a
-binding (2, 175), maps (1, 173), and an error struct (1, 175).
+## What is left after #177, #179, #180 and lane 179
 
-## Problems per file (structs branch, top ten)
+Estimate: the groups covered by #177, #179, #180 and lane 179 come to about
+770 of the 1079 problems. About **310** would remain, mostly these:
 
-| File | Problems |
-|---|---|
-| mir/lower.ail | 175 |
-| x64/gen.ail | 102 |
-| a64/gen.ail | 89 |
-| syntax/lex.ail | 87 |
-| check/checker.ail | 86 |
-| ast/ast.ail | 51 |
-| obj/macho.ail | 39 |
-| syntax/recover.ail | 36 |
-| check/traits.ail | 27 |
-| obj/elf.ail | 25 |
+- Lists: about 170 (`List[T]` types not covered, list methods, indexing).
+- Comprehensions: 63.
+- Non-local names used as values: 23.
+- Lane 120 leftovers (struct, generic and call forms, the 6-parameter
+  calling convention): about 35.
+- Cascades and calls, which should fall away with the types: about 20.
 
-The full list is in the survey's `summary.md`.
+This is an estimate by message group, not a merge. The true count needs a
+merge of #177, #179, #180 and lane 179's branch on top of #183, and a
+rerun of the survey. Cascades mean the count can move by more than the
+groups show.
 
-## Bugs and notes
+## Notes
 
-- `syntax/parse.ail:91` reported "internal error: invalid MIR: not_yet:
-  b2 passes a str to b1's bool" on the base. Lane 120 says this was a
-  follow-on from the `==` on `str` problem (lane 172). Since the
-  lowering stops verifying MIR after a problem, only the `native.subset.1`
-  line is printed now, on lane/120-native-structs.
-- Misattributed message: `x64/gen.ail` and `a64/gen.ail` say "must end
-  with its result" for `is_reg` and `is_slot`. The cause is the qualified
-  constant `codegen.SLOT_BASE` on the next line, which is cross-module.
+- Earlier, `syntax/parse.ail:91` reported "internal error: invalid MIR". Lane
+  120 says this was a follow-on of the `str ==` problem. It is no longer
+  reported on the structs branch.
+- The qualified constant `codegen.SLOT_BASE` was a cross-module artifact on
+  the base. It is no longer a problem in the whole-compiler build.
 
 ## Next steps
 
-1. Lane 120 merges structs; rerun the survey on the batch branch, and
-   compare with the two snapshots above.
-2. Lane 179 lands enums, match and non-literal constants; rerun.
-3. Module loading lands; rerun, and drop the cross-module rows.
-4. When `ail build compiler/main.ail` succeeds, diff the native `mir` and
+1. Rerun the survey after #177, #179, #180, #183 and lane 179 are merged
+   into the batch branch, and update this table.
+2. Lists: name an owner for `List[T]` types, list methods and comprehensions.
+   These are about 220 problems and have no open PR.
+3. When `ail build compiler/main.ail` succeeds, diff the native `mir` and
    `build` output against the interpreted compiler's on every perfbench
    program, and report the result here.

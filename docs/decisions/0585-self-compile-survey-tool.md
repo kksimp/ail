@@ -7,6 +7,10 @@
 - **Spec rules:** [native.subset.1](../spec/23-native.md)
 - **Builds on:** [ADR 0384](0384-mir-shape-and-native-subset.md) (MIR and the native subset), [ADR 0022](0022-staged-self-hosting.md) (self-hosting)
 
+**Amended 2026-10-20:** module loading landed in lane 120 (PR #183), so the
+script now builds the whole compiler with `ail build compiler/main.ail`.
+The per-module mode described below is the one used before that merge.
+
 ## Context
 
 `ail build compiler/main.ail` reports only the five native-subset problems
