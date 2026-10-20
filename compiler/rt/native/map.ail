@@ -255,15 +255,15 @@ fn map_copy(m int) int
 
 # ---- traps and text ----
 
-fn out_hex(n int)
+fn map_out_hex(n int)
     if n >= 16
-        out_hex(n / 16)
+        map_out_hex(n / 16)
     d := n % 16
     out_byte(if d < 10 then 48 + d else 87 + d)
 
 ## A string as it appears inside another value: quoted, with `\`, the quote
 ## and control characters escaped (trait.auto.2).
-fn out_quoted(s int)
+fn map_out_quoted(s int)
     out_byte(34)
     n := load64(s)
     for i in 0..n
@@ -285,7 +285,7 @@ fn out_quoted(s int)
             out_byte(48)
         elif c < 32 or c == 127
             out_str("\\u\{")
-            out_hex(c)
+            map_out_hex(c)
             out_byte(125)
         else
             out_byte(c)
@@ -294,7 +294,7 @@ fn out_quoted(s int)
 ## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float.
 fn out_scalar(kind int, v int)
     if kind == 1
-        out_quoted(v)
+        map_out_quoted(v)
     elif kind == 2
         out_bool(v != 0)
     elif kind == 3
