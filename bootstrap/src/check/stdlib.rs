@@ -161,13 +161,24 @@ impl<'p> Checker<'p> {
         if (module, f) == ("random", "shuffle") {
             return Some(self.shuffle_call(args, pos));
         }
+        if (module, f) == ("task", "select") {
+            return Some(self.select_call(args, pos));
+        }
         let (mut params, ret) = self.std_signature(module, f);
         if (module, f) == ("proc", "run") {
             // std.proc.2: `input str?` and `timeout_ms int?` may be left off
             // from the end.
             params.truncate(args.len().clamp(2, 4));
         }
-        let sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
+        if (module, f) == ("proc", "start") {
+            // std.proc.4: `timeout_ms int?` may be left off.
+            params.truncate(args.len().clamp(2, 3));
+        }
+        let mut sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
+        if module == "proc" && matches!(f, "wait" | "kill") {
+            // std.proc.7: the child is consumed.
+            sig.moves = vec![true];
+        }
         Some(self.check_call(&what, &sig, Vec::new(), args, None, pos, expect))
     }
 
@@ -207,6 +218,16 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
             ("proc", "which") => (vec![Str], opt(Str)),
+            // std.proc.4-7 (ADR 0424)
+            ("proc", "start") => (
+                vec![Str, list(Str), opt(Int)],
+                Ty::Res(Box::new(std_ty("proc.Child")), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
+            ("proc", "wait") => (
+                vec![std_ty("proc.Child")],
+                Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
+            ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
             ("net", "get" | "post") => (
                 if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
                 Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
@@ -235,6 +256,33 @@ impl<'p> Checker<'p> {
             Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
             _ => Ty::Err,
         }
+    }
+
+    /// conc.select.1 (ADR 0427): `task.select(chans)` takes a `List[Channel[T]]`
+    /// and gives the index of a channel with a value waiting, or none.
+    fn select_call(&mut self, args: &'p [Arg], pos: Pos) -> Ty {
+        let result = Ty::Opt(Box::new(Ty::Int));
+        if args.len() != 1 {
+            self.args_only(args);
+            self.error(
+                "conc.select.1",
+                pos,
+                format!("`select` takes exactly one argument, but {} given", super::was_were(args.len())),
+            );
+            return result;
+        }
+        let t = self.expr(&args[0].value, None, true);
+        match &t {
+            Ty::List(e) if matches!(**e, Ty::Conc(super::conc::Conc::Channel, _) | Ty::Err) => {}
+            Ty::Err => {}
+            _ => self.error_help(
+                "conc.select.1",
+                args[0].value.pos(),
+                format!("`select` needs a list of channels, not {}", self.ty_name(&t)),
+                "write `task.select([a, b])`, then `recv` from the channel at the index it gives",
+            ),
+        }
+        result
     }
 
     /// std.random.4: `random.shuffle(mut xs)` reorders any `List[T]` in place.

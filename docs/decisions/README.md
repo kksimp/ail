@@ -367,3 +367,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
+| [0424](0424-streaming-child-processes.md) | Streaming child processes: `proc.start`, with the child's streams as channels *(delegated)* | Accepted | 2026-10-20 |
+| [0425](0425-child-is-unique-and-consumed.md) | A `Child` is a unique value, consumed by `wait` or `kill`, and ended with the program *(delegated)* | Accepted | 2026-10-20 |
+| [0426](0426-scheduler-waits-for-child-streams.md) | The scheduler waits for a child's output instead of reporting a deadlock *(delegated)* | Accepted | 2026-10-20 |
+| [0427](0427-task-select.md) | `task.select(chans)` waits on several channels and returns an index *(delegated)* | Accepted | 2026-10-20 |
+| [0428](0428-wait-yields-and-time-limit-kills.md) | `proc.wait` lets other tasks run, and the time limit kills the child *(delegated)* | Accepted | 2026-10-20 |

@@ -246,6 +246,55 @@ fn main() !
     print(r.out)
 ```
 
+**std.proc.4** — `start(cmd str, args List[str], timeout_ms int?) Child !
+ProcError` starts the program as `run` does (`std.proc.1`) and returns at once
+with a `proc.Child`, `unique struct Child { pid int, stdin Channel[str], out
+Channel[str], err Channel[str] }`. (`spawn` is a keyword, so the function is
+`start`.) `timeout_ms` may be left off; a process still running after that
+many milliseconds is killed (`std.proc.6`); a negative value traps. A process
+that can't start is a `ProcError`, a cancelled task starts none (kind
+`cancelled`, `conc.cancel.2`). *(ADRs 0424–0425)*
+
+**std.proc.5** — The streams of a child are channels. `c.out` and `c.err`
+hold the lines the child writes to standard output and standard error, in
+order, without the line end (`\n` or `\r\n`; a last line with no end
+counts), with bytes that aren't UTF-8 as U+FFFD. Each is closed when the
+stream ends, so `recv` gives `none`, `for line in c.out` ends, and
+`task.select` (`conc.select.1`) can wait on both. A child that writes more
+than a task reads is never blocked: lines queue without a limit. `c.stdin`
+takes text: `c.stdin.send(text)` writes it to the child's standard input
+at once, without waiting, and `c.stdin.close()` ends the input (a child that
+reads until the end of its input needs the `close`). Sending to a child that
+has exited is not an error. All three are `Channel[str]`, so a task can be
+passed `c.out` and read it while another task writes `c.stdin`. *(ADR 0425)*
+
+**std.proc.6** — `wait(move c Child) int ! ProcError` waits for the child to
+exit and returns its status as `run` does (`std.proc.1`). It fails with
+`ProcError` of kind `timed_out` when the time limit of `start` killed the
+child, and of kind `cancelled` (after killing the child) in a cancelled task.
+While it waits, other tasks run, so a task can write the child's input or read
+its output meanwhile. Lines the child wrote before it exited stay readable
+from `out` and `err`. *(ADR 0428)*
+
+**std.proc.7** — A `Child` is a unique value (`own.uniq.1`): it can't be
+copied, and `wait` and `kill` take it with `move` (`own.move.2`), so a child
+is waited or killed once. `kill(move c Child) int` ends the child at once
+(with `SIGKILL`; `TerminateProcess` on Windows), waits for it and returns its
+status (137 on Unix). A child that is neither waited nor killed when the
+program ends is killed then, so no program leaves a process running. *(ADR 0425)*
+
+```ail
+use std.proc
+
+fn main() !
+    c := proc.start("sort", [])?
+    c.stdin.send("b\na\n")
+    c.stdin.close()
+    for line in c.out
+        print(line)
+    print(proc.wait(move c)?)
+```
+
 ## Network: `std.net`
 
 **std.net.1** — Every function of `std.net` has the effects `net` and

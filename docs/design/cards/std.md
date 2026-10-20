@@ -16,6 +16,11 @@ struct Output  ## std.proc
 error struct ProcError
     cmd str
     kind str
+unique struct Child  ## std.proc.4 (ADR 0424): a child; `stdin` takes `send` and `close`, `out` and `err` give lines.
+    pid int
+    stdin Channel[str]
+    out Channel[str]
+    err Channel[str]
 struct Response  ## std.net (ADR 0283)
     status int
     headers Map[str, str]
