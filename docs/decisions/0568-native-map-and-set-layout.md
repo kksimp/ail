@@ -17,7 +17,7 @@ of the drag race need them.
 
 ## Decision
 
-A `Map[K, V]` or `Set[T]` is a pointer to a 88-byte **table object** (heap
+A `Map[K, V]` or `Set[T]` is a pointer to an 88-byte **table object** (heap
 kind 7 for a map, 8 for a set; both use the layout, a set ignores the value
 word). Two arrays hang off it, as in CPython's dict:
 
