@@ -307,6 +307,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 <<<<<<< HEAD
 | [0331](0331-editor-program-card-view.md) | Editor program card view (Ctrl-Shift-I) from `ail api --card --json` *(delegated)* | Accepted | 2026-10-20 |
 =======
+| [0323](0323-chained-call-lines.md) | A line starting with `.name` continues the statement; the formatter splits chains one call per line *(delegated)* | Accepted | 2026-10-20 |
+| [0324](0324-attributes-on-their-own-line.md) | Attributes may sit on their own lines above a function, in name order *(delegated)* | Accepted | 2026-10-20 |
 | [0314](0314-standard-modules-in-ail.md) | Standard modules written in AIL, starting with `std.ui.widgets` *(delegated)* | Accepted | 2026-10-20 |
 | [0315](0315-widget-contract.md) | Widgets render pure runs and turn events into an `Action` *(delegated)* | Accepted | 2026-10-20 |
 | [0316](0316-dashboard-example.md) | `examples/dashboard.ail` prints by default and opens a window with `--window` *(delegated)* | Accepted | 2026-10-20 |

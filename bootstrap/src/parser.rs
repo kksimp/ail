@@ -595,14 +595,20 @@ impl Parser {
                 }
             }
             attrs.push(Attr { name, pos, arg });
+            // gram.attr.2: an attribute may sit on its own line above its function.
+            while matches!(self.peek(), Tok::Newline)
+                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn")))
+            {
+                self.i += 1;
+            }
         }
         if !self.at_kw("fn") {
             let pos = self.pos();
             self.error_help(
                 "gram.attr.2",
                 pos,
-                "an attribute applies to a function declared on the same line",
-                "write `@test fn name()` on one line",
+                "an attribute applies to the function declared right after it",
+                "write `@test fn name()` or put the function on the next line",
             );
             self.skip_statement();
             return None;

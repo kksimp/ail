@@ -54,6 +54,8 @@ Lane 54 (ADRs 0281–0284): `std.fs` `walk`, `glob`, `metadata`, `rename`, `copy
 Lane 38 (ADRs 0230–0233, resolves OQ-045): `ail.pkg` manifests, path dependencies imported by package name, and per-dependency capability grants checked at compile time ([packages.md](design/packages.md)); git dependencies and `ail.lock` are designed only.
 interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
 implemented and tested on Linux x86-64; examples and test cases are canonical.
+Lane 73 added chained-call splitting (a line starting with `.name` continues
+the statement) and own-line attributes in name order (ADRs 0323–0324).
 Lane 12 added `tools/edit/edit.ail`, a code editor written in AIL with a
 headless, tested core that drives `ail check --json`, fixes, `ail explain` and
 `ail api`, with a window front end on `std.ui` (ADRs 0180–0181).
