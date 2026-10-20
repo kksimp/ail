@@ -65,31 +65,33 @@ fn mir_matches_the_expected_dumps() {
 /// `ail build` on each `tests/native/run/NAME.ail`, then the executable's
 /// output against `ail run`'s: stdout, the exit code, and a trap's message
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
-// native.build.1, expr.arith.1, expr.arith.3, type.coll.4, type.num.9, expr.bit.2
-#[test]
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-fn executables_match_the_interpreter() {
+/// `target` is passed to `--target`; `runner` runs the executable (an
+/// emulator), or it runs directly.
+fn executables_match(target: Option<&str>, runner: Option<&str>) {
     let dir = root().join("bootstrap/tests/native/run");
     let mut cases: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
     cases.sort();
-    let tmp = std::env::temp_dir().join(format!("ail-native-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("ail-native-{}-{}", target.unwrap_or("host"), std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
     let mut failures = Vec::new();
     for case in cases.iter().filter(|p| p.extension().is_some_and(|x| x == "ail")) {
         let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
         let exe = tmp.join(case.file_stem().unwrap());
-        let built = Command::new(env!("CARGO_BIN_EXE_ail"))
-            .current_dir(root())
-            .args(["build", &rel, "-o"])
-            .arg(&exe)
-            .output()
-            .unwrap();
+        let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
+        build.current_dir(root()).args(["build", &rel, "-o"]).arg(&exe);
+        if let Some(t) = target {
+            build.args(["--target", t]);
+        }
+        let built = build.output().unwrap();
         if !built.status.success() {
             failures.push(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
             continue;
         }
         let want = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", &rel]).output().unwrap();
-        let got = Command::new(&exe).current_dir(root()).output().unwrap();
+        let got = match runner {
+            Some(r) => Command::new(r).arg(&exe).current_dir(root()).output().unwrap(),
+            None => Command::new(&exe).current_dir(root()).output().unwrap(),
+        };
         let snapshot = |l: &&str| {
             !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"))
         };
@@ -109,6 +111,27 @@ fn executables_match_the_interpreter() {
     }
     let _ = fs::remove_dir_all(&tmp);
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+// native.build.1, expr.arith.1, expr.arith.3, type.coll.4, type.num.9, expr.bit.2
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn executables_match_the_interpreter() {
+    executables_match(None, None);
+}
+
+/// The same for Linux ARM64 executables, when a qemu user-mode emulator is
+/// installed (`qemu-aarch64-static` or `qemu-aarch64`); otherwise skipped.
+#[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn arm64_executables_match_the_interpreter_under_qemu() {
+    let runner = ["qemu-aarch64-static", "qemu-aarch64"]
+        .into_iter()
+        .find(|q| Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()));
+    match runner {
+        Some(q) => executables_match(Some("aarch64-linux"), Some(q)),
+        None => eprintln!("skipped: no qemu-aarch64 emulator"),
+    }
 }
 
 /// A program outside the native subset builds nothing (native.subset.1).

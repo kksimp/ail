@@ -1,0 +1,97 @@
+## A program's machine code and data before addresses are known, the same
+## for every target (ADR 0387): the code, the functions' offsets in it, the
+## read-only data, and the relocations the object writer resolves.
+use mir
+
+## A field of the code to patch once addresses are known: `kind` is "rel32"
+## (x86-64, PC-relative to the end of the instruction, `tail` bytes after
+## the field; the field holds the addend), or "b26", "adrp", "add12" (ARM64).
+## `sym` is a function, `d:` data, or `globals`.
+pub struct Reloc
+    pub at int
+    pub kind str
+    pub sym str
+    pub tail int
+
+pub struct Image
+    pub code List[int]
+    pub funcs Map[str, int]
+    pub relocs List[Reloc]
+    pub data List[int]
+    pub data_syms Map[str, int]
+    ## The size of the runtime's globals, in 8-byte slots.
+    pub globals int
+    ## The entry point's offset in `code`.
+    pub entry int
+
+pub fn new_image() Image
+    Image(code: [], funcs: {}, relocs: [], data: [], data_syms: {}, globals: 8, entry: 0)
+
+## A string object (native-abi.md §2) in the read-only data, once per symbol.
+pub fn add_str(mut img Image, sym str, s str)
+    if img.data_syms.contains(sym)
+        return
+    bytes := utf8(s)
+    align(mut img.data, 16)
+    img.data_syms[sym] = img.data.len()
+    push64(mut img.data, bytes.len())
+    push64(mut img.data, s.chars().len())
+    img.data.extend(bytes)
+
+## A float constant in the read-only data; gives its symbol.
+pub fn add_f64(mut img Image, x float) str
+    bits := f64_bits(x)
+    sym := "d:f{bits}"
+    if not img.data_syms.contains(sym)
+        align(mut img.data, 8)
+        img.data_syms[sym] = img.data.len()
+        push64(mut img.data, bits)
+    sym
+
+pub fn align(mut bytes List[int], n int)
+    while bytes.len() % n != 0
+        bytes.push(0)
+
+pub fn push64(mut bytes List[int], v int)
+    for i in 0..8
+        bytes.push(v.shr(8 * i).bit_and(255))
+
+## The UTF-8 bytes of a string.
+pub fn utf8(s str) List[int]
+    mut out := List[int]()
+    for c in s.chars()
+        n := c.code()
+        if n < 128
+            out.push(n)
+        elif n < 2048
+            out.push(192 + n.shr(6))
+            out.push(128 + n.bit_and(63))
+        elif n < 65536
+            out.push(224 + n.shr(12))
+            out.push(128 + n.shr(6).bit_and(63))
+            out.push(128 + n.bit_and(63))
+        else
+            out.push(240 + n.shr(18))
+            out.push(128 + n.shr(12).bit_and(63))
+            out.push(128 + n.shr(6).bit_and(63))
+            out.push(128 + n.bit_and(63))
+    out
+
+## The constant texts a trap stub passes to `rt.trap` (native-abi.md §7):
+## `PATH:LINE:COL: trap[RULE]: ` as `d:hK`, the source excerpt as `d:tK`,
+## and the operator as `d:oOP`.
+pub fn add_trap_texts(mut img Image, m mir.Module, k int, op str)
+    site := m.sites[k]
+    add_str(mut img, "d:h{k}", "{m.path}:{site.line}:{site.col}: trap[{site.rule}]: ")
+    line := if site.line >= 1 and site.line <= m.lines.len() then m.lines[site.line - 1] else ""
+    gutter := "{site.line}"
+    mut pad := List[str]()
+    chars := line.chars()
+    for c in 0..site.col - 1
+        pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
+    add_str(
+        mut img,
+        "d:t{k}",
+        "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n",
+    )
+    add_str(mut img, "d:o{op}", op)

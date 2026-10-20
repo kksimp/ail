@@ -6,9 +6,13 @@
 #   ail run compiler parse FILE...        the AIL parser's tree, as `ail api --ast FILE`
 #   ail run compiler mir FILE [RT]        the native backend's MIR of a program (ADR 0384), with
 #                                         the runtime in directory RT when given
-#   ail run compiler build FILE RT        a Linux x86-64 executable of a program as hex text,
-#                                         with the runtime in directory RT (ADR 0385; `ail build`)
+#   ail run compiler build FILE RT [TARGET]
+#                                         an executable of a program as hex text, with the runtime
+#                                         in directory RT, for x86_64-linux (the default) or
+#                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
+#                                         `ail build`)
 # With several files, each output starts with a line `== PATH`.
+use a64
 use ast
 use check
 use mir
@@ -43,7 +47,16 @@ fn main() !
                 print(mir.module_text(lower_file(args[1], none)?))
         "build" =>
             m := lower_file(args[1], runtime(args[2])?)?
-            print(obj.hex(obj.elf_x64(x64.generate(m))))
+            target := if args.len() > 3 then args[3] else "x86_64-linux"
+            match target
+                "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
+                "aarch64-linux" => print(obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)))
+                "aarch64-macos" =>
+                    name := args[1].split("/").last() else args[1]
+                    print(obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))))
+                _ =>
+                    io.eprint("error[native.build.3]: unknown target `{target}`")
+                    io.exit(2)
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)

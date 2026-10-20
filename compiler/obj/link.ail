@@ -1,0 +1,64 @@
+## Resolving an image's relocations once the object writer has placed the
+## code, the read-only data and the globals (ADR 0387).
+use codegen
+
+## The code with every relocation patched, for code at address `code`,
+## data at `data` and the globals at `bss`.
+pub fn link(img codegen.Image, code int, data int, bss int) List[int]
+    mut out := img.code
+    for r in img.relocs
+        to := address(img, r.sym, code, data, bss)
+        pc := code + r.at
+        mut w := read32(out, r.at)
+        match r.kind
+            "rel32" => w = to + signed32(w) - (pc + 4 + r.tail)
+            "b26" => w = w.bit_or((to - pc).shr(2).bit_and(67108863))
+            "adrp" =>
+                pages := to.shr(12) - pc.shr(12)
+                w = w.bit_or(pages.bit_and(3).shl(29)).bit_or(pages.shr(2).bit_and(524287).shl(5))
+            "add12" => w = w.bit_or(to.bit_and(4095).shl(10))
+            _ => unreachable("unknown relocation {r.kind}")
+        for i in 0..4
+            out[r.at + i] = w.shr(8 * i).bit_and(255)
+    out
+
+## The address of a symbol.
+fn address(img codegen.Image, sym str, code int, data int, bss int) int
+    if sym == "globals"
+        return bss
+    if sym.starts_with("d:")
+        return data + (img.data_syms.get(sym) else unreachable("no data {sym}"))
+    code + (img.funcs.get(sym) else unreachable("no function {sym}"))
+
+fn read32(bytes List[int], at int) int
+    mut v := 0
+    for i in 0..4
+        v = v.bit_or(bytes[at + i].shl(8 * i))
+    v
+
+fn signed32(v int) int
+    if v >= 2147483648 then v - 4294967296 else v
+
+pub fn align_up(n int, a int) int
+    (n + a - 1) / a * a
+
+## `v` in `n` little-endian bytes.
+pub fn put(mut out List[int], v int, n int)
+    for i in 0..n
+        out.push(v.shr(8 * i).bit_and(255))
+
+## Bytes as lines of hexadecimal text, for the driver to write out until
+## the standard library writes bytes.
+pub fn hex(bytes List[int]) str
+    digits := "0123456789abcdef".chars()
+    mut lines := List[str]()
+    mut k := 0
+    while k < bytes.len()
+        mut row := List[char]()
+        end := if k + 64 < bytes.len() then k + 64 else bytes.len()
+        for i in k..end
+            row.push(digits[bytes[i].shr(4)])
+            row.push(digits[bytes[i].bit_and(15)])
+        lines.push(row.join(""))
+        k = end
+    lines.join("\n")
