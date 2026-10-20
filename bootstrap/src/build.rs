@@ -1,7 +1,7 @@
 //! `ail build FILE [-o OUT]` and `ail api --mir FILE`: drivers for the
 //! native backend, which is written in AIL under `compiler/` (ADRs 0384,
 //! 0385). This runs it on the interpreter, then writes the executable it
-//! prints as hexadecimal (native.build.1); bytes go through text until the
+//! prints as hexadecimal (native.build.3); bytes go through text until the
 //! standard library writes them.
 
 use std::path::{Path, PathBuf};
@@ -22,12 +22,12 @@ fn compiler_dir() -> Option<PathBuf> {
 /// warnings are dropped; its errors are about the user's program.
 fn run_compiler(args: &[&str]) -> Result<String, ExitCode> {
     let Some(dir) = compiler_dir() else {
-        eprintln!("error[native.build.1]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
+        eprintln!("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
         return Err(ExitCode::from(2));
     };
     let exe = std::env::current_exe().map_err(|_| ExitCode::from(2))?;
     let out = Command::new(exe).arg("run").arg(&dir).args(args).output().map_err(|e| {
-        eprintln!("error[native.build.1]: can't run the native backend: {e}");
+        eprintln!("error[native.build.3]: can't run the native backend: {e}");
         ExitCode::from(2)
     })?;
     let mut skipping = false;
@@ -59,7 +59,7 @@ pub fn mir(file: &str) -> ExitCode {
 }
 
 /// `ail build FILE [-o OUT]`: a native executable, by default named after
-/// FILE in the current directory (native.build.1).
+/// FILE in the current directory (native.build.3).
 pub fn command(args: &[&str]) -> ExitCode {
     let (file, out) = match args {
         [file] => (*file, None),
@@ -70,11 +70,11 @@ pub fn command(args: &[&str]) -> ExitCode {
         }
     };
     if !(cfg!(target_os = "linux") && cfg!(target_arch = "x86_64")) {
-        eprintln!("error[native.build.1]: `ail build` makes Linux x86-64 executables so far; this is another target");
+        eprintln!("error[native.build.3]: `ail build` makes Linux x86-64 executables so far; this is another target");
         return ExitCode::from(2);
     }
     let Some(dir) = compiler_dir() else {
-        eprintln!("error[native.build.1]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
+        eprintln!("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
         return ExitCode::from(2);
     };
     // The backend assumes a checked program.
@@ -89,7 +89,7 @@ pub fn command(args: &[&str]) -> ExitCode {
         Err(code) => return code,
     };
     let Some(bytes) = decode(&hex) else {
-        eprintln!("error[native.build.1]: the native backend printed something other than hexadecimal");
+        eprintln!("error[native.build.3]: the native backend printed something other than hexadecimal");
         return ExitCode::from(2);
     };
     let out = match out {
@@ -97,7 +97,7 @@ pub fn command(args: &[&str]) -> ExitCode {
         None => PathBuf::from(Path::new(file).file_stem().unwrap_or_default()),
     };
     if let Err(e) = write_executable(&out, &bytes) {
-        eprintln!("error[native.build.1]: can't write {}: {e}", out.display());
+        eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
         return ExitCode::from(2);
     }
     ExitCode::SUCCESS

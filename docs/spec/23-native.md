@@ -3,7 +3,8 @@
 Chapter key: `native`
 
 > **Status:** Drafted (partial). Specified: what the native subset is, how a
-> program outside it is reported, and what a native executable must match.
+> program outside it is reported, what a native executable must match, and
+> the `ail build` command. Implemented for Linux x86-64.
 > The backend's representations and the ABI are non-normative and live in
 > [ir-architecture.md](../design/ir-architecture.md) and
 > [native-abi.md](../design/native-abi.md).
@@ -23,7 +24,7 @@ comparisons, `and`/`or`/`not`, `if` (statement or value), `while`, `for`
 over a range or a list, `break`, `continue`, `return`, calls, `print` of
 those values or an interpolation of them, `xs[i]`, `xs[i] = v`, `len`,
 `push`, and the methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`,
-`floor`, `ceil`. Any other construct is reported at its position under this
+`floor`, `ceil`, and the bit operations of expr.bit.1. Any other construct is reported at its position under this
 rule, all of them at once, and nothing is built. *(ADR 0384)*
 
 ```ail
@@ -43,8 +44,20 @@ fn main()
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
 trap[RULE]: MESSAGE`, err.trap.*); the interpreter's frame lines after it
-may be absent. *(ADR 0384)*
+may be absent. *(ADRs 0384, 0385)*
 
 **native.build.2** — An error inside the backend itself (MIR that fails the
 verifier, ir-architecture.md §4) is reported under this rule as an internal
 error, never turned into code. *(ADR 0384)*
+
+**native.build.3** — `ail build FILE [-o OUT]` checks the program as `ail
+check` does and stops on its errors, then reports native.subset.1 problems,
+then writes an executable for the host to OUT (default: FILE's name without
+`.ail`, in the current directory). A host the backend can't target yet, or a
+failure to write the file, is reported under this rule. *(ADR 0387)*
+
+```text
+$ ail build examples/hello.ail
+$ ./hello
+Hello, world!
+```

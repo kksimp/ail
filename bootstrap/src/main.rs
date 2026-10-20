@@ -41,7 +41,7 @@ commands:
   run DIR [ARGS...]
                 check and run the package whose root module is DIR
   build FILE [-o OUT]
-                compile a program in the native subset to an executable (native.build.1)
+                compile a program in the native subset to an executable (native.build.3)
   check FILE    check a program (or a package DIR) without running it;
                 --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;

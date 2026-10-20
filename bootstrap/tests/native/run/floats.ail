@@ -1,0 +1,20 @@
+fn main()
+    mut x := 1.0
+    for i in 1..400
+        print(i.to_float() / 7.0)
+        print(x)
+        print(-x / 3.0)
+        x = x * 1.37
+    mut y := 1.0
+    for _ in 0..340
+        y = y / 9.3
+        print(y)
+    print(5e-324)
+    print(2.2250738585072014e-308)
+    print(1.7976931348623157e308)
+    print(0.0 - 0.0)
+    print(-0.0)
+    print(1e16)
+    print(1e15)
+    print(0.0001)
+    print(0.00001)
