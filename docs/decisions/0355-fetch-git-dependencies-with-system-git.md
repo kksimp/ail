@@ -11,7 +11,7 @@
 ADRs 0231 and 0233 designed `dep NAME git URL rev|tag PIN` but the
 bootstrap rejected it. Agents add dependencies by URL; making them clone by
 hand and switch to `path` costs steps and loses the pin. Constraint: no
-hosted registry (OQ-049 is the designer's), and ADR 0009 prefers custom
+hosted registry (OQ-049, since closed by ADR 0383: none), and ADR 0009 prefers custom
 tooling unless an existing tool meets every requirement.
 
 ## Options considered
