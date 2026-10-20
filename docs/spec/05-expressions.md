@@ -34,7 +34,10 @@ fn total(items List[Item]) i64
 ```
 
 **expr.bind.5** — Declaring a local name equal to a visible module-level
-item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
+type, constant, imported name, or prelude type is a compile-time error. A
+local may have the name of a function, module-level or prelude: it shadows
+the function for the rest of its block, and a call of that name there is
+`expr.call.1`. *(ADR 0084; ADR 0469)*
 
 **expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
 (`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
@@ -186,6 +189,9 @@ value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
 `then` is a keyword only right after the condition, so it stays usable as a
 name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
 without `else` is a compile-time error. *(ADR 0280)*
+
+An `if` used as an operand is written in parentheses: `col + (if raw then 4 else 3)`.
+Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
 
 ```ail
 fn sign(n int) str

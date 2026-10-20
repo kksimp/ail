@@ -367,3 +367,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
+| [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
+| [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
+| [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
