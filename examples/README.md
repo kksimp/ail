@@ -30,6 +30,10 @@ with `./ail fmt`.
 | `tasks.ail` | Agent-style task runner over JSON tasks, written back to disk. |
 | `tool.ail` | Agent-style tool: read a file, measure it, run a command, with each failure in its type. |
 | `dashboard.ail` | A small dashboard on `std.ui.widgets`: directory sizes, rescanned by a task. |
+| `checksums.ail` | Digests and checksums (`std.hash`): SHA-2, HMAC-SHA256, CRC-32, each against its standard test vector. |
+| `compress.ail` | Compression (`std.compress`): gzip a log, check it shrinks, gunzip it back; bad input is refused. |
+| `regex.ail` | Regular expressions (`std.regex`): find, capture groups, replacement with `${name}`, split. |
+| `loopback.ail` | An HTTP round trip on 127.0.0.1 (`std.net` server and client). Runs offline. |
 | `ui_hello.ail` | A window that says hello (`std.ui`). Needs a display; see `ui_hello.rules`. |
 | `bits.ail` | Bit operations on `int`: flags, a bitset, a hash mix; `shr` keeps the sign. |
 | `calendar.ail` | Dates, times and zones (`std.time.date`, `std.tz`): leap years, ISO 8601, DST, `in_zone`. Fixed values, same output every run. |
