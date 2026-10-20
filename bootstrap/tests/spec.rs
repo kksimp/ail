@@ -1,5 +1,6 @@
 //! Spec conformance harness (ADR 0002): every fenced `ail` block in
-//! `docs/spec/*.md` is checked with `ail check --json`.
+//! `docs/spec/*.md`, `docs/quick-reference.md` and `docs/language-card.md` is
+//! checked with `ail check --json`.
 //!
 //! The fence line says what to expect (documented in `docs/spec/README.md`):
 //! - ```` ```ail ````: must check clean (warnings allowed).
@@ -8,6 +9,8 @@
 //!   `type`, `@attribute`, with their indented bodies) stay top level, and
 //!   every other line becomes the body of a generated `fn main()`. A block
 //!   that declares its own `main` is used as written.
+//!   In `quick-reference.md` and `language-card.md` (they spend tokens on every
+//!   fence) every block without a `main` is a fragment, and untagged.
 //! - ```` ```ail error=RULE ````: must report RULE among its errors; handled
 //!   as `fragment` when the block has no `main`.
 //! - ```` ```ail skip=bootstrap ````: uses a feature the bootstrap doesn't
@@ -33,9 +36,10 @@ struct Block {
     code: String,
 }
 
-fn blocks(dir: &Path) -> Result<Vec<Block>, String> {
+fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
     let mut chapters: Vec<_> = fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
     chapters.sort();
+    chapters.extend(extra.iter().map(|p| p.to_path_buf())); // the quick reference and the language card
     let mut out = Vec::new();
     for path in chapters.iter().filter(|p| p.extension().is_some_and(|x| x == "md")) {
         let name = path.file_name().unwrap().to_string_lossy().to_string();
@@ -56,7 +60,7 @@ fn blocks(dir: &Path) -> Result<Vec<Block>, String> {
                     if l.starts_with("```") {
                         let (start, tags, code) = (*start, tags.clone(), std::mem::take(code));
                         open = None;
-                        let (mut expect, mut wrap) = (Expect::Clean, false);
+                        let (mut expect, mut wrap) = (Expect::Clean, name.starts_with("quick-ref") || name.starts_with("language-card"));
                         for t in &tags {
                             if t == "fragment" {
                                 wrap = true;
@@ -115,7 +119,9 @@ fn wrap_fragment(code: &str) -> String {
 #[test]
 fn spec_examples() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let blocks = blocks(&root.join("../docs/spec")).unwrap_or_else(|e| panic!("{e}"));
+    let docs = root.join("../docs");
+    let blocks = blocks(&docs.join("spec"), &[&docs.join("quick-reference.md"), &docs.join("language-card.md")])
+        .unwrap_or_else(|e| panic!("{e}"));
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR")).join("spec");
     fs::create_dir_all(&tmp).unwrap();
     let (mut run, mut skipped, mut failures) = (0, 0, Vec::new());

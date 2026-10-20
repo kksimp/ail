@@ -201,6 +201,8 @@ fn main() !                                 # main can fail; the error is report
 - `else` also works inside an expression: `Min => nums.min() else 0`,
   `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`.
 - `?` on an optional works only in a function that returns an optional.
+- `T??` is an optional whose content is an optional: `none` is the outer one,
+  and `else`, `?` and `if v := e` peel one level (`type.opt.6`).
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
@@ -295,7 +297,7 @@ fn main()
 
 ## Control flow
 
-```ail
+```ail skip=context
 if a < b
     print("less")
 elif a == b
@@ -366,7 +368,7 @@ no `break` can end a function too.
 
 ## Strings and characters
 
-```ail
+```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
 t := """
     line one
@@ -383,7 +385,8 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 
 - `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
-- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
+- `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
+  `List[char]`; strings have no indexing or `for`),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
@@ -394,7 +397,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 
 ## Lists
 
-```ail
+```ail skip=context
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
@@ -415,7 +418,7 @@ errors: write `xs[xs.len() - 1]` or `xs.last()`.
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:
 
-```ail
+```ail skip=context
 for mut item in items      # `items` must be `mut`
     item.qty += 1          # changes the element
 ```
@@ -424,7 +427,7 @@ Inside a `for mut` loop, the body can't use the list itself (`items`).
 
 A comprehension builds a list, set or map in one expression:
 
-```ail fragment
+```ail
 xs := [3, 1, 4]
 squares := [x * x for x in xs]             # [9, 1, 16]
 big := [x for x in xs if x > 2]            # [3, 4]
@@ -462,7 +465,7 @@ floats.
 `Json` is built in, with no import (`json.type.1`). It is read only when the
 program uses it.
 
-```ail
+```ail skip=context
 doc := parse_json("\{\"a\": [1, \"x\"]}")?   # Json ! JsonError; err.at is the char offset
 doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/as_bool/as_arr/as_obj)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
@@ -477,7 +480,7 @@ the type isn't known. A program that declares its own `Json` keeps it.
 Assigning or passing a value copies it (cheaply): changing `b` after
 `b := a` never changes `a`.
 
-```ail
+```ail skip=context
 fn bump(mut p Point)   # the caller sees the change
     p.x += 1
 
@@ -492,7 +495,7 @@ A module is a directory of `.ail` files sharing one namespace. `use a.b`
 imports `ROOT/a/b`, where ROOT is the directory run (`ail run DIR`) or the
 file's directory (`ail run FILE`, whose siblings are not included).
 
-```ail fragment
+```ail skip=context
 use geo                  # imports at the top of each file
 use util.text as fmt     # `as` renames; names must not clash
 
@@ -504,7 +507,7 @@ fn main()
         _ => print(p.x)
 ```
 
-```ail fragment
+```ail
 pub struct Point         # `pub` exports; everything else is private
     pub x int            # fields too; a private field means only this
     y int                # module can build a `Point`
@@ -574,7 +577,7 @@ fn main()
 
 ## Tests and assertions
 
-```ail
+```ail skip=context
 @test fn doubles()           # `@test` on the same line
     assert_eq(double(4), 8)  # traps showing both values if unequal
     assert(double(1) == 2)   # traps if false
@@ -589,7 +592,7 @@ to the smallest input, printed as AIL literals. Parameters may be `int`,
 `float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, and structs
 and enums made of those.
 
-```ail fragment
+```ail
 @test fn add_commutes(a int, b int)
     assert_eq(a + b, b + a)
 ```
@@ -609,7 +612,7 @@ fn double(x int) int
 
 ## Tasks and channels
 
-```ail
+```ail skip=context
 t := spawn load(1)            # runs load(1) as a task; args are copies
 p := t.wait()?                # its result; fails with Trapped if it trapped
 g := TaskGroup()              # tasks that return nothing

@@ -1,15 +1,19 @@
 # AIL language card
 
-> v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
-> [quick reference](quick-reference.md) has the long form. Budget 4,000 tokens
-> on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
+> Non-normative: the [spec](spec/) rules; the [quick reference](quick-reference.md)
+> is longer. Budget: 4,000 tokens on every tokenizer
+> (`tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs
 
 ```sh
 ./ail run FILE.ail           # check, then run; --deterministic forbids clock/random/proc
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail test|fmt|fix|api|effects|explain ...   # tests, layout, apply fixes, outline, effects, rule text
 ```
+
+`@test fn t()` is a test (`assert`, `assert_eq`); `@pure`; `todo` is a typed hole.
+`ail.pkg` lists a package's `dep`s and the `caps` each may use.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
 
@@ -57,8 +61,7 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-`use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
-`random.seed(n)`, `random.shuffle(mut xs)`.
+`use std.random`: `random.int(1, 6)` (inclusive), `float()`, `seed(n)`, `shuffle(mut xs)`.
 
 Constants: top-level `NAME := value` (no calls).
 
@@ -87,7 +90,6 @@ fn main()
     p.shift(3)                    # `mut self` methods need a `mut` variable
     print(p.sum())                # method calls always have ()
     c := Color.Red                # qualified, unless the type is known: `c = Green`
-    p.x = 10                      # fields of a `mut` variable can be assigned
 ```
 
 `==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
@@ -170,8 +172,8 @@ fn largest[T Ord](items List[T]) T   # `T`: any type that implements `Ord`
             best = x
     best
 
-struct Stack[T]                      # a generic type; its methods use `T`
-    items List[T]                    # and `Self` (for `Stack[T]`) directly
+struct Stack[T]                      # generic type
+    items List[T]
 
 fn main()
     c := Circle(r: 2)
@@ -181,19 +183,15 @@ fn main()
     shapes.push(c)
 ```
 
-- `impl Ord for Version` with no body compares the fields in order. `<` and
-  friends work on `int`, `str`, lists and `Ord` types. Customise with
-  `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
+- `impl Ord for Version` with no body compares the fields in order. `<` works
+  on `int`, `str`, lists and `Ord` types. Customise: `impl ToStr` (`fn to_str`),
+  `impl Eq` (`fn eq`), `fn cmp`.
 
 ## Control flow
 
-```ail
-if a < b
+```ail skip=context
+if a < b             # then `elif`, `else`
     print("less")
-elif a == b
-    print("equal")
-else
-    print("greater")
 
 kind := if n < 0     # `if` used as a value needs `else`;
     "negative"       # elif/else line up with the line the `if` starts on
@@ -238,7 +236,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 
 ## Strings and characters
 
-```ail
+```ail skip=context
 s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
 c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
@@ -251,7 +249,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `pad_right`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+  `str?`), `repeat`, `pad_left`, `pad_right`, `slice(a, b)` (characters), `char_at(i)` (`char?`), `find(x)` (`int?`), `replace(a, b)`, `to_lower()`, `to_upper()`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -259,14 +257,13 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 
 ## Lists
 
-```ail
+```ail skip=context
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
 xs.push(4)             # push, pop, sort and swap need a `mut` variable
 xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
-n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
 ```
 
@@ -298,10 +295,10 @@ Also `contains`, `remove`, `len`, `sorted`. Keys can't be floats.
 
 ## Values and `mut`
 
-Assigning or passing a value copies it (cheaply): changing `b` after
-`b := a` never changes `a`.
+Assigning or passing a value copies it: changing `b` after `b := a` never
+changes `a`.
 
-```ail
+```ail skip=context
 fn bump(mut p Point)   # the caller sees the change
     p.x += 1
 
@@ -312,7 +309,7 @@ Two `mut` arguments of one call can't refer to the same value.
 
 ## Tasks
 
-```ail
+```ail skip=context
 t := spawn load(1)          # a task; args are copies
 p := t.wait()?              # result, or fails with Trapped
 g := TaskGroup()            # tasks returning nothing; waited at block end

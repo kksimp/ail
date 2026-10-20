@@ -207,6 +207,17 @@ ADR 0076; decide when a real program needs it.*
 ## OQ-048 — Editing text without string indexing
 **Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
 
+## OQ-049 — A package registry and version ranges
+Dependencies come from a path or a pinned git commit
+([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
+central registry with names and semver ranges (`dep json 1.4`), resolved
+into `ail.lock` (recommended eventually: short `dep` lines and discovery for
+agents, but it needs hosting, accounts, a naming policy and a solver);
+(b) git URLs only, with tags as versions (no service to run; long URLs in
+every manifest); (c) a registry that only maps names to git URLs and commits
+(no solver; small service). Involves hosting and publishing, so it is the
+designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
+
 ## OQ-060 — Contracts beyond runtime checks
 [ADRs 0210–0213](decisions/0210-contract-syntax.md) add `requires` and
 `ensures`, checked at run time. Open: (1) `old(x)`, a parameter's value on
@@ -239,14 +250,3 @@ type, `BadName(text str) "bad cell name '{text}'"`, interpolating its fields
 Rust's `thiserror`); (b) keep `impl ToStr` (recommended for now: the saving
 is a tie under ADR 0076, and it adds a declaration form). Revisit if
 error-heavy programs join the corpus. *Owner: AI under ADR 0076.*
-
-## OQ-049 — A package registry and version ranges
-Dependencies come from a path or a pinned git commit
-([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
-central registry with names and semver ranges (`dep json 1.4`), resolved
-into `ail.lock` (recommended eventually: short `dep` lines and discovery for
-agents, but it needs hosting, accounts, a naming policy and a solver);
-(b) git URLs only, with tags as versions (no service to run; long URLs in
-every manifest); (c) a registry that only maps names to git URLs and commits
-(no solver; small service). Involves hosting and publishing, so it is the
-designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*

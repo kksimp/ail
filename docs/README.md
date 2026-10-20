@@ -48,10 +48,19 @@ Design notes:
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
 - [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
   moves from the bootstrap's crate shim to platform APIs through `extern c`.
+- [design/semantic-api.md](design/semantic-api.md): the machine-readable
+  interfaces of `ail`: diagnostics schema, fixes, `ail explain`, `ail api`,
+  `ail fix`, with the `api.*` and `fix.*` rules.
+- [design/packages.md](design/packages.md): `ail.pkg` manifests, dependencies
+  and per-dependency capability grants.
+- [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
+  writes.
 - [design/program-measurements-r3.md](design/program-measurements-r3.md):
   where AIL's tokens go per construct against Python, and the round-3 changes.
 
 Tools:
+- [tools/edit/](../tools/edit/edit.ail): the AIL code editor, written in AIL
+  (headless core plus a `std.ui` window front end).
 - [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run
   `tools/perfbench/run.sh [RUNS]`; results in
   [design/interpreter-performance.md](design/interpreter-performance.md).
