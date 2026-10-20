@@ -194,9 +194,11 @@ pub struct ListView
     pub filter str
     pub selected int
     pub top int
+    ## What the list shows when nothing matches.
+    pub empty str
 
 pub fn ListView.new(items List[str]) ListView
-    ListView(items: items, filter: "", selected: 0, top: 0)
+    ListView(items: items, filter: "", selected: 0, top: 0, empty: "no match")
 
 ## The items the filter keeps, in order.
 pub fn ListView.shown(self) List[str]
@@ -277,7 +279,7 @@ pub fn ListView.render(self, r Rect, theme Map[str, int]) List[Run]
         out[0] = Run(
             col: r.col,
             row: r.row,
-            text: fit(" no match", r.cols),
+            text: fit(" {empty}", r.cols),
             fg: color(theme, "gutter_fg"),
             bg: color(theme, "pane_bg"),
             bold: false,
