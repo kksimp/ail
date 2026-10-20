@@ -23,6 +23,10 @@ pub struct Explanation {
     /// ADR number and title, in order of first citation.
     pub adrs: Vec<(String, String)>,
     pub example: Option<String>,
+    /// A program the rule rejects (a block tagged `error=RULE`), and the
+    /// same program repaired (the plain block right after it).
+    pub rejected: Option<String>,
+    pub fixed: Option<String>,
 }
 
 /// Is `s` shaped like a rule ID, `chapter.section.n`?
@@ -58,6 +62,8 @@ pub fn explain(rule: &str) -> Option<Explanation> {
             text: UNSUPPORTED_TEXT.into(),
             adrs: adrs_in(UNSUPPORTED_TEXT),
             example: None,
+            rejected: None,
+            fixed: None,
         });
     }
     for (name, src) in SPEC {
@@ -87,6 +93,9 @@ pub fn explain(rule: &str) -> Option<Explanation> {
             }
             i += 1;
         }
+        let (rejected, fixed) = worked_example(rule).unzip();
+        // A worked example replaces the nearest example, which may belong to another rule.
+        let example = if rejected.is_some() { None } else { example };
         return Some(Explanation {
             rule: rule.into(),
             file: format!("docs/spec/{name}"),
@@ -94,7 +103,39 @@ pub fn explain(rule: &str) -> Option<Explanation> {
             adrs: adrs_in(&text),
             text,
             example,
+            rejected,
+            fixed: fixed.flatten(),
         });
+    }
+    None
+}
+
+/// The first block tagged `error=RULE` anywhere in the specification, and the
+/// plain block that directly follows it, if any (err.explain.1).
+fn worked_example(rule: &str) -> Option<(String, Option<String>)> {
+    let tag = format!("error={rule}");
+    for (_, src) in SPEC {
+        let lines: Vec<&str> = src.lines().collect();
+        let block = |at: usize| -> String {
+            lines[at + 1..].iter().take_while(|l| !l.starts_with("```")).copied().collect::<Vec<_>>().join("\n")
+        };
+        let Some(open) = lines.iter().position(|l| l.strip_prefix("```ail ").is_some_and(|t| t.split_whitespace().any(|w| w == tag)))
+        else {
+            continue;
+        };
+        let rejected = block(open);
+        let mut i = open + 1;
+        while i < lines.len() && !lines[i].starts_with("```") {
+            i += 1;
+        }
+        // Past the closing fence, to the next block unless a heading or rule comes first.
+        let fixed = lines[i + 1..]
+            .iter()
+            .position(|l| l.starts_with('#') || rule_at(l).is_some() || l.starts_with("```"))
+            .map(|k| i + 1 + k)
+            .filter(|&k| matches!(lines[k].trim_end(), "```ail" | "```ail fragment"))
+            .map(block);
+        return Some((rejected, fixed));
     }
     None
 }
@@ -179,10 +220,12 @@ fn to_text(e: &Explanation) -> String {
             let _ = writeln!(s, "ADR {n}: {t}");
         }
     }
-    if let Some(x) = &e.example {
-        let _ = write!(s, "\nexample:\n");
-        for l in x.lines() {
-            let _ = writeln!(s, "    {l}");
+    for (label, code) in [("example", &e.example), ("rejected example", &e.rejected), ("repaired", &e.fixed)] {
+        if let Some(x) = code {
+            let _ = write!(s, "\n{label}:\n");
+            for l in x.lines() {
+                let _ = writeln!(s, "    {l}");
+            }
         }
     }
     s
@@ -200,6 +243,11 @@ fn to_json(e: &Explanation) -> String {
     s.push(']');
     if let Some(x) = &e.example {
         let _ = write!(s, ",\"example\":{}", json_str(x));
+    }
+    for (key, code) in [("rejected", &e.rejected), ("fixed", &e.fixed)] {
+        if let Some(x) = code {
+            let _ = write!(s, ",\"{key}\":{}", json_str(x));
+        }
     }
     s.push('}');
     s

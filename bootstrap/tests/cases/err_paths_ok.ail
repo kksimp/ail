@@ -1,0 +1,23 @@
+error enum A
+    X
+
+error enum B
+    Y
+
+fn a(n int) int ! A
+    if n < 0
+        return A.X
+    n
+
+fn b(n int) int ! B
+    if n > 9
+        return B.Y
+    n
+
+fn both(n int) !int
+    x := a(n)? "first"
+    y := b(n)?
+    x + y
+
+fn main()
+    print(both(3) else 0)

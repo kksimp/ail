@@ -1,0 +1,4 @@
+fn main()
+    n := [1, 2].max() else
+        0
+    print(n)
