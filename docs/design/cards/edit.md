@@ -1,6 +1,6 @@
 # edit
 entry: main in edit.ail
-tests: 49 (`ail test` lists them)
+tests: 50 (`ail test` lists them)
 
 ## (root)
 ```
@@ -54,6 +54,7 @@ CLOSERS := ")]}\""
 fn all_digits(str) bool
 fn word_marks(List[char], str) List[bool]
 struct ApiIndex
+fn facts_of(Json) List[str]
 fn parse_api(str) ApiIndex
 fn typed_word(Command) str?
 fn parse_type_name(str) str
@@ -123,12 +124,16 @@ fn valid_name(str) bool
 struct TreeRow
 struct Hit
 fn search_text(str, str, str) List[Hit]
+fn jtext(Json) str
+fn json_pairs(Json) str
+fn trace_hits(str, str, str) List[Hit]
+fn failure_hits(str, str) List[Hit]
+fn parse_coverage(str) Set[int]
 fn list_files(str, int, int) List[str] [fs io]
 fn fuzzy(str, str) bool
 fn window_main(mut Editor, List[str]) [env fs io mutates proc ui]
 fn font_flag(List[str]) int
-fn print_screen(mut Editor, List[str]) [env fs io mutates proc]
-fn key_spec(str) Command?
+fn print_screen(Editor, List[str]) [env fs io proc ui]
 fn bench(mut Editor) [clock io mutates]
 fn main() ! [clock env fail fs io proc ui]
 ```
@@ -139,4 +144,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~2935); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~2990); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
