@@ -442,10 +442,19 @@ fn Gen.compare(mut self, i mir.Inst) int
         a.vucomisd(xa, xb)
         return cc
     if k := imm32(y)
-        a.alu_ri("cmp", gpr(x, S0), k)
+        r := gpr(x, S0)
+        # `test r, r` sets the flags a signed comparison with 0 reads.
+        if k == 0
+            a.test_rr(r, r)
+        else
+            a.alu_ri("cmp", r, k)
         return cc
     if k := imm32(x)
-        a.alu_ri("cmp", gpr(y, S0), k)
+        r := gpr(y, S0)
+        if k == 0
+            a.test_rr(r, r)
+        else
+            a.alu_ri("cmp", r, k)
         return swapped(cc)
     ra := gpr(x, S0)
     rb := gpr(y, S1)
@@ -613,6 +622,19 @@ fn Gen.arith(mut self, i mir.Inst)
         return
     # Into the result's register when that leaves `x` and `y` intact.
     r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
+    # `3 * n`: the constant goes second; the stub still reports `x OP y`.
+    kx := imm32(x)
+    if ky == none and kx != none and i.op != "sub"
+        k := kx else 0
+        if i.op == "mul"
+            a.imul_rri(r, gpr(y, r), k)
+        else
+            a.mov_rr(r, gpr(y, r))
+            a.alu_ri(i.op, r, k)
+        if i.site >= 0
+            a.jcc(CC_O, stub(0, x, y, i.site, sym))
+        put_gpr(i.dst, r)
+        return
     if k := ky
         if i.op == "mul"
             a.imul_rri(r, gpr(x, r), k)

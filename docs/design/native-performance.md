@@ -96,6 +96,26 @@ kept in a register only inside versioned loops (`data`, `ldx`, `stx`),
 allocation and call bound, not check bound. `ail build` takes about 0.1 s
 longer per program.
 
+## Range guards and smaller wins (ADR 0611)
+
+Wall time, best of 7, against `gcc -O2 -ffp-contract=off` at the large sizes;
+the "before" column is the batch head with #181. The VM varies 10-20%.
+
+| program | before | now | gcc -O2 | before/gcc | now/gcc |
+|---|---:|---:|---:|---:|---:|
+| collatz 1000000 | 0.315 | 0.297 | 0.218 | 1.45 | 1.36 |
+| mandelbrot 1000 | 0.109 | 0.097 | 0.077 | 1.42 | 1.26 |
+| spectralnorm 1000 | 0.074 | 0.062 | 0.051 | 1.45 | 1.21 |
+| matmul 400 | 0.125 | 0.117 | 0.050 | 2.51 | 2.35 |
+| fannkuch 10 | 0.804 | 0.551 | 0.220 | 3.65 | 2.50 |
+| sieve 30000000 | 0.237 | 0.245 | 0.199 | 1.19 | 1.23 |
+| binarytrees 17 | 0.665 | 0.674 | 0.135 | 4.94 | 5.01 |
+| fasta 5000000 | 0.166 | 0.159 | 0.059 | 2.80 | 2.68 |
+
+What is left: matmul's `b[k][j]` keeps its row check (the rows' lengths
+aren't known), collatz and the float kernels pay for loop structure and
+copies, and binarytrees and fasta are bound by allocation and memory.
+
 ## perfbench sizes (`tools/perfbench/run.sh --all`, min of 5)
 
 The `.args` sizes, now passed to every column. C finishes most in under

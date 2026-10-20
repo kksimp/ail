@@ -1,0 +1,21 @@
+# Checked arithmetic in a counted loop whose fixed operands are small runs
+# without overflow checks (native.bce.4); the sums must not change.
+fn tri(i int, n int) int
+    mut s := 0
+    for j in 0..n
+        s += (i + j) * (i + j + 1) / 2 + i + 1 - j % 7
+    s
+
+fn twice(a int, n int) int
+    mut s := 0
+    for j in 0..n
+        s += 3 * a + j * j - 2 * j
+    s
+
+fn main()
+    print(tri(5, 100))
+    print(tri(0, 0))
+    print(tri(-7, 50))
+    print(twice(1000, 1000))
+    print(tri(1073741824, 3))
+    print(twice(4000000000, 2))

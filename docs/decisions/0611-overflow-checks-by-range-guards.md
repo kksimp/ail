@@ -1,0 +1,63 @@
+# 0611. Overflow checks removed by range guards, and smaller codegen wins
+
+- **Status:** Accepted
+- **Date:** 2026-10-20
+- **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
+- **Topic:** 23 — Compiler architecture
+- **Spec rules:** [native.bce.4](../spec/23-native.md), native.build.1, expr.arith.1
+- **Builds on:** [ADR 0577](0577-bounds-checks-in-counted-loops.md) (loop versioning), [ADR 0391](0391-native-backend-optimisations.md) (MIR passes)
+
+## Context
+
+After ADR 0577 the remaining gaps to `gcc -O2` on spectralnorm (1.45x),
+mandelbrot (1.42x), collatz (1.45x) and matmul (2.5x) were instruction
+overhead: checked `+`, `-` and `*` on loop indices, copies, and
+comparisons with 0. Reading the code showed `(i + j) * (i + j + 1) / 2 + i + 1`
+with eight `jo` checks, the same `i + j` checked twice, `3 * n` loaded into a
+register before the `imul`, and `cmp r, 0`.
+
+## Decision
+
+1. **Range guards** (`compiler/mir/ranges.ail`, used by bce.ail). In a
+   counted loop that is being versioned, a forward pass gives each value a
+   span: the induction value is `start .. 2^30 - 1`, a constant its own
+   value, a value fixed in the loop `-2^30 .. 2^30` (the guard tests this
+   once, ahead of the loop), and `+`, `-`, `*`, `neg`, `/` and `%` by a
+   positive constant follow by interval arithmetic. A checked operation
+   whose result span fits in `int` loses its check in the loop's copy. If a
+   guard fails, the original loop runs, so the trap is the interpreter's
+   (native.build.1). It applies when two or more checks go, or one in a loop
+   that is versioned anyway, and with at most 8 guarded values.
+2. **Duplicate checked operations are removed** in CSE (fold.ail): the
+   first one dominates and would have trapped.
+3. **x86-64:** a constant on the left of `+` or `*` is encoded as the
+   immediate (the trap still reports `x OP y` in source order), and a
+   comparison with 0 is `test r, r`.
+4. **`rt.list_reserve` is a runtime root** (lower.ail): with the runtime
+   lowered on demand (ADR 0393) the optimiser's call to it had no function
+   behind it, and fannkuch had lost ADR 0579's sizing (383M → 271M
+   instructions).
+5. **`copy_bytes` copies 32 bytes per iteration** while it can.
+
+Instructions at the `.args` sizes, before → after: spectralnorm 88M → 75M,
+fannkuch 383M → 271M, collatz 188M → 184M, mandelbrot 44.0M → 43.0M, sieve
+134M → 130M. Wall time against `gcc -O2` at the large sizes is in
+[native-performance.md](../design/native-performance.md).
+
+## Consequences
+
+- A loop whose bound or fixed operands exceed 2^30 runs the original loop
+  after a few compares per entry.
+- The a64 code generator doesn't yet get the immediate multiply or the
+  zero-compare forms; its results are the same.
+
+## Rejected alternatives
+
+- **A general value-range lattice over the whole function.** A far larger
+  pass for a compiler that runs in the interpreter; loops are where the
+  checks cost.
+- **Guard on the product instead of the operands.** One compare for the
+  result, but it needs the checked operation to compute first, which is the
+  check being removed.
+- **Four-fold list growth for binarytrees.** 14% fewer instructions and no
+  change in wall time (the program is bound by memory), at more waste.

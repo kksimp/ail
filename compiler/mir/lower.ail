@@ -234,7 +234,15 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
 
 ## The runtime functions the code generators call by name, besides those
 ## the MIR calls.
-RT_ROOTS := ["rt.init", "rt.exit", "rt.trap", "rt.list_push", "rt.list_pushf", "rt.list_pushb"]
+RT_ROOTS := [
+    "rt.init",
+    "rt.exit",
+    "rt.trap",
+    "rt.list_push",
+    "rt.list_pushf",
+    "rt.list_pushb",
+    "rt.list_reserve",
+]
 
 ## Lower the runtime functions the program reaches, and those they reach
 ## (ADR 0393): a program pays only for the runtime it uses.
