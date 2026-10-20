@@ -213,13 +213,24 @@ pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     if prog.consts.is_empty() {
         return Vec::new();
     }
-    let fx = Effects::infer(prog, resolved);
     let mut w = Walker::new(prog, resolved);
+    let walked: Vec<_> = prog
+        .consts
+        .iter()
+        .map(|c| {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.value);
+            (std::mem::take(&mut w.direct), std::mem::take(&mut w.calls))
+        })
+        .collect();
+    // Most constants call nothing; infer effects only when one does.
+    if walked.iter().all(|(direct, calls)| calls.is_empty() && !direct.keys().any(|e| impure(e))) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
     let mut diags = Vec::new();
-    for c in &prog.consts {
-        w.direct = BTreeMap::new();
-        w.calls = Vec::new();
-        w.expr(&c.value);
+    for (c, (direct, calls)) in prog.consts.iter().zip(&walked) {
         // Each forbidden effect with the chain that gives it, grouped by chain.
         let mut groups: Vec<(Vec<&str>, String)> = Vec::new();
         let mut note = |e: &'static str, chain: String| match groups.iter_mut().find(|(_, ch)| *ch == chain) {
@@ -230,15 +241,15 @@ pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
             }
             None => groups.push((vec![e], chain)),
         };
-        for (&e, source) in w.direct.iter().filter(|(e, _)| impure(e)) {
+        for (&e, source) in direct.iter().filter(|(e, _)| impure(e)) {
             note(e, format!("{} -> {source}", c.name));
         }
         let mut bad: BTreeSet<&'static str> = BTreeSet::new();
-        for &j in &w.calls {
-            bad.extend(fx.of(j).iter().copied().filter(|e| impure(e) && !w.direct.contains_key(e)));
+        for &j in calls {
+            bad.extend(fx.of(j).iter().copied().filter(|e| impure(e) && !direct.contains_key(e)));
         }
         for e in bad {
-            let j = w.calls.iter().copied().find(|&j| fx.of(j).contains(e)).expect("an effect comes from a callee");
+            let j = calls.iter().copied().find(|&j| fx.of(j).contains(e)).expect("an effect comes from a callee");
             note(e, format!("{} -> {}", c.name, fx.chain(j, e)));
         }
         if groups.is_empty() {
