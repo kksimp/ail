@@ -1,0 +1,2 @@
+true
+proc.ProcError(cmd: "ail-no-such-program", kind: "not_found")

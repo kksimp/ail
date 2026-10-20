@@ -1,0 +1,36 @@
+# Sieve of Eratosthenes: count, sum and largest of the primes below N, on a
+# List[bool]. N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(3000000)
+    mut is_prime := []
+    for _ in 0..n
+        is_prime.push(true)
+    is_prime[0] = false
+    is_prime[1] = false
+    mut i := 2
+    while i * i < n
+        if is_prime[i]
+            mut j := i * i
+            while j < n
+                is_prime[j] = false
+                j += i
+        i += 1
+    mut count := 0
+    mut total := 0
+    mut largest := 0
+    for k in 0..n
+        if is_prime[k]
+            count += 1
+            total += k
+            largest = k
+    print("primes below {n}: {count}")
+    print("sum: {total}")
+    print("largest: {largest}")

@@ -27,7 +27,6 @@ mod mistakes;
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
-    ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
     ("as", "ffi.decl.1"),
 ];
@@ -169,6 +168,12 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 p.skip_block();
             }
             Tok::Kw("fn") => {
+                if let Some(f) = p.function(Within::TopLevel) {
+                    prog.fns.push(f);
+                }
+            }
+            // `unsafe fn` (unsafe.block.2) and `extern c fn` (ffi.decl.2).
+            Tok::Kw("unsafe") if p.at_fn_start() => {
                 if let Some(f) = p.function(Within::TopLevel) {
                     prog.fns.push(f);
                 }
@@ -603,12 +608,12 @@ impl Parser {
             attrs.push(Attr { name, pos, arg });
             // gram.attr.2: an attribute may sit on its own line above its function.
             while matches!(self.peek(), Tok::Newline)
-                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn")))
+                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn" | "unsafe")))
             {
                 self.i += 1;
             }
         }
-        if !self.at_kw("fn") {
+        if !self.at_fn_start() {
             let pos = self.pos();
             self.error_help(
                 "gram.attr.2",
@@ -624,7 +629,21 @@ impl Parser {
         Some(f)
     }
 
+    /// At `fn`, `unsafe fn` or `extern c ["lib"] fn`.
+    fn at_fn_start(&self) -> bool {
+        match self.peek() {
+            Tok::Kw("fn") => true,
+            Tok::Kw("unsafe") => matches!(self.peek_at(1), Tok::Kw("fn")),
+            _ => false,
+        }
+    }
+
     fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
+        let mut unsafe_fn = false;
+        let ext = None;
+        if self.eat_kw("unsafe") {
+            unsafe_fn = true;
+        }
         self.bump(); // fn
         let (first, first_pos) = self.name("a function name after `fn`", "gram.fn.1")?;
         // `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
@@ -737,7 +756,14 @@ impl Parser {
             None => format!("`{name}`"),
         };
         // A trait method without a default ends with its signature (trait.decl.2).
-        let (body, contracts) = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
+        let (body, contracts) = if ext.is_some() {
+            // ffi.decl.2: a C function has a signature and no body.
+            if !self.eat(&Tok::Newline) {
+                self.unexpected("end of line after the signature of an `extern c fn`", "ffi.decl.2");
+                return None;
+            }
+            (None, Vec::new())
+        } else if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
             if !self.eat(&Tok::Newline) {
                 self.unexpected("end of line after the signature", "trait.decl.1");
                 return None;
@@ -760,6 +786,8 @@ impl Parser {
             within,
             contracts,
             inherits: None,
+            unsafe_fn,
+            ext,
         })
     }
 
@@ -1228,6 +1256,12 @@ impl Parser {
             }
             Tok::Kw("for") => self.for_loop(false, pos),
             Tok::Kw("with") => self.with_stmt(pos),
+            // unsafe.block.1: `unsafe` and an indented block.
+            Tok::Kw("unsafe") if !matches!(self.peek_at(1), Tok::Kw("fn")) => {
+                self.bump();
+                let body = self.block("`unsafe`", "unsafe.block.1")?;
+                Some(Stmt::Unsafe { body, pos })
+            }
             // conc.par.5: `par for` asserts that the iterations are independent.
             Tok::Kw("par") => {
                 self.bump();
@@ -1780,7 +1814,8 @@ impl Parser {
             }
             Tok::Sym("(") => {
                 self.i += 1;
-                let inner = self.range()?;
+                // expr.if.8: a parenthesised one-line `if` is an operand.
+                let inner = if self.at_kw("if") { self.if_expr()? } else { self.range()? };
                 let inner = self.else_expr(inner)?;
                 self.expect_sym(")", "`)`", "gram.syntax.1")?;
                 Some(inner)
@@ -1839,7 +1874,16 @@ impl Parser {
                 self.expect_sym("}", "`}` or `,` in the set", "type.coll.2")?;
                 Some(Expr::Set(elems, pos))
             }
-            Tok::Kw(k @ ("if" | "match")) => {
+            Tok::Kw("if") => {
+                self.error_help(
+                    "expr.if.8",
+                    pos,
+                    "an `if` operand needs parentheses",
+                    "write `(if c then a else b)`, or bind the `if` to a name first",
+                );
+                None
+            }
+            Tok::Kw(k @ "match") => {
                 self.error_help(
                     "gram.syntax.1",
                     pos,
@@ -2281,7 +2325,7 @@ mod tests {
 
     #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    unsafe x\n");
+        let (_, rules) = parse_src("fn main()\n    extern x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 

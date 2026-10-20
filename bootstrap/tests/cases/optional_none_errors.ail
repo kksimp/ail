@@ -1,0 +1,9 @@
+## type.opt.9: a local that starts as `none` needs an assignment to fix its type.
+fn main()
+    mut owner := none
+    print("unused")
+
+## type.opt.10: an `if` whose branches are all `none` has no type.
+fn nothing(c bool) int?
+    x := if c then none else none
+    x

@@ -422,6 +422,7 @@ fn stmt_spawns(s: &Stmt, diags: &mut Vec<Diagnostic>) {
             spawns(iter, diags);
             block(body, diags);
         }
+        Stmt::Unsafe { body, .. } => block(body, diags),
         Stmt::Return(Some(e), _) | Stmt::Expr(e) => spawns(e, diags),
         Stmt::Handle { value, otherwise } => {
             spawns(value, diags);
@@ -620,6 +621,7 @@ fn stmt_uses(name: &str, s: &Stmt, cond: bool, u: &mut Uses) {
             expr_uses(name, mutex, cond, u);
             body.iter().for_each(|s| stmt_uses(name, s, cond, u));
         }
+        Stmt::Unsafe { body, .. } => body.iter().for_each(|s| stmt_uses(name, s, cond, u)),
         Stmt::Return(Some(e), _) | Stmt::Expr(e) => expr_uses(name, e, cond, u),
         Stmt::Handle { value, otherwise } => {
             expr_uses(name, value, cond, u);

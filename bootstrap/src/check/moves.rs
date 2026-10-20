@@ -136,6 +136,7 @@ impl<'p> Walker<'p> {
                 self.expr(cond);
                 self.loop_body(body, None);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::With { mutex, body, .. } => {
                 self.expr(mutex);
                 self.block(body);

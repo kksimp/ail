@@ -1,0 +1,9 @@
+## std.proc.1, std.proc.3: a missing program is not found by which or run, on every platform (ADR 0505).
+use std.proc
+
+fn main() !
+    print(proc.which("ail-no-such-program") == none)
+    r := proc.run("ail-no-such-program", []) else err
+        print(err)
+        return
+    print(r.status)

@@ -1,0 +1,6 @@
+unsafe fn raw(x int) int
+    x / 2
+
+pub fn half(x int) int
+    unsafe
+        raw(x)

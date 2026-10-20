@@ -46,6 +46,8 @@ fn main() !
         within: ast.Within.TopLevel,
         contracts: [],
         inherits: none,
+        unsafe_fn: false,
+        ext: none,
     )
     t := f.to_json().to_text()
     print(t)
