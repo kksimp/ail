@@ -60,7 +60,18 @@ fn editor_drives_the_real_semantic_api() {
     let squeeze = ["--at=7:6", "--key=delete", "--key=right", "--key=delete"];
     let squeezed = screen(&squeeze);
     assert!(squeezed.contains("  7     a+b\n"), "squeeze:\n{squeezed}");
-    let format = screen(&[&squeeze[..], &["--key=ctrl+shift+f"]].concat());
+    let format = screen(&[&squeeze[..], &["--key=alt+shift+f"]].concat());
     assert!(format.contains("  7     a + b\n") && format.contains("| formatted"), "format:\n{format}");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The README's key table is the editor's `--keys` output, the same list
+/// the command palette shows (ADR 0291).
+#[test]
+fn editor_key_table_matches_the_readme() {
+    let out = ail().args(["run", &tool("tools/edit/edit.ail"), "--keys"]).output().unwrap();
+    assert!(out.status.success());
+    let table = String::from_utf8_lossy(&out.stdout);
+    let readme = std::fs::read_to_string(tool("tools/edit/README.md")).unwrap();
+    assert!(readme.contains(table.trim_end()), "tools/edit/README.md's key table differs from `--keys`; paste its output:\n{table}");
 }
