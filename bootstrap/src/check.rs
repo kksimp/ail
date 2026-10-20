@@ -26,6 +26,7 @@ pub mod errpaths;
 pub mod facts;
 mod keyfn;
 mod stdlib;
+mod tensor;
 pub mod effects;
 pub mod parallel;
 mod moves;
@@ -186,6 +187,9 @@ pub struct Resolved {
     pub std: Std,
     /// Calls to the standard modules, by the position of the name (std.use.2).
     pub std_calls: HashMap<Pos, crate::stdlib::StdCall>,
+    /// `tensor.from` and `tensor.zeros` calls typed `Tensor[int]`, by the
+    /// position of the name (std.tensor.2).
+    pub int_tensors: std::collections::HashSet<Pos>,
     /// The declaration a name, call, method, field or variant refers to, by
     /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
@@ -3747,6 +3751,9 @@ impl<'p> Checker<'p> {
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
+        if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
         let cands = self.candidates(&rt, name);
         match cands.as_slice() {
             [] => {
@@ -4051,6 +4058,9 @@ impl<'p> Checker<'p> {
                     .fix("add the parentheses", vec![Edit::replace(pos, name, format!("{name}()"))]),
             );
             return Ty::Err;
+        }
+        if let Some(t) = self.tensor_field(&rt, name, pos) {
+            return t;
         }
         match &rt {
             Ty::Struct(s, args) => {

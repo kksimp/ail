@@ -265,6 +265,10 @@ reach these devices at all, and nothing of LLVM's ships with AIL);
 (b) CPU only, no GPU or NPU ever; (c) allow vendor libraries (cuDNN, MPS) as
 opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
 section 6 and [ADR 0247](decisions/0247-std-tensor-and-accel-capability.md).
+The CPU slice exists (`std.tensor`, ADRs 0328–0329); [ADR 0330](decisions/0330-tensor-accelerator-backends-plug-in.md)
+lists what a device backend needs decided here. Still missing from the CPU
+slice: axis reductions, `transpose`, `conv2d`, activations, `f32`, indexing,
+operators, and fusing chains of elementwise calls.
 *Owner: designer (it reads ADR 0010, a designer decision).*
 
 ## OQ-091 — Field attributes for derive generators

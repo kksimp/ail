@@ -1,0 +1,19 @@
+# std.tensor.7, std.tensor.5: a 96x96 `matmul` runs on the thread pool and
+# equals the plain triple loop exactly.
+fn main()
+    n := 96
+    xs := [(i % 17).to_float() * 0.25 - 1.5 for i in 0..n * n]
+    ys := [(i % 13).to_float() * 0.5 + 0.125 for i in 0..n * n]
+    a := tensor.from(xs, [n, n])
+    b := tensor.from(ys, [n, n])
+    got := a.matmul(b).to_list()
+    mut same := true
+    for i in 0..n
+        for j in 0..n
+            mut c := 0.0
+            for p in 0..n
+                c += xs[i * n + p] * ys[p * n + j]
+            if c != got[i * n + j]
+                same = false
+    print(same)
+    print(a.dot(b) == a.mul(b).sum())

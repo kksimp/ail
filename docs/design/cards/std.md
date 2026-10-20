@@ -50,4 +50,6 @@ enum Cursor  ## std.ui.18: the caret's shape.
 error struct UiError
     kind str
     message str
+struct Tensor[T]  ## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
+    elements Map[int, T]
 ```

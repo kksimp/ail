@@ -1,0 +1,19 @@
+# The work of `tensor.ail` in plain loops over lists.
+fn main()
+    n := 160
+    xs := [(i % 17).to_float() * 0.25 for i in 0..n * n]
+    ys := [(i % 13).to_float() * 0.5 for i in 0..n * n]
+    mut c := [0.0 for i in 0..n * n]
+    for i in 0..n
+        for p in 0..n
+            x := xs[i * n + p]
+            for j in 0..n
+                c[i * n + j] += x * ys[p * n + j]
+    mut total := 0.0
+    for x in c
+        total += x
+    for i in 0..n * n
+        total += (xs[i] + ys[i]) * xs[i]
+    for i in 0..n * n
+        total += xs[i] * ys[i]
+    print(total)

@@ -1,0 +1,23 @@
+# std.tensor.1-9: building tensors, their methods, text form and equality.
+fn counts() tensor.Tensor[int]
+    return tensor.zeros([2, 3])
+
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    b := tensor.from([5.0, 6.0, 7.0, 8.0], [2, 2])
+    print(a)
+    print(a.shape())
+    print(a.sum())
+    print(a.dot(b))
+    print(a.add(b))
+    print(a.mul(b))
+    print(a.matmul(b))
+    print(a.map(|x| x * 10.0))
+    v := tensor.from([1, 2, 3])
+    print(v.sum())
+    print(v.map(|x| x * x).to_list())
+    z := counts()
+    print(z)
+    print(tensor.zeros([3]))
+    print(a == a.map(|x| x))
+    print(a.reshape([4]).len())
