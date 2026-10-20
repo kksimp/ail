@@ -596,14 +596,27 @@ mod backend {
                 return;
             }
             let bitmap = self.glyphs.entry(cell.ch).or_insert_with(|| render(cell.ch));
+            let caret_color = contrast(cell.bg);
             for y in 0..CH.min(self.h - y0) {
                 let line = &mut self.fb[(y0 + y) * self.w + x0..][..CW.min(self.w - x0)];
                 for (x, px) in line.iter_mut().enumerate() {
-                    let on = bitmap[y * CW + x] || (caret && x < 2);
-                    *px = if on { cell.fg } else { cell.bg };
+                    *px = if caret && x < 2 {
+                        caret_color
+                    } else if bitmap[y * CW + x] {
+                        cell.fg
+                    } else {
+                        cell.bg
+                    };
                 }
             }
         }
+    }
+
+    /// The caret's color on `bg`: white on dark colors, black on light ones,
+    /// so it shows whatever the cell's colors are (std.ui.5).
+    fn contrast(bg: u32) -> u32 {
+        let (r, g, b) = (bg >> 16 & 0xFF, bg >> 8 & 0xFF, bg & 0xFF);
+        if r * 299 + g * 587 + b * 114 < 128_000 { 0xFF_FFFF } else { 0 }
     }
 
     /// One glyph as `CW` by `CH` pixels, row by row.

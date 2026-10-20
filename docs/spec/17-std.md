@@ -182,7 +182,8 @@ including a tab, shows as `?`. *(ADR 0177)*
 
 **std.ui.5** — Drawing is buffered: `clear` and `put` change only the grid,
 and `present(mut self)` shows it. `cursor(mut self, col int, row int)` sets
-where the caret is drawn at the next `present`; a position outside the grid,
+where the caret, a thin bar in white or black, whichever shows on the cell's
+background, is drawn at the next `present`; a position outside the grid,
 such as (-1, -1), hides it. *(ADR 0177)*
 
 **std.ui.6** — `next_event(mut self) Event` waits for the next event;
