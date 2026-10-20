@@ -1,6 +1,7 @@
-tls: https://example.com/
+refused: https://127.0.0.1:1/
 bad_url: ftp://example.com/
 bad_url: example.com
 bad_url: http://:80/
+bad_url: https://:443/
 refused: http://127.0.0.1:1/
-`https` needs TLS, which the bootstrap doesn't have yet (ADR 0283); use an `http://` URL
+`44x` is not a port

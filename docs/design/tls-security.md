@@ -5,14 +5,14 @@ been verified to do. Update it in the same change as the code.
 
 ## Status
 
-`https` still fails with kind `tls` (`std.net.4`). Slices:
+`https` works in `net.get` and `net.post` (`std.net.5`). Slices:
 
 | Slice | ADR | State |
 |---|---|---|
 | 1. Primitives | [0366](../decisions/0366-tls-crypto-primitives.md) | Done, tested |
 | 2. Record layer and handshake | [0367](../decisions/0367-tls13-client-handshake.md) | Done, tested |
 | 3. Certificates | [0368](../decisions/0368-tls-certificate-verification.md) | Done, tested |
-| 4. `net.get`/`net.post` over TLS | 0369 | Not started |
+| 4. `net.get`/`net.post` over TLS | [0369](../decisions/0369-https-in-std-net.md) | Done, tested |
 
 ## Verified
 
@@ -58,6 +58,16 @@ been verified to do. Update it in the same change as the code.
   RSA-PSS), verified against the test root; the wrong host name fails as a
   certificate error naming the cause.
 - **Root stores:** all 122 roots in Ubuntu's bundle parse.
+- **End to end:** an AIL program (`bootstrap/tests/net/https.ail`) fetches
+  from a local `openssl s_server` over `https` with the test root as
+  `SSL_CERT_FILE`, and gets kind `tls` with the expected message for a
+  wrong host and for an untrusted root.
+- **Real servers (once, 2026-10-20):** through the sandbox's TLS-terminating
+  egress proxy, handshakes, certificate checks and downloads (up to 343 KB)
+  succeeded for github.com, api.github.com, raw.githubusercontent.com,
+  pypi.org, files.pythonhosted.org, crates.io and static.rust-lang.org.
+  `AIL_TLS_PUBLIC=1 ./ail selftest public_sites -- --nocapture` repeats a
+  direct check against 14 public sites where the network allows.
 - **Mutation:** 3,000 mutated ServerHello and Certificate bodies and 300
   mutated server flights per selftest (100,000 and 10,000 run once with
   `AIL_FUZZ_N=100000`) without a panic; 5,000 mutated certificates per
@@ -72,7 +82,7 @@ been verified to do. Update it in the same change as the code.
 - **Side channels beyond timing** (power, faults): out of scope.
 - **HelloRetryRequest with a cookie:** implemented per RFC 8446 §4.1.4
   and unit-tested, but no available test server sends one.
-- **Not wired in yet:** `net.get` still refuses `https` until slice 4.
+- **Proxies:** `std.net` connects directly; `HTTPS_PROXY` is ignored.
 - **Revocation and Certificate Transparency** aren't checked; nor are
   policies, directory-name and email name constraints, or the user's own
   trust settings on macOS and Windows (ADR 0368).
