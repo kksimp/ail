@@ -38,7 +38,7 @@ pub fn Diag.to_json(self, files List[ast.SourceFile]) str
     mut line := pos.line
     if line < 1073741824
         for f in files
-            if f.base < line
+            if f.base < pos.line
                 file = f.path
                 line = pos.line - f.base
     severity := if warning then "warning" else "error"

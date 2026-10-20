@@ -830,14 +830,15 @@ fn Checker.check_uses(mut self)
                 "the standard modules are {list_names(STD_MODULES)}",
             )
             continue
-        alias := u.alias?.name else u.path[u.path.len() - 1].name
+        named := u.alias else u.path[u.path.len() - 1]
+        alias := named.name
         key := "{file_of(u.pos)}/{alias}"
         if first := seen.get(key)
-            diags.push(new_diag("std.use.3", u.pos, "`{alias}` is already imported").with_help(
+            diags.push(new_diag("std.use.3", named.pos, "`{alias}` is already imported").with_help(
                 "it is first imported on line {first.line}; remove one import, or import it under another name with `as`",
             ))
         else
-            seen[key] = u.pos
+            seen[key] = named.pos
 
 ## The path of the file a position is in, or "" for one file or the prelude.
 fn Checker.file_of(self, at ast.Pos) str
