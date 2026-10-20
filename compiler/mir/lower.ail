@@ -527,6 +527,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         )
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
+        Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
