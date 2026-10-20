@@ -127,8 +127,8 @@ fn Lower.trap_open(mut self, rule str, pos ast.Pos)
 
 ## Finish it: the source excerpt, then exit.
 fn Lower.trap_close(mut self, pos ast.Pos)
-    lines := src_lines[file]
-    line := if pos.line >= 1 and pos.line <= lines.len() then lines[pos.line - 1] else ""
+    src := src_lines[file]
+    line := if pos.line >= 1 and pos.line <= src.len() then src[pos.line - 1] else ""
     call("rt.trap_end", [str_value(excerpt(line, pos.line, pos.col))], Ty.Unit)
     finish(unreachable_term())
 
