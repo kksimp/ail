@@ -3703,6 +3703,18 @@ impl<'p> Checker<'p> {
                 _ => {}
             }
         }
+        // type.coll.13: `m.push(k, x)` makes a pending `{}` a `Map[K, List[X]]`.
+        if let Expr::Name(n, _) = recv
+            && name == "push"
+            && let Some(k) = self.pending_of(n)
+            && self.pending[k].brace
+            && let [key, val] = args
+        {
+            let (kt, vt) = (self.quiet_type(&key.value), self.quiet_type(&val.value));
+            if let Some(k) = self.pending_of(n) {
+                self.settle(k, Ty::Map(Box::new(kt), Box::new(Ty::List(Box::new(vt)))));
+            }
+        }
         // `Type.name(...)` and `Type[int].name(...)`: an associated function
         // (trait.method.4) or a variant; `Trait.name(x, ...)`: a qualified
         // trait method call (trait.res.1).

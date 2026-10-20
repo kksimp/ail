@@ -332,3 +332,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0320](0320-atomic-int-and-bool.md) | `Atomic[int]` and `Atomic[bool]`: shared cells for tasks and `par for` *(delegated)* | Accepted | 2026-10-20 |
 | [0321](0321-task-cancellation.md) | Cancellation: `cancel`, `task.cancelled()`, `task.check()` *(delegated)* | Accepted | 2026-10-20 |
 | [0322](0322-random-schedule-testing.md) | `--schedule=random[:SEED]`: replayable random interleavings *(delegated)* | Accepted | 2026-10-20 |
+| [0340](0340-set-operations.md) | `union`, `intersect` and `difference` on sets and lists *(delegated)* | Accepted | 2026-10-20 |
+| [0341](0341-map-push.md) | `m.push(k, x)` appends to a list-valued map entry *(delegated)* | Accepted | 2026-10-20 |
+| [0342](0342-named-arguments-for-std-optionals-rejected.md) | Named arguments for std optional parameters: measured no gain, not added *(delegated)* | Accepted | 2026-10-20 |
