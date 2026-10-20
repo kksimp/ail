@@ -1,11 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`
-Chapter keys: `api`, `explain`, `fix`, `snap`
-Chapter keys: `api`, `explain`, `fix`, `budget`, `diff`
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `edit`
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `replay`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
