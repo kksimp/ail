@@ -23,6 +23,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Bare variant pattern** | A variant with data written without parentheses in a pattern, `Rect =>`: it matches any fields and binds none (ADR 0183). |
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
 | **Bit operation** | An `int` method that works on the 64-bit two's complement bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-2, ADR 0465). |
+| **Block parameter** | A MIR value defined on entry to a block; each edge into the block passes one argument per parameter, in place of phi nodes (ADR 0222, ADR 0384). |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
 | **Bytecode tier** | The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
 | **Bytes** | The built-in `bytes` type: an immutable sequence of `u8` for binary data, written `b"..."` (ADR 0412, `type.bytes.1`). Not text: `str` is UTF-8 text, and `b.text()` or `b.to_str()` read bytes as text. |
@@ -122,6 +123,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
+| **Native subset** | The constructs the native backend compiles (native.subset.1): free functions over numbers, string literals and lists of numbers; anything else is reported before code is made (ADR 0384). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **net.serve** | The capability to listen for connections, held in addition to `net` (`std.net.14`, ADR 0422). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
@@ -197,6 +199,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Trait** | A named set of method signatures that types implement explicitly with `impl Trait for Type` (ADR 0073). |
 | **Trap** | The response to a bug (overflow, out-of-bounds access, failed assertion). It stops the current task, runs its deferred cleanup, and is reported to the parent task. In the main task it ends the program (ADR 0035, ADR 0047). |
 | **Trap record** | A per-site constant the native compiler emits for a runtime check: file, line, column, rule ID and message, which `rt_trap` prints (ADR 0405). |
+| **Trap site** | A MIR record of one check that can trap: its rule, kind, operator and position; the code jumps to a stub that prints the interpreter's trap line (ADR 0384). |
 | **Trap snapshot** | The source line and the stack, each frame with its arguments and locals, reported with a trap that ends `ail run` (ADR 0267). |
 | **Trapped** | The prelude error `Trapped { rule, message }` that `Task.wait()` fails with when the task trapped (ADR 0187). |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |

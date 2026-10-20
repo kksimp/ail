@@ -29,6 +29,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `compiler/syntax/`: the lexer and parser in AIL, identical to `ail api --tokens` and `ail api --ast` on all 770 repository files; diagnostics are rule and position (ADR 0373).
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
 - `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slice 1 (declarations) agrees with `ail check` on every corpus program; the selftest `self_hosted_check` holds it there. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
+- `compiler/mir/`: the native backend's MIR in AIL (ADR 0384): flat instructions in SSA with block parameters, built from the AIL syntax tree by Braun et al.'s construction, cleaned up and verified; `ail run compiler mir FILE` prints it. The native subset is numbers, string literals, lists of numbers and free functions (native.subset.1, [23-native.md](spec/23-native.md)); the ABI is in [native-abi.md](design/native-abi.md). Code generation follows (lane 120).
 
 ### Language (2026-10-20 batch)
 

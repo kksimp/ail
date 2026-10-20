@@ -1,0 +1,124 @@
+# MIR (unstable) of bootstrap/tests/native/lists.ail
+
+fn norm(v0:xs List[float]) float
+  b0(v0:xs List[float]):
+    v1:s float = fconst 0.0
+    v2 int = const 0
+    v3 int = len v0:xs
+    jump b1(v2, v1:s)
+  b1(v4 int, v7:s float):
+    v5 bool = lt v4, v3
+    branch v5, b2(), b3()
+  b2:
+    v6:x float = get v0:xs, v4
+    v8 float = fmul v6:x, v6:x
+    v9 float = fadd v7:s, v8
+    jump b4()
+  b3:
+    v12 float = sqrt v7:s
+    return v12
+  b4:
+    v10 int = const 1
+    v11 int = add v4, v10
+    jump b1(v11, v9)
+
+fn main() unit
+  b0:
+    v0 int = const 0
+    v1:xs List[int] = call rt.list_new(v0)
+    v2 int = const 0
+    v3 int = const 5
+    jump b1(v2)
+  b1(v4:i int):
+    v5 bool = lt v4:i, v3
+    branch v5, b2(), b3()
+  b2:
+    v7 int = const 2
+    v8 int = mul v4:i, v7 !s0
+    call rt.list_push(v1:xs, v8)
+    jump b4()
+  b3:
+    v11:ys List[int] = call rt.list_copy(v1:xs)
+    v12 int = const 0
+    v13 int = const 7
+    set v1:xs, v12, v13 !s1
+    v14 List[int] = call rt.list_copy(v1:xs)
+    v15 int = const 0
+    v16 int = len v14
+    jump b5(v15)
+  b4:
+    v9 int = const 1
+    v10 int = add v4:i, v9
+    jump b1(v10)
+  b5(v17 int):
+    v18 bool = lt v17, v16
+    branch v18, b6(), b7()
+  b6:
+    v19:x int = get v14, v17
+    v20 int = const 4
+    v21 bool = gt v19:x, v20
+    v23 bool = const 0
+    branch v21, b11(), b10(v23)
+  b7:
+    call rt.out_list_int(v1:xs)
+    call rt.out_nl()
+    v37 int = const 0
+    v38 int = get v11:ys, v37 !s2
+    v39 int = len v11:ys
+    v40 int = add v38, v39 !s3
+    call rt.out_int(v40)
+    call rt.out_nl()
+    v41 int = const 2
+    v42 float = fconst 3.0
+    v43 float = fconst 4.0
+    v44 List[float] = call rt.list_new(v41)
+    call rt.list_pushf(v44, v42)
+    call rt.list_pushf(v44, v43)
+    v45 float = call norm(v44)
+    call rt.out_float(v45)
+    call rt.out_nl()
+    v46 int = const 7
+    v47 int = const 0
+    v48 bool = lt v46, v47
+    branch v48, b15(), b14(v46)
+  b8:
+    v31 int = const 1
+    v32 int = add v17, v31
+    jump b5(v32)
+  b9:
+    jump b8()
+  b10(v22 bool):
+    branch v22, b12(), b13()
+  b11:
+    v24 int = const 8
+    v25 bool = lt v19:x, v24
+    jump b10(v25)
+  b12:
+    call rt.list_push(v1:xs, v19:x)
+    jump b9()
+  b13:
+    jump b9()
+  b14(v49 int):
+    v51 int = const 2
+    v52 bool = ge v49, v51
+    branch v52, b16(v49), b17()
+  b15:
+    v50 int = neg v46 !s4
+    jump b14(v50)
+  b16(v53 int):
+    v54 int = neg v53 !s5
+    v55 int = const 2
+    v56 int = div v54, v55 !s6
+    v57 int = const 3
+    v58 bool = eq v56, v57
+    v60 bool = const 1
+    branch v58, b18(v60), b19()
+  b17:
+    jump b16(v51)
+  b18(v59 bool):
+    call rt.out_bool(v59)
+    call rt.out_nl()
+    return
+  b19:
+    v61 bool = const 0
+    jump b18(v61)
