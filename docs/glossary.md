@@ -19,6 +19,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
+| **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **Dependency** | A package another package declares with a `dep` line in its `ail.pkg` and imports by that name (`use geo.shapes`) (ADR 0231). |
 | **Deterministic mode** | `ail run --deterministic`: denies `clock`, `random`, `proc` and `net` so a program gives the same output for the same inputs (`eff.det.1–3`, ADR 0207). |
@@ -78,6 +79,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
+| **Probe** | A one-to-three statement program that feeds edge values (extremes, zero, empty, non-ASCII) to an operation that may trap; a trap is correct, an interpreter panic is the finding (ADR 0269). |
 | **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |
 | **Place** | A local binding, parameter or `self`, or a field or element of a place: something that can be assigned to or passed `mut`. It is *mutable* when its root is a `mut` binding, `mut` parameter or `mut self` (`own.place.1`, ADR 0117). |
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |

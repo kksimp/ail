@@ -6,3 +6,4 @@ __pycache__/
 .toolchain/
 .verify/
 bootstrap/target/
+tools/fuzz/failures/

@@ -43,6 +43,7 @@ Lane 31 (ADRs 0214–0215, resolves OQ-047, OQ-048): list `insert`, `remove_at`,
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
 Lane 28 added `requires`/`ensures` contracts, checked at run time (ADRs 0210–0213, `contract.*`).
+Lane 47 (ADRs 0269–0271): the fuzz and differential harness (`tools/fuzz/run.sh`, 200-program smoke inside `./ail selftest`); 10,000 programs found two bugs, both fixed with cases: `spawn` of a method call on a value panicked the interpreter (`conc.task.1`), and `repeat`/`pad_left` with a huge count aborted on allocation (new `type.str.15` trap).
 Lane 38 (ADRs 0230–0233, resolves OQ-045): `ail.pkg` manifests, path dependencies imported by package name, and per-dependency capability grants checked at compile time ([packages.md](design/packages.md)); git dependencies and `ail.lock` are designed only.
 interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
 implemented and tested on Linux x86-64; examples and test cases are canonical.

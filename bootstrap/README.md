@@ -34,7 +34,8 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols)
 ./ail fix FILE [--dry-run]         # apply the fixes diagnostics carry, re-check, repeat (ADR 0203)
 ./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
-./ail selftest                     # the bootstrap's own tests
+./ail selftest                     # the bootstrap's own tests, incl. a 200-program fuzz smoke
+tools/fuzz/run.sh [N [SEED]]       # fuzz and differential run, 10,000 programs by default (ADRs 0269–0271)
 ```
 
 Exit status: `0` success, `1` the program failed or trapped, `2` the program

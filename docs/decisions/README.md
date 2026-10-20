@@ -220,3 +220,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
 | [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
 | [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
+| [0269](0269-fuzz-generator-design.md) | The fuzz harness generates typed programs, edge-value probes and token-level mutants from a seed *(delegated)* | Accepted | 2026-10-20 |
+| [0270](0270-fuzz-properties.md) | The fuzz harness checks crash-freedom, determinism, fmt idempotence, api validity and a contracts differential *(delegated)* | Accepted | 2026-10-20 |
+| [0271](0271-every-crash-becomes-a-case.md) | Every fuzz crash becomes a regression case; `repeat` and `pad_*` trap above 2^30 bytes *(delegated)* | Accepted | 2026-10-20 |
