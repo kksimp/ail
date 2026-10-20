@@ -23,6 +23,9 @@ Design notes:
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
   make AIL easiest and most efficient for an AI author (proposals).
+- [design/ai-first-plan.md](design/ai-first-plan.md): the 2026-10-20 plan
+  for the AI-as-operator features (semantic API, effects and capabilities,
+  standard modules), efficiency, and the buildout lanes.
 - [design/syntax-measurements-r1.md](design/syntax-measurements-r1.md): first
   real tokenizer measurements of candidate syntax (block style, signatures,
   keywords).

@@ -212,3 +212,29 @@ one (Swift); optionals flatten (TypeScript's `undefined`; loses
 information); or `Map` values can't be optional (restrictive). Recommendation:
 the first, with a diagnostic when `none` is ambiguous. *Owner: AI under ADR
 0076.*
+
+## OQ-045 — Capability manifests for packages
+[ai-first-plan.md §3.2](design/ai-first-plan.md) gives every function an
+inferred capability set (`fs`, `env`, `proc`, `clock`, `net`) and lets
+`ail run --deny` refuse a program at compile time. The package half is open:
+should a package manifest declare the capabilities a dependency may use, so
+an AI-added dependency can't reach the filesystem or network unless granted
+(wishlist 5.1)? Options: (a) a `capabilities` list per dependency in the
+manifest, checked like `--deny` per package (recommended: it reuses the
+inference, and the grant is visible in one file); (b) capabilities as values
+passed explicitly from `main` (wishlist 6.6; most explicit, but costs tokens
+on every call chain); (c) nothing at the package level. Waits on Topic 13
+(packages). *Owner: designer.*
+
+## OQ-046 — Deterministic execution mode
+[ai-first-plan.md §3.3](design/ai-first-plan.md) proposes
+`ail run --deterministic`: deny `clock` and `random`, and make every
+remaining source of nondeterminism (map iteration order, task scheduling)
+fixed, so two runs give byte-identical output. Options: a flag only (cheap;
+programs opt in), or a language guarantee that safe code without `clock`,
+`random`, `proc` and `spawn` is deterministic by construction (stronger; it
+constrains the standard library's map order and the runtime forever).
+Recommendation: specify the guarantee for single-task programs now, since
+the bootstrap already iterates maps in insertion order, and keep the flag for
+the rest. *Owner: AI under ADR 0076, after the effects lane lands.*
+

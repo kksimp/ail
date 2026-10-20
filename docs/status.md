@@ -26,6 +26,10 @@ shorthand constructor arguments, and empty literals typed by first use
 (ADRs 0141–0143) bring the three examples to 1.5% above their Python
 versions in tokens. Verified on Linux x86-64 and macOS ARM64.
 See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
+2026-10-20: the [AI-first buildout plan](design/ai-first-plan.md) is in
+progress on ten parallel lanes (semantic API, effects and capabilities,
+standard modules, user modules, tests, formatter, conformance harness,
+interpreter performance).
 
 ## Design topics
 
@@ -86,4 +90,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-044).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-046).
