@@ -390,3 +390,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
 | [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
 | [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
+| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
+| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
+| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |

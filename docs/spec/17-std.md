@@ -97,7 +97,9 @@ Any directory that can't be read fails with that directory's path.
 
 **std.fs.9** — `glob(pattern str) List[str]` returns the existing paths
 that match `pattern`, sorted by bytes, without duplicates. The pattern's
-components are split at `/`. In a component, `*` matches any run of
+components are split at `/` (and at `\` on Windows). On Windows a pattern
+that starts with a drive and a separator (`C:\`) is absolute, as one that
+starts with a separator is everywhere. In a component, `*` matches any run of
 characters and `?` exactly one, and neither matches a leading `.` unless
 the component starts with `.`; any other character matches itself. A whole
 component `**` matches zero or more directories (not starting with `.`),
@@ -161,15 +163,17 @@ file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
 **std.path.2** — A separator is `/`, and also `\` on Windows.
 `dir(p str) str` is the text before the last separator: `.` when there is
 none, and the separator itself for a path in the root (`dir("/x")` is `/`).
-`base(p str) str` is the text after the last separator. *(ADR 0253)*
+On Windows a drive's root keeps its separator (`dir("C:\x")` is `C:\`).
+`base(p str) str` is the text after the last separator. *(ADR 0253, ADR 0504)*
 
 **std.path.3** — `ext(p str) str` is the text after the last `.` of
 `base(p)`, without the dot, and `""` when there is none or the only `.` is the
 first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
 
 **std.path.4** — `join(a str, b str) str` is `b` when `b` starts with a
-separator or `a` is empty; otherwise `a` and `b` with one `/` between.
-*(ADR 0253)*
+separator or `a` is empty; on Windows also when `b` starts with a drive and
+a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
+*(ADR 0253, ADR 0504)*
 
 ```ail
 use std.path
@@ -204,7 +208,10 @@ after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 **std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
-The process inherits the working directory and the environment, reads an
+On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
+starts `npm.cmd` (ADR 0504). A batch file (`.cmd`, `.bat`) runs through the
+system's command interpreter and fails as a `ProcError` when an argument has
+characters the system won't pass to it. The process inherits the working directory and the environment, reads an
 empty standard input, and its standard output and standard error are
 captured. The result is `struct Output { status int, out str, err str }`:
 the exit status (128 plus the signal number if a signal ended it, as shells
