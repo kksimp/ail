@@ -1,0 +1,40 @@
+# Dense matrix multiply on plain List[List[int]]: C = A * B for N x N matrices
+# with small integer entries. Prints the trace and the sum of all entries.
+# N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(200)
+    mut a := List[List[int]]()
+    mut b := List[List[int]]()
+    for i in 0..n
+        mut row_a := []
+        mut row_b := []
+        for j in 0..n
+            row_a.push((i * j + i + j) % 7)
+            row_b.push((i + 2 * j) % 5)
+        a.push(row_a)
+        b.push(row_b)
+    mut c := List[List[int]]()
+    for i in 0..n
+        mut row := []
+        for j in 0..n
+            mut s := 0
+            for k in 0..n
+                s += a[i][k] * b[k][j]
+            row.push(s)
+        c.push(row)
+    mut trace := 0
+    mut total := 0
+    for i in 0..n
+        trace += c[i][i]
+        for j in 0..n
+            total += c[i][j]
+    print("trace: {trace}")
+    print("sum: {total}")

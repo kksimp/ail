@@ -235,20 +235,8 @@ outline instead.
 
 ### Output
 
-**api.out.1** — The output is one JSON object with the keys `api` (the
-shape's version, `1`), `file` (the path as given) and `items`, then
-`references` with `--symbols`.
-
-**api.out.2** — By default the object is written on one line with no
-spaces outside strings. `--pretty` writes it with a two-space indent and a
-space after each `:`. Either way every object's keys are in the order this
-section lists them, an empty array is `[]`, and a newline ends the output.
-
-**api.out.3** — `items` holds every declaration of the file, sorted by
-position. Each item has `kind`, `name`, `id`, `line`, `col`, `doc` (the doc
-comment, or `null`) and `signature` (the declaration's first line as
-written, without its body; a constant's value only when it is a literal,
-else `...`). Then, by kind:
+The `api.*` rules are normative and live in [chapter 22](../spec/22-tools.md#semantic-api).
+This section shows the output format, which is non-normative.
 
 | `kind` | Further keys |
 |---|---|
@@ -267,17 +255,7 @@ A method declared `fn Type.name` sits under its type when the file declares
 that type, otherwise at the top level. Types are written as in source
 (`List[any Shape]`, `Size?`, `int ! ParseError`).
 
-**api.out.4** — `effects` lists the effects the function performs, sorted, from the inferred effect set (`eff.infer.*`, [ADR 0163](../decisions/0163-inferred-effect-sets.md)): `fail`, `io`, `mutates`, `spawn`, `unsafe` and the capabilities `fs`, `env`, `proc`, `clock`, `net`. `ail effects FILE` prints the same sets on their own.
-
-**api.out.5** — A program with errors has no outline: `ail api` reports the
-diagnostics as `ail check` would (with `--json`, as JSON lines) and exits 2.
-A file without `main` (mod.main.1) is not an error here, so a library
-file has an outline. Warnings are not reported and don't stop the outline.
-
 ### Stable ids
-
-**api.id.1** — An id names a declaration by its path, never by its
-position, so it survives edits elsewhere in the file:
 
 | Declaration | Id |
 |---|---|
@@ -291,43 +269,11 @@ position, so it survives edits elsewhere in the file:
 | `impl Trait for Type` | `impl:Type.Trait` |
 | constant | `const:MAX_DEPTH` |
 
-**api.id.2** — When a method of an `impl` block would get the same id as
-another method of the type, its id also names the trait:
-`method:Circle.Shape.area`.
-
-**api.id.3** — An id may name a standard declaration that isn't in the file,
-such as `trait:Ord`.
-
 ### References
-
-**api.ref.1** — With `--symbols`, `references` lists every use of a declared
-name as `{id, line, col}`, sorted by position then id: calls, method calls,
-field reads, struct-literal and variant labels, variants (qualified, bare
-and in patterns), constants, and type and trait mentions in signatures,
-`impl` headers, bounds and type arguments. A local variable, a declaration
-itself and a use inside the standard prelude are not references.
-
-**api.ref.2** — A method call that is dispatched through a trait refers to
-the trait's method (`method:Shape.area`), not to an implementation: which
-implementation runs is known only from the value.
 
 ### Doc comments
 
-**api.doc.1** — A doc comment (lex.comment.2) is a run of `##` lines with
-nothing between it and the declaration's line. A blank line or a plain `#`
-comment ends a run and leaves it unattached.
-
-**api.doc.2** — The doc is the lines' text after `##` and one optional
-space, joined with newlines. Structs, fields, enums, variants, traits,
-functions, methods and constants take docs; an `impl` block doesn't.
-
 ### Text outline
-
-**api.text.1** — `--text` prints one declaration per line: its line number
-right-aligned in five columns, two spaces, four spaces per nesting level,
-and its signature. Each doc line follows, indented one level deeper as
-`## text`. A variant's fields are not repeated under it, since its
-signature shows them.
 
 ```text
     2  trait Shape
@@ -342,42 +288,6 @@ signature shows them.
 `ail api --card [--budget N] [--json] DIR|FILE` prints a program's own card
 (ADRs 0310–0311).
 
-**api.card.1** — The card of a package directory or a file has, in this
-order: its name; `entry:` the `main` of the root module and its file;
-`tests:` the `@test` functions' names, sorted; the lines of `ail.pkg`;
-`examples:` the `.ail` files under `DIR/examples`, each with the first line
-of its first `##` comment; then one block per module, the root module
-first, then by import path, listing the module's declarations in source
-order as `ail api --text` does (signatures, with `pub` where written),
-each function's effects in `[...]`, its `requires`/`ensures` and, for an
-inferred error set, `fails with`, and the first line of its doc after `##`.
-`@test` functions are not in the module blocks.
-
-**api.card.2** — With `--json` (or the global `--json`) the same content is
-one JSON line: `api`, `card`, `entry`, `tests`, `test_count`, `manifest`,
-`examples`, `modules` (each `module`, `count`, `items` with `kind`, `name`,
-`pub`, `file`, `line`, `col`, `signature`, `doc`, `effects`, `requires`,
-`ensures`, `fails_with`, `members`), `budget` and `dropped`. `file`, `line`
-and `col` are where the declaration's name is, the file as the program
-loaded it ([ADR 0338](../decisions/0338-card-json-positions.md)); the text
-form doesn't show them.
-
-**api.card.3** — The card fits `--budget` estimated tokens (default 4,000).
-If the full card is over, it drops in this order until it fits: private
-items; doc comments; parameters' names; fields, variants, contracts, error
-sets and test names; signatures (kind and name only, then module names
-with counts). A trimmed card's last line is `trimmed to fit N tokens (~M);
-dropped: LIST`.
-
-**api.card.4** — A program the checker rejects has no card: the
-diagnostics are printed and the exit code is 2, as for api.out.5. A missing
-path or a bad option is exit code 2.
-
-**api.card.5** — `docs/design/cards/edit.md` and `std.md` are the output for
-`tools/edit` and `bootstrap/src/std`; `cargo test --test api_card` fails
-when either differs from the command's output. Regenerate with
-`./ail api --card tools/edit > docs/design/cards/edit.md`.
-
 ### Position queries: `--locals`, `--type`, `--refs`
 
 `ail api --locals FILE LINE COL`, `ail api --type FILE LINE COL` and
@@ -385,49 +295,6 @@ when either differs from the command's output. Regenerate with
 file ([ADRs 0258–0261](../decisions/0258-api-locals-query.md)). They take
 `--pretty` and `--json` as above, and the same program-with-errors rule
 (api.out.5). Every answer starts `{"api":1,"file":F,"line":L,"col":C`.
-
-**api.query.1** — A position with nothing to answer (`--type` or `--refs` off
-a name, or a name with no recorded type or symbol) exits 1 and prints on
-stderr one object `{"api":1,"severity":"error","message":...}`. A missing or
-non-numeric `LINE COL` is a usage error, exit 2.
-
-**api.loc.1** — `--locals` adds `locals`: every name in scope at the
-position, as `{name, type, mut, kind, line, col}`. `kind` is `self`, `param`,
-`loop` or `binding`; `line` and `col` are where the name is written (`null`
-for `self`). The order is `self`, then by where each name is written. `type`
-is the checker's, as in a diagnostic, or `"?"` where it is not known.
-
-**api.loc.2** — A `:=` binding is in scope from the line after it. A
-parameter, loop variable or pattern name is in scope from the first
-statement of the block it scopes. A name stays in scope until a line indented
-less than the line it started on; blank and comment lines never end a scope.
-On an empty line the cursor's column gives the indent.
-
-**api.type.1** — `--type` finds the name or number under (or just before) the
-cursor and adds `text`, `start_col`, `end_col` (exclusive), `type` (the
-innermost expression that starts there, or the type of a binding site) and
-`symbol` (the id of the declaration it refers to, as `--symbols`, or `null`).
-A qualified use of a module item (`geo.origin`) is one token at `geo`.
-
-**api.type.2** — `callee` is the declaration's outline item when `symbol` is
-a function or method (`signature`, `params`, `returns`, `effects`,
-`requires`, `ensures`, `doc`; api.out.3), else `null`.
-
-**api.refs.1** — `--refs` adds `symbol` and `refs`, a list of
-`{file, line, col, def}` sorted by file order, line and column. `symbol` is
-the id of the declaration the cursor is on or in a use of (api.ref.1) or
-`local:NAME`. The definition has `def:true`; `file` is the source file of the
-module the position is in, so a reference in an imported user module names
-that module's file.
-
-**api.refs.2** — A use of a module item is reported at the start of its
-qualified name (`geo.origin` at the `g`). A method call through a trait refers to the trait's
-method (api.ref.2).
-
-**api.refs.3** — For a local, `refs` is its binding (`def:true`) and every
-use of the name within its scope (api.loc.2). Locals can't be shadowed
-(expr.bind.4), so the name identifies the binding. Only locals of the file
-asked about are supported.
 
 ### Syntax dumps: `--tokens` and `--ast`
 
@@ -462,31 +329,6 @@ fields is `{"kind":"Call",...}`, one without is its name, and `none` is
 derive output.
 
 ### Package directories
-
-**api.pkg.1** — `ail api [--outline] [--symbols] [--text|--pretty] DIR` outlines
-a whole package: the root module's files and every module they import
-([ADR 0325](../decisions/0325-ail-api-on-package-directories.md)). The object
-has `api`, `package` (the path as given), `items` and, with `--symbols`,
-`references`. Items are ordered by file (root files first, then modules in
-load order) and line. Each item has the single-file keys, with its `id` prefixed
-by its module (`fn:geo.origin`, `type:geo.P`, `method:geo.P.shift`; api.id.1),
-and ends with `module` (the import path, empty for the root) and `file`.
-`line` counts from the top of the item's file. A reference has `id`, `line`,
-`col` and `file`. `--text` prints a `# FILE` line before each file's items.
-
-**api.pkg.2** — `--locals|--type|--refs DIR FILE LINE COL` asks about `FILE`
-in the context of the whole package `DIR`, so `--refs` lists uses in every file
-of every module, whichever file declares or uses the symbol. `FILE` is a root
-file of `DIR` or a file of a module the root imports. A file the package does
-not load is an error (`api.pkg.2`, exit 2). `--locals` and locals in `--type` and
-`--refs` need a root file (api.refs.3).
-
-**api.pkg.3** — The cursor may be on the name after a module qualifier
-(`geo.origin` at `origin`) as well as on the qualifier (api.refs.2); both ask
-about the same symbol. This holds for `--refs` with or without `DIR`.
-
-**api.pkg.4** — The single-file forms and their JSON are unchanged (api.out.1,
-api.refs.1). `refs` always names the file each position is in.
 
 ```json
 {"api":1,"file":"t.ail","line":14,"col":9,"locals":[{"name":"items","type":"List[Point]","mut":false,"kind":"param","line":10,"col":10},{"name":"sum","type":"int","mut":true,"kind":"binding","line":11,"col":9}]}

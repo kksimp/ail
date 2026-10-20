@@ -1,0 +1,71 @@
+# Fannkuch-redux: over every permutation of 0..N-1, count the prefix reversals
+# needed to bring 0 to the front. Prints the signed checksum and the max flips.
+# Only integer lists and loops. N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn fannkuch(n int) List[int]
+    mut perm1 := []
+    for i in 0..n
+        perm1.push(i)
+    mut count := []
+    for _ in 0..n
+        count.push(0)
+    mut maxflips := 0
+    mut checksum := 0
+    mut permcount := 0
+    mut r := n
+    mut done := false
+    while not done
+        while r != 1
+            count[r - 1] = r
+            r -= 1
+        mut perm := []
+        for i in 0..n
+            perm.push(perm1[i])
+        mut flips := 0
+        mut k := perm[0]
+        while k != 0
+            mut i := 0
+            mut j := k
+            while i < j
+                t := perm[i]
+                perm[i] = perm[j]
+                perm[j] = t
+                i += 1
+                j -= 1
+            flips += 1
+            k = perm[0]
+        if flips > maxflips
+            maxflips = flips
+        if permcount % 2 == 0
+            checksum += flips
+        else
+            checksum -= flips
+        mut advanced := false
+        while not advanced
+            if r == n
+                done = true
+                break
+            first := perm1[0]
+            for i in 0..r
+                perm1[i] = perm1[i + 1]
+            perm1[r] = first
+            count[r] -= 1
+            if count[r] > 0
+                advanced = true
+            else
+                r += 1
+        permcount += 1
+    [checksum, maxflips]
+
+fn main()
+    n := size(9)
+    res := fannkuch(n)
+    print(res[0])
+    print("Pfannkuchen({n}) = {res[1]}")
