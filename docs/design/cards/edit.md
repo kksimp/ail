@@ -1,6 +1,6 @@
 # edit
 entry: main in edit.ail
-tests: 54 (`ail test` lists them)
+tests: 55 (`ail test` lists them)
 
 ## (root)
 ```
@@ -108,6 +108,7 @@ fn session_value(List[Editor], int) str
 fn session_places(str) List[Loc]
 enum Extra
 fn extra_key(str, bool, bool, bool) Extra?
+fn test_counts(str) str
 struct Loc
 fn number_at(List[char], int) Range?
 fn output_location(str, str) Loc?
@@ -138,12 +139,14 @@ fn declared_at(List[Source], str) Loc?
 fn card_hits(Json, List[Source]) List[Hit]
 fn card_item(mut List[Hit], Json, List[Source], int, Loc) [mutates]
 fn problem_hits(str, str, mut Set[str]) List[Hit] [mutates]
+fn problems_title(List[Hit]) str
+fn problem_key(Hit) str
 fn list_files(str, int, int) List[str] [fs io]
 fn fuzzy(str, str) bool
 fn picker_list() std.ui.widgets.ListView
-fn window_main(mut Editor, List[str]) [env fs io mutates proc ui]
+fn window_main(mut Editor, List[str]) [clock env fs io mutates proc ui]
 fn font_flag(List[str]) int
-fn print_screen(Editor, List[str]) [env fs io proc ui]
+fn print_screen(Editor, List[str]) [clock env fs io proc ui]
 fn bench(mut Editor) [clock io mutates]
 fn main() ! [clock env fail fs io proc ui]
 ```
@@ -173,4 +176,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3409); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3441); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names

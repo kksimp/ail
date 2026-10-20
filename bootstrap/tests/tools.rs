@@ -44,9 +44,13 @@ fn editor_replaces_in_files() {
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     let preview = screen(&[]);
-    for want in ["replace `half` with `halve`: 4 lines in 2 files", " a.ail:12:10: x := half(4)? -> x := halve(4)?", " b.ail:2:11: print(half(2)) -> print(halve(2))"] {
+    for want in ["replace `half` with `halve`: 4 of 4 lines, 2 files", " a.ail:12:10: x := half(4)? -> x := halve(4)?", " b.ail:2:11: print(half(2)) -> print(halve(2))"] {
         assert!(preview.contains(want), "preview lacks {want:?}:\n{preview}");
     }
+    let skipped = screen(&["--key=down", "--key=space", "--key=ctrl+enter"]);
+    assert!(skipped.contains(" 12     x := half(4)?") && skipped.contains("  5 fn halve(n int)"), "skipped row:\n{skipped}");
+    let marked = screen(&["--key=down", "--key=space"]);
+    assert!(marked.contains("3 of 4 lines, 2 files") && marked.contains("[ ] a.ail:12:10:"), "marked:\n{marked}");
     let applied = screen(&["--key=ctrl+enter"]);
     for want in [" a.ail *   b.ail * ", "  5 fn halve(n int) int ! HalfError", "| replaced `half` in 2 files, not saved"] {
         assert!(applied.contains(want), "applied lacks {want:?}:\n{applied}");
@@ -151,7 +155,17 @@ fn editor_agent_panel_reads_the_real_outputs() {
     }
     let problem_jump = screen(&["--at=13:5", "--type=x", "--key=end", "--key=ctrl+shift+m", "--key=enter"]);
     assert!(problem_jump.contains("Ln 13, Col 5"), "problem jump:\n{problem_jump}");
+    // ADR 0353: the shown list follows edits after an idle pause and keeps
+    // the selection on the same diagnostic (`zprint`), so F4 goes on to the
+    // new first row.
+    let live = screen(&["--at=13:5", "--type=x", "--at=15:5", "--type=z", "--key=ctrl+shift+m", "--key=down", "--at=9:5", "--type=q", "--idle", "--key=f4"]);
+    assert!(live.contains(" problems: 3 errors, 0 others") && live.contains("agent.ail:9:5: error[expr.name.1] unknown name `qn`") && live.contains("Ln 9, Col 5"), "live problems:\n{live}");
+    let tests_on = screen(&["--key=ctrl+shift+u"]);
+    assert!(tests_on.contains("0 warnings, tests 1/1 pass"), "tests on save:\n{tests_on}");
     let covered = screen(&["--key=ctrl+shift+c"]);
     assert!(covered.contains("\n  8!        return Odd(n)\n") && covered.contains("\n  9     n / 2\n") && covered.contains("| coverage: lines 2/7"), "coverage:\n{covered}");
+    // Saving with tests on reruns them; this changes the file, so it's last.
+    let failing = screen(&["--key=ctrl+shift+u", "--at=9:9", "--type=1", "--key=ctrl+s"]);
+    assert!(failing.contains("tests 1 FAILED of 1"), "tests after save:\n{failing}");
     std::fs::remove_dir_all(&dir).ok();
 }

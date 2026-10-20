@@ -53,7 +53,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 ### Editor
 
-`tools/edit/edit.ail`, a code editor written in AIL (ADRs 0180–0181, 0241): a headless, tested core driving `ail check --json`, fixes, `ail explain` and `ail api`, with a `std.ui` window front end. It has completion, hover, find and replace, format on save, tabs, a Ctrl-P picker, a command palette, project search and replace, a file tree, rename through references, themes, an agent panel (info, trace, failure paths, coverage, program card) and per-directory session memory (ADRs 0244, 0291–0296, 0312–0313, 0331, 0338–0339).
+`tools/edit/edit.ail`, a code editor written in AIL (ADRs 0180–0181, 0241): a headless, tested core driving `ail check --json`, fixes, `ail explain` and `ail api`, with a `std.ui` window front end. It has completion, hover, find and replace, format on save, tabs, a Ctrl-P picker, a command palette, project search and replace, a file tree, rename through references, themes, an agent panel (info, trace, failure paths, coverage, program card) per-directory session memory, a problems list that stays live, a replace preview with per-row accept, and tests on save (ADRs 0244, 0291–0296, 0312–0313, 0331, 0338–0339, 0353–0354).
 
 ## Design topics
 
