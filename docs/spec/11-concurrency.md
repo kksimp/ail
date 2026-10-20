@@ -274,8 +274,8 @@ starts, so it is scope-bound like `conc.task.4`. *(ADR 0238)*
 thread pool. With `ail run --parallel`, so does every loop `conc.par.2–4`
 prove independent. A loop on the pool must also write only list elements
 and `int` accumulators, each accumulator by one `+=` outside nested loops;
-any other loop, and a loop with fewer than twice as many iterations as the
-pool has threads, runs in order. *(ADR 0272, ADR 0275)*
+any other loop, a loop that captures a handle or a `ref`, and a loop with
+fewer than twice as many iterations as the pool has threads, runs in order. *(ADR 0272, ADR 0275)*
 
 **conc.par.9** — The pool has one thread per hardware thread, at most 8,
 unless the environment variable `AIL_THREADS` sets the number. With one

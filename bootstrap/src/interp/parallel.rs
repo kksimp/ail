@@ -161,7 +161,8 @@ fn plain(v: &Value) -> Option<Plain> {
         Value::None => Plain::None,
         Value::Nested(n) => Plain::Nested(*n),
         Value::Fail(f) => Plain::Fail(Box::new(plain(&f.error)?), f.context.clone(), f.trace.clone()),
-        Value::Handle(_) => return None,
+        // A handle or a shared `ref` has identity a copy would lose (conc.par.8).
+        Value::Handle(_) | Value::Ref(_) => return None,
     })
 }
 
