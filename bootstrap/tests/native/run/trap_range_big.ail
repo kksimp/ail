@@ -1,0 +1,11 @@
+# A fixed operand beyond the guard's limit keeps the loop's overflow checks:
+# the product overflows on the first iteration (expr.arith.1).
+fn tri(i int, n int) int
+    mut s := 0
+    for j in 0..n
+        s += (i + j) * (i + j + 1) / 2
+    s
+
+fn main()
+    print(tri(5, 10))
+    print(tri(4000000000, 3))

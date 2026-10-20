@@ -4,6 +4,7 @@
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 22 — Tools; AI semantic API
+- **Amended by:** [ADR 0399](0399-compact-edits-and-diff-hunks.md)
 - **Spec rules:** [diff.out.1–6](../spec/22-tools.md#semantic-diff)
 - **Builds on:** [ADR 0150](0150-ail-api-outline.md) and the ids of `api.id.1`
 

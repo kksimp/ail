@@ -90,6 +90,14 @@ Tested live on 2026-10-20 (macOS ARM64): google.com loads in about
 and every link). A search submits correctly, but Google answers any client
 without JavaScript with its "enable JavaScript" page, so results wait for
 the JS engine (the designer's choice, 2026-10-20; no user-agent spoofing).
+Google sends that page with HTTP 200 and a `<meta http-equiv=refresh
+content="0;url=/httpservice/retry/enablejs?...">` inside `<noscript>`, so
+Garlic follows a meta refresh at once when its delay is at most 5 s (up to
+5 hops; longer delays stay, as the page asks to be read). Once scripts run,
+`<noscript>` content must be skipped (HTML parses it as raw text when
+scripting is on), or this refresh would fire on every search. Captures of
+Google's pages, taken with Garlic's headers, are in the project files for
+the JS engine.
 
 Known limits: `std.net` follows redirects itself but doesn't report the
 final URL, so relative links on a redirected page resolve against the URL

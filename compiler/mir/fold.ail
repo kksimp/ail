@@ -35,8 +35,11 @@ fn cse(f Func) Func
     mut seen := Map[str, List[int]]()
     mut repl := [v for v in 0..f.vals.len()]
     mut where := [-1 for _ in 0..f.vals.len()]
+    # Instructions that repeat an earlier one: the first would have trapped.
+    mut dup := [[false for _ in blk.insts] for blk in f.blocks]
     for b in rpo(f)
-        for i in f.blocks[b].insts
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
             if i.dst < 0 or not same_each_time(i)
                 continue
             args := [repl[a] for a in i.args]
@@ -49,6 +52,7 @@ fn cse(f Func) Func
                         break
             if found >= 0
                 repl[i.dst] = found
+                dup[b][k] = true
             else
                 where[i.dst] = b
                 if not seen.contains(key)
@@ -58,6 +62,10 @@ fn cse(f Func) Func
     for b in 0..n
         for k in 0..g.blocks[b].insts.len()
             g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
+        g.blocks[b].insts = [
+            g.blocks[b].insts[k]
+            for k in 0..g.blocks[b].insts.len() if not dup[b][k]
+        ]
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = repl[t.cond]

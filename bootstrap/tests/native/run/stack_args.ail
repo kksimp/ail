@@ -1,0 +1,23 @@
+# Integer arguments beyond the registers go on the stack (native-abi.md §1).
+
+fn mix(a int, b int, c int, d int, e int, f int, g int, h float, i int, s str) int
+    print(s)
+    a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + h.to_int() + 9 * i
+
+fn ten(a int, b int, c int, d int, e int, f int, g int, h int, i int, j int) int
+    a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j
+
+fn swap(a int, b int, c int, d int, e int, f int, g int, h int, i int, j int) int
+    if a == 0
+        return j * 10 + i
+    swap(a - 1, b, c, d, e, f, g, h, j, i)
+
+fn main()
+    print(mix(1, 2, 3, 4, 5, 6, 7, 8.5, 9, "hi"))
+    print(ten(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+    mut t := 0
+    for k in 0..1000
+        t += ten(k, k, k, k, k, k, k, k, k, ten(k, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+    print(t)
+    print(swap(5, 0, 0, 0, 0, 0, 0, 0, 1, 2))
+    print(mix(1, 2, 3, 4, 5, 6, 7, 8.5, 9223372036854775807, "x"))

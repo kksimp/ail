@@ -22,7 +22,10 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
-registers go on the stack, 8 bytes each, in order. Callee-saved registers are
+registers go on the stack, 8 bytes each, in order, the first lowest; the
+caller reserves a 16-byte-aligned area below its frame for them and frees it
+after the call, and the callee reads them above its frame record (ADR 0533).
+Float arguments beyond the eighth aren't supported yet. Callee-saved registers are
 the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
 an `extern` call treats them as clobbered). No variadics. Structs are passed
 by pointer.
@@ -186,9 +189,9 @@ Linux clobbers `rcx` and `r11` on x86-64. The shim is four functions
 
 **macOS risk.** Apple documents `libSystem` as the stable interface and
 reserves the right to change raw syscall numbers. The raw route works on
-current macOS ARM64 and is what the first slice uses; the fallback is to import
-`_write`, `_exit` and `_mmap` from `libSystem` through the dyld stubs lane 126
-needs for `extern` anyway. Only the four shim functions change (ADR 0406).
+current macOS ARM64 and is what the first slice uses. ADR 0534 moves the macOS
+OS layer to libSystem calls (`_write`, `_exit`, `_mmap`, ...) through the dyld
+imports lane 178 adds; Linux keeps raw syscalls.
 
 ## 5. Allocator
 
@@ -202,7 +205,12 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free.
+flag), 40-47 `fmt.ail` (the byte builder), 48-63 free. Each slot is a
+constant `NAME := N` read as `global(NAME)`; two names may share a slot only
+if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
+`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
+past `Image.globals`, an undeclared name, or a code generator constant of
+the same name with another value.
 
 **Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
 after `main` and by `io.exit`); every trap; before reading standard input;

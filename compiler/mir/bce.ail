@@ -301,6 +301,11 @@ fn Guard.in_bounds(mut self, x int, idx int, k int?)
         check(emit("ge", [idx, zero], Ty.Bool))
         check(emit("lt", [idx, l], Ty.Bool))
 
+## `-LIMIT <= x <= LIMIT`.
+fn Guard.within(mut self, x int)
+    check(emit("ge", [x, konst(0 - LIMIT)], Ty.Bool))
+    check(emit("le", [x, konst(LIMIT)], Ty.Bool))
+
 fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
     match nd.kind
         "index" =>
@@ -401,7 +406,19 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
                 needs.push(Need(kind: "off", x: x, arg: off))
                 relax.add("{b}:{k}")
                 relax.add("{defs[idx].block}:{defs[idx].at}")
-    if needs.len() == 0 and hoists.len() == 0
+    # Checked arithmetic that can't overflow if the fixed operands are small.
+    mut fx := [false for _ in 0..nv]
+    for v in 0..nv
+        fx[v] = defs[v].block >= 0 and fixed(defs, inl, hidx, v)
+    pr := prove(f, defs, lp, c, rpo(f), fx)
+    # Worth the guard on the operands: two checks, or one in a loop that is
+    # versioned anyway.
+    versioned := needs.len() > 0 or hoists.len() > 0
+    use_ranges := pr.sites.len() >= 2 or (pr.sites.len() == 1 and versioned)
+    if use_ranges
+        for key in pr.sites
+            relax.add(key)
+    if not versioned and not use_ranges
         return none
     # Everything defined in the loop and used after it is defined in the
     # header (the loop has one exit, from the header), and gets a parameter
@@ -449,6 +466,11 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
         gd.in_bounds(y, ci, cst(f, defs, hoists[h].c))
         d := gd.emit("get", [y, ci], f.vals[hoists[h].dst])
         hoists[h].fresh = d
+    if use_ranges
+        if pr.limited.len() > 8
+            return none
+        for v in pr.limited
+            gd.within(fresh_of(hoists, hidx, v))
     mut seen := Set[str]()
     for nd in needs
         key := "{nd.kind}|{nd.x}|{nd.arg}"

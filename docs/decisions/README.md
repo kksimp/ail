@@ -383,27 +383,26 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0391](0391-native-backend-optimisations.md) | First optimisations in the native backend: lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols *(delegated)* | Accepted | 2026-10-20 |
 | [0392](0392-native-structs-and-methods.md) | Structs and methods in the native subset: heap header word, slots, copies at the boundary, `T.m` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0393](0393-native-modules.md) | Modules in the native backend: package loading, module-prefixed names, files in problems and traps *(delegated)* | Accepted | 2026-10-20 |
+| [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
+| [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
+| [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
 | [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
 | [0396](0396-ail-diff-semantic-diff.md) | `ail diff`: a semantic diff of declarations, diagnostics and test outcomes, also against a git revision *(delegated)* | Accepted | 2026-10-20 |
 | [0397](0397-ail-edit-structured-edits-by-id.md) | `ail edit`: structured edits by declaration id, formatted and checked *(delegated)* | Accepted | 2026-10-20 |
 | [0398](0398-record-and-replay.md) | Record and replay: `--record R` writes every effect's result as JSON lines, `--replay R` answers effects from it *(delegated)* | Accepted | 2026-10-20 |
+| [0399](0399-compact-edits-and-diff-hunks.md) | Compact `ail edit` hunks by declaration name, `--test`, and changed lines in `ail diff` *(delegated)* | Accepted | 2026-10-20 |
 | [0583](0583-native-coverage-tracker.md) | A native coverage tracker: which programs `ail build` handles, and why the rest fail *(delegated)* | Accepted | 2026-10-20 |
 | [0584](0584-native-coverage-classification.md) | Native coverage: status rules, construct keys and counting *(delegated)* | Accepted | 2026-10-20 |
 | [0577](0577-bounds-checks-in-counted-loops.md) | Bounds checks in counted loops: versioning with guards, hoisted loads, two-pointer loops *(delegated)* | Accepted | 2026-10-20 |
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
+| [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
 | [0450](0450-iso-8601-parse-and-print.md) | ISO 8601: an offset is required, `parse_in` supplies a zone, `iso()` prints round-trippable text *(delegated)* | Accepted | 2026-10-20 |
 | [0451](0451-format-patterns-use-strftime-tokens.md) | `format` patterns use strftime tokens *(delegated)* | Accepted | 2026-10-20 |
-| [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
-| [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
-| [0398](0398-record-and-replay.md) | Record and replay: `--record R` writes every effect's result as JSON lines, `--replay R` answers effects from it *(delegated)* | Accepted | 2026-10-20 |
-| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
-| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
-| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
 | [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |
 | [0405](0405-native-traps.md) | Native traps print the interpreter's first line and exit 1 *(delegated)* | Accepted | 2026-10-20 |
 | [0406](0406-raw-syscalls-for-native-runtime.md) | Raw syscalls for the first native runtime, including on macOS *(delegated)* | Accepted | 2026-10-20 |
@@ -453,6 +452,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0521](0521-tensor-conv2d.md) | `conv2d` on 2-D float tensors: valid, stride 1, no padding (AI, delegated) | Accepted | 2026-10-20 |
 | [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
 | [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
+| [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
 | [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
@@ -497,3 +497,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
+| [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
