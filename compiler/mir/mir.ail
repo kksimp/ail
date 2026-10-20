@@ -76,6 +76,7 @@ pub fn Ty.name(self) str
 ## | `stx` | base, index, value | writes that element; not checked |
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
+## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst
     pub dst int
     pub op str

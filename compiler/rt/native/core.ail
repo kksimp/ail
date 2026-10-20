@@ -16,6 +16,9 @@ CHUNK := 4
 ARGC := 5
 ARGV := 6
 PARSE_OK := 7
+## A trap's third number (a slice's list length); the program ends after
+## it, so it shares `PARSE_OK`'s slot.
+TRAP_LEN := 7
 
 OUT_CAP := 65536
 
@@ -327,6 +330,19 @@ fn out_list_deep(xs List[int], depth int, leaf int)
         out_list_deep(list_at(load64(data + 8 * i)), depth - 1, leaf)
     out_byte(93)
 
+## Record the length a slice trap reports (kind 7).
+fn note_len(n int)
+    store64(global(TRAP_LEN), n)
+
+## `xs[lo..hi]`, checked by the caller: a new list of `size`-byte elements.
+fn list_slice(xs List[int], lo int, hi int, size int) List[int]
+    p := list_addr(xs)
+    n := hi - lo
+    q := list_addr(list_alloc(n, size))
+    copy_bytes(load64(q + 16), load64(p + 16) + size * lo, size * n)
+    store64(q, n)
+    list_at(q)
+
 ## A heap object of `size` bytes after its header word (native-abi.md §2):
 ## bits 0-7 the kind, 16-63 the size. The pointer is to the first byte
 ## after the header.
@@ -511,6 +527,14 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("shift count `")
         out_int(a)
         out_str("` is outside `0..=63`")
+    elif kind == 7
+        # `xs[a..b]` (type.coll.4); `op` is `..` or `..=`.
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for a list of length ")
+        out_int(load64(global(TRAP_LEN)))
     out_byte(10)
     out_str(tail)
     flush_to(2)

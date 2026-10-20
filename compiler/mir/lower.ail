@@ -327,7 +327,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
-        if p.mutable and not needs_copy(t)
+        if p.mutable and not needs_copy(t) and not t.is_unknown()
             problem(
                 p.pos,
                 "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
@@ -591,7 +591,7 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
                 v := Val(id: convert(r, ret, f.pos), ty: r.ty)
                 e := final_expr(body[body.len() - 1]) else ast.Expr.NoneLit(f.pos)
                 finish(return_of(copy_if_borrowed(e, v)))
-            elif problems.len() == fn_problems
+            elif not failing()
                 problem(f.pos, "`{f.name}` must end with its result")
         else
             finish(return_of(-1))
@@ -624,6 +624,11 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
         blocks[cur].params.push(new_value(t, ""))
     blocks[cur].params
 
+## Whether the current function already failed: later problems in it
+## would only repeat the first.
+fn Lower.failing(self) bool
+    problems.len() > fn_problems or fn_failed
+
 ## Finish the function begun with `begin_fn`: simplify, fold, verify.
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
@@ -648,7 +653,10 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
 ## The value as the type the context expects: an `int` literal already
 ## became a `float` where one was expected; anything else must match.
 fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
-    if not same_ty(v.ty, want)
+    if want.is_unknown() or v.ty.is_unknown()
+        # A type outside the subset, already reported.
+        fn_failed = true
+    elif not same_ty(v.ty, want)
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
 
@@ -1080,7 +1088,9 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             l := lower_value(recv, none)?
             elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
             if is_range(index)
-                return unsupported(pos, "list slices")
+                return match index
+                    Range(lo, hi, incl, rpos) => lower_slice(l, lo, hi, incl, rpos)
+                    _ => none
             i := lower_value(index, Ty.Int)?
             Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
         ListLit(items, pos) => lower_list(items, pos, want)
@@ -1101,7 +1111,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         SetLit(_, pos) => unsupported(pos, "sets")
         Match(_, _, pos) => unsupported(pos, "`match`")
         Try(_, _, pos) => unsupported(pos, "`?`")
-        Comp(_, _, _, _, pos) => unsupported(pos, "comprehensions")
+        Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
         OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
@@ -1298,7 +1308,8 @@ fn Lower.arm_end(mut self, join int, value bool, v Val?, pos ast.Pos, rty Ty) Ty
         jump(join, [])
         return rty
     x := v else
-        problem(pos, "this `if` needs a value in every branch")
+        if not failing()
+            problem(pos, "this `if` needs a value in every branch")
         jump(join, [])
         return rty
     mut t := rty
