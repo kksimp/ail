@@ -326,6 +326,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         env_pool: Vec::new(),
         returned: None,
         ops_pool: Vec::new(),
+        no_fields: Rc::new(Vec::new()),
         method_sites: HashMap::default(),
         call_targets: HashMap::default(),
         user_std,
@@ -378,6 +379,8 @@ struct Interp<'a, W: Write> {
     /// The value of the `return` being carried out, and where it was returned.
     returned: Option<(Value, Pos)>,
     ops_pool: Vec<Vec<Prepared>>,
+    /// The shared field list of every variant without fields.
+    no_fields: Rc<Vec<Value>>,
     /// What each method-call site resolves to, by the address of its receiver expression.
     method_sites: HashMap<usize, MethodSite<'a>>,
     /// What each call site names, by the address of its callee expression.
@@ -1034,6 +1037,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
+            Expr::Char(c, _) => Ok(Value::Char(*c)),
             Expr::Name(n, _) => match lookup(env, n) {
                 Some(v) => Ok(v.clone()),
                 None => self.eval_general(e, env),
@@ -1099,10 +1103,13 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `recv.name`: a field, or a unit variant `Enum.Variant` (type.struct.2, type.enum.2).
     #[inline(never)]
     fn eval_field(&mut self, recv: &'a Expr, name: &'a str, env: &mut Env<'a>) -> Flow<Value> {
+        if let Some(Value::Struct(s, fields)) = self.borrowed(recv, env) {
+            return Ok(fields[self.field_index(*s, name)].clone());
+        }
         if let Some(tn) = type_head(recv, env, self.prog) {
             let e = self.enums[tn];
             let v = self.variant_index(e, name);
-            return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
+            return Ok(Value::Enum(e, v, Rc::clone(&self.no_fields)));
         }
         let Value::Struct(s, fields) = self.operand_value(recv, env)? else { unreachable!("checked: struct") };
         Ok(fields[self.field_index(s, name)].clone())
@@ -1112,6 +1119,13 @@ impl<'a, W: Write> Interp<'a, W> {
     #[inline(never)]
     fn eval_index(&mut self, recv: &'a Expr, index: &'a Expr, pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
         let index: &'a Expr = index;
+        // A list in a local or a field, at an int that needs no evaluation: read in place, without
+        // taking a reference to the list.
+        if let Some(i) = self.int_val(index, env)
+            && let Some(Value::List(items)) = self.borrowed(recv, env)
+        {
+            return Ok(element(items, i, pos)?.clone());
+        }
         let items = match self.eval(recv, env)? {
             Value::List(items) => items,
             Value::Map(t) => {
@@ -1182,6 +1196,18 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => None,
             },
             Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// The value a local or a chain of fields of a local holds, without cloning it.
+    fn borrowed<'e>(&self, e: &Expr, env: &'e Env<'a>) -> Option<&'e Value> {
+        match e {
+            Expr::Name(n, _) => lookup(env, n),
+            Expr::Field { recv, name, .. } => match self.borrowed(recv, env)? {
+                Value::Struct(s, fields) => Some(&fields[self.field_index(*s, name)]),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -1290,7 +1316,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     let Some(&(e, v)) = self.resolved.variants.get(pos) else {
                         unreachable!("checked: `{n}` at {}:{} is a variant", pos.line, pos.col)
                     };
-                    Value::Enum(e, v, Rc::new(Vec::new()))
+                    Value::Enum(e, v, Rc::clone(&self.no_fields))
                 }
             },
             Expr::List(elems, _) => {
@@ -1461,6 +1487,18 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => unreachable!("checked: `{sym}` on floats"),
             },
             (Value::Num(k, a), Value::Num(_, b)) => num_binop(op, k, a, b, pos)?,
+            // Characters and booleans compare without the trait-aware generic path.
+            (Value::Char(a), Value::Char(b)) if !self.user_std[0] && !self.user_std[1] => Value::Bool(match op {
+                BinOp::Eq => a == b,
+                BinOp::Ne => a != b,
+                BinOp::Lt => a < b,
+                BinOp::Le => a <= b,
+                BinOp::Gt => a > b,
+                _ => a >= b,
+            }),
+            (Value::Bool(a), Value::Bool(b)) if matches!(op, BinOp::Eq | BinOp::Ne) && !self.user_std[0] => {
+                Value::Bool((a == b) == (op == BinOp::Eq))
+            }
             (Value::Int(a), Value::Int(b)) => Value::Bool(match op {
                 BinOp::Eq => a == b,
                 BinOp::Ne => a != b,
@@ -1614,7 +1652,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Ordering::Equal => 1,
             Ordering::Greater => 2,
         };
-        Value::Enum(self.resolved.std.ordering, v, Rc::new(Vec::new()))
+        Value::Enum(self.resolved.std.ordering, v, Rc::clone(&self.no_fields))
     }
 
     fn call_expr(&mut self, callee: &'a Expr, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
@@ -1665,7 +1703,8 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Target::Variant(e, v) => {
                 let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;
-                Ok(Value::Enum(e, v, Rc::new(fields)))
+                let fields = if fields.is_empty() { Rc::clone(&self.no_fields) } else { Rc::new(fields) };
+                Ok(Value::Enum(e, v, fields))
             }
             Target::Fn(f) => self.invoke(f, None, args, callee.pos(), env),
         }
