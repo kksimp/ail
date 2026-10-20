@@ -68,6 +68,8 @@ pub fn outline(path: &str, src: &str, symbols: bool, text: bool) -> Result<Strin
     if diags.is_empty() {
         (diags, resolved) = check::check(&prog);
     }
+    // A library file has no `main`, and still has an outline (api.out.5).
+    diags.retain(|d| d.rule != "mod.main.1");
     if diags.iter().any(|d| !d.warning) {
         return Err(diags);
     }
@@ -1008,9 +1010,9 @@ fn main()
 
     #[test]
     fn text_outline() {
-        let src = "## Adds.\nfn add(a int, b int) int\n    a + b\n\nstruct P\n    x int\n\nfn main()\n    print(add(1, 2))\n";
+        let src = "## Adds.\nfn add(a int, b int) int\n    a + b\n\nstruct P\n    x int\n";
         let out = outline("t.ail", src, false, true).unwrap();
-        assert_eq!(out, "    2  fn add(a int, b int) int\n           ## Adds.\n    5  struct P\n    6      x int\n    8  fn main()\n");
+        assert_eq!(out, "    2  fn add(a int, b int) int\n           ## Adds.\n    5  struct P\n    6      x int\n");
     }
 
     #[test]

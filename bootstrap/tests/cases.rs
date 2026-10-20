@@ -117,3 +117,24 @@ fn usage_errors_exit_2() {
     let out = ail().arg("nonsense").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// `ail api` (ADR 0150) outlines every example and every accepted case,
+/// with and without `--symbols`, and rejects a program with errors (api.out.5).
+#[test]
+fn api_outlines_every_accepted_program() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut files = ail_files(&root.join("../examples"));
+    files.extend(ail_files(&root.join("tests/cases")).into_iter().filter(|p| p.with_extension("out").exists()));
+    for path in files {
+        for extra in [None, Some("--symbols"), Some("--text")] {
+            let out = ail().arg("api").args(extra).arg(&path).output().unwrap();
+            assert_eq!(out.status.code(), Some(0), "{} {extra:?}: {}", path.display(), String::from_utf8_lossy(&out.stderr));
+        }
+    }
+    let rejected = root.join("tests/cases/condition_not_bool.ail");
+    let out = ail().args(["api", "--json"]).arg(&rejected).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("\"rule\":"));
+    let out = ail().args(["api", "--bogus", "x.ail"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
