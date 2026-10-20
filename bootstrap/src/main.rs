@@ -52,7 +52,10 @@ options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deterministic
                 with run or check: same as `--deny clock,random,proc,net`, so
-                the same inputs always give the same output (std.random.5)
+                the same inputs always give the same output (std.random.5),
+                and runs every loop on one thread (conc.par.9)
+  --parallel    with run: run every loop proven independent on the thread
+                pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
   --deny LIST   with run or check: reject a program whose `main` reaches a
                 denied capability (fs, env, proc, clock, random, net, ui,
@@ -78,7 +81,7 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" | "--deterministic" | "--no-contracts" => {}
+            "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
             "--deny" | "--seed" => i += 1,
             a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
@@ -189,8 +192,17 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
         args.drain(at..at + 2);
         interp::set_seed(seed);
     }
+    // conc.par.8: `run --parallel` puts every proven loop on the pool.
+    if args.first() == Some(&"run")
+        && let Some(at) = args.iter().position(|a| *a == "--parallel")
+    {
+        args.remove(at);
+        interp::parallel::set_mode(interp::parallel::Mode::Proven);
+    }
     if let Some(at) = args.iter().position(|a| *a == "--deterministic") {
         args.remove(at);
+        // conc.par.9: deterministic runs keep every loop on one thread.
+        interp::parallel::set_mode(interp::parallel::Mode::Off);
         deny.extend(check::effects::DETERMINISTIC_DENY);
         deny.sort_unstable();
         deny.dedup();

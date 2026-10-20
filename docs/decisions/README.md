@@ -250,3 +250,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0266](0266-trace-budget-and-value-form.md) | Traces are budgeted, and show values structurally without user code *(delegated)* | Accepted | 2026-10-20 |
 | [0267](0267-trap-snapshots.md) | A trap carries a snapshot of the stack and its values *(delegated)* | Accepted | 2026-10-20 |
 | [0268](0268-watch-and-no-debugger-protocol.md) | `--watch NAME` shows a variable's assignments; no debugger protocol for now *(delegated)* | Accepted | 2026-10-20 |
+| [0272](0272-interpreter-thread-pool.md) | The interpreter runs `par for` on a pool of copied values *(delegated)* | Accepted | 2026-10-20 |
+| [0273](0273-pure-tasks-off-the-scheduler.md) | Pure tasks run on their own threads; tasks with handles keep the scheduler *(delegated)* | Accepted | 2026-10-20 |
+| [0274](0274-pool-fallback-runs-in-order.md) | When the pool can't give the sequential result, the loop reruns in order *(delegated)* | Accepted | 2026-10-20 |
+| [0275](0275-run-parallel-flag-and-pool-log.md) | `ail run --parallel`, `AIL_THREADS` and `AIL_PAR_LOG` *(delegated)* | Accepted | 2026-10-20 |

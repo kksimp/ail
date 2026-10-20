@@ -270,6 +270,42 @@ pool for tasks and parallel loops, runs a loop with too little work
 sequentially, and finishes a parallel loop before the statement after it
 starts, so it is scope-bound like `conc.task.4`. *(ADR 0238)*
 
-> **Note:** the bootstrap interpreter runs every loop in order, which
-> satisfies `conc.par.1`. Its analysis is what `conc.par.5–6` report.
+**conc.par.8** — A `par for` loop that `conc.par.5` accepts runs on the
+thread pool. With `ail run --parallel`, so does every loop `conc.par.2–4`
+prove independent. A loop on the pool must also write only list elements
+and `int` accumulators, each accumulator by one `+=` outside nested loops;
+any other loop, a loop that captures a handle or a `ref`, and a loop with
+fewer than twice as many iterations as the pool has threads, runs in order. *(ADR 0272, ADR 0275)*
+
+**conc.par.9** — The pool has one thread per hardware thread, at most 8,
+unless the environment variable `AIL_THREADS` sets the number. With one
+thread, or under `--deterministic`, every loop and task runs as if there
+were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
+how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
+
+**conc.par.10** — A task whose function has no `io`, `unsafe`, `spawn` or
+capability effect and calls no method of a handle, directly or through the
+functions it calls, and whose arguments hold no handle, runs on its own
+thread outside the one-at-a-time scheduler (`conc.task.3`); `wait`, a
+group's `wait_all` and the end of its block join it. Any other task runs on
+the scheduler. A pooled task that returns a handle traps. *(ADR 0273)*
+
+**conc.par.11** — If an iteration on the pool traps, a captured value holds a
+handle, an accumulator doesn't hold an `int`, or the running total of an
+accumulator would leave `int`, the loop discards what the pool computed and
+runs in order from its first iteration. Because the body has no effect, the
+result, and the trap if any, is the sequential one (`conc.par.1`). A body on
+the pool can't block on another task: it has no handle. *(ADR 0274)*
+
+```ail
+fn main()
+    mut squares := List[int]()
+    for _ in 0..64
+        squares.push(0)
+    mut total := 0
+    par for i in 0..64
+        squares[i] = i * i
+        total += i
+    print("{squares[63]} {total}")
+```
 

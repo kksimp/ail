@@ -19,6 +19,7 @@ use std::cmp::Ordering;
 
 mod builtins;
 mod contracts;
+pub mod parallel;
 mod random;
 mod stdlib;
 mod tasks;
@@ -320,6 +321,8 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         conc: None,
         tracing: trace::mode(),
         snap: None,
+        par: None,
+        pure: None,
     }
 }
 
@@ -360,6 +363,7 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let mut it = build(prog, resolved, stdout.lock());
     // trace.snap.1: a trap that ends the program carries a snapshot.
     it.snap = Some(Box::default());
+    it.par = parallel::plans(prog, resolved);
     let result = run_main(&mut it, prog);
     if let (Err(Stop::Trap(t)), Some(snap)) = (&result, it.snap.take()) {
         trace::keep(prog, *snap, t);
@@ -425,6 +429,10 @@ struct Interp<'a, W: Write> {
     tracing: u8,
     /// The frames of a trap on its way out, when `run` keeps a snapshot (trace.snap.1).
     snap: Option<Box<trace::Snap>>,
+    /// The loops that run on the thread pool (conc.par.8).
+    par: Option<Rc<parallel::Plans>>,
+    /// Which functions a task may run on the pool (conc.par.10), once needed.
+    pure: Option<Rc<Vec<bool>>>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -1089,7 +1097,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             Stmt::For { var, mutable: true, iter, body, .. } => self.for_mut(var, iter, body, env)?,
-            Stmt::For { var, iter, body, .. } => self.for_loop(var, iter, body, env)?,
+            Stmt::For { var, iter, body, pos, .. } => {
+                if !self.par_for(*pos, var, iter, body, env)? {
+                    self.for_loop(var, iter, body, env)?;
+                }
+            }
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
             Stmt::Return(value, pos) => {

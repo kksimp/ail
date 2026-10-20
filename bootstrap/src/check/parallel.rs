@@ -63,6 +63,50 @@ pub struct Verdict {
     /// Where the reason is: the first write or exit that orders the loop.
     pub at: Pos,
     help: Option<String>,
+    /// How the interpreter's pool may run the loop, when it can
+    /// (conc.par.8); meaningful only when the outcome isn't sequential.
+    pub plan: Option<Plan>,
+}
+
+/// What a worker needs to run a loop's iterations (conc.par.8, ADR 0272):
+/// the variables declared outside the body that it reads or writes, the
+/// lists whose elements it writes, and the `int` accumulators it adds to.
+#[derive(Debug, Clone, Default)]
+pub struct Plan {
+    pub captures: Vec<String>,
+    pub lists: Vec<String>,
+    pub sums: Vec<String>,
+}
+
+/// The plan for a loop whose writes are all list elements, or single `+=`
+/// accumulators outside nested loops; `None` for any other write.
+fn plan_of(writes: &[Write], reads: &[Read], mutable: bool) -> Option<Plan> {
+    if mutable {
+        return None;
+    }
+    let mut plan = Plan::default();
+    let mut roots: Vec<&str> = writes.iter().map(|w| w.root).collect();
+    roots.sort_unstable();
+    roots.dedup();
+    for root in roots {
+        let ws: Vec<&Write> = writes.iter().filter(|w| w.root == root).collect();
+        let element = |w: &&Write| match &w.kind {
+            Kind::Element(s) | Kind::Unproven(s) => s.first().is_some_and(|s| s.starts_with('[')),
+            _ => false,
+        };
+        if ws.iter().all(element) {
+            plan.lists.push(root.to_string());
+        } else if ws.len() == 1 && ws[0].kind == Kind::Add && ws[0].depth == 0 {
+            plan.sums.push(root.to_string());
+        } else {
+            return None;
+        }
+    }
+    let mut captures: Vec<&str> = writes.iter().map(|w| w.root).chain(reads.iter().map(|r| r.root)).collect();
+    captures.sort_unstable();
+    captures.dedup();
+    plan.captures = captures.into_iter().map(String::from).collect();
+    Some(plan)
 }
 
 /// Why a loop isn't proven independent. `provable` problems make
@@ -95,6 +139,8 @@ struct Write<'a> {
     root: &'a str,
     kind: Kind,
     pos: Pos,
+    /// Loops nested inside the body around the write.
+    depth: usize,
 }
 
 /// A read of a variable that outlives the iteration.
@@ -278,7 +324,7 @@ impl<'a> Scan<'a> {
                 _ => Kind::Unproven(steps),
             }
         };
-        self.writes.push(Write { root, kind, pos });
+        self.writes.push(Write { root, kind, pos, depth: self.depth });
     }
 
     /// The steps pick the same place in every iteration: fields, literal
@@ -651,6 +697,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
         scan.problem("conc.par.2", *pos, true, format!("has effect `{e}` via {source}"), help);
     }
     let Scan { writes, reads, mut problems, .. } = scan;
+    let plan = plan_of(&writes, &reads, *mutable);
     let mut roots: BTreeMap<&str, Vec<&Write>> = BTreeMap::new();
     for w in &writes {
         roots.entry(w.root).or_default().push(w);
@@ -790,6 +837,7 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
         reason,
         at,
         help,
+        plan: plan.clone(),
     };
     match problems.into_iter().next() {
         Some(p) => {
@@ -833,10 +881,8 @@ struct Context<'a> {
     fns: HashMap<&'a str, usize>,
 }
 
-/// The verdict on every `for` loop of the program's own functions, in
-/// source order (conc.par.6).
-pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
-    let fx = Effects::infer(prog, resolved);
+/// Free functions by name, and which functions synchronise through a handle.
+fn context<'a>(prog: &'a Program, resolved: &'a Resolved, fx: &'a Effects<'a>) -> Context<'a> {
     let fns: HashMap<&str, usize> = prog
         .fns
         .iter()
@@ -844,7 +890,7 @@ pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
         .filter(|(_, f)| f.owner.is_none() && f.top_level())
         .map(|(i, f)| (f.name.as_str(), i))
         .collect();
-    let mut cx = Context { prog, resolved, fx: &fx, sync: vec![false; prog.fns.len()], fns };
+    let mut cx = Context { prog, resolved, fx, sync: vec![false; prog.fns.len()], fns };
     // A function synchronises if its body calls a handle's method, or it
     // calls a function that does: a fixed point over the call graph.
     let direct: Vec<bool> = prog
@@ -879,6 +925,22 @@ pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
         }
         add.into_iter().for_each(|i| cx.sync[i] = true);
     }
+    cx
+}
+
+/// conc.par.10: the functions a task may run on the pool: no ordering
+/// effect (conc.par.2) and no handle, through every call.
+pub fn pure_fns(prog: &Program, resolved: &Resolved) -> Vec<bool> {
+    let fx = Effects::infer(prog, resolved);
+    let cx = context(prog, resolved, &fx);
+    (0..prog.fns.len()).map(|i| !cx.sync[i] && !fx.of(i).iter().any(|e| ordering(e))).collect()
+}
+
+/// The verdict on every `for` loop of the program's own functions, in
+/// source order (conc.par.6).
+pub fn analyze(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
+    let fx = Effects::infer(prog, resolved);
+    let cx = context(prog, resolved, &fx);
     let mut out = Vec::new();
     for f in prog.fns.iter().filter(|f| !is_prelude(f.pos)) {
         let Some(body) = &f.body else { continue };
