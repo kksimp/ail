@@ -35,7 +35,7 @@ mod testing;
 mod traits;
 mod ui;
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 
 use builtins::builtin;
 pub use errpaths::FailPath;
@@ -228,25 +228,25 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     let mut c = Checker {
         prog,
         diags: Vec::new(),
-        types: HashMap::new(),
-        traits: HashMap::new(),
+        types: HashMap::default(),
+        traits: HashMap::default(),
         tparams: Vec::new(),
         struct_params: Vec::new(),
         enum_params: Vec::new(),
         list_param: 0,
         trait_self: Vec::new(),
         impl_info: Vec::new(),
-        impl_of: HashMap::new(),
+        impl_of: HashMap::default(),
         std: Std::default(),
         field_types: Vec::new(),
         variant_types: Vec::new(),
-        fns: HashMap::new(),
-        methods: HashMap::new(),
+        fns: HashMap::default(),
+        methods: HashMap::default(),
         sigs: Vec::new(),
         fn_scopes: Vec::new(),
         fn_self: Vec::new(),
         inferred: vec![Vec::new(); prog.fns.len()],
-        consts: HashMap::new(),
+        consts: HashMap::default(),
         const_types: vec![None; prog.consts.len()],
         const_busy: vec![false; prog.consts.len()],
         resolved: Resolved::default(),
@@ -260,8 +260,8 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         loops: 0,
         record: false,
         anchored: 0,
-        anchors: HashMap::new(),
-        bound: HashMap::new(),
+        anchors: HashMap::default(),
+        bound: HashMap::default(),
         catching: 0,
         caught: 0,
         cur_fn: 0,

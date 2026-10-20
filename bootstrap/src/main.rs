@@ -5,6 +5,7 @@
 
 mod api;
 mod ast;
+mod bump;
 mod check;
 mod derive;
 mod diag;
@@ -77,6 +78,10 @@ options:
   --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
 
+// ADR 0332: commands that only read a program use the front-end allocator.
+#[global_allocator]
+static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
+
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
 const STACK_BYTES: usize = 256 * 1024 * 1024;
 
@@ -142,6 +147,11 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // ADR 0332: `check`, `api` and `effects` make one pass over the program
+    // and exit, so they use the front-end allocator.
+    if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) {
+        ALLOC.enable();
+    }
     match rest.as_slice() {
         ["run", file] => {
             interp::set_program(file, program_args);

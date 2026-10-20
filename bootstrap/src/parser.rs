@@ -8,7 +8,7 @@
 //! Spec constructs the bootstrap doesn't implement yet report
 //! `bootstrap.unsupported` with the rule they belong to.
 
-use std::collections::HashSet;
+use crate::fasthash::FastSet as HashSet;
 
 use crate::ast::{
     Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
@@ -149,8 +149,8 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
         in_interp: false,
         generic_names,
         olds: None,
-        aliases: HashSet::new(),
-        public: HashSet::new(),
+        aliases: HashSet::default(),
+        public: HashSet::default(),
     };
     let mut prog = Program::default();
     loop {
@@ -1864,7 +1864,7 @@ impl Parser {
                         generic_names,
                         olds: None,
                         aliases: self.aliases.clone(),
-                        public: HashSet::new(),
+                        public: HashSet::default(),
                     };
                     let expr = sub.expression();
                     if expr.is_some() && !matches!(sub.peek(), Tok::Eof) {
