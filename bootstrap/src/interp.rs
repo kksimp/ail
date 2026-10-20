@@ -228,6 +228,23 @@ const MAX_DEPTH: usize = 10_000;
 /// Locals of one call, innermost last.
 type Env<'a> = Vec<(&'a str, Value)>;
 
+/// What is known of a method-call site: its trait dispatch, whether the method may change its
+/// receiver, and the last user method it resolved to (type kind, index, function).
+#[derive(Clone, Copy)]
+struct MethodSite<'a> {
+    call: Option<Call>,
+    mutating: bool,
+    last: Option<(bool, usize, &'a FnDecl)>,
+}
+
+/// What a call expression names.
+#[derive(Clone, Copy)]
+enum Target<'a> {
+    Struct(usize),
+    Variant(usize, usize),
+    Fn(&'a FnDecl),
+}
+
 /// A place (own.place.1) resolved to a local slot and a path of steps.
 #[derive(Clone, Debug)]
 struct Place {
@@ -308,6 +325,8 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         env_pool: Vec::new(),
         returned: None,
         ops_pool: Vec::new(),
+        method_sites: HashMap::default(),
+        call_targets: HashMap::default(),
         user_std,
         mutating,
         field_slots: HashMap::default(),
@@ -358,6 +377,10 @@ struct Interp<'a, W: Write> {
     /// The value of the `return` being carried out, and where it was returned.
     returned: Option<(Value, Pos)>,
     ops_pool: Vec<Vec<Prepared>>,
+    /// What each method-call site resolves to, by the address of its receiver expression.
+    method_sites: HashMap<usize, MethodSite<'a>>,
+    /// What each call site names, by the address of its callee expression.
+    call_targets: HashMap<usize, Target<'a>>,
     /// Whether the program implements, or gives a default body to, `eq`, `cmp` and `to_str`.
     /// When not, `==`, ordering and text go straight to the built-in forms (trait.std.1).
     user_std: [bool; 3],
@@ -1609,16 +1632,33 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => {}
             }
         }
-        if let Some(&s) = self.structs.get(n.as_str()) {
-            let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
-            return Ok(Value::Struct(s, Rc::new(fields)));
+        // What a call names doesn't change, so it is looked up once per call site.
+        let key = callee as *const Expr as usize;
+        let target = match self.call_targets.get(&key) {
+            Some(&t) => t,
+            None => {
+                let t = if let Some(&s) = self.structs.get(n.as_str()) {
+                    Target::Struct(s)
+                } else if let Some(&(e, v)) = self.resolved.variants.get(&callee.pos()) {
+                    Target::Variant(e, v)
+                } else {
+                    Target::Fn(self.fns[n.as_str()])
+                };
+                self.call_targets.insert(key, t);
+                t
+            }
+        };
+        match target {
+            Target::Struct(s) => {
+                let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
+                Ok(Value::Struct(s, Rc::new(fields)))
+            }
+            Target::Variant(e, v) => {
+                let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;
+                Ok(Value::Enum(e, v, Rc::new(fields)))
+            }
+            Target::Fn(f) => self.invoke(f, None, args, callee.pos(), env),
         }
-        if let Some(&(e, v)) = self.resolved.variants.get(&callee.pos()) {
-            let fields = self.labelled(&self.prog.enums[e].variants[v].fields, args, env)?;
-            return Ok(Value::Enum(e, v, Rc::new(fields)));
-        }
-        let f = self.fns[n.as_str()];
-        self.invoke(f, None, args, callee.pos(), env)
     }
 
     /// Field values in declaration order from named, shorthand and
@@ -1783,7 +1823,21 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
-        let call = self.resolved.calls.get(&pos).copied();
+        // What a call site says about itself doesn't change, so it is worked out once.
+        let key = recv as *const Expr as usize;
+        let site = match self.method_sites.get(&key) {
+            Some(&site) => site,
+            None => {
+                let site = MethodSite {
+                    call: self.resolved.calls.get(&pos).copied(),
+                    mutating: self.mutating.contains(name),
+                    last: None,
+                };
+                self.method_sites.insert(key, site);
+                site
+            }
+        };
+        let call = site.call;
         // `Trait.name(x, ...)` (trait.res.1).
         if let Some(Call::Qualified(tr)) = call {
             let (first, rest) = args.split_first().expect("checked: a receiver argument");
@@ -1811,7 +1865,7 @@ impl<'a, W: Write> Interp<'a, W> {
             let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
         }
-        let recv = if self.mutating.contains(name) {
+        let recv = if site.mutating {
             self.operand(recv, env)?
         } else {
             Operand::Value(self.eval(recv, env)?)
@@ -1823,12 +1877,23 @@ impl<'a, W: Write> Interp<'a, W> {
             Operand::Place(p) => peek(env, p)?,
             Operand::Value(v) => v,
         };
-        let type_name = match value {
-            Value::Struct(s, _) => self.prog.structs[*s].name.as_str(),
-            Value::Enum(e, _, _) => self.prog.enums[*e].name.as_str(),
+        // The method for the receiver's type; a site usually sees one type, so the last one is kept.
+        let (is_enum, index) = match value {
+            Value::Struct(s, _) => (false, *s),
+            Value::Enum(e, _, _) => (true, *e),
             _ => return self.builtin(recv, name, args, pos, env),
         };
-        let f = self.methods[type_name][name];
+        let f = match site.last {
+            Some((e, i, f)) if e == is_enum && i == index => f,
+            _ => {
+                let type_name = if is_enum { &self.prog.enums[index].name } else { &self.prog.structs[index].name };
+                let f = self.methods[type_name.as_str()][name];
+                if let Some(site) = self.method_sites.get_mut(&key) {
+                    site.last = Some((is_enum, index, f));
+                }
+                f
+            }
+        };
         self.invoke(f, Some(recv), args, pos, env)
     }
 
