@@ -55,6 +55,12 @@ type and extended again: C leaves the upper bits unspecified, so `abs` is
 declared `fn abs(x i32) i32`, not `int`. A `bool` result is true when its low
 byte is not zero. *(ADR 0432)*
 
+## Native builds
+
+**ffi.native.1** — `ail build` rejects a program that declares an `extern c fn`,
+or uses `std.mem`, until the native backend can link a dynamic library; the
+error names the declaration. The interpreter runs both. *(ADR 0436)*
+
 ## Loading
 
 **ffi.load.1** — The library is loaded on the first call to one of its

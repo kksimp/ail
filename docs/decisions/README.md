@@ -413,6 +413,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0433](0433-raw-pointer-type.md) | `*T` is a raw pointer type with a C-layout target *(delegated)* | Accepted | 2026-10-20 |
 | [0434](0434-std-mem-c-strings.md) | `std.mem` hands out C strings from C's allocator and traps on bad frees *(delegated)* | Accepted | 2026-10-20 |
 | [0435](0435-pointer-operations-and-typed-alloc.md) | Pointer reads, writes and offsets are methods; blocks are bounds-checked *(delegated)* | Accepted | 2026-10-20 |
+| [0436](0436-native-c-calls-by-dynamic-imports.md) | Native C calls use the platform convention and dynamic imports, planned before built *(delegated)* | Accepted | 2026-10-20 |
 | [0460](0460-drag-race-harness.md) | The drag race is one Python harness that times AIL, native AIL, C and Python from twins *(delegated)* | Accepted | 2026-10-20 |
 | [0461](0461-module-fuzzers.md) | Module fuzzers are templates plus seeded input generators *(delegated)* | Accepted | 2026-10-20 |
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
