@@ -292,8 +292,11 @@ fn Guard.check(mut self, cond int)
 ## `0 <= idx < len x`, with `idx` the constant `k` if known.
 fn Guard.in_bounds(mut self, x int, idx int, k int?)
     l := len_of(x)
+    mut known := -1
     if kk := k
-        check(emit("lt", [konst(kk), l], Ty.Bool))
+        known = kk
+    if known >= 0
+        check(emit("lt", [konst(known), l], Ty.Bool))
     else
         if zero < 0
             zero = konst(0)
