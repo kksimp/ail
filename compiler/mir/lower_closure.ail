@@ -133,7 +133,7 @@ fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
     m := lower_value(args[0].value, Ty.Str)?
     if m.ty != Ty.Str
         return unsupported(expr_pos(args[0].value), "`unreachable` of a `{m.ty.name()}`")
-    mut i := inst(-1, "trap", [m.id])
+    mut i := inst(-1, "utrap", [m.id])
     i.site = site("err.model.2", "unreachable", "", pos)
     emit_void(i)
     finish(unreachable_term())
