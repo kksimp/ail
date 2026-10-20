@@ -6,6 +6,15 @@ enum Ordering
     Equal
     Greater
 
+## An atomic operation's memory ordering, given as `a.load(order: Relaxed)`
+## (conc.atomic.7, ADR 0352). Leaving it out means `SeqCst`.
+enum AtomicOrder
+    SeqCst
+    Acquire
+    Release
+    AcqRel
+    Relaxed
+
 trait Eq
     fn eq(self, other Self) bool
 
