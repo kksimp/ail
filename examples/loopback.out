@@ -1,0 +1,2 @@
+server got GET /hello query {"name": "ail"}
+client got 200: hi there
