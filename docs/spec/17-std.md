@@ -541,7 +541,8 @@ expected type is `Tensor[int]`. A negative size, or a shape whose element
 count differs from `xs.len()`, traps. *(ADR 0328)*
 
 **std.tensor.3** — The methods are `add`, `dot`, `len`, `map`, `matmul`,
-`mul`, `reshape`, `shape`, `sum` and `to_list`. `shape() List[int]`,
+`max`, `mean`, `mul`, `reshape`, `shape`, `sum`, `to_list` and `transpose`
+(ADR 0345). `shape() List[int]`,
 `len() int` (the element count), `to_list() List[T]` (row-major), and
 `reshape(shape List[int]) Tensor[T]` (the same elements; traps like
 std.tensor.2 when the count differs). Any other method is a compile-time
@@ -582,9 +583,38 @@ elements are equal. A tensor's text form is the call that rebuilds it:
 `tensor.from([1.0, 2.0])`, with the shape after the list when the tensor
 isn't 1-D. *(ADR 0328)*
 
+**std.tensor.10** — `a + b`, `a - b` and `a * b` with a tensor operand are
+elementwise, with no other arithmetic operator defined for tensors. Both
+operands are tensors with one element type and equal shapes (`a + b` is
+`a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the other a
+scalar of its element type, on either side, which is taken with every
+element: `t * 2.0`, `1.0 - t`. An `int` literal beside a `Tensor[float]` is a
+`float` (`type.num.10`). Rounding is std.tensor.5's and overflow
+std.tensor.6's; other operand types are a compile-time error, and unequal
+shapes trap. `+=`, `-=` and `*=` follow. Matrix product stays
+`a.matmul(b)`. *(ADR 0344)*
+
+**std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
+to a `T`; `t.sum(axis int)`, `t.max(axis)` and `t.mean(axis)` reduce along
+one axis to a `Tensor[T]` whose shape drops that axis. Each result adds its
+elements, taken along the axis in index order, in std.tensor.5's order, so
+the axis sum of a row equals `sum()` of that row bit for bit; `int` sums are
+std.tensor.6's. `max` keeps the first element and replaces it by each later
+one that is `>` it: a NaN never replaces it, and ties keep the earlier one.
+`mean` is the sum divided by the count, and is a compile-time error on
+`Tensor[int]`. An axis outside `0` to rank − 1 traps, and so do `max` and
+`mean` of zero elements. *(ADR 0345)*
+
+**std.tensor.12** — `t.transpose()` of an `m` by `n` tensor is the `n` by
+`m` tensor whose element `(j, i)` is `t`'s `(i, j)`. A tensor that isn't
+2-D traps. *(ADR 0345)*
+
 ```ail
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(a.sum(0))           # tensor.from([4.0, 6.0])
+    print(a.transpose().max(1))   # tensor.from([3.0, 4.0])
     print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
     print(a.map(|x| x * 2.0).sum())   # 20.0
     print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32

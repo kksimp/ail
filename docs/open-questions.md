@@ -267,8 +267,9 @@ opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
 section 6 and [ADR 0247](decisions/0247-std-tensor-and-accel-capability.md).
 The CPU slice exists (`std.tensor`, ADRs 0328–0329); [ADR 0330](decisions/0330-tensor-accelerator-backends-plug-in.md)
 lists what a device backend needs decided here. Still missing from the CPU
-slice: axis reductions, `transpose`, `conv2d`, activations, `f32`, indexing,
-operators, and fusing chains of elementwise calls.
+slice: `conv2d`, activations, `f32`, indexing, `/` and unary `-`, broadcasting
+beyond a scalar, and fusing chains of elementwise calls (axis reductions,
+`transpose` and `+ - *` landed in ADRs 0344–0345).
 *Owner: designer (it reads ADR 0010, a designer decision).*
 
 ## OQ-091 — Field attributes for derive generators
@@ -375,3 +376,12 @@ task. (3) A cancelled task blocked in `send` on a full channel still
 waits. Options: (a) `send` returns `! Cancelled` (breaks every existing
 call's type); (b) keep waiting, so a cancelled producer is released by its
 consumer (current); (c) drop the value and return. *Owner: AI under ADR 0076.*
+
+## OQ-113 — A matrix product operator
+`a.matmul(b)` is the only spelling of the matrix product (ADR 0344). Options:
+(a) keep the method (recommended: `matmul` is rare in agent code, so the
+token gain is under the 2% tie, and the operator set is fixed by ADR 0077);
+(b) `a @ b` as in Python, which needs a new operator against `trait.op.2`,
+and `@` already starts attributes (`@inline`), so a line that starts with an
+operand-less `@` reads two ways; (c) a named operator such as `a matmul b`,
+which no other part of AIL has. *Owner: designer (amends ADR 0077).*
