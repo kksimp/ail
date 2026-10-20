@@ -183,12 +183,18 @@ impl<'p> Checker<'p> {
     pub(super) fn move_arg(&mut self, a: &'p Arg, param_moves: bool) {
         match (param_moves, a.moved) {
             (true, true) => self.take(&a.value, "own.move.2"),
-            (true, false) => self.error_help(
-                "own.move.2",
-                a.value.pos(),
-                "this parameter is `move`, so the argument must be marked `move`",
-                "write `move` before the argument; the value can't be used after the call",
-            ),
+            (true, false) => {
+                let mut d = crate::diag::Diagnostic::new(
+                    "own.move.2",
+                    a.value.pos(),
+                    "this parameter is `move`, so the argument must be marked `move`",
+                )
+                .help("write `move` before the argument; the value can't be used after the call");
+                if matches!(a.value, Expr::Name(..)) {
+                    d = d.fix("mark the argument `move`", vec![crate::diag::Edit::insert(a.value.pos(), "move ")]);
+                }
+                self.diags.push(d);
+            }
             (false, true) => {
                 self.error_help("own.move.2", a.value.pos(), "this parameter isn't `move`", "remove the `move`")
             }

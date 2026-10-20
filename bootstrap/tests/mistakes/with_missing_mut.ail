@@ -1,0 +1,5 @@
+fn main()
+    m := Mutex(0)
+    with m as x
+        x += 1
+    print(m.get())

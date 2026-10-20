@@ -387,6 +387,9 @@ pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
         (Ty::Set(_), "insert" | "push") => "write `s.add(x)`",
         (Ty::Set(_), "has") => "write `s.contains(x)`",
         (Ty::Set(_), "discard" | "delete") => "write `s.remove(x)`",
+        (_, "message" | "msg" | "description" | "getMessage" | "get_message") => {
+            "an error's message is its text: interpolate `\"{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`"
+        }
         (_, "to_string" | "toString" | "__str__") => "write `x.to_str()`, or interpolate: `\"{x}\"`",
         _ => return None,
     })

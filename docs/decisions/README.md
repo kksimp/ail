@@ -345,3 +345,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0357](0357-ail-pkg-update.md) | `ail pkg update [NAME...]` re-resolves git dependencies *(delegated)* | Accepted | 2026-10-20 |
 | [0351](0351-cancel-trees-and-cancelled-send.md) | Cancel trees; `send` in a cancelled task drops its value *(delegated)* | Accepted | 2026-10-20 |
 | [0352](0352-weaker-atomic-orderings.md) | Weaker atomic orderings as a trailing `order:` argument *(delegated)* | Accepted | 2026-10-20 |
+| [0358](0358-mistakes-corpus-for-rounds-5-9.md) | The mistakes corpus covers the features of rounds 5 to 9 *(delegated)* | Accepted | 2026-10-20 |

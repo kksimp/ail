@@ -1,0 +1,7 @@
+error enum ParseError
+    Empty
+    Bad(text str)
+
+fn main()
+    e := ParseError.Empty
+    print(e.message())

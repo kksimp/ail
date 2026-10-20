@@ -1,0 +1,6 @@
+fn half(n int) int
+    requires result >= 0
+    n / 2
+
+fn main()
+    print(half(4))

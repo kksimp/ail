@@ -1,0 +1,4 @@
+fn main()
+    mut m := {"a": 1}
+    m.push("a", 2)
+    print(m)

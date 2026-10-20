@@ -1,0 +1,6 @@
+fn port(text str) int
+    n := text.to_int()?
+    n
+
+fn main()
+    print(port("80"))

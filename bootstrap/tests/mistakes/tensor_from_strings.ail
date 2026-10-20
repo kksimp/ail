@@ -1,0 +1,3 @@
+fn main()
+    t := tensor.from(["a", "b"])
+    print(t.len())

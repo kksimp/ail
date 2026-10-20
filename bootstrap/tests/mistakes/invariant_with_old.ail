@@ -1,0 +1,7 @@
+struct Account
+    balance int
+    invariant balance >= old(balance)
+
+fn main()
+    a := Account(balance: 5)
+    print(a.balance)

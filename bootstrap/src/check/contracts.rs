@@ -79,7 +79,9 @@ impl<'p> Checker<'p> {
             for (name, ty) in olds {
                 self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding, decl: None });
             }
+            self.in_requires = !c.ensures;
             let got = self.expr(&c.cond, Some(&Ty::Bool), true);
+            self.in_requires = false;
             if !self.accepts(&Ty::Bool, &got) {
                 self.mismatch("contract.decl.2", c.cond.pos(), &Ty::Bool, &got);
             }

@@ -1,0 +1,6 @@
+@pure fn area(w int, h int) int
+    print("area")
+    w * h
+
+fn main()
+    print(area(2, 3))
