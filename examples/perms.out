@@ -1,0 +1,5 @@
+notes.txt   rw-r--r--  owner write: yes, others read: yes
+run.sh      rwxr-xr-x  owner write: yes, others read: yes
+secret.key  rw-------  owner write: yes, others read: no
+shared      rwxrwxr-x  owner write: yes, others read: yes
+mode 0o600 has 2 owner bits

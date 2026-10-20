@@ -80,3 +80,20 @@ precise compiler error, saves more tokens than shorter syntax does.
 - Type system / verification: 6.1
 - Tooling: 6.3
 - Standard library / runtime: 6.6
+
+## 7. Agent corpus round three (2026-10-20)
+
+From the ten programs in [program-measurements-agent-r3.md](program-measurements-agent-r3.md).
+Only the four that cost more tokens than their Python twins are listed.
+
+| Proposal | Why it helps | Possible cost |
+|---|---|---|
+| **7.1 A date module** (`std.time`: `date.from_unix(secs)`, `date.format(secs, "%Y-%m-%d")`, weekday, day arithmetic) | `report_dates` spends 229 tokens (+128%) rebuilding the civil date that Python's `datetime` gives in one call. Dates are common in agent tools, logs and reports. Covered by lane 129. | A calendar in the standard library, tested for leap years and time zones (UTC first). |
+| **7.2 Bit operators** (`&`, `\|`, `^`, `<<`, `>>`, `~`) | `perms` spends 109 tokens (+41%) on `(mode / bit) % 2 == 1`. `mode & bit != 0` is the form an author and a reviewer both read at a glance. Covered by lane 140. | Operator precedence must match what authors expect; a new rule ID. |
+| **7.3 Tuples as values** (`(a, b)`, `.0`, `s, b := f()`) | `route` and `perms` need a struct for every pair of results. Tuples give a short two-value return and an iterable list of pairs (`perms`' file table is an error today: `gram.syntax.1`). | Grammar and a type form; struct-like naming stays the choice for named fields. |
+| **7.4 Bytes as a value** (`bytes(path) ! fs.IoError`, `b.len()`, `b[i]`, `b.hex()`) | `hexdump` shells out to `od` (+27%) because there is no bytes type. A byte-level inspector should not need a process. Covered by lane 123. | A new value type next to `str`; the UTF-8 rule stays on `str`. |
+
+Rejected for this round: named arguments for `proc.run` (measured by round 9 at
++1.4 tokens, [ADR 0342](../decisions/0342-named-arguments-for-std-optionals-rejected.md));
+an `enumerate` form of `for` (an index loop is already short, and the
+diagnostic `expr.loop.1` teaches it).

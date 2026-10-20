@@ -1,0 +1,37 @@
+
+struct Event
+    ts int
+    kind str
+
+fn civil(days int) str
+    z := days + 719468
+    era := z / 146097
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d := doy - (153 * mp + 2) / 5 + 1
+    m := if mp < 10 then mp + 3 else mp - 9
+    bump := if m <= 2 then 1 else 0
+    y := yoe + era * 400 + bump
+    "{y:0>4}-{m:0>2}-{d:0>2}"
+
+fn parse(text str) List[Event]
+    mut events := []
+    for line in text.lines()[1..]
+        cells := line.split(",")
+        events.push(Event(ts: cells[0].to_int() else 0, kind: cells[1]))
+    events
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/data/events.csv")? "reading events"
+    mut per_day := {}
+    mut kinds := {}
+    for e in parse(text)
+        day := civil(e.ts / 86400)
+        per_day[day] += 1
+        kinds[e.kind] += 1
+    for day in per_day.keys().sorted()
+        print("{day}  {per_day[day]} events")
+    names := kinds.keys().sorted().join(", ")
+    print("kinds: {names}")

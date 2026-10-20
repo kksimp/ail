@@ -56,7 +56,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - **Tests:** `@test`, `assert`, `ail test` (ADRs 0167–0168); property tests with `--cases`, `--seed`, shrinking; doc examples as tests (ADRs 0198–0201); `--coverage`, `--trace`.
 - **Formatter:** `ail fmt` (ADRs 0169–0170) with chained-call lines, own-line attributes and long-line splitting (ADRs 0323–0324, 0346–0347); examples and test cases are canonical.
 - **Conformance and fuzzing:** `bootstrap/tests/spec.rs` checks every `ail` block in `docs/spec/`, the quick reference and the language card (ADRs 0172, 0174, 0276); the fuzz and differential harness `tools/fuzz/run.sh` runs a 200-program smoke inside `./ail selftest` (ADRs 0269–0271). `docs/language-card.md` is the whole language within 8,000 tokens.
-- **Benchmarks:** `tools/tokbench` (tokens), `tools/perfbench` (speed), and the agent-tool corpus of ten programs with Python twins, 5.7% under Python in tokens ([program-measurements-r5.md](design/program-measurements-r5.md), [r8](design/program-measurements-r8.md); ADRs 0217–0218, 0337).
+- **Benchmarks:** `tools/tokbench` (tokens), `tools/perfbench` (speed), and the agent-tool corpus of ten programs with Python twins, 5.7% under Python in tokens ([program-measurements-r5.md](design/program-measurements-r5.md), [r8](design/program-measurements-r8.md); ADRs 0217–0218, 0337). Round three adds ten programs on today's library, 14.7% over Python in total; the gaps are dates, bit operators, bytes and tuples ([program-measurements-agent-r3.md](design/program-measurements-agent-r3.md); ADR 0477).
 
 ### Editor
 
