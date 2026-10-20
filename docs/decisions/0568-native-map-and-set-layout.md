@@ -17,7 +17,7 @@ of the drag race need them.
 
 ## Decision
 
-A `Map[K, V]` or `Set[T]` is a pointer to a 72-byte **table object** (heap
+A `Map[K, V]` or `Set[T]` is a pointer to a 88-byte **table object** (heap
 kind 7 for a map, 8 for a set; both use the layout, a set ignores the value
 word). Two arrays hang off it, as in CPython's dict:
 
@@ -29,6 +29,7 @@ word). Two arrays hang off it, as in CPython's dict:
 +48  index   (mask + 1) * 8 bytes: 0 empty, else entry number + 1
 +56  vmode   copy mode of values: 0 plain, 1 lists, 2 maps and sets
 +64  vinfo   vmode 1: nesting depth * 256 + element bytes
++72  lastkey the last key found or added   +80 laste  its entry, or 0
 ```
 
 - **Order is the array.** Insertion appends; an existing key's value is

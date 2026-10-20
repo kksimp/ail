@@ -144,3 +144,10 @@ by pointer, then bytes. A cached hash in the string object, a combined
 find-or-insert, and keeping `map_find` and `map_set` inline are the next
 steps. At the `.args` size (1 million words) the run takes 0.07 s and
 prints the interpreter's bytes on x86-64 and on ARM64 under qemu.
+
+**Remembered entry (follow-up).** A table keeps the last key it found or added
+and its entry, so the assignment after `get(k)` skips the hash and the probe
+(a rebuild, removal or copy forgets it). 10 million words: 0.341 s -> 0.260 s
+(gcc -O2 0.055 s, CPython 1.9 s). Still open: a cached hash in the string
+object (needs a spare word; agree the layout with the strings and GC lanes),
+and inlining `map_find` and `map_set` into the caller.

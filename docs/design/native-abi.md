@@ -86,6 +86,8 @@ for list indexing).
 +48  ptr  index   (mask + 1) * 8 bytes: 0 empty, else entry number + 1
 +56  u64  vmode   copy mode of values: 0 plain, 1 lists, 2 tables
 +64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
++72  u64  lastkey the last key found or added
++80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
 ```
 
 The entry array is in insertion order, which is iteration order
