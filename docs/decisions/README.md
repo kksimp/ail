@@ -228,3 +228,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0227](0227-derive-generators.md) | A trait may name a derive generator: a compile-time function from `TypeInfo` to AIL source *(delegated)* | Accepted | 2026-10-20 |
 | [0228](0228-generated-code-is-visible-hir.md) | Generated code is ordinary HIR with a provenance link, shown by `ail api --expanded` *(delegated)* | Accepted | 2026-10-20 |
 | [0229](0229-compile-time-reflection-only.md) | Reflection is compile-time only: generators receive a `TypeInfo` value *(delegated)* | Accepted | 2026-10-20 |
+| [0236](0236-automatic-parallel-loops.md) | Run provably independent loops in parallel, with results identical to sequential *(delegated)* | Accepted | 2026-10-20 |
+| [0237](0237-par-for.md) | `par for` asserts independence; provable conflicts are errors *(delegated)* | Accepted | 2026-10-20 |
+| [0238](0238-parallel-runtime-model.md) | One work-stealing pool for tasks and parallel loops, with a minimum-work threshold *(delegated)* | Accepted | 2026-10-20 |
+| [0239](0239-float-sum-fixed-tree.md) | Float `sum()` adds in a fixed four-lane tree (amends 0136) *(delegated)* | Accepted | 2026-10-20 |
+| [0246](0246-simd-vectorisation.md) | Vectorise independent loops on both baselines; never contract to FMA implicitly *(delegated)* | Accepted | 2026-10-20 |
+| [0247](0247-std-tensor-and-accel-capability.md) | NPUs and GPUs through a `std.tensor` module and an `accel` capability (design) *(delegated)* | Accepted | 2026-10-20 |

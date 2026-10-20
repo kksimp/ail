@@ -52,6 +52,7 @@ reported but don't stop a program from running.
 | `src/packages.rs` | Reads `ail.pkg` manifests of the root and every path dependency, maps `use` paths to packages and directories, adds manifests to the program's files; after checking, checks each package's code against its capability grants | `mod.pkg.1–6`, `eff.cap.2`, `eff.cap.4–5` |
 | `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.hole.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.coll.14`, `type.str.2–3`, `type.str.13–14`, `type.str.11`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2`, `own.excl.5`, `type.opt.4–5`, `type.enum.6`, `type.str.4–5`, `expr.loop.6`, `expr.match.6`, `err.decl.1–3`, `err.type.1–2`, `err.type.5–6`, `err.prop.1–3`, `err.use.1–2`, `err.else.1–3`, `err.ctx.2`, `err.text.1`, `expr.if.5–6`, `expr.cmp.1`, `gen.decl.1–2`, `gen.bound.1–4`, `gen.method.1–3`, `gen.infer.1–2`, `gen.anon.1`, `trait.decl.1–2`, `trait.impl.1–6`, `trait.self.1`, `trait.res.1`, `trait.any.1–5`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–4` (traits and generics in `src/check/traits.rs`), `ct.const.1`, `ct.const.3`, `test.attr.1–3`, `test.assert.2` (in `src/check/testing.rs`), `mod.vis.1`, `mod.vis.3` (private fields and methods, in `src/check/privacy.rs`), `test.prop.2`, `expr.comp.1–4`, `expr.match.10`, `src/check/comprehension.rs` |
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
+| `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel` | `conc.par.2–6` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–5` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires` and `ensures`: parsing, typing and `result`, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–2`, `contract.run.1–3`, `contract.api.1` |
@@ -188,6 +189,13 @@ and `close`, and `Mutex(v)` with `get`, `set`, `swap`, `lock` and `unlock`.
 Tasks run one at a time in a fixed order, so output repeats; a deadlock
 traps (`conc.task.7`). `spawn` takes a call of a declared function, without
 `mut` arguments.
+
+Parallel loops (ADRs 0236–0239): `ail effects --parallel` reports, per `for`
+loop, whether its iterations are independent (`conc.par.2–4`) and the first
+write or effect that blocks it; `par for` asserts independence, and a
+provable conflict is a `conc.par.5` error. The interpreter runs every loop in
+order, which `conc.par.1` allows. Float `xs.sum()` adds in the fixed tree of
+`type.coll.12`.
 
 Sized numbers (ADRs 0194–0195): `i8 i16 i32 u8 u16 u32 u64 f32` with literals typed by
 context, same-type arithmetic that traps on overflow, `to_<type>()` conversions, and

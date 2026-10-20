@@ -13,6 +13,7 @@
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
 ./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output
 ./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
@@ -446,6 +447,24 @@ nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 
 The loop variables are new names that end with the comprehension. `?` and
 `return` leave the function; `break` ends the comprehension.
+
+Loops use every core automatically when their iterations are independent:
+no output or capability, no `break`/`return`/`?`, and writes only to the
+iteration's own locals, to `out[i]` in a `for i in a..b` loop, or to an
+`int` total with `+=`. Results are always the same as running in order, so
+float totals use `xs.sum()` (a fixed tree) rather than `+=`. When you know
+the iterations are independent but the checker can't see it (writes to
+`out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
+(it prints, or breaks out) is an error:
+
+```ail
+fn main()
+    perm := [1, 0]
+    mut out := [0, 0]
+    par for i in 0..2
+        out[perm[i]] = i * 10    # par asserts perm has no repeats
+    print(out)
+```
 
 ## Maps and sets
 

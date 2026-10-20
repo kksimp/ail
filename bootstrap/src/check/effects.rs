@@ -109,6 +109,26 @@ impl<'p> Effects<'p> {
         Effects { prog, direct, calls, sets }
     }
 
+    /// The effects that running `body` has, each with its source: the
+    /// block's own operations (`print`), or a chain of calls such as
+    /// `log -> print` (conc.par.2, ADR 0237).
+    pub fn of_block(&self, resolved: &Resolved, body: &Block) -> BTreeMap<&'static str, String> {
+        let mut w = Walker::new(self.prog, resolved);
+        w.block(body);
+        let mut out = w.direct;
+        for &j in &w.calls {
+            for &e in self.sets[j].iter().filter(|e| propagates(e)) {
+                out.entry(e).or_insert_with(|| self.chain(j, e));
+            }
+        }
+        out
+    }
+
+    /// The functions that function `i` may call (eff.infer.3).
+    pub fn calls_of(&self, i: usize) -> &[usize] {
+        &self.calls[i]
+    }
+
     /// The effect set of function `i`, sorted (eff.infer.6).
     pub fn of(&self, i: usize) -> &BTreeSet<&'static str> {
         &self.sets[i]

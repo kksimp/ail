@@ -23,6 +23,7 @@ mod contracts;
 mod comprehension;
 mod stdlib;
 pub mod effects;
+pub mod parallel;
 mod privacy;
 mod testing;
 mod traits;
@@ -166,6 +167,9 @@ pub struct Resolved {
     /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
+    /// Methods called on a task, group, channel or mutex handle, by the
+    /// position of the name: they synchronise with other tasks (conc.par.2).
+    pub handle_calls: FastSet<Pos>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -251,6 +255,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.diags.extend(conc::check_handles(prog));
     c.diags.extend(effects::check_contracts(prog, &c.resolved));
     c.diags.extend(effects::check_constants(prog, &c.resolved));
+    c.diags.extend(parallel::check_par(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 
@@ -3291,6 +3296,7 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         }
         if let Ty::Conc(k, inner) = &rt {
+            self.resolved.handle_calls.insert(pos);
             return self.conc_method(*k, inner, name, pos, args);
         }
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {

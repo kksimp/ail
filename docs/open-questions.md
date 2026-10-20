@@ -251,6 +251,18 @@ every manifest); (c) a registry that only maps names to git URLs and commits
 (no solver; small service). Involves hosting and publishing, so it is the
 designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
 
+## OQ-090 — May accelerator drivers compile AIL-generated code?
+ADR 0010 forbids external backends. GPUs and NPUs can't be reached without
+the OS driver compiling what AIL hands it: SPIR-V (Vulkan), MSL (Metal), a
+Core ML model, an ONNX graph. Options: (a) AIL generates the SPIR-V, MSL or
+graph with its own code generator, and the driver's compiler counts as part
+of the platform, like CPU microcode (recommended: it is the only way to
+reach these devices at all, and nothing of LLVM's ships with AIL);
+(b) CPU only, no GPU or NPU ever; (c) allow vendor libraries (cuDNN, MPS) as
+opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
+section 6 and [ADR 0247](decisions/0247-std-tensor-and-accel-capability.md).
+*Owner: designer (it reads ADR 0010, a designer decision).*
+
 ## OQ-091 — Field attributes for derive generators
 A `ToJson` derive (ADR 0227) wants per-field options (`@json("user_id")`,
 skip a field). Today an unknown attribute is an error (`test.attr.1`), and
