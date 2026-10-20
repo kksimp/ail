@@ -20,8 +20,10 @@ mod builtins;
 mod stdlib;
 
 pub use stdlib::set_program;
+mod prop;
 mod testing;
 mod ui;
+pub use prop::PropInfo;
 pub use testing::run_tests;
 
 use builtins::{Key, Table, map_value};
@@ -132,13 +134,15 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn render(&self, path: &str) -> String {
+    /// `at` writes a position as `FILE:LINE:COL` (a program can have
+    /// several files).
+    pub fn render_with(&self, at: impl Fn(Pos) -> String) -> String {
         let mut s = format!("error: {}", self.error);
         for c in &self.context {
             let _ = write!(s, "\n  context: {c}");
         }
         for p in &self.trace {
-            let _ = write!(s, "\n  at {path}:{}:{}", p.line, p.col);
+            let _ = write!(s, "\n  at {}", at(*p));
         }
         s
     }

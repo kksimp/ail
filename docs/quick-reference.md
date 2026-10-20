@@ -8,12 +8,15 @@
 
 ```sh
 ./ail run FILE.ail           # check, then run
+./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
+./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
+./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
@@ -37,6 +40,11 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 - A statement ends at the end of its line, unless the line ends inside
   `(`, `[` or `{`, or after a binary operator or a comma.
 - `#` starts a comment. `##` starts a doc comment.
+- Write the layout `ail fmt` writes ([formatting.md](design/formatting.md)):
+  one space around binary operators and after `,` and `:`; none inside
+  brackets, around `.` and `..`, or before a call's `(`; lines up to 100
+  characters, with a longer list split one element per line plus a trailing
+  comma; one blank line between multi-line top-level declarations.
 
 ## Functions
 
@@ -447,6 +455,34 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 
 Two `mut` arguments of one call can't refer to the same value.
 
+## Modules
+
+A module is a directory of `.ail` files sharing one namespace. `use a.b`
+imports `ROOT/a/b`, where ROOT is the directory run (`ail run DIR`) or the
+file's directory (`ail run FILE`, whose siblings are not included).
+
+```ail fragment
+use geo                  # imports at the top of each file
+use util.text as fmt     # `as` renames; names must not clash
+
+fn main()
+    p := geo.Point(x: 1, y: 2)   # items are always qualified
+    print(geo.dist(p, geo.ORIGIN))
+    match geo.classify(p)
+        geo.Kind.Near => print(fmt.banner("near"))
+        _ => print(p.x)
+```
+
+```ail fragment
+pub struct Point         # `pub` exports; everything else is private
+    pub x int            # fields too; a private field means only this
+    y int                # module can build a `Point`
+```
+
+There are no item or wildcard imports, no `pub use`, and no import cycles.
+`fn T.m` must be in `T`'s module. Text forms show the module path:
+`geo.Point(x: 1, y: 2)`.
+
 ## Files, processes and the system
 
 Import a standard module with `use std.NAME` and call it by its name
@@ -496,13 +532,37 @@ fn main()
 ## Tests and assertions
 
 ```ail
-@test fn doubles()           # `@test` on the same line; no parameters
+@test fn doubles()           # `@test` on the same line
     assert_eq(double(4), 8)  # traps showing both values if unequal
     assert(double(1) == 2)   # traps if false
 ```
 
 A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 `assert` and `assert_eq` also work in ordinary code (a failure traps).
+
+A test with parameters is a **property**: `ail test` runs it on generated
+inputs (`--cases N`, default 100; `--seed S` replays), and shrinks a failure
+to the smallest input, printed as AIL literals. Parameters may be `int`,
+`float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, and structs
+and enums made of those.
+
+```ail fragment
+@test fn add_commutes(a int, b int)
+    assert_eq(a + b, b + a)
+```
+
+A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
+`# => text` after a `print` asserts its output:
+
+```text
+## Doubles a number.
+##
+## ```ail
+## print(double(4))
+## # => 8
+## ```
+fn double(x int) int
+```
 
 ## Effects
 

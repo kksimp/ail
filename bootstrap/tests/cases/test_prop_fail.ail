@@ -1,0 +1,19 @@
+enum Shape
+    Dot
+    Circle(r int)
+    Box(w int, h int)
+
+@test fn small_numbers(a int)
+    assert(a < 100)
+
+@test fn short_lists(xs List[int])
+    assert(xs.len() < 3)
+
+@test fn short_text(s str)
+    assert(s.chars().len() < 4)
+
+@test fn only_dots(s Shape)
+    assert(s == Dot)
+
+@test fn passes(a int)
+    assert_eq(a, a)

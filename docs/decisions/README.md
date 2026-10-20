@@ -153,6 +153,13 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0145](0145-diagnostics-schema-v1.md) | Version the JSON diagnostics as schema v1, with spans, notes and fixes *(delegated)* | Accepted | 2026-10-20 |
 | [0146](0146-ail-explain.md) | `ail explain RULE` prints a rule from the embedded specification *(delegated)* | Accepted | 2026-10-20 |
 | [0147](0147-typed-holes-todo.md) | Typed holes: the keyword `todo` *(delegated)* | Accepted | 2026-10-20 |
+| [0150](0150-ail-api-outline.md) | `ail api` prints a program's declarations without bodies, as one-line JSON *(delegated)* | Accepted | 2026-10-20 |
+| [0151](0151-stable-symbol-ids-and-references.md) | Symbols have path ids; `--symbols` lists every reference by id *(delegated)* | Accepted | 2026-10-20 |
+| [0152](0152-doc-comment-attachment.md) | A doc comment is the run of `##` lines directly above a declaration *(delegated)* | Accepted | 2026-10-20 |
+| [0153](0153-package-root-and-loading.md) | A package is rooted at the directory run; imports load lazily and can't form cycles *(delegated)* | Accepted | 2026-10-20 |
+| [0154](0154-imports-per-file-at-the-top.md) | Imports come first, apply to their file, and need unique names *(delegated)* | Accepted | 2026-10-20 |
+| [0155](0155-member-visibility-and-method-placement.md) | Methods live in their type's module; private fields block outside construction *(delegated)* | Accepted | 2026-10-20 |
+| [0156](0156-bootstrap-modules-by-qualified-names.md) | The bootstrap gives every item its qualified name before checking *(delegated)* | Accepted | 2026-10-20 |
 | [0157](0157-standard-os-modules.md) | The machine is reached through five built-in standard modules, `use std.fs` and friends *(delegated)* | Accepted | 2026-10-20 |
 | [0158](0158-standard-io-errors.md) | Standard failures are `fs.IoError` and `proc.ProcError` with a short `kind` *(delegated)* | Accepted | 2026-10-20 |
 | [0159](0159-program-arguments.md) | `ail run FILE ARGS...` gives the program its arguments and its path *(delegated)* | Accepted | 2026-10-20 |
@@ -164,6 +171,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0165](0165-capability-denial.md) | `--deny` rejects at compile time a program that reaches a denied capability *(delegated)* | Accepted | 2026-10-20 |
 | [0167](0167-test-functions-and-ail-test.md) | Tests are `@test` functions run by `ail test FILE [--json]` *(delegated)* | Accepted | 2026-10-20 |
 | [0168](0168-assert-and-assert-eq.md) | `assert` and `assert_eq` are prelude functions allowed anywhere *(delegated)* | Accepted | 2026-10-20 |
+| [0169](0169-canonical-formatting-style.md) | One canonical layout, written by `ail fmt`, with a 100-column limit *(delegated)* | Accepted | 2026-10-20 |
+| [0170](0170-ail-fmt-command.md) | `ail fmt` reprints the token stream, and refuses any change but layout *(delegated)* | Accepted | 2026-10-20 |
 | [0172](0172-spec-conformance-harness.md) | Every `ail` block in the spec runs as a conformance test, tagged by expectation *(delegated)* | Accepted | 2026-10-20 |
 | [0173](0173-format-specifications-in-interpolation.md) | Interpolation takes format specs: `{x:>8}`, `{r:.2}`, `{n:0>4x}` (resolves OQ-041) *(delegated)* | Accepted | 2026-10-20 |
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
@@ -172,3 +181,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
 | [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
 | [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
+| [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
+| [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
+| [0198](0198-test-properties.md) | Run a test with parameters as a property *(delegated)* | Accepted | 2026-10-20 |
+| [0199](0199-property-seeds-and-shrinking.md) | Seed properties from the test name and shrink failures *(delegated)* | Accepted | 2026-10-20 |
+| [0200](0200-doc-examples-as-tests.md) | Run doc-comment examples as tests *(delegated)* | Accepted | 2026-10-20 |
+| [0201](0201-doc-example-output-comments.md) | Assert example output with `# => text` comments *(delegated)* | Accepted | 2026-10-20 |

@@ -9,14 +9,14 @@ use std::collections::HashMap;
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
 use crate::ast::{Arg, TypeRef};
 use crate::diag::{Diagnostic, Pos};
-use crate::lexer::UNSUPPORTED;
 use crate::stdlib::{self, StdCall};
 
 impl<'p> Checker<'p> {
     /// std.use.1, std.use.3: each `use std.NAME` names a standard module, and
     /// no two imports share a name.
     pub(super) fn check_uses(&mut self) {
-        let mut seen: HashMap<&str, Pos> = HashMap::new();
+        // Imports apply to their file (mod.use.3).
+        let mut seen: HashMap<(&str, &str), Pos> = HashMap::new();
         for u in &self.prog.uses {
             match u.path.as_slice() {
                 [(root, _), (module, mpos)] if root == "std" => {
@@ -51,20 +51,12 @@ impl<'p> Checker<'p> {
                     );
                     continue;
                 }
-                // TODO(lane 3, user modules): resolve `use a.b` for the
-                // program's own modules (mod.use.1).
-                _ => {
-                    self.diags.push(Diagnostic::new(
-                        UNSUPPORTED,
-                        u.pos,
-                        "importing a user module is not supported by the bootstrap yet (spec mod.use.1); \
-                         only the standard modules `use std.NAME` are",
-                    ));
-                    continue;
-                }
+                // `use a.b`: the program's own modules (`modules.rs`).
+                _ => continue,
             }
             let (name, pos) = u.name();
-            if let Some(first) = seen.get(name.as_str()) {
+            let file = self.prog.file_at(u.pos).map_or("", |f| f.path.as_str());
+            if let Some(first) = seen.get(&(file, name.as_str())) {
                 self.diags.push(Diagnostic::new("std.use.3", *pos, format!("`{name}` is already imported")).help(
                     format!(
                         "it is first imported on line {}; remove one import, or import it under another name with `as`",
@@ -72,7 +64,7 @@ impl<'p> Checker<'p> {
                     ),
                 ));
             } else {
-                seen.insert(name, *pos);
+                seen.insert((file, name), *pos);
             }
         }
     }
@@ -211,10 +203,13 @@ impl<'p> Checker<'p> {
     pub(super) fn std_type(&mut self, name: &str, args: &[TypeRef], pos: Pos) -> Option<Ty> {
         let (head, item) = name.split_once('.')?;
         let Some(module) = self.std_module(head) else {
-            if stdlib::is_std_module(head) {
+            if self.types.contains_key(name) && !stdlib::is_std_module(head) {
+                // A type of the program's own module `head`, already
+                // given its qualified name (`modules.rs`).
+                return None;
+            } else if stdlib::is_std_module(head) {
                 self.not_imported(head, pos);
             } else {
-                // TODO(lane 3, user modules): types of the program's own modules.
                 self.error_help(
                     "std.use.2",
                     pos,

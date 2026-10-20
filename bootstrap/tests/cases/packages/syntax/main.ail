@@ -1,0 +1,14 @@
+use lib
+
+pub impl Eq for Point
+
+pub use lib
+
+fn lib.Point.go()
+    1
+
+struct Point
+    x int
+
+fn main()
+    print(1)

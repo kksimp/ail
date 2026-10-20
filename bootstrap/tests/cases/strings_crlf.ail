@@ -1,3 +1,4 @@
+# ail fmt: off (this test needs its CRLF line endings)
 # lex.str.3 rule 5: CRLF source line endings become \n inside strings.
 fn show(label str, s str)
     print("{label}: {[s]}")

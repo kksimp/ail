@@ -1,0 +1,6 @@
+pub trait T
+    pub fn f(self) int
+
+pub enum E
+    pub A
+    B(pub x int)
