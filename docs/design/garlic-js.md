@@ -212,6 +212,21 @@ regex engine is written.
   them as the `value` and `checked` attributes, as its own form input does.
 - Layout isn't known to scripts: sizes and rectangles are 0, and
   `getComputedStyle` reads only the `style` attribute.
+- **Chrome's surface** (`vm/browser.ail`). Pages check that built-ins are
+  real by calling them on the wrong object, reading their source, or
+  comparing a frame's built-ins with the page's. So the window, document,
+  each element tag and the host objects have Chrome's interface objects and
+  `Symbol.toStringTag` (`[object HTMLDivElement]`), `new Navigator()` fails
+  as in Chrome, navigator's values are enumerable getters on its prototype
+  that throw "Illegal invocation" for any other receiver, and
+  `navigator.permissions`, `canPlayType` and `window.chrome` exist. An
+  attached iframe's `contentWindow` has its own copies of the built-ins,
+  running the same natives, so `frame.String !== String` as with a separate
+  realm; the DOM is shared. Rejected: a full second realm (a second
+  `Vm` setup per frame), which no page we test needs yet.
+- `Function.prototype.toString` returns a function's source text
+  (§20.2.3.5): the parser keeps each function's and class's text, so code
+  that rebuilds functions from their source with `eval` works.
 
 ## Generators and async functions
 
@@ -286,14 +301,16 @@ it comes later for speed, and these frames will move onto it).
   exception and why: an unsupported feature, a twin that is not the same
   script, a test made stale by a later edition, or a gap. A listed test that
   starts to behave is reported, so the list only shrinks.
-- `testdata/run`: 19 programs (operators, functions, classes, control flow,
+- `testdata/run`: 21 programs (operators, functions, classes, control flow,
   built-ins, numbers, JSON, collections, errors, strings, console layout,
   promises, symbols, generators, async functions, `await` positions,
-  `eval`, `Date` setters, assignment order, async generators),
+  `eval`, `Date` setters, assignment order, async generators, direct
+  `eval`, function source text),
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
-- `testdata/page`: 8 pages (tree, events, timers, forms, URL, a
-  Google-style script redirect, binary strings and beacons), each with `NAME.out`: the console, the
+- `testdata/page`: 9 pages (tree, events, timers, forms, URL, a
+  Google-style script redirect, binary strings and beacons, Chrome's
+  interface objects), each with `NAME.out`: the console, the
   body's `innerHTML` at the end, and the navigations asked for, as Chromium
   (Playwright's build 1194) gave them with the page at
   `https://example.test/dir/page.html`. `--test-page DIR` compares them.
