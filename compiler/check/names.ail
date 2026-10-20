@@ -42,21 +42,25 @@ pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated"]
 
 ## The standard modules (std.use.1), sorted.
 pub STD_MODULES := [
+    "compress",
     "env",
     "fs",
+    "hash",
     "io",
     "net",
     "path",
     "proc",
     "random",
+    "regex",
     "tensor",
     "task",
     "time",
+    "tz",
     "ui",
 ]
 
 ## The standard modules written in AIL (std.ui.19).
-pub AIL_STD_MODULES := ["std.ui.widgets"]
+pub AIL_STD_MODULES := ["std.time.date", "std.ui.widgets"]
 
 ## Positions from here on are the prelude's.
 pub PRELUDE_LINE := 1073741824

@@ -1,0 +1,13 @@
+# json.parse.2, json.print.2: a number outside the float range is an error, and
+# a non-finite number prints as null, so printed text always parses again.
+# Found by the module fuzzer (fuzz.mod.3, seeds 6 and 15).
+
+fn main()
+    for text in ["1e999", "-1e999", "9e991", "1e308", "123456789012345678901234567890"]
+        _ := parse_json(text) else err
+            print("{text}: {err.message} at {err.at}")
+            continue
+        print("{text}: ok")
+    inf := 1e308 * 10.0
+    print(Json.Num(inf).to_text())
+    print(Json.Arr([Json.Num(inf - inf), Json.Num(-inf), Json.Num(1.5)]).to_text())

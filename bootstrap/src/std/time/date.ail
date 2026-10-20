@@ -1,0 +1,487 @@
+## std.time.date (spec std.date.1-15, ADRs 0447-0451): calendar dates, dates
+## with a time and a zone, durations as milliseconds, ISO 8601 and
+## `format` patterns. All arithmetic is pure; only `now`, `now_local` and
+## named zones touch the platform (clock, and the tz database through
+## `std.tz`).
+##
+## A zone is a `str`: `"UTC"` (or `"Z"`), a fixed offset such as `"+05:30"`,
+## or an IANA name such as `"America/New_York"`.
+use std.time
+use std.tz
+
+## Milliseconds in a second, minute, hour and day: a duration is an `int` of
+## milliseconds, so `dt.add_ms(3 * date.HOUR)`.
+pub SEC := 1000
+pub MIN := 60000
+pub HOUR := 3600000
+pub DAY := 86400000
+
+MONTHS := [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+]
+
+WEEKDAYS := ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+## Why a date, time or zone was refused (std.date.15).
+pub error struct DateError "{why}: `{text}`"
+    pub text str
+    pub why str
+
+## A calendar day in the proleptic Gregorian calendar. Compare with `<` and
+## `==`: year, then month, then day.
+pub struct Date
+    pub year int
+    pub month int
+    pub day int
+
+impl Ord for Date
+
+impl ToStr for Date
+    fn to_str(self) str
+        iso()
+
+## An instant with its zone and the calendar fields there (std.date.8).
+## `==` compares the fields, so the same instant in two zones differs; compare
+## instants with `a.unix_ms() == b.unix_ms()` or `a.before(b)`.
+pub struct DateTime
+    pub date Date
+    pub hour int
+    pub minute int
+    pub second int
+    pub ms int
+    ## Seconds east of UTC at this instant.
+    pub offset int
+    pub zone str
+
+fn lo(a int, b int) int
+    if a < b
+        return a
+    b
+
+fn fdiv(a int, b int) int
+    q := a / b
+    if a % b != 0 and (a < 0) != (b < 0)
+        return q - 1
+    q
+
+fn fmod(a int, b int) int
+    a - fdiv(a, b) * b
+
+## Whether `year` is a leap year (std.date.1).
+pub fn is_leap(year int) bool
+    year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+## The number of days in a month, 1-12 (std.date.1).
+pub fn days_in_month(year int, month int) int
+    if month == 2
+        if is_leap(year)
+            return 29
+        return 28
+    if month == 4 or month == 6 or month == 9 or month == 11
+        return 30
+    31
+
+fn days_from_civil(year int, month int, day int) int
+    y := if month <= 2 then year - 1 else year
+    era := fdiv(y, 400)
+    yoe := y - era * 400
+    mp := if month > 2 then month - 3 else month + 9
+    doy := (153 * mp + 2) / 5 + day - 1
+    doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+    era * 146097 + doe - 719468
+
+## The date `days` days after 1970-01-01 (before it when negative) (std.date.2).
+pub fn Date.from_days(days int) Date
+    z := days + 719468
+    era := fdiv(z, 146097)
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d := doy - (153 * mp + 2) / 5 + 1
+    m := if mp < 10 then mp + 3 else mp - 9
+    bump := if m <= 2 then 1 else 0
+    y := yoe + era * 400 + bump
+    Date(year: y, month: m, day: d)
+
+## The date, or `none` when `month` or `day` doesn't exist (std.date.1).
+pub fn Date.new(year int, month int, day int) Date?
+    if month < 1 or month > 12 or day < 1 or day > days_in_month(year, month)
+        return none
+    Date(year: year, month: month, day: day)
+
+## Days since 1970-01-01 (std.date.2).
+pub fn Date.days(self) int
+    days_from_civil(year, month, day)
+
+## 1 for Monday to 7 for Sunday (std.date.3).
+pub fn Date.weekday(self) int
+    fmod(days() + 3, 7) + 1
+
+## 1 for January 1 (std.date.3).
+pub fn Date.yday(self) int
+    days() - days_from_civil(year, 1, 1) + 1
+
+## This date plus `n` days, `n` may be negative (std.date.4).
+pub fn Date.add_days(self, n int) Date
+    Date.from_days(days() + n)
+
+## This date plus `n` months. A day the target month lacks becomes its last
+## day: January 31 plus one month is February 28 or 29 (std.date.5).
+pub fn Date.add_months(self, n int) Date
+    index := year * 12 + month - 1 + n
+    y := fdiv(index, 12)
+    m := fmod(index, 12) + 1
+    Date(year: y, month: m, day: lo(day, days_in_month(y, m)))
+
+## This date plus `n` years; February 29 becomes February 28 in a common
+## year (std.date.5).
+pub fn Date.add_years(self, n int) Date
+    add_months(12 * n)
+
+## Days from `other` to this date (std.date.4).
+pub fn Date.since(self, other Date) int
+    days() - other.days()
+
+## `2026-10-20` (std.date.9).
+pub fn Date.iso(self) str
+    "{pad4(year)}-{pad2(month)}-{pad2(day)}"
+
+## The date formatted by `pattern` (std.date.10): the fields of the time are 0.
+pub fn Date.format(self, pattern str) str
+    DateTime(
+        date: self,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        ms: 0,
+        offset: 0,
+        zone: "UTC",
+    ).format(pattern)
+
+fn pad2(n int) str
+    "{n}".pad_left(2, '0')
+
+fn pad4(n int) str
+    "{n}".pad_left(4, '0')
+
+## The seconds east of UTC of a fixed zone, or `none` for a named one.
+fn fixed_offset(zone str) int?
+    if zone == "UTC" or zone == "Z"
+        return 0
+    first := zone.char_at(0) else return none
+    if first != '+' and first != '-'
+        return none
+    sign := if first == '-' then - 1 else 1
+    rest := zone.slice(1, zone.len()).replace(":", "")
+    h := digits(rest, 0, 2)?
+    mut m := 0
+    if rest.len() == 4
+        m = digits(rest, 2, 2)?
+    elif rest.len() != 2
+        return none
+    if h > 23 or m > 59
+        return none
+    sign * (h * 3600 + m * 60)
+
+## `+05:30` for 19800 and `UTC` for 0.
+fn fixed_name(offset int) str
+    if offset == 0
+        return "UTC"
+    sign := if offset < 0 then "-" else "+"
+    a := if offset < 0 then - offset else offset
+    "{sign}{pad2(a / 3600)}:{pad2(a % 3600 / 60)}"
+
+## The offset of `zone` at the instant `secs`, or `none` for an unknown zone.
+fn zone_offset(zone str, secs int) int?
+    if f := fixed_offset(zone)
+        return f
+    tz.offset(zone, secs)
+
+## The instant of local time `local` (seconds, read as if UTC) in `zone`.
+## A time that happens twice takes the first; one that is skipped takes the
+## offset before the change, so it lands after the gap (std.date.7).
+fn resolve(local int, zone str) int?
+    if f := fixed_offset(zone)
+        return local - f
+    a := zone_offset(zone, local - 86400)?
+    b := zone_offset(zone, local + 86400)?
+    ta := local - a
+    tb := local - b
+    a_ok := valid(zone, ta, a)
+    b_ok := valid(zone, tb, b)
+    if a_ok and b_ok
+        return lo(ta, tb)
+    if b_ok and not a_ok
+        return tb
+    ta
+
+fn valid(zone str, t int, off int) bool
+    o := zone_offset(zone, t) else return false
+    o == off
+
+fn build(ms int, zone str) DateTime
+    secs := fdiv(ms, 1000)
+    off := zone_offset(zone, secs) else 0
+    local := secs + off
+    sod := fmod(local, 86400)
+    DateTime(
+        date: Date.from_days(fdiv(local, 86400)),
+        hour: sod / 3600,
+        minute: sod % 3600 / 60,
+        second: sod % 60,
+        ms: fmod(ms, 1000),
+        offset: off,
+        zone: zone,
+    )
+
+fn known(zone str) DateError?
+    if zone_offset(zone, 0) == none
+        return DateError(text: zone, why: "unknown zone")
+    none
+
+## The instant `ms` milliseconds after 1970-01-01T00:00:00Z, seen in `zone`
+## (std.date.7).
+pub fn at(ms int, zone str) DateTime ! DateError
+    if e := known(zone)
+        return e
+    build(ms, zone)
+
+## The instant `ms`, in UTC (std.date.7).
+pub fn utc(ms int) DateTime
+    build(ms, "UTC")
+
+## The current instant, in UTC (std.date.11). Denied by `--deterministic`
+## with the rest of the clock (eff.det.1).
+pub fn now() DateTime
+    build(time.now_ms(), "UTC")
+
+## The current instant in the system zone: `TZ`, else `/etc/localtime`, else
+## UTC (std.date.11).
+pub fn now_local() DateTime
+    zone := tz.system()
+    if zone_offset(zone, 0) == none
+        return build(time.now_ms(), "UTC")
+    build(time.now_ms(), zone)
+
+## Milliseconds since 1970-01-01T00:00:00Z (std.date.8).
+pub fn DateTime.unix_ms(self) int
+    ((date.days() * 86400 + hour * 3600 + minute * 60 + second) - offset) * 1000 + ms
+
+## Whether this instant is earlier than `other`'s (std.date.8).
+pub fn DateTime.before(self, other DateTime) bool
+    unix_ms() < other.unix_ms()
+
+## Milliseconds from `other` to this instant (std.date.8).
+pub fn DateTime.since(self, other DateTime) int
+    unix_ms() - other.unix_ms()
+
+## This instant `n` milliseconds later, in the same zone: exact elapsed
+## time, so across a clock change the wall time jumps (std.date.12).
+pub fn DateTime.add_ms(self, n int) DateTime
+    build(unix_ms() + n, zone)
+
+## The same instant seen in another zone (std.date.7).
+pub fn DateTime.in_zone(self, other str) DateTime ! DateError
+    at(unix_ms(), other)
+
+fn DateTime.on(self, d Date) DateTime
+    tod := hour * 3600 + minute * 60 + second
+    local := d.days() * 86400 + tod
+    secs := resolve(local, zone) else local - offset
+    build(secs * 1000 + ms, zone)
+
+## The same wall-clock time `n` days later in the same zone, so across a
+## clock change the elapsed time is 23 or 25 hours (std.date.12).
+pub fn DateTime.add_days(self, n int) DateTime
+    on(date.add_days(n))
+
+## The same wall-clock time `n` months later; see `Date.add_months`.
+pub fn DateTime.add_months(self, n int) DateTime
+    on(date.add_months(n))
+
+## The same wall-clock time `n` years later; see `Date.add_years`.
+pub fn DateTime.add_years(self, n int) DateTime
+    on(date.add_years(n))
+
+## 1 for Monday to 7 for Sunday.
+pub fn DateTime.weekday(self) int
+    date.weekday()
+
+## `2026-10-20T17:01:52.123Z`, or with `+05:30` for a zone that isn't UTC; the
+## fraction is left out when it is zero (std.date.9). `parse_iso` reads it back.
+pub fn DateTime.iso(self) str
+    frac := if ms != 0 then ".{pad3(ms)}" else ""
+    zone_text := if offset == 0 then "Z" else fixed_name(offset)
+    "{date.iso()}T{pad2(hour)}:{pad2(minute)}:{pad2(second)}{frac}{zone_text}"
+
+fn pad3(n int) str
+    "{n}".pad_left(3, '0')
+
+## The date and time formatted by `pattern` (std.date.10). Tokens:
+## `%Y` year, `%y` two-digit year, `%m` month, `%d` day, `%e` day padded with
+## a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
+## minute, `%S` second, `%f` milliseconds, `%a` `%A` weekday name, `%b` `%B`
+## month name, `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone, `%s` Unix
+## seconds, `%%` a percent sign. Any other token is kept as written.
+pub fn DateTime.format(self, pattern str) str
+    cs := pattern.chars()
+    mut out := List[str]()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if c != '%' or i >= cs.len()
+            out.push("{c}")
+            continue
+        t := cs[i]
+        i += 1
+        if t == 'Y'
+            out.push(pad4(date.year))
+        elif t == 'y'
+            out.push(pad2(fmod(date.year, 100)))
+        elif t == 'm'
+            out.push(pad2(date.month))
+        elif t == 'd'
+            out.push(pad2(date.day))
+        elif t == 'e'
+            out.push("{date.day}".pad_left(2, ' '))
+        elif t == 'j'
+            out.push("{date.yday()}".pad_left(3, '0'))
+        elif t == 'H'
+            out.push(pad2(hour))
+        elif t == 'I'
+            h := hour % 12
+            h12 := if h == 0 then 12 else h
+            out.push(pad2(h12))
+        elif t == 'p'
+            out.push(if hour < 12 then "AM" else "PM")
+        elif t == 'M'
+            out.push(pad2(minute))
+        elif t == 'S'
+            out.push(pad2(second))
+        elif t == 'f'
+            out.push(pad3(ms))
+        elif t == 'a'
+            out.push(WEEKDAYS[date.weekday() - 1].slice(0, 3))
+        elif t == 'A'
+            out.push(WEEKDAYS[date.weekday() - 1])
+        elif t == 'b'
+            out.push(MONTHS[date.month - 1].slice(0, 3))
+        elif t == 'B'
+            out.push(MONTHS[date.month - 1])
+        elif t == 'z' or (t == ':' and i < cs.len() and cs[i] == 'z')
+            if t == ':'
+                i += 1
+            sign := if offset < 0 then "-" else "+"
+            a := if offset < 0 then - offset else offset
+            sep := if t == ':' then ":" else ""
+            out.push("{sign}{pad2(a / 3600)}{sep}{pad2(a % 3600 / 60)}")
+        elif t == 'Z'
+            out.push(zone)
+        elif t == 's'
+            out.push("{fdiv(unix_ms(), 1000)}")
+        elif t == '%'
+            out.push("%")
+        else
+            out.push("%{t}")
+    out.join("")
+
+## The characters from `a` up to `b` or the end, whichever is first.
+fn part(text str, a int, b int) str
+    n := text.len()
+    if a >= n
+        return ""
+    if b > n
+        return text.slice(a, n)
+    text.slice(a, b)
+
+fn digits(text str, p int, n int) int?
+    seg := part(text, p, p + n)
+    if seg.len() != n
+        return none
+    for c in seg.chars()
+        if not "0123456789".contains("{c}")
+            return none
+    seg.to_int()
+
+fn bad(text str, why str) DateError
+    DateError(text: text, why: why)
+
+## The date in `YYYY-MM-DD` (std.date.13).
+pub fn parse_date(text str) Date ! DateError
+    y := digits(text, 0, 4) else return bad(text, "expected a 4-digit year")
+    if part(text, 4, 5) != "-" or part(text, 7, 8) != "-" or text.len() != 10
+        return bad(text, "expected YYYY-MM-DD")
+    m := digits(text, 5, 2) else return bad(text, "expected a 2-digit month")
+    d := digits(text, 8, 2) else return bad(text, "expected a 2-digit day")
+    day := Date.new(y, m, d) else return bad(text, "no such day")
+    day
+
+## An ISO 8601 date and time with an offset: `2026-10-20T17:01:52Z`,
+## `2026-10-20T13:01:52.5-04:00`; `T` may be a space; seconds are optional;
+## a fraction beyond milliseconds is cut (std.date.14). The result is in the
+## text's own offset. A text with no offset is an error: use `parse_in`.
+pub fn parse_iso(text str) DateTime ! DateError
+    parse_with(text, "")
+
+## Like `parse_iso`, for a text with no offset, read in `zone`; an offset in
+## the text still wins (std.date.14).
+pub fn parse_in(text str, zone str) DateTime ! DateError
+    if e := known(zone)
+        return e
+    parse_with(text, zone)
+
+fn parse_with(text str, zone str) DateTime ! DateError
+    d := parse_date(part(text, 0, 10)) else err
+        return bad(text, err.why)
+    if text.len() < 16
+        return bad(text, "expected a time after the date")
+    sep := part(text, 10, 11)
+    if sep != "T" and sep != " "
+        return bad(text, "expected `T` between the date and the time")
+    hh := digits(text, 11, 2) else return bad(text, "expected a 2-digit hour")
+    mm := digits(text, 14, 2) else return bad(text, "expected a 2-digit minute")
+    if part(text, 13, 14) != ":" or hh > 23 or mm > 59
+        return bad(text, "expected HH:MM")
+    mut p := 16
+    mut ss := 0
+    if part(text, p, p + 1) == ":"
+        ss = digits(text, p + 1, 2) else return bad(text, "expected a 2-digit second")
+        if ss > 59
+            return bad(text, "seconds go to 59 (leap seconds aren't supported)")
+        p += 3
+    mut frac := 0
+    if part(text, p, p + 1) == "."
+        mut scale := 100
+        p += 1
+        mut n := 0
+        while p < text.len() and "0123456789".contains(part(text, p, p + 1))
+            if scale > 0
+                frac += (digits(text, p, 1) else 0) * scale
+                scale /= 10
+            p += 1
+            n += 1
+        if n == 0
+            return bad(text, "expected digits after `.`")
+    rest := part(text, p, text.len())
+    tod := hh * 3600 + mm * 60 + ss
+    local := d.days() * 86400 + tod
+    if rest == ""
+        if zone == ""
+            return bad(text, "no offset (write Z or +HH:MM, or use parse_in)")
+        secs := resolve(local, zone) else return bad(text, "unknown zone")
+        return build(secs * 1000 + frac, zone)
+    off := fixed_offset(rest) else return bad(text, "expected Z, +HH:MM or -HH:MM after the time")
+    build((local - off) * 1000 + frac, if off == 0 then "UTC" else fixed_name(off))

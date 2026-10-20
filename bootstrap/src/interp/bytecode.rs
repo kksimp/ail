@@ -25,14 +25,15 @@ pub fn set_enabled(on: bool) {
 }
 
 /// Whether the tier runs for this program: only where nothing it doesn't
-/// carry yet is on (`--watch`, unique values, `defer`, contracts). Call and
-/// effect traces come from code the walker and the tier share; run limits
-/// and coverage take a `Hit` per statement (ADR 0364).
-pub(super) fn usable(prog: &Program, tracing: u8, unique: bool, defer: bool) -> bool {
+/// carry yet is on (unique values, `defer`, contracts). Call and effect
+/// traces come from code the walker and the tier share; run limits and
+/// coverage take a `Hit` per statement (ADR 0364). `--watch` runs here too:
+/// the statements and calls that show a watched value hand off to the walker
+/// (ADR 0471).
+pub(super) fn usable(prog: &Program, unique: bool, defer: bool) -> bool {
     let contracts = prog.fns.iter().any(|f| !f.contracts.is_empty() || f.inherits.is_some())
         || prog.structs.iter().any(|s| !s.invariants.is_empty());
     ENABLED.load(AtomicOrdering::Relaxed)
-        && tracing & trace::WATCH == 0
         && !unique
         && !defer
         && !(contracts && contracts::enabled())
@@ -564,7 +565,7 @@ fn compilable(b: &Block) -> bool {
                     expr(c) && compilable(b)
                 }) && els.as_ref().is_none_or(|b| compilable(b))
             }
-            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| compilable(&a.body)),
+            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(expr) && compilable(&a.body)),
             Expr::Binary { lhs, rhs, .. } => expr(lhs) && expr(rhs),
             Expr::Unary { operand, .. } => expr(operand),
             Expr::Method { recv, args, .. } => expr(recv) && args.iter().all(|a| expr(&a.value)),
@@ -597,7 +598,7 @@ fn compilable(b: &Block) -> bool {
     }
     fn stmt(s: &Stmt) -> bool {
         match s {
-            Stmt::With { .. } | Stmt::Defer(..) => false,
+            Stmt::With { .. } | Stmt::Defer(..) | Stmt::Unsafe { .. } => false,
             Stmt::For { par: true, .. } => false,
             Stmt::Let { value, otherwise, .. } => expr(value) && otherwise.as_ref().is_none_or(other),
             Stmt::Assign { target, value, .. } => expr(target) && expr(value),
@@ -893,12 +894,24 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
                         self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
                     }
+                    // expr.match.11: a false guard drops the bindings and tries the next arm.
+                    let fails = arm.guard.as_ref().map(|g| self.cond_jump(g, false));
                     self.block(&arm.body, t);
-                    if self.depth() > mark {
+                    let bound = self.depth() > mark;
+                    if bound {
                         self.scope.truncate(mark as usize);
                         self.emit(Ins::Truncate(mark));
                     }
                     ends.push(self.emit(Ins::Jump(0)));
+                    if let Some(fails) = fails {
+                        let here = self.here();
+                        for f in fails {
+                            self.patch(f, here);
+                        }
+                        if bound {
+                            self.emit(Ins::Truncate(mark));
+                        }
+                    }
                     let next = self.here();
                     self.patch(test, next);
                 }
@@ -1240,6 +1253,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             self.emit(Ins::Hit(s.pos()));
         }
         match s {
+            // trace.watch.1: the walker shows each assignment and `mut` binding under `--watch` (ADR 0471).
+            Stmt::Assign { .. } | Stmt::Let { mutable: true, .. } if self.it.tracing & trace::WATCH != 0 => {
+                self.delegate_stmt(s)
+            }
             Stmt::Let { name, value, otherwise: Some(o), .. }
                 if !has_try(value) && !matches!(o, Else::Block { err: Some(_), .. }) =>
             {
@@ -1406,6 +1423,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// at run time; trait, associated, standard-module and generic calls,
     /// and receivers in a `ref` cell or a handle, take the walker's path.
     fn method(&mut self, e: &'a Expr, recv: &'a Expr, name: &'a str, args: &'a [Arg], pos: Pos, dst: Opnd) {
+        // trace.watch.3: a mutating method may change the watched value through `self`; the walker's `invoke` shows it.
+        if self.it.tracing & trace::WATCH != 0 && self.it.mutating.contains(name) {
+            return self.delegate(e, dst);
+        }
         let r = &self.it.resolved;
         let mut path = Vec::new();
         let mut at = recv;
@@ -1864,6 +1885,11 @@ impl<'a, W: Write> Interp<'a, W> {
                     let v = match take!(*src) {
                         Value::Float(x) => Value::Float(-x),
                         Value::Num(k, bits) => negate(k, bits, *pos)?,
+                        // std.tensor.14: elementwise on a tensor.
+                        Value::Tensor(t) => match t.neg() {
+                            Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+                            Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        },
                         v => {
                             let v = v.int();
                             match v.checked_neg() {

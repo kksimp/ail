@@ -293,6 +293,7 @@ impl<'a> Scan<'a> {
             }
             // `defer` runs at block exit; its statement is part of the body (own.defer.1).
             Stmt::Defer(inner, _) => self.stmt(inner),
+            Stmt::Unsafe { body, .. } => self.block(body),
             // conc.share.6: holding a mutex synchronises with other tasks.
             Stmt::With { mutex, var, body, pos, .. } => {
                 self.expr(mutex);
@@ -547,6 +548,9 @@ impl<'a> Scan<'a> {
             Expr::Match { scrutinee, arms, .. } => {
                 self.expr(scrutinee);
                 for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.scoped(pattern_names(&arm.pat), &arm.body);
                 }
             }
@@ -679,6 +683,7 @@ pub(crate) fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
             expr_blocks(value, f);
             other(otherwise, f);
         }
+        Stmt::Unsafe { body, .. } => f(body),
         Stmt::Defer(inner, _) => each_block(inner, f),
     }
 }
@@ -698,7 +703,12 @@ fn expr_blocks<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Block)) {
         }
         Expr::Match { scrutinee, arms, .. } => {
             expr_blocks(scrutinee, f);
-            arms.iter().for_each(|a| f(&a.body));
+            for a in arms {
+                if let Some(g) = &a.guard {
+                    expr_blocks(g, f);
+                }
+                f(&a.body);
+            }
         }
         Expr::Else { value, otherwise, .. } => {
             expr_blocks(value, f);
@@ -1185,7 +1195,12 @@ fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
             }
             Expr::Match { scrutinee, arms, .. } => {
                 walk(scrutinee, f);
-                arms.iter().for_each(|a| block(&a.body, f));
+                for a in arms {
+                    if let Some(g) = &a.guard {
+                        walk(g, f);
+                    }
+                    block(&a.body, f);
+                }
             }
             Expr::Else { value, otherwise, .. } => {
                 walk(value, f);
@@ -1220,6 +1235,7 @@ fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
                 walk(value, f);
                 other(otherwise, f);
             }
+            Stmt::Unsafe { body, .. } => block(body, f),
             Stmt::Defer(inner, _) => stmt(inner, f),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
         }

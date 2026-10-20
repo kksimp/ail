@@ -6,6 +6,7 @@
 mod api;
 mod ast;
 mod build;
+mod budget;
 mod bump;
 mod check;
 mod derive;
@@ -21,10 +22,12 @@ mod implicit_self;
 mod interp;
 mod lexer;
 mod modules;
+mod codec;
 mod net;
 mod num;
 mod packages;
 mod parser;
+mod regex;
 mod stdlib;
 mod tensor;
 mod ui;
@@ -64,6 +67,11 @@ commands:
                 in a package root: fetch the named git dependencies (all if
                 none) again, ignoring `ail.lock`, and rewrite it (mod.pkg.9)
   version       print the version
+
+every command:
+  --budget [N]  show about N tokens of output (the command's default when N
+                is left off): errors, failed tests and warnings first, then
+                a note counting the rest; --from K continues (budget.out.1-5)
 
 options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
@@ -114,7 +122,10 @@ fn main() -> ExitCode {
             "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
-            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" => i += 1,
+            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" => i += 1,
+            // budget.out.5: `--budget` may stand alone (the command's default).
+            "--budget" if args.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())) => i += 1,
+            "--budget" => {}
             a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
         }
@@ -125,6 +136,17 @@ fn main() -> ExitCode {
         _ => (args, Vec::new()),
     };
     let json = args.iter().any(|a| a == "--json");
+    // budget.out.1: `--budget N [--from K]` runs the command as a child and
+    // cuts its output.
+    let mut args = args;
+    match budget::take(&mut args) {
+        Ok(Some(b)) => return budget::run(&b, &[args, program_args].concat(), json),
+        Ok(None) => {}
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    }
     // contract.run.3: `--no-contracts` skips the runtime contract checks.
     interp::set_contracts(!args.iter().any(|a| a == "--no-contracts"));
     // ADR 0361: `--no-bytecode` runs every function on the tree walker, as

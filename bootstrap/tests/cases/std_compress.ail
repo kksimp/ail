@@ -1,0 +1,38 @@
+## std.compress.1-4: DEFLATE and gzip round trips, a known stream, and
+## the failure of corrupt data.
+use std.compress
+
+fn main() !
+    text := "abc abc abc abc abc abc abc abc"
+    packed := compress.deflate(text)
+    print(packed.len() < text.len())
+    print(compress.inflate(packed)? == text)
+    print(compress.inflate([203, 72, 205, 201, 201, 7, 0])?)
+    mut z := compress.gzip(text)
+    print("{z[0]} {z[1]} {z[2]}")
+    print(compress.gunzip(z)? == text)
+    print(compress.inflate(compress.deflate(""))? == "")
+    print(compress.unzlib([120, 156, 203, 72, 205, 201, 201, 7, 0, 6, 44, 2, 21])?)
+    print(compress.unzlib(compress.zlib(text))? == text)
+    torn := compress.unzlib([120, 156, 203, 72, 205, 201, 201, 7, 0, 6, 44, 2, 22]) else err
+        print(err.kind)
+        ""
+    print(torn == "")
+    bad := compress.gunzip([1, 2, 3, 4]) else err
+        print(err.kind)
+        ""
+    print(bad == "")
+    z[z.len() - 6] = z[z.len() - 6] + 1
+    flipped := compress.gunzip(z) else err
+        print(err.kind)
+        ""
+    print(flipped == "")
+
+@test fn deflate_round_trips(s str)
+    assert_eq(compress.inflate(compress.deflate(s)) else "lost", s)
+
+@test fn gzip_round_trips(s str)
+    assert_eq(compress.gunzip(compress.gzip(s)) else "lost", s)
+
+@test fn zlib_round_trips(s str)
+    assert_eq(compress.unzlib(compress.zlib(s)) else "lost", s)

@@ -1,0 +1,57 @@
+## std.net.10: the server is strict about what it accepts. A slow client
+## doesn't hold up the others, and a bad request gets an error response
+## without reaching the program.
+use std.net
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            return
+        ex.respond(net.Response(
+            status: 200,
+            headers: {},
+            body: "ok {ex.request.method} {ex.request.path} {ex.request.body.len()}",
+        ))?
+
+fn status_of(c net.Conn) str
+    line := c.read_line() else err
+        return "error"
+    line else "(closed)"
+
+fn send(port int, raw str) str
+    c := net.connect("127.0.0.1", port) else err
+        return err.kind
+    c.write(raw) else err
+        return err.kind
+    status_of(c)
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn worker(srv)
+    port := srv.addr().split(":")[1].to_int() else 0
+
+    # A client that has sent half a request, and keeps the connection open.
+    slow := net.connect("127.0.0.1", port)?
+    slow.write("POST /slow HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhe")?
+    r := net.get("http://127.0.0.1:{port}/fast")?
+    print("while slow waits: {r.body}")
+    slow.write("llo")?
+    print("slow: {status_of(slow)}")
+
+    print(send(port, "GET / HTTP/1.1\r\n\r\n"))
+    print(send(port, "garbage\r\n\r\n"))
+    print(send(port, "GET / HTTP/2\r\nHost: x\r\n\r\n"))
+    print(send(port, "GET relative HTTP/1.1\r\nHost: x\r\n\r\n"))
+    print(send(
+        port,
+        "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n",
+    ))
+    print(send(port, "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 99999999999\r\n\r\n"))
+    print(send(
+        port,
+        "POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n",
+    ))
+    print(send(port, "HEAD /h HTTP/1.0\r\n\r\n"))
+
+    srv.close()
+    w.wait()?
