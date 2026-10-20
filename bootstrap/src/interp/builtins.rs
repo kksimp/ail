@@ -238,6 +238,19 @@ impl<'a, W: Write> Interp<'a, W> {
         for arg in args {
             a.push(self.eval(&arg.value, env)?);
         }
+        self.builtin_with(recv, name, a, pos, env)
+    }
+
+    /// `builtin` with the arguments' values in `a` (taken from `arg_pool`,
+    /// which gets it back); the bytecode tier evaluates them itself (ADR 0363).
+    pub(super) fn builtin_with(
+        &mut self,
+        recv: Operand,
+        name: &str,
+        mut a: Vec<Value>,
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
         let mutating = |v: &Value| match v {
             Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
             Value::Map(_) => matches!(name, "remove" | "push"),

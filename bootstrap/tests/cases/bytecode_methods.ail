@@ -1,0 +1,100 @@
+# Methods, structs, variants, `match`, interpolation, map literals and `?`
+# on the bytecode tier (ADR 0363), with receivers it hands to the walker.
+# The output must not depend on the tier.
+
+WORDS := ["let", "fn", "if"]
+
+error struct Short
+    text str
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+struct Pen
+    name str
+    marks List[str]
+    count int
+
+fn Pen.mark(mut self, s str)
+    marks.push(s)
+    count += 1
+
+fn Pen.label(self) str
+    "{name}:{count}"
+
+fn Pen.with_mut(self, mut xs List[int]) int
+    xs.push(count)
+    xs.len()
+
+fn Shape.area(self) int
+    match self
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+        Dot => 0
+
+fn word(s str) str ! Short
+    if s.len() < 2
+        return Short(s)
+    s
+
+fn words(xs List[str]) List[str] ! Short
+    mut out := []
+    for x in xs
+        out.push(word(x)?)
+    out
+
+fn counts(xs List[str]) Map[str, int]
+    mut m := {}
+    for x in xs
+        m[x] += 1
+    m
+
+fn first_long(xs List[str]) str
+    for x in xs
+        w := word(x) else continue
+        return w
+    "none"
+
+fn pick(n int) Shape
+    if n % 3 == 0
+        Shape.Circle(n)
+    elif n % 3 == 1
+        Rect(w: n, h: 2)
+    else
+        Dot
+
+fn main()
+    mut pen := Pen(name: "p", marks: [], count: 0)
+    for i in 0..4
+        pen.mark("m{i}")
+    print(pen.label())
+    print(pen.marks.len())
+    mut xs := [7]
+    print(pen.with_mut(mut xs))
+    print(xs)
+    total := 0
+    mut sum := total
+    for n in 0..6
+        sum += pick(n).area()
+    print(sum)
+    print(WORDS.contains("fn"))
+    print(WORDS[0].len())
+    print("a b c".split(" ").len())
+    m := counts(["a", "b", "a"])
+    print(m["a"])
+    print(m.get("z") else 0)
+    mut seen := {}
+    seen.add(3)
+    seen.add(3)
+    print(seen.len())
+    print(words(["ab", "cd"]) else [])
+    print(words(["ab", "c"]) else ["short"])
+    print(first_long(["a", "b", "cde"]))
+    c := ref Pen(name: "r", marks: [], count: 0)
+    c.mark("x")
+    print(c.label())
+    s := "x"
+    print(s == "x" and s != "y")
+    print("{sum:>5}|{pen.count}")

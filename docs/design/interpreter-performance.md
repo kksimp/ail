@@ -278,3 +278,48 @@ program and package (715 runs of `ail run` and `ail test --json`) prints the
 same stdout and stderr and exits the same with the tier as `main` did
 without it, except the two programs that print the clock and unseeded random
 numbers.
+
+## Bytecode tier, slice 3 (lane 111)
+
+[ADR 0363](../decisions/0363-bytecode-tier-methods-and-data.md) compiles
+method calls (a guard on the receiver's value, then the user or built-in
+method directly), struct and variant construction, list, map and set literals,
+`match`, interpolation, `?` and `else`, and `local.field = v`. String `==`
+skips the trait dispatch when no `Eq` implementation applies to `str`.
+
+Results, measured as for slice 1:
+
+| Program | Walker s | Tier s | CPython s | Walker / CPython | Tier / CPython | Walker instr | Tier instr | Gain |
+|---|---|---|---|---|---|---|---|---|
+| interp | 0.133 | 0.097 | 0.113 | 1.18 | **0.86** | 818.4M | 599.0M | **1.37x** |
+| json | 0.011 | 0.009 | 0.044 | 0.25 | 0.20 | 31.3M | 27.5M | 1.14x |
+| sheet | 0.017 | 0.018 | 0.072 | 0.24 | 0.25 | 84.6M | 77.5M | 1.09x |
+| loops | 0.321 | 0.174 | 0.323 | 0.99 | **0.54** | 3,955.4M | 1,885.9M | **2.10x** |
+| collatz | 0.222 | 0.109 | 0.492 | 0.45 | 0.22 | 2,765.3M | 1,067.3M | 2.59x |
+
+The walker is 0.7% slower on `interp` than in slice 1 (818.4M against
+812.8M instructions), from splitting its method call so the tier can enter
+it after the receiver. `json` and `sheet` are mostly start-up: the front end
+is about 25M of their instructions.
+
+What runs on the tier (`AIL_BYTECODE_STATS=1`; instructions the tier ran,
+hand-offs counted as one each):
+
+| Program | Functions compiled | Calls on the tier | Instructions | Hand-offs | Native |
+|---|---|---|---|---|---|
+| interp | 50 of 50 | 224,854 of 224,854 | 3,464,526 | 22,830 | 99.3% |
+| json | 30 of 30 | 5,242 of 5,242 | 94,147 | 254 | 99.7% |
+| sheet | 49 of 50 | 10,282 of 10,449 | 171,930 | 4,809 | 97.2% |
+| agent corpus (10 programs) | 76 of 79 | 3,922 of 3,950 | 66,051 | 324 | 99.5% |
+
+The agent corpus is the ten agent-tool programs of ADR 0217, run from
+`examples/` on their data. The hand-offs that remain are field and element
+assignments deeper than one step (`env.scopes[k][name] = v`, 16,620 in
+`interp`), trait-qualified calls (`.cmp` and `.to_str` in `sheet`),
+comprehensions, slices, and the functions the tier leaves whole to the walker.
+
+`interp`'s profile on the tier has no single hot spot left: the loop's own
+work is 25%, bounds checks 6%, value drops 5%, allocation 7%, and call set-up
+(`run_body`, register files) 10%. A further large step needs frames without
+names (ADR 0361's Option B).
+

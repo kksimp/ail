@@ -76,7 +76,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Glob** | A path pattern with `*` and `?` inside a component and `**` for any number of directories; `fs.glob` returns the matching paths, sorted (`std.fs.9`, ADR 0281). |
 | **`Hash`** | The standard trait of map keys and set elements. Automatic for every type whose `==` is automatic or derived and whose parts are `Hash`; has no methods (ADR 0133). |
 | **HIR** | High-level IR: the resolved, typed, expanded program, named by stable ids; what `ail api` serves and the interpreter runs ([ir-architecture.md](design/ir-architecture.md), ADR 0222). |
-| **Hand-off (bytecode tier)** | An expression or statement a compiled body leaves to the tree walker, which runs it on the same environment (ADR 0361). |
+| **Hand-off (bytecode tier)** | An expression or statement a compiled body leaves to the tree walker, which runs it on the same environment (ADR 0361). A method call whose receiver fails its guard is handed off with the receiver already evaluated (ADR 0363). |
 | **Hot/cold splitting** | Placing rarely used fields (or code) away from frequently used ones to improve cache use. |
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
