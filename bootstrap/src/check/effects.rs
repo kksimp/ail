@@ -11,8 +11,7 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` yet, so
-/// nothing gives it; `spawn` gives `spawn`.
+/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `spawn` gives `spawn`.
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
@@ -562,6 +561,11 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.otherwise(otherwise);
             }
             Stmt::Defer(s, _) => self.stmt(s),
+            // unsafe.block.5, eff.infer.4: an `unsafe` block gives `unsafe`.
+            Stmt::Unsafe { body, .. } => {
+                self.direct.entry("unsafe").or_insert_with(|| "an `unsafe` block".to_string());
+                self.block(body);
+            }
         }
     }
 

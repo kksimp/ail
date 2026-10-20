@@ -525,6 +525,8 @@ Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs
 `env`, `proc`, `clock`, `random`, `net`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
+`unsafe` and a block allow `unsafe fn` calls (and C calls, raw pointers); `ail.pkg` needs `unsafe allow`.
+
 A window is a grid of text cells; draw with `put`, then `present`:
 
 ```ail

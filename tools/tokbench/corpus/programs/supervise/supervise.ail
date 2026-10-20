@@ -1,0 +1,29 @@
+
+struct Job
+    cmd str
+    args List[str]
+    limit int
+
+fn run_job(job Job) str
+    r := proc.run(job.cmd, job.args, "", job.limit) else err
+        if err.kind == "timed_out"
+            return "timed out after {job.limit} ms"
+        return "could not start"
+    if r.status == 0
+        return "ok"
+    "exit {r.status}: {r.err.trim()}"
+
+fn main() !
+    jobs := [
+        Job(cmd: "echo", args: ["hello"], limit: 1000),
+        Job(cmd: "sh", args: ["-c", "echo oops >&2; exit 3"], limit: 1000),
+        Job(cmd: "sleep", args: ["5"], limit: 200),
+        Job(cmd: "no-such-tool-xyz", args: [], limit: 1000),
+    ]
+    mut failed := 0
+    for job in jobs
+        result := run_job(job)
+        if result != "ok"
+            failed += 1
+        print("{job.cmd:<18}{result}")
+    print("{failed} of {jobs.len()} jobs failed")

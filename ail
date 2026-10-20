@@ -80,7 +80,15 @@ fi
 
 if [ "${1:-}" = selftest ]; then
     shift
-    # Extra words go to `cargo test` (fuzz.run.1: `./ail selftest --test fuzz`).
+    # `--fuzz N [SEED]` runs both fuzzers (fuzz.run.2); other words go to `cargo test`
+    # (fuzz.run.1: `./ail selftest --test fuzz`).
+    if [ "${1:-}" = --fuzz ]; then
+        export AIL_FUZZ_N="${2:?usage: ail selftest --fuzz N [SEED]}"
+        shift 2
+        case "${1:-}" in ''|*[!0-9]*) ;; *) export AIL_FUZZ_SEED="$1"; shift ;; esac
+        echo "fuzz: $AIL_FUZZ_N inputs per fuzzer from seed ${AIL_FUZZ_SEED:-1}" >&2
+        exec "$cargo" test --quiet --release --manifest-path "$manifest" --test fuzz --test fuzz_modules fuzz_ "$@" -- --nocapture
+    fi
     exec "$cargo" test --quiet --release --manifest-path "$manifest" "$@"
 fi
 
