@@ -96,7 +96,8 @@ fn str_sub(p int, from int, to int) str
 ## Print a string trap and exit 1. `head` and `tail` are the compiler's
 ## constants for the call's source position, as for `trap`; `kind` picks
 ## the message: 0 slice (`a`, `b` bounds, `n` length), 1 empty separator,
-## 2 empty text to replace, 3 negative repeat count `a`, 4 text over 2^30
+## 2 empty text to replace, 3 negative repeat count `a`, 5 bad radix `a`,
+## 4 text over 2^30
 ## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right).
 fn str_trap(kind int, a int, b int, n int, head str, tail str)
     flush()
@@ -114,6 +115,9 @@ fn str_trap(kind int, a int, b int, n int, head str, tail str)
         out_str("`replace` needs a non-empty text to find")
     elif kind == 3
         out_str("`repeat` needs a count of 0 or more, not ")
+        out_int(a)
+    elif kind == 5
+        out_str("`to_digit` needs a radix from 2 to 36, not ")
         out_int(a)
     else
         out_byte(96)
@@ -668,3 +672,57 @@ fn out_list_char(xs List[int])
         out_escaped(load64(data + 8 * i), 39)
         out_byte(39)
     out_byte(93)
+
+# ---- methods with an optional result (type.opt.*, ADR 0574) ----
+# A present number is boxed (`box`), a present string is its own pointer, and
+# `none` is 0; the lowering types the result `T?`.
+
+## `s.find(sub)`: the boxed character index, or 0.
+fn str_find_opt(s str, sub str) int
+    i := str_find(s, sub)
+    if i < 0
+        return 0
+    box(i)
+
+## `s.char_at(i)`: the boxed character, or 0.
+fn str_char_at(s str, i int) int
+    p := str_addr(s)
+    if i < 0 or i >= load64(p + 8)
+        return 0
+    box(u8_get(p + 16 + u8_skip(p, 0, i)))
+
+## `s.strip_prefix(pre)`: the rest of `s`, or 0.
+fn str_strip_prefix(s str, pre str) int
+    if not str_starts_with(s, pre)
+        return 0
+    p := str_addr(s)
+    str_addr(str_sub(p, load64(str_addr(pre)), load64(p)))
+
+## `s.strip_suffix(suf)`: the start of `s`, or 0.
+fn str_strip_suffix(s str, suf str) int
+    if not str_ends_with(s, suf)
+        return 0
+    p := str_addr(s)
+    str_addr(str_sub(p, 0, load64(p) - load64(str_addr(suf))))
+
+## `c.to_digit(radix)`: the boxed value, or 0 (type.char.3).
+fn char_to_digit(c int, radix int, head str, tail str) int
+    if radix < 2 or radix > 36
+        str_trap(5, radix, 0, 0, head, tail)
+    mut d := 99
+    if c >= 48 and c <= 57
+        d = c - 48
+    elif c >= 97 and c <= 122
+        d = c - 87
+    elif c >= 65 and c <= 90
+        d = c - 55
+    if d >= radix
+        return 0
+    box(d)
+
+## `char.from_code(n)`: the boxed character, or 0 for a surrogate or a value
+## outside the scalar range (type.char.4).
+fn char_from_code(n int) int
+    if n < 0 or n > 1114111 or n >= 55296 and n <= 57343
+        return 0
+    box(n)

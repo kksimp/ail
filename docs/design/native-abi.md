@@ -75,6 +75,19 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
+**Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
+optional is the pointer itself. An `int`, `float` or `bool` optional points at
+an 8-byte box (the value, or its bits for a `float`); the heap lane gives the
+box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
+`rt.unbox`, `rt.unboxf`, `rt.unbox_bool`.
+
+**Results** (ADRs 0575, 0576). A function that can fail returns its success
+value (zero on failure); failure is the runtime's global slot 8 holding the
+error's display text (a string object), 0 otherwise. Global 9 holds the return
+trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`; `rt.exit` reports a failure
+that reached `main` first (`error: TEXT`, the trace, status 1).
+
 **Heap object header** (ADR 0392). Objects allocated with `rt.obj_new(size,
 kind)` have an 8-byte word just before the address the program holds, so a
 pointer is to the first field:
@@ -266,7 +279,8 @@ with the status call.
 adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
 `str_float`, `str_fixed`, `str_char`, `str_pad`, `str_pad_checked`,
 `str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
-(character index or -1; waits for optionals), `str_replace`, `str_split`,
+(character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
+`char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
 `str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
 `str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
 `out_char`, `out_list_char`, and `str_trap`. A function that

@@ -1,0 +1,72 @@
+fn find(xs List[int], want int) int?
+    for i in 0..xs.len()
+        if xs[i] == want
+            return i
+    none
+
+fn half(x float) float?
+    if x < 0.0
+        return none
+    x / 2.0
+
+fn flag(n int) bool?
+    if n == 0
+        return none
+    n > 5
+
+fn first_word(s str) str?
+    if s.len() == 0
+        return none
+    s
+
+fn rows(n int) List[int]?
+    if n <= 0
+        return none
+    [n, n * 2]
+
+fn show(o int?) int
+    if v := o
+        return v
+    -1
+
+fn main()
+    xs := [4, 8, 15, 16]
+    print(find(xs, 15) else -1)
+    print(find(xs, 99) else -1)
+    n := find(xs, 8) else 0
+    print(n + 1)
+    print(show(3))
+    print(show(none))
+    print(show(find(xs, 16)))
+    print(half(9.0) else 0.0)
+    print(half(-1.0) else 0.0)
+    print(flag(7) else false)
+    print(flag(2) else true)
+    print(flag(0) else true)
+    if find(xs, 4) != none
+        print("found")
+    if find(xs, 5) == none
+        print("missing")
+    w := first_word("hello") else "none"
+    print(w)
+    print(first_word("") else "none")
+    r := rows(3) else []
+    print(r)
+    print(rows(0) else [7])
+    mut total := 0
+    for i in 0..10
+        if v := find(xs, i)
+            total += v
+    print(total)
+    mut o := find(xs, 8)
+    print(o else 0)
+    o = none
+    print(o else 100)
+    o = 5
+    print(o else 100)
+    if p := find(xs, 99)
+        print("p {p}")
+    elif q := find(xs, 16)
+        print("q {q}")
+    else
+        print("neither")

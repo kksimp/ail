@@ -53,8 +53,9 @@ risk: it adds nothing to the shared files of lane 120.
 - Both targets share the code; the tests run on x86-64 and on aarch64 (qemu).
 - Strings stay immutable and shared; every method that builds text allocates.
   The collector (lane 171) frees it.
-- Methods whose result is an optional (`find`, `char_at`, `strip_prefix`,
-  `strip_suffix`, `to_float`) wait for optionals in the subset (lane 175).
+- Methods with an optional result (`find`, `char_at`, `strip_prefix`,
+  `strip_suffix`, `to_digit`, `char.from_code`) return a pointer or 0 as
+  ADR 0574 lays out (a number or `char` is boxed); `to_float` is lane 177's.
 
 ## Rejected alternatives
 

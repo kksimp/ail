@@ -30,7 +30,11 @@ fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
 interpolation as a value, format specifications on numbers, `bool`, `char`
 and `str` (lex.str.7, type.str.11: width, fill, alignment, `.N`, `x`),
 `xs[i]`, `xs[i] = v`, `len`, `push`, `join`, `env.args()`, `s.to_int() else
-...` as a binding's value, the methods `abs`, `min`, `max`, `to_float`,
+...` as a binding's value, optionals of numbers, `char`s, strings and lists (`none`,
+`x == none`, `if v := o`, `o else d`, `o?` in a function returning an optional),
+functions that can fail (`T ! E`, `! E`, `!`) whose errors are message-only
+`error struct`s without fields (`return E()`, `f()?`, `f() else ...`,
+`else err`, a failing `main`), the methods `abs`, `min`, `max`, `to_float`,
 `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9, ADR 0591), the bit
 operations of expr.bit.1, and those of native.str.1. Also `s.to_float()` in
 the `else` forms, and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
@@ -42,7 +46,7 @@ only as the value of `else` with a fallback value, a statement that leaves,
 or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
 Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566,
-0580, 0582, 0591)*
+0574, 0575, 0576, 0580, 0582, 0591)*
 
 ```ail
 fn steps(n int) int
@@ -67,9 +71,10 @@ width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
 `slice`, `replace`, `repeat`, `pad_left`, `pad_right`; on `char`, `code`,
 `to_str`, `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`,
 `is_lower`, `to_upper`, `to_lower`; `to_str` on `int`, `float` and `bool`;
-`print` of a `char`, a `List[char]` and a `List[str]`. The methods whose
-result is an optional (`find`, `char_at`, `strip_prefix`, `strip_suffix`,
-`to_float`, `to_digit`, `char.from_code`) are reported under native.subset.1.
+`print` of a `char`, a `List[char]` and a `List[str]`. The methods with an
+optional result are `find`, `char_at`, `strip_prefix`, `strip_suffix`,
+`to_digit` and `char.from_code`, used with the optional forms of
+native.subset.1.
 The character predicates and case mappings, and `to_upper` and `to_lower`
 on a `str`, are those of the interpreter on every scalar value, read from
 tables generated from it (a capital sigma becomes the final form by the

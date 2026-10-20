@@ -105,7 +105,7 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
 ## and on failure the fallback value or the leaving statement.
 fn Lower.lower_os_or_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) Val?
     f := fallible(value) else
-        return unsupported(pos, "`else` on this expression")
+        return lower_else(value, other, pos)
     args := match value
         Method(recv, name, _, margs) =>
             if name == "to_float" and margs.len() == 0 and os_module(recv) == ""
@@ -220,10 +220,4 @@ fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
 ## if any, is dropped.
 fn Lower.lower_os_handle(mut self, value ast.Expr, other ast.Else)
     pos := expr_pos(value)
-    if fallible(value) == none
-        problem(
-            pos,
-            "`else` handlers aren't in the native subset yet, but for the OS calls and `s.to_float()`",
-        )
-        return
     lower_os_or_else(value, other, pos)

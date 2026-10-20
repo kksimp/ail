@@ -75,13 +75,10 @@ fn Lower.int_arg(mut self, v Val, name str, pos ast.Pos) int?
     problem(pos, "`.{name}()` needs an `int`, found `{v.ty.name()}`")
     none
 
-## The methods whose result is an optional (`int?`, `char?`, `str?`): they
-## wait for optionals in the native subset, and the runtime has no entry
-## for them yet.
-OPTIONAL_METHODS := ["find", "char_at", "strip_prefix", "strip_suffix", "to_float", "to_bytes"]
-
+## The methods whose result is an optional that the subset lacks: `to_float`
+## has its own `else` form (lane 177), and `to_bytes` waits for `bytes`.
 fn Lower.str_unsupported(mut self, name str, npos ast.Pos) Val?
-    if OPTIONAL_METHODS.contains(name)
+    if name == "to_float" or name == "to_bytes"
         return unsupported(npos, "`.{name}()` on `str` (its result is an optional)")
     unsupported(npos, "`.{name}()` on `str`")
 
@@ -121,6 +118,22 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     id: call("rt.str_repeat", [r.id, k, h3, h4, trap_tail(npos)], Ty.Str),
                     ty: Ty.Str,
                 )
+            "find" =>
+                if not (vs[0].ty == Ty.Str)
+                    problem(npos, "`.find()` needs a `str`, found `{vs[0].ty.name()}`")
+                    return none
+                t := Ty.Opt(Ty.Int)
+                return Val(id: call("rt.str_find_opt", [r.id, vs[0].id], t), ty: t)
+            "char_at" =>
+                i := int_arg(vs[0], name, npos)?
+                t := Ty.Opt(Ty.Char)
+                return Val(id: call("rt.str_char_at", [r.id, i], t), ty: t)
+            "strip_prefix" | "strip_suffix" =>
+                if not (vs[0].ty == Ty.Str)
+                    problem(npos, "`.{name}()` needs a `str`, found `{vs[0].ty.name()}`")
+                    return none
+                t := Ty.Opt(Ty.Str)
+                return Val(id: call("rt.str_{name}", [r.id, vs[0].id], t), ty: t)
             _ => return str_unsupported(name, npos)
     if n == 2
         match name
@@ -165,6 +178,11 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
 
 ## `c.NAME(...)` on a `char` (type.char.2-4).
 fn Lower.lower_char_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if vs.len() == 1 and name == "to_digit"
+        radix := int_arg(vs[0], name, npos)?
+        h := trap_head("type.char.3", npos)
+        t := Ty.Opt(Ty.Int)
+        return Val(id: call("rt.char_to_digit", [r.id, radix, h, trap_tail(npos)], t), ty: t)
     if vs.len() != 0
         return unsupported(npos, "`.{name}()` on `char`")
     match name
@@ -194,3 +212,12 @@ fn Lower.char_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val?
     if is_comparison(o)
         return Val(id: op(op_name(o), [a.id, b.id], Ty.Bool), ty: Ty.Bool)
     unsupported(pos, "`{op_symbol(o)}` on `char`")
+
+## `char.from_code(n)` (type.char.4): a `char?`.
+fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
+    if args.len() != 1
+        return unsupported(npos, "this `char.from_code`")
+    n := lower_value(args[0].value, Ty.Int)?
+    k := int_arg(n, "from_code", npos)?
+    t := Ty.Opt(Ty.Char)
+    Val(id: call("rt.char_from_code", [k], t), ty: t)
