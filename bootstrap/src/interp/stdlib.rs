@@ -279,6 +279,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            ("regex", _) => return self.regex_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());
                 if lo > hi {

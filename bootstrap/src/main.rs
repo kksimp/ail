@@ -24,6 +24,7 @@ mod net;
 mod num;
 mod packages;
 mod parser;
+mod regex;
 mod stdlib;
 mod tensor;
 mod ui;

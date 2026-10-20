@@ -67,6 +67,11 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
+        // std.regex.1: text in, text out, so no effects.
+        "regex" => (
+            &["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+            &[],
+        ),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
         // std.tensor.1: values only, so no effects.
         "tensor" => (&["from", "zeros"], &[]),

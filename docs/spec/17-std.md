@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -14,7 +14,7 @@ failures are values (ADR 0157). There is no string-typed shell.
 
 **std.use.1** — `use std.NAME` imports the standard module `NAME`, available
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
-The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time` and `ui`. Importing
+The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time` and `ui`. Importing
 `std` itself, a submodule of a standard module, or any other `std.NAME` is a
 compile-time error that lists the modules. *(ADR 0157)*
 

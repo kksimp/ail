@@ -1,0 +1,7 @@
+## std.regex.7: a replacement that names a group the pattern doesn't have traps.
+use std.regex
+
+fn main()
+    re := regex.compile(r"(\w+)") else return
+    print(regex.replace(re, "ab", "$1!"))
+    print(regex.replace(re, "ab", "$2"))

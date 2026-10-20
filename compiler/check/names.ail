@@ -49,6 +49,7 @@ pub STD_MODULES := [
     "path",
     "proc",
     "random",
+    "regex",
     "tensor",
     "task",
     "time",
