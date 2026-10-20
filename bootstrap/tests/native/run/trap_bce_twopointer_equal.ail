@@ -1,0 +1,15 @@
+# The lower pointer is in range when the upper one is `len`: `xs[i]` is
+# fine for i = 0, and `xs[j]` isn't (type.coll.4).
+fn probe(xs List[int], j0 int) int
+    mut i := 0
+    mut j := j0
+    mut s := 0
+    while i < j
+        s += xs[i] + xs[j]
+        i += 1
+        j -= 1
+    s
+
+fn main()
+    print(probe([1, 2, 3, 4], 3))
+    print(probe([1, 2, 3, 4], 4))

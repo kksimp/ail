@@ -1,0 +1,26 @@
+# Accesses an earlier access or `push` vouches for (native.bce.2): the
+# results stay the same, and an index nothing vouches for still traps.
+fn node(mut left List[int], mut right List[int]) int
+    n := left.len()
+    left.push(-1)
+    left[n] = 7
+    right.push(n)
+    right[right.len() - 1] = n + 1
+    n
+
+fn twice(mut xs List[int], i int) int
+    a := xs[i]
+    xs[i] = a + 1
+    xs[i] += 2
+    xs[i] + a
+
+fn main()
+    mut l := [5]
+    mut r := List[int]()
+    print(node(mut l, mut r))
+    print(node(mut l, mut r))
+    print(l)
+    print(r)
+    mut xs := [10, 20, 30]
+    print(twice(mut xs, 1))
+    print(xs)

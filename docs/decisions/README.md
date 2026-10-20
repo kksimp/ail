@@ -387,6 +387,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0390](0390-native-subset-for-the-drag-race.md) | The native subset grows to the drag-race programs: arguments, `to_int() else`, constant expressions, `{x:.N}`, strings and nested lists *(delegated)* | Accepted | 2026-10-20 |
 | [0391](0391-native-backend-optimisations.md) | First optimisations in the native backend: lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols *(delegated)* | Accepted | 2026-10-20 |
 | [0392](0392-native-structs-and-methods.md) | Structs and methods in the native subset: heap header word, slots, copies at the boundary, `T.m` methods *(delegated)* | Accepted | 2026-10-20 |
+| [0577](0577-bounds-checks-in-counted-loops.md) | Bounds checks in counted loops: versioning with guards, hoisted loads, two-pointer loops *(delegated)* | Accepted | 2026-10-20 |
+| [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
+| [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
