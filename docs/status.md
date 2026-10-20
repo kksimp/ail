@@ -1,89 +1,59 @@
 # Project status
 
-_Last updated: 2026-10-05_
+_Last updated: 2026-10-20_
 
 **Current stage:** 2 — Bootstrap front end and interpreter. The Stage 1 core
 design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
-**Implementation:** milestone 1 complete (2026-10-04): `./ail run examples/hello.ail`
-prints `Hello, world!`. Milestone 2 (2026-10-05): `examples/gradebook.ail`
-runs, with structs, enums, methods, `match`, loops, lists, `mut` and
-interpolation. Both verified on Linux x86-64 and macOS ARM64 (ADR 0085).
-Milestone 3 (2026-10-05): `examples/commands.ail` runs, with error types,
-`T ! E` and `!T`, `?`, `else`, optionals, variants with data, `for mut`, and
-error reports from `main`. Verified on Linux x86-64 and macOS ARM64.
-If-binding conditions (`if x := e` … `else err`, ADR 0125) followed
-(2026-10-05), verified on both. Milestone 4 (2026-10-05): `examples/shapes.ail`
-runs, with traits, `impl` blocks, default methods, `any Trait`, generic
-functions, types and methods, inference, and the standard traits `Eq`, `Ord`
-and `ToStr` (ADRs 0126–0129). Verified on Linux x86-64 and macOS ARM64.
-Milestone 5 (2026-10-05): three 500–800 line programs run with output
-identical to their Python versions (`examples/interp.ail`, `json.ail`,
-`sheet.ail`), with floats, `char`, maps and sets, multi-line and raw strings,
-literal and or-patterns, constants, `! E` results and statement `else`
-(ADRs 0130–0140). Verified on Linux x86-64 and macOS ARM64.
-Milestone 6 (2026-10-05): Python parity. Implicit `self`, positional and
-shorthand constructor arguments, and empty literals typed by first use
-(ADRs 0141–0143) bring the three examples to 1.5% above their Python
-versions in tokens. Verified on Linux x86-64 and macOS ARM64.
-See [bootstrap/README.md](../bootstrap/README.md) for the supported subset.
-2026-10-20: the [AI-first buildout plan](design/ai-first-plan.md) is in
-progress on ten parallel lanes (semantic API, effects and capabilities,
-standard modules, user modules, tests, formatter, conformance harness,
-interpreter performance: `tools/perfbench/run.sh`, about 20-35% faster; the front end (lane 81, ADRs 0332–0334) runs `ail check`, `api` and `effects` on the editor 1.2–1.3x faster (35% fewer instructions) with fast hashing, allocation-free keyword lexing and a front-end allocator, and records no on-disk cache yet; round 3 (lane 61, ADR 0297) profiled the remaining cost and kept the tree walker; round 2 (lane 36, ADRs 0219–0221) cut instructions 32–47% more and brings interp and loops to parity with CPython, see
-[interpreter-performance.md](design/interpreter-performance.md)). Lane 5 added `std.json` (`Json`, `parse_json`,
-`to_text`, accessors) to the prelude, read on demand (ADR 0161–0162).
-Overnight 2026-10-20 (lane 9, ADRs 0172–0174): the spec conformance harness
-(`bootstrap/tests/spec.rs`) checks every `ail` block in `docs/spec/`; format
-specifications in interpolation (`{x:>8}`, `{r:.2}`, `{n:0>4x}`, resolves OQ-041)
-are implemented; `docs/language-card.md` is the whole language in under 8,000
-tokens. Linux selftest passes; macOS verification is pending.
-Lane 25 added property tests (`@test` with parameters, `--cases`, `--seed`, shrinking) and doc examples as tests (ADRs 0198–0201; spec `test.prop.*`, `test.doc.*`).
-Lane 27 (ADRs 0206–0209, resolves OQ-043, OQ-044, OQ-046): `std.random` (`int`, `float`, `seed`, `shuffle`; capability `random`), `ail run --deterministic` and `--seed`, `str.len()` counting characters with `byte_len()`, and nested optionals (`T??`).
-Lane 31 (ADRs 0214–0215, resolves OQ-047, OQ-048): list `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first`; `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`; the editor uses them (tokens -0.9%).
-Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
-capability denial with `ail run --deny` (ADRs 0163–0165).
-Lane 28 added `requires`/`ensures` contracts, checked at run time (ADRs 0210–0213, `contract.*`). Lane 64 (ADRs 0303–0305): `old(e)` in `ensures`, trait method contracts inherited by implementations (own `requires` weaken, own `ensures` add), and struct `invariant` lines checked at construction and after `mut self` methods; `ail api` shows them.
-Lane 94 (ADRs 0346–0347, [formatting](design/formatting.md), spec [21-trace](spec/21-trace.md)): `ail fmt` splits a still-long line before its lowest-precedence binary operator (`lex.stmt.2` (5): a line may start with `and`, `or`, `+ * / % == != <= >= < >`); `--watch` shows `push`, `pop`, `insert`, `remove_at`, `swap`, `extend`, `clear`, `reverse`, `sort`, map `remove`, set `add`/`remove` and `m[k] = e` as element writes with the element and index or key.
+Linux x86-64 and macOS ARM64 gate every change ([ADR 0085](decisions/0085-interim-local-testing-gate.md));
+Windows is tested when convenient. The Linux selftest passes; macOS
+verification of the 2026-10-20 batch is pending. See
+[bootstrap/README.md](../bootstrap/README.md) for the supported subset and
+pipeline, and [roadmap.md](roadmap.md) for what comes next.
 
-Lane 82 (ADRs 0335–0336, spec [22-tools](spec/22-tools.md)): tests fail when a rule ID in `bootstrap/src` has no `ail explain` entry or the specification cites an undefined rule; `ail explain` alone lists all 566 rules with chapter and fix flag (39 have a fix; `--json` too); ten more mistakes get `ail fix` (string `+`/`*`/`%`, `in`, `s[i]`, `pass`, C-style `for`, typed empty collection, `printf`, `sqrt`/`floor`/`ceil`/`round`), so `ail fix` repairs 86 of the 112 corpus programs; explain entries average 116 tokens (was 178).
-Lane 74 (ADRs 0325–0327, spec [21-trace](spec/21-trace.md), [semantic-api](design/semantic-api.md#package-directories)): `ail api` on package directories (outline, `--symbols`, `--locals|--type|--refs DIR FILE L C`, module-prefixed ids, refs across every file); `ail test --trace` puts a failing test's events in its JSON entry; `--watch` follows `mut` arguments and `mut self` calls.
-Lane 56 (ADRs 0288–0290, spec [21-trace](spec/21-trace.md) and [19-testing](spec/19-testing.md)): `ail test --coverage[=lines]` (lines and functions run, `--json`), `--timeout`, `--max-memory`, `--max-steps` for `run` and `test` (`run.limit.*`), and trap snapshots under failing tests.
-Lane 46 (ADRs 0265–0268, spec [21-trace](spec/21-trace.md)): `ail run --trace[=calls|effects|all]` with `--trace-limit`, `--watch NAME`, and trap snapshots (stack, locals, source line, contract values; `--verbose`, `--json`).
-Lane 41 (ADRs 0250–0255): key functions `sorted(by: |x| key)` (also `sort`, `min`, `max`) and `take`, `m[k] += v` starting from zero, `?` caught by an enclosing `else`, `std.path`, and `Json` getters (`str`, `num`, `bool`, `arr`) and `set`; the agent-tool corpus fell from +28.0% to +6.9% tokens over Python (−16.6%).
-Lane 51 (ADRs 0277–0280): standard modules in scope without `use`, messages on error types, `?` on optionals failing with `Absent` in functions with inferred errors (tests can always fail), a one-line `if c then a else b`, and `{}` typed by `m[k] += n`; the three-program agent corpus fell from +6.9% to −0.25% against Python, and two new agent programs (`snapdiff`, `csvreport`) measure +4.6% and +2.5% ([program-measurements-r5.md](design/program-measurements-r5.md)).
-Lane 83 (ADR 0337): five more agent programs with Python twins (`scan`, `tail`, `merge`, `digest`, `runner`) using `fs.glob`, `proc.run`, `for v in ch`, `par` comprehensions, `net.get` and derives; they measure −8.6% against Python (the ten-program agent corpus −5.4%; [program-measurements-r8.md](design/program-measurements-r8.md)); a checker panic on `m[k] = ...m.get(k)...` for an untyped `{}` is fixed.
-Lane 91 (ADRs 0340–0342, resolves OQ-110 to OQ-112): `union`, `intersect` and `difference` on sets and `keys()` lists (`snapdiff` −9.6 tokens), `m.push(k, x)` for list-valued maps (`scan` −4.8); named arguments for `proc.run` measured +1.4 tokens on `runner` and were not added. The ten-program agent corpus is now 5.7% under Python (from 5.4%).
-Lane 63 (ADRs 0300–0302, `conc.share.6–7`, `conc.par.12`): `for v in ch` receives until a channel closes (also in comprehensions), `with m as mut x` holds a mutex for a block and writes the value back, and `[f(x) par for x in xs]` computes a list on the thread pool; `select` measured 9% heavier on `examples/workers.ail` and was left out.
-Lane 72 (ADRs 0320–0322, `conc.atomic.3–6`, `conc.cancel.1–2`, `conc.sched.1–2`): `Atomic[int]`/`Atomic[bool]` (`load`, `store`, `add`, `cas`; SeqCst) shared by tasks and `par for` without a lock; `t.cancel()`/`g.cancel()` with `task.cancelled()`, `task.check() ! Cancelled`, and early return from `recv`, `for v in ch`, `time.sleep_ms` and `proc.run`; `ail test --schedule=random[:SEED]` replays an interleaving and prints the seed on failure.
-Lane 47 (ADRs 0269–0271): the fuzz and differential harness (`tools/fuzz/run.sh`, 200-program smoke inside `./ail selftest`); 10,000 programs found two bugs, both fixed with cases: `spawn` of a method call on a value panicked the interpreter (`conc.task.1`), and `repeat`/`pad_left` with a huge count aborted on allocation (new `type.str.15` trap).
+## What is implemented
 
-Lane 75 (ADRs 0328–0330, spec `std.tensor.1–9`): `std.tensor`, a value-typed `Tensor[int|float]` with `from`, `zeros`, `add`, `mul`, `dot`, `sum`, `matmul`, `map`, `reshape`; AVX2/NEON/scalar kernels picked at run time with one specified summation order (bit-identical everywhere), `matmul` on the thread pool from 64³; perfbench `tensor` 0.015 s against 0.885 s in plain AIL loops and 0.361 s in Python. Device backends are designed (ADR 0330) and wait on OQ-090. Lane 93 (ADRs 0344–0345, spec `std.tensor.10–12`): `+ - *` on tensors with a scalar on either side, `sum`/`max`/`mean` over an axis or all elements, and 2-D `transpose`, with AVX2/NEON/scalar kernels that stay bit-identical; perfbench `tensor_ops` 0.031 s against 0.589 s in plain AIL loops and 0.270 s in Python.
-Lane 54 (ADRs 0281–0284): `std.fs` `walk`, `glob`, `metadata`, `rename`, `copy`; `proc.run` with input and a time limit (`timed_out`), `proc.which`, `env.vars`; `std.net` `get`/`post` over a small HTTP/1.1 client (no TLS yet), giving the `net` capability.
-Lane 38 (ADRs 0230–0233, resolves OQ-045): `ail.pkg` manifests, path dependencies imported by package name, and per-dependency capability grants checked at compile time ([packages.md](design/packages.md)); git dependencies and `ail.lock` are designed only.
-interpreter performance). Formatter: `ail fmt` (ADRs 0169–0170) is
-implemented and tested on Linux x86-64; examples and test cases are canonical.
-Lane 73 added chained-call splitting (a line starting with `.name` continues
-the statement) and own-line attributes in name order (ADRs 0323–0324).
-Lane 12 added `tools/edit/edit.ail`, a code editor written in AIL with a
-headless, tested core that drives `ail check --json`, fixes, `ail explain` and
-`ail api`, with a window front end on `std.ui` (ADRs 0180–0181).
-Lane 3 added user modules (ADRs 0153–0156): `ail run DIR` runs a package,
-`use a.b` imports a directory, items are reached by qualified name, and
-`pub` controls visibility of items, fields and methods. Linux selftest
-passes; macOS verification is pending.
-Lane 11 added `std.ui` (ADRs 0177–0179, `std.ui.1–9`): a window of
-monospace text cells with key and resize events, through `minifb` and
-`embedded-graphics` in the bootstrap, a new capability `ui`, and
-`examples/ui_hello.ail`. Selftest passes headless on Linux; the window was
-tested under X11 (Xvfb); macOS is pending. The path to a native layer is in
-[gui-path.md](design/gui-path.md). Mouse, scroll, clipboard and window titles
-followed (ADR 0240, `std.ui.10–13`), and the editor's window front end got
-tabs, a Ctrl-P file picker, mouse selection, wheel scrolling, the system
-clipboard and F5/F6 runs (ADR 0241). Shift-click (ADR 0242,
-`std.ui.14`) and font sizes (ADR 0243, `std.ui.15`: `--font N`, Ctrl-+,
-Ctrl--) came next, then F2 rename through `ail api` references (ADR 0244). A command palette (Ctrl-Shift-P) and the README key table now come from one list (ADR 0291). Project search (Ctrl-Shift-F, F4) fills the pane with jumpable matches (ADR 0292). A file tree (Ctrl-B) and a check of every open tab on save, with error and warning counts on the tab labels, followed (ADR 0293). The agent panel puts the semantic API one key away: Ctrl-I info with contracts, effects, error set and uses; Shift-F5 trace with trap frames; Ctrl-Shift-E failure paths; Ctrl-Shift-C coverage marks (ADRs 0312–0313). Ctrl-Shift-I shows the program card (`ail api --card`) with jumps to each declaration (ADR 0331), now exact through positions in `--card --json` (ADR 0338). Ctrl-Shift-M lists every diagnostic of the open programs, Ctrl-Shift-H previews and applies a replace across the project's files, and the open tabs and cursors are remembered per directory in `~/.ail-edit` (ADR 0339). Then text styles, named colors and caret shapes (ADR 0294, `std.ui.16–18`). Editor themes are remembered in `~/.ail-edit` (ADRs 0295–0296, `std.env.6`). `std.ui.widgets`, the first standard module written in AIL, gives text fields, fuzzy lists, buttons, dialogs, panes and trees; the editor's picker, palette and text pane use it, and `examples/dashboard.ail` shows it (ADRs 0314–0316, `std.ui.19–24`).
+### Milestones (2026-10-04 to 2026-10-05)
 
-Lane 37 (ADRs 0222–0229) designed topics 16–19: four compiler tiers (AST, HIR, MIR, machine IR), constants computed at compile time by calling compile-time-safe functions (implemented: `ct.const.1–3`), derive generators whose output `ail api --expanded` shows, and compile-time-only reflection. Lane 65 (ADRs 0306–0309) implemented derive generators, `TypeInfo`, `ail api --expanded`, and the `ToJson`/`FromJson` derives (`ct.derive.*`, `ct.gen.*`, `refl.info.*`, `json.derive.*`). Lane 92 (ADR 0343) extended them to `Map[str, T]`, any `T?`, nested lists, enum variants with fields (`{"kind": "Name", ...}`), generic `ToJson`, and failures that name their path (`json.derive.3`); generic `FromJson` waits for OQ-039.
+All verified on Linux x86-64 and macOS ARM64.
+
+1. `./ail run examples/hello.ail` prints `Hello, world!`.
+2. `examples/gradebook.ail`: structs, enums, methods, `match`, loops, lists, `mut`, interpolation.
+3. `examples/commands.ail`: error types, `T ! E` and `!T`, `?`, `else`, optionals, variants with data, `for mut`, error reports from `main`; then if-binding conditions (ADR 0125).
+4. `examples/shapes.ail`: traits, `impl`, default methods, `any Trait`, generics, inference, `Eq`, `Ord`, `ToStr` (ADRs 0126–0129).
+5. `examples/interp.ail`, `json.ail`, `sheet.ail` (500–800 lines each) with output identical to their Python versions: floats, `char`, maps and sets, multi-line and raw strings, literal and or-patterns, constants, `! E` results, statement `else` (ADRs 0130–0140).
+6. Python parity: implicit `self`, positional and shorthand constructor arguments, empty literals typed by first use (ADRs 0141–0143); the three examples are 1.5% above Python in tokens.
+
+### Language (2026-10-20 batch)
+
+- **Strings, numbers, collections:** format specifications in interpolation (ADR 0173, resolves OQ-041); sized numeric types, `@inline`, `@deprecated` (ADRs 0194–0197); `str.len()` counts characters, with `byte_len()` (ADR 0208); nested optionals `T??` (ADR 0209); list editing and `str` search methods (ADRs 0214–0215, resolve OQ-047, OQ-048); comprehensions and bare variant patterns (ADRs 0182–0183); key functions `sorted(by: |x| key)`, `take`, `m[k] += v` from zero, `?` caught by an enclosing `else` (ADRs 0250–0255); set `union`, `intersect`, `difference` and `m.push(k, x)` (ADRs 0340–0342); standard modules in scope without `use`, messages on error types, `?` on optionals failing with `Absent`, a one-line `if c then a else b` (ADRs 0277–0280, resolve OQ-071, OQ-072).
+- **Ownership:** moves checked on every path, `move` parameters and `move self` receivers, `unique` types cleaned up by `Drop`, `ref` cells with exclusivity traps, unique values in lists and maps (ADRs 0190–0193, 0317–0319).
+- **Concurrency:** tasks, task groups, channels and mutexes under a deterministic scheduler (ADRs 0186–0189); `for v in ch`, scoped `with m as mut x`, and `[f(x) par for x in xs]` (ADRs 0300–0302); `Atomic[int]`/`Atomic[bool]`, cancellation, and `ail test --schedule=random[:SEED]` (ADRs 0320–0322).
+- **Parallelism:** `par for` asserts independence and provable conflicts are errors; automatic parallel loops where provable; a thread pool (`ail run --parallel`, `AIL_THREADS`) that falls back to the sequential result; fixed-tree float `sum()`; vectorised independent loops (ADRs 0236–0239, 0246, 0272–0275).
+- **Modules and packages:** user modules with `use a.b`, `pub` and qualified access (ADRs 0153–0156); `ail.pkg` manifests, path dependencies by package name, per-dependency capability grants (ADRs 0230–0233, resolves OQ-045, [packages.md](design/packages.md)). Git dependencies and `ail.lock` are designed only.
+- **Effects and contracts:** inferred effect sets, `@pure`, compile-time `ail run --deny` (ADRs 0163–0165); `requires`, `ensures`, `old(e)`, trait-method contract inheritance and struct `invariant`, checked at run time (ADRs 0210–0213, 0303–0305).
+- **Compile time and reflection:** four compiler tiers and compile-time functions (`ct.const.1–3`), derive generators, `TypeInfo`, `ail api --expanded`, and the `ToJson`/`FromJson` derives with path-naming failures (ADRs 0222–0229, 0306–0309, 0343). Generic `FromJson` waits for OQ-039.
+- **Interpreter speed:** fast paths and fast hashing (ADRs 0175–0176, 0219–0221, 0297, 0332–0334): interp and loops at parity with CPython, the front end 1.2–1.3x faster; no on-disk cache yet (ADR 0333). Numbers: [interpreter-performance.md](design/interpreter-performance.md), `tools/perfbench/run.sh`.
+
+### Standard library
+
+- `std.json` (`Json`, `parse_json`, `to_text`, typed getters and `set`; ADRs 0161–0162, 0254) and `ToJson`/`FromJson` derives.
+- `std.fs` (with `walk`, `glob`, `metadata`, `rename`, `copy`), `env`, `io`, `proc` (input, time limit, `which`), `time`, `path`, and `net` (a small HTTP/1.1 client, no TLS yet) (ADRs 0157–0160, 0253, 0281–0284).
+- `std.random` and `ail run --deterministic` with `--seed` (ADRs 0206–0207, resolve OQ-043, OQ-044, OQ-046).
+- `std.tensor`: value-typed `Tensor[int|float]` with elementwise operators, reductions, `matmul`, `transpose`; AVX2, NEON or scalar kernels chosen at run time with one specified summation order, `matmul` on the thread pool; device backends designed only (ADRs 0328–0330, 0344–0345, 0247).
+- `std.ui`: a window of monospace text cells with keys, resize, mouse, scroll, clipboard, modifiers, font sizes, text styles and colors; capability `ui` (ADRs 0177–0179, 0240, 0242–0243, 0294; [gui-path.md](design/gui-path.md)). `std.ui.widgets`, the first standard module written in AIL (ADRs 0314–0316, `examples/dashboard.ail`).
+
+### Tooling
+
+- **Semantic API:** diagnostics schema v1 (ADR 0145), `ail explain` covering every emitted rule (ADRs 0146, 0335), typed holes `todo` (ADR 0147), `ail api` with ids, references, doc comments, contracts and effects (ADRs 0150–0152, 0213), `ail api --locals|--type|--refs`, `--card` and package directories (ADRs 0258–0261, 0310–0311, 0325–0327), `ail check --errors` (ADR 0286), `ail effects`, and `ail fix` with anchored fixes for 86 of 112 corpus programs (ADRs 0202–0205, 0264, 0285, 0335). Foreign syntax is reported once with a help (ADR 0262). See [semantic-api.md](design/semantic-api.md).
+- **Run and trace:** `ail run --trace`, `--watch NAME`, trap snapshots, `--timeout`, `--max-memory`, `--max-steps` (ADRs 0265–0268, 0288–0290, 0326).
+- **Tests:** `@test`, `assert`, `ail test` (ADRs 0167–0168); property tests with `--cases`, `--seed`, shrinking; doc examples as tests (ADRs 0198–0201); `--coverage`, `--trace`.
+- **Formatter:** `ail fmt` (ADRs 0169–0170) with chained-call lines, own-line attributes and long-line splitting (ADRs 0323–0324, 0346–0347); examples and test cases are canonical.
+- **Conformance and fuzzing:** `bootstrap/tests/spec.rs` checks every `ail` block in `docs/spec/`, the quick reference and the language card (ADRs 0172, 0174, 0276); the fuzz and differential harness `tools/fuzz/run.sh` runs a 200-program smoke inside `./ail selftest` (ADRs 0269–0271). `docs/language-card.md` is the whole language within 8,000 tokens.
+- **Benchmarks:** `tools/tokbench` (tokens), `tools/perfbench` (speed), and the agent-tool corpus of ten programs with Python twins, 5.7% under Python in tokens ([program-measurements-r5.md](design/program-measurements-r5.md), [r8](design/program-measurements-r8.md); ADRs 0217–0218, 0337).
+
+### Editor
+
+`tools/edit/edit.ail`, a code editor written in AIL (ADRs 0180–0181, 0241): a headless, tested core driving `ail check --json`, fixes, `ail explain` and `ail api`, with a `std.ui` window front end. It has completion, hover, find and replace, format on save, tabs, a Ctrl-P picker, a command palette, project search and replace, a file tree, rename through references, themes, an agent panel (info, trace, failure paths, coverage, program card) and per-directory session memory (ADRs 0244, 0291–0296, 0312–0313, 0331, 0338–0339).
 
 ## Design topics
 
@@ -145,4 +115,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-049, OQ-060 and OQ-091 to OQ-096; 043, 044, 045, 046, 047, 048, 071 and 072 are resolved).
+See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-113 with gaps), 44 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-039, OQ-042, OQ-049, OQ-050, OQ-060, OQ-090, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097, OQ-113.

@@ -44,7 +44,9 @@ Rules for rule IDs:
 
 Every fenced block tagged `ail` in a chapter is a **conformance test**
 (ADR 0002). `bootstrap/tests/spec.rs` runs `ail check --json` on each one
-during `./ail selftest` and reports failures by chapter and line. The fence
+during `./ail selftest` and reports failures by chapter and line. The
+same rules apply to `docs/quick-reference.md` and `docs/language-card.md`, where a block
+without `fn main` is a fragment without a tag (to save tokens). The fence
 line says what to expect:
 
 | Fence | Expectation |

@@ -210,28 +210,6 @@ ADR 0076; decide when a real program needs it.*
 ## OQ-048 — Editing text without string indexing
 **Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
 
-## OQ-060 — Loop invariants and static proof for contracts
-Items (1) `old(x)`, (2) inherited trait contracts and (3) type invariants are
-**resolved** by [ADR 0303](decisions/0303-contract-old.md),
-[ADR 0304](decisions/0304-trait-contract-inheritance.md) and
-[ADR 0305](decisions/0305-struct-invariants.md); checks stay run-time
-([ADRs 0210–0213](decisions/0210-contract-syntax.md)). Still open: (a) loop
-invariants (recommended: wait; `assert` inside the loop covers the run-time
-case and a prover is the only reason to name one); (b) static proof, and
-whether an optimising build keeps the checks it can't prove (recommended:
-keep them, so `--no-contracts` stays an explicit choice); (c) invariants on
-enums, and checks for writes through `mut` parameters outside the type's
-methods (recommended: revisit with (b), since both need a prover to be cheap).
-*Owner: AI under ADR 0076.*
-
-## OQ-071 — Standard modules without `use` lines
-**Resolved** by [ADR 0277](decisions/0277-standard-modules-without-use.md)
-(option a: in scope unless the program has something else by that name).
-
-## OQ-072 — Display text written on error variants
-**Resolved** by [ADR 0278](decisions/0278-messages-on-error-types.md) (option a:
-a message after each variant or the struct's name).
-
 ## OQ-049 — A package registry and version ranges
 Dependencies come from a path or a pinned git commit
 ([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
@@ -257,6 +235,28 @@ unless it opts out (`[T unique]`), which also opens `move self` in traits;
 (b) keep the restriction. Recommendation: (a), designed with the standard
 library's resource types (files, sockets). *Owner: AI under ADR 0076, with
 the standard-library resource types.*
+
+## OQ-060 — Loop invariants and static proof for contracts
+Items (1) `old(x)`, (2) inherited trait contracts and (3) type invariants are
+**resolved** by [ADR 0303](decisions/0303-contract-old.md),
+[ADR 0304](decisions/0304-trait-contract-inheritance.md) and
+[ADR 0305](decisions/0305-struct-invariants.md); checks stay run-time
+([ADRs 0210–0213](decisions/0210-contract-syntax.md)). Still open: (a) loop
+invariants (recommended: wait; `assert` inside the loop covers the run-time
+case and a prover is the only reason to name one); (b) static proof, and
+whether an optimising build keeps the checks it can't prove (recommended:
+keep them, so `--no-contracts` stays an explicit choice); (c) invariants on
+enums, and checks for writes through `mut` parameters outside the type's
+methods (recommended: revisit with (b), since both need a prover to be cheap).
+*Owner: AI under ADR 0076.*
+
+## OQ-071 — Standard modules without `use` lines
+**Resolved** by [ADR 0277](decisions/0277-standard-modules-without-use.md)
+(option a: in scope unless the program has something else by that name).
+
+## OQ-072 — Display text written on error variants
+**Resolved** by [ADR 0278](decisions/0278-messages-on-error-types.md) (option a:
+a message after each variant or the struct's name).
 
 ## OQ-090 — May accelerator drivers compile AIL-generated code?
 ADR 0010 forbids external backends. GPUs and NPUs can't be reached without
