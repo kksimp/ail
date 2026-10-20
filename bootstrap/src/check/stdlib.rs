@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
-use crate::ast::{Arg, TypeRef};
+use crate::ast::{Arg, Expr, TypeRef};
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::stdlib::{self, StdCall};
 
@@ -268,6 +268,34 @@ impl<'p> Checker<'p> {
             Some(def) => Some(self.generic_type(def, args, pos)),
             None => {
                 self.error("std.use.2", pos, format!("module `{head}` has no type `{item}`"));
+                Some(Ty::Err)
+            }
+        }
+    }
+
+    /// `ui.NAME`, a named color (std.ui.17); `None` when `recv` isn't an
+    /// imported standard module.
+    pub(super) fn std_constant(&mut self, recv: &Expr, name: &str, pos: Pos) -> Option<Ty> {
+        let Expr::Name(n, _) = recv else { return None };
+        if self.local(n).is_some() {
+            return None;
+        }
+        let module = self.std_module(n)?;
+        let consts: &[(&str, i64)] = if module == "ui" { crate::ui::COLORS } else { &[] };
+        match consts.iter().find(|(c, _)| *c == name) {
+            Some(&(_, v)) => {
+                self.resolved.std_calls.insert(pos, StdCall::Const(v));
+                Some(Ty::Int)
+            }
+            None if consts.is_empty() => None,
+            None => {
+                let names: Vec<&str> = consts.iter().map(|(c, _)| *c).collect();
+                self.error_help(
+                    "std.ui.17",
+                    pos,
+                    format!("module `{n}` has no color `{name}`"),
+                    format!("the colors are {}", list_names(&names)),
+                );
                 Some(Ty::Err)
             }
         }

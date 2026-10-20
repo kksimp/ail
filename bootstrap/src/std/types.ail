@@ -37,6 +37,18 @@ enum Event
     Mouse(col int, row int, button str, kind str)
     Scroll(lines int)
 
+## std.ui.16: how `put_styled` draws text.
+struct Style
+    bold bool
+    italic bool
+    underline bool
+
+## std.ui.18: the caret's shape.
+enum Cursor
+    Bar
+    Block
+    Underline
+
 error struct UiError
     kind str
     message str

@@ -31,6 +31,8 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
     ("poll_event", true),
     ("present", true),
     ("put", true),
+    ("put_styled", true),
+    ("set_cursor", true),
     ("set_font_size", true),
     ("set_title", true),
     ("size", false),
@@ -46,6 +48,8 @@ pub enum StdCall {
     Type(usize),
     /// `w.m(...)` on a `ui.Window` (std.ui.2-8): the method's name.
     Method(&'static str),
+    /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
+    Const(i64),
 }
 
 /// Each type of a standard module, declared in `std/types.ail`: its name
@@ -58,6 +62,8 @@ const TYPES: &[(&str, &str)] = &[
     ("Size", "ui"),
     ("Modifiers", "ui"),
     ("Event", "ui"),
+    ("Style", "ui"),
+    ("Cursor", "ui"),
     ("UiError", "ui"),
 ];
 

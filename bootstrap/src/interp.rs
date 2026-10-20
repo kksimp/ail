@@ -1533,6 +1533,9 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env)?,
             Expr::TypeArgs { .. } => unreachable!("checked: type arguments only on a callee or receiver"),
             Expr::Field { recv, name, name_pos } => {
+                if let Some(&crate::stdlib::StdCall::Const(v)) = self.resolved.std_calls.get(name_pos) {
+                    return Ok(Value::Int(v));
+                }
                 if let Some(tn) = type_head(recv, env, self.prog) {
                     let e = self.enums[tn];
                     let v = self.variant_index(e, name);

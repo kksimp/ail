@@ -336,3 +336,19 @@ its size in pixels, so when the number of cells that fit changes, a
 `Resize` event follows (std.ui.7) and the grid takes the new size when the
 program receives it. On a window that is not open, `set_font_size` does
 nothing visible. *(ADR 0243)*
+
+**std.ui.16** — `put_styled(mut self, col int, row int, text str, fg int,
+bg int, style Style)` is `put` (std.ui.4) with a `ui.Style(bold, italic,
+underline)` drawn into each cell; `put` draws plain text. The backend
+synthesises the styles from the one font: bold thickens strokes, italic
+slants them, underline marks the row below the baseline. *(ADR 0294)*
+
+**std.ui.17** — `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`,
+`ORANGE`, `RED`, `WHITE` and `YELLOW` are `int` colors (0xRRGGBB) usable
+wherever a color is. Any other `ui.NAME` that isn't a function or type is
+an error naming the colors. *(ADR 0294)*
+
+**std.ui.18** — `set_cursor(mut self, col int, row int, shape Cursor)`
+places the caret like `cursor` (std.ui.5) and sets its shape: `Bar` (a
+thin line at the cell's left, `cursor`'s shape), `Block` (the cell's colors
+swapped) or `Underline` (a line at the cell's foot). *(ADR 0294)*
