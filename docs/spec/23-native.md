@@ -61,9 +61,11 @@ width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
 `print` of a `char`, a `List[char]` and a `List[str]`. The methods whose
 result is an optional (`find`, `char_at`, `strip_prefix`, `strip_suffix`,
 `to_float`, `to_digit`, `char.from_code`) are reported under native.subset.1.
-The character predicates and case mappings are those of Unicode for
-U+0000 to U+00FF and approximate above that (OQ-172). *(ADRs 0565, 0566,
-0567)*
+The character predicates and case mappings, and `to_upper` and `to_lower`
+on a `str`, are those of the interpreter on every scalar value, read from
+tables generated from it (a capital sigma becomes the final form by the
+Unicode rule, with its case-ignorable set approximated by the apostrophes,
+dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
 
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first

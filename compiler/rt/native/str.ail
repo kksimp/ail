@@ -482,129 +482,203 @@ fn char_is_space(c int) bool
 fn char_is_digit(c int) bool
     c >= 48 and c <= 57
 
-## `to_lower()` for ASCII, Latin-1, Latin Extended-A, Greek and Cyrillic.
-fn char_lower(c int) int
-    if c < 128
-        return if c >= 65 and c <= 90 then c + 32 else c
-    if c >= 192 and c <= 222 and c != 215
-        return c + 32
-    if c >= 256 and c <= 311 and c != 304
-        return if c % 2 == 0 then c + 1 else c
-    if c == 304
+# ---- Unicode tables (ADR 0567, unicode.ail) ----
+
+## The index of a table character: printable ASCII but `"`, `\`, `{` and `}`.
+fn uni_digit(b int) int
+    mut d := b - 32
+    if b > 34
+        d -= 1
+    if b > 92
+        d -= 1
+    if b > 123
+        d -= 1
+    if b > 125
+        d -= 1
+    d
+
+## The `k`-th three-character number of the table at data address `p`.
+fn uni_num(p int, k int) int
+    q := p + 3 * k
+    uni_digit(load8(q)) * 8281 + uni_digit(load8(q + 1)) * 91 + uni_digit(load8(q + 2))
+
+## Whether `c` is in a sorted table of (first, last) pairs.
+fn uni_has(t str, c int) bool
+    p := str_addr(t)
+    d := p + 16
+    mut lo := 0
+    mut hi := load64(p) / 6
+    while lo < hi
+        mid := (lo + hi) / 2
+        if c < uni_num(d, mid * 2)
+            hi = mid
+        elif c <= uni_num(d, mid * 2 + 1)
+            return true
+        else
+            lo = mid + 1
+    false
+
+## `c` mapped by a sorted table of runs (first, count, stride, zigzag delta).
+fn uni_map(t str, c int) int
+    p := str_addr(t)
+    d := p + 16
+    mut lo := 0
+    mut hi := load64(p) / 12
+    while lo < hi
+        mid := (lo + hi) / 2
+        if uni_num(d, mid * 4) <= c
+            lo = mid + 1
+        else
+            hi = mid
+    if lo == 0
         return c
-    if c >= 313 and c <= 328
-        return if c % 2 == 1 then c + 1 else c
-    if c >= 330 and c <= 375
-        return if c % 2 == 0 then c + 1 else c
-    if c == 376
-        return 255
-    if c >= 377 and c <= 382
-        return if c % 2 == 1 then c + 1 else c
-    if c == 902
-        return 940
-    if c >= 904 and c <= 906
-        return c + 37
-    if c == 908
-        return 972
-    if c == 910 or c == 911
-        return c + 63
-    if c >= 913 and c <= 939 and c != 930
-        return c + 32
-    if c >= 1024 and c <= 1039
-        return c + 80
-    if c >= 1040 and c <= 1071
-        return c + 32
-    if c >= 1120 and c <= 1153
-        return if c % 2 == 0 then c + 1 else c
-    c
+    r := (lo - 1) * 4
+    off := c - uni_num(d, r)
+    stride := uni_num(d, r + 2)
+    if off >= uni_num(d, r + 1) * stride or off % stride != 0
+        return c
+    z := uni_num(d, r + 3)
+    if z % 2 == 0
+        return c + z / 2
+    c - (z + 1) / 2
 
-## `to_upper()`: the inverse of `char_lower`; a character whose upper case
-## has several characters is unchanged.
-fn char_upper(c int) int
-    if c < 128
-        return if c >= 97 and c <= 122 then c - 32 else c
-    if c == 181
-        return 924
-    if c >= 224 and c <= 254 and c != 247
-        return c - 32
-    if c == 255
-        return 376
-    if c >= 256 and c <= 311 and c != 305
-        return if c % 2 == 1 then c - 1 else c
-    if c >= 313 and c <= 328
-        return if c % 2 == 0 then c - 1 else c
-    if c >= 330 and c <= 375
-        return if c % 2 == 1 then c - 1 else c
-    if c >= 377 and c <= 382
-        return if c % 2 == 0 then c - 1 else c
-    if c == 940
-        return 902
-    if c >= 941 and c <= 943
-        return c - 37
-    if c == 972
-        return 908
-    if c == 973 or c == 974
-        return c - 63
-    if c == 962
-        return 931
-    if c >= 945 and c <= 971
-        return c - 32
-    if c >= 1104 and c <= 1119
-        return c - 80
-    if c >= 1072 and c <= 1103
-        return c - 32
-    if c >= 1121 and c <= 1153
-        return if c % 2 == 1 then c - 1 else c
-    c
+## The record of `c` in a table of 13-character records (scalar value, length,
+## three scalar values), as its address, or 0.
+fn uni_special(t str, c int) int
+    p := str_addr(t)
+    d := p + 16
+    mut lo := 0
+    mut hi := load64(p) / 13
+    while lo < hi
+        mid := (lo + hi) / 2
+        at := d + mid * 13
+        v := uni_num(at, 0)
+        if c < v
+            hi = mid
+        elif c > v
+            lo = mid + 1
+        else
+            return at
+    0
 
-fn char_is_upper(c int) bool
-    char_lower(c) != c
+# ---- characters (type.char.2) ----
 
-fn char_is_lower(c int) bool
-    if c == 170 or c == 186 or c == 223 or c == 312 or c == 329 or c == 383
-        return true
-    char_upper(c) != c
-
-## `is_alpha()`: Unicode Alphabetic for the scripts above, Hiragana,
-## Katakana, CJK ideographs and Hangul.
 fn char_is_alpha(c int) bool
     if c < 128
         return c >= 65 and c <= 90 or c >= 97 and c <= 122
-    if c == 170 or c == 181 or c == 186
-        return true
-    if c >= 192 and c <= 705
-        return c != 215 and c != 247
-    if c >= 880 and c <= 1023
-        return c != 894 and c != 900 and c != 901 and c != 903 and c != 1014
-    if c >= 1024 and c <= 1327
-        return not (c >= 1155 and c <= 1161 or c == 1154)
-    c >= 12353 and c <= 12438
-        or c >= 12449 and c <= 12538
-        or c >= 19968 and c <= 40959
-        or c >= 44032 and c <= 55203
+    uni_has(UNI_ALPHA, c)
+
+fn char_is_upper(c int) bool
+    if c < 128
+        return c >= 65 and c <= 90
+    uni_has(UNI_UPPER, c)
+
+fn char_is_lower(c int) bool
+    if c < 128
+        return c >= 97 and c <= 122
+    uni_has(UNI_LOWER, c)
+
+## `to_lower()`: the single-character mapping; unchanged when it has several.
+fn char_lower(c int) int
+    if c < 128
+        return if c >= 65 and c <= 90 then c + 32 else c
+    uni_map(UNI_TO_LOWER, c)
+
+fn char_upper(c int) int
+    if c < 128
+        return if c >= 97 and c <= 122 then c - 32 else c
+    uni_map(UNI_TO_UPPER, c)
 
 fn char_is_alnum(c int) bool
     char_is_digit(c) or char_is_alpha(c)
+
+## A cased letter, for the final-sigma rule.
+fn char_is_cased(c int) bool
+    char_is_upper(c) or char_is_lower(c)
+
+## A character the final-sigma rule skips: an apostrophe, a full stop or
+## colon, a dot or accent, and the combining marks.
+fn char_is_ignorable(c int) bool
+    if c == 39 or c == 46 or c == 58 or c == 94 or c == 96 or c == 168 or c == 173
+        return true
+    if c == 175 or c == 180 or c == 183 or c == 184 or c == 8216 or c == 8217
+        return true
+    c == 8228 or c == 8231 or c >= 768 and c <= 879
+
+## The lower case of the capital sigma at byte `i` of the string object at `p`:
+## the final form when a cased letter comes before it and none after it.
+fn sigma_lower(p int, i int) int
+    mut before := false
+    mut j := i
+    while j > 0
+        j -= 1
+        while j > 0 and load8(p + 16 + j).bit_and(192) == 128
+            j -= 1
+        c := u8_get(p + 16 + j)
+        if char_is_ignorable(c)
+            continue
+        before = char_is_cased(c)
+        break
+    if not before
+        return 963
+    mut k := i + 2
+    while k < load64(p)
+        c := u8_get(p + 16 + k)
+        k += u8_width(load8(p + 16 + k))
+        if char_is_ignorable(c)
+            continue
+        if char_is_cased(c)
+            return 963
+        break
+    962
+
+## The case mapping of the character at byte `i` of the string object at `p`,
+## written at `at` unless that is 0. Gives `chars * 16 + bytes`: how many
+## characters it makes and how many bytes they take.
+fn case_put(p int, i int, upper bool, at int) int
+    c := u8_get(p + 16 + i)
+    if c >= 128
+        r := uni_special(if upper then UNI_UP_SPECIAL else UNI_LO_SPECIAL, c)
+        if r != 0
+            return case_many(r, at)
+    mut m := if upper then char_upper(c) else char_lower(c)
+    if not upper and c == 931
+        m = sigma_lower(p, i)
+    if at != 0
+        u8_put(at, m)
+    16 + u8_size(m)
+
+## A special mapping of up to three characters, from the record at `r`.
+fn case_many(r int, at int) int
+    n := uni_digit(load8(r + 3))
+    mut bytes := 0
+    mut k := 0
+    while k < n
+        m := uni_num(r + 4, k)
+        if at != 0
+            u8_put(at + bytes, m)
+        bytes += u8_size(m)
+        k += 1
+    n * 16 + bytes
 
 ## `s.to_upper()` and `s.to_lower()` (type.str.14), character by character.
 fn str_map_case(s str, upper bool) str
     p := str_addr(s)
     n := load64(p)
     mut i := 0
-    # Case mapping can change a character's size, so measure first.
+    # A mapping can change the length (`"ß"` is `"SS"`), so measure first.
     mut size := 0
+    mut chars := 0
     while i < n
-        c := u8_get(p + 16 + i)
-        m := if upper then char_upper(c) else char_lower(c)
-        size += u8_size(m)
+        v := case_put(p, i, upper, 0)
+        size += v % 16
+        chars += v / 16
         i += u8_width(load8(p + 16 + i))
-    r := str_new(size, load64(p + 8))
+    r := str_new(size, chars)
     mut at := r + 16
     i = 0
     while i < n
-        c := u8_get(p + 16 + i)
-        m := if upper then char_upper(c) else char_lower(c)
-        at += u8_put(at, m)
+        at += case_put(p, i, upper, at) % 16
         i += u8_width(load8(p + 16 + i))
     str_at(r)
 
