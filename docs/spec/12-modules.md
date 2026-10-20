@@ -3,8 +3,8 @@
 Chapter key: `mod`
 
 > **Status:** Drafted (partial). Specified: modules, visibility, imports,
-> constants, single-file programs, and the entry point. Not yet designed:
-> packages, manifests, and dependency resolution (build-system topic).
+> constants, single-file programs, the package root, and the entry point.
+> Not yet designed: manifests and dependency resolution (build-system topic).
 
 ## Modules
 
@@ -17,7 +17,28 @@ compile-time error. *(ADR 0097)*
 package root, with segments separated by `.`. *(ADR 0097)*
 
 **mod.unit.3** — A single `.ail` file given directly to `ail run` forms a
-complete program by itself. *(ADR 0101)*
+complete program by itself: it is the root module, and its sibling files are
+not part of it. It may import modules from subdirectories of its own
+directory (`mod.unit.5`). *(ADR 0101, ADR 0153)*
+
+**mod.unit.4** — A method or associated function `fn T.name` is declared in
+the module that declares `T`. Writing `fn m.T.name` is a compile-time error.
+*(ADR 0155)*
+
+**mod.unit.5** — `ail run DIR` runs the package rooted at `DIR`: the `.ail`
+files directly in `DIR` form the root module, which declares `main`.
+`ail run FILE` runs `FILE` as the root module, with its directory as the
+package root. The import path `a.b` names the directory `ROOT/a/b`. Only
+imported modules are loaded. *(ADR 0153)*
+
+```
+geometry/          ail run geometry
+    main.ail       use geo         (the root module: main.ail and extra.ail)
+    extra.ail
+    geo/           module geo
+        point.ail
+        shapes.ail
+```
 
 ## Visibility
 
@@ -25,7 +46,23 @@ complete program by itself. *(ADR 0101)*
 module unless marked `pub`. *(ADR 0098)*
 
 **mod.vis.2** — Enum variants have their enum's visibility. Trait methods have
-their trait's visibility. *(ADR 0098)*
+their trait's visibility, and so do the methods of an `impl` block. Writing
+`pub` before a variant, a variant's field, a function in a `trait` or `impl`
+block, or an `impl` is a compile-time error. *(ADR 0098, ADR 0155)*
+
+**mod.vis.3** — A struct with a private field can be built with a struct
+literal only inside its own module. Reading or assigning a private field, or
+calling a private method or associated function, outside its module is a
+compile-time error (`mod.vis.1`). *(ADR 0155)*
+
+```ail fragment
+pub struct Account
+    pub owner str
+    balance int          # private: other modules call Account.open()
+
+pub fn Account.open(owner str) Account
+    Account(owner, balance: 0)
+```
 
 ## Imports
 
@@ -33,8 +70,27 @@ their trait's visibility. *(ADR 0098)*
 `use a.b.c as d` makes it available as `d`. *(ADR 0099)*
 
 **mod.use.2** — Items of an imported module are referred to by qualified name
-(`c.item`). Importing individual items, and wildcard imports, are not
-supported. *(ADR 0099)*
+(`c.item`), in expressions, types (`c.Type`), and patterns (`c.Enum.Variant`).
+Importing individual items, and wildcard imports, are not supported. A bare
+import name is not a value, an unknown or unimported qualifier is a
+compile-time error, and `pub use` (re-exporting) is not supported.
+*(ADR 0099, ADR 0154)*
+
+**mod.use.3** — `use` declarations come first in a file, before its other
+declarations. An import applies to the file that declares it.
+*(ADR 0154)*
+
+**mod.use.4** — `use a.b` requires a directory `a/b` under the package root
+that contains at least one `.ail` file; otherwise it is a compile-time
+error. `use std.NAME` names a standard module instead (`std.use.1`).
+*(ADR 0153)*
+
+**mod.use.5** — Imports MUST NOT form a cycle; a module can't import itself.
+The error names the cycle. *(ADR 0153)*
+
+**mod.use.6** — An import name MUST differ from the file's other import names
+and from the module's top-level names. `use a.b as c` resolves a clash.
+*(ADR 0154)*
 
 **Note:** The standard modules (`use std.fs` and others) are in
 [chapter 17](17-std.md).

@@ -1,0 +1,6 @@
+# A single file can import modules from subdirectories of its own directory
+# (mod.unit.3, mod.unit.5); its sibling files are not part of it.
+use caselib as lib
+
+fn main()
+    print(lib.twice(21))

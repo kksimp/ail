@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.proc` and `std.time`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.proc`, `std.random` and `std.time`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -137,3 +137,38 @@ fn main() !
 
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+## Randomness: `std.random`
+
+**std.random.1** — `use std.random` provides `int`, `float`, `seed` and
+`shuffle`. Each has the capability `random` (`eff.infer.4`). *(ADR 0206)*
+
+**std.random.2** — `int(lo int, hi int) int` returns a uniformly distributed
+integer with `lo <= n <= hi`; both bounds are inclusive. It traps if `lo >
+hi`. `float() float` returns a uniformly distributed float with `0 <= x <
+1`. *(ADR 0206)*
+
+**std.random.3** — The functions draw from one generator. `seed(s int)`, or
+`ail run --seed S`, sets its state from `s`: the draws that follow are then a
+function of `s` and of the calls made, so a run repeats. Without a seed the
+generator starts from the clock. The sequence for a given seed is not
+specified across releases. `--seed` needs an integer (exit status 2
+otherwise). *(ADR 0206, ADR 0207)*
+
+**std.random.4** — `shuffle(mut xs)` reorders any `List[T]` in place so that
+every order is equally likely (Fisher-Yates). The argument is marked `mut`
+(`own.param.2`) and must be a list. *(ADR 0206)*
+
+**std.random.5** — `ail run --deterministic` rejects every program that
+reaches `random` (`eff.det.2`). *(ADR 0207)*
+
+```ail
+use std.random
+
+fn main()
+    random.seed(1)
+    mut deck := [1, 2, 3, 4, 5]
+    random.shuffle(mut deck)
+    print(deck.len())
+    print(random.int(1, 6) <= 6)
+```

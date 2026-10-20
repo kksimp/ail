@@ -1,5 +1,7 @@
 //! Syntax tree for the subset the bootstrap supports.
 
+use std::collections::HashSet;
+
 use crate::diag::Pos;
 
 #[derive(Debug, Default)]
@@ -12,12 +14,18 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub consts: Vec<ConstDecl>,
-    /// `use a.b.c` and `use a.b.c as d` at the top level (mod.use.1).
+    /// `use` declarations of every file (mod.use.1).
     pub uses: Vec<Use>,
+    /// The lines that start with `pub`: a declaration or struct field on one
+    /// of them is public (mod.vis.1). Every declaration starts its own line.
+    pub public: HashSet<usize>,
+    /// The source files of a package, in line order (`modules.rs`). Empty
+    /// for a single-file program without imports.
+    pub files: Vec<SourceFile>,
 }
 
 /// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Use {
     pub path: Vec<(String, Pos)>,
     pub alias: Option<(String, Pos)>,
@@ -28,6 +36,52 @@ impl Use {
     /// The name the module is available under: the alias, or the last segment.
     pub fn name(&self) -> &(String, Pos) {
         self.alias.as_ref().unwrap_or_else(|| self.path.last().expect("a use path has a segment"))
+    }
+
+    /// `a.b.c`
+    pub fn dotted(&self) -> String {
+        self.path.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(".")
+    }
+}
+
+/// One source file of a package: its lines are numbered from `base + 1`.
+#[derive(Debug, Clone)]
+pub struct SourceFile {
+    pub path: String,
+    pub src: String,
+    /// The module's import path, `a.b` (mod.unit.2); empty for the root module.
+    pub module: String,
+    pub base: usize,
+}
+
+/// Each file of a package is numbered from a multiple of this, so a
+/// position tells its file (the first file starts at 0).
+pub const FILE_LINES: usize = 1 << 20;
+
+impl Program {
+    /// The file a position is in, if the program has more than one.
+    pub fn file_at(&self, pos: Pos) -> Option<&SourceFile> {
+        if is_prelude(pos) {
+            return None;
+        }
+        self.files.iter().rev().find(|f| f.base < pos.line)
+    }
+
+    /// The import path of the module a position is in (mod.unit.2); empty
+    /// for the root module and the prelude.
+    pub fn module_at(&self, pos: Pos) -> &str {
+        self.file_at(pos).map_or("", |f| f.module.as_str())
+    }
+
+    /// Whether the declaration at `pos` is marked `pub`, or is in the prelude.
+    pub fn is_pub(&self, pos: Pos) -> bool {
+        is_prelude(pos) || self.public.contains(&pos.line)
+    }
+
+    /// Whether the declaration at `decl` is hidden from code at `at`: it is
+    /// private and in another module (mod.vis.1).
+    pub fn hidden(&self, decl: Pos, at: Pos) -> bool {
+        !self.is_pub(decl) && self.module_at(decl) != self.module_at(at)
     }
 }
 
@@ -174,6 +228,8 @@ pub struct Contract {
 pub struct Attr {
     pub name: String,
     pub pos: Pos,
+    /// The string argument, as in `@deprecated("why")` (gram.attr.3).
+    pub arg: Option<String>,
 }
 
 /// Where a function is declared.

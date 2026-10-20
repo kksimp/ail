@@ -8,13 +8,17 @@
 
 ```sh
 ./ail run FILE.ail           # check, then run
+./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output
+./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
+./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms, use std.x); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
 
@@ -344,6 +348,14 @@ no `break` can end a function too.
   rounds halves away from zero and gives a float: `2.5.round()` is `3.0`.
   Floats print like Python: `0.1 + 0.2` is `0.30000000000000004`, `1e16` is
   `1e+16`.
+- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32` (`i64` is `int`, `f64` is
+  `float`). A literal takes its type from context and must fit: `fn mix(a i32)`
+  called `mix(-7)`, `r: 255` for a `u8` field. Operators need two values of
+  one type and trap on overflow; no implicit widening. Convert with
+  `x.to_u8()` (traps if it doesn't fit), `x.to_int()`, `x.to_float()`,
+  `f.to_f32()`; `wrapping_add`, `checked_add` and `saturating_add` work on
+  every sized integer. Unsigned types have no unary `-`. Locals aren't
+  annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
 
@@ -454,6 +466,34 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 
 Two `mut` arguments of one call can't refer to the same value.
 
+## Modules
+
+A module is a directory of `.ail` files sharing one namespace. `use a.b`
+imports `ROOT/a/b`, where ROOT is the directory run (`ail run DIR`) or the
+file's directory (`ail run FILE`, whose siblings are not included).
+
+```ail fragment
+use geo                  # imports at the top of each file
+use util.text as fmt     # `as` renames; names must not clash
+
+fn main()
+    p := geo.Point(x: 1, y: 2)   # items are always qualified
+    print(geo.dist(p, geo.ORIGIN))
+    match geo.classify(p)
+        geo.Kind.Near => print(fmt.banner("near"))
+        _ => print(p.x)
+```
+
+```ail fragment
+pub struct Point         # `pub` exports; everything else is private
+    pub x int            # fields too; a private field means only this
+    y int                # module can build a `Point`
+```
+
+There are no item or wildcard imports, no `pub use`, and no import cycles.
+`fn T.m` must be in `T`'s module. Text forms show the module path:
+`geo.Point(x: 1, y: 2)`.
+
 ## Files, processes and the system
 
 Import a standard module with `use std.NAME` and call it by its name
@@ -479,12 +519,13 @@ fn main() !
 | `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
+| `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 
 ## Tests and assertions
 
 ```ail
-@test fn doubles()           # `@test` on the same line; no parameters
+@test fn doubles()           # `@test` on the same line
     assert_eq(double(4), 8)  # traps showing both values if unequal
     assert(double(1) == 2)   # traps if false
 ```
@@ -492,17 +533,45 @@ fn main() !
 A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 `assert` and `assert_eq` also work in ordinary code (a failure traps).
 
+A test with parameters is a **property**: `ail test` runs it on generated
+inputs (`--cases N`, default 100; `--seed S` replays), and shrinks a failure
+to the smallest input, printed as AIL literals. Parameters may be `int`,
+`float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, and structs
+and enums made of those.
+
+```ail fragment
+@test fn add_commutes(a int, b int)
+    assert_eq(a + b, b + a)
+```
+
+A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
+`# => text` after a `print` asserts its output:
+
+```text
+## Doubles a number.
+##
+## ```ail
+## print(double(4))
+## # => 8
+## ```
+fn double(x int) int
+```
+
 ## Effects
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
-`fs`, `env`, `proc`, `clock`, `net`. A call through `any Trait` counts every
+`fs`, `env`, `proc`, `clock`, `random`, `net`. A call through `any Trait` counts every
 implementation.
 
 ```ail
 @pure fn area(w int, h int) int   # error if it reaches print or a capability
     w * h
 ```
+
+`@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
+area")` before a function warns at each call, with the reason (required).
+Unknown attributes are errors.
 
 ## Contracts
 

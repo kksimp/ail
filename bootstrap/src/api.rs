@@ -12,7 +12,13 @@ use std::process::ExitCode;
 use crate::ast::*;
 use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
-use crate::{docs, lexer, parser};
+use crate::docs;
+
+/// Whether `pos` is outside the file being outlined: in the prelude or in
+/// an imported module (`modules.rs`).
+fn is_prelude(pos: Pos) -> bool {
+    pos.line > FILE_LINES
+}
 
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
@@ -73,9 +79,9 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
 /// The outline of `src` as JSON (or text), or the diagnostics that stopped
 /// it: a rejected program has no reliable outline (api.out.5).
 pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<String, Vec<diag::Diagnostic>> {
-    let (tokens, mut diags) = lexer::lex(src);
-    let (mut prog, parse_diags) = parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
+    // The file and the modules it imports (mod.unit.3); only the file's own
+    // declarations are outlined.
+    let (mut prog, mut diags) = crate::modules::load_src(path, src);
     let mut resolved = Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&prog);

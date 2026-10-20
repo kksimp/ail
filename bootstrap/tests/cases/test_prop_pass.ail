@@ -1,0 +1,36 @@
+struct Point
+    x int
+    y int
+
+enum Shape
+    Dot
+    Circle(r int)
+    Box(w int, h int)
+
+fn add(a int, b int) int
+    a + b
+
+fn area(s Shape) int
+    match s
+        Dot => 0
+        Circle(r) => 3 * r * r
+        Box(w, h) => w * h
+
+@test fn add_commutes(a int, b int)
+    assert_eq(add(a, b), add(b, a))
+
+@test fn sort_is_idempotent(xs List[int])
+    assert_eq(xs.sorted().sorted(), xs.sorted())
+
+@test fn string_length(s str, t str)
+    assert_eq("{s}{t}".chars().len(), s.chars().len() + t.chars().len())
+
+@test fn point_sum(p Point, flag bool, c char, f float, o int?)
+    assert_eq(add(p.x, p.y), add(p.y, p.x))
+    assert(f == f)
+
+@test fn set_and_map(s Set[int], m Map[str, int])
+    assert(s.len() >= 0 and m.len() >= 0)
+
+@test fn shape_area(sh Shape)
+    assert_eq(area(sh), area(sh))

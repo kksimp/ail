@@ -12,6 +12,9 @@
 //! - `NAME.ail` + `NAME.err`: `main` must fail (exit 1) with exactly this
 //!   error report on stderr, where `$FILE` stands for the program's path,
 //!   after printing exactly `NAME.out` if that exists.
+//! - `bootstrap/tests/cases/packages/NAME/`: a package (mod.unit.5), run as
+//!   `ail run NAME`, with the same expectations in `NAME/expected.out`,
+//!   `expected.rules`, `expected.trap` or `expected.err`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,11 +35,17 @@ fn ail_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn check_case(path: &Path) -> Result<(), String> {
-    let out_file = path.with_extension("out");
-    let rules_file = path.with_extension("rules");
-    let trap_file = path.with_extension("trap");
-    let err_file = path.with_extension("err");
-    let test_file = path.with_extension("test");
+    check_run(path, &|ext| path.with_extension(ext))
+}
+
+/// Run `path`, a file or a package directory, against the expectation
+/// files that `expect` names by extension.
+fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String> {
+    let out_file = expect("out");
+    let rules_file = expect("rules");
+    let trap_file = expect("trap");
+    let err_file = expect("err");
+    let test_file = expect("test");
     let name = path.display();
     if test_file.exists() {
         let out = ail().args(["test", "--json"]).arg(path).output().unwrap();
@@ -128,6 +137,17 @@ fn cases() {
 }
 
 #[test]
+fn packages() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases/packages");
+    let mut dirs: Vec<PathBuf> =
+        fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
+    dirs.sort();
+    let failures: Vec<String> =
+        dirs.iter().filter_map(|d| check_run(d, &|ext| d.join(format!("expected.{ext}"))).err()).collect();
+    assert!(failures.is_empty(), "{} package(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
+}
+
+#[test]
 fn usage_errors_exit_2() {
     let out = ail().arg("nonsense").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -145,7 +165,7 @@ fn json_diagnostics_have_spans_and_fixes() {
     // `mut total := total + i` becomes `total = total + i`.
     assert!(
         lines[0].contains(
-            "\"end_line\":4,\"end_col\":18,\"fixes\":[{\"title\":\"assign to `total` with `=`\",\"edits\":[\
+            "\"end_line\":4,\"end_col\":18,\"notes\":[{\"line\":2,\"col\":9,\"message\":\"`total` is first declared here\"}],\"fixes\":[{\"title\":\"assign to `total` with `=`\",\"edits\":[\
              {\"line\":4,\"col\":9,\"end_line\":4,\"end_col\":13,\"text\":\"\"},\
              {\"line\":4,\"col\":19,\"end_line\":4,\"end_col\":21,\"text\":\"=\"}]}]"
         ),
@@ -206,4 +226,35 @@ fn api_outlines_every_accepted_program() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("\"rule\":"));
     let out = ail().args(["api", "--bogus", "x.ail"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
+}
+
+/// test.prop.3: `--cases` and `--seed` fix a property's inputs, so a run
+/// replays exactly.
+#[test]
+fn property_options_replay() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases/test_prop_fail.ail");
+    let run = |extra: &[&str]| {
+        let out = ail().args(["test", "--json"]).args(extra).arg(&path).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let a = run(&["--seed", "7", "--cases", "50"]);
+    assert_eq!(a, run(&["--cases", "50", "--seed", "7"]));
+    assert!(a.contains("\"seed\":7,") && a.contains("\"cases\":50"), "{a}");
+    assert_ne!(a, run(&["--seed", "8", "--cases", "50"]));
+    let out = ail().args(["test", "--cases", "x"]).arg(&path).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
+
+/// Related notes (fix.note.1): a duplicate declaration points at the first.
+#[test]
+fn duplicates_carry_notes() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases");
+    for (case, note) in [
+        ("fix_notes_fn", "\"notes\":[{\"line\":1,\"col\":4,\"message\":\"`helper` is first declared here\"}]"),
+        ("fix_notes", "\"notes\":[{\"line\":2,\"col\":5,\"message\":\"`n` is first declared here\"}]"),
+    ] {
+        let out = ail().args(["check", "--json"]).arg(root.join(format!("{case}.ail"))).output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains(note), "{case}: {stderr}");
+    }
 }

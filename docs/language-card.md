@@ -1,7 +1,7 @@
 # AIL language card
 
-> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,480 tokens
-> (3,915 on the costliest tokenizer; measure with
+> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,525 tokens
+> (3,973 on the costliest tokenizer; measure with
 > `tools/tokbench/run.sh docs/language-card.md`). Non-normative: the
 > [spec](spec/) is authoritative and the [quick reference](quick-reference.md)
 > has the long form. Everything here runs on the bootstrap interpreter.
@@ -11,7 +11,10 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail run --deterministic FILE.ail  # same inputs, same output (no clock/random/proc)
 ```
+
+Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
 
@@ -56,6 +59,9 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `int` (64-bit), `float` (64-bit IEEE), `bool` (`true`, `false`), `str`,
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+
+`use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
+`random.seed(n)`, `random.shuffle(mut xs)`; `--seed N` repeats a run.
 
 Constants are top-level `NAME := value` (literals, constants, operators; no calls).
 
@@ -155,6 +161,8 @@ fn main() !                                 # main can fail; the error is report
 - No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
   As a statement, `save() else err` + block handles the failure and goes on;
   `save() else return` leaves.
+- `int??` (from `m.get(k)` on a `Map[K, int?]`): `none` is the outer level;
+  `else` peels one, so `m.get(k) else none` flattens to `int?`.
 - `unreachable("why")` stops the program; it fits any type, like `return`.
 
 ## Traits and generics
@@ -271,6 +279,8 @@ match ch             # literals and `|`; ints, strings and chars need `_`
   `if n != 0`, not `if n`.
 - `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
   `x.to_int()`. An int literal works where a float is expected.
+- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32`: literals take the type from
+  context; same-type operands only; overflow traps; convert with `x.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()`, `checked_add`
   (gives `int?`), `wrapping_add`, `saturating_add`.
 
@@ -286,8 +296,8 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
   align (numbers default right, others left); `.N` needs a float, `x` an int.
 - `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
-- `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
-  `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
+- `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
+  `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`.
 - Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.

@@ -1,0 +1,10 @@
+# `@inline` is a hint the bootstrap ignores; `@deprecated("why")` warns at each use (gram.attr.3-4).
+@inline fn double(x int) int
+    x * 2
+
+@deprecated("use double") fn twice(x int) int
+    x * 2
+
+fn main()
+    print("{double(2)}")
+    print("{twice(2)} {twice(3)}")

@@ -13,9 +13,9 @@ use std::collections::HashSet;
 use crate::ast::{
     Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
     InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
-    TypeRef, UnOp, Use, Variant, Within, is_prelude,
+    TypeRef, UnOp, Variant, Within, is_prelude,
 };
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 mod contracts;
@@ -23,7 +23,6 @@ mod contracts;
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
-    ("pub", "mod.vis.1"),
     ("unique", "own.uniq.1"),
     ("move", "own.move.1"),
     ("ref", "own.ref.1"),
@@ -69,7 +68,16 @@ fn prelude_text(tokens: &[Token]) -> &'static str {
 
 /// Parse a program after the prelude, whose lines are numbered from
 /// `ast::PRELUDE_LINE`.
+#[cfg(test)]
 pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
+    let (mut prog, mut diags) = parse_after_prelude(tokens);
+    crate::implicit_self::rewrite(&mut prog, &mut diags);
+    (prog, diags)
+}
+
+/// `parse_with_prelude` without the implicit-`self` pass, which a package
+/// runs after naming its modules' items (`modules.rs`).
+pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     let (mut all, diags) = lex(prelude_text(&tokens));
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
@@ -87,9 +95,8 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     }
     shift(&mut all);
     all.extend(tokens);
-    let (mut prog, mut diags) = parse(all);
+    let (mut prog, diags) = parse(all);
     crate::stdlib::add_declarations(&mut prog);
-    crate::implicit_self::rewrite(&mut prog, &mut diags);
     (prog, diags)
 }
 
@@ -113,7 +120,15 @@ fn generic_names(tokens: &[Token]) -> HashSet<String> {
 
 pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     let generic_names = generic_names(&tokens);
-    let mut p = Parser { tokens, i: 0, diags: Vec::new(), in_interp: false, generic_names };
+    let mut p = Parser {
+        tokens,
+        i: 0,
+        diags: Vec::new(),
+        in_interp: false,
+        generic_names,
+        aliases: HashSet::new(),
+        public: HashSet::new(),
+    };
     let mut prog = Program::default();
     loop {
         match p.peek().clone() {
@@ -129,6 +144,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 }
             }
             Tok::Kw("use") => p.use_decl(&mut prog),
+            Tok::Kw("pub") => p.pub_marker(),
             // `@name fn ...` (gram.attr.1-2)
             Tok::Sym("@") => {
                 if let Some(f) = p.attributed_function() {
@@ -209,8 +225,11 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             }
         }
     }
+    prog.public = std::mem::take(&mut p.public);
     (prog, p.diags)
 }
+
+mod modules;
 
 struct Parser {
     tokens: Vec<Token>,
@@ -218,6 +237,11 @@ struct Parser {
     diags: Vec<Diagnostic>,
     /// Parsing the expression inside a string's `{...}`, which ends at `}`.
     in_interp: bool,
+    /// The names bound by `use` so far: `m.Stack[int]` is a qualified generic
+    /// type, not an index (gen.infer.2, mod.use.2).
+    aliases: HashSet<String>,
+    /// The lines of `pub` markers (`Program::public`).
+    public: HashSet<usize>,
     generic_names: HashSet<String>,
 }
 
@@ -449,10 +473,12 @@ impl Parser {
                 self.skip_statement();
                 return None;
             };
+            let mut arg = None;
             if self.at_sym("(") {
                 let mut depth = 0usize;
                 loop {
                     match self.peek() {
+                        Tok::Str(text) if depth == 1 && arg.is_none() => arg = Some(text.clone()),
                         Tok::Sym("(") => depth += 1,
                         Tok::Sym(")") => depth -= 1,
                         Tok::Newline | Tok::Eof => break,
@@ -464,7 +490,7 @@ impl Parser {
                     }
                 }
             }
-            attrs.push(Attr { name, pos });
+            attrs.push(Attr { name, pos, arg });
         }
         if !self.at_kw("fn") {
             let pos = self.pos();
@@ -492,6 +518,16 @@ impl Parser {
             let (name, pos) = self.name("a method name after `.`", "trait.method.1")?;
             if self.at_sym("[") {
                 generics = self.generic_params()?;
+            }
+            if self.at_sym(".") {
+                let at = self.pos();
+                self.error_help(
+                    "mod.unit.4",
+                    at,
+                    "a method is declared in the module of its type",
+                    format!("move the method into the module that declares `{first}.{name}`"),
+                );
+                return None;
             }
             (Some(Owner { name: first, pos: first_pos, params }), name, pos)
         } else {
@@ -601,9 +637,9 @@ impl Parser {
             let (name, pos) = self.name("a type parameter name", "gen.decl.1")?;
             let mut bounds = Vec::new();
             if matches!(self.peek(), Tok::Ident(_)) {
-                bounds.push(self.name("a trait", "gen.bound.1")?);
+                bounds.push(self.dotted_name("a trait", "gen.bound.1")?);
                 while self.eat_sym("+") {
-                    bounds.push(self.name("a trait after `+`", "gen.bound.1")?);
+                    bounds.push(self.dotted_name("a trait after `+`", "gen.bound.1")?);
                 }
             }
             params.push(GenericParam { name, pos, bounds });
@@ -613,34 +649,6 @@ impl Parser {
         }
         self.expect_sym("]", "`]` or `,` in the type parameters", "gen.decl.1")?;
         Some(params)
-    }
-
-    /// `use a.b.c` or `use a.b.c as d` (mod.use.1).
-    fn use_decl(&mut self, prog: &mut Program) {
-        let pos = self.bump().pos;
-        let mut path = Vec::new();
-        loop {
-            match self.name("a module path after `use`, e.g. `use std.fs`", "mod.use.1") {
-                Some(seg) => path.push(seg),
-                None => return self.skip_statement(),
-            }
-            if !self.eat_sym(".") {
-                break;
-            }
-        }
-        let alias = if self.eat_kw("as") {
-            match self.name("a name after `as`", "mod.use.1") {
-                Some(a) => Some(a),
-                None => return self.skip_statement(),
-            }
-        } else {
-            None
-        };
-        if !self.eat(&Tok::Newline) {
-            self.unexpected("end of line after the import", "mod.use.1");
-            return self.skip_statement();
-        }
-        prog.uses.push(Use { path, alias, pos });
     }
 
     /// `trait Name` followed by an indented block of functions (trait.decl.1).
@@ -676,12 +684,12 @@ impl Parser {
     fn impl_decl(&mut self, prog: &mut Program) {
         let pos = self.bump().pos; // impl
         let parsed = (|| {
-            let (trait_name, trait_pos) = self.name("a trait name after `impl`", "trait.impl.1")?;
+            let (trait_name, trait_pos) = self.dotted_name("a trait name after `impl`", "trait.impl.1")?;
             if !self.eat_kw("for") {
                 self.unexpected("`for` after the trait name", "trait.impl.1");
                 return None;
             }
-            let (name, tpos) = self.name("the implementing type after `for`", "trait.impl.1")?;
+            let (name, tpos) = self.dotted_name("the implementing type after `for`", "trait.impl.1")?;
             let params = if self.at_sym("[") { Some(self.generic_params()?) } else { None };
             Some((trait_name, trait_pos, Owner { name, pos: tpos, params }))
         })();
@@ -723,6 +731,7 @@ impl Parser {
             if self.eat(&Tok::Newline) {
                 continue;
             }
+            self.member_pub("trait and `impl` methods");
             if !self.at_kw("fn") {
                 self.unexpected(&format!("a method (`fn ...`) in {what}"), "trait.decl.1");
                 self.skip_statement();
@@ -760,7 +769,7 @@ impl Parser {
             return Some(TypeRef { kind: TypeKind::Fallible { ok, errors: None }, pos });
         }
         if self.eat_kw("any") {
-            let (name, _) = self.name("a trait after `any`", "trait.any.1")?;
+            let (name, _) = self.dotted_name("a trait after `any`", "trait.any.1")?;
             return Some(TypeRef { kind: TypeKind::Any(name), pos });
         }
         let ok = self.optional_type(expected, rule)?;
@@ -776,32 +785,19 @@ impl Parser {
 
     /// `T` or `T?` (type.opt.2).
     fn optional_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
-        let t = self.named_type(expected, rule)?;
-        if !self.eat_sym("?") {
-            return Some(t);
+        let mut t = self.named_type(expected, rule)?;
+        // type.opt.6: `T??` is an optional of an optional.
+        while self.eat_sym("?") {
+            let pos = t.pos;
+            t = TypeRef { kind: TypeKind::Optional(Box::new(t)), pos };
         }
-        if self.at_sym("?") {
-            let at = self.pos();
-            self.error(
-                UNSUPPORTED,
-                at,
-                "nested optional types are not supported by the bootstrap yet (spec type.opt.2)",
-            );
-            return None;
-        }
-        let pos = t.pos;
-        Some(TypeRef { kind: TypeKind::Optional(Box::new(t)), pos })
+        Some(t)
     }
 
     /// `Name` or `Name[Arg, ...]` (gram.generic.1), or a module's type
     /// `m.Name`, kept as the dotted name (mod.use.2, std.use.2).
     fn named_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
-        let (mut name, pos) = self.name(expected, rule)?;
-        if self.at_sym(".") && matches!(self.peek_at(1), Tok::Ident(_)) {
-            self.i += 1;
-            let (item, _) = self.name(expected, rule)?;
-            name = format!("{name}.{item}");
-        }
+        let (name, pos) = self.dotted_name(expected, rule)?;
         let mut args = Vec::new();
         if self.at_sym("<") {
             let at = self.pos();
@@ -827,6 +823,7 @@ impl Parser {
 
     /// `name Type`, a field of a struct or of a variant (type.struct.2, type.enum.2).
     fn field_decl(&mut self, rule: &'static str) -> Option<Field> {
+        self.field_pub(rule);
         let (fname, fpos) = self.name("a field name", rule)?;
         if self.at_sym(":") {
             let at = self.pos();
@@ -888,6 +885,7 @@ impl Parser {
         };
         let mut variants = Vec::new();
         self.members(&format!("`enum {name}`"), "type.enum.1", |p| {
+            p.member_pub("enum variants");
             let (vname, vpos) = p.name("a variant name", "type.enum.1")?;
             let mut fields = Vec::new();
             if p.eat_sym("(") {
@@ -1304,7 +1302,9 @@ impl Parser {
                 expr = Expr::Call { callee: Box::new(expr), args, pos };
             } else if self.eat_sym(".") {
                 let (name, name_pos) = self.name("a field or method name after `.`", "gram.syntax.1")?;
-                if self.eat_sym("(") {
+                if let Some(qualified) = self.qualified_type_args(&expr, &name)? {
+                    expr = qualified;
+                } else if self.eat_sym("(") {
                     let args = self.args()?;
                     expr = Expr::Method { recv: Box::new(expr), name, name_pos, args };
                 } else {
@@ -1483,7 +1483,15 @@ impl Parser {
                 Part::Code(tokens) | Part::Fmt(tokens, _) => {
                     let spec = part_spec;
                     let generic_names = self.generic_names.clone();
-                    let mut sub = Parser { tokens, i: 0, diags: Vec::new(), in_interp: true, generic_names };
+                    let mut sub = Parser {
+                        tokens,
+                        i: 0,
+                        diags: Vec::new(),
+                        in_interp: true,
+                        generic_names,
+                        aliases: self.aliases.clone(),
+                        public: HashSet::new(),
+                    };
                     let expr = sub.expression();
                     if expr.is_some() && !matches!(sub.peek(), Tok::Eof) {
                         sub.unexpected("`}` after the interpolated expression", "lex.str.2");
@@ -1519,7 +1527,10 @@ impl Parser {
             } else if self.at_kw("else") {
                 let else_pos = self.bump().pos;
                 if self.at_kw("if") {
-                    self.error_help("expr.if.1", else_pos, "AIL writes `else if` as `elif`", "write `elif`");
+                    let d = Diagnostic::new("expr.if.1", else_pos, "AIL writes `else if` as `elif`")
+                        .help("write `elif`")
+                        .fix("write `elif`", vec![Edit::replace(else_pos, "else if", "elif")]);
+                    self.diags.push(d);
                     return None;
                 }
                 // `else err` binds the error (expr.if.6).
@@ -1630,12 +1641,13 @@ impl Parser {
             }
             Tok::Ident(n) => {
                 self.i += 1;
-                let (qualifier, name) = if self.eat_sym(".") {
-                    let (v, _) = self.name("a variant name after `.`", "expr.match.4")?;
-                    (Some(n), v)
-                } else {
-                    (None, n)
-                };
+                // `Enum.Variant`, or `m.Enum.Variant` for an imported enum (mod.use.2).
+                let mut path = vec![n];
+                while self.eat_sym(".") {
+                    path.push(self.name("a variant name after `.`", "expr.match.4")?.0);
+                }
+                let name = path.pop().expect("a name");
+                let qualifier = (!path.is_empty()).then(|| path.join("."));
                 // `Variant(a, _)`: one binding per field (expr.match.6).
                 let mut bindings = None;
                 if self.eat_sym("(") {
