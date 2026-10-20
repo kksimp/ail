@@ -613,7 +613,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

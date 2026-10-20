@@ -1,0 +1,7 @@
+key ctrl-s alt=false shift=false
+resize 100x30
+close
+0x0
+close
+close
+ui.UiError(kind: "no_display", message: "none")
