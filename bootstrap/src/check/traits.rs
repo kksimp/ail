@@ -515,7 +515,7 @@ impl<'p> Checker<'p> {
                         format!("`{}` has no method `{}`", trait_decl.name, f.name),
                     );
                     d = match super::suggest(&f.name, &names) {
-                        Some(s) => d.help(format!("did you mean `{s}`?")),
+                        Some(s) => d.did_you_mean(&f.name, s),
                         None => d.help(format!(
                             "a method that isn't part of the trait is declared on its own: `fn {}.{}(...)`",
                             imp.target.name, f.name

@@ -1,0 +1,40 @@
+# eff.pure.1: `@pure` functions without io, unsafe, spawn or a capability.
+
+trait Shape
+    fn area(self) int
+
+struct Square
+    side int
+
+impl Shape for Square
+    fn area(self) int
+        side * side
+
+error struct Odd
+    value int
+
+@pure fn double(x int) int
+    x * 2
+
+# `fail` and `mutates` are allowed: the signature already shows them.
+@pure fn halve(x int) int ! Odd
+    if x % 2 != 0
+        return Odd(value: x)
+    x / 2
+
+@pure fn bump(mut n int)
+    n += double(1)
+
+@pure fn total(shapes List[Square]) int
+    mut sum := 0
+    for s in shapes
+        sum += s.area()
+    sum
+
+fn main()
+    mut n := 1
+    bump(mut n)
+    print(n)
+    print(total([Square(side: 2), Square(side: 3)]))
+    h := halve(8) else 0
+    print(h)

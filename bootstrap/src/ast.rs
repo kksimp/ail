@@ -180,6 +180,8 @@ pub struct Variant {
 /// blocks have the trait or the implementing type as their owner.
 #[derive(Debug)]
 pub struct FnDecl {
+    /// Attributes written before `fn` (gram.attr.1-2).
+    pub attrs: Vec<Attr>,
     pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
@@ -191,6 +193,13 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+}
+
+/// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
+#[derive(Debug, Clone)]
+pub struct Attr {
+    pub name: String,
+    pub pos: Pos,
 }
 
 /// Where a function is declared.
@@ -225,6 +234,10 @@ impl FnDecl {
     /// A free function, method or associated function declared at the top level.
     pub fn top_level(&self) -> bool {
         self.within == Within::TopLevel
+    }
+
+    pub fn has_attr(&self, name: &str) -> bool {
+        self.attrs.iter().any(|a| a.name == name)
     }
 }
 
@@ -391,6 +404,8 @@ pub enum Expr {
     Bool(bool, Pos),
     /// `none` (type.opt.4)
     None(Pos),
+    /// `todo`, a typed hole (expr.hole.1-2).
+    Hole(Pos),
     /// A name, including `self` and bare enum variants (type.enum.3).
     Name(String, Pos),
     /// A generic function or type with explicit type arguments, `f[int]` or
@@ -492,6 +507,7 @@ impl Expr {
             | Expr::Char(_, p)
             | Expr::Bool(_, p)
             | Expr::None(p)
+            | Expr::Hole(p)
             | Expr::Name(_, p)
             | Expr::TypeArgs { pos: p, .. }
             | Expr::List(_, p)
@@ -525,6 +541,8 @@ pub enum Cond {
 pub enum InterpPart {
     Lit(String),
     Expr(Expr),
+    /// `{expression:spec}` (lex.str.7).
+    Fmt(Expr, crate::lexer::FormatSpec),
 }
 
 /// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).

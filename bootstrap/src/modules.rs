@@ -113,7 +113,7 @@ fn shift(tokens: &mut [Token], base: usize) {
         t.pos.line += base;
         if let Tok::Interp(parts) = &mut t.tok {
             for p in parts {
-                if let Part::Code(code) = p {
+                if let Part::Code(code) | Part::Fmt(code, _) = p {
                     shift(code, base);
                 }
             }
@@ -676,7 +676,7 @@ impl Cx<'_> {
             }
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.expr(x);
                     }
                 }
@@ -738,7 +738,13 @@ impl Cx<'_> {
                     self.expr(c);
                 }
             }
-            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {}
+            Expr::Str(..)
+            | Expr::Int(..)
+            | Expr::Float(..)
+            | Expr::Char(..)
+            | Expr::Bool(..)
+            | Expr::None(_)
+            | Expr::Hole(_) => {}
         }
     }
 }
@@ -756,13 +762,25 @@ pub fn locate(files: &[SourceFile], pos: Pos) -> (&str, Pos) {
     }
 }
 
-/// Report diagnostics file by file, each against its own source.
+/// Report diagnostics file by file, each against its own source. A note
+/// in another file names that file.
 pub fn report(files: &[SourceFile], diags: Vec<Diagnostic>, json: bool) {
+    let index = |pos: Pos| if is_prelude(pos) { 0 } else { files.iter().rposition(|f| f.base < pos.line).unwrap_or(0) };
+    let local = |pos: Pos| locate(files, pos).1;
     let mut groups: Vec<Vec<Diagnostic>> = files.iter().map(|_| Vec::new()).collect();
     for mut d in diags {
-        let fi = if is_prelude(d.pos) { 0 } else { files.iter().rposition(|f| f.base < d.pos.line).unwrap_or(0) };
-        if !is_prelude(d.pos) {
-            d.pos.line -= files[fi].base;
+        let fi = index(d.pos);
+        d.pos = local(d.pos);
+        d.end = d.end.map(local);
+        for n in d.notes.iter_mut() {
+            if index(n.pos) != fi {
+                n.message = format!("{} (in {})", n.message, files[index(n.pos)].path);
+            }
+            n.pos = local(n.pos);
+        }
+        for e in d.fixes.iter_mut().flat_map(|f| f.edits.iter_mut()) {
+            e.pos = local(e.pos);
+            e.end = local(e.end);
         }
         groups[fi].push(d);
     }

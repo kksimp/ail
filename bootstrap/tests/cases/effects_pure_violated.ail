@@ -1,0 +1,44 @@
+# eff.pure.1: `@pure` functions that reach `print`: directly, through
+# other functions, and through `any Shape` (every implementation counts).
+# `dispatched` is accepted: `Square.area` is known statically and is pure.
+
+trait Shape
+    fn area(self) int
+
+struct Square
+    side int
+
+struct Noisy
+    side int
+
+impl Shape for Square
+    fn area(self) int
+        side * side
+
+impl Shape for Noisy
+    fn area(self) int
+        print("measuring")
+        side * side
+
+fn log(msg str)
+    print(msg)
+
+fn save(n int) int
+    log("saving {n}")
+    n
+
+@pure fn direct(x int) int
+    print(x)
+    x
+
+@pure fn chained(x int) int
+    save(x) + 1
+
+@pure fn dispatched(s Square) int
+    s.area()
+
+@pure fn through_any(s any Shape) int
+    s.area()
+
+fn main()
+    print(direct(1) + chained(2) + dispatched(Square(side: 3)) + through_any(Noisy(side: 1)))

@@ -23,7 +23,7 @@ a mutable place. The call is not marked with `mut` (an exception to
 `own.param.2`). Exclusivity (`own.excl.*`) applies between the receiver and
 the arguments. *(ADR 0075, ADR 0064)*
 
-```ail
+```ail skip=context
 fn Circle.scale(mut self, k f64)
     self.r = self.r * k
 
@@ -51,14 +51,14 @@ only reached through a call. A bare call whose name is both a method of the
 receiver and a top-level or prelude function is a compile-time error; the help
 suggests `self.f()` or renaming. *(ADR 0141, ADR 0044)*
 
-```ail
+```ail skip=context
 fn Parser.advance(mut self) char?
     c := peek() else return none   # self.peek()
     pos += 1                       # self.pos += 1
     c
 ```
 
-```ail
+```ail skip=context
 fn Circle.new(r f64) Circle
     Circle(r: r)
 
@@ -86,7 +86,7 @@ one with a mismatched signature, is a compile-time error reported at the
 `impl` block. The diagnostic MUST list each missing or mismatched method.
 *(ADR 0073)*
 
-```ail
+```ail skip=context
 trait Shape
     fn area(self) f64
 
@@ -146,7 +146,7 @@ type implementing `Trait`. Method calls on it dispatch dynamically.
 **trait.any.2** — A bare trait name is not a type, except as a parameter's
 top-level type (see `gen.anon.1`). *(ADR 0079, ADR 0078)*
 
-```ail
+```ail skip=context
 struct Scene
     shapes List[any Shape]
 ```
@@ -183,7 +183,7 @@ else `a`, so ties give `a`. Every `Ord` type has them, in generic code too.
 For `float` they use `cmp`, so NaN counts as the greatest value and
 `x.min(nan)` is `x`. *(ADR 0127, ADR 0130, ADR 0137)*
 
-```ail
+```ail fragment
 fn clamp[T Ord](x T, lo T, hi T) T
     x.max(lo).min(hi)
 ```
@@ -206,7 +206,7 @@ definitions derives the implementation: structs compare field by field in
 declaration order; enums compare by variant declaration order, then field by
 field. Every field's type MUST implement the trait. *(ADR 0127)*
 
-```ail
+```ail fragment
 struct Version
     major int
     minor int
@@ -241,7 +241,7 @@ written `\u{hex}` in lowercase hex without padding, and everything else is
 kept as is, including `{` and the other kind of quote. *(ADR 0126,
 ADR 0135, ADR 0130, ADR 0131, ADR 0134)*
 
-```ail
+```ail fragment
 print(["a\"b", "x\ty"])     # ["a\"b", "x\ty"]
 print(['x', '\'', '{'])      # ['x', '\'', '{']
 print({"k": [1.5, 2.0]})     # {"k": [1.5, 2.0]}
@@ -255,7 +255,7 @@ automatic implementation. For the effect on `Hash`, see `trait.auto.5`.
 an `impl` of `Eq` or `ToStr`. The diagnostic SHOULD suggest the `impl`.
 *(ADR 0126)*
 
-```ail
+```ail skip=context
 impl ToStr for Dir
     fn to_str(self) str
         match self

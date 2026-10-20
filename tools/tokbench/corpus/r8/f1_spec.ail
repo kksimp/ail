@@ -1,0 +1,16 @@
+struct Item
+    id int
+    name str
+    qty int
+    price float
+
+fn main()
+    items := [Item(id: 255, name: "widget", qty: 3, price: 4.5), Item(id: 4096, name: "gadget", qty: 12, price: 19.999)]
+    print("{"name":<10}{"qty":>5}{"price":>10}  id")
+    mut total := 0.0
+    for it in items
+        line := it.price * it.qty.to_float()
+        total += line
+        print("{it.name:<10}{it.qty:>5}{it.price:>10.2}  {it.id:0>4x}")
+    print("{"total":-<15}{total:->10.2}")
+    print("balance: ${total:.2}")

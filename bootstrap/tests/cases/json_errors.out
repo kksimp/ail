@@ -1,0 +1,13 @@
+0: unexpected end of input
+5: trailing comma
+3: unexpected character '2'
+5: expected ':' after object key
+0: unterminated string
+4: extra data after value
+1: extra data after value
+1: invalid number
+2: invalid number
+1: unpaired surrogate escape
+1: invalid unicode escape
+1: invalid escape '\q'
+0: unexpected character 't'

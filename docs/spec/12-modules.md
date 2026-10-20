@@ -55,7 +55,7 @@ literal only inside its own module. Reading or assigning a private field, or
 calling a private method or associated function, outside its module is a
 compile-time error (`mod.vis.1`). *(ADR 0155)*
 
-```ail
+```ail fragment
 pub struct Account
     pub owner str
     balance int          # private: other modules call Account.open()
@@ -91,7 +91,7 @@ The error names the cycle. *(ADR 0153)*
 and from the module's top-level names. `use a.b as c` resolves a clash.
 *(ADR 0154)*
 
-```ail
+```ail skip=bootstrap
 use net.http
 
 pub fn fetch(url str) Data ! FetchError
@@ -126,7 +126,7 @@ computed before `main` runs. A failure while computing one (overflow, division
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*
 
-```ail
+```ail skip=bootstrap
 pub MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}
 SCRIPTS := [["a", "b"], ["c"]]
