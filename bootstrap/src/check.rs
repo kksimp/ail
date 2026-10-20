@@ -1853,7 +1853,9 @@ impl<'p> Checker<'p> {
             "a type"
         } else if self.consts.contains_key(name) {
             "a constant"
-        } else if self.std_module(name).is_some() {
+        } else if crate::stdlib::imported(self.prog, name).is_some() {
+            // Only an explicit `use std.NAME`: a standard module in scope
+            // without one is hidden by the local instead (std.use.4).
             "an imported module"
         } else {
             return true;
@@ -3529,7 +3531,9 @@ impl<'p> Checker<'p> {
         match cands.as_slice() {
             [] => {
                 self.args_only(args);
-                self.no_method(&rt, name, pos);
+                if !self.hidden_std_module(recv, name, pos) {
+                    self.no_method(&rt, name, pos);
+                }
                 Ty::Err
             }
             [Cand::Builtin] => self.builtin_call(recv, &rt, name, pos, args),

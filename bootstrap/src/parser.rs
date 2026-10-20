@@ -19,6 +19,7 @@ use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 mod contracts;
+mod messages;
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
@@ -907,11 +908,15 @@ impl Parser {
         } else {
             Vec::new()
         };
+        let whole = self.error_message(is_error);
         let mut fields = Vec::new();
         self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
             fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
+        if whole.is_some() {
+            self.splice_messages(&name, pos, !generics.is_empty(), Vec::new(), whole);
+        }
         Some(StructDecl { name, pos, doc: None, is_error, unique: false, generics, fields })
     }
 
@@ -934,6 +939,7 @@ impl Parser {
             Vec::new()
         };
         let mut variants = Vec::new();
+        let mut messages = Vec::new();
         self.members(&format!("`enum {name}`"), "type.enum.1", |p| {
             p.member_pub("enum variants");
             let (vname, vpos) = p.name("a variant name", "type.enum.1")?;
@@ -947,9 +953,12 @@ impl Parser {
                 }
                 p.expect_sym(")", "`)` or `,` in the variant's fields", "type.enum.2")?;
             }
+            let field_names = fields.iter().map(|f| f.name.clone()).collect();
+            messages.push((vname.clone(), field_names, p.error_message(is_error)));
             variants.push(Variant { name: vname, pos: vpos, doc: None, fields });
             Some(())
         });
+        self.splice_messages(&name, pos, !generics.is_empty(), messages, None);
         Some(EnumDecl { name, pos, doc: None, is_error, unique: false, generics, variants })
     }
 

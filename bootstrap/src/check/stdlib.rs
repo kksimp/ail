@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
-use crate::ast::{Arg, TypeRef};
+use crate::ast::{Arg, Expr, TypeRef};
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::stdlib::{self, StdCall};
 
@@ -69,9 +69,36 @@ impl<'p> Checker<'p> {
         }
     }
 
-    /// The standard module imported under `name`, if any (std.use.1).
+    /// The standard module that `name` names, if any: the one imported
+    /// under `name` (std.use.1), or else the standard module called `name`,
+    /// which is in scope without a `use` unless the program declares or
+    /// imports something else under that name (std.use.4). Locals are
+    /// checked first by the callers, so a local also hides it.
     pub(super) fn std_module(&self, name: &str) -> Option<&'static str> {
-        stdlib::imported(self.prog, name)
+        stdlib::imported(self.prog, name).or_else(|| {
+            let hidden = self.types.contains_key(name)
+                || self.traits.contains_key(name)
+                || self.consts.contains_key(name)
+                || self.fns.contains_key(name)
+                || self.prog.uses.iter().any(|u| u.name().0 == name);
+            if hidden { None } else { stdlib::module_names().into_iter().find(|m| *m == name) }
+        })
+    }
+
+    /// std.use.4: `n.f(...)` where the local `n` hides the standard module
+    /// `n`, which has a function `f`. Reports it and returns true.
+    pub(super) fn hidden_std_module(&mut self, recv: &Expr, name: &str, pos: Pos) -> bool {
+        let Expr::Name(n, _) = recv else { return false };
+        if self.local(n).is_none() || !stdlib::functions(n).contains(&name) {
+            return false;
+        }
+        self.error_help(
+            "std.use.4",
+            pos,
+            format!("the local `{n}` hides the standard module `std.{n}`, so `{n}.{name}` isn't found"),
+            format!("rename the local, or import the module under another name: `use std.{n} as {n}_mod`"),
+        );
+        true
     }
 
     /// `m.f(...)` or `m.Type(...)` where `m` may be a standard module
