@@ -1,0 +1,3 @@
+# A package without a manifest: no dependencies, no capabilities.
+pub fn shout(s str) str
+    "{s}!"

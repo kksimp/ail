@@ -18,6 +18,7 @@ mod interp;
 mod lexer;
 mod modules;
 mod num;
+mod packages;
 mod parser;
 mod stdlib;
 
@@ -216,6 +217,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         if !deny.is_empty() {
             diags.extend(check::effects::check_denied(&program, &resolved, deny));
         }
+        diags.extend(packages::check_grants(&program, &resolved));
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
@@ -287,6 +289,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
+        diags.extend(packages::check_grants(&program, &resolved));
     }
     // test.run.1: a file of tests needs no `main`.
     if !program.fns.iter().any(|f| f.name == "main" && f.owner.is_none() && f.top_level()) {
