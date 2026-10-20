@@ -7,6 +7,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 |---|---|
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |
 | **ADR** | Architecture Decision Record: one file per design decision in `docs/decisions/`. See ADR 0001. |
+| **Card (program card)** | `ail api --card`: one Markdown page of a program or package (entry, tests, manifest, examples, each module's signatures), trimmed to a token budget. The language card is the same idea for the language. See ADRs 0310 and 0311. |
 | **Agent-tool corpus** | The benchmark programs of the kind an AI agent writes when operating a computer (`logscan`, `tasks`, `build`), each with a Python twin, measured for tokens and speed. See ADRs 0217 and 0218. |
 | **Allocation ladder** | The ordered list of allocation strategies the compiler tries per site: eliminate > stack > in-place reuse > inferred arena > task-local heap > shared GC heap. See ADR 0012. |
 | **`any Trait`** | A type holding any value whose type implements `Trait`. Calls dispatch dynamically (ADR 0079). |

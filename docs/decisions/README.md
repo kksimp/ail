@@ -285,3 +285,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0294](0294-std-ui-styles-colors-caret.md) | `std.ui` text styles, named colors and caret shapes *(delegated)* | Accepted | 2026-10-20 |
 | [0295](0295-editor-themes.md) | Editor themes recolor the default colors by kind, from an AIL module *(delegated)* | Accepted | 2026-10-20 |
 | [0296](0296-env-home-and-editor-settings.md) | `env.home()`, and editor settings in `~/.ail-edit` *(delegated)* | Accepted | 2026-10-20 |
+| [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
+| [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |

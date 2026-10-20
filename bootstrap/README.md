@@ -32,6 +32,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
+./ail api --card [--budget N] DIR|FILE  # a program's own card: modules, entry, tests, manifest, examples, trimmed to a token budget
 ./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols); `fails_with` per fallible fn
 ./ail check --errors FILE          # each function's error types and failure paths, JSON
 ./ail api --locals|--type|--refs FILE LINE COL   # names in scope, type at a position, references
@@ -83,6 +84,7 @@ reported but don't stop a program from running.
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
+| `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
 | `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
 | `src/check/errpaths.rs`, `src/api/errors.rs` | failure paths and error sets the checker records; `ail check --errors`, `fails_with` in `ail api`; the `err.ret.*` diagnostics and error fixes | `err.ret.1–3`, `err.fix.1`, `err.api.1`, `err.paths.1` |
 | `src/api/query.rs`, `src/check/facts.rs` | `ail api --locals/--type/--refs`: position queries from facts the checker records | `api.query.1`, `api.loc.1–2`, `api.type.1–2`, `api.refs.1–3` |
