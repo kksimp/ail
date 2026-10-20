@@ -20,6 +20,7 @@ mod implicit_self;
 mod interp;
 mod lexer;
 mod modules;
+mod codec;
 mod net;
 mod num;
 mod packages;
