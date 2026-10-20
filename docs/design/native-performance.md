@@ -84,14 +84,14 @@ vouches for lose theirs, and a list filled by a counted loop is sized first.
 | fasta | 5000000 | 0.175 | 0.060 | 0.069 | 1.176 | 2.91 | 2.53 | 0.15 |
 
 Instructions retired at the `.args` sizes (callgrind), before → after:
-fannkuch 442M → 296M, matmul 223M → 157M, sieve 144M → 136M, binarytrees
+fannkuch 442M → 272M, matmul 223M → 142M, sieve 144M → 133M, binarytrees
 381M → 375M, fasta 75M → 74M, collatz 188M (unchanged). Wall times on this
 shared VM vary by 10–20% between runs: fannkuch ran 0.84–0.94 s before and
 0.51–0.61 s after, matmul 0.20 s before and 0.13–0.14 s after.
 
 What is left against C: the row of `b[k][j]` in matmul keeps its length
-check (the rows' lengths aren't known), the data pointer and length are
-reloaded on every access (new MIR operations and code generator changes),
+check (the rows' lengths aren't known), the elements' address is
+kept in a register only inside versioned loops (`data`, `ldx`, `stx`),
 `n` still spills in matmul's inner loop, and binarytrees and fasta are
 allocation and call bound, not check bound. `ail build` takes about 0.1 s
 longer per program.

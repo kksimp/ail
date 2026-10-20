@@ -50,8 +50,16 @@ versions an innermost counted loop (Allen and Cocke's loop versioning):
    loop uses it. A load is only hoisted into the guard, never ahead of it, so
    an out-of-range index can't trap early or late.
 
+6. **Elements' address once.** Accesses in the copy of the loop to a fixed
+   list go through three new MIR operations (lane 120's shape): `data xs`
+   (the word at +16, taken in the guard), and unchecked `ldx base, index`
+   and `stx base, index, value` with the element size in `imm` (8, or 1 for
+   `List[bool]`). `data` isn't pure for CSE, since `push` moves the elements;
+   it is only hoisted over loops with no call, `push` or list-of-lists
+   store on that list.
+
 Results at the perfbench sizes (callgrind, instructions): fannkuch
-442M → 296M, matmul 223M → 157M, sieve 144M → 136M; at the large sizes
+442M → 272M, matmul 223M → 142M, sieve 144M → 133M; at the large sizes
 fannkuch 0.84 s → 0.51–0.61 s and matmul 0.20 s → 0.13 s.
 
 ## Consequences
@@ -62,8 +70,8 @@ fannkuch 0.84 s → 0.51–0.61 s and matmul 0.20 s → 0.13 s.
   rows aren't known.
 - Compile time rose by about 0.1 s per program (the passes run in the
   interpreter, [native-performance.md](../design/native-performance.md)).
-- The data pointer and the length aren't kept in registers yet; that needs
-  new MIR operations and changes to both code generators.
+- The length test still happens once per loop entry, not per access; the
+  loop keeps the elements' address in a register.
 
 ## Rejected alternatives
 

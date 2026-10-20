@@ -363,15 +363,21 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
     # The accesses that can lose their checks, and what that takes.
     mut needs := List[Need]()
     mut relax := Set[str]()
+    # The fixed list each access in the copy goes through.
+    mut via := Map[str, int]()
     for b in lp.blocks
         if b == lp.header
             continue
         for k in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[k]
-            if i.op != "get" and i.op != "set" or i.site < 0 or hidx.contains(i.dst)
+            if i.op != "get" and i.op != "set" or hidx.contains(i.dst)
                 continue
             x := i.args[0]
             if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
+                continue
+            # Its elements' address is the same on every iteration.
+            via[k_of(b, k)] = x
+            if i.site < 0
                 continue
             idx := i.args[1]
             if idx == c.p
@@ -458,6 +464,12 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
             hi_is_len = d.op == "len" and d.args[0] == nd.x
         idx := if nd.kind == "inv" then fresh_of(hoists, hidx, nd.arg) else nd.arg
         gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
+    # The address of each fixed list's elements, taken once.
+    mut data := Map[int, int]()
+    for key in via.keys()
+        x := fresh_of(hoists, hidx, via[key])
+        if not data.contains(x)
+            data[x] = gd.emit("data", [x], Ty.Int)
     # The last guard block enters the copy, which follows the guard blocks.
     clone_base := n + gd.blocks.len() + 1
     gd.blocks.push(Block(params: [], insts: gd.cur, term: jump_to(clone_base, pre_args)))
@@ -520,6 +532,16 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
             r.args = [vm[a] for a in i.args]
             if relax.contains("{b}:{k}")
                 r.site = -1
+            if r.site < 0 and (i.op == "get" or i.op == "set") and via.contains(k_of(b, k))
+                base := data[fresh_of(hoists, hidx, via[k_of(b, k)])]
+                if i.op == "get"
+                    r.op = "ldx"
+                    r.args = [base, vm[i.args[1]]]
+                    r.imm = if f.vals[i.dst] == Ty.Bool then 1 else 8
+                else
+                    r.op = "stx"
+                    r.args = [base, vm[i.args[1]], vm[i.args[2]]]
+                    r.imm = if f.vals[i.args[2]] == Ty.Bool then 1 else 8
             insts.push(r)
         t := blk.term
         mut nt := t
@@ -545,6 +567,9 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
 ## Whether `v` has the same value on every iteration.
 fn fixed(defs List[Def], inl List[bool], hidx Map[int, int], v int) bool
     not inl[defs[v].block] or hidx.contains(v)
+
+fn k_of(b int, k int) str
+    "{b}:{k}"
 
 fn renamed(m Map[int, int], v int) int
     if to := m.get(v)
