@@ -1,6 +1,6 @@
 # 0607. The Windows target is refused by `ail build` until its runtime lands
 
-- **Status:** Accepted
+- **Status:** Superseded by 0608
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture
@@ -37,3 +37,7 @@ wrong thing.
 
 - Windows executables cannot be built until the runtime lands. The Wine tests
   in `native_pe` run the MIR and PE pieces directly, not `ail build`.
+
+## Superseded
+
+The guard was removed when the Windows runtime arms landed ([ADR 0608](0608-windows-target-and-runtime.md)).

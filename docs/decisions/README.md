@@ -499,3 +499,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
 | [0607](0607-windows-runtime-guard.md) | `ail build --target x86_64-windows` is refused until the Windows runtime lands *(delegated)* | Accepted | 2026-10-20 |
+| [0608](0608-windows-target-and-runtime.md) | The Windows x86-64 target: `target()` is 3, the entry runs the runtime, and output, exit and the heap use kernel32 *(delegated)* | Accepted | 2026-10-20 |

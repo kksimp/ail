@@ -55,10 +55,7 @@ fn main() !
             match target
                 "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
                 "aarch64-linux" => print(obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)))
-                "x86_64-windows" =>
-                    # Guard (lane 187): the Windows runtime branches (ADR 0607) are not in yet.
-                    io.eprint("error[native.build.3]: target `x86_64-windows` is not built yet: the Windows runtime (ADR 0607) has not landed, so the executable would not run")
-                    io.exit(2)
+                "x86_64-windows" => print(obj.hex(obj.pe_image(x64.generate_windows(m))))
                 "aarch64-macos" =>
                     name := args[1].split("/").last() else args[1]
                     print(obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))))
