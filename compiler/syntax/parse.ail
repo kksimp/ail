@@ -611,8 +611,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         error_fix("gram.fn.2", here(), "there is no `{sym}`; the return type follows `)` directly")
         i += 1
     mut ret := none
-    if tag_at(0) == "id" or at_sym("!") or at_sym("*") or at_kw("any") or at_kw("ref")
-    if tag_at(0) == "id" or at_sym("!") or at_kw("any") or at_kw("ref") or at_kw("fn")
+    if tag_at(0) == "id" or at_sym("!") or at_sym("*") or at_kw("any") or at_kw("ref") or at_kw("fn")
         ret = type_ref("a return type", "gram.fn.2")?
     full := if o := owner then "`{o.name}.{name}`" else "`{name}`"
     # A trait method without a default ends with its signature (trait.decl.2).

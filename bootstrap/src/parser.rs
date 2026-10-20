@@ -772,8 +772,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!" | "*") | Tok::Kw("any" | "ref") => Some(self.type_ref("a return type", "gram.fn.2")?),
-            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!" | "*") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
