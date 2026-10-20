@@ -24,7 +24,8 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
                 piece = text_of(v, expr_pos(x))?
             Fmt(x, spec) =>
                 v := lower_value(x, none)?
-                piece = format_value(v, spec, expr_pos(x))?
+                f := fmt_text(v, spec, expr_pos(x))?
+                piece = f.id
         if piece >= 0
             acc = if acc < 0 then piece else call("rt.str_cat", [acc, piece], Ty.Str)
     if acc < 0
@@ -35,45 +36,22 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
 fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
     match v.ty
         Str => v.id
-        Int => call("rt.str_int", [v.id], Ty.Str)
-        Float => call("rt.str_float", [v.id], Ty.Str)
-        Bool => call("rt.str_bool", [v.id], Ty.Str)
+        Int => call("rt.fmt_int", [v.id], Ty.Str)
+        Float => call("rt.fmt_float", [v.id], Ty.Str)
+        Bool => call("rt.fmt_bool", [v.id], Ty.Str)
         Char => call("rt.str_char", [v.id], Ty.Str)
         _ =>
             problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
             none
 
-## `{x:spec}` (type.str.11): `x` in hex or to N places, then padded.
-fn Lower.format_value(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) int?
-    mut body := -1
-    if spec.hex
-        if not (v.ty == Ty.Int)
-            problem(pos, "`x` on a `{v.ty.name()}`")
-            return none
-        body = call("rt.str_hex", [v.id], Ty.Str)
-    elif n := spec.precision
-        if not v.ty.is_float()
-            problem(pos, "`.{n}` on a `{v.ty.name()}`")
-            return none
-        body = call("rt.str_fixed", [v.id, konst(n, Ty.Int)], Ty.Str)
-    else
-        body = text_of(v, pos)?
-    w := spec.width else return body
-    mut fill := 32
-    if f := spec.fill
-        fill = f.chars()[0].code()
-    mut align := if v.ty == Ty.Int or v.ty.is_float() then 1 else 0
-    if a := spec.align
-        align = if a == "<" then 0 else if a == ">" then 1 else 2
-    call("rt.str_pad", [body, konst(w, Ty.Int), konst(fill, Ty.Int), konst(align, Ty.Int)], Ty.Str)
-
 ## The constant text of a trap's first line, `PATH:LINE:COL: trap[RULE]: `
 ## (native-abi.md §7), as a string value.
 fn Lower.trap_head(mut self, rule str, pos ast.Pos) int
-    str_value("{path}:{pos.line}:{pos.col}: trap[{rule}]: ")
+    str_value("{src_paths[file]}:{pos.line}:{pos.col}: trap[{rule}]: ")
 
 ## The source excerpt that follows a trap's message.
 fn Lower.trap_tail(mut self, pos ast.Pos) int
+    lines := src_lines[file]
     line := if pos.line >= 1 and pos.line <= lines.len() then lines[pos.line - 1] else ""
     gutter := "{pos.line}"
     mut pad := List[str]()

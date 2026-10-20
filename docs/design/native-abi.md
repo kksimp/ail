@@ -18,7 +18,7 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 | Linux x86-64 | ELF | rdi rsi rdx rcx r8 r9 | xmm0-7 | rax, xmm0 | 16-byte aligned at call |
 | Linux ARM64 | ELF | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
 | macOS ARM64 | Mach-O | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
-| Windows x86-64 | PE | stub, `plat.win.1` | | | not built yet |
+| Windows x86-64 | PE | Win64: rcx rdx r8 r9, 32-byte shadow space (ADR 0598) | xmm0-3 | rax, xmm0 | 16-byte aligned at call |
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
@@ -39,7 +39,9 @@ libSystem but import nothing, and are signed ad hoc by the backend
 
 All values are 64-bit and little-endian (ADR 0007). In registers and in list
 elements each scalar takes 8 bytes, except that a `List[bool]` element takes
-one byte, 0 or 1 (ADR 0391).
+one byte, 0 or 1 (ADR 0391). A list's length never decreases in the native
+subset, and the optimiser relies on it (ADR 0578): an operation that
+shortens a list must be added to the optimiser's decision first.
 
 | Type | Layout |
 |---|---|
@@ -136,6 +138,30 @@ The steps:
 `mmap` flags: `PROT_READ|PROT_WRITE` = 3; `MAP_PRIVATE|MAP_ANONYMOUS` = `0x22`
 on Linux and `0x1002` on macOS (`MAP_ANON` is `0x1000`). fd `-1`, offset 0.
 
+**OS layer calls** (ADR 0580, `compiler/rt/native/os.ail`; a negative result is
+`-errno` on every target):
+
+| Operation | Linux x86-64 | Linux ARM64 | macOS ARM64 |
+|---|---|---|---|
+| `open` | `openat` 257, `AT_FDCWD` -100 | `openat` 56 | `open` 5 |
+| `close` | 3 | 57 | 6 |
+| `lseek` | 8 | 62 | 199 |
+| `access` | `faccessat` 269 | `faccessat` 48 | `access` 33 |
+| `mkdir` | `mkdirat` 258 | `mkdirat` 34 | `mkdir` 136 |
+| `unlink` / `rmdir` | `unlinkat` 263, flag 0 / 0x200 | `unlinkat` 35 | `unlink` 10 / `rmdir` 137 |
+| `rename` | `renameat` 264 | `renameat` 38 | `rename` 128 |
+| directory entries | `getdents64` 217 (name at +19) | `getdents64` 61 | `getdirentries64` 344 (name at +21) |
+| working directory | `getcwd` 79 | `getcwd` 17 | `fcntl` 92, `F_GETPATH` 50, on `.` |
+| clock | `clock_gettime` 228, `CLOCK_REALTIME` | `clock_gettime` 113 | `gettimeofday` 116 |
+| sleep | `nanosleep` 35 | `nanosleep` 101 | `select` 93 with a timeout |
+| terminal test | `ioctl` 16, `TCGETS` 0x5401 | `ioctl` 29 | `ioctl` 54, `TIOCGETA` 0x40487413 |
+
+`open` flags for writing: Linux `O_WRONLY|O_CREAT|O_TRUNC` = 577, append
+1089; macOS 1537 and 521. Errors map to `fs.IoError.kind` (std.err.1) from
+`errno` 2 not_found, 1 and 13 permission, 17 exists, 21 is_dir, 20 not_dir,
+39 (Linux) or 66 (macOS) not_empty, else other. The environment follows
+`argv`'s NULL (`argv + 8 * (argc + 1)`) on all three targets.
+
 Linux clobbers `rcx` and `r11` on x86-64. The shim is four functions
 (`sys_exit`, `sys_write`, `sys_mmap`, `sys_read`) so each target is one file
 (`compiler/rt/sys_*.ail`).
@@ -154,6 +180,17 @@ freed. `alloc(n)` aborts with trap `run.limit.2` if `mmap` fails. This is
 the interim for the GC (ADR 0407).
 
 ## 6. Output
+
+**Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
+`Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
+`os.ail` (status, scratch area, output descriptor, input buffer, terminal
+flag), 40-47 `fmt.ail` (the byte builder), 48-63 free.
+
+**Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
+after `main` and by `io.exit`); every trap; before reading standard input;
+before `io.eprint`; and each newline when standard output is a terminal.
+`io.eprint` writes into the same buffer with `OUT_FD` set to 2, so every
+flush it causes goes to standard error, then restores 1.
 
 `print` appends to a 64 KiB stdout buffer and flushes when full, at exit, at a
 trap, and before reading stdin. Standard error is unbuffered. The interpreter's
@@ -207,13 +244,23 @@ by zero), `expr.arith.1` (overflow), per `expr.arith` in spec chapter 5.
 with every program, provides `rt.init`, `rt.exit`, `rt.alloc`, `rt.trap`,
 `rt.out_str`, `rt.out_int`, `rt.out_float`, `rt.out_bool`, `rt.out_nl`,
 `rt.out_list_int`/`_float`/`_bool`, `rt.list_new`, `rt.list_push`,
-`rt.list_pushf` and `rt.list_copy`; `print` writes its pieces straight into
+`rt.list_pushf`, `rt.list_copy` and `rt.list_reserve(xs, lo, hi, per, size)`
+(room for `(hi - lo) * per` more elements, inserted by the optimiser before
+loops that fill a list, ADR 0579); `print` writes its pieces straight into
 the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 (`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
 `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
+
+**OS layer and number text (lane 177, ADRs 0580-0582).** `os.ail` provides
+`fs_*`, `env_*`, `time_*`, `io_*`, `err_begin`/`err_end`, `os_ok`, `os_kind`
+and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
+`fmt_int`, `fmt_hex`, `fmt_bool`, `fmt_float`, `fmt_float_fixed`, `fmt_pad`,
+`out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
+its value (empty on failure) and sets `os_ok()`; the lowering follows it
+with the status call.
 
 **Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
 adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,

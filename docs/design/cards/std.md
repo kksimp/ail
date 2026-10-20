@@ -32,10 +32,12 @@ struct Response  ## std.net (ADR 0283)
     status int
     headers Map[str, str]
     body str
+    all_headers Map[str, List[str]]
 struct RawResponse  ## std.net.16 (ADR 0416): a response with its body undecoded.
     status int
     headers Map[str, str]
     data bytes
+    all_headers Map[str, List[str]]
 error struct NetError
     url str
     kind str

@@ -1,0 +1,9 @@
+# A negative fixed index is out of range, and the loop must trap (type.coll.4).
+fn pick(xs List[int], k int, n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[k]
+    s
+
+fn main()
+    print(pick([1, 2, 3], -1, 2))

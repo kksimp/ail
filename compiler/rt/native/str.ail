@@ -192,111 +192,6 @@ fn str_char(c int) str
     u8_put(r + 16, c)
     str_at(r)
 
-## The text form of an `int` (type.str.3). Works on negative digits so the
-## smallest `int` needs no negation.
-fn str_int(n int) str
-    mut digits := 0
-    mut v := n
-    while v != 0
-        v = v / 10
-        digits += 1
-    if digits == 0
-        digits = 1
-    size := if n < 0 then digits + 1 else digits
-    r := str_new(size, size)
-    mut at := r + 16 + size - 1
-    v = n
-    mut k := 0
-    while k < digits
-        store8(at, 48 + (v % 10).abs())
-        v = v / 10
-        at -= 1
-        k += 1
-    if n < 0
-        store8(r + 16, 45)
-    str_at(r)
-
-## `n.to_hex()` and `{n:x}` (type.str.8): lowercase, `-` before the
-## magnitude of a negative value.
-fn str_hex(n int) str
-    mut digits := 0
-    mut v := n
-    while v != 0
-        v = v / 16
-        digits += 1
-    if digits == 0
-        digits = 1
-    size := if n < 0 then digits + 1 else digits
-    r := str_new(size, size)
-    mut at := r + 16 + size - 1
-    v = n
-    mut k := 0
-    while k < digits
-        d := (v % 16).abs()
-        store8(at, if d < 10 then 48 + d else 87 + d)
-        v = v / 16
-        at -= 1
-        k += 1
-    if n < 0
-        store8(r + 16, 45)
-    str_at(r)
-
-fn str_bool(b bool) str
-    if b
-        return "true"
-    "false"
-
-# Text of a float comes from the output routines, run over the free end of
-# the stdout buffer and taken back out. Lane 177's formatting replaces this
-# with a direct formatter.
-
-## Where the text starts: room is made first, so it can't flush half way.
-fn cap_begin() int
-    if load64(global(OUT_LEN)) > OUT_CAP - 4096
-        flush()
-    load64(global(OUT_LEN))
-
-## The text written since `start`, taken out of the buffer.
-fn cap_end(start int) str
-    n := load64(global(OUT_LEN)) - start
-    r := str_new(n, n)
-    copy_bytes(r + 16, load64(global(OUT_BUF)) + start, n)
-    store64(global(OUT_LEN), start)
-    str_at(r)
-
-## The text form of a `float` (type.num.7).
-fn str_float(x float) str
-    start := cap_begin()
-    out_float(x)
-    cap_end(start)
-
-## `{x:.N}` (type.str.11).
-fn str_fixed(x float, n int) str
-    start := cap_begin()
-    out_float_fixed(x, n)
-    cap_end(start)
-
-## `{v:fill align width}` (type.str.11): `align` 0 left, 1 right, 2 centre.
-fn str_pad(s str, width int, fill int, align int) str
-    p := str_addr(s)
-    chars := load64(p + 8)
-    if width <= chars
-        return s
-    pad := width - chars
-    left := if align == 0 then 0 else if align == 1 then pad else pad / 2
-    right := pad - left
-    fsize := u8_size(fill)
-    n := load64(p) + pad * fsize
-    r := str_new(n, width)
-    mut at := r + 16
-    for i in 0..left
-        at += u8_put(at, fill)
-    copy_bytes(at, p + 16, load64(p))
-    at += load64(p)
-    for i in 0..right
-        at += u8_put(at, fill)
-    str_at(r)
-
 ## `s.pad_left(width, fill)` (align 1) and `s.pad_right` (align 0)
 ## (type.str.9, type.str.15).
 fn str_pad_checked(s str, width int, fill int, align int, head str, tail str) str
@@ -304,7 +199,7 @@ fn str_pad_checked(s str, width int, fill int, align int, head str, tail str) st
         return s
     if width > 1073741824 or width * u8_size(fill) > 1073741824
         str_trap(4, if align == 1 then 1 else 2, 0, 0, head, tail)
-    str_pad(s, width, fill, align)
+    fmt_pad(s, width, str_char(fill), align)
 
 # ---- slicing and searching (type.str.13-14) ----
 
