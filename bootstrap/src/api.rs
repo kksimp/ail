@@ -14,6 +14,8 @@ use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
 use crate::docs;
 
+mod query;
+
 /// Whether `pos` is outside the file being outlined: in the prelude or in
 /// an imported module (`modules.rs`).
 fn is_prelude(pos: Pos) -> bool {
@@ -23,7 +25,7 @@ fn is_prelude(pos: Pos) -> bool {
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api FILE [--text | --pretty] [--symbols] [--json]\n";
+pub const USAGE: &str = "usage: ail api FILE [--text | --pretty] [--symbols] [--json]\n       ail api (--locals | --type | --refs) FILE LINE COL [--pretty] [--json]\n";
 
 /// How the outline is written (api.out.2, api.text.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +40,9 @@ pub enum Form {
 
 /// `ail api ...`; `json` asks for diagnostics as JSON lines.
 pub fn command(args: &[&str], json: bool) -> ExitCode {
+    if let Some(q) = args.iter().find_map(|a| query::Query::from_flag(a)) {
+        return query::command(q, args, json);
+    }
     let mut form = Form::Json;
     let mut symbols = false;
     let mut file = None;
@@ -233,6 +238,8 @@ struct Api<'p> {
     fn_ids: Vec<String>,
     /// Each function's checked effect set, by the effects lane's id (api.out.4).
     effects: std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>,
+    /// Also describe the modules the file imports (`--refs`).
+    whole: bool,
 }
 
 impl<'p> Api<'p> {
@@ -248,7 +255,12 @@ impl<'p> Api<'p> {
                 fn_ids[i] = fn_id(prog, f, true);
             }
         }
-        Api { prog, fn_ids, effects }
+        Api { prog, fn_ids, effects, whole: false }
+    }
+
+    /// Whether `pos` is a declaration the outline leaves out.
+    fn outside(&self, pos: Pos) -> bool {
+        if self.whole { crate::ast::is_prelude(pos) } else { is_prelude(pos) }
     }
 
     /// Every declaration of the program (not the prelude), nested: fields,
@@ -261,7 +273,7 @@ impl<'p> Api<'p> {
         let local_types: HashSet<&str> =
             prog.structs.iter().map(|s| s.name.as_str()).chain(prog.enums.iter().map(|e| e.name.as_str())).collect();
         for (i, f) in prog.fns.iter().enumerate() {
-            if is_prelude(f.pos) || !f.top_level() {
+            if self.outside(f.pos) || !f.top_level() {
                 continue;
             }
             match &f.owner {
@@ -276,7 +288,7 @@ impl<'p> Api<'p> {
             ms.sort_by_key(|m| (m.pos.line, m.pos.col));
             ms
         };
-        for s in prog.structs.iter().filter(|s| !is_prelude(s.pos)) {
+        for s in prog.structs.iter().filter(|s| !self.outside(s.pos)) {
             let fields = s.fields.iter().map(|f| field_item(&s.name, f)).collect();
             items.push(Item {
                 pos: s.pos,
@@ -289,7 +301,7 @@ impl<'p> Api<'p> {
                 members: vec![("fields", fields), ("methods", take(&s.name))],
             });
         }
-        for e in prog.enums.iter().filter(|e| !is_prelude(e.pos)) {
+        for e in prog.enums.iter().filter(|e| !self.outside(e.pos)) {
             let variants = e.variants.iter().map(|v| variant_item(&e.name, v)).collect();
             items.push(Item {
                 pos: e.pos,
@@ -302,7 +314,7 @@ impl<'p> Api<'p> {
                 members: vec![("variants", variants), ("methods", take(&e.name))],
             });
         }
-        for t in prog.traits.iter().filter(|t| !is_prelude(t.pos)) {
+        for t in prog.traits.iter().filter(|t| !self.outside(t.pos)) {
             items.push(Item {
                 pos: t.pos,
                 kind: "trait",
@@ -314,7 +326,7 @@ impl<'p> Api<'p> {
                 members: vec![("methods", t.methods.iter().map(|&m| self.fn_item(m)).collect())],
             });
         }
-        for im in prog.impls.iter().filter(|im| !is_prelude(im.pos)) {
+        for im in prog.impls.iter().filter(|im| !self.outside(im.pos)) {
             let target = owner_text(&im.target);
             items.push(Item {
                 pos: im.pos,
@@ -330,7 +342,7 @@ impl<'p> Api<'p> {
                 members: vec![("methods", im.methods.iter().map(|&m| self.fn_item(m)).collect())],
             });
         }
-        for c in prog.consts.iter().filter(|c| !is_prelude(c.pos)) {
+        for c in prog.consts.iter().filter(|c| !self.outside(c.pos)) {
             items.push(Item {
                 pos: c.pos,
                 kind: "const",
@@ -410,7 +422,7 @@ impl<'p> Api<'p> {
     /// Every use of a declared name, keyed by the id of what it refers to
     /// and sorted by position (api.ref.1-2).
     fn references(&self, resolved: &Resolved) -> Json {
-        let mut refs = Refs { prog: self.prog, resolved, found: Vec::new(), generics: Vec::new() };
+        let mut refs = Refs { prog: self.prog, resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
         refs.program();
         let mut found = refs.found;
         found.retain(|(p, _)| !is_prelude(*p));
@@ -587,6 +599,8 @@ struct Refs<'p> {
     found: Vec<(Pos, String)>,
     /// Type parameter names in scope, which shadow nothing but aren't references.
     generics: Vec<String>,
+    /// Names the checker did not resolve to a declaration: locals (api.refs.3).
+    names: Vec<(Pos, String)>,
 }
 
 impl<'p> Refs<'p> {
@@ -817,6 +831,8 @@ impl<'p> Refs<'p> {
             Expr::Name(n, p) => {
                 if let Some(id) = self.resolved_at(*p, n) {
                     self.add(*p, id);
+                } else {
+                    self.names.push((*p, n.clone()));
                 }
             }
             Expr::TypeArgs { name, args, pos } => {

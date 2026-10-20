@@ -21,6 +21,7 @@ mod builtins;
 pub mod conc;
 mod contracts;
 mod comprehension;
+pub mod facts;
 mod stdlib;
 pub mod effects;
 mod privacy;
@@ -166,6 +167,8 @@ pub struct Resolved {
     /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
+    /// Types of locals and expressions, recorded for `ail api` only (api.loc.1).
+    pub facts: facts::Facts,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -180,6 +183,15 @@ const BUILTIN_TYPES: &[&str] = &[
 const SPEC_TYPES_NOT_YET: &[&str] = &["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "Option"];
 
 pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
+    check_with(prog, false)
+}
+
+/// `check`, also recording the types of locals and expressions (api.loc.1).
+pub fn check_recording(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
+    check_with(prog, true)
+}
+
+fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     let mut c = Checker {
         prog,
         diags: Vec::new(),
@@ -212,6 +224,10 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
         pending: Vec::new(),
         ret: Ty::Unit,
         loops: 0,
+        record: false,
+        anchored: 0,
+        anchors: HashMap::new(),
+        bound: HashMap::new(),
     };
     c.list_param = c.new_param("T", Vec::new());
     c.collect_traits();
@@ -242,9 +258,11 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
             }
         }
     }
+    c.record = record;
     for (i, f) in prog.fns.iter().enumerate() {
         c.check_fn(i, f);
     }
+    c.record = false;
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
@@ -366,6 +384,14 @@ struct Checker<'p> {
     pending: Vec<Pending>,
     ret: Ty,
     loops: usize,
+    /// Record `resolved.facts` (api.loc.1); on for the final pass only.
+    record: bool,
+    /// The locals below this index already have an anchor (`anchors`).
+    anchored: usize,
+    /// The anchor of each local without a declaration, by index in `locals`.
+    anchors: HashMap<usize, Pos>,
+    /// Where each local's name is written, by index in `locals`.
+    bound: HashMap<usize, Pos>,
 }
 
 /// `a` and `b` are the same type, or an error already reported makes it moot.
@@ -1394,6 +1420,8 @@ impl<'p> Checker<'p> {
         self.self_ty = self.fn_self[idx].clone();
         self.locals.clear();
         self.pending.clear();
+        self.anchored = 0;
+        self.anchors.clear();
         self.loops = 0;
         self.ret = sig.ret.clone();
         if f.receiver.is_some() {
@@ -1432,6 +1460,7 @@ impl<'p> Checker<'p> {
                 self.error("expr.block.2", at, msg);
             }
         }
+        self.record_locals(0);
         self.scope.clear();
         self.self_ty = None;
     }
@@ -1449,6 +1478,7 @@ impl<'p> Checker<'p> {
     /// `Never` if a statement always leaves (expr.block.3).
     fn block(&mut self, stmts: &'p [crate::ast::Stmt], expect: Option<&Ty>, need: bool) -> Ty {
         let mark = self.locals.len();
+        self.anchor_locals(mark, stmts);
         let mut ty = Ty::Unit;
         let mut leaves = false;
         for (i, s) in stmts.iter().enumerate() {
@@ -1701,6 +1731,9 @@ impl<'p> Checker<'p> {
 
     /// Check a new local name against the no-shadowing rules; true if it can be added.
     fn declare(&mut self, name: &str, pos: Pos) -> bool {
+        if self.record {
+            self.bound.insert(self.locals.len(), pos);
+        }
         if let Some(l) = self.locals.iter().rev().find(|l| l.name == name) {
             let mut d = Diagnostic::new("expr.bind.4", pos, format!("`{name}` is already declared in this function"));
             if let Some(first) = l.decl {
@@ -1789,7 +1822,45 @@ impl<'p> Checker<'p> {
                 format!("declare it with {ctor}"),
             );
         }
+        self.record_locals(mark);
         self.locals.truncate(mark);
+    }
+
+    /// Record the locals from `mark` up, which are about to go out of scope
+    /// (api.loc.1).
+    fn record_locals(&mut self, mark: usize) {
+        if self.record {
+            for i in mark..self.locals.len() {
+                let l = &self.locals[i];
+                let Some(anchor) = l.decl.or_else(|| self.anchors.get(&i).copied()) else { continue };
+                let kind = match l.kind {
+                    Kind::Param => "param",
+                    Kind::SelfParam => "self",
+                    Kind::LoopVar => "loop",
+                    Kind::Binding => "binding",
+                };
+                let ty = if matches!(l.ty, Ty::Err) { "?".to_string() } else { self.ty_name(&l.ty) };
+                let fact = facts::LocalFact { name: l.name.clone(), ty, mutable: l.mutable, kind, at: self.bound.get(&i).copied(), decl: l.decl, anchor };
+                self.resolved.facts.locals.push(fact);
+            }
+        }
+        self.anchored = self.anchored.min(mark);
+        self.anchors.retain(|i, _| *i < mark);
+        self.bound.retain(|i, _| *i < mark);
+    }
+
+    /// Locals below `mark` with no declaration of their own (parameters, loop
+    /// variables, pattern names) are in scope from the first statement of the
+    /// block that starts here (api.loc.2).
+    fn anchor_locals(&mut self, mark: usize, stmts: &[crate::ast::Stmt]) {
+        if self.record {
+            if let Some(first) = stmts.first() {
+                for i in self.anchored..mark {
+                    self.anchors.entry(i).or_insert(first.pos());
+                }
+            }
+            self.anchored = self.anchored.max(mark);
+        }
     }
 
     fn local(&self, name: &str) -> Option<&Local> {
@@ -2139,6 +2210,18 @@ impl<'p> Checker<'p> {
     /// resolves bare variants, empty lists and type arguments. `need` says
     /// whether the value is used (expr.if.4).
     fn expr(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
+        let t = self.expr_of(e, expect, need);
+        if self.record {
+            let text = if matches!(t, Ty::Err) { "?".to_string() } else { self.ty_name(&t) };
+            if let Expr::Method { name_pos, .. } | Expr::Field { name_pos, .. } = e {
+                self.resolved.facts.exprs.push((*name_pos, text.clone()));
+            }
+            self.resolved.facts.exprs.push((e.pos(), text));
+        }
+        t
+    }
+
+    fn expr_of(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         match e {
             Expr::Str(..) => Ty::Str,
             // type.num.10: an integer literal where a float is expected is a float.

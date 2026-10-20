@@ -32,6 +32,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
 ./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols)
+./ail api --locals|--type|--refs FILE LINE COL   # names in scope, type at a position, references
 ./ail fix FILE [--dry-run]         # apply the fixes diagnostics carry, re-check, repeat (ADR 0203)
 ./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
 ./ail selftest                     # the bootstrap's own tests
@@ -71,6 +72,7 @@ reported but don't stop a program from running.
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
+| `src/api/query.rs`, `src/check/facts.rs` | `ail api --locals/--type/--refs`: position queries from facts the checker records | `api.query.1`, `api.loc.1–2`, `api.type.1–2`, `api.refs.1–3` |
 
 All errors in a file are reported in one pass, sorted by position; a
 package's are reported file by file.
