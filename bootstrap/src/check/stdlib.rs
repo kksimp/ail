@@ -159,6 +159,10 @@ impl<'p> Checker<'p> {
             ),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
+            ("ui", "open") => (
+                vec![Str, Int, Int],
+                Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
+            ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
         }
     }

@@ -13,6 +13,7 @@ mod interp;
 mod lexer;
 mod parser;
 mod stdlib;
+mod ui;
 
 use std::process::ExitCode;
 
@@ -32,7 +33,8 @@ commands:
 options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deny LIST   with run or check: reject a program whose `main` reaches a
-                denied capability (fs, env, proc, clock, net, or all) (eff.cap.1)
+                denied capability (fs, env, proc, clock, net, ui,
+                or all) (eff.cap.1)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -164,16 +166,13 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
     }
 
     let file = path.to_string();
-    let result = std::thread::Builder::new()
-        .stack_size(STACK_BYTES)
-        .spawn(move || {
-            interp::run(&program, &resolved).map_err(|stop| match stop {
-                interp::Stop::Trap(t) => format!("{file}:{t}"),
-                interp::Stop::Failed(report) => report.render(&file),
-            })
+    // std.ui: this thread hosts any window the program opens (ADR 0177).
+    let result = ui::run_hosted(STACK_BYTES, move || {
+        interp::run(&program, &resolved).map_err(|stop| match stop {
+            interp::Stop::Trap(t) => format!("{file}:{t}"),
+            interp::Stop::Failed(report) => report.render(&file),
         })
-        .expect("spawn interpreter thread")
-        .join();
+    });
     match result {
         Ok(Ok(())) => ExitCode::SUCCESS,
         Ok(Err(message)) => {

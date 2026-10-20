@@ -17,7 +17,7 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "net"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "net", "ui"];
 
 /// Effects that a `@pure` function may not have (eff.pure.1): everything but
 /// `fail` and `mutates`, which its signature already shows.
@@ -46,6 +46,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.ui.9: opening a window and every `ui.Window` method.
+        "ui" => (&["open", "Window"], &["ui", "io"]),
         _ => return None,
     };
     names.contains(&name).then_some(effects)
@@ -436,6 +438,12 @@ impl Walker<'_, '_> {
                 {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
+                    }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && let Some(effects) = std_effects("ui", "Window")
+                {
+                    for &e in effects {
+                        self.add(e, format!("ui.Window.{m}"));
                     }
                 } else if let Expr::Name(m, _) = &**recv
                     && self.prog.enums.iter().any(|d| d.name == *m)

@@ -1,5 +1,5 @@
-//! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc` and
-//! `std.time` (spec 17-std, ADRs 0157-0160): their names, the functions
+//! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
+//! `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0177): their names, the functions
 //! each provides, and the declarations of their types. The checker types
 //! calls to them in `check/stdlib.rs`; the interpreter runs them in
 //! `interp/stdlib.rs`.
@@ -14,6 +14,20 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("io", &["eprint", "exit", "read_all", "read_line"]),
     ("proc", &["run"]),
     ("time", &["now_ms", "sleep_ms"]),
+    ("ui", &["open"]),
+];
+
+/// The methods of `ui.Window` (std.ui.2-8), sorted, each with whether its
+/// receiver is `mut self`.
+pub const WINDOW_METHODS: &[(&str, bool)] = &[
+    ("clear", true),
+    ("close", true),
+    ("cursor", true),
+    ("next_event", true),
+    ("poll_event", true),
+    ("present", true),
+    ("put", true),
+    ("size", false),
 ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
@@ -24,11 +38,21 @@ pub enum StdCall {
     Fn(&'static str, &'static str),
     /// `m.Type(...)`: a struct literal of a module's type, by struct index.
     Type(usize),
+    /// `w.m(...)` on a `ui.Window` (std.ui.2-8): the method's name.
+    Method(&'static str),
 }
 
 /// Each type of a standard module, declared in `std/types.ail`: its name
 /// there, and its module.
-const TYPES: &[(&str, &str)] = &[("IoError", "fs"), ("Output", "proc"), ("ProcError", "proc")];
+const TYPES: &[(&str, &str)] = &[
+    ("IoError", "fs"),
+    ("Output", "proc"),
+    ("ProcError", "proc"),
+    ("Window", "ui"),
+    ("Size", "ui"),
+    ("Event", "ui"),
+    ("UiError", "ui"),
+];
 
 /// The declarations of the standard modules' types, read with the prelude.
 const SOURCE: &str = include_str!("std/types.ail");
@@ -77,6 +101,11 @@ pub fn add_declarations(prog: &mut Program) {
         let module = TYPES.iter().find(|(n, _)| *n == s.name).map(|(_, m)| *m).expect("each std type has a module");
         s.name = format!("{module}.{}", s.name);
         prog.structs.push(s);
+    }
+    for mut e in std.enums {
+        let module = TYPES.iter().find(|(n, _)| *n == e.name).map(|(_, m)| *m).expect("each std type has a module");
+        e.name = format!("{module}.{}", e.name);
+        prog.enums.push(e);
     }
 }
 

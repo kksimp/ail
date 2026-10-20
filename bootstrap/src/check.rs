@@ -22,6 +22,7 @@ mod stdlib;
 pub mod effects;
 mod testing;
 mod traits;
+mod ui;
 
 use std::collections::HashMap;
 
@@ -3139,6 +3140,9 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&rt, recv.pos()) || rt == Ty::Err {
             self.args_only(args);
             return Ty::Err;
+        }
+        if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
+            return t;
         }
         let cands = self.candidates(&rt, name);
         match cands.as_slice() {

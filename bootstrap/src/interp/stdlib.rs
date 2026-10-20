@@ -35,6 +35,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 return Ok(Value::Struct(s, Rc::new(fields)));
             }
             StdCall::Fn(module, f) => (module, f),
+            StdCall::Method(_) => unreachable!("interp::method_call runs `ui.Window` methods"),
         };
         let mut values = Vec::with_capacity(args.len());
         for a in args {
@@ -186,6 +187,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 std::thread::sleep(std::time::Duration::from_millis(ms as u64));
                 Value::Unit
             }
+            ("ui", "open") => {
+                let (title, cols, rows) = (str_arg(0), values[1].int(), values[2].int());
+                self.ui_open(&title, cols, rows, pos)
+            }
             _ => unreachable!("checked: `{module}.{f}` is a standard function"),
         })
     }
@@ -199,7 +204,7 @@ impl<'a, W: Write> Interp<'a, W> {
 
 /// An error value leaving a standard function: its failure, with the call
 /// as the first entry of the return trace (err.ctx.1).
-fn fail(error: Value, pos: Pos) -> Value {
+pub(super) fn fail(error: Value, pos: Pos) -> Value {
     Value::Fail(Rc::new(Failure { error, context: Vec::new(), trace: vec![pos] }))
 }
 
