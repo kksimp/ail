@@ -259,10 +259,10 @@ def main():
                   if (root / p["rel"]).with_suffix(".py").exists()}
     after_tok = count_tokens(args.tokbench, root, list(after_paths.values()) + list(twin_paths.values()))
     before_tok = count_tokens(args.tokbench, root, [v for v in before_paths.values() if v])
-    card_ail = count_tokens(args.tokbench, root, [str(args.card_ail)]).get(str(args.card_ail)) \
-        if args.card_ail else None
-    card_py = count_tokens(args.tokbench, root, [str(args.card_py)]).get(str(args.card_py)) \
-        if args.card_py else None
+    cards = [c for c in (args.card_ail, args.card_py) if c and c.exists()]
+    card_tok = count_tokens(args.tokbench, root, [str(c) for c in cards])
+    card_ail = card_tok.get(str(args.card_ail)) if args.card_ail and args.card_ail.exists() else None
+    card_py = card_tok.get(str(args.card_py)) if args.card_py and args.card_py.exists() else None
     token_rows = []
     for p in progs:
         k = p["key"]
