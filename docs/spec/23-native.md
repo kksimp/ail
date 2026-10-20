@@ -62,6 +62,8 @@ name without `.ail`, in the current directory). T is `x86_64-linux`,
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
 
+**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
+
 ```text
 $ ail build examples/hello.ail
 $ ./hello

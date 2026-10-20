@@ -45,6 +45,8 @@ fn main() !
                 print(mir.module_text(lower_file(args[1], runtime(args[2])?)?))
             else
                 print(mir.module_text(lower_file(args[1], none)?))
+        "pe-sample" =>
+            print(obj.hex(obj.pe_sample()))
         "build" =>
             m := lower_file(args[1], runtime(args[2])?)?
             target := if args.len() > 3 then args[3] else "x86_64-linux"

@@ -1,0 +1,256 @@
+## Windows x86-64 executables (ADR 0597): PE32+ images with a kernel32
+## import table (ADR 0598). The image has a fixed base and no relocations,
+## so the loader maps it at its preferred address. Sections: `.text` (code),
+## `.rdata` (read-only data), `.idata` (the import directory and the address
+## table, which the loader fills in) and `.bss` (the runtime's globals,
+## zero-filled, with no file bytes). A call to an import is
+## `call qword ptr [rip + slot]`: the codegen emits FF 15 with a `rel32`
+## relocation to the symbol `imp:NAME`.
+use codegen
+
+PE_MACHINE := 34404
+PE_BASE := 5368709120
+PE_SECTION_ALIGN := 4096
+PE_FILE_ALIGN := 512
+PE_HEADERS := 1024
+
+## One DLL and the functions the program imports from it.
+pub struct PeDll
+    pub name str
+    pub funcs List[str]
+
+## The import directory laid out at RVA `base`: `bytes` (the descriptors,
+## the lookup and address tables, the names and the hint/name entries),
+## `iat` (the RVA of the first address-table entry), `iat_size` and
+## `dir_size` (the byte sizes of the address tables and the descriptors),
+## and `slots` (each function's address-table RVA under `imp:NAME`).
+struct PeImports
+    bytes List[int]
+    iat int
+    iat_size int
+    dir_size int
+    slots Map[str, int]
+
+## A PE32+ executable for `img` that imports `dlls`. The entry point is
+## `img.entry` in the code. Every relocation resolves here.
+pub fn pe(img codegen.Image, dlls List[PeDll]) List[int]
+    code_rva := PE_SECTION_ALIGN
+    rdata := align_up(code_rva + img.code.len(), PE_SECTION_ALIGN)
+    idata := align_up(rdata + img.data.len(), PE_SECTION_ALIGN)
+    idata_len := pe_imports(dlls, 0).bytes.len()
+    bss := align_up(idata + idata_len, PE_SECTION_ALIGN)
+    bss_size := 8 * img.globals
+    table := pe_imports(dlls, idata)
+    image := align_up(bss + bss_size, PE_SECTION_ALIGN)
+    text_raw := align_up(img.code.len(), PE_FILE_ALIGN)
+    rdata_raw := align_up(img.data.len(), PE_FILE_ALIGN)
+    idata_raw := align_up(idata_len, PE_FILE_ALIGN)
+    mut out := List[int]()
+    # The DOS header, with `e_lfanew` at 0x3C pointing past it to 0x80.
+    out.extend([77, 90])
+    pe_pad(mut out, 60)
+    put(mut out, 128, 4)
+    pe_pad(mut out, 128)
+    # The PE signature and the COFF header: no symbols, no line numbers.
+    out.extend([80, 69, 0, 0])
+    put(mut out, PE_MACHINE, 2)
+    put(mut out, 4, 2)
+    put(mut out, 0, 4)
+    put(mut out, 0, 4)
+    put(mut out, 0, 4)
+    put(mut out, 240, 2)
+    # EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE | RELOCS_STRIPPED
+    put(mut out, 35, 2)
+    # The optional header (PE32+): the standard fields first.
+    put(mut out, 523, 2)
+    out.push(1)
+    out.push(0)
+    put(mut out, text_raw, 4)
+    put(mut out, rdata_raw + idata_raw, 4)
+    put(mut out, bss_size, 4)
+    put(mut out, code_rva + img.entry, 4)
+    put(mut out, code_rva, 4)
+    # The Windows fields: 64-bit base, alignments, OS and subsystem 6.0.
+    put(mut out, PE_BASE, 8)
+    put(mut out, PE_SECTION_ALIGN, 4)
+    put(mut out, PE_FILE_ALIGN, 4)
+    put(mut out, 6, 2)
+    put(mut out, 0, 2)
+    put(mut out, 0, 2)
+    put(mut out, 0, 2)
+    put(mut out, 6, 2)
+    put(mut out, 0, 2)
+    put(mut out, 0, 4)
+    put(mut out, image, 4)
+    put(mut out, PE_HEADERS, 4)
+    put(mut out, 0, 4)
+    # CONSOLE subsystem; NX_COMPAT | TERMINAL_SERVER_AWARE.
+    put(mut out, 3, 2)
+    put(mut out, 33024, 2)
+    put(mut out, 1048576, 8)
+    put(mut out, 4096, 8)
+    put(mut out, 1048576, 8)
+    put(mut out, 4096, 8)
+    put(mut out, 0, 4)
+    put(mut out, 16, 4)
+    # The data directories: the import table (1) and the address table (12).
+    for d in 0..16
+        if d == 1
+            put(mut out, idata, 4)
+            put(mut out, table.dir_size, 4)
+        elif d == 12
+            put(mut out, table.iat, 4)
+            put(mut out, table.iat_size, 4)
+        else
+            put(mut out, 0, 8)
+    pe_section(mut out, ".text", img.code.len(), code_rva, text_raw, PE_HEADERS, 1610612768)
+    pe_section(mut out, ".rdata", img.data.len(), rdata, rdata_raw, PE_HEADERS + text_raw, 1073741888)
+    pe_section(mut out, ".idata", idata_len, idata, idata_raw, PE_HEADERS + text_raw + rdata_raw, 3221225536)
+    pe_section(mut out, ".bss", bss_size, bss, 0, 0, 3221225600)
+    pe_pad(mut out, PE_HEADERS)
+    out.extend(pe_resolve(img, table.slots, code_rva, rdata, bss))
+    pe_pad(mut out, PE_HEADERS + text_raw)
+    out.extend(img.data)
+    pe_pad(mut out, PE_HEADERS + text_raw + rdata_raw)
+    out.extend(table.bytes)
+    pe_pad(mut out, PE_HEADERS + text_raw + rdata_raw + idata_raw)
+    out
+
+## One 40-byte section header: the name padded to 8 bytes, the virtual
+## size and address, the file size and offset, then the characteristics.
+fn pe_section(mut out List[int], name str, size int, rva int, raw int, at int, flags int)
+    bytes := codegen.utf8(name)
+    for i in 0..8
+        out.push(if i < bytes.len() then bytes[i] else 0)
+    put(mut out, size, 4)
+    put(mut out, rva, 4)
+    put(mut out, raw, 4)
+    put(mut out, at, 4)
+    put(mut out, 0, 4)
+    put(mut out, 0, 4)
+    put(mut out, 0, 2)
+    put(mut out, 0, 2)
+    put(mut out, flags, 4)
+
+## The import directory at RVA `base` (ADR 0598): one descriptor per DLL and
+## a null descriptor, then each DLL's lookup and address tables, the DLL
+## names, and the hint/name entries. The tables start out equal; the loader
+## overwrites the address table with the functions' addresses.
+fn pe_imports(dlls List[PeDll], base int) PeImports
+    dirs := 20 * (dlls.len() + 1)
+    mut pos := dirs
+    mut lookups := List[int]()
+    mut iats := List[int]()
+    mut iat_size := 0
+    for d in dlls
+        lookups.push(base + pos)
+        pos += 8 * (d.funcs.len() + 1)
+        iats.push(base + pos)
+        pos += 8 * (d.funcs.len() + 1)
+        iat_size += 8 * (d.funcs.len() + 1)
+    mut names := List[int]()
+    for d in dlls
+        names.push(base + pos)
+        pos += d.name.chars().len() + 1
+    mut hints := List[int]()
+    for d in dlls
+        for f in d.funcs
+            pos = align_up(pos, 2)
+            hints.push(base + pos)
+            pos += 2 + f.chars().len() + 1
+    mut out := List[int]()
+    mut slots := Map[str, int]()
+    for i in 0..dlls.len()
+        put(mut out, lookups[i], 4)
+        put(mut out, 0, 4)
+        put(mut out, 0, 4)
+        put(mut out, names[i], 4)
+        put(mut out, iats[i], 4)
+    pe_pad(mut out, dirs)
+    mut first := 0
+    for i in 0..dlls.len()
+        d := dlls[i]
+        for pass in 0..2
+            for j in 0..d.funcs.len()
+                put(mut out, hints[first + j], 8)
+                if pass == 1
+                    slots["imp:{d.funcs[j]}"] = iats[i] + 8 * j
+            put(mut out, 0, 8)
+        first += d.funcs.len()
+    for d in dlls
+        out.extend(codegen.utf8(d.name))
+        out.push(0)
+    for d in dlls
+        for f in d.funcs
+            pe_pad(mut out, align_up(out.len(), 2))
+            put(mut out, 0, 2)
+            out.extend(codegen.utf8(f))
+            out.push(0)
+    PeImports(bytes: out, iat: if lookups.len() > 0 then iats[0] else 0, iat_size: iat_size, dir_size: dirs, slots: slots)
+
+## The code with its relocations resolved, for `.text` at RVA `code_rva`,
+## `.rdata` at `rdata` and `.bss` at `bss`.
+fn pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int) List[int]
+    mut out := img.code
+    for r in img.relocs
+        if r.kind != "rel32"
+            unreachable("unknown relocation {r.kind}")
+        to := pe_address(img, slots, code_rva, rdata, bss, r.sym)
+        pc := code_rva + r.at
+        mut w := pe_read32(out, r.at)
+        w = to + pe_signed32(w) - (pc + 4 + r.tail)
+        for i in 0..4
+            out[r.at + i] = w.shr(8 * i).bit_and(255)
+    out
+
+## The RVA of a relocation's symbol.
+fn pe_address(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int, sym str) int
+    if sym == "globals"
+        return bss
+    if sym.starts_with("imp:")
+        return slots.get(sym) else unreachable("no import {sym}")
+    if sym.starts_with("d:")
+        return rdata + (img.data_syms.get(sym) else unreachable("no data {sym}"))
+    code_rva + (img.funcs.get(sym) else unreachable("no function {sym}"))
+
+## Zero bytes, up to `n` in all.
+fn pe_pad(mut out List[int], n int)
+    while out.len() < n
+        out.push(0)
+
+fn pe_read32(bytes List[int], at int) int
+    mut v := 0
+    for i in 0..4
+        v = v.bit_or(bytes[at + i].shl(8 * i))
+    v
+
+fn pe_signed32(v int) int
+    if v >= 2147483648 then v - 4294967296 else v
+
+## A sample program for the writer's test (`ail run compiler pe-sample`):
+## it writes a line to standard output with kernel32's `GetStdHandle` and
+## `WriteFile`, then calls `ExitProcess`. Win64 convention: four register
+## arguments, 32 bytes of shadow space, and the fifth argument at
+## `[rsp + 32]`. `sub rsp, 56` leaves the stack 16-byte aligned at each call.
+pub fn pe_sample() List[int]
+    mut img := codegen.new_image()
+    img.code.extend([72, 131, 236, 56])
+    img.code.extend([185, 245, 255, 255, 255])
+    pe_call_import(mut img, "GetStdHandle")
+    img.code.extend([72, 137, 193])
+    img.code.extend([72, 141, 21, 0, 0, 0, 0])
+    img.relocs.push(codegen.Reloc(at: img.code.len() - 4, kind: "rel32", sym: "d:msg", tail: 0))
+    img.code.extend([65, 184, 6, 0, 0, 0])
+    img.code.extend([76, 141, 76, 36, 40])
+    img.code.extend([72, 199, 68, 36, 32, 0, 0, 0, 0])
+    pe_call_import(mut img, "WriteFile")
+    img.code.extend([49, 201])
+    pe_call_import(mut img, "ExitProcess")
+    img.data_syms["d:msg"] = img.data.len()
+    img.data.extend(codegen.utf8("hello from AIL on Windows\n"))
+    pe(img, [PeDll(name: "KERNEL32.dll", funcs: ["GetStdHandle", "WriteFile", "ExitProcess"])])
+
+## `call qword ptr [rip + slot]` through the import `name`: FF 15 and a rel32.
+fn pe_call_import(mut img codegen.Image, name str)
+    img.code.extend([255, 21, 0, 0, 0, 0])
+    img.relocs.push(codegen.Reloc(at: img.code.len() - 4, kind: "rel32", sym: "imp:{name}", tail: 0))
