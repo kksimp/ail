@@ -445,7 +445,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
-        tier: bytecode::usable(prog, trace::mode(), has_unique, has_defer),
+        tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
         reg_pool: Vec::new(),
         stats: bytecode::Stats {
@@ -479,7 +479,9 @@ fn has_defer(b: &Block) -> bool {
     }
     b.iter().any(|s| match s {
         Stmt::Defer(..) => true,
-        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } => has_defer(body),
+        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } | Stmt::Unsafe { body, .. } => {
+            has_defer(body)
+        }
         Stmt::Let { value, otherwise, .. } => {
             in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
         }
@@ -1422,6 +1424,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.for_loop(var, iter, body, env)?;
                 }
             }
+            Stmt::Unsafe { body, .. } => return self.block(body, env),
             Stmt::With { mutex, var, body, pos, .. } => self.with_block(mutex, var, body, *pos, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),

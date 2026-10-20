@@ -1,0 +1,11 @@
+## expr.if.8: a one-line `if` is an operand when it is parenthesised.
+fn width(raw bool) int
+    col := 1 + (if raw then 4 else 3)
+    col * (if raw then 2 else 10)
+
+fn main()
+    print(width(true))
+    print(width(false))
+    total := 100 - (if true then 1 else 2) * 3
+    print(total)
+    print("{(if total > 50 then "big" else "small")}")

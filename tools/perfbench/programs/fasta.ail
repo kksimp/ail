@@ -1,0 +1,37 @@
+# FASTA-style DNA: an integer LCG draws each base from fixed weights (a 30,
+# c 20, g 20, t 30). Prints lines of 60 bases, then the base counts. N comes
+# from argv. Output is one line per 60 bases, so the print path is measured too.
+
+WIDTH := 60
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn main()
+    n := size(500000)
+    letters := "acgt".chars()
+    mut seed := 42
+    mut counts := [0, 0, 0, 0]
+    mut line := []
+    for _ in 0..n
+        seed = (seed * 3877 + 29573) % 139968
+        t := seed * 100 / 139968
+        mut base := 3
+        if t < 30
+            base = 0
+        elif t < 50
+            base = 1
+        elif t < 70
+            base = 2
+        counts[base] += 1
+        line.push(letters[base])
+        if line.len() == WIDTH
+            print(line.join(""))
+            line = []
+    if line.len() > 0
+        print(line.join(""))
+    print("a {counts[0]} c {counts[1]} g {counts[2]} t {counts[3]}")

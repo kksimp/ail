@@ -1,0 +1,5 @@
+## expr.if.8: an `if` operand needs parentheses.
+fn main()
+    raw := true
+    col := 1 + if raw then 4 else 3
+    print(col)
