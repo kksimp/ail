@@ -27,3 +27,307 @@ trait ToStr
 
 ## Map keys and set elements. Automatic, with no methods (trait.auto.5).
 trait Hash
+## @module json
+## `std.json` (lane 5, plan section 4): a JSON value, parser and printer. It
+## is read only when the program names one of its public items and doesn't
+## declare that name itself, so other programs pay nothing for it.
+## TODO(lane 4): once `use std.NAME` exists, move these to `use std.json` as
+## `json.parse`, `json.Value`, and so on (ADR 0161).
+
+enum Json
+    Null
+    Bool(b bool)
+    Num(n float)
+    Str(s str)
+    Arr(items List[Json])
+    Obj(members List[JsonMember])
+
+struct JsonMember
+    key str
+    value Json
+
+## `at` is the 0-based character offset of the problem (json.err.1).
+error struct JsonError
+    at int
+    message str
+
+struct JsonParser
+    chars List[char]
+    pos int
+
+fn JsonParser.fail_at(self, at int, message str) JsonError
+    JsonError(at, message)
+
+fn JsonParser.fail(self, message str) JsonError
+    JsonError(pos, message)
+
+fn JsonParser.at_end(self) bool
+    pos >= chars.len()
+
+fn JsonParser.peek(self) char?
+    if at_end()
+        return none
+    chars[pos]
+
+fn JsonParser.unexpected(self) JsonError
+    if c := peek()
+        return fail("unexpected character '{c}'")
+    fail("unexpected end of input")
+
+fn JsonParser.skip_space(mut self)
+    while not at_end() and " \t\n\r".contains(chars[pos])
+        pos += 1
+
+fn JsonParser.document(mut self) !Json
+    value := value()?
+    skip_space()
+    if not at_end()
+        return fail("extra data after value")
+    value
+
+fn JsonParser.value(mut self) !Json
+    skip_space()
+    c := peek() else return unexpected()
+    if c == '-' or c.is_digit()
+        return number()
+    match c
+        '{' => object()
+        '[' => array()
+        '"' => Str(string()?)
+        _ =>
+            if word("true")
+                return Bool(true)
+            if word("false")
+                return Bool(false)
+            if word("null")
+                return Null
+            unexpected()
+
+fn JsonParser.word(mut self, w str) bool
+    end := pos + w.chars().len()
+    if end > chars.len() or chars[pos..end].join("") != w
+        return false
+    pos = end
+    true
+
+fn JsonParser.object(mut self) !Json
+    pos += 1
+    skip_space()
+    if peek() == '}'
+        pos += 1
+        return Obj([])
+    mut members := []
+    while true
+        skip_space()
+        if peek() != '"'
+            return unexpected()
+        key := string()?
+        skip_space()
+        if peek() != ':'
+            if at_end()
+                return unexpected()
+            return fail("expected ':' after object key")
+        pos += 1
+        members.push(JsonMember(key, value()?))
+        if container_end('}')?
+            return Obj(members)
+
+fn JsonParser.array(mut self) !Json
+    pos += 1
+    skip_space()
+    if peek() == ']'
+        pos += 1
+        return Arr([])
+    mut items := []
+    while true
+        items.push(value()?)
+        if container_end(']')?
+            return Arr(items)
+
+fn JsonParser.container_end(mut self, close char) !bool
+    skip_space()
+    if peek() == close
+        pos += 1
+        return true
+    if peek() != ','
+        return unexpected()
+    comma := pos
+    pos += 1
+    skip_space()
+    if peek() == ']' or peek() == '}'
+        return fail_at(comma, "trailing comma")
+    false
+
+fn JsonParser.string(mut self) !str
+    start := pos
+    pos += 1
+    mut text := []
+    while true
+        c := peek() else return fail_at(start, "unterminated string")
+        match c
+            '"' => break
+            '\n' => return fail_at(start, "unterminated string")
+            '\\' => text.push(escape(start)?)
+            _ =>
+                if c.code() < 0x20
+                    return fail("control character in string")
+                text.push(c)
+                pos += 1
+    pos += 1
+    text.join("")
+
+fn JsonParser.escape(mut self, start int) !char
+    at := pos
+    pos += 1
+    c := peek() else return fail_at(start, "unterminated string")
+    pos += 1
+    match c
+        '"' | '\\' | '/' => c
+        'b' => '\u{8}'
+        'f' => '\u{c}'
+        'n' => '\n'
+        'r' => '\r'
+        't' => '\t'
+        'u' => unicode(at)
+        _ => return fail_at(at, "invalid escape '\\{c}'")
+
+## Four hex digits at `pos`, advancing past them.
+fn JsonParser.hex4(mut self, at int) !int
+    end := pos + 4
+    if end > chars.len()
+        return fail_at(at, "invalid unicode escape")
+    mut code := 0
+    for d in chars[pos..end]
+        code = code * 16 + (d.to_digit(16) else return fail_at(at, "invalid unicode escape"))
+    pos = end
+    code
+
+## A `\u` escape; a high surrogate must be followed by `\u` and a low one.
+fn JsonParser.unicode(mut self, at int) !char
+    mut code := hex4(at)?
+    if code >= 0xDC00 and code <= 0xDFFF
+        return fail_at(at, "unpaired surrogate escape")
+    if code >= 0xD800 and code <= 0xDBFF
+        if pos + 2 > chars.len() or chars[pos] != '\\' or chars[pos + 1] != 'u'
+            return fail_at(at, "unpaired surrogate escape")
+        low_at := pos
+        pos += 2
+        low := hex4(low_at)?
+        if low < 0xDC00 or low > 0xDFFF
+            return fail_at(at, "unpaired surrogate escape")
+        code = 0x10000 + (code - 0xD800) * 0x400 + (low - 0xDC00)
+    ch := char.from_code(code) else return fail_at(at, "invalid unicode escape")
+    ch
+
+fn JsonParser.digits(mut self) int
+    start := pos
+    while not at_end() and chars[pos].is_digit()
+        pos += 1
+    pos - start
+
+fn JsonParser.number(mut self) !Json
+    start := pos
+    if peek() == '-'
+        pos += 1
+    if peek() == '0'
+        pos += 1
+    elif digits() == 0
+        return fail("invalid number")
+    if peek() == '.'
+        pos += 1
+        if digits() == 0
+            return fail("invalid number")
+    if peek() == 'e' or peek() == 'E'
+        pos += 1
+        if peek() == '+' or peek() == '-'
+            pos += 1
+        if digits() == 0
+            return fail("invalid number")
+    text := chars[start..pos].join("")
+    Num(text.to_float() else return fail_at(start, "invalid number"))
+
+## Parse one JSON document (json.parse.1).
+fn parse_json(text str) Json ! JsonError
+    mut p := JsonParser(text.chars(), 0)
+    p.document()
+
+fn json_quote(s str) str
+    mut out := ["\""]
+    for c in s.chars()
+        piece := match c
+            '"' => "\\\""
+            '\\' => "\\\\"
+            '\n' => "\\n"
+            '\r' => "\\r"
+            '\t' => "\\t"
+            '\u{8}' => "\\b"
+            '\u{c}' => "\\f"
+            _ =>
+                if c.code() < 0x20
+                    "\\u{c.code().to_hex().pad_left(4, '0')}"
+                else
+                    "{c}"
+        out.push(piece)
+    out.push("\"")
+    out.join("")
+
+## Compact text: no spaces, object members in document order (json.print.1).
+fn Json.to_text(self) str
+    match self
+        Null => "null"
+        Bool(b) => "{b}"
+        Num(n) => "{n}"
+        Str(s) => json_quote(s)
+        Arr(items) =>
+            mut parts := []
+            for item in items
+                parts.push(item.to_text())
+            "[{parts.join(",")}]"
+        Obj(members) =>
+            mut parts := []
+            for m in members
+                parts.push("{json_quote(m.key)}:{m.value.to_text()}")
+            "\{{parts.join(",")}}"
+
+## The first member named `key`; `none` unless this is an object (json.query.1).
+fn Json.get(self, key str) Json?
+    match self
+        Obj(members) =>
+            for m in members
+                if m.key == key
+                    return m.value
+            none
+        Null | Bool(_) | Num(_) | Str(_) | Arr(_) => none
+
+fn Json.at(self, i int) Json?
+    match self
+        Arr(items) =>
+            if i < 0 or i >= items.len()
+                return none
+            items[i]
+        Null | Bool(_) | Num(_) | Str(_) | Obj(_) => none
+
+fn Json.as_str(self) str?
+    match self
+        Str(s) => s
+        Null | Bool(_) | Num(_) | Arr(_) | Obj(_) => none
+
+fn Json.as_num(self) float?
+    match self
+        Num(n) => n
+        Null | Bool(_) | Str(_) | Arr(_) | Obj(_) => none
+
+fn Json.as_bool(self) bool?
+    match self
+        Bool(b) => b
+        Null | Num(_) | Str(_) | Arr(_) | Obj(_) => none
+
+fn Json.as_arr(self) List[Json]?
+    match self
+        Arr(items) => items
+        Null | Bool(_) | Num(_) | Str(_) | Obj(_) => none
+
+fn Json.as_obj(self) List[JsonMember]?
+    match self
+        Obj(members) => members
+        Null | Bool(_) | Num(_) | Str(_) | Arr(_) => none

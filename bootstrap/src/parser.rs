@@ -18,9 +18,6 @@ use crate::ast::{
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
-/// Attributes the bootstrap understands (gram.attr.1): `@pure` (eff.pure.1).
-const KNOWN_ATTRS: &[&str] = &["pure"];
-
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
@@ -51,10 +48,28 @@ const COMPARISONS: &[(&str, BinOp)] =
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
 const PRELUDE: &str = include_str!("prelude.ail");
 
+/// Names of the optional `std.json` prelude module (ADR 0161).
+const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
+
+/// The always-read prelude, plus the `json` module (after its `## @module`
+/// marker) when the program names one of its items and declares none of them.
+fn prelude_text(tokens: &[Token]) -> &'static str {
+    let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
+    let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
+    let declared = tokens.windows(2).any(|w| {
+        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
+    });
+    if tokens.iter().any(named) && !declared {
+        PRELUDE
+    } else {
+        core
+    }
+}
+
 /// Parse a program after the prelude, whose lines are numbered from
 /// `ast::PRELUDE_LINE`.
 pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let (mut all, diags) = lex(PRELUDE);
+    let (mut all, diags) = lex(prelude_text(&tokens));
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
     fn shift(tokens: &mut [Token]) {
@@ -111,17 +126,10 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                     prog.fns.push(f);
                 }
             }
-            // `@pure fn ...` (gram.attr.1-2)
+            // `@name fn ...` (gram.attr.1-2)
             Tok::Sym("@") => {
-                let attrs = p.attributes();
-                if p.at_kw("fn") {
-                    if let Some(mut f) = p.function(Within::TopLevel) {
-                        f.attrs = attrs;
-                        prog.fns.push(f);
-                    }
-                } else {
-                    p.unexpected("`fn` after the attribute", "gram.attr.2");
-                    p.skip_statement();
+                if let Some(f) = p.attributed_function() {
+                    prog.fns.push(f);
                 }
             }
             Tok::Kw("trait") => p.trait_decl(&mut prog),
@@ -413,28 +421,6 @@ impl Parser {
 
     // ---- Declarations ----
 
-    /// `@name @name ...` before a declaration (gram.attr.1-2). Attributes the
-    /// bootstrap doesn't know are reported and dropped.
-    fn attributes(&mut self) -> Vec<Attr> {
-        let mut attrs = Vec::new();
-        while self.at_sym("@") {
-            let pos = self.bump().pos;
-            let Some((name, _)) = self.name("an attribute name after `@`", "gram.attr.1") else {
-                break;
-            };
-            if self.at_sym("(") {
-                self.error(UNSUPPORTED, pos, format!("arguments to `@{name}` are not supported by the bootstrap yet"));
-                break;
-            }
-            if KNOWN_ATTRS.contains(&name.as_str()) {
-                attrs.push(Attr { name, pos });
-            } else {
-                self.error(UNSUPPORTED, pos, format!("the attribute `@{name}` is not supported by the bootstrap yet"));
-            }
-        }
-        attrs
-    }
-
     /// `fn [Type.]name(params) [ReturnType]` followed by an indented body.
     /// In a trait, the body is optional (trait.decl.2).
     fn function(&mut self, within: Within) -> Option<FnDecl> {
@@ -443,6 +429,49 @@ impl Parser {
             self.skip_statement();
         }
         f
+    }
+
+    /// `@name` or `@name(args)`, repeated, then a function on the same line
+    /// (gram.attr.1-2).
+    fn attributed_function(&mut self) -> Option<FnDecl> {
+        let mut attrs = Vec::new();
+        while self.at_sym("@") {
+            self.i += 1;
+            let Some((name, pos)) = self.name("an attribute name after `@`", "gram.attr.1") else {
+                self.skip_statement();
+                return None;
+            };
+            if self.at_sym("(") {
+                let mut depth = 0usize;
+                loop {
+                    match self.peek() {
+                        Tok::Sym("(") => depth += 1,
+                        Tok::Sym(")") => depth -= 1,
+                        Tok::Newline | Tok::Eof => break,
+                        _ => {}
+                    }
+                    self.i += 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            attrs.push(Attr { name, pos });
+        }
+        if !self.at_kw("fn") {
+            let pos = self.pos();
+            self.error_help(
+                "gram.attr.2",
+                pos,
+                "an attribute applies to a function declared on the same line",
+                "write `@test fn name()` on one line",
+            );
+            self.skip_statement();
+            return None;
+        }
+        let mut f = self.function(Within::TopLevel)?;
+        f.attrs = attrs;
+        Some(f)
     }
 
     fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
@@ -539,7 +568,7 @@ impl Parser {
         } else {
             Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
         };
-        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within, attrs: Vec::new() })
+        Some(FnDecl { attrs: Vec::new(), owner, name, pos, generics, receiver, params, ret, body, within })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).

@@ -65,8 +65,10 @@ defined when the diagnostic format is designed.
 | 12 | [Modules and programs](12-modules.md) | `mod` | Drafted (partial) |
 | 13 | [Unsafe](13-unsafe.md) | `unsafe` | Drafted (partial) |
 | 14 | [FFI and C interoperability](14-ffi.md) | `ffi` | Drafted (partial) |
+| 19 | [Testing](19-testing.md) | `test` | Drafted (partial) |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |
 | 16 | Reflection | `refl` | Not started |
+| std | [Standard library: json](std-json.md) | `json` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

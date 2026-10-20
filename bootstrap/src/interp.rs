@@ -17,6 +17,8 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod testing;
+pub use testing::run_tests;
 
 use builtins::{Key, Table, map_value};
 
@@ -197,7 +199,8 @@ thread_local! {
         const { std::cell::RefCell::new(TypeNames { structs: Vec::new(), enums: Vec::new() }) };
 }
 
-pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
+/// An interpreter for `prog` writing standard output to `out`.
+fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Interp<'a, W> {
     NAMES.with(|n| {
         let fields = |fs: &[crate::ast::Field]| fs.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
         *n.borrow_mut() = TypeNames {
@@ -223,19 +226,23 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     }
     let structs = prog.structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
     let enums = prog.enums.iter().enumerate().map(|(i, e)| (e.name.as_str(), i)).collect();
-    let stdout = io::stdout();
-    let mut it = Interp {
+    Interp {
         prog,
         resolved,
         fns,
         methods,
         structs,
         enums,
-        out: BufWriter::new(stdout.lock()),
+        out: BufWriter::new(out),
         depth: 0,
         closed: false,
         consts: HashMap::new(),
-    };
+    }
+}
+
+pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
+    let stdout = io::stdout();
+    let mut it = build(prog, resolved, stdout.lock());
     // mod.const.1: constants are computed before the program runs.
     for c in &prog.consts {
         it.constant(&c.name, c.pos).map_err(|e| match e {
@@ -1164,6 +1171,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if n == "unreachable" && lookup(env, n).is_none() {
             let Value::Str(msg) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
             return Err(Exit::Trap(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }));
+        }
+        if (n == "assert" || n == "assert_eq") && lookup(env, n).is_none() {
+            return self.assert(n, args, pos, env);
         }
         if matches!(callee, Expr::TypeArgs { .. }) {
             match n.as_str() {

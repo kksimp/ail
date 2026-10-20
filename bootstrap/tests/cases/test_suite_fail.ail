@@ -1,0 +1,18 @@
+fn double(x int) int
+    x * 2
+
+@test fn passes()
+    assert(true)
+
+@test fn wrong_value()
+    assert_eq(double(2), 5)
+
+@test fn wrong_cond()
+    print("about to fail")
+    assert(double(2) == 5)
+
+error enum Boom
+    Bang
+
+@test fn errors() !
+    return Bang
