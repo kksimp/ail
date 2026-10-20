@@ -1673,6 +1673,10 @@ impl<'p> Checker<'p> {
                 self.mismatch("expr.block.2", at, &sig.ret, &got);
             } else {
                 let mut d = Diagnostic::new("expr.block.2", at, msg);
+                if sig.ret == Ty::Int && got == Ty::Float {
+                    // Two candidates, the likelier first; neither is applied, since each is a choice.
+                    d = d.help("convert the value with `x.to_int()`, or declare the return type `float` instead");
+                }
                 if f.ret.is_some() {
                     d = d.note(ret_pos, "the return type is declared here");
                 }
@@ -2007,6 +2011,13 @@ impl<'p> Checker<'p> {
                 let dt = self.expr(d, Some(&ok), true);
                 if !self.accepts(&ok, &dt) {
                     self.mismatch("err.else.1", d.pos(), &ok, &dt);
+                    if let Expr::Float(f, p) = d
+                        && ok == Ty::Int
+                        && f.fract() == 0.0
+                        && let Some(last) = self.diags.last_mut().filter(|x| x.rule == "err.else.1")
+                    {
+                        last.fixes.push(crate::fix::number::whole_float(*p, *f));
+                    }
                 }
             }
             Else::Leave(stmt) => {
@@ -3762,12 +3773,13 @@ impl<'p> Checker<'p> {
         for (i, a) in args.iter().enumerate() {
             let slot = match &a.label {
                 None if i > first => {
-                    self.error_help(
-                        "expr.call.3",
-                        a.value.pos(),
-                        "a positional argument can't follow a named one",
-                        "name this argument too, or move it before the named ones",
-                    );
+                    let name = sig.names.get(i).filter(|n| !args.iter().any(|b| b.label.as_ref().is_some_and(|(m, _)| m == *n)));
+                    let mut d = Diagnostic::new("expr.call.3", a.value.pos(), "a positional argument can't follow a named one")
+                        .help("name this argument too, or move it before the named ones");
+                    if let Some(n) = name {
+                        d = d.fix(format!("name it `{n}:`"), vec![crate::fix::named::name_positional(a.value.pos(), n)]);
+                    }
+                    self.diags.push(d);
                     ok = false;
                     continue;
                 }
@@ -3793,7 +3805,12 @@ impl<'p> Checker<'p> {
             if filled[slot].is_some() {
                 let at = a.label.as_ref().map_or(a.value.pos(), |(_, p)| *p);
                 let how = if a.label.is_some() { "" } else { " by position" };
-                self.error("expr.call.3", at, format!("parameter `{}` is given more than once{how}", sig.names[slot]));
+                self.error_help(
+                    "expr.call.3",
+                    at,
+                    format!("parameter `{}` is given more than once{how}", sig.names[slot]),
+                    "pass each parameter once: remove one of the two arguments",
+                );
                 ok = false;
             } else {
                 filled[slot] = Some(i);
