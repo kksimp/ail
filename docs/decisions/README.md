@@ -393,6 +393,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
 | [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
 | [0509](0509-tensor-indexing-and-slicing.md) | Tensor `t[i]` drops the first axis, `t[lo..hi]` keeps it; `item()` (AI, delegated) | Accepted | 2026-10-20 |
+| [0521](0521-tensor-conv2d.md) | `conv2d` on 2-D float tensors: valid, stride 1, no padding (AI, delegated) | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
 | [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
