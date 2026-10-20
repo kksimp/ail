@@ -82,12 +82,22 @@ variable inside a loop, use `=`, not `:=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-Constants are top-level `NAME := value`, built from literals, other
-constants, collection and struct literals and operators (no calls):
+Constants are top-level `NAME := value`, computed at compile time. The
+value may call functions that do no I/O and use no capability
+(`ct.const.2`); a value that can fail needs `else`. Put `if`, `match` and
+`?` in a function and call it:
 
 ```ail
 MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}     # a Set[str]
+WORDS := "fn if else".split(" ")
+SQUARES := squares(8)                   # squares must be free of I/O
+
+fn squares(n int) List[int]
+    mut out := List[int]()
+    for i in 0..n
+        out.push(i * i)
+    out
 ```
 
 ## Structs, enums and methods

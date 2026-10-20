@@ -85,8 +85,8 @@ impl<'p> Effects<'p> {
             direct.push(std::mem::take(&mut w.direct));
             calls.push(std::mem::take(&mut w.calls));
         }
-        // Constants need no walk: a constant expression calls no function
-        // and runs no user code (mod.const.2-3, ADR 0132).
+        // Constants add nothing: they are computed at compile time, and
+        // `check_constants` keeps what they call free of effects (ct.const.2).
         // eff.infer.3: the least fixed point.
         let mut sets: Vec<BTreeSet<&'static str>> = direct.iter().map(|d| d.keys().copied().collect()).collect();
         loop {
@@ -270,6 +270,73 @@ pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
                 .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
             );
         }
+    }
+    diags
+}
+
+/// ct.const.2 (ADR 0225): a constant is computed at compile time, so
+/// everything its value may call must be compile-time-safe: no `io`,
+/// `unsafe`, `spawn` or capability. One diagnostic per constant, naming each
+/// chain of calls.
+pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.consts.is_empty() {
+        return Vec::new();
+    }
+    let mut w = Walker::new(prog, resolved);
+    let walked: Vec<_> = prog
+        .consts
+        .iter()
+        .map(|c| {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.value);
+            (std::mem::take(&mut w.direct), std::mem::take(&mut w.calls))
+        })
+        .collect();
+    // Most constants call nothing; infer effects only when one does.
+    if walked.iter().all(|(direct, calls)| calls.is_empty() && !direct.keys().any(|e| impure(e))) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut diags = Vec::new();
+    for (c, (direct, calls)) in prog.consts.iter().zip(&walked) {
+        // Each forbidden effect with the chain that gives it, grouped by chain.
+        let mut groups: Vec<(Vec<&str>, String)> = Vec::new();
+        let mut note = |e: &'static str, chain: String| match groups.iter_mut().find(|(_, ch)| *ch == chain) {
+            Some((es, _)) => {
+                if !es.contains(&e) {
+                    es.push(e)
+                }
+            }
+            None => groups.push((vec![e], chain)),
+        };
+        for (&e, source) in direct.iter().filter(|(e, _)| impure(e)) {
+            note(e, format!("{} -> {source}", c.name));
+        }
+        let mut bad: BTreeSet<&'static str> = BTreeSet::new();
+        for &j in calls {
+            bad.extend(fx.of(j).iter().copied().filter(|e| impure(e) && !direct.contains_key(e)));
+        }
+        for e in bad {
+            let j = calls.iter().copied().find(|&j| fx.of(j).contains(e)).expect("an effect comes from a callee");
+            note(e, format!("{} -> {}", c.name, fx.chain(j, e)));
+        }
+        if groups.is_empty() {
+            continue;
+        }
+        let parts: Vec<String> = groups
+            .iter()
+            .map(|(es, chain)| {
+                let es: Vec<String> = es.iter().map(|e| format!("`{e}`")).collect();
+                let noun = if es.len() == 1 { "effect" } else { "effects" };
+                format!("has {noun} {} via {chain}", es.join(" and "))
+            })
+            .collect();
+        let msg = format!("`{}` is computed at compile time but {}", c.name, parts.join("; "));
+        diags.push(
+            Diagnostic::new("ct.const.2", c.pos, msg)
+                .help("constants may call only functions without I/O or capabilities; compute this value in `main`"),
+        );
     }
     diags
 }

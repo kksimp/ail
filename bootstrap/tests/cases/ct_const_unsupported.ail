@@ -1,0 +1,13 @@
+# ct.const.3: the bootstrap doesn't compute `?` in a constant yet
+# (bootstrap.unsupported); `else` works.
+LIMIT := parse_limit("12")?
+
+error enum LimitError
+    Bad(text str)
+
+fn parse_limit(text str) int ! LimitError
+    n := text.to_int() else return LimitError.Bad(text)
+    n
+
+fn main()
+    print(LIMIT)
