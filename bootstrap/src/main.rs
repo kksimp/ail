@@ -10,6 +10,7 @@ mod diag;
 mod explain;
 mod fasthash;
 mod docs;
+mod fix;
 mod fmt;
 mod implicit_self;
 mod interp;
@@ -34,6 +35,8 @@ commands:
                 indented; --text: an outline; --symbols: every reference)
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
+  fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
+                rounds); --dry-run: print the diff instead of writing
   version       print the version
 
 options:
@@ -80,6 +83,7 @@ fn main() -> ExitCode {
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => run_tests(file, json),
         ["effects", file] if deny.is_empty() => effects_file(file, json),
+        ["fix", rest @ ..] => fix::command(rest, json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),

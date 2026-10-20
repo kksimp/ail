@@ -15,7 +15,7 @@ use crate::ast::{
     InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
     TypeRef, UnOp, Use, Variant, Within, is_prelude,
 };
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
@@ -1495,7 +1495,10 @@ impl Parser {
             } else if self.at_kw("else") {
                 let else_pos = self.bump().pos;
                 if self.at_kw("if") {
-                    self.error_help("expr.if.1", else_pos, "AIL writes `else if` as `elif`", "write `elif`");
+                    let d = Diagnostic::new("expr.if.1", else_pos, "AIL writes `else if` as `elif`")
+                        .help("write `elif`")
+                        .fix("write `elif`", vec![Edit::replace(else_pos, "else if", "elif")]);
+                    self.diags.push(d);
                     return None;
                 }
                 // `else err` binds the error (expr.if.6).

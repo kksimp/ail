@@ -1,0 +1,15 @@
+enum Dir
+    Up
+    Down
+
+fn name(d Dir) str
+    match d
+        Up => "up"
+
+fn main()
+    total := 0
+    total = total + 1
+    if total > 5
+        print("a")
+    else if total > 0
+        print(name(Dir.Up))

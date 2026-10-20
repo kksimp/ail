@@ -174,3 +174,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0202](0202-more-machine-applicable-fixes.md) | Offer fixes for five more common mistakes: `mut`, `elif`, `?`, missing match arms, `use std.x` *(delegated)* | Accepted | 2026-10-20 |
+| [0203](0203-ail-fix-command.md) | `ail fix` applies diagnostics' fixes until none are left *(delegated)* | Accepted | 2026-10-20 |
+| [0204](0204-anchored-fix-edits.md) | The checker names some fix positions by rule, and the tool resolves them *(delegated)* | Accepted | 2026-10-20 |
+| [0205](0205-related-notes-on-duplicates.md) | Duplicate declarations point at the first one *(delegated)* | Accepted | 2026-10-20 |

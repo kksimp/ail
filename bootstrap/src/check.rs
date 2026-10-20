@@ -33,7 +33,7 @@ use crate::ast::{
     Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
 use crate::fasthash::{FastMap, FastSet};
-use crate::diag::{Diagnostic, Edit, Pos};
+use crate::diag::{Diagnostic, Edit, Fix, Pos};
 use crate::lexer::UNSUPPORTED;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -279,6 +279,8 @@ struct Local {
     ty: Ty,
     mutable: bool,
     kind: Kind,
+    /// Where a `:=` binding's name is written, for fixes (fix.edit.1).
+    decl: Option<Pos>,
 }
 
 /// A type parameter: its name and the traits it must implement (gen.bound.1).
@@ -697,7 +699,12 @@ impl<'p> Checker<'p> {
                 format!("redeclaring the prelude function `{name}` is not supported by the bootstrap"),
             ),
             None if self.fns.contains_key(name) || self.types.contains_key(name) || self.traits.contains_key(name) => {
-                self.error("mod.unit.1", f.pos, format!("`{name}` is declared more than once in this module"));
+                let mut d =
+                    Diagnostic::new("mod.unit.1", f.pos, format!("`{name}` is declared more than once in this module"));
+                if let Some(first) = self.fns.get(name).map(|j| self.prog.fns[*j].pos).or_else(|| self.types.get(name).map(|d| self.def_pos(*d))) {
+                    d = d.note(first, format!("`{name}` is first declared here"));
+                }
+                self.diags.push(d);
             }
             None => {
                 self.fns.insert(name, i);
@@ -739,8 +746,10 @@ impl<'p> Checker<'p> {
                     }
                 }
                 let table = self.methods.entry(o).or_default();
-                if table.contains_key(name) {
-                    self.error("mod.unit.1", f.pos, format!("`{o}.{name}` is declared more than once"));
+                if let Some(first) = table.get(name).map(|j| self.prog.fns[*j].pos) {
+                    let d = Diagnostic::new("mod.unit.1", f.pos, format!("`{o}.{name}` is declared more than once"))
+                        .note(first, format!("`{o}.{name}` is first declared here"));
+                    self.diags.push(d);
                 } else {
                     table.insert(name, i);
                 }
@@ -761,7 +770,15 @@ impl<'p> Checker<'p> {
                 || PRELUDE.contains(&name)
                 || BUILTIN_TYPES.contains(&name);
             if taken {
-                self.error("mod.unit.1", c.pos, format!("`{name}` is declared more than once in this module"));
+                let mut d =
+                    Diagnostic::new("mod.unit.1", c.pos, format!("`{name}` is declared more than once in this module"));
+                let first = (self.consts.get(name).map(|j| prog.consts[*j].pos))
+                    .or_else(|| self.fns.get(name).map(|j| prog.fns[*j].pos))
+                    .or_else(|| self.types.get(name).map(|d| self.def_pos(*d)));
+                if let Some(first) = first {
+                    d = d.note(first, format!("`{name}` is first declared here"));
+                }
+                self.diags.push(d);
             } else {
                 self.consts.insert(name, i);
             }
@@ -1233,6 +1250,26 @@ impl<'p> Checker<'p> {
         true
     }
 
+    /// fix.edit.3: offer `?` after a statement-level fallible call when this
+    /// function's error type already admits its errors. Adds the fix to the
+    /// `err.use.1` diagnostic just reported.
+    fn try_fix(&mut self, t: &Ty, e: &Expr) {
+        let Ty::Res(_, errs) = t else { return };
+        let errors = self.errs_of(errs);
+        let admits = match &self.ret {
+            Ty::Res(_, Errs::Inferred(_)) => true,
+            Ty::Res(_, Errs::Set(want)) => errors.iter().all(|g| want.contains(g)),
+            _ => false,
+        };
+        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
+        if admits && matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
+            d.fixes.push(Fix {
+                title: "pass the error on with `?`".into(),
+                edits: vec![Edit::at_line_end(e.pos(), "?")],
+            });
+        }
+    }
+
     /// The success type of a value that may be a failure.
     fn ok_type(t: &Ty) -> Ty {
         match t {
@@ -1323,11 +1360,11 @@ impl<'p> Checker<'p> {
         if f.receiver.is_some() {
             let ty = self.self_ty.clone().unwrap_or(Ty::Err);
             let mutable = f.receiver.is_some_and(|r| r.mutable);
-            self.locals.push(Local { name: "self".into(), ty, mutable, kind: Kind::SelfParam });
+            self.locals.push(Local { name: "self".into(), ty, mutable, kind: Kind::SelfParam, decl: None });
         }
         for (p, (_, ty)) in f.params.iter().zip(&sig.params) {
             if self.declare(&p.name, p.pos) {
-                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param });
+                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param, decl: None });
             }
         }
         let need = !Self::returns_nothing(&sig.ret);
@@ -1380,6 +1417,9 @@ impl<'p> Checker<'p> {
             leaves |= ty == Ty::Never;
             // err.use.1: a failure can't be discarded.
             if (!last || !need) && matches!(s, Stmt::Expr(_)) && self.reject_unhandled(&ty, s.pos()) {
+                if let Stmt::Expr(e) = s {
+                    self.try_fix(&ty, e);
+                }
                 ty = Ty::Err;
             }
         }
@@ -1405,6 +1445,7 @@ impl<'p> Checker<'p> {
                             ty: Ty::Err,
                             mutable: *mutable,
                             kind: Kind::Binding,
+                            decl: Some(*pos),
                         });
                         self.pending.push(Pending { name: name.clone(), lit: value.pos(), brace, index });
                     }
@@ -1413,7 +1454,10 @@ impl<'p> Checker<'p> {
                 let vt = self.expr(value, None, true);
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
-                    None if self.reject_unhandled(&vt, value.pos()) => Self::ok_type(&vt),
+                    None if self.reject_unhandled(&vt, value.pos()) => {
+                        self.try_fix(&vt, value);
+                        Self::ok_type(&vt)
+                    }
                     None => vt,
                 };
                 if ty == Ty::Unit {
@@ -1429,7 +1473,7 @@ impl<'p> Checker<'p> {
                     }
                 }
                 if self.declare(name, *pos) {
-                    self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding });
+                    self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding, decl: Some(*pos) });
                 } else if *mutable
                     && let Some(d) = self.diags.last_mut()
                     && let Some(f) = d.fixes.first_mut()
@@ -1459,7 +1503,7 @@ impl<'p> Checker<'p> {
                 let elem = if *mutable { self.mut_iterable(iter, var, body) } else { self.iterable(iter) };
                 let mark = self.locals.len();
                 if self.declare(var, *var_pos) {
-                    self.locals.push(Local { name: var.clone(), ty: elem, mutable: *mutable, kind: Kind::LoopVar });
+                    self.locals.push(Local { name: var.clone(), ty: elem, mutable: *mutable, kind: Kind::LoopVar, decl: None });
                 }
                 self.loops += 1;
                 self.block(body, None, false);
@@ -1586,6 +1630,7 @@ impl<'p> Checker<'p> {
                                     ty: t,
                                     mutable: false,
                                     kind: Kind::Binding,
+                                    decl: None,
                                 });
                             }
                         }
@@ -1618,6 +1663,9 @@ impl<'p> Checker<'p> {
     fn declare(&mut self, name: &str, pos: Pos) -> bool {
         if let Some(l) = self.locals.iter().rev().find(|l| l.name == name) {
             let mut d = Diagnostic::new("expr.bind.4", pos, format!("`{name}` is already declared in this function"));
+            if let Some(first) = l.decl {
+                d = d.note(first, format!("`{name}` is first declared here"));
+            }
             d = if l.mutable {
                 d.help(format!("`{name}` is a `mut` variable; to change it, write `{name} = ...`"))
                     .fix(format!("assign to `{name}` with `=`"), vec![Edit::replace(pos, ":=", "=")])
@@ -1638,12 +1686,15 @@ impl<'p> Checker<'p> {
         } else {
             return true;
         };
-        self.error_help(
-            "expr.bind.5",
-            pos,
-            format!("`{name}` is already {what} name"),
-            "choose a different name for the local",
-        );
+        let mut d = Diagnostic::new("expr.bind.5", pos, format!("`{name}` is already {what} name"))
+            .help("choose a different name for the local");
+        let first = (self.fns.get(name).map(|j| self.prog.fns[*j].pos))
+            .or_else(|| self.types.get(name).map(|d| self.def_pos(*d)))
+            .or_else(|| self.consts.get(name).map(|j| self.prog.consts[*j].pos));
+        if let Some(first) = first.filter(|p| !is_prelude(*p)) {
+            d = d.note(first, format!("`{name}` is declared here"));
+        }
+        self.diags.push(d);
         false
     }
 
@@ -1849,7 +1900,7 @@ impl<'p> Checker<'p> {
                     .help(format!("declare it with `mut {n} := ...`"));
                 if op.is_none() {
                     let edits = vec![
-                        Edit { pos: *npos, end: *npos, old: None, text: "mut ".into() },
+                        Edit::insert(*npos, "mut "),
                         Edit::replace(pos, "=", ":="),
                     ];
                     d = d.fix(format!("declare `{n}` with `mut {n} :=`"), edits);
@@ -1894,6 +1945,7 @@ impl<'p> Checker<'p> {
         if l.mutable {
             return;
         }
+        let decl = l.decl;
         let (default_rule, msg, help) = match l.kind {
             Kind::Binding => {
                 ("expr.bind.3", format!("`{root}` is immutable"), format!("declare it with `mut {root} := ...`"))
@@ -1914,7 +1966,12 @@ impl<'p> Checker<'p> {
                 "copy it into a `mut` binding first".into(),
             ),
         };
-        self.error_help(rule.unwrap_or(default_rule), e.pos(), format!("{msg}, so it can't be {action}"), help);
+        let mut d = Diagnostic::new(rule.unwrap_or(default_rule), e.pos(), format!("{msg}, so it can't be {action}")).help(help);
+        // fix.edit.1: a `:=` binding that is changed later becomes `mut`.
+        if let Some(decl) = decl {
+            d = d.fix(format!("declare `{root}` with `mut`"), vec![Edit::insert(decl, "mut ")]);
+        }
+        self.diags.push(d);
     }
 
     /// Whether two argument places certainly overlap (own.excl.2). Overlaps
@@ -3677,7 +3734,7 @@ impl<'p> Checker<'p> {
                     binds_failure |= errs.is_some();
                     errors = errs;
                     if self.declare(name, *npos) {
-                        self.locals.push(Local { name: name.clone(), ty, mutable: false, kind: Kind::Binding });
+                        self.locals.push(Local { name: name.clone(), ty, mutable: false, kind: Kind::Binding, decl: None });
                     }
                 }
             }
@@ -3700,7 +3757,7 @@ impl<'p> Checker<'p> {
                     (Some(set), 1) => {
                         let t = if set.len() == 1 { set[0].clone() } else { Ty::Union(set.clone()) };
                         if self.declare(name, *npos) {
-                            self.locals.push(Local { name: name.clone(), ty: t, mutable: false, kind: Kind::Binding });
+                            self.locals.push(Local { name: name.clone(), ty: t, mutable: false, kind: Kind::Binding, decl: None });
                         }
                     }
                     _ => self.error_help(
@@ -3799,25 +3856,40 @@ impl<'p> Checker<'p> {
             let mark = self.locals.len();
             for (name, npos, ty) in bindings {
                 if name != "_" && self.declare(&name, npos) {
-                    self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding });
+                    self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding, decl: None });
                 }
             }
             agree.block(self, &arm.body, pos);
             self.end_scope(mark);
         }
         if let Some((e, _)) = e {
-            let missing: Vec<&str> = (self.prog.enums[e].variants.iter())
-                .zip(&covered)
-                .filter(|(_, c)| !**c)
-                .map(|(v, _)| v.name.as_str())
-                .collect();
+            let missing_variants: Vec<&crate::ast::Variant> =
+                (self.prog.enums[e].variants.iter()).zip(&covered).filter(|(_, c)| !**c).map(|(v, _)| v).collect();
+            let missing: Vec<&str> = missing_variants.iter().map(|v| v.name.as_str()).collect();
             if !wildcard && !missing.is_empty() {
-                self.error_help(
+                let mut d = Diagnostic::new(
                     "expr.match.2",
                     pos,
                     format!("this `match` doesn't cover {}", list_names(&missing)),
-                    "add an arm for each, or a `_` arm",
-                );
+                )
+                .help("add an arm for each, or a `_` arm");
+                // fix.edit.4: one arm per missing variant, each a typed hole.
+                if let Some(last) = arms.last() {
+                    let indent = " ".repeat(last.pat.pos().col - 1);
+                    let text: String = missing_variants
+                        .iter()
+                        .map(|v| {
+                            let binds = if v.fields.is_empty() {
+                                String::new()
+                            } else {
+                                format!("({})", vec!["_"; v.fields.len()].join(", "))
+                            };
+                            format!("{indent}{}{binds} => todo\n", v.name)
+                        })
+                        .collect();
+                    d = d.fix("add the missing arms, each a `todo`", vec![Edit::after_block(last.pat.pos(), text)]);
+                }
+                self.diags.push(d);
             }
         }
         if let Some(t) = &literal {
@@ -3830,12 +3902,26 @@ impl<'p> Checker<'p> {
                 } else {
                     "add a `_` arm for the other values"
                 };
-                self.error_help(
+                let mut d = Diagnostic::new(
                     "expr.match.2",
                     pos,
                     format!("this `match` on {} doesn't cover every value", self.show(t)),
-                    help,
-                );
+                )
+                .help(help);
+                if let Some(last) = arms.last() {
+                    let indent = " ".repeat(last.pat.pos().col - 1);
+                    let text: String = if *t == Ty::Bool {
+                        [true, false]
+                            .iter()
+                            .filter(|b| !seen.contains(&crate::ast::Literal::Bool(**b)))
+                            .map(|b| format!("{indent}{b} => todo\n"))
+                            .collect()
+                    } else {
+                        format!("{indent}_ => todo\n")
+                    };
+                    d = d.fix("add the missing arms, each a `todo`", vec![Edit::after_block(last.pat.pos(), text)]);
+                }
+                self.diags.push(d);
             }
         }
         agree.result()
