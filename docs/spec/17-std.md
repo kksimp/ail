@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -97,7 +97,9 @@ Any directory that can't be read fails with that directory's path.
 
 **std.fs.9** — `glob(pattern str) List[str]` returns the existing paths
 that match `pattern`, sorted by bytes, without duplicates. The pattern's
-components are split at `/`. In a component, `*` matches any run of
+components are split at `/` (and at `\` on Windows). On Windows a pattern
+that starts with a drive and a separator (`C:\`) is absolute, as one that
+starts with a separator is everywhere. In a component, `*` matches any run of
 characters and `?` exactly one, and neither matches a leading `.` unless
 the component starts with `.`; any other character matches itself. A whole
 component `**` matches zero or more directories (not starting with `.`),
@@ -161,15 +163,17 @@ file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
 **std.path.2** — A separator is `/`, and also `\` on Windows.
 `dir(p str) str` is the text before the last separator: `.` when there is
 none, and the separator itself for a path in the root (`dir("/x")` is `/`).
-`base(p str) str` is the text after the last separator. *(ADR 0253)*
+On Windows a drive's root keeps its separator (`dir("C:\x")` is `C:\`).
+`base(p str) str` is the text after the last separator. *(ADR 0253, ADR 0504)*
 
 **std.path.3** — `ext(p str) str` is the text after the last `.` of
 `base(p)`, without the dot, and `""` when there is none or the only `.` is the
 first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
 
 **std.path.4** — `join(a str, b str) str` is `b` when `b` starts with a
-separator or `a` is empty; otherwise `a` and `b` with one `/` between.
-*(ADR 0253)*
+separator or `a` is empty; on Windows also when `b` starts with a drive and
+a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
+*(ADR 0253, ADR 0504)*
 
 ```ail
 use std.path
@@ -204,7 +208,10 @@ after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 **std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
-The process inherits the working directory and the environment, reads an
+On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
+starts `npm.cmd` (ADR 0504). A batch file (`.cmd`, `.bat`) runs through the
+system's command interpreter and fails as a `ProcError` when an argument has
+characters the system won't pass to it. The process inherits the working directory and the environment, reads an
 empty standard input, and its standard output and standard error are
 captured. The result is `struct Output { status int, out str, err str }`:
 the exit status (128 plus the signal number if a signal ended it, as shells
@@ -244,6 +251,55 @@ fn main() !
         return
     r := proc.run("sort", [], "b\na\n", 2000)?
     print(r.out)
+```
+
+**std.proc.4** — `start(cmd str, args List[str], timeout_ms int?) Child !
+ProcError` starts the program as `run` does (`std.proc.1`) and returns at once
+with a `proc.Child`, `unique struct Child { pid int, stdin Channel[str], out
+Channel[str], err Channel[str] }`. (`spawn` is a keyword, so the function is
+`start`.) `timeout_ms` may be left off; a process still running after that
+many milliseconds is killed (`std.proc.6`); a negative value traps. A process
+that can't start is a `ProcError`, a cancelled task starts none (kind
+`cancelled`, `conc.cancel.2`). *(ADRs 0424–0425)*
+
+**std.proc.5** — The streams of a child are channels. `c.out` and `c.err`
+hold the lines the child writes to standard output and standard error, in
+order, without the line end (`\n` or `\r\n`; a last line with no end
+counts), with bytes that aren't UTF-8 as U+FFFD. Each is closed when the
+stream ends, so `recv` gives `none`, `for line in c.out` ends, and
+`task.select` (`conc.select.1`) can wait on both. A child that writes more
+than a task reads is never blocked: lines queue without a limit. `c.stdin`
+takes text: `c.stdin.send(text)` writes it to the child's standard input
+at once, without waiting, and `c.stdin.close()` ends the input (a child that
+reads until the end of its input needs the `close`). Sending to a child that
+has exited is not an error. All three are `Channel[str]`, so a task can be
+passed `c.out` and read it while another task writes `c.stdin`. *(ADR 0425)*
+
+**std.proc.6** — `wait(move c Child) int ! ProcError` waits for the child to
+exit and returns its status as `run` does (`std.proc.1`). It fails with
+`ProcError` of kind `timed_out` when the time limit of `start` killed the
+child, and of kind `cancelled` (after killing the child) in a cancelled task.
+While it waits, other tasks run, so a task can write the child's input or read
+its output meanwhile. Lines the child wrote before it exited stay readable
+from `out` and `err`. *(ADR 0428)*
+
+**std.proc.7** — A `Child` is a unique value (`own.uniq.1`): it can't be
+copied, and `wait` and `kill` take it with `move` (`own.move.2`), so a child
+is waited or killed once. `kill(move c Child) int` ends the child at once
+(with `SIGKILL`; `TerminateProcess` on Windows), waits for it and returns its
+status (137 on Unix). A child that is neither waited nor killed when the
+program ends is killed then, so no program leaves a process running. *(ADR 0425)*
+
+```ail
+use std.proc
+
+fn main() !
+    c := proc.start("sort", [])?
+    c.stdin.send("b\na\n")
+    c.stdin.close()
+    for line in c.out
+        print(line)
+    print(proc.wait(move c)?)
 ```
 
 ## Network: `std.net`
@@ -302,6 +358,102 @@ fn main() !
 
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+## Calendar: `std.time.date`
+
+A standard module written in AIL (`use std.time.date`, ADR 0447). A
+**duration** is an `int` of milliseconds; the constants `date.SEC`, `MIN`,
+`HOUR` and `DAY` name the usual ones. A **zone** is a `str`: `"UTC"` (or
+`"Z"`), a fixed offset such as `"+05:30"` (`±HH`, `±HHMM` or `±HH:MM`), or an
+IANA name such as `"America/New_York"` read from the platform's tz database
+(`std.tz`, ADR 0448).
+
+**std.date.1** — `Date(year, month, day)` is a day of the proleptic Gregorian
+calendar. `Date.new(y, m, d)` is `none` unless the day exists.
+`is_leap(y)` and `days_in_month(y, m)` follow the Gregorian rules. A `Date`
+compares by year, then month, then day, and prints as its `iso()` text.
+
+**std.date.2** — `d.days()` is the number of days since 1970-01-01, negative
+before it; `Date.from_days(n)` is its inverse.
+
+**std.date.3** — `d.weekday()` is 1 for Monday to 7 for Sunday; `d.yday()`
+is 1 for January 1.
+
+**std.date.4** — `d.add_days(n)` and `a.since(b)` (days from `b` to `a`) are
+exact for any `n`.
+
+**std.date.5** — `d.add_months(n)` moves the month and keeps the day, except
+that a day the target month lacks becomes that month's last day (January 31
+plus one month is February 28 or 29). `d.add_years(n)` is `add_months(12 * n)`,
+so February 29 becomes February 28 in a common year. *(ADR 0449)*
+
+**std.date.6** — `DateTime` is an instant seen in a zone: `date`, `hour`,
+`minute`, `second`, `ms`, `offset` (seconds east of UTC at that instant) and
+`zone`. `==` compares these fields, so the same instant in two zones is not
+equal; `a.unix_ms() == b.unix_ms()` and `a.before(b)` compare instants.
+
+**std.date.7** — `date.utc(ms)` and `date.at(ms, zone)` give the instant `ms`
+milliseconds after 1970-01-01T00:00:00Z; `at` fails with `DateError` for an
+unknown zone. `dt.in_zone(zone)` is the same instant in another zone. Reading
+a local time in a zone (`parse_in`, `add_days`, `add_months`, `add_years`)
+resolves it to an instant: a local time that happens twice (the clock goes
+back) takes the first, and one that is skipped (the clock goes forward) takes
+the offset in force before the change, so it lands just after the gap.
+*(ADR 0449)*
+
+**std.date.8** — `dt.unix_ms()`, `a.before(b)` and `a.since(b)` (milliseconds
+from `b` to `a`) work on instants.
+
+**std.date.9** — `dt.iso()` is `YYYY-MM-DDTHH:MM:SS`, then `.mmm` unless the
+milliseconds are zero, then `Z` for offset 0 or `±HH:MM`. `d.iso()` is
+`YYYY-MM-DD`. Years below 1000 are padded to four digits. *(ADR 0450)*
+
+**std.date.10** — `dt.format(pattern)` replaces these tokens and copies the
+rest: `%Y` year, `%y` two-digit year, `%m` month, `%d` day, `%e` day padded
+with a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
+minute, `%S` second, `%f` milliseconds, `%a` and `%A` weekday name, `%b` and
+`%B` month name (English), `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone text,
+`%s` Unix seconds, `%%` a percent sign. An unknown token such as `%q` is kept
+as written. *(ADR 0451)*
+
+**std.date.11** — `date.now()` is the current instant in UTC and
+`date.now_local()` the current instant in the system zone (`tz.system()`, UTC
+when that zone isn't installed). Both read the clock, so `--deterministic`
+rejects a program that reaches them (`eff.det.1`); the rest of the module is
+pure.
+
+**std.date.12** — `dt.add_ms(n)` adds elapsed time. `dt.add_days(n)`,
+`add_months(n)` and `add_years(n)` keep the wall-clock time in the same zone
+(std.date.7), so across a clock change a day may last 23 or 25 hours.
+
+**std.date.13** — `date.parse_date(text)` reads `YYYY-MM-DD`.
+
+**std.date.14** — `date.parse_iso(text)` reads `YYYY-MM-DD` and `T` (or a
+space) and `HH:MM[:SS[.fraction]]` and an offset `Z`, `±HH`, `±HHMM` or
+`±HH:MM`; digits of the fraction past milliseconds are dropped. The result is
+in the text's own offset. Text with no offset is an error; `date.parse_in(text,
+zone)` reads it in `zone` instead (an offset in the text still wins). Seconds
+go to 59: leap seconds are not supported. *(ADR 0450)*
+
+**std.date.15** — Refused text, zones and dates fail with `DateError(text,
+why)`, which displays as `why: \`text\``.
+
+## Zones: `std.tz`
+
+**std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
+zone `zone` at the instant `secs` (seconds since the epoch), or `none` when the
+zone isn't installed, the name is empty or unsafe (it may hold only letters,
+digits and `/ _ + -`, no `..`, no leading `/`). It reads TZif files (RFC 9636)
+from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
+POSIX rule for instants after its last transition. It has the effects `fs` and
+`env`. *(ADR 0448)*
+
+**std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
+else the zone `/etc/localtime` links to, else `"UTC"`.
+
+**std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
+every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
+lands; UTC and fixed offsets work everywhere.
 
 ## Randomness: `std.random`
 
@@ -566,8 +718,8 @@ error that lists them. *(ADR 0328)*
 same element type (checked) and MUST have equal shapes: otherwise the call
 traps. *(ADR 0328)*
 
-**std.tensor.5** — On `float` tensors, `add` and `mul` round each element
-as `+` and `*` do. `sum` and `dot` add in this order: element `i` (or
+**std.tensor.5** — On `float` tensors, `add`, `mul` and `/` round each element
+as `+`, `*` and `/` do. `sum` and `dot` add in this order: element `i` (or
 product `i`) goes to partial sum `i % 16` for the first `16 * (n / 16)`
 elements; the partial sums then halve, `s[i] += s[i + h]` for `h` = 8, 4,
 2, 1; the remaining elements are added to `s[0]` in order. Products are
@@ -596,16 +748,17 @@ elements are equal. A tensor's text form is the call that rebuilds it:
 `tensor.from([1.0, 2.0])`, with the shape after the list when the tensor
 isn't 1-D. *(ADR 0328)*
 
-**std.tensor.10** — `a + b`, `a - b` and `a * b` with a tensor operand are
-elementwise, with no other arithmetic operator defined for tensors. Both
-operands are tensors with one element type and equal shapes (`a + b` is
-`a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the other a
-scalar of its element type, on either side, which is taken with every
-element: `t * 2.0`, `1.0 - t`. An `int` literal beside a `Tensor[float]` is a
-`float` (`type.num.10`). Rounding is std.tensor.5's and overflow
-std.tensor.6's; other operand types are a compile-time error, and unequal
-shapes trap. `+=`, `-=` and `*=` follow. Matrix product stays
-`a.matmul(b)`. *(ADR 0344)*
+**std.tensor.10** — `a + b`, `a - b`, `a * b` and `a / b` with a tensor
+operand are elementwise, with no other arithmetic operator defined for
+tensors. Both operands are tensors with one element type and equal shapes
+(`a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the
+other a scalar of its element type, on either side, which is taken with
+every element: `t * 2.0`, `1.0 - t`, `8.0 / t`. `/` is defined on `float`
+tensors only; `/` on a `Tensor[int]` is a compile-time error. An `int`
+literal beside a `Tensor[float]` is a `float` (`type.num.10`). Rounding is
+std.tensor.5's and overflow std.tensor.6's; other operand types are a
+compile-time error, and unequal shapes trap. `+=`, `-=` and `*=` follow.
+Matrix product stays `a.matmul(b)`. *(ADR 0344, ADR 0507)*
 
 **std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
 to a `T`; `t.sum(axis int)`, `t.max(axis)` and `t.mean(axis)` reduce along
@@ -621,6 +774,21 @@ one that is `>` it: a NaN never replaces it, and ties keep the earlier one.
 **std.tensor.12** — `t.transpose()` of an `m` by `n` tensor is the `n` by
 `m` tensor whose element `(j, i)` is `t`'s `(i, j)`. A tensor that isn't
 2-D traps. *(ADR 0345)*
+
+**std.tensor.13** — `t.relu()`, `t.sigmoid()` and `t.tanh()` apply an
+activation to each element of a `float` tensor and give a tensor of the
+same shape. `relu(x)` is `x` when `x > 0.0` and `0.0` otherwise, except
+that a NaN stays NaN. `sigmoid(x)` is `1.0 / (1.0 + exp(-x))` and `tanh` is
+the hyperbolic tangent, both with the platform's `exp` and `tanh`, so their
+last bit may differ between operating systems. Each element is computed by
+the same scalar code on every ISA, so std.tensor.5's vector paths don't
+apply to them.
+These methods on a `Tensor[int]` are a compile-time error. *(ADR 0507)*
+
+**std.tensor.14** — `-t` on a tensor negates each element and gives a tensor
+of the same shape and element type. A `float` is negated exactly, so `-0.0`
+is a result. An `int` element that is the least `int` traps as in
+std.tensor.6. *(ADR 0508)*
 
 ```ail
 fn main()

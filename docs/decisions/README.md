@@ -368,6 +368,12 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
+| [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
+| [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
+| [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
+| [0450](0450-iso-8601-parse-and-print.md) | ISO 8601: an offset is required, `parse_in` supplies a zone, `iso()` prints round-trippable text *(delegated)* | Accepted | 2026-10-20 |
+| [0451](0451-format-patterns-use-strftime-tokens.md) | `format` patterns use strftime tokens *(delegated)* | Accepted | 2026-10-20 |
+| [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
 | [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |
 | [0405](0405-native-traps.md) | Native traps print the interpreter's first line and exit 1 *(delegated)* | Accepted | 2026-10-20 |
 | [0406](0406-raw-syscalls-for-native-runtime.md) | Raw syscalls for the first native runtime, including on macOS *(delegated)* | Accepted | 2026-10-20 |
@@ -375,6 +381,27 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0408](0408-buffered-output.md) | Output is buffered in the runtime; errors are not *(delegated)* | Accepted | 2026-10-20 |
 | [0409](0409-float-text-by-exact-digit-generation.md) | Float text by exact digit generation, written from the textbook *(delegated)* | Accepted | 2026-10-20 |
 | [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
+| [0430](0430-unsafe-blocks-and-functions-built.md) | `unsafe` blocks and `unsafe fn`, with a manifest opt-in, are built *(delegated)* | Accepted | 2026-10-20 |
+| [0460](0460-drag-race-harness.md) | The drag race is one Python harness that times AIL, native AIL, C and Python from twins *(delegated)* | Accepted | 2026-10-20 |
+| [0461](0461-module-fuzzers.md) | Module fuzzers are templates plus seeded input generators *(delegated)* | Accepted | 2026-10-20 |
+| [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
+| [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
+| [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
+| [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
+| [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
+| [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
+| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
+| [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
+| [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
+| [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
+| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
+| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
+| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
+| [0424](0424-streaming-child-processes.md) | Streaming child processes: `proc.start`, with the child's streams as channels *(delegated)* | Accepted | 2026-10-20 |
+| [0425](0425-child-is-unique-and-consumed.md) | A `Child` is a unique value, consumed by `wait` or `kill`, and ended with the program *(delegated)* | Accepted | 2026-10-20 |
+| [0426](0426-scheduler-waits-for-child-streams.md) | The scheduler waits for a child's output instead of reporting a deadlock *(delegated)* | Accepted | 2026-10-20 |
+| [0427](0427-task-select.md) | `task.select(chans)` waits on several channels and returns an index *(delegated)* | Accepted | 2026-10-20 |
+| [0428](0428-wait-yields-and-time-limit-kills.md) | `proc.wait` lets other tasks run, and the time limit kills the child *(delegated)* | Accepted | 2026-10-20 |

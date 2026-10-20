@@ -1,0 +1,6 @@
+# std.tensor.10, std.tensor.13: `/` on int tensors, and activations on int tensors.
+fn main()
+    i := tensor.from([1, 2])
+    print(i / i)
+    print(i.relu())
+    print(i.sigmoid())

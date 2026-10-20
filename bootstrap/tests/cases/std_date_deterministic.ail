@@ -1,0 +1,8 @@
+## std.date.11, eff.det.1: the calendar is pure, so it runs under
+## `--deterministic`; `date.now()` reads the clock and is refused there.
+use std.time.date
+
+fn main()
+    t := date.utc(1_700_000_000_000)
+    print(t.iso())
+    print(t.add_days(30).format("%Y-%m-%d"))

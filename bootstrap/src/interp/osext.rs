@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::stdlib::{error_kind, path_join};
+use crate::stdlib::{error_kind, is_sep_in, path_join};
 
 /// A failure: the path it concerns, and its kind (std.err.1).
 pub type FsFail = (String, &'static str);
@@ -45,16 +45,31 @@ fn walk_into(dir: &str, out: &mut Vec<String>) -> Result<(), FsFail> {
 /// neither matches a leading `.`; a whole component `**` matches any number
 /// of directories. Directories that can't be read are skipped.
 pub fn glob(pattern: &str) -> Vec<String> {
-    let (root, rest) = match pattern.strip_prefix('/') {
-        Some(rest) => ("/", rest),
-        None => ("", pattern),
-    };
-    let parts: Vec<&str> = rest.split('/').filter(|p| !p.is_empty()).collect();
+    glob_in_platform(pattern, cfg!(windows))
+}
+
+/// std.fs.9 on a platform the caller picks: the root of `pattern` (its
+/// leading separator, or a Windows drive root `C:\`) and the components.
+fn glob_in_platform(pattern: &str, windows: bool) -> Vec<String> {
+    let (root, rest) = glob_root(pattern, windows);
+    let parts: Vec<&str> = rest.split(|c| is_sep_in(c, windows)).filter(|p| !p.is_empty()).collect();
     let mut out = Vec::new();
     glob_in(root, &parts, &mut out);
     out.sort();
     out.dedup();
     out
+}
+
+/// std.fs.9: the absolute root of a pattern and what follows it. The root
+/// keeps the pattern's own separator; a drive root is `C:` and its separator.
+fn glob_root(pattern: &str, windows: bool) -> (&str, &str) {
+    if windows && matches!(pattern.as_bytes(), [d, b':', s, ..] if d.is_ascii_alphabetic() && is_sep_in(*s as char, true)) {
+        return (&pattern[..3], &pattern[3..]);
+    }
+    match pattern.chars().next() {
+        Some(c) if is_sep_in(c, windows) => (&pattern[..1], &pattern[1..]),
+        _ => ("", pattern),
+    }
 }
 
 fn glob_in(prefix: &str, parts: &[&str], out: &mut Vec<String>) {
@@ -188,7 +203,15 @@ pub type Ran = (std::process::ExitStatus, Vec<u8>, Vec<u8>);
 /// standard input, and killing it after `timeout_ms` (if any), which is
 /// then the failure `timed_out`.
 pub fn run(cmd: &str, args: &[String], input: Option<&str>, timeout_ms: Option<u64>) -> Result<Ran, &'static str> {
-    let mut child = Command::new(cmd)
+    // std.proc.1: on Windows a bare name is found with the extensions in
+    // PATHEXT first, so `npm` starts `npm.cmd`, which Rust's own lookup
+    // doesn't try. A name that isn't found is started as given and fails.
+    let program = if cfg!(windows) && !cmd.contains(['/', '\\']) {
+        which(cmd).unwrap_or_else(|| cmd.to_string())
+    } else {
+        cmd.to_string()
+    };
+    let mut child = Command::new(program)
         .args(args)
         .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
@@ -286,6 +309,17 @@ fn executable(p: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::wildcard;
+
+    #[test]
+    fn glob_roots_on_both_platforms() {
+        use super::glob_root;
+        assert_eq!(glob_root("/tmp/*.ail", false), ("/", "tmp/*.ail"));
+        assert_eq!(glob_root("a\\*.ail", false), ("", "a\\*.ail"));
+        assert_eq!(glob_root("C:\\src\\*.ail", true), ("C:\\", "src\\*.ail"));
+        assert_eq!(glob_root("\\src\\*.ail", true), ("\\", "src\\*.ail"));
+        assert_eq!(glob_root("C:src", true), ("", "C:src"));
+        assert_eq!(glob_root("C:\\src", false), ("", "C:\\src"));
+    }
 
     #[test]
     fn wildcards() {

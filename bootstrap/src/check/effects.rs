@@ -11,8 +11,7 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` yet, so
-/// nothing gives it; `spawn` gives `spawn`.
+/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `spawn` gives `spawn`.
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
@@ -61,17 +60,19 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         ),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
-        "proc" => (&["run", "which"], &["proc", "io"]),
+        "proc" => (&["run", "which", "start", "wait", "kill"], &["proc", "io"]),
         // std.net.1: every request reaches the network.
         "net" => (&["get", "post"], &["net", "io"]),
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.tz.1-2: reads the tz database files, and `TZ`.
+        "tz" => (&["offset", "system"], &["fs", "env"]),
         // std.tensor.1: values only, so no effects.
         "tensor" => (&["from", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
-        "task" => (&["cancelled", "check"], &[]),
+        "task" => (&["cancelled", "check", "select"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.
         "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,
@@ -555,6 +556,11 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.otherwise(otherwise);
             }
             Stmt::Defer(s, _) => self.stmt(s),
+            // unsafe.block.5, eff.infer.4: an `unsafe` block gives `unsafe`.
+            Stmt::Unsafe { body, .. } => {
+                self.direct.entry("unsafe").or_insert_with(|| "an `unsafe` block".to_string());
+                self.block(body);
+            }
         }
     }
 
@@ -803,6 +809,13 @@ mod tests {
         let src = "use std.time\nuse std.env\nuse std.proc\nfn main()\n    t := time.now_ms()\n    e := env.cwd()\n    r := proc.run(\"ls\", [])\n";
         let (prog, resolved) = front(src);
         assert_eq!(set(&prog, &resolved, "fn:main"), ["clock", "env", "io", "proc"]);
+    }
+
+    #[test]
+    fn tz_reads_files_and_env() {
+        let src = "use std.tz\nfn main()\n    print(tz.offset(\"UTC\", 0))\n    print(tz.system())\n";
+        let (prog, resolved) = front(src);
+        assert_eq!(set(&prog, &resolved, "fn:main"), ["env", "fs", "io"]);
     }
 
     #[test]

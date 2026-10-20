@@ -5,7 +5,7 @@
 //! The fence line says what to expect (documented in `docs/spec/README.md`):
 //! - ```` ```ail ````: must check clean (warnings allowed).
 //! - ```` ```ail fragment ````: a snippet that isn't a whole program. Column-0
-//!   declarations (`struct`, `enum`, `fn`, `trait`, `impl`, `const`, `use`,
+//!   declarations (`struct`, `enum`, `fn`, `trait`, `impl`, `const`, `use`, `unsafe fn`, `extern`,
 //!   `type`, `@attribute`, with their indented bodies) stay top level, and
 //!   every other line becomes the body of a generated `fn main()`. A block
 //!   that declares its own `main` is used as written.
@@ -91,8 +91,8 @@ fn has_main(code: &str) -> bool {
     code.lines().any(|l| l.starts_with("fn main"))
 }
 
-const DECLS: [&str; 13] =
-    ["struct ", "enum ", "error ", "unique ", "fn ", "trait ", "impl ", "const ", "use ", "type ", "@", "pub ", "#"];
+const DECLS: [&str; 15] =
+    ["struct ", "enum ", "error ", "unique ", "fn ", "unsafe fn ", "extern ", "trait ", "impl ", "const ", "use ", "type ", "@", "pub ", "#"];
 
 /// Split a fragment into top-level declarations and a `main` body.
 fn wrap_fragment(code: &str) -> String {

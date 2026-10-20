@@ -28,7 +28,9 @@ mod contracts;
 pub mod parallel;
 mod net;
 mod osext;
+mod spawn;
 mod random;
+mod tz;
 mod stdlib;
 mod tasks;
 mod tensor;
@@ -403,7 +405,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
-    let has_unique = prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique);
+    // A standard module's unique type (`proc.Child`) has no cleanup to run, so
+    // it doesn't slow programs that don't declare one (std.proc.7).
+    let has_unique = prog.structs.iter().any(|s| s.unique && !s.name.contains('.')) || prog.enums.iter().any(|e| e.unique);
     let has_defer = prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b));
     Interp {
         prog,
@@ -442,7 +446,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
-        tier: bytecode::usable(prog, trace::mode(), has_unique, has_defer),
+        tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
         reg_pool: Vec::new(),
         stats: bytecode::Stats {
@@ -476,7 +480,9 @@ fn has_defer(b: &Block) -> bool {
     }
     b.iter().any(|s| match s {
         Stmt::Defer(..) => true,
-        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } => has_defer(body),
+        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } | Stmt::Unsafe { body, .. } => {
+            has_defer(body)
+        }
         Stmt::Let { value, otherwise, .. } => {
             in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
         }
@@ -1419,6 +1425,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.for_loop(var, iter, body, env)?;
                 }
             }
+            Stmt::Unsafe { body, .. } => return self.block(body, env),
             Stmt::With { mutex, var, body, pos, .. } => self.with_block(mutex, var, body, *pos, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
@@ -2149,6 +2156,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = match self.eval(operand, env)? {
                     Value::Float(x) => return Ok(Value::Float(-x)),
                     Value::Num(k, bits) => return negate(k, bits, *pos),
+                    Value::Tensor(t) => {
+                        return match t.neg() {
+                            Ok(r) => Ok(Value::Tensor(Rc::new(r))),
+                            Err(f) => Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        };
+                    }
                     v => v.int(),
                 };
                 match v.checked_neg() {

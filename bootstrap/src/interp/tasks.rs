@@ -89,6 +89,16 @@ struct Chan {
     capacity: usize,
     closed: bool,
     waiters: Vec<usize>,
+    /// A child's output stream feeding this channel (std.proc.5).
+    ext: Option<Arc<super::spawn::Ext>>,
+    /// A child's input: `send` writes to it, `close` ends it (std.proc.5).
+    sink: Option<std::sync::mpsc::Sender<String>>,
+}
+
+impl Chan {
+    fn new(capacity: usize) -> Self {
+        Chan { items: VecDeque::new(), capacity, closed: false, waiters: Vec::new(), ext: None, sink: None }
+    }
 }
 
 struct Cell {
@@ -141,6 +151,45 @@ impl Sched {
         if st.tasks[id].status == Status::Blocked {
             st.tasks[id].status = Status::Ready;
             st.ready.push_back(id);
+        }
+    }
+
+    /// std.proc.5: move what children's streams produced into their
+    /// channels, close those that ended, and wake the tasks waiting on them.
+    fn pump(st: &mut State) {
+        let mut wake = Vec::new();
+        for ch in st.chans.iter_mut().filter(|c| !c.closed) {
+            let Some(ext) = &ch.ext else { continue };
+            let (lines, eof) = ext.take();
+            if lines.is_empty() && !eof {
+                continue;
+            }
+            ch.items.extend(lines.into_iter().map(|l| Value::Str(Rc::from(l.as_str()))));
+            ch.closed = eof;
+            wake.append(&mut ch.waiters);
+        }
+        for w in wake {
+            Sched::wake(st, w);
+        }
+    }
+
+    /// Nothing is ready, but a task waits on a child's stream: sleep until
+    /// the child writes or ends, and return the next task to run. `None`
+    /// when no child could wake anything (a deadlock, conc.task.7).
+    fn wait_external(st: &mut State, blocking: Option<usize>) -> Option<usize> {
+        if !st.chans.iter().any(|c| c.ext.is_some() && !c.closed && !c.waiters.is_empty()) {
+            return None;
+        }
+        if let Some(me) = blocking {
+            st.tasks[me].status = Status::Blocked;
+        }
+        loop {
+            let seen = super::spawn::event_count();
+            Sched::pump(st);
+            if let Some(next) = Sched::next_ready(st) {
+                return Some(next);
+            }
+            super::spawn::wait_event(seen, 50);
         }
     }
 
@@ -205,7 +254,12 @@ impl Sched {
             return Err(cancelled(pos));
         }
         st.tasks[me].waiting = waiting;
-        match Sched::next_ready(&mut st) {
+        Sched::pump(&mut st);
+        let next = match Sched::next_ready(&mut st) {
+            Some(n) => Some(n),
+            None => Sched::wait_external(&mut st, Some(me)),
+        };
+        match next {
             Some(next) => {
                 st.tasks[me].status = Status::Blocked;
                 self.hand_to(&mut st, next);
@@ -244,7 +298,9 @@ impl Sched {
         if st.shutdown {
             return;
         }
-        if let Some(next) = Sched::next_ready(&mut st) {
+        Sched::pump(&mut st);
+        let next = Sched::next_ready(&mut st).or_else(|| Sched::wait_external(&mut st, None));
+        if let Some(next) = next {
             self.hand_to(&mut st, next);
         } else if let Some(stuck) = st.tasks.iter().position(|t| t.status == Status::Blocked) {
             // conc.task.7: every task left is blocked; the first one traps.
@@ -300,6 +356,8 @@ fn cancelled(pos: Pos) -> Trap {
 /// still only one thread touches values, and wait for every thread.
 pub(super) fn shutdown(ctx: Option<Ctx>) {
     let Some(ctx) = ctx else { return };
+    // std.proc.7: a child nobody waited or killed ends with the program.
+    super::spawn::reap_all();
     let (threads, pooled) = {
         let mut st = ctx.sched.lock();
         st.shutdown = true;
@@ -508,7 +566,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     return Err(Trap { rule: "conc.share.4", pos, message }.into());
                 }
                 let capacity = usize::try_from(capacity).unwrap_or(usize::MAX);
-                st.chans.push(Chan { items: VecDeque::new(), capacity, closed: false, waiters: Vec::new() });
+                st.chans.push(Chan::new(capacity));
                 Handle::Channel(st.chans.len() - 1)
             }
             ("Mutex", Some(value)) => {
@@ -581,6 +639,13 @@ impl<'a, W: Write> Interp<'a, W> {
                     if ch.closed {
                         return trap("conc.share.4", format!("send on a closed channel `{}`", h.text()));
                     }
+                    // std.proc.5: a child's input takes the text at once.
+                    if let Some(tx) = &ch.sink {
+                        if let Value::Str(text) = &v {
+                            let _ = tx.send(text.to_string());
+                        }
+                        break;
+                    }
                     if ch.items.len() < ch.capacity {
                         ch.items.push_back(v);
                         for w in std::mem::take(&mut ch.waiters) {
@@ -600,6 +665,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Unit
             }
             (Handle::Channel(c), "recv") => loop {
+                Sched::pump(&mut st);
                 let cancelled = st.tasks[me].cancelled;
                 let ch = &mut st.chans[c];
                 if let Some(v) = ch.items.pop_front() {
@@ -621,6 +687,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     return trap("conc.share.4", format!("channel `{}` is already closed", h.text()));
                 }
                 ch.closed = true;
+                ch.sink = None;
                 for w in std::mem::take(&mut ch.waiters) {
                     Sched::wake(&mut st, w);
                 }
@@ -682,6 +749,7 @@ impl<'a, W: Write> Interp<'a, W> {
         let mut st = sched.lock();
         st = sched.switch(st, me, pos)?;
         loop {
+            Sched::pump(&mut st);
             let cancelled = st.tasks[me].cancelled;
             let ch = &mut st.chans[c];
             if let Some(v) = ch.items.pop_front() {
@@ -697,6 +765,69 @@ impl<'a, W: Write> Interp<'a, W> {
             ch.waiters.push(me);
             st = sched.block(st, me, "a value from a channel", pos)?;
         }
+    }
+
+    /// A channel fed by a child's output stream, or feeding its input
+    /// (std.proc.5); returns its handle.
+    pub(super) fn child_chan(&mut self, ext: Option<Arc<super::spawn::Ext>>, sink: Option<std::sync::mpsc::Sender<String>>) -> Value {
+        let ctx = self.ctx();
+        let mut st = ctx.sched.lock();
+        let mut ch = Chan::new(usize::MAX);
+        ch.ext = ext;
+        ch.sink = sink;
+        st.chans.push(ch);
+        Value::Handle(Handle::Channel(st.chans.len() - 1))
+    }
+
+    /// std.proc.6: let other tasks run while this one polls a child.
+    pub(super) fn yield_turn(&mut self, pos: Pos) -> Result<(), Trap> {
+        let ctx = self.ctx();
+        let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
+        let mut st = sched.lock();
+        Sched::pump(&mut st);
+        match Sched::next_ready(&mut st) {
+            Some(next) => {
+                st.tasks[me].status = Status::Ready;
+                st.ready.push_back(me);
+                sched.hand_to(&mut st, next);
+                drop(sched.await_turn(st, me, pos)?);
+            }
+            None => {
+                let seen = super::spawn::event_count();
+                drop(st);
+                super::spawn::wait_event(seen, 5);
+            }
+        }
+        Ok(())
+    }
+
+    /// `task.select(chans)` (conc.select.1, ADR 0427): the index of the first
+    /// channel with a value waiting, blocking until there is one; `none`
+    /// once every channel is closed and empty, or the task is cancelled.
+    pub(super) fn select(&mut self, chans: &[usize], pos: Pos) -> Flow<Value> {
+        let ctx = self.ctx();
+        let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
+        let mut st = sched.lock();
+        st = sched.switch(st, me, pos)?;
+        let found = loop {
+            Sched::pump(&mut st);
+            if let Some(i) = chans.iter().position(|&c| !st.chans[c].items.is_empty()) {
+                break Value::Int(i as i64);
+            }
+            if st.tasks[me].cancelled || chans.iter().all(|&c| st.chans[c].closed) {
+                break Value::None;
+            }
+            for &c in chans {
+                if !st.chans[c].closed && !st.chans[c].waiters.contains(&me) {
+                    st.chans[c].waiters.push(me);
+                }
+            }
+            st = sched.block(st, me, "a value from one of several channels", pos)?;
+        };
+        for &c in chans {
+            st.chans[c].waiters.retain(|&w| w != me);
+        }
+        Ok(found)
     }
 
     /// `with m as mut x` body (conc.share.6): take the lock, run the body

@@ -20,11 +20,12 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("io", &["eprint", "exit", "read_all", "read_line"]),
     ("net", &["get", "post"]),
     ("path", &["base", "dir", "ext", "join"]),
-    ("proc", &["run", "which"]),
+    ("proc", &["kill", "run", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("tensor", &["from", "zeros"]),
-    ("task", &["cancelled", "check"]),
+    ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
+    ("tz", &["offset", "system"]),
     ("ui", &["clipboard_get", "clipboard_set", "open"]),
 ];
 
@@ -50,7 +51,10 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
-    &["add", "dot", "len", "map", "matmul", "max", "mean", "mul", "reshape", "shape", "sum", "to_list", "transpose"];
+    &[
+        "add", "dot", "len", "map", "matmul", "max", "mean", "mul", "relu", "reshape", "shape", "sigmoid", "sum", "tanh",
+        "to_list", "transpose",
+    ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
 /// position of the function's name.
@@ -76,6 +80,7 @@ const TYPES: &[(&str, &str)] = &[
     ("Response", "net"),
     ("NetError", "net"),
     ("Output", "proc"),
+    ("Child", "proc"),
     ("ProcError", "proc"),
     ("Window", "ui"),
     ("Size", "ui"),
@@ -96,8 +101,10 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
-const AIL_MODULES: &[(&str, &str, &str)] =
-    &[("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail"))];
+const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
+    ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
+];
 
 /// The file name of the standard module in AIL at `dotted`, if there is one.
 pub fn ail_module_path(dotted: &str) -> Option<&'static str> {
@@ -173,26 +180,45 @@ pub fn error_kind(e: &std::io::Error) -> &'static str {
     }
 }
 
-/// std.path.2: a separator is `/`, and also `\\` on Windows.
-fn is_sep(c: char) -> bool {
-    c == '/' || (cfg!(windows) && c == '\\')
+/// std.path.2: a separator is `/`, and also `\` on Windows. The platform is
+/// the caller's choice, so tests check both rules on any host.
+pub fn is_sep_in(c: char, windows: bool) -> bool {
+    c == '/' || (windows && c == '\\')
+}
+
+/// std.path.2, std.path.4: a Windows drive and its colon at the start of `p`
+/// (`C:`), which on Windows is absolute only when a separator follows it.
+fn drive_absolute_in(p: &str, windows: bool) -> bool {
+    windows && matches!(p.as_bytes(), [d, b':', s, ..] if d.is_ascii_alphabetic() && is_sep_in(*s as char, true))
 }
 
 /// std.path.2: the text before and after the last separator; the part
 /// before is `None` when there is no separator.
 pub fn path_split(p: &str) -> (Option<&str>, &str) {
-    match p.rfind(is_sep) {
+    path_split_in(p, cfg!(windows))
+}
+
+fn path_split_in(p: &str, windows: bool) -> (Option<&str>, &str) {
+    match p.rfind(|c| is_sep_in(c, windows)) {
         Some(i) => (Some(&p[..i]), &p[i + 1..]),
         None => (None, p),
     }
 }
 
 /// std.path.2: the directory part: `.` with no separator, the separator
-/// itself for a file in the root.
+/// itself for a file in the root, and a drive's root with its separator
+/// (`dir("C:\x")` is `C:\`).
 pub fn path_dir(p: &str) -> String {
-    match path_split(p) {
+    path_dir_in(p, cfg!(windows))
+}
+
+fn path_dir_in(p: &str, windows: bool) -> String {
+    match path_split_in(p, windows) {
         (None, _) => ".".into(),
         (Some(""), _) => p[..1].into(),
+        (Some(d), _) if windows && d.len() == 2 && d.as_bytes()[1] == b':' && d.as_bytes()[0].is_ascii_alphabetic() => {
+            p[..3].into()
+        }
         (Some(d), _) => d.into(),
     }
 }
@@ -208,13 +234,45 @@ pub fn path_ext(p: &str) -> String {
 }
 
 /// std.path.4: `b` under `a` with one separator between; `b` alone when it
-/// is absolute or `a` is empty.
+/// is absolute (a drive path counts on Windows) or `a` is empty.
 pub fn path_join(a: &str, b: &str) -> String {
-    if a.is_empty() || b.starts_with(is_sep) {
+    path_join_in(a, b, cfg!(windows))
+}
+
+fn path_join_in(a: &str, b: &str, windows: bool) -> String {
+    if a.is_empty() || b.starts_with(|c| is_sep_in(c, windows)) || drive_absolute_in(b, windows) {
         b.into()
-    } else if a.ends_with(is_sep) {
+    } else if a.ends_with(|c| is_sep_in(c, windows)) {
         format!("{a}{b}")
     } else {
         format!("{a}/{b}")
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    #[test]
+    fn windows_drives_and_separators() {
+        assert_eq!(path_dir_in("C:\\x\\y.ail", true), "C:\\x");
+        assert_eq!(path_dir_in("C:\\x", true), "C:\\");
+        assert_eq!(path_dir_in("C:\\", true), "C:\\");
+        assert_eq!(path_dir_in("\\x", true), "\\");
+        assert_eq!(path_dir_in("C:x", true), ".");
+        assert_eq!(path_split_in("a\\b/c", true), (Some("a\\b"), "c"));
+        assert_eq!(path_join_in("C:\\a", "C:\\b", true), "C:\\b");
+        assert_eq!(path_join_in("C:\\a", "b", true), "C:\\a/b");
+        assert_eq!(path_join_in("C:\\a", "\\b", true), "\\b");
+        assert_eq!(path_join_in("C:\\a", "D:x", true), "C:\\a/D:x");
+    }
+
+    #[test]
+    fn posix_is_unchanged() {
+        assert_eq!(path_dir_in("C:\\x", false), ".");
+        assert_eq!(path_split_in("a\\b", false), (None, "a\\b"));
+        assert_eq!(path_join_in("a", "C:\\b", false), "a/C:\\b");
+        assert_eq!(path_join_in("a/", "b", false), "a/b");
+        assert_eq!(path_join_in("a", "/b", false), "/b");
     }
 }

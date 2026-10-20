@@ -49,6 +49,8 @@ struct ManifestFile {
     /// Positions are local to the manifest until `finish`.
     diags: Vec<Diagnostic>,
     grants: Vec<Grant>,
+    /// The packages this manifest lets contain `unsafe` code (unsafe.block.3).
+    unsafe_ok: Vec<String>,
 }
 
 /// What an import path written in some module names.
@@ -187,7 +189,11 @@ impl Packages {
             src,
             diags,
             grants: Vec::new(),
+            unsafe_ok: Vec::new(),
         });
+        if manifest.unsafe_ok {
+            self.manifests[me].unsafe_ok.push(pkg.to_string());
+        }
         if let (Some((name, _)), Some((parent, pos))) = (&manifest.name, from)
             && name != pkg
         {
@@ -235,6 +241,9 @@ impl Packages {
                 continue;
             }
             self.deps.get_mut(pkg).expect("visited").push(dep.name.clone());
+            if dep.unsafe_ok {
+                self.manifests[me].unsafe_ok.push(dep.name.clone());
+            }
             self.manifests[me].grants.push(Grant {
                 package: dep.name.clone(),
                 caps: dep.caps,
@@ -308,6 +317,7 @@ impl Packages {
                 diags.push(d);
             }
             prog.grants.extend(m.grants.into_iter().map(|g| Grant { pos: at(g.pos), ..g }));
+            prog.unsafe_allowed.get_or_insert_with(Vec::new).extend(m.unsafe_ok);
             prog.files.push(SourceFile {
                 path: m.path.display().to_string(),
                 src: m.src,
@@ -327,6 +337,8 @@ fn canonical(dir: &Path) -> PathBuf {
 struct Manifest {
     name: Option<(String, Pos)>,
     caps: Option<Vec<&'static str>>,
+    /// `unsafe allow` on the `package` line (unsafe.block.3).
+    unsafe_ok: bool,
     deps: Vec<Dep>,
 }
 
@@ -338,6 +350,8 @@ struct Dep {
     /// `git URL` with its pin (mod.pkg.6).
     git: Option<git::Source>,
     caps: Vec<&'static str>,
+    /// `unsafe allow` on the `dep` line (unsafe.block.3).
+    unsafe_ok: bool,
 }
 
 /// The words of one line, with their columns: whitespace separates them,
@@ -418,8 +432,8 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
             m.name = Some((String::new(), *kw_pos));
         }
         let allowed: &[&str] = match kw.as_str() {
-            "package" => &["caps"],
-            "dep" => &["path", "git", "rev", "tag", "caps"],
+            "package" => &["caps", "unsafe"],
+            "dep" => &["path", "git", "rev", "tag", "caps", "unsafe"],
             _ => {
                 diags.push(
                     Diagnostic::new("mod.pkg.2", *kw_pos, format!("`{kw}` is not a manifest line"))
@@ -460,6 +474,17 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
                 diags.push(Diagnostic::new("mod.pkg.2", kpos, format!("`{key}` is given twice on this line")));
             }
         }
+        let unsafe_ok = match keys.get("unsafe") {
+            Some(("allow", _)) => true,
+            Some((v, p)) => {
+                diags.push(
+                    Diagnostic::new("unsafe.block.3", *p, format!("`unsafe {v}` is not an unsafe setting"))
+                        .help("write `unsafe allow` to let this package contain `unsafe` code"),
+                );
+                false
+            }
+            None => false,
+        };
         let grant = keys.get("caps").map(|(v, p)| caps(v, *p, &mut diags));
         if kw == "package" {
             if m.name.as_ref().is_some_and(|(n, _)| !n.is_empty()) {
@@ -468,6 +493,7 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
             }
             m.name = Some((name.clone(), *name_pos));
             m.caps = grant;
+            m.unsafe_ok = unsafe_ok;
             continue;
         }
         if !names.insert(name.clone()) || name == "std" {
@@ -512,7 +538,7 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
                 None
             }
         };
-        m.deps.push(Dep { name: name.clone(), pos: *name_pos, path, git, caps: grant.unwrap_or_default() });
+        m.deps.push(Dep { name: name.clone(), pos: *name_pos, path, git, caps: grant.unwrap_or_default(), unsafe_ok });
     }
     if m.name.is_none() {
         diags.push(

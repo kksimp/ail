@@ -1,0 +1,20 @@
+## An agent-style byte inspector: print a file as offset-addressed hex rows of
+## 16 bytes. The bytes come from the system od tool, since there is no bytes
+## type yet; the rows and offsets are built in AIL.
+##   ./ail run examples/hexdump.ail
+
+fn main() !
+    file := "{path.dir(env.program())}/agent-data/status.json"
+    dump := proc.run("od", ["-An", "-tx1", "-v", "-w16", file])?
+    if dump.status != 0
+        print("od failed: {dump.err.trim()}")
+        return
+    mut total := 0
+    rows := dump.out.lines()
+    for i in 0..rows.len()
+        hex := rows[i].trim()
+        if hex == ""
+            continue
+        total += hex.split(" ").len()
+        print("{i * 16:>6}  {hex}")
+    print("{total} bytes")
