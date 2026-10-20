@@ -1,4 +1,4 @@
-//! Messages written on error types (err.msg.1-3, ADR 0278):
+//! Messages written on error types (err.msg.1-2, ADR 0278):
 //! `error struct E "text {field}"` and `Variant(f T) "text {f}"` in an
 //! `error enum`. Each is the type's display text: the parser turns the
 //! messages into the tokens of an `impl ToStr for E`, spliced in after the

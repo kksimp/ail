@@ -374,6 +374,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0407](0407-bump-allocator-no-header.md) | Bump allocator over mmap, no object header, collector later *(delegated)* | Accepted | 2026-10-20 |
 | [0408](0408-buffered-output.md) | Output is buffered in the runtime; errors are not *(delegated)* | Accepted | 2026-10-20 |
 | [0409](0409-float-text-by-exact-digit-generation.md) | Float text by exact digit generation, written from the textbook *(delegated)* | Accepted | 2026-10-20 |
+| [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
