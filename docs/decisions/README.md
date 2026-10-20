@@ -303,3 +303,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0314](0314-standard-modules-in-ail.md) | Standard modules written in AIL, starting with `std.ui.widgets` *(delegated)* | Accepted | 2026-10-20 |
 | [0315](0315-widget-contract.md) | Widgets render pure runs and turn events into an `Action` *(delegated)* | Accepted | 2026-10-20 |
 | [0316](0316-dashboard-example.md) | `examples/dashboard.ail` prints by default and opens a window with `--window` *(delegated)* | Accepted | 2026-10-20 |
+| [0317](0317-move-self-receivers.md) | `move self` receivers consume the receiver; the call site is unmarked *(delegated)* | Accepted | 2026-10-20 |
+| [0318](0318-unique-values-in-lists-and-maps.md) | Lists and maps may hold unique values; such a collection is unique *(delegated)* | Accepted | 2026-10-20 |
+| [0319](0319-copying-methods-on-unique-collections.md) | Methods that copy elements are errors on unique collections; task handles stay out of lists *(delegated)* | Accepted | 2026-10-20 |

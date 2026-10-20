@@ -580,8 +580,23 @@ f := File(fd: 3)
 close(move f)          # f can't be used after this
 ```
 
-A unique value can't be a list element, map value, `ref` contents or type
-argument yet (OQ-050).
+A `move self` method consumes its receiver; the call has no mark, and the
+receiver can't be used after it (own.move.6):
+
+```ail
+fn File.finish(move self) int
+    fd
+
+n := f.finish()        # f is moved
+```
+
+Lists and maps of a unique type are unique too (own.uniq.8-10).
+`xs.push(move x)`, `insert(i, move x)` and `extend(move ys)` move in;
+`pop()`, `remove_at(i)` and `m.remove(k)` move out; `xs[i]`, `m[k]` and
+`for x in xs` borrow in place. `first`, `last`, `min`, `max`, `sorted`,
+`take`, `get` and `values` would copy, so they are errors. A unique value
+still can't be a map key, set element, `ref` contents or type argument;
+task handles go in a `TaskGroup`, not a list.
 
 ## Modules
 
