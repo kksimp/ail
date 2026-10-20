@@ -195,7 +195,8 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free.
+flag), 40-51 concurrency (#194: tasks, locks, stacks), 52-54 `fmt.ail` (the
+byte builder), 55-63 free.
 
 **Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
 after `main` and by `io.exit`); every trap; before reading standard input;
