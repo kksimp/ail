@@ -302,10 +302,12 @@ impl FnDecl {
     }
 }
 
-/// `self` or `mut self` (trait.method.1).
+/// `self`, `mut self` or `move self` (trait.method.1, own.move.6).
 #[derive(Debug, Clone, Copy)]
 pub struct Receiver {
     pub mutable: bool,
+    /// `move self`: the method consumes its receiver (own.move.6).
+    pub moved: bool,
 }
 
 /// `name Type`, `mut name Type` or `move name Type` (gram.fn.2,

@@ -1,6 +1,8 @@
 //! Ownership checks made while typing (ADRs 0063, 0066-0069, 0190-0193):
 //! unique types (own.uniq.1-6), `move` parameters and arguments
-//! (own.move.1-5), `ref T` (own.ref.1-7) and `defer` (own.defer.1-3).
+//! (own.move.1-5), `move self` (own.move.6, ADR 0317), unique values in
+//! lists and maps (own.uniq.8-10, ADRs 0318-0319), `ref T` (own.ref.1-7)
+//! and `defer` (own.defer.1-3).
 //!
 //! The checker records each name whose use moves its binding's value in
 //! `Resolved::moves`; `moves.rs` then follows control flow to report uses
@@ -12,12 +14,13 @@ use crate::diag::Pos;
 
 impl<'p> Checker<'p> {
     /// A value of `t` can't be copied (own.uniq.1). Optionals and results of
-    /// a unique type hold one, so they move too.
+    /// a unique type hold one, so they move too, and so do lists and maps
+    /// of one (own.uniq.8).
     pub(super) fn is_unique(&self, t: &Ty) -> bool {
         match t {
             Ty::Struct(i, _) => self.prog.structs[*i].unique,
             Ty::Enum(i, _) => self.prog.enums[*i].unique,
-            Ty::Opt(t) | Ty::Res(t, _) => self.is_unique(t),
+            Ty::Opt(t) | Ty::Res(t, _) | Ty::List(t) | Ty::Map(_, t) => self.is_unique(t),
             _ => false,
         }
     }
@@ -126,11 +129,15 @@ impl<'p> Checker<'p> {
                 Some(Kind::Binding | Kind::MoveParam) => {
                     self.resolved.moves.insert(*pos, rule);
                 }
+                // own.move.6: a `move self` method owns its receiver.
+                Some(Kind::SelfParam) if self.prog.fns[self.cur_fn].receiver.is_some_and(|r| r.moved) => {
+                    self.resolved.moves.insert(*pos, rule);
+                }
                 Some(kind) => {
                     let (what, help) = match kind {
                         Kind::SelfParam => (
                             "`self` belongs to the caller".to_string(),
-                            "a method can't take ownership of its receiver yet".to_string(),
+                            "declare the method `move self` to take ownership of its receiver".to_string(),
                         ),
                         Kind::LoopVar => (
                             format!("the loop variable `{n}` belongs to the loop"),
@@ -145,22 +152,26 @@ impl<'p> Checker<'p> {
                 }
                 None => {}
             },
-            _ if place_path(e).is_some() && rule == "own.move.2" => {
+            _ if place_path(e).is_some() && matches!(rule, "own.move.2" | "own.move.6") => {
                 let root = place_path(e).map_or("", |(r, _)| r);
+                let help = self.take_out_help(e, root).unwrap_or_else(|| format!("move `{root}` itself, or pass a new value"));
                 self.error_help(
                     "own.move.3",
                     e.pos(),
                     format!("only a whole local binding can be moved, and this is part of `{root}`"),
-                    format!("move `{root}` itself, or pass a new value"),
+                    help,
                 );
             }
             _ if place_path(e).is_some() => {
                 let root = place_path(e).map_or("", |(r, _)| r);
+                let help = self
+                    .take_out_help(e, root)
+                    .unwrap_or_else(|| format!("move the whole of `{root}`, or use the value where it is"));
                 self.error_help(
                     "own.uniq.1",
                     e.pos(),
                     format!("this value is unique and belongs to `{root}`, so it can't be copied out of it"),
-                    format!("move the whole of `{root}`, or use the value where it is"),
+                    help,
                 );
             }
             _ => {}
@@ -183,6 +194,64 @@ impl<'p> Checker<'p> {
             }
             (false, false) => {}
         }
+    }
+
+    /// own.uniq.9: an element is borrowed where it is; `pop`, `remove_at`
+    /// and a map's `remove` take one out.
+    fn take_out_help(&mut self, e: &'p Expr, root: &str) -> Option<String> {
+        let Expr::Index { recv, .. } = e else { return None };
+        Some(match self.quiet_type(recv) {
+            Ty::Map(..) => format!("take it out with `{root}.remove(k)`, which gives a `T?`, or use it where it is"),
+            _ => format!("take it out with `{root}.pop()` or `{root}.remove_at(i)`, or use it where it is"),
+        })
+    }
+
+    /// own.move.6: calling a `move self` method on `recv` moves it.
+    pub(super) fn move_receiver(&mut self, f: usize, recv: &'p Expr) {
+        if self.prog.fns[f].receiver.is_some_and(|r| r.moved) {
+            self.take(recv, "own.move.6");
+        }
+    }
+
+    /// The elements of a list literal, or the values of a map literal, of
+    /// a unique type move into it (own.uniq.8).
+    pub(super) fn consume_elems(&mut self, es: impl IntoIterator<Item = &'p Expr>, elem: &Ty) {
+        if self.is_unique(elem) {
+            for e in es {
+                self.take(e, "own.uniq.8");
+            }
+        }
+    }
+
+    /// own.uniq.9-10: a built-in method of a list or map whose elements are
+    /// unique. Which parameters take ownership (their arguments are marked
+    /// `move`); a method that would copy an element is an error.
+    pub(super) fn unique_builtin(&mut self, rt: &Ty, name: &str, pos: Pos, nparams: usize) -> Vec<bool> {
+        let (elem, list) = match rt {
+            Ty::List(e) => (&**e, true),
+            Ty::Map(_, v) => (&**v, false),
+            _ => return Vec::new(),
+        };
+        if !self.is_unique(elem) {
+            return Vec::new();
+        }
+        let help = match (list, name) {
+            (true, "push" | "extend") => return vec![true],
+            (true, "insert") => return vec![false, true],
+            (true, "pop" | "remove_at" | "len" | "swap" | "clear" | "reverse" | "sort" | "contains" | "index_of") => {
+                return vec![false; nparams];
+            }
+            (false, "remove" | "len" | "contains" | "keys") => return vec![false; nparams],
+            (true, "first" | "last") => "borrow it with `xs[0]` or `xs[xs.len() - 1]`, or take it out with `xs.pop()`",
+            (true, "min" | "max") => "find its index and borrow it with `xs[i]`",
+            (true, _) => "use a comprehension that reads what it needs, e.g. `[c.id for c in xs]`",
+            (false, "get") => "borrow it with `m[k]`, or take it out with `m.remove(k)`",
+            (false, _) => "iterate the keys and borrow each value: `for k in m.keys()` then `m[k]`",
+        };
+        let what = if list { "list elements" } else { "map values" };
+        let msg = format!("`{name}` would copy {what}, and {} is unique", self.show(elem));
+        self.error_help("own.uniq.10", pos, msg, help);
+        Vec::new()
     }
 
     /// `ref e` (own.ref.1, ADR 0067).

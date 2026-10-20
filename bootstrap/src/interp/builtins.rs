@@ -239,6 +239,14 @@ impl<'a, W: Write> Interp<'a, W> {
             sorted?;
             return Ok(Value::Unit);
         }
+        if name == "clear" && self.has_unique {
+            // own.uniq.8: the removed elements are released.
+            let old = with_slot(env, &p, false, |slot| std::mem::replace(slot, Value::List(Rc::new(Vec::new()))))?;
+            a.clear();
+            self.arg_pool.push(a);
+            self.release(old, pos)?;
+            return Ok(Value::Unit);
+        }
         let result = with_slot(env, &p, false, |slot| -> Result<Value, Trap> {
             Ok(match (slot, name) {
             (Value::List(items), "push") => {

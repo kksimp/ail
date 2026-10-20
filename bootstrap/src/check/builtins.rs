@@ -306,7 +306,9 @@ impl<'p> Checker<'p> {
         if b.mutates {
             self.require_mutable(recv, Some("trait.method.3"), &format!("the receiver of `{name}`"));
         }
-        let sig = Sig::plain(Some(b.mutates), b.params.into_iter().map(|t| (false, t)).collect(), b.ret);
+        let moves = self.unique_builtin(rt, name, pos, b.params.len());
+        let mut sig = Sig::plain(Some(b.mutates), b.params.into_iter().map(|t| (false, t)).collect(), b.ret);
+        sig.moves = moves;
         self.check_call(name, &sig, Vec::new(), args, Some(recv), pos, None)
     }
 }
