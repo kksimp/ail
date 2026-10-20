@@ -370,3 +370,36 @@ pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
         _ => return None,
     })
 }
+
+/// The AIL method for another language's name for it, when the arguments
+/// carry over unchanged (gram.foreign.1, ADR 0262). The fix renames the call.
+pub(super) fn method_rename(t: &Ty, name: &str) -> Option<&'static str> {
+    Some(match (t, name) {
+        (Ty::Str | Ty::List(_) | Ty::Map(..) | Ty::Set(_), "length" | "size" | "count") => "len",
+        (Ty::Str, "strip" | "lstrip" | "rstrip" | "trim_start" | "trim_end") => "trim",
+        (Ty::Str, "startswith" | "startsWith") => "starts_with",
+        (Ty::Str, "endswith" | "endsWith") => "ends_with",
+        (Ty::Str, "splitlines") => "lines",
+        (Ty::Str, "lower" | "lowercase" | "toLowerCase") => "to_lower",
+        (Ty::Str, "upper" | "uppercase" | "toUpperCase") => "to_upper",
+        (Ty::Str, "includes") => "contains",
+        (Ty::Str, "indexOf") => "find",
+        (Ty::Str, "substring" | "substr") => "slice",
+        (Ty::Char, "is_alphabetic") => "is_alpha",
+        (Ty::Char, "is_whitespace") => "is_space",
+        (Ty::Char, "is_alphanumeric") => "is_alnum",
+        (Ty::Char, "is_numeric" | "is_ascii_digit" | "isdigit") => "is_digit",
+        (Ty::Char, "to_uppercase") => "to_upper",
+        (Ty::Char, "to_lowercase") => "to_lower",
+        (Ty::List(_), "append" | "add" | "push_back") => "push",
+        (Ty::List(_), "includes" | "has") => "contains",
+        (Ty::List(_), "indexOf") => "index_of",
+        (Ty::List(_), "pop_back") => "pop",
+        (Ty::Map(..), "has" | "has_key" | "contains_key") => "contains",
+        (Ty::Map(..), "delete") => "remove",
+        (Ty::Set(_), "insert" | "push") => "add",
+        (Ty::Set(_), "has") => "contains",
+        (Ty::Set(_), "discard" | "delete") => "remove",
+        _ => return None,
+    })
+}

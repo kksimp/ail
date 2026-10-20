@@ -1,0 +1,6 @@
+struct Point
+    x int
+
+fn main()
+    p := Point{x: 1}
+    print(p)

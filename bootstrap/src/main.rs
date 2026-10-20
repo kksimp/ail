@@ -12,6 +12,7 @@ mod fasthash;
 mod doctest;
 mod docs;
 mod fix;
+mod foreign;
 mod fmt;
 mod implicit_self;
 mod interp;

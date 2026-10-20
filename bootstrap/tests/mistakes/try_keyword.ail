@@ -1,0 +1,5 @@
+fn main()
+    try
+        print(1)
+    catch e
+        print(e)

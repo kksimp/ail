@@ -39,6 +39,7 @@ use crate::ast::{
 };
 use crate::fasthash::{FastMap, FastSet};
 use crate::diag::{Diagnostic, Edit, Fix, Pos};
+use crate::foreign;
 use crate::lexer::UNSUPPORTED;
 use crate::num::Num;
 
@@ -211,6 +212,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
         locals: Vec::new(),
         pending: Vec::new(),
         ret: Ty::Unit,
+        assoc: None,
         loops: 0,
     };
     c.list_param = c.new_param("T", Vec::new());
@@ -365,6 +367,9 @@ struct Checker<'p> {
     /// Locals declared from `[]` or `{}` whose type isn't known yet (type.coll.13).
     pending: Vec<Pending>,
     ret: Ty,
+    /// In a method written without `self`: where its `(` is, whether it has
+    /// parameters, and the owner's field names (diag.rec.2).
+    assoc: Option<(Pos, bool, Vec<String>)>,
     loops: usize,
 }
 
@@ -1059,6 +1064,13 @@ impl<'p> Checker<'p> {
                 return ty;
             }
             n if conc::TYPE_NAMES.contains(&n) => return self.conc_type(n, args, t.pos),
+            "Option" if args.len() == 1 => {
+                let mut d = Diagnostic::new("type.opt.3", t.pos, "an optional type is written `T?`, not `Option[T]`")
+                    .help("write `int?` for `Option[int]`; the two mean the same and `T?` is the canonical form");
+                d = d.fix("write `T?`", vec![Edit::call_with(t.pos, "Option", "$1?")]);
+                self.diags.push(d);
+                return Ty::Err;
+            }
             n if SPEC_TYPES_NOT_YET.contains(&n) => {
                 self.unsupported(t.pos, format!("type `{n}` is not supported by the bootstrap yet (spec 04-types)"));
                 return Ty::Err;
@@ -1317,7 +1329,9 @@ impl<'p> Checker<'p> {
     fn unknown_type(&mut self, name: &str, pos: Pos) {
         let candidates: Vec<&str> = BUILTIN_TYPES.iter().copied().chain(self.types.keys().copied()).collect();
         let mut d = Diagnostic::new("expr.name.1", pos, format!("unknown type `{name}`"));
-        if let Some(s) = suggest(name, &candidates) {
+        if let Some(t) = foreign::type_word(name) {
+            d = d.help(format!("write `{t}`")).fix(format!("write `{t}`"), vec![Edit::replace(pos, name, t)]);
+        } else if let Some(s) = suggest(name, &candidates) {
             d = d.did_you_mean(name, s);
         } else if name.len() == 1 && name.chars().all(|c| c.is_ascii_uppercase()) {
             d = d.help(format!("to make it a type parameter, declare it after the name: `fn name[{name}](...)`"));
@@ -1396,6 +1410,10 @@ impl<'p> Checker<'p> {
         self.pending.clear();
         self.loops = 0;
         self.ret = sig.ret.clone();
+        self.assoc = f.owner.as_ref().filter(|_| f.receiver.is_none()).and_then(|o| {
+            let st = self.prog.structs.iter().find(|st| st.name == o.name)?;
+            Some((f.pos, !f.params.is_empty(), st.fields.iter().map(|x| x.name.clone()).collect()))
+        });
         if f.receiver.is_some() {
             let ty = self.self_ty.clone().unwrap_or(Ty::Err);
             let mutable = f.receiver.is_some_and(|r| r.mutable);
@@ -1803,10 +1821,20 @@ impl<'p> Checker<'p> {
         }
         if !self.accepts(&Ty::Bool, &t) {
             let msg = format!("a condition must be `bool`, found {}", self.show(&t));
-            match t {
-                Ty::Int => self.error_help("expr.if.2", cond.pos(), msg, "compare explicitly, e.g. `n != 0`"),
-                _ => self.error("expr.if.2", cond.pos(), msg),
+            let simple = matches!(cond, Expr::Name(..) | Expr::Field { .. } | Expr::Method { .. } | Expr::Index { .. } | Expr::Call { .. });
+            // The test that the other languages' truthiness stands for.
+            let (help, suffix) = match &t {
+                Ty::Int => ("compare explicitly, e.g. `n != 0`", " != 0"),
+                Ty::Str => ("compare explicitly, e.g. `s != \"\"`", " != \"\""),
+                Ty::List(_) | Ty::Map(..) | Ty::Set(_) => ("test the length, e.g. `xs.len() > 0`", ".len() > 0"),
+                Ty::Opt(_) => ("compare with `none`, e.g. `x != none`, or bind it with `if v := x`", " != none"),
+                _ => ("write a comparison that gives `bool`", ""),
+            };
+            let mut d = Diagnostic::new("expr.if.2", cond.pos(), msg).help(help);
+            if simple && !suffix.is_empty() {
+                d = d.fix(format!("test `{}`", suffix.trim()), vec![Edit::at_line_end(cond.pos(), suffix)]);
             }
+            self.diags.push(d);
         }
     }
 
@@ -1821,12 +1849,12 @@ impl<'p> Checker<'p> {
             Ty::Err => Ty::Err,
             t if self.reject_unhandled(&t, iter.pos()) => Ty::Err,
             Ty::Map(..) => {
-                self.error_help(
-                    "type.map.5",
-                    iter.pos(),
-                    "`for` iterates a map's keys or values explicitly",
-                    "write `for k in m.keys()`, or `m.values()`",
-                );
+                let mut d = Diagnostic::new("type.map.5", iter.pos(), "`for` iterates a map's keys or values explicitly")
+                    .help("write `for k in m.keys()`, or `m.values()`");
+                if let Expr::Name(n, p) = iter {
+                    d = d.fix("iterate the keys", vec![Edit::replace(*p, n.clone(), format!("{n}.keys()"))]);
+                }
+                self.diags.push(d);
                 Ty::Err
             }
             Ty::Str => {
@@ -1946,6 +1974,8 @@ impl<'p> Checker<'p> {
                     d = d.fix(format!("declare `{n}` with `mut {n} :=`"), edits);
                 }
                 self.diags.push(d);
+                // Later uses don't report the same name again (diag.rec.2).
+                self.locals.push(Local { name: n.clone(), ty: Ty::Err, mutable: true, kind: Kind::Binding, decl: None });
             }
             return;
         }
@@ -2359,7 +2389,7 @@ impl<'p> Checker<'p> {
             self.error("expr.name.1", pos, format!("`{n}` is a type, not a value"));
             return Ty::Err;
         }
-        self.unknown_name(n, pos);
+        self.unknown_name(n, pos, None);
         Ty::Err
     }
 
@@ -2468,6 +2498,8 @@ impl<'p> Checker<'p> {
         match expect {
             Some(t @ Ty::Opt(_)) => t.clone(),
             Some(Ty::Res(ok, _)) if matches!(**ok, Ty::Opt(_)) => (**ok).clone(),
+            // The type was already reported as wrong.
+            Some(Ty::Err) => Ty::Err,
             _ => {
                 self.error_help(
                     "type.opt.4",
@@ -2728,7 +2760,7 @@ impl<'p> Checker<'p> {
                 format!("call a method of it, e.g. `{n}.method(x)`"),
             );
         } else if self.variant_owners(n).is_empty() {
-            self.unknown_name(n, npos);
+            self.unknown_name(n, npos, Some(args.len()));
         }
         Ty::Err
     }
@@ -2980,12 +3012,16 @@ impl<'p> Checker<'p> {
             bind(pty, &t, vars, &mut binds);
             let want = subst_unknown(pty, &binds, vars);
             if *pmut && !a.mutable {
-                self.error_help(
+                let mut d = Diagnostic::new(
                     "own.param.2",
                     a.value.pos(),
                     "this parameter is `mut`, so the argument must be marked `mut`",
-                    "write `mut` before the argument",
-                );
+                )
+                .help("write `mut` before the argument");
+                if matches!(a.value, Expr::Name(..)) {
+                    d = d.fix("mark the argument `mut`", vec![Edit::insert(a.value.pos(), "mut ")]);
+                }
+                self.diags.push(d);
             } else if *pmut {
                 self.require_mutable(&a.value, Some("own.param.2"), "passed `mut`");
             } else if a.mutable {
@@ -3076,15 +3112,29 @@ impl<'p> Checker<'p> {
         }
         if args.len() != 1 {
             self.args_only(args);
-            self.error(
+            let mut d = Diagnostic::new(
                 "mod.main.3",
                 pos,
                 format!("`print` takes exactly one argument, but {} given", was_were(args.len())),
-            );
+            )
+            .help("print one string that interpolates the values: `print(\"{a} {b}\")`");
+            if args.len() > 1 && args.iter().all(|a| a.label.is_none() && !a.mutable) {
+                d = d.fix("print one interpolated string", vec![Edit::call(pos, "print", "print($*)")]);
+            }
+            self.diags.push(d);
         } else {
             let t = self.expr(&args[0].value, None, true);
             if t == Ty::Unit {
-                self.error("mod.main.3", args[0].value.pos(), "this expression produces no value to print");
+                let mut d = Diagnostic::new("mod.main.3", args[0].value.pos(), "this expression produces no value to print");
+                if let Expr::Call { callee, .. } = &args[0].value
+                    && let Expr::Name(f, _) = &**callee
+                    && self.fns.contains_key(f.as_str())
+                {
+                    d = d
+                        .message(format!("`{f}` returns nothing, so there is no value to print"))
+                        .help(format!("if `{f}` should give a value, declare its type after the `)`: `fn {f}(...) int`"));
+                }
+                self.diags.push(d);
             } else {
                 self.text_form(&t, args[0].value.pos(), "mod.main.3");
             }
@@ -3131,7 +3181,7 @@ impl<'p> Checker<'p> {
     ) {
         let mut given = vec![false; fields.len()];
         let slots = field_slots(fields, args);
-        self.positional_types(type_label, fields, types, args, &slots);
+        self.positional_types(type_label, fields, types, args, &slots, pos);
         let mut lost = false;
         for (a, (slot, kind)) in args.iter().zip(&slots) {
             if a.mutable {
@@ -3190,7 +3240,18 @@ impl<'p> Checker<'p> {
                 if missing.len() == 1 { "field" } else { "fields" },
                 list_names(&missing)
             );
-            self.error_help("type.struct.4", pos, msg, "every field must be given; there are no defaults yet");
+            let mut d = Diagnostic::new("type.struct.4", pos, msg)
+                .help("every field must be given; there are no defaults yet; `todo` stands in for a value you haven't written");
+            let holes: Vec<String> = missing.iter().map(|m| format!("{m}: todo")).collect();
+            let template = if args.is_empty() {
+                format!("{type_label}({})", holes.join(", "))
+            } else {
+                format!("{type_label}($a, {})", holes.join(", "))
+            };
+            if args.iter().all(|a| !a.mutable) {
+                d = d.fix("give the missing fields a `todo` each", vec![Edit::call(pos, type_label, template)]);
+            }
+            self.diags.push(d);
         }
     }
 
@@ -3203,7 +3264,9 @@ impl<'p> Checker<'p> {
         types: &[Ty],
         args: &[Arg],
         slots: &[(Option<usize>, ArgKind)],
+        call: Pos,
     ) {
+        let call = Some(call);
         let filled: Vec<usize> =
             slots.iter().filter(|(_, k)| *k == ArgKind::Positional).filter_map(|(i, _)| *i).collect();
         let clash = filled
@@ -3221,7 +3284,16 @@ impl<'p> Checker<'p> {
             "fields `{fa}` and `{fb}` of `{type_label}` are both {}, so they can't be given by position",
             self.show(&types[a])
         );
-        self.error_help("type.struct.7", at, msg, format!("name them: `{type_label}({fa}: ..., {fb}: ...)`"));
+        let mut d = Diagnostic::new("type.struct.7", at, msg)
+            .help(format!("name them: `{type_label}({fa}: ..., {fb}: ...)`"));
+        if let Some(call) = call
+            && slots.len() == fields.len()
+            && slots.iter().all(|(i, k)| i.is_some() && *k == ArgKind::Positional)
+        {
+            let names: Vec<&str> = slots.iter().filter_map(|(i, _)| i.map(|i| fields[i].name.as_str())).collect();
+            d = d.fix("name the fields", vec![Edit::call_named(call, type_label, &names)]);
+        }
+        self.diags.push(d);
     }
 
     fn method(&mut self, recv: &'p Expr, name: &'p str, pos: Pos, args: &'p [Arg], expect: Option<&Ty>) -> Ty {
@@ -3506,7 +3578,9 @@ impl<'p> Checker<'p> {
             return;
         }
         let mut d = Diagnostic::new("expr.name.1", pos, format!("{shown} has no method `{name}`"));
-        if let Some(h) = builtins::method_help(rt, name) {
+        if let Some(new) = builtins::method_rename(rt, name) {
+            d = d.help(format!("write `.{new}()`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
+        } else if let Some(h) = builtins::method_help(rt, name) {
             d = d.help(h);
         } else if let Some(s) = suggest(name, &names) {
             d = d.did_you_mean(name, s);
@@ -3515,6 +3589,10 @@ impl<'p> Checker<'p> {
                 "a type parameter has only the methods of its constraints; add one, e.g. `[{} Trait]`",
                 self.tparams[*p].name
             ));
+        } else if matches!(rt, Ty::Opt(_)) {
+            d = d.help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`");
+        } else {
+            d = d.help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types");
         }
         self.diags.push(d);
     }
@@ -3567,11 +3645,10 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         }
         if !self.candidates(&rt, name).is_empty() {
-            self.error_help(
-                "expr.op.3",
-                pos,
-                format!("`{name}` is a method, so calling it needs `()`"),
-                format!("write `.{name}()`"),
+            self.diags.push(
+                Diagnostic::new("expr.op.3", pos, format!("`{name}` is a method, so calling it needs `()`"))
+                    .help(format!("write `.{name}()`"))
+                    .fix("add the parentheses", vec![Edit::replace(pos, name, format!("{name}()"))]),
             );
             return Ty::Err;
         }
@@ -3589,13 +3666,26 @@ impl<'p> Checker<'p> {
                 let mut d = Diagnostic::new("type.struct.6", pos, format!("`{}` has no field `{name}`", decl.name));
                 if let Some(s) = suggest(name, &names) {
                     d = d.did_you_mean(name, s);
+                } else if names.is_empty() {
+                    d = d.help(format!("`{}` has no fields", decl.name));
+                } else {
+                    d = d.help(format!("`{}` has the fields {}", decl.name, list_names(&names)));
                 }
                 self.diags.push(d);
                 Ty::Err
             }
             t => {
                 let msg = format!("{} has no fields", self.show(t));
-                self.error("type.struct.6", pos, msg);
+                let mut d = Diagnostic::new("type.struct.6", pos, msg);
+                if let Some(new) = builtins::method_rename(t, name) {
+                    d = d.help(format!("`{name}` isn't a field; write the method `.{new}()`")).fix(
+                        format!("write `{new}()`"),
+                        vec![Edit::replace(pos, name, format!("{new}()"))],
+                    );
+                } else {
+                    d = d.help("only structs have fields; the built-in types have methods, written with `()`");
+                }
+                self.diags.push(d);
                 Ty::Err
             }
         }
@@ -3628,12 +3718,12 @@ impl<'p> Checker<'p> {
             _ => None,
         };
         if let Some(at) = bad {
-            self.error_help(
-                "type.coll.4",
-                at,
-                "a list has no negative indexes",
-                "count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`",
-            );
+            let mut d = Diagnostic::new("type.coll.4", at, "a list has no negative indexes")
+                .help("count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`");
+            if let Expr::Name(n, _) = recv {
+                d = d.fix("count from the end", vec![Edit::replace(at, "-", format!("{n}.len() - "))]);
+            }
+            self.diags.push(d);
         }
         let slice = matches!(index, Expr::Range { .. });
         if let Expr::Range { lo, hi, .. } = index {
@@ -3804,6 +3894,10 @@ impl<'p> Checker<'p> {
             let msg = format!("`{sym}` needs operands of one type, found {} and {}", self.show(lt), self.show(rt));
             if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
                 self.error_help("trait.op.3", pos, msg, "build text with interpolation: \"{a}{b}\"");
+            } else if *lt == Ty::Str && op == BinOp::Rem {
+                self.error_help("trait.op.3", pos, msg, "AIL has no `%` formatting; interpolate the values: \"n is {n}\"");
+            } else if *lt == Ty::Str && op == BinOp::Mul {
+                self.error_help("trait.op.3", pos, msg, "repeat a string with `s.repeat(n)`");
             } else {
                 self.error("trait.op.3", pos, msg);
             }
@@ -3817,7 +3911,7 @@ impl<'p> Checker<'p> {
                 // type.num.6: float arithmetic, without `%`.
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
                 Ty::Str if op == BinOp::Add => self.diags.push(
-                    Diagnostic::new(UNSUPPORTED, pos, "joining strings with `+` is not decided yet (spec trait.op.1)")
+                    Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
                         .help("build text with interpolation: \"{a}{b}\""),
                 ),
                 t => {
@@ -4243,17 +4337,32 @@ impl<'p> Checker<'p> {
         }
     }
 
-    fn unknown_name(&mut self, name: &str, pos: Pos) {
+    /// An unknown name; `args` is the argument count when it was called.
+    fn unknown_name(&mut self, name: &str, pos: Pos, args: Option<usize>) {
         let candidates: Vec<&str> = (self.locals.iter().map(|l| l.name.as_str()))
             .chain(self.fns.keys().copied())
             .chain(PRELUDE.iter().copied())
             .chain(self.types.keys().copied())
             .collect();
         let mut d = Diagnostic::new("expr.name.1", pos, format!("unknown name `{name}`"));
-        if let Some(h) = builtins::function_help(name) {
+        if let Some((new, help)) = foreign::name_word(name) {
+            d = d.help(help).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
+        } else if let Some(c) = args.and_then(|n| foreign::call_hint(name, n)) {
+            d = d.help(c.help).fix(format!("write `{}`", c.example), vec![Edit::call(pos, name, c.template)]);
+        } else if let Some(h) = foreign::call_help(name).or_else(|| builtins::function_help(name)) {
             d = d.help(h);
+        } else if let Some((at, params, fields)) = self.assoc.as_ref().filter(|(_, _, f)| f.iter().any(|f| f == name)) {
+            let _ = fields;
+            d = d
+                .help(format!("this function has no `self`, so the field `{name}` isn't in scope; add `self` as its first parameter"))
+                .fix(
+                    "add `self`",
+                    vec![Edit::replace(*at, "(", if *params { "(self, " } else { "(self" })],
+                );
         } else if let Some(s) = suggest(name, &candidates) {
             d = d.did_you_mean(name, s);
+        } else {
+            d = d.help(format!("no variable, function or type named `{name}` is in scope here; declare it first, e.g. `{name} := value`"));
         }
         self.diags.push(d);
     }
@@ -4400,6 +4509,11 @@ fn was_were(n: usize) -> String {
 
 /// Closest candidate by edit distance, if it's close enough to be a likely typo.
 pub(crate) fn suggest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
+    // One or two letters are within one edit of nearly any name: a "fix" to
+    // another short name would change what the program means (diag.rec.3).
+    if name.chars().count() < 3 {
+        return None;
+    }
     let limit = (name.chars().count() / 3).max(1);
     candidates.iter().map(|c| (edit_distance(name, c), *c)).filter(|(d, _)| *d <= limit).min().map(|(_, c)| c)
 }

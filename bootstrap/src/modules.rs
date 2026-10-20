@@ -84,6 +84,10 @@ fn load_package(
             shift(&mut toks, base);
             diags.extend(lex_diags.into_iter().map(|mut d| {
                 d.pos.line += base;
+                for e in d.fixes.iter_mut().flat_map(|f| f.edits.iter_mut()) {
+                    e.pos.line += base;
+                    e.end.line += base;
+                }
                 d
             }));
             for import in scan_uses(&toks) {
@@ -107,6 +111,7 @@ fn load_package(
 
     let (mut prog, parse_diags) = crate::parser::parse_after_prelude(tokens);
     diags.extend(parse_diags);
+    one_per_line(&mut diags);
     prog.files = files;
     resolve(&mut prog, &mut diags, &packages);
     packages.finish(&mut prog, &mut diags);
@@ -120,6 +125,42 @@ fn ail_files(dir: &Path) -> Vec<PathBuf> {
     files.retain(|p| p.is_file() && p.extension().is_some_and(|x| x == "ail"));
     files.sort();
     files
+}
+
+/// One syntax diagnostic per line (diag.rec.1, ADR 0263): a mistake on a line
+/// often breaks the lexer and the parser in turn, and the first report, the
+/// leftmost, names it. Fixes of the reports it absorbs join its own when they
+/// don't overlap, so `ail fix` still settles the whole line in one round.
+/// String errors stay: they are independent of the rest.
+fn one_per_line(diags: &mut Vec<Diagnostic>) {
+    diags.sort_by_key(|d| (d.pos.line, d.pos.col));
+    let mut kept: Vec<Diagnostic> = Vec::new();
+    for d in std::mem::take(diags) {
+        let same_line = kept.last().is_some_and(|k| !k.warning && k.pos.line == d.pos.line);
+        if d.warning || d.rule.starts_with("lex.str.") || !same_line {
+            kept.push(d);
+            continue;
+        }
+        let last = kept.last_mut().unwrap();
+        if let (Some(into), Some(from)) = (last.fixes.first_mut(), d.fixes.first())
+            && explicit(&into.edits)
+            && explicit(&from.edits)
+            && !from.edits.iter().any(|e| into.edits.iter().any(|o| overlaps(o, e)))
+        {
+            let more: Vec<_> = d.fixes.into_iter().next().unwrap().edits;
+            into.edits.extend(more);
+        }
+    }
+    *diags = kept;
+}
+
+fn explicit(edits: &[crate::diag::Edit]) -> bool {
+    edits.iter().all(|e| e.old.is_none() && e.anchor == crate::diag::Anchor::Exact)
+}
+
+fn overlaps(a: &crate::diag::Edit, b: &crate::diag::Edit) -> bool {
+    let key = |p: Pos| (p.line, p.col);
+    key(a.pos) <= key(b.end) && key(b.pos) <= key(a.end)
 }
 
 fn shift(tokens: &mut [Token], base: usize) {
