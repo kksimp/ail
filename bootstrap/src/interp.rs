@@ -719,7 +719,29 @@ impl<'a, W: Write> Interp<'a, W> {
         self.prog.structs[s].fields.iter().position(|f| f.name == name).expect("checked: field exists")
     }
 
+    /// The hot expression forms, kept in a small frame: `eval_general`'s frame
+    /// is over a kilobyte, and most evaluations are names, literals and
+    /// operators (ADR 0175). Every other form, and every fallback, is
+    /// `eval_general`'s, so the two stay in step by construction.
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        match e {
+            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
+            Expr::Bool(b, _) => Ok(Value::Bool(*b)),
+            Expr::Name(n, _) => match lookup(env, n) {
+                Some(v) => Ok(v.clone()),
+                None => self.eval_general(e, env),
+            },
+            Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
+                let l = self.eval(lhs, env)?;
+                let r = self.eval(rhs, env)?;
+                Ok(self.binop(*op, l, r, *pos)?)
+            }
+            _ => self.eval_general(e, env),
+        }
+    }
+
+    #[inline(never)]
+    fn eval_general(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
             Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
             // type.num.10
