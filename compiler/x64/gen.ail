@@ -334,10 +334,20 @@ fn Gen.entry_moves(mut self)
                 float: true,
             ))
             nf += 1
-        else
+        elif ni < INT_ARGS.len()
             moves.push(Move(dst: loc[p], src: INT_ARGS[ni], imm: 0, sym: "", float: false))
             ni += 1
     parallel(moves)
+    # Integer parameters after the sixth are on the stack, above the return
+    # address (native-abi.md §1).
+    mut k := 0
+    for p in f.params
+        if not f.vals[p].is_float()
+            if k >= INT_ARGS.len()
+                d := out_gpr(p, S0)
+                a.mov_rm(d, at(RBP, 16 + 8 * (k - INT_ARGS.len())))
+                put_gpr(p, d)
+            k += 1
 
 # ---- blocks ----
 
@@ -796,15 +806,27 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
+    mut extra := List[int]()
     for v in i.args
         if f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
-        else
+        elif ni < INT_ARGS.len()
             moves.push(move_of(INT_ARGS[ni], v))
             ni += 1
+        else
+            extra.push(v)
+    # Integer arguments after the sixth go on the stack, the seventh lowest,
+    # in a 16-byte multiple (native-abi.md §1).
+    room := (8 * extra.len() + 15) / 16 * 16
+    if room > 0
+        a.alu_ri("sub", RSP, room)
+        for k in 0..extra.len()
+            a.mov_mr(at(RSP, 8 * k), gpr(extra[k], S0))
     parallel(moves)
     a.call_sym(i.name)
+    if room > 0
+        a.alu_ri("add", RSP, room)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_xmm(i.dst, 0)
