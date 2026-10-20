@@ -383,12 +383,13 @@ impl Walker<'_, '_> {
             | Expr::Char(..)
             | Expr::Bool(..)
             | Expr::None(_)
+            | Expr::Hole(_)
             | Expr::Name(..)
             | Expr::TypeArgs { .. } => {}
             Expr::Interp(parts, _) => {
                 self.std_traits();
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.expr(x);
                     }
                 }

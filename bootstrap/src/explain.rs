@@ -80,7 +80,7 @@ pub fn explain(rule: &str) -> Option<Explanation> {
         let mut example = None;
         let mut i = end;
         while i < lines.len() && !lines[i].starts_with('#') {
-            if lines[i].trim() == "```ail" {
+            if lines[i].trim().starts_with("```ail") {
                 let body: Vec<&str> = lines[i + 1..].iter().take_while(|l| !l.starts_with("```")).copied().collect();
                 example = Some(body.join("\n"));
                 break;
