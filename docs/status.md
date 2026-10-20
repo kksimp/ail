@@ -41,7 +41,7 @@ All verified on Linux x86-64 and macOS ARM64.
 ### Standard library
 
 - `std.json` (`Json`, `parse_json`, `to_text`, typed getters and `set`; ADRs 0161–0162, 0254) and `ToJson`/`FromJson` derives.
-- `std.fs` (with `walk`, `glob`, `metadata`, `rename`, `copy`), `env`, `io`, `proc` (input, time limit, `which`), `time`, `path`, and `net` (a small HTTP/1.1 client, no TLS yet) (ADRs 0157–0160, 0253, 0281–0284).
+- `std.fs` (with `walk`, `glob`, `metadata`, `rename`, `copy`), `env`, `io`, `proc` (input, time limit, `which`), `time`, `path`, and `net` (a small HTTP/1.1 client, no TLS yet) (ADRs 0157–0160, 0253, 0281–0284). In-house TLS 1.3 is in progress (ADR 0360): the constant-time primitives are done and tested (ADR 0366); the handshake, certificates and wiring follow ([tls-security.md](design/tls-security.md)).
 - `std.random` and `ail run --deterministic` with `--seed` (ADRs 0206–0207, resolve OQ-043, OQ-044, OQ-046).
 - `std.tensor`: value-typed `Tensor[int|float]` with elementwise operators, reductions, `matmul`, `transpose`; AVX2, NEON or scalar kernels chosen at run time with one specified summation order, `matmul` on the thread pool; device backends designed only (ADRs 0328–0330, 0344–0345, 0247).
 - `std.ui`: a window of monospace text cells with keys, resize, mouse, scroll, clipboard, modifiers, font sizes, text styles and colors; capability `ui` (ADRs 0177–0179, 0240, 0242–0243, 0294; [gui-path.md](design/gui-path.md)). `std.ui.widgets`, the first standard module written in AIL (ADRs 0314–0316, `examples/dashboard.ail`).
