@@ -1,0 +1,8 @@
+use shapes
+
+fn main() !
+    a := shapes.Point(x: 1, y: 2)
+    s := shapes.Shape.Group([shapes.Shape.Dot(a), shapes.Shape.Line(from: a, to: a)])
+    t := s.to_json().to_text()
+    print(t)
+    print(shapes.Shape.from_json(parse_json(t)?)? == s)

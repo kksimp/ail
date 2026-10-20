@@ -23,6 +23,10 @@ All verified on Linux x86-64 and macOS ARM64.
 5. `examples/interp.ail`, `json.ail`, `sheet.ail` (500–800 lines each) with output identical to their Python versions: floats, `char`, maps and sets, multi-line and raw strings, literal and or-patterns, constants, `! E` results, statement `else` (ADRs 0130–0140).
 6. Python parity: implicit `self`, positional and shorthand constructor arguments, empty literals typed by first use (ADRs 0141–0143); the three examples are 1.5% above Python in tokens.
 
+### Stage 3: self-hosting (started 2026-10-20)
+
+- `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376). Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
+
 ### Language (2026-10-20 batch)
 
 - **Strings, numbers, collections:** format specifications in interpolation (ADR 0173, resolves OQ-041); sized numeric types, `@inline`, `@deprecated` (ADRs 0194–0197); `str.len()` counts characters, with `byte_len()` (ADR 0208); nested optionals `T??` (ADR 0209); list editing and `str` search methods (ADRs 0214–0215, resolve OQ-047, OQ-048); comprehensions and bare variant patterns (ADRs 0182–0183); key functions `sorted(by: |x| key)`, `take`, `m[k] += v` from zero, `?` caught by an enclosing `else` (ADRs 0250–0255); set `union`, `intersect`, `difference` and `m.push(k, x)` (ADRs 0340–0342); standard modules in scope without `use`, messages on error types, `?` on optionals failing with `Absent`, a one-line `if c then a else b` (ADRs 0277–0280, resolve OQ-071, OQ-072).

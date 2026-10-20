@@ -2010,7 +2010,10 @@ impl<'p> Checker<'p> {
             self.diags.push(d);
             return false;
         }
-        let what = if self.fns.contains_key(name) || PRELUDE.contains(&name) {
+        // The prelude's own locals never meet the program's items (expr.bind.5).
+        let what = if is_prelude(pos) {
+            return true;
+        } else if self.fns.contains_key(name) || PRELUDE.contains(&name) {
             "a function"
         } else if self.types.contains_key(name) || BUILTIN_TYPES.contains(&name) {
             "a type"

@@ -140,6 +140,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Second-class borrow** | Temporary access to an argument that lasts only for a call and can't be stored or returned, so no lifetimes are needed (ADR 0062). |
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
+| **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, run by the bootstrap and compared with the Rust ones on every program (Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
 | **Site cache** | A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
 | **Sized number** | One of `i8 i16 i32 u8 u16 u32 u64 f32`: the numeric types besides `int` (`i64`) and `float` (`f64`). Literals take their type from context, and nothing converts implicitly (ADRs 0194–0195). |

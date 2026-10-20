@@ -617,7 +617,7 @@ fn derive_from_json(t TypeInfo) str ! DeriveError
             out.push("        return {t.name}.{v.name}\n")
         else
             out.push(json_fields(v.fields, "        ")?)
-            args := ["v_{f.name}" for f in v.fields]
+            args := ["{f.name}: v_{f.name}" for f in v.fields]
             out.push("        return {t.name}.{v.name}({args.join(", ")})\n")
     out.push("    return JsonError(-1, \"unknown {t.name} `\{name}`\")\n")
     out.join("")
