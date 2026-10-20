@@ -42,6 +42,7 @@ struct Walked
 ## The facts about calls that typing recorded.
 struct Facts
     targets Map[int, int]
+    fn_values Map[int, int]
     trait_calls Map[int, int]
     assoc_calls Map[int, int]
     std_fns Map[int, str]
@@ -83,6 +84,7 @@ fn Checker.facts(self) Facts
                     impls.push(m)
     Facts(
         targets: targets,
+        fn_values: fn_values,
         trait_calls: trait_calls,
         assoc_calls: assoc_calls,
         std_fns: std_fns,
@@ -418,7 +420,12 @@ fn Walked.otherwise(mut self, prog ast.Program, fx Facts, o ast.Else)
 
 fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
     match e
-        Str | Int | Float | Char | Bool | NoneLit | Hole | Name | TypeArgs => return
+        Str | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
+        # type.fn.2: naming a function as a value counts as calling it, since
+        # the value can be called wherever it ends up.
+        Name(_, at) =>
+            if i := fx.fn_values.get(pos_key(at))
+                call(i)
         Interp(parts, _) =>
             std_traits(fx)
             for p in parts

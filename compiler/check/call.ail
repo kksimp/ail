@@ -79,17 +79,11 @@ fn Checker.args_only(mut self, args List[ast.Arg])
             targs = a
             has_targs = true
         _ =>
-            expr(callee, none, true)
-            args_only(args)
-            unsupported(
-                expr_pos(callee),
-                "calling the result of an expression is not supported by the bootstrap yet",
-            )
-            return Ty.Unknown
-    if not has_targs and local(n) != none
-        args_only(args)
-        err("expr.call.1", npos, "`{n}` is a value, not a function")
-        return Ty.Unknown
+            t := expr(callee, none, true)
+            return call_value("this value", t, args, expr_pos(callee))
+    if not has_targs
+        if l := local(n)
+            return call_value(n, l.ty, args, npos)
     if n == "print"
         return print_call(args, npos)
     # err.model.2: `unreachable(message)` traps; it never returns.

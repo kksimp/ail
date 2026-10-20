@@ -196,6 +196,14 @@ fn Checker.error_names(self, errors List[Ty]) List[str]
                     bind(k, l, vars, mut binds)
                     bind(v, w, vars, mut binds)
                 _ => return
+        FnTy(xs, r) =>
+            match actual
+                FnTy(ys, s) =>
+                    if xs.len() == ys.len()
+                        for k in 0..xs.len()
+                            bind(xs[k], ys[k], vars, mut binds)
+                        bind(r, s, vars, mut binds)
+                _ => return
         Struct(s, xs) =>
             match actual
                 Struct(t, ys) =>
@@ -257,6 +265,10 @@ fn is_bound(binds List[Bind], p int) bool
                 )
                 Inferred => Ty.Res(subst_unknown(x, binds, vars), errs)
         Union(m) => Ty.Union([subst_unknown(x, binds, vars) for x in m])
+        FnTy(ps, r) => Ty.FnTy(
+            [subst_unknown(x, binds, vars) for x in ps],
+            subst_unknown(r, binds, vars),
+        )
         _ => t
 
 ## Whether two declared field types could be the same type (type.struct.7).
@@ -273,6 +285,7 @@ fn may_be_same(a Ty, b Ty) bool
         MapOf(k, v) => has_param(k) or has_param(v)
         Struct(_, args) => any_param(args)
         Enum(_, args) => any_param(args)
+        FnTy(ps, r) => any_param(ps) or has_param(r)
         _ => false
 
 fn any_param(ts List[Ty]) bool

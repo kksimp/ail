@@ -464,7 +464,7 @@ fn holds_int(f ast.FnDecl, fx Facts, n str) int
                     if ["float", "f64", "f32"].contains(t)
                         return 0
                     return -1
-                Optional | Fallible | AnyTrait | RefTo => return -1
+                Optional | Fallible | AnyTrait | RefTo | FnType => return -1
     body := f.body else return -1
     mut found := -1
     for l in each_let(body)

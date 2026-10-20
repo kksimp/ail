@@ -179,8 +179,13 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
         return Ty.Unknown
     if module_as_value(n, at)
         return Ty.Unknown
-    if fns.contains(n) or PRELUDE_FNS.contains(n)
-        unsupported(at, "using the function `{n}` as a value is not supported by the bootstrap yet")
+    if i := fns.get(n)
+        return fn_value(n, i, at)
+    if PRELUDE_FNS.contains(n)
+        unsupported(
+            at,
+            "using the built-in function `{n}` as a value is not supported by the bootstrap yet",
+        )
         return Ty.Unknown
     if d := types.get(n)
         match d
