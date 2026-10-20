@@ -23,7 +23,7 @@ like `str`) and `icall` (args: the value, then the arguments; `dst` typed by
 the function type's result, none for a unit result). `Ty.Fn(params, ret)` is
 the value's MIR type, so a mismatch is caught as for any type. Both code
 generators reuse `call`'s argument moves and put the callee in the scratch
-register that no argument uses (`r10`, `x16`): `call r10` and `blr x16`. An
+register that no argument or move uses (`r10`, `x8`): `call r10` and `blr x8`. An
 `icall` clobbers the caller-saved registers like `call` and stops a function
 being inlined. Lists, structs and fields of function type stay outside the
 subset until lists of pointers and structs land.

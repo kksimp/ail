@@ -688,12 +688,13 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
-    # A call through a value (`icall`) takes the callee first, into the scratch register.
+    # A call through a value (`icall`) takes the callee first, into the scratch register
+    # that moves don't use (a float constant goes through `S0`).
     indirect := i.op == "icall"
     for k in 0..i.args.len()
         v := i.args[k]
         if indirect and k == 0
-            moves.push(move_of(S0, v))
+            moves.push(move_of(S2, v))
         elif f.vals[v].is_float()
             moves.push(move_of(FB + nf, v))
             nf += 1
@@ -702,7 +703,7 @@ fn Gen.call_out(mut self, i mir.Inst)
             ni += 1
     parallel(moves)
     if indirect
-        a.blr(S0)
+        a.blr(S2)
     else
         a.bl(i.name)
     if i.dst >= 0
