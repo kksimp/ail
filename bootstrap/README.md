@@ -52,7 +52,7 @@ reported but don't stop a program from running.
 | File | Stage | Spec rules enforced |
 |---|---|---|
 | `src/lexer.rs` | Text to tokens, including INDENT/DEDENT and interpolated strings | `lex.block.1–4`, `lex.stmt.1–3`, `lex.kw.1–2` (incl. `todo`), `lex.comment.*`, `lex.str.1–5`, `lex.str.7`, `lex.num.1–3` |
-| `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr`, `Hash`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker, with its `ToJson`/`FromJson` part (`## @module jsonderive`) only when the program names them; then the `derive` module (`TypeInfo`, `DeriveError`), read with `std.json`, `@derive` or its names | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–4`, `json.derive.1–2`, `refl.info.1–3` |
+| `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr`, `Hash`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker, with its `ToJson`/`FromJson` part (`## @module jsonderive`) only when the program names them; then the `derive` module (`TypeInfo`, `DeriveError`), read with `std.json`, `@derive` or its names | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–4`, `json.derive.1–3`, `refl.info.1–3` |
 | `src/modules.rs` | Loads a file or package and the modules it imports; renames each module's items to qualified names; import and item-privacy errors; per-file diagnostics | `mod.unit.1–5`, `mod.use.1–6`, `mod.vis.1`, `expr.bind.5` (for imported modules) |
 | `src/parser.rs` | Tokens to syntax tree (`use`, `pub` and qualified names in `src/parser/modules.rs`: `mod.use.1`, `mod.vis.1–2`, `mod.unit.4`) | `mod.use.1`, `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `gram.attr.1–2`, `gen.decl.1`, `gen.bound.1`, `gen.method.1–3`, `gen.infer.2`, `trait.decl.1–2`, `trait.impl.1`, `trait.any.1`, `type.struct.1–3`, `type.enum.1–2`, `type.opt.2`, `err.decl.1`, `err.type.1–2`, `err.type.5`, `err.else.1–3`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.if.5–6`, `expr.if.8`, `expr.loop.1–3`, `expr.loop.6`, `expr.match.1`, `expr.match.6`, `expr.prec.1–2`, `expr.op.1–3`, `expr.comp.1–2` |
 | `src/packages.rs` | Reads `ail.pkg` manifests of the root and every path dependency, maps `use` paths to packages and directories, adds manifests to the program's files; after checking, checks each package's code against its capability grants | `mod.pkg.1–6`, `eff.cap.2`, `eff.cap.4–5` |
@@ -137,8 +137,10 @@ package's are reported file by file.
   functions and methods (`ct.const.1–3`; `if`, `match` and `?` in a
   constant are `bootstrap.unsupported`: call a function instead);
   derive generators: `@derive(f) trait X` and empty `impl X for T`, with
-  `TypeInfo`, the `ToJson` and `FromJson` derives, and `ail api --expanded`
-  (`ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3`, `json.derive.1–2`; step
+  `TypeInfo`, the `ToJson` and `FromJson` derives (maps, optionals, enum
+  payloads, path-naming failures; generic types `ToJson` only), and
+  `ail api --expanded`
+  (`ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3`, `json.derive.1–3`; step
   limits aren't counted)
 - **Statements:** `x := v`, `mut x := v`, `x := v else fallback`,
   `x := v else return ...`, `x := v else` or `else err` with a block,

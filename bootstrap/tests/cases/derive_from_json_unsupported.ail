@@ -1,6 +1,6 @@
-## FromJson can't read a map field yet (json.derive.2, ct.derive.4).
+## FromJson can't read a set field (json.derive.2, ct.derive.4).
 struct Scores
-    by_name Map[str, int]
+    names Set[str]
 
 impl FromJson for Scores
 

@@ -197,7 +197,8 @@ fn main()
   friends work on `int`, `str`, lists and `Ord` types. Customise with
   `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
 - `impl ToJson for T` and `impl FromJson for T` with no body derive
-  `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name). A trait
+  `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name; lists,
+  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
   `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
   that writes an empty `impl`'s methods; `ail api --expanded` shows them.
 

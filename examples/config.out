@@ -1,0 +1,8 @@
+api x3, 2 env vars
+  MODE=prod
+  LOG=info
+health GET /up every 10s
+route /v1 weight 1.0
+route /v2 weight 0.25
+{"name":"api","replicas":3.0,"env":{"MODE":"prod","LOG":"info"},"health":{"kind":"Http","path":"/up","every_s":10.0},"routes":[{"prefix":"/v1","weight":null},{"prefix":"/v2","weight":0.25}]}
+rejected: missing routes[0].prefix

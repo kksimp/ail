@@ -64,9 +64,12 @@ fn main()
 JSON's words (`null`, `bool`, `number`, `string`, `array`, `object`).
 `j.need(key) Json ! JsonError` is member `key`, failing with the message
 `missing KEY`; `need_str`, `need_num`, `need_int`, `need_bool` and
-`need_arr` give the payload, failing with `expected a string, found KIND`
-and so on. These failures have `at` -1: the value isn't tied to a place in
-a text. *(ADR 0308)*
+`need_arr` and `need_obj` give the payload, failing with `expected a
+string, found KIND` and so on. These failures have `at` -1: the value isn't
+tied to a place in a text. `j.non_null()` is `none` for `null`, else `j`;
+`j.opt(key)` is member `key` unless it is missing or `null`;
+`j.variant_name()` is a string, or the string member `kind` of an object.
+*(ADR 0308, ADR 0343)*
 
 ## Derives
 
@@ -75,17 +78,32 @@ generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
 `Json` and `List[T ToJson]` implement it. A derived struct gives an object of
 its fields in declaration order, a `T?` field that is `none` giving `null`; a
 derived enum gives a variant without fields as its name, and one with fields
-as `{"Name": {fields}}`. *(ADR 0308)*
+as an object `{"kind": "Name", fields...}`. Fields of type `Map[str, T]`,
+`List[T]` and `T?` convert element by element when `T` has no `to_json`
+(`List[int?]`, `Map[str, List[U]]`). A generic type derives it through
+bounds on the `impl`: `impl ToJson for Pair[A ToJson, B ToJson]`.
+*(ADR 0308, ADR 0343)*
 
 **json.derive.2** — `trait FromJson` has no methods; its generator
 `derive_from_json` adds the associated function `T.from_json(j Json) T !
 JsonError` (`ct.gen.1`). A struct reads each field from the member of its
 name with `need` and the `need_*` of its type, so a missing or mistyped
 member fails with its message; a field of another type `U` calls
-`U.from_json`, which `U` derives too; a field `T?` of `str`, `int`, `float`,
-`bool` or `Json` may be missing. An enum whose variants have no fields reads
-a variant's name. Generic types, other optional fields, maps and variants
-with fields are a `ct.derive.4` error naming the field. *(ADR 0308)*
+`U.from_json`, which `U` derives too. A field may nest `List[T]`,
+`Map[str, T]` (read from an object) and `T?` (missing or `null` gives
+`none`) to any depth. An enum reads a variant's name, or, when a variant has
+fields, an object whose member `kind` names the variant and whose other
+members are its fields; a variant field named `kind` is a `ct.derive.4`
+error. A generic type, a map whose key isn't `str`, and any other type
+(`Set[T]`, tuples) are a `ct.derive.4` error naming the type: generic code
+can't call `from_json` of a type parameter until OQ-039. *(ADR 0308,
+ADR 0343)*
+
+**json.derive.3** — A failure of a derived `from_json` names its path from
+the document root: `missing items[2].kind` for a missing member, and
+`items[2].kind: expected a string, found number` or ``shape: unknown Shape
+`Box` `` for the others. `e.under(part)`, with `part` a member name or
+`[i]`, puts a `JsonError` under one more step of its path. *(ADR 0343)*
 
 ```ail
 struct Item
@@ -106,7 +124,7 @@ fn main()
     print(back == t)    # true
     bad := parse_json("\{\"id\": 7}") else return
     wrong := Item.from_json(bad) else err
-        print(err.message)    # expected a string, found number
+        print(err.message)    # id: expected a string, found number
         return
     print(wrong)
 ```

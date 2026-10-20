@@ -1,9 +1,9 @@
 {"id":"t1","hours":1.5,"count":3.0,"done":false,"tags":["ops","db"],"note":null,"level":"High","owner":{"name":"ann"}}
 true
-{"Circle":{"r":2.0,"label":"a"}}
+{"kind":"Circle","r":2.0,"label":"a"}
 "Dot"
-expected a string, found number
+id: expected a string, found number
 missing hours
-expected a whole number, found 1.5
+count: expected a whole number, found 1.5
 missing id
 unknown Level `Mid`

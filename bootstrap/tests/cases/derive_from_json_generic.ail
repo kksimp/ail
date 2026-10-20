@@ -1,0 +1,9 @@
+## FromJson can't be derived for a generic type until OQ-039 (json.derive.2, ct.derive.4).
+struct Pair[A, B]
+    first A
+    second B
+
+impl FromJson for Pair[A, B]
+
+fn main()
+    print(1)

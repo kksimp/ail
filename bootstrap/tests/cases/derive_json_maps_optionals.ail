@@ -1,0 +1,54 @@
+## FromJson reads maps, any optional, nested lists, and names the path of a failure (json.derive.2-3).
+struct Item
+    id str
+    tags List[str]
+    scores Map[str, int]
+    owner Owner?
+    nums List[int?]
+    grid List[List[int]]
+    extra Json?
+    by_owner Map[str, List[Owner]]
+
+struct Owner
+    name str
+
+impl ToJson for Item
+impl FromJson for Item
+impl ToJson for Owner
+impl FromJson for Owner
+
+fn main()
+    t := Item(
+        id: "a",
+        tags: ["x"],
+        scores: {"k": 2, "j": 5},
+        owner: Owner(name: "ann"),
+        nums: [1, none],
+        grid: [[1], [2, 3]],
+        extra: none,
+        by_owner: {"ops": [Owner(name: "bo")]},
+    )
+    text := t.to_json().to_text()
+    print(text)
+    doc := parse_json(text) else return
+    back := Item.from_json(doc) else err
+        print("failed: {err.message}")
+        return
+    print(back == t)
+    mj := parse_json("\{\"id\": \"b\", \"tags\": [], \"scores\": \{}, \"owner\": null, \"nums\": [null, 4], \"grid\": [], \"by_owner\": \{}}") else return
+    min := Item.from_json(mj) else return
+    print(min.owner)
+    print(min.nums)
+    for bad in [
+        "\{\"id\": \"a\", \"tags\": [], \"scores\": \{}, \"nums\": [], \"grid\": [[1], [2, \"x\"]], \"by_owner\": \{}}",
+        "\{\"id\": \"a\", \"tags\": [], \"scores\": \{\"q\": true}, \"nums\": [], \"grid\": [], \"by_owner\": \{}}",
+        "\{\"id\": \"a\", \"tags\": [], \"scores\": \{}, \"owner\": \{}, \"nums\": [], \"grid\": [], \"by_owner\": \{}}",
+        "\{\"id\": \"a\", \"tags\": [], \"scores\": \{}, \"nums\": [], \"grid\": [], \"by_owner\": \{\"ops\": [\{\"name\": 1}]}}",
+        "\{\"id\": \"a\", \"tags\": [], \"scores\": [], \"nums\": [], \"grid\": [], \"by_owner\": \{}}",
+        "\{\"tags\": []}",
+    ]
+        j := parse_json(bad) else return
+        x := Item.from_json(j) else err
+            print(err.message)
+            continue
+        print(x)

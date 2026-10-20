@@ -1,0 +1,49 @@
+## An agent's service config read in one call: maps, optionals and enum
+## variants with fields come from `@derive`d `FromJson`; a bad document
+## names the path of its problem.
+
+struct Service
+    name str
+    replicas int
+    env Map[str, str]
+    health Check?
+    routes List[Route]
+
+enum Check
+    None
+    Http(path str, every_s int)
+    Command(argv List[str])
+
+struct Route
+    prefix str
+    weight float?
+
+impl FromJson for Service
+impl ToJson for Service
+impl FromJson for Check
+impl ToJson for Check
+impl FromJson for Route
+impl ToJson for Route
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/configs/service.json")?
+    svc := Service.from_json(parse_json(text)?)?
+    print("{svc.name} x{svc.replicas}, {svc.env.len()} env vars")
+    for k in svc.env.keys()
+        print("  {k}={svc.env[k]}")
+    check := svc.health else Check.None
+    match check
+        Http(path, every_s) => print("health GET {path} every {every_s}s")
+        None | Command(_) => print("health {check}")
+    for r in svc.routes
+        print("route {r.prefix} weight {r.weight else 1.0}")
+    print(svc.to_json().to_text())
+    bad := parse_json("\{\"name\": \"x\", \"replicas\": 1, \"env\": \{}, \"routes\": [\{\"weight\": 1}]}")?
+    if s := Service.from_json(bad)
+        print(s)
+    else err
+        print("rejected: {err.message}")
+
+@test fn reads_a_command_check()
+    c := Check.from_json(parse_json("\{\"kind\": \"Command\", \"argv\": [\"true\"]}")?)?
+    assert_eq(c, Check.Command(["true"]))
