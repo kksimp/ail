@@ -6,6 +6,7 @@
 - **Topic:** 4 — Type system; 21 — Standard library
 - **Spec rules:** [type.coll.4](../spec/04-types.md) (amended), [type.coll.9–12](../spec/04-types.md), [expr.cmp.3](../spec/05-expressions.md)
 - **Extends:** [ADR 0090](0090-collections.md) (lists, indexing and slices), [ADR 0116](0116-core-library-basics.md) (`len`, `push`)
+- **Amended by:** [ADR 0239](0239-float-sum-fixed-tree.md) (float `sum()` adds in a fixed tree, not left to right)
 - **Relates to:** [ADR 0128](0128-methods-on-generic-types.md) (`sum` is a special case that doesn't change it), [ADR 0137](0137-integer-methods-and-min-max.md) (`xs.min()` and Ord's `a.min(b)`)
 - **Evidence:** `examples/interp.ail`, `examples/json.ail`, `examples/sheet.ail`; `tools/tokbench` (mean of five tokenizers)
 

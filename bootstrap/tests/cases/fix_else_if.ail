@@ -1,0 +1,8 @@
+fn main()
+    n := 2
+    if n > 5
+        print("big")
+    else if n > 1
+        print("mid")
+    else
+        print("small")

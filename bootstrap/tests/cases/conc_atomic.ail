@@ -1,0 +1,25 @@
+# conc.atomic.3-5: `Atomic[int]` and `Atomic[bool]` shared by tasks and
+# `par for` without a `ref` or a lock (ADR 0320).
+
+fn work(hits Atomic[int], n int)
+    for _ in 0..n
+        hits.add(1)
+
+fn main() !
+    hits := Atomic(0)
+    g := TaskGroup()
+    for _ in 0..4
+        g.add(spawn work(hits, 100))
+    g.wait_all()?
+    print(hits.load())
+    print(hits.add(5))
+    print(hits.cas(405, 7))
+    print(hits.cas(405, 8))
+    print(hits)
+    ready := Atomic[bool](false)
+    ready.store(true)
+    print(ready.load())
+    total := Atomic(0)
+    par for i in 0..1000
+        total.add(i)
+    print(total.load())

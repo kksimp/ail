@@ -1,0 +1,12 @@
+## Wrong uses of std.fs.8-12, std.proc.2-3 and std.net.2-3 (std.use.2, expr.call.2).
+use std.fs
+use std.net
+use std.proc
+
+fn main() !
+    fs.walk(1)?
+    proc.run("a", ["b"], "in", 5, 6)?
+    proc.run("a", [], 5)?
+    net.get("http://x", "y")?
+    net.fetch("http://x")?
+    print(proc.which(3))

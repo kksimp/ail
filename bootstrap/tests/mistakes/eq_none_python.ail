@@ -1,0 +1,7 @@
+fn f() int?
+    none
+
+fn main()
+    x := f()
+    if x == None
+        print(1)

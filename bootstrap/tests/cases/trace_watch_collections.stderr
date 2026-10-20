@@ -1,0 +1,7 @@
+watch: xs = [1, 2] at 5:9
+watch: xs = [1, 2, 3] at 6:8 [push 3 at index 2]
+watch: xs = [9, 1, 2, 3] at 7:8 [insert 9 at index 0]
+watch: xs = [9, 5, 2, 3] at 8:5 [set 5 at index 1]
+watch: xs = [9, 5, 2] at 9:8 [pop 3 at index 3]
+watch: xs = [5, 2] at 10:8 [remove_at 9 at index 0]
+trace: summary: 6 events shown, 0 dropped (watch 6)

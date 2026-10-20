@@ -1,0 +1,14 @@
+# conc.task.7: when every task is blocked, the program traps instead of
+# hanging.
+
+fn take(ch Channel[int])
+    v := ch.recv() else return
+    print(v)
+
+fn main()
+    ch := Channel[int](1)
+    g := TaskGroup()
+    g.add(spawn take(ch))
+    g.add(spawn take(ch))
+    ch.send(1)
+    print("main done")

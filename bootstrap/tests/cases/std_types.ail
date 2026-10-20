@@ -1,0 +1,14 @@
+## std.use.2, std.err.1: module types are written `m.Type`; an alias works too.
+use std.fs as files
+
+fn explain(e files.IoError) str
+    match e.kind
+        "not_found" => "{e.path} is missing"
+        _ => "{e.path}: {e.kind}"
+
+fn main()
+    print(explain(files.IoError(path: "a.txt", kind: "not_found")))
+    print(explain(files.IoError(path: "b", kind: "permission")))
+    text := files.read_text("std_types_missing.txt") else err
+        explain(err)
+    print(text)

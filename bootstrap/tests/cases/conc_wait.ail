@@ -1,0 +1,36 @@
+# conc.task.1, conc.task.6: tasks run calls and `wait` gives their results;
+# a task's own errors pass through `wait`.
+
+error struct TooBig
+    n int
+
+fn square(x int) int
+    x * x
+
+fn checked(x int) int ! TooBig
+    if x > 9
+        return TooBig(x)
+    x
+
+fn total(xs List[int]) int
+    mut sum := 0
+    for x in xs
+        sum += x
+    sum
+
+fn main() !
+    a := spawn square(3)
+    b := spawn square(4)
+    print(a.wait()? + b.wait()?)
+    # conc.share.1: the task works on its own copy of the list.
+    mut xs := [1, 2, 3]
+    t := spawn total(xs)
+    xs.push(100)
+    print(t.wait()?)
+    ok := spawn checked(5)
+    print(ok.wait()?)
+    bad := spawn checked(12)
+    r := bad.wait() else err
+        print("failed: {err}")
+        0
+    print(r)

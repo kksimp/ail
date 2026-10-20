@@ -1,0 +1,5 @@
+{"test":"passes","status":"pass","line":4,"col":10,"message":""}
+{"test":"wrong_value","status":"fail","line":8,"col":14,"message":"trap[test.assert.1]: assertion failed: left is 4, right is 5","snapshot":"  8 |     assert_eq(double(2), 5)\n    |              ^\n  at 8:14 in wrong_value()"}
+{"test":"wrong_cond","status":"fail","line":12,"col":11,"message":"trap[test.assert.1]: assertion failed","snapshot":"  12 |     assert(double(2) == 5)\n     |           ^\n  at 12:11 in wrong_cond()"}
+{"test":"errors","status":"fail","line":18,"col":5,"message":"error: Boom.Bang"}
+{"summary":true,"passed":1,"failed":3}

@@ -1,0 +1,10 @@
+# conc.task.8: a trapped task in a group that is never waited explicitly
+# traps its owner when the group's block ends.
+
+fn fails(xs List[int])
+    print(xs[5])
+
+fn main()
+    g := TaskGroup()
+    g.add(spawn fails([1, 2]))
+    print("before the end")

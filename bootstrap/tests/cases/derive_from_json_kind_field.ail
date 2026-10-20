@@ -1,0 +1,8 @@
+## A variant field named `kind` would clash with the variant tag (json.derive.2, ct.derive.4).
+enum Event
+    Moved(kind str, x int)
+
+impl FromJson for Event
+
+fn main()
+    print(1)

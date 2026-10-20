@@ -1,0 +1,11 @@
+# trace.snap.3: `--verbose` shows every frame, and each local on its own
+# line, with values up to the long budget.
+
+fn down(n int, label str) int
+    doubled := n * 2
+    if n == 0
+        return 10 / n
+    down(n - 1, label) + doubled
+
+fn main()
+    print(down(2, "a label that is longer than sixty characters, so the short report would cut it"))

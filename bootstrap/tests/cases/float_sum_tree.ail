@@ -1,0 +1,9 @@
+# type.coll.12 (ADR 0239): a float sum adds in a fixed tree, four running
+# sums per leaf of 32, so a vector or parallel sum gives the same bits.
+fn main()
+    print([1.5, 2.5, 3.0].sum())
+    print([1e16, 1.0, -1e16, 1.0].sum())
+    mut xs := List[float]()
+    for i in 0..100
+        xs.push(i.to_float() / 10.0)
+    print(xs.sum())

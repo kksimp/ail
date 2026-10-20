@@ -1,0 +1,16 @@
+# contract.inh.2: an implementation that breaks the trait's `ensures` traps in
+# the implementation, through the trait and through the concrete type.
+trait Shape
+    fn area(self) int
+        ensures result >= 0
+
+struct Odd
+    side int
+
+impl Shape for Odd
+    fn area(self) int
+        self.side * 3
+
+fn main()
+    print(Odd(side: 2).area())
+    print(Odd(side: -2).area())

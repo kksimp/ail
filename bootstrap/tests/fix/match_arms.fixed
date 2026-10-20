@@ -1,0 +1,19 @@
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn area(s Shape) int
+    match s
+        Circle(r) => r * r
+        Rect(_, _) => todo
+        Dot => todo
+
+fn flag(b bool) int
+    match b
+        true => 1
+        false => todo
+
+fn main()
+    print(area(Shape.Circle(2)))
+    print(flag(true))

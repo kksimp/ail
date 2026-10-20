@@ -1,0 +1,5 @@
+$FILE:11:11: trap[contract.req.1]: `withdraw` requires `amount <= balance`, but it was called with balance = 10, amount = 25 (contract at 5:5)
+  11 |     print(withdraw(have, 25))
+     |           ^
+  values: amount = 25, balance = 10
+  at 11:11 in main(); have = 10

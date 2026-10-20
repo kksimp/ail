@@ -1,0 +1,5 @@
+error: fs.IoError(path: "no_such_file.ail.cfg", kind: "not_found")
+  context: reading the config
+  at $FILE:5:8
+  at $FILE:5:23
+  at $FILE:9:39

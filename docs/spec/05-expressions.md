@@ -25,7 +25,7 @@ or an enclosing local scope of the same function is a compile-time error. This
 applies to variables, parameters, and loop and pattern bindings. *(ADR 0039,
 ADR 0044)*
 
-```ail
+```ail skip=context
 fn total(items List[Item]) i64
     mut sum := 0
     for item in items
@@ -54,7 +54,7 @@ the entries below. A declared name is never overridden by the table.
 
 | Habit | Help names |
 |---|---|
-| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()`; for a `str`, `s.chars().len()` |
+| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()` (a `str` counts characters; `s.byte_len()` counts bytes) |
 | `str(x)` | `"{x}"` |
 | `int(s)` | `s.to_int()` |
 | `float(x)` | `s.to_float()` for text, `n.to_float()` for an `int` |
@@ -126,7 +126,9 @@ next iteration. *(ADR 0091)*
 immutable binding scoped to the loop body. The loop iterates the value `e` had
 when the loop started. `e` MUST NOT be a `Map`: `for k in m` is a
 compile-time error, and its help says to iterate `m.keys()` (the habit is
-ambiguous between keys and pairs). *(ADR 0117, ADR 0131)*
+ambiguous between keys and pairs). `e` may also be a `Channel[T]`, giving `x`
+type `T`: the loop receives until the channel is closed and empty
+(`conc.share.7`). *(ADR 0117, ADR 0131, ADR 0300)*
 
 **expr.loop.5** — `break` and `continue` outside a loop are compile-time
 errors. *(ADR 0117)*
@@ -152,7 +154,7 @@ apart from binding conditions (`expr.if.5`). *(ADR 0110, ADR 0125)*
 value), its blocks are indented one level deeper than that statement's line,
 and its `elif` and `else` lines are at that statement's level. *(ADR 0111)*
 
-```ail
+```ail skip=context
 kind := if n < 0
     "negative"
 elif n == 0
@@ -171,11 +173,27 @@ of type `T ! E`, its `else` may be written `else name`, which binds the error
 value to `name` within the `else` block. The type of `name` is given by
 `err.else.3`. *(ADR 0125, ADR 0139)*
 
-```ail
+```ail skip=context
 if cfg := parse(lines)
     print("ok: {cfg.width}x{cfg.height}")
 else err
     print("error: {err}")
+```
+
+**expr.if.8** — `if c then a else b` is the one-line form of an `if` with one
+condition and an `else`: `a` and `b` are expressions on the same line, and its
+value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
+`then` is a keyword only right after the condition, so it stays usable as a
+name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
+without `else` is a compile-time error. *(ADR 0280)*
+
+```ail
+fn sign(n int) str
+    if n < 0 then "negative" else "non-negative"
+
+fn main()
+    print(sign(-2))
+    print("{if 3 > 2 then "big" else "small"}")
 ```
 
 **expr.if.4** — An `if` or `match` whose value is used (bound, passed,
@@ -216,7 +234,7 @@ ordering comparison with NaN is false. *(ADR 0129, ADR 0127, ADR 0130)*
 literal is a compile-time error. The help says that `index_of` returns `none`
 when the element is absent, not `-1`. *(ADR 0136)*
 
-```ail
+```ail skip=context
 i := xs.index_of(x)
 if i == -1        # compile-time error: index_of returns none when absent
     print("absent")
@@ -231,7 +249,7 @@ one-line statement on the arm's line (`expr.match.9`). A result consisting of
 several statements is written as an indented block following `=>`.
 *(ADR 0054, ADR 0138)*
 
-```ail
+```ail skip=context
 area := match s
     Circle(r) => pi * r * r
     Rect(w, h) => w * h
@@ -250,7 +268,8 @@ and name those variants, unless the warning is suppressed for that match.
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`). *(ADR 0117, ADR 0123, ADR 0138)*
+for each of its fields (`expr.match.6`), or written bare to match any fields
+(`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -282,7 +301,7 @@ arm's line: `return x`, `break`, `continue`, `total += n`, `x = y` or
 the match's type is expected. Any other statement gives the arm no value, so
 the match can't be used as a value (`expr.if.4`). *(ADR 0138, ADR 0139)*
 
-```ail
+```ail skip=context
 fn class(c char) int
     match c
         '0' | '1' => 1
@@ -296,11 +315,103 @@ fn kind(t Token) str
         Plus => "op"
 ```
 
+**expr.match.10** — A variant with data written without parentheses, bare or
+qualified, matches that variant whatever its fields hold and binds no names.
+`Circle | Rect => 0` is the same as `Circle(_) | Rect(_, _) => 0`.
+*(ADR 0183)*
+
+```ail
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn has_area(s Shape) bool
+    match s
+        Circle | Rect => true
+        Dot => false
+
+fn main()
+    print(has_area(Shape.Circle(r: 1)))
+```
+
 > **Note:** not yet designed: range patterns (`'0'..='9'`), guards
 > (`x if x > 0`), or-patterns that bind names, patterns nested inside a
 > variant's fields (`expr.match.6`), and warning-suppression syntax. The
 > diagnostics for range patterns and guards suggest an `if` chain.
 > *(ADR 0138)*
+
+## Comprehensions
+
+**expr.comp.1** — A comprehension builds a list, set or map from one or more
+`for` clauses. `[e for x in xs]` is a `List[T]`, `{e for x in xs}` a `Set[T]`
+and `{k: v for x in xs}` a `Map[K, V]`, where `T`, `K` and `V` are the types of
+`e`, `k` and `v`. A set's elements and a map's keys MUST be `Hash`
+(`type.map.2`). A comprehension may span lines inside its brackets.
+*(ADR 0182)*
+
+**expr.comp.2** — Each clause is `for name in iterable`, optionally followed
+by `if condition`. The iterable is anything a `for` loop accepts
+(`expr.loop.3`). The name is a new immutable binding (`expr.bind.4`: it MUST
+NOT repeat a name already declared), visible in the condition, in later
+clauses and in the element; it ends with the comprehension. `for mut` is a
+compile-time error. A clause may be `par for` (`conc.par.12`). *(ADR 0182,
+ADR 0302)*
+
+**expr.comp.3** — The clauses run like nested `for` loops, outermost first.
+For each combination whose conditions are all `true`, the element (and, in a
+map, the value) is evaluated and added: in order for a list, and as by `add`
+and `m[k] = v` for a set or map, so a later equal key replaces an earlier
+one's value. The element MUST be a value, and when the context expects a
+collection of a known element type, it MUST fit that type. *(ADR 0182)*
+
+**expr.comp.4** — The element and conditions are ordinary expressions:
+`?`, `return` and `else return` leave the enclosing function. `continue`
+skips the current element and `break` ends the comprehension, which then
+holds the elements added so far. *(ADR 0182)*
+
+```ail
+fn main()
+    xs := [3, 1, 4, 1, 5]
+    print([x * x for x in xs if x > 1])          # [9, 16, 25]
+    print({x for x in xs}.len())                 # 4
+    sizes := {w: w.chars().len() for w in ["a", "bcd"]}
+    print(sizes["bcd"])                          # 3
+    print([r * 10 + c for r in 1..3 for c in 0..2])   # [10, 11, 20, 21]
+    print([t.to_int() else continue for t in ["1", "x", "3"]])  # [1, 3]
+```
+
+## Key functions
+
+**expr.key.1** — An argument written `by: |x| e` is a key function. It is
+allowed only as the one argument of a list's `sorted`, `sort`, `min` and
+`max`, and of a set's `sorted`; anywhere else, and a `by:` argument without
+`|x|`, is a compile-time error. A key function isn't a value: it can't be
+bound, returned, stored or passed to a user function. *(ADR 0250)*
+
+**expr.key.2** — `x` is a new immutable binding of the element type
+(`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in
+`e`. `e` is an ordinary expression and sees the enclosing locals. *(ADR 0250)*
+
+**expr.key.3** — `e` MUST be `Ord`. It is evaluated once per element, in the
+collection's order, before any comparison. *(ADR 0250)*
+
+**expr.key.4** — `sorted(by:)` and `sort(by:)` order the elements by their
+keys and are stable; `min(by:)` and `max(by:)` return the first element with
+the least (greatest) key as a `T?`, or `none` if the list is empty.
+*(ADR 0250)*
+
+```ail
+struct Person
+    name str
+    age int
+
+fn main()
+    people := [Person(name: "bo", age: 30), Person(name: "al", age: 25)]
+    print([p.name for p in people.sorted(by: |p| p.age)])   # ["al", "bo"]
+    counts := {"b": 2, "a": 2, "c": 5}
+    print(counts.keys().sorted().sorted(by: |k| -counts[k]).take(2))   # ["c", "a"]
+```
 
 ## Integer arithmetic
 
@@ -327,3 +438,29 @@ sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is
 > decided in the error-handling chapter.
+
+## Holes
+
+**expr.hole.1** — `todo` is a *typed hole*: an expression that stands for code
+not yet written. It is accepted wherever an expression is. Its type is the type
+the context expects; where no type is expected, its type is unknown and every
+use of the value is accepted. Each hole MUST be reported as a warning, not an
+error, whose message states the expected type (or that none is known) and lists
+the local names in scope with their types, sorted by name. *(ADR 0147)*
+
+```ail
+fn area(w int, h int) int
+    todo
+
+fn main()
+    print("started")
+```
+
+The checker warns "hole: expected `int`; in scope: `h int`, `w int`", and the
+program still runs: `area` is never called.
+
+**expr.hole.2** — Evaluating a hole MUST trap (`err.trap.1`). *(ADR 0147)*
+
+> **Note:** a hole lets a program be written top-down: the checker says what
+> each gap needs, and the program runs until it reaches one. The bootstrap
+> doesn't infer an unknown hole type from later uses; a later lane may.

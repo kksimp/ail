@@ -3,7 +3,7 @@
 Chapter key: `gram`
 
 > **Status:** Drafted (partial). Function-declaration shape, generic brackets,
-> and attributes are specified. The full grammar (in a machine-checkable form, per
+> and attributes (`@inline`, `@deprecated`, and those of other chapters) are specified. The full grammar (in a machine-checkable form, per
 > ADR 0002) will be written as the syntax decisions are completed.
 
 ## Syntax errors
@@ -11,6 +11,44 @@ Chapter key: `gram`
 **gram.syntax.1** — Source text that doesn't match the grammar is rejected. The
 diagnostic names the construct that was expected, unless a more specific rule
 applies. *(ADR 0108)*
+
+**gram.foreign.1** — A construct that other languages have and AIL doesn't
+(`//` comments, `def`, `class`, `import`, `try`, `switch`, `x++`, `a ? b : c`,
+`<>`, `Color::Red`, `Point{...}`, `new`, braces around blocks, `:` after a
+block header, a line-ending `\`, `f"..."`) is reported once, at its first token. The message says what AIL
+has instead, and the diagnostic carries a fix when the AIL spelling can be
+written without knowing more than the source shows. *(ADR 0262)*
+
+```ail error=gram.foreign.1
+fn main()
+    mut n := 3
+    n++
+    print(n)
+```
+
+## Recovery and help
+
+**gram.rec.1** — A line with several syntax errors yields one diagnostic, for
+the leftmost. The fixes of the errors it absorbs join its own fix when their
+edits don't overlap, so one application settles the line. A file indented by
+2 or 3 spaces, or with tabs, yields one diagnostic for the file whose fix
+re-indents every line. *(ADR 0263)*
+
+**gram.rec.2** — After an error in a declaration, the checker still treats the
+name as declared, so later uses don't add reports about it. *(ADR 0263)*
+
+**gram.rec.3** — A "did you mean" suggestion, and the fix that comes with it,
+is made only for names of 3 or more characters: with fewer, nearly any name is
+one edit away, and applying the fix would change the program's meaning.
+*(ADR 0263)*
+
+**gram.help.1** — Every error diagnostic carries a `help` that says what to
+write. A rule without a specific help has a default one. *(ADR 0262)*
+
+**gram.help.2** — `ail fix` resolves a mistake only when the result checks
+without errors; a fix that leaves other errors is still a fix, but the
+mistakes corpus records which files `ail fix` leaves clean. *(ADR 0262,
+[audit](../design/diagnostics-audit.md))*
 
 ## Function declarations
 
@@ -22,7 +60,7 @@ type. Its body is the indented block that follows. *(ADR 0042, ADR 0037, ADR 003
 separated by whitespace, with no colon. The return type, if present, follows
 the closing parenthesis, with no arrow. *(ADR 0037)*
 
-```ail
+```ail fragment
 fn add(a i32, b i32) i32
     a + b
 ```
@@ -42,7 +80,7 @@ when the list spans several lines. *(ADR 0118)*
 in square brackets `[` `]`. Angle brackets are never used for generics.
 *(ADR 0041)*
 
-```ail
+```ail skip=context
 fn load(path str) Result[Map[str, User], DbError]
     ...
 ```
@@ -57,9 +95,25 @@ fn load(path str) Result[Map[str, User], DbError]
 
 **gram.attr.2** — Attributes precede the declaration they apply to, on the same
 line. The canonical formatter moves them to their own preceding line only when
-the line would otherwise exceed the line-length limit. *(ADR 0083)*
+the line would otherwise exceed the line-length limit. A newline may separate
+an attribute from the next attribute or the declaration. *(ADR 0083, ADR 0324)*
 
-```ail
+```ail fragment
 @inline fn hash(x u64) u64
     x * 31
+```
+
+**gram.attr.3** — `@inline` is a hint that the function is worth inlining. It
+takes no arguments and never changes behaviour; an implementation MAY ignore
+it. The bootstrap accepts it and ignores it. *(ADR 0196)*
+
+**gram.attr.4** — `@deprecated("reason")` marks a function as deprecated. The
+reason is one string literal and is required. Each call of the function is a
+warning that names the function and gives the reason; the program still runs.
+The attributes known to the bootstrap are `@test`, `@pure`, `@inline` and
+`@deprecated`; any other attribute is an error (`test.attr.1`). *(ADR 0197)*
+
+```ail fragment
+@deprecated("use hash") fn old_hash(x u64) u64
+    x * 17
 ```

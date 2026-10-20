@@ -1,0 +1,13 @@
+# Conversions and wrapping, checked and saturating methods on sized integers (type.num.14-15).
+fn main()
+    w := 250.to_u8()
+    print("{w.wrapping_add(10.to_u8())} {w.checked_add(10.to_u8())} {w.saturating_add(10.to_u8())}")
+    print("{w.checked_sub(251.to_u8())} {w.wrapping_sub(251.to_u8())} {w.checked_div(0.to_u8())}")
+    s := 127.to_i8()
+    print("{s.wrapping_add(1.to_i8())} {s.saturating_add(1.to_i8())} {s.checked_neg()} {s.wrapping_neg()}")
+    h := 2166136261.to_u32()
+    print("{h.wrapping_mul(16777619.to_u32())} {h.to_int()} {h.to_float()} {h.to_hex()}")
+    print("{h.to_u64()}")
+    f := 2.5.to_f32()
+    print("{f} {f.round()} {f.to_int()} {f.sqrt()} {(0.1).to_f32() + (0.2).to_f32()}")
+    print("{(-5).to_i8().to_i16()}")

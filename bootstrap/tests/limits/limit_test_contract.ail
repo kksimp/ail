@@ -1,0 +1,6 @@
+fn half(x int) int
+    requires x > 0
+    x / 2
+
+@test fn boom()
+    assert_eq(half(0), 0)

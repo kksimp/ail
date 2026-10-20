@@ -1,0 +1,24 @@
+## std.fs.1-7: files and directories, in a scratch directory of its own.
+use std.fs
+
+fn main() !
+    dir := "std_fs_case.tmp"
+    fs.make_dir("{dir}/sub")?
+    file := "{dir}/notes.txt"
+    fs.write_text(file, "one\n")?
+    fs.append_text(file, "two\n")?
+    print(fs.read_text(file)?.lines())
+    fs.write_text(file, "replaced")?
+    print(fs.read_text(file)?)
+    print(fs.exists(file))
+    print(fs.list_dir(dir)?)
+    fs.remove(dir) else err
+        print("{err.kind}: {err.path}")
+    fs.remove(file)?
+    fs.remove("{dir}/sub")?
+    fs.remove(dir)?
+    print(fs.exists(dir))
+    missing := fs.read_text("{dir}/nothing") else err
+        print(err)
+        ""
+    print(missing == "")

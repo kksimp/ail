@@ -43,6 +43,7 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
         Ty::Set(x) => Ty::Set(Box::new(map_params(x, f))),
         Ty::Map(k, v) => Ty::Map(Box::new(map_params(k, f)), Box::new(map_params(v, f))),
         Ty::Opt(x) => Ty::Opt(Box::new(map_params(x, f))),
+        Ty::Conc(k, x) => Ty::Conc(*k, Box::new(map_params(x, f))),
         Ty::Res(x, Errs::Set(set)) => Ty::Res(Box::new(map_params(x, f)), Errs::Set(all(set))),
         Ty::Res(x, errs) => Ty::Res(Box::new(map_params(x, f)), errs.clone()),
         Ty::Union(m) => Ty::Union(all(m)),
@@ -62,6 +63,7 @@ pub(super) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(u
             }
         }
         (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => bind(x, y, vars, binds),
+        (Ty::Conc(a, x), Ty::Conc(b, y)) if a == b => bind(x, y, vars, binds),
         (Ty::Map(k, v), Ty::Map(l, w)) => {
             bind(k, l, vars, binds);
             bind(v, w, vars, binds);
@@ -89,7 +91,7 @@ fn mentions(t: &Ty, p: usize) -> bool {
     match t {
         Ty::Param(q) => *q == p,
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(|x| mentions(x, p)),
-        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) => mentions(x, p),
+        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) | Ty::Conc(_, x) => mentions(x, p),
         Ty::Map(k, v) => mentions(k, p) || mentions(v, p),
         Ty::Res(x, Errs::Set(set)) => mentions(x, p) || set.iter().any(|e| mentions(e, p)),
         Ty::Res(x, _) => mentions(x, p),
@@ -136,6 +138,7 @@ impl<'p> Checker<'p> {
                     "Ord" => self.std.ord = i,
                     "ToStr" => self.std.to_str = i,
                     "Hash" => self.std.hash = i,
+                    "Drop" => self.std.drop = Some(i),
                     _ => {}
                 }
             }
@@ -209,7 +212,8 @@ impl<'p> Checker<'p> {
                     Con::Enum(e) => is_prelude(prog.enums[e].pos),
                     _ => true,
                 };
-                if is_prelude(prog.traits[t].pos) && built_in_type {
+                // The prelude's own impls (an error type's message, err.msg.1) are allowed.
+                if is_prelude(prog.traits[t].pos) && built_in_type && !is_prelude(imp.pos) {
                     self.error(
                         "trait.impl.4",
                         imp.pos,
@@ -259,6 +263,10 @@ impl<'p> Checker<'p> {
                 .iter()
                 .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
+            // own.ref.6: references compare by identity, and aren't keys or ordered.
+            Ty::Ref(_) => tr == eq,
+            // type.num.14: sized numbers are `Eq` and `Ord`; every one but `f32` is `Hash`.
+            Ty::Num(k) => tr == eq || tr == self.std.ord || (tr == self.std.hash && !k.is_float()),
             Ty::Union(_) => tr == eq || tr == self.std.hash,
             Ty::Opt(inner) => (tr == eq || tr == self.std.hash) && self.implements_in(inner, tr, seen),
             // type.map.4: maps and sets compare with `==`, and aren't keys.
@@ -324,6 +332,7 @@ impl<'p> Checker<'p> {
         let hash = self.std.hash;
         match t {
             Ty::Float => "`float` isn't `Hash`, since NaN isn't equal to itself".into(),
+            Ty::Num(k) if k.is_float() => "`f32` isn't `Hash`, since NaN isn't equal to itself".into(),
             Ty::Map(..) | Ty::Set(_) => "maps and sets aren't `Hash`".into(),
             Ty::Any(_) => "`any` values aren't `Hash`".into(),
             Ty::Param(p) => format!(
@@ -515,7 +524,7 @@ impl<'p> Checker<'p> {
                         format!("`{}` has no method `{}`", trait_decl.name, f.name),
                     );
                     d = match super::suggest(&f.name, &names) {
-                        Some(s) => d.help(format!("did you mean `{s}`?")),
+                        Some(s) => d.did_you_mean(&f.name, s),
                         None => d.help(format!(
                             "a method that isn't part of the trait is declared on its own: `fn {}.{}(...)`",
                             imp.target.name, f.name
@@ -546,7 +555,12 @@ impl<'p> Checker<'p> {
                 }
             }
             let built_in = is_prelude(trait_decl.pos);
-            if built_in && imp.methods.is_empty() {
+            // ct.derive.2: a generator fills in an empty `impl` before checking
+            // (`derive.rs`); one it couldn't fill is already reported.
+            let by_generator = trait_decl.derive.is_some() && (imp.methods.is_empty() || trait_decl.methods.is_empty());
+            if by_generator {
+                // Nothing more to check.
+            } else if built_in && imp.methods.is_empty() {
                 self.check_derived(i, tr, &target);
             } else {
                 let missing: Vec<usize> = trait_decl

@@ -1,0 +1,10 @@
+{"id":"a","tags":["x"],"scores":{"k":2.0,"j":5.0},"owner":{"name":"ann"},"nums":[1.0,null],"grid":[[1.0],[2.0,3.0]],"extra":null,"by_owner":{"ops":[{"name":"bo"}]}}
+true
+none
+[none, 4]
+grid[1][1]: expected a whole number, found "x"
+scores.q: expected a whole number, found true
+missing owner.name
+by_owner.ops[0].name: expected a string, found number
+scores: expected an object, found array
+missing id

@@ -1,0 +1,10 @@
+# Manifest errors, all reported in one pass (mod.pkg.2-6, eff.cap.2).
+package app
+dep json git https://example.com/ail-json
+dep lib path vendor/other
+dep other path vendor/other caps disk
+dep other path vendor/other
+dep gone path vendor/missing
+dep loop path vendor/loop
+dep std path vendor/other
+version 1.0

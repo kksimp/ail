@@ -1,0 +1,47 @@
+
+LEVELS := ["INFO", "WARN", "ERROR"]
+
+struct Entry
+    hour str
+    level str
+    message str
+
+fn parse_line(line str) Entry?
+    words := line.split(" ")
+    if words.len() < 4
+        return none
+    Entry(hour: words[1].split(":")[0], level: words[2], message: words[3..].join(" "))
+
+fn top_errors(counts Map[str, int], n int) List[str]
+    counts.keys().sorted().sorted(by: |m| -counts[m]).take(n)
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/data/logscan.log")? "reading the log"
+    mut per_hour := {}
+    mut hours := {}
+    mut errors := {}
+    mut skipped := 0
+    for line in text.lines()
+        entry := parse_line(line) else
+            skipped += 1
+            continue
+        hours.add(entry.hour)
+        per_hour["{entry.hour} {entry.level}"] += 1
+        if entry.level == "ERROR"
+            errors[entry.message] += 1
+    print("hour {LEVELS[0]:>6} {LEVELS[1]:>6} {LEVELS[2]:>6}")
+    for hour in hours.sorted()
+        cells := ["{per_hour.get("{hour} {level}") else 0:>6}" for level in LEVELS].join(" ")
+        print("{hour}:00 {cells}")
+    print("top errors:")
+    for m in top_errors(errors, 3)
+        print("{errors[m]:>3}  {m}")
+    print("skipped {skipped} malformed lines")
+
+@test fn parses_a_line()
+    want := Entry(hour: "09", level: "WARN", message: "slow query")
+    assert_eq(parse_line("2026-10-12 09:15:00 WARN slow query")?, want)
+    assert(parse_line("garbled") == none)
+
+@test fn ranks_by_count_then_message()
+    assert_eq(top_errors({"b": 2, "a": 2, "c": 5}, 2), ["c", "a"])

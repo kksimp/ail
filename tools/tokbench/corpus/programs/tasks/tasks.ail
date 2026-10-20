@@ -1,0 +1,57 @@
+
+MAX_HOURS := 3.0
+
+struct Todo
+    id str
+    title str
+    status str
+    hours float
+
+impl FromJson for Todo
+impl ToJson for Todo
+
+fn main() !
+    dir := "{path.dir(env.program())}/data"
+    doc := parse_json(fs.read_text("{dir}/tasks.json")? "reading tasks")? "parsing tasks"
+    mut updated := []
+    mut ran := 0
+    mut failed := 0
+    for item in doc.arr("tasks") else []
+        mut task := Todo.from_json(item) else err
+            print("skip {item.str("id") else "?"}: {err.message}")
+            updated.push(item)
+            continue
+        if task.status != "todo" or task.hours > MAX_HOURS
+            print("keep {task.id}: {task.title} ({task.status}, {task.hours}h)")
+            updated.push(item)
+            continue
+        r := proc.run("echo", ["running", task.title])? "running {task.id}"
+        ran += 1
+        if r.status != 0
+            failed += 1
+        task.status = if r.status == 0 then "done" else "failed"
+        print("{task.id}: {r.out.trim()}")
+        updated.push(task.to_json())
+    out := Json.Obj([JsonMember(key: "tasks", value: Json.Arr(updated))]).to_text()
+    fs.write_text("{dir}/tasks.out.json", out)?
+    back := parse_json(fs.read_text("{dir}/tasks.out.json")?)?
+    fs.remove("{dir}/tasks.out.json")?
+    print("ran {ran}, failed {failed}, wrote {back.arr("tasks")?.len()} tasks ({out.len()} chars)")
+
+@test fn loads_a_task()
+    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}")?
+    t := Todo.from_json(doc)?
+    assert_eq(t.title, "t")
+    assert_eq(t.hours, 2.0)
+    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}")?
+    missing := Todo.from_json(bad) else err
+        assert_eq(err.message, "missing title")
+        return
+    assert_eq(missing.id, "rejected")
+
+@test fn writes_a_task()
+    t := Todo(id: "a", title: "t", status: "done", hours: 1.0)
+    assert_eq(
+        t.to_json().to_text(),
+        "\{\"id\":\"a\",\"title\":\"t\",\"status\":\"done\",\"hours\":1.0}",
+    )

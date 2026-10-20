@@ -1,0 +1,16 @@
+struct Item
+    id int
+    name str
+    qty int
+    price float
+
+fn main()
+    items := [Item(id: 255, name: "widget", qty: 3, price: 4.5), Item(id: 4096, name: "gadget", qty: 12, price: 19.999)]
+    print("{"name".pad_right(10, ' ')}{"qty".pad_left(5, ' ')}{"price".pad_left(10, ' ')}  id")
+    mut total := 0.0
+    for it in items
+        line := it.price * it.qty.to_float()
+        total += line
+        print("{it.name.pad_right(10, ' ')}{it.qty.to_str().pad_left(5, ' ')}{it.price.to_fixed(2).pad_left(10, ' ')}  {it.id.to_hex().pad_left(4, '0')}")
+    print("{"total".pad_right(15, '-')}{total.to_fixed(2).pad_left(10, '-')}")
+    print("balance: ${total.to_fixed(2)}")

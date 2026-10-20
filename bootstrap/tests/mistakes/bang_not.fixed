@@ -1,0 +1,4 @@
+fn main()
+    a := true
+    if not a
+        print("no")

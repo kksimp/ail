@@ -1,0 +1,4 @@
+# A conversion that does not fit traps (type.num.15).
+fn main()
+    print("{200.to_u8()}")
+    print("{300.to_u8()}")

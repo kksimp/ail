@@ -1,0 +1,6 @@
+# std.tensor.4: `add` of tensors whose shapes differ traps.
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0])
+    b := tensor.from([1.0, 2.0])
+    print(a.sum())
+    print(a.add(b))

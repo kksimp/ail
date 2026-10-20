@@ -1,0 +1,11 @@
+struct Pt
+    a int
+    b int
+
+fn Pt.sum(self) int
+    a + b
+
+fn main()
+    p := Pt(a: 1, b: 2)
+    t := spawn p.sum()
+    print(t.wait() else 0)

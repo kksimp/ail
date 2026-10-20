@@ -39,7 +39,7 @@ including in generic code through an `Eq` or `Ord` bound (an amendment of
 (`type.num.9`). `float` implements `Eq`, `Ord` and `ToStr`. It isn't `Hash`
 (`trait.auto.5`). *(ADR 0130)*
 
-```ail
+```ail fragment
 a := 0.1 + 0.2          # 0.30000000000000004
 b := 1.0 / 0.0          # inf: no trap
 c := 0.0 / 0.0          # nan; c == c is false
@@ -54,7 +54,7 @@ Otherwise use `d[.ddd]e±XX`: the sign is always written, the exponent has at
 least two digits, and the mantissa has no `.0`. The special forms are `inf`,
 `-inf`, `nan` (never `-nan`) and `-0.0`. *(ADR 0130)*
 
-```ail
+```ail fragment
 "{1000.0}"              # 1000.0
 "{0.0001}"              # 0.0001
 "{-0.0}"                # -0.0
@@ -75,7 +75,7 @@ underflow gives a subnormal or `±0.0`; `"-0"` gives `-0.0`. Float literals
 are correctly rounded too; a literal that overflows is a `lex.num.3` error.
 *(ADR 0130)*
 
-```ail
+```ail fragment
 "2.5E-3".to_float()     # 0.0025
 "1e999".to_float()      # inf
 "-0".to_float()         # -0.0
@@ -95,7 +95,7 @@ rounds to nearest, ties to even, and never traps. *(ADR 0130)*
 float literal. Only literals (and `-` applied to a literal) convert: an
 expression of type `int` never does. *(ADR 0130)*
 
-```ail
+```ail skip=context
 struct Stats
     total float
 
@@ -114,14 +114,14 @@ derived `Ord` on a struct with a `float` field) use this `cmp`, so their
 results are deterministic. For `float` alone, `a.cmp(b) == Equal` doesn't
 imply `a == b`. *(ADR 0130)*
 
-```ail
+```ail fragment
 n := 0.0 / 0.0
 [2.0, n, 1.0].sorted()  # [1.0, 2.0, nan]
 n < 1.0                 # false: the operator is IEEE
 ```
 
-> **Note:** float literal patterns are an error (`expr.match.7`). `f32` is
-> named by `type.num.1` but has no implementation yet.
+> **Note:** float literal patterns are an error (`expr.match.7`). The same
+> holds for `f32`.
 
 **type.num.12** — `int` has these methods. *(ADR 0137)*
 - `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`
@@ -139,11 +139,47 @@ negation. Division and remainder have the checked forms only; wrapping and
 saturating division are deferred. `a.min(b)` and `a.max(b)` of two `int`
 values are the default methods of `Ord` (ADR 0137).
 
-```ail
+```ail fragment
 x := 9223372036854775807
 x.checked_add(1)        # none
 x.wrapping_add(1)       # -9223372036854775808
 x.saturating_add(1)     # 9223372036854775807
+```
+
+**type.num.13** — A sized number is a value of one of the types of
+`type.num.1` other than `int` and `float`. Its literals are typed by context: an
+integer literal whose expected type is a sized integer type (a parameter, a
+field, a return value, or the other operand of an operator, written on either
+side) has that type; it MUST fit, or the program is rejected. A `-` applied to
+a literal belongs to the literal, so `-128` is an `i8`. An integer or float
+literal whose expected type is `f32` is an `f32`. With no expected type a
+literal is an `int` or a `float` (`type.num.3`). *(ADR 0194)*
+
+**type.num.14** — Arithmetic, unary `-` and comparison on sized numbers are
+defined only between two values of the same type; there is no implicit
+widening or conversion (`trait.op.3`). The sized integers support what `int`
+does (`type.num.5`), and a result outside the type traps (`expr.arith.1`,
+`expr.arith.3`); unary `-` isn't defined for the unsigned types. `f32` follows
+`type.num.6` in single precision and has no `%`. Every sized number is `Eq` and
+`Ord`; every one but `f32` is `Hash`. A sized integer has the methods of
+`type.num.12` (`checked_*`, `wrapping_*`, `saturating_*`, `abs`, `to_hex`,
+computed in the type; `checked_neg`, `wrapping_neg` and `abs` for the signed
+types only), and `f32` has `abs`, `floor`, `ceil`, `round` and `sqrt` in
+single precision. Text forms follow `type.num.7` (an `f32` uses the shortest
+digits that read back as an `f32`). *(ADR 0194)*
+
+**type.num.15** — Conversions are explicit methods named for the target:
+`to_i8`, `to_i16`, `to_i32`, `to_u8`, `to_u16`, `to_u32`, `to_u64` and `to_f32`
+on any integer type (including `int`), `to_f32` on `float`, and `to_int` and
+`to_float` back to `int` and `float` from any sized number. An integer
+conversion is exact and traps (`type.num.15`) when the value doesn't fit; a
+float conversion rounds to nearest, ties to even, and never traps, except
+`to_int` of an `f32`, which is `type.num.9`'s. *(ADR 0195)*
+
+```ail fragment
+a := 300.to_u16()       # a u16
+b := a.to_u32() * 2     # a u32: 600
+c := 0.5.to_f32() + 1   # an f32: 1 is a float literal
 ```
 
 ## Structs
@@ -155,7 +191,7 @@ name, and an indented block containing one field declaration per line.
 **type.struct.2** — A field declaration is written `name Type`. *(ADR 0052,
 ADR 0037)*
 
-```ail
+```ail fragment
 struct User
     id i64
     name str
@@ -168,7 +204,7 @@ by a parenthesised, comma-separated list of arguments. An argument is named
 sets that field), or positional (any other expression). *(ADR 0058,
 ADR 0142)*
 
-```ail
+```ail skip=context
 u := User(id: 7, name: "Ada", email: none)
 ```
 
@@ -189,7 +225,7 @@ always a type error; two fields whose types are type parameters count as the
 same type. Otherwise it's a compile-time error whose help names the fields.
 *(ADR 0142)*
 
-```ail
+```ail error=type.struct.7
 struct Pos
     row int
     col int
@@ -209,7 +245,7 @@ name, and an indented block containing one variant per line. *(ADR 0053)*
 **type.enum.2** — A variant either carries no data or carries a parenthesised
 list of fields, each written `name Type`. *(ADR 0053)*
 
-```ail
+```ail fragment
 enum Shape
     Circle(r f64)
     Rect(w f64, h f64)
@@ -240,7 +276,7 @@ equivalent to `Option[T]`. *(ADR 0048)*
 **type.opt.3** — The canonical form of an optional type is `T?`.
 *(ADR 0048)*
 
-```ail
+```ail skip=context
 fn find(id i64) User?
     ...
 ```
@@ -254,6 +290,39 @@ fn find(id i64) User?
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
 converts implicitly to a present optional. *(ADR 0093)*
 
+**type.opt.6** — `T??` is an optional whose content is an optional `T?`; it
+is a different type from `T?`. Any number of `?` may follow a type. A value
+of type `T??` arises from collection methods on optional elements, for
+example `m.get(k)` on a `Map[K, V?]` and `xs.last()` on a `List[T?]`.
+*(ADR 0209)*
+
+**type.opt.7** — `none` is the absent value of the outermost level. `e else
+d`, `e?` and `if v := e` act on that level only and give an optional of the
+inner type: `m.get(k) else none` flattens a `V??` to a `V?`. A present value
+whose content is `none` is not `none`: `==` compares every level, and the
+text form of the present-but-empty value of a `T??` is `some(none)`. A `T`
+converts to a `T??` (`type.opt.5`, twice). *(ADR 0209)*
+
+**type.opt.8** — A `T?` does not convert to a `T??`, because its `none` would
+be ambiguous between the two levels. The error is the ordinary mismatch with
+a help that says so. *(ADR 0209)*
+
+```ail fragment
+fn lookup(m Map[str, int?], k str) int??
+    m.get(k)
+
+fn flat(m Map[str, int?], k str) int?
+    lookup(m, k) else none
+```
+
+```ail error=expr.block.2
+fn lift(v int?) int??
+    v
+
+fn main()
+    print(lift(none))
+```
+
 ## Booleans
 
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
@@ -264,11 +333,11 @@ Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 **type.str.1** — `str` is the type of immutable UTF-8 text. `char` is the type
 of a single Unicode scalar value. *(ADR 0089)*
 
-**type.str.2** — `str` doesn't support the indexing operator, `for` iteration
-or a `len()` method. Byte and character access go through explicit views:
-`s.bytes()` (not implemented yet) and `s.chars()` (`type.str.7`). The
-diagnostic for `s[i]` or `for c in s` suggests `s.chars()`, and for `s.len()`
-suggests `s.chars().len()`. *(ADR 0089, ADR 0135)*
+**type.str.2** — `str` doesn't support the indexing operator or `for`
+iteration. Character access goes through the explicit view `s.chars()`
+(`type.str.7`); `s.bytes()` is not implemented yet. The diagnostic for `s[i]`
+or `for c in s` suggests `s.chars()`. Length is `s.len()` (`type.str.12`).
+*(ADR 0089, ADR 0135, ADR 0208)*
 
 **type.str.3** — The text form of an `int` is its decimal representation,
 with a leading `-` when negative. The text form of a `bool` is `true` or
@@ -303,7 +372,7 @@ take a `str` only. *(ADR 0135)*
 - `s.strip_prefix(p)` and `s.strip_suffix(p)` return the rest of `s` as a
   `str?`, or `none` when `s` doesn't start (end) with `p`.
 
-```ail
+```ail fragment
 "a\r\nb\n".lines()             # ["a", "b"]
 "a\n\n".lines()                # ["a", ""]
 "  hi ".trim()                # hi
@@ -322,13 +391,59 @@ characters (scalar values). A string already that wide, or any string when
 `width <= 0`, is returned unchanged. The fill is required: AIL has no default
 arguments. *(ADR 0135)*
 
-```ail
+```ail fragment
 "7".pad_left(3, '0')        # 007
 "ab".pad_right(4, ' ')      # "ab  "
 ```
 
+**type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
+`a` up to but excluding `b` (indexes count characters, as `len()` does:
+`type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
+clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
+`i` is out of range or negative. *(ADR 0215)*
+
+**type.str.14** — `s.find(sub)` returns the character index of the first
+occurrence of `sub` as an `int?`, or `none`. `s.replace(from, to)` returns a
+copy with every non-overlapping occurrence of `from` replaced by `to`, left
+to right; it traps if `from` is empty. `s.to_lower()` and `s.to_upper()`
+return the Unicode lower- and upper-case forms. `sub`, `from` and `to` are
+`str`s. *(ADR 0215)*
+
+```ail fragment
+s := "Héllo"
+a := s.slice(1, 3)       # "él"
+i := s.find("llo")       # 2
+t := s.replace("l", "L") # "HéLLo"
+```
+
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
+
+**type.str.15** — `repeat` and `pad_left`/`pad_right` MUST trap, rather than
+exhaust memory, when the text they would build is over 2^30 bytes. *(ADR 0271)*
+
+**type.str.12** — `s.len()` returns the number of characters (Unicode scalar
+values) of `s`, the same as `s.chars().len()` without building the list; it
+takes time proportional to the length. `s.byte_len()` returns the number of
+UTF-8 bytes. Grapheme clusters are not counted: `"e\u{301}".len()` is 2.
+*(ADR 0208)*
+
+```ail fragment
+n := "héllo".len()        # 5
+b := "héllo".byte_len()   # 6
+```
+
+**type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
+exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
+is `2`); `nan` and `inf` print as `{x}` does. `x` formats an `int` in lowercase
+hex without `0x`, with a leading `-` for a negative number (as `n.to_hex()`).
+Using `.N` on a non-float or `x` on a non-int is a compile-time error. Width,
+fill and alignment apply to the text form of any value. *(ADR 0173)*
+
+```ail error=type.str.11
+n := 1
+print("{n:.2}")      # compile-time error: write {n.to_float():.2}
+```
 
 > **Note:** joining is `xs.join(sep)` on any list (`type.coll.9`). There is
 > no `str.from_chars`. `s.len()` is absent until bytes versus characters is
@@ -366,7 +481,7 @@ outside the scalar range. The diagnostics for `ord(c)`, `chr(n)` and
 `c.to_int()` suggest `c.code()`, `char.from_code(n)` and "`c.code()` or
 `c.to_digit(10)`". *(ADR 0134)*
 
-```ail
+```ail fragment
 c := 'f'
 c.is_alpha()            # true
 c.to_digit(16)          # 15
@@ -383,7 +498,7 @@ char.from_code(0x41)    # 'A'
 **type.coll.2** — `[a, b, ...]` is a list literal. `{k: v, ...}` is a map
 literal. `{a, b, ...}` is a set literal. *(ADR 0090)*
 
-```ail
+```ail fragment
 ports := {"http": 80, "https": 443}
 primes := [2, 3, 5, 7]
 ```
@@ -415,7 +530,7 @@ collection anywhere, with no expected type needed. `{}` where the expected
 type is a `Map` or `Set` is the empty map or set; with no expected type it is
 the error of `type.coll.3`. *(ADR 0131)*
 
-```ail
+```ail fragment
 seen := Set[int]()
 counts := Map[str, int]()
 names := List[str]()
@@ -433,12 +548,34 @@ names := List[str]()
   contributes its text form, with `str` and `char` elements unquoted at the
   top level and nested values in their quoted forms (`trait.auto.2`).
 
-```ail
+```ail fragment
 xs := ["a", "b"]
 xs.join(", ")           # a, b
 [1, 2, 3].join("")      # 123
 [["a"], ["b"]].join("+")  # ["a"]+["b"]
 xs.index_of("b")        # 1
+```
+
+**type.coll.14** — A list has these further methods. *(ADR 0214)*
+- `xs.insert(i, x)` puts `x` at index `i`, moving later elements up. `i` MAY
+  equal `xs.len()` (append). Receiver `mut self`.
+- `xs.remove_at(i)` removes and returns the element at `i` as a `T`.
+  Receiver `mut self`.
+- `xs.extend(ys)` appends the elements of the `List[T]` `ys`. Receiver
+  `mut self`.
+- `xs.clear()` removes every element and `xs.reverse()` reverses in place.
+  Receivers are `mut self`.
+- `xs.first()` returns the first element as a `T?`, or `none` if empty.
+
+`insert` traps unless `0 <= i <= xs.len()` and `remove_at` traps unless
+`0 <= i < xs.len()`, both under rule `type.coll.4`. There is no `xs[a..b]`
+method: slicing is `type.coll.4`.
+
+```ail fragment
+mut xs := [1, 2, 3]
+xs.insert(1, 9)       # [1, 9, 2, 3]
+n := xs.remove_at(0)  # 1
+xs.extend([4, 5])     # [9, 2, 3, 4, 5]
 ```
 
 **type.coll.10** — Open-ended slices `xs[a..]`, `xs[..b]` and `xs[..=b]` follow
@@ -451,24 +588,37 @@ the bounds rule of `type.coll.4`. Open ranges exist only inside `[]`;
 `T?`: the first least (greatest) element, or `none` if the list is empty. An
 inherent method takes precedence over a method of the same name from `Ord`
 (`trait.res.2`), so `xs.min()` isn't `Ord`'s `min(other)`. A binding of
-`xs.sort()`'s result gets a help suggesting `sorted()`. *(ADR 0136, ADR 0137)*
+`xs.sort()`'s result gets a help suggesting `sorted()`. Each also takes a key
+function, `by: |x| key` (`expr.key.1`); `s.sorted(by: ...)` works on a set.
+*(ADR 0136, ADR 0137, ADR 0250)*
+
+**type.coll.15** — `xs.take(n)` returns a new list of the first `n`
+elements, or all of them when the list is shorter. A negative `n` traps.
+*(ADR 0250)*
 
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
 and `List[float]`, returning a `float`. It is a built-in special case that user
-code can't declare (ADR 0128 is unchanged for user code). It starts at `0` or
-`0.0` and adds left to right with `+`: an `int` overflow traps, and an empty
-list gives `0` or `0.0`. For `float` it matches a Python loop, not Python
-3.12's compensated `sum()`. *(ADR 0136)*
+code can't declare (ADR 0128 is unchanged for user code). An empty list
+gives `0` or `0.0`. For `int` it adds left to right from `0`, and an overflow
+of any partial sum traps. For `float` the sum `S(xs)` is a fixed tree that
+depends only on the length: if it has at most 32 elements, four partial sums
+`p0`–`p3`, where `pk` adds the elements whose index is `k` modulo 4 left to
+right from `0.0`, and `S = (p0 + p1) + (p2 + p3)`; otherwise
+`S(xs[..m]) + S(xs[m..])` with `m = 32 × ⌈len / 64⌉`. Vector and parallel
+implementations compute the same tree (`conc.par.1`). *(ADR 0136,
+ADR 0239)*
 
 **type.coll.13** — A local declared with `:=` from `[]` or `{}` with no
 expected type takes its type from the first statement that determines it:
-`x.push(e)` (a `List`), `x.add(e)` (a `Set`), `x[k] = v` (a `Map`), `x = e`,
+`x.push(e)` (a `List`), `x.add(e)` (a `Set`), `x[k] = v` or `x[k] op= v`
+with a number `v` (a `Map`, ADR 0251, ADR 0280), `x.push(k, e)` (a
+`Map[K, List[E]]`, ADR 0341), `x = e`,
 passing `x` where a parameter's type is known, returning `x`, or using it as
 a field's value. Any other use before then, or none at all, is a
 compile-time error whose help suggests `List[T]()`, `Map[K, V]()` or
-`Set[T]()`. *(ADR 0143)*
+`Set[T]()`. *(ADR 0143, ADR 0280)*
 
-```ail
+```ail fragment
 mut out := []
 out.push("a")          # out is List[str]
 ```
@@ -490,25 +640,37 @@ compile-time error that names the cause. *(ADR 0131, ADR 0133)*
 **type.map.3** — `m[k]` reads the value for `k` and traps if `k` is missing;
 the message shows the key's text form. An entry `m[k]` of a map place is a
 place (`own.place.1` amended), but only when `m[k]` is the whole target of `=`
-does it insert or replace. Every other use traps if `k` is missing:
-- the target of `op=` (`m[k] += 1`);
+does it insert or replace, and when it is the whole target of `op=` a missing
+`k` starts from zero (`type.map.7`). Every other use traps if `k` is missing:
 - a step before the last one in a longer place (`m[k].f = v`, `m[k][j] = v`);
   `m[a][b] = v` needs `m[a]` to exist and inserts `b`;
 - the receiver of a `mut self` method (`m[k].push(x)`);
 - a `mut` argument, and `for mut x in m[k]`.
 
-`k` is evaluated once, before the right-hand side. *(ADR 0131)*
+`k` is evaluated once, before the right-hand side. *(ADR 0131, ADR 0251)*
 
-```ail
+```ail fragment
 mut m := Map[str, int]()
 m["a"] = 1              # inserts
 m["a"] = 2              # replaces; "a" keeps its position
 m["a"] += 1             # 3
-m["z"] += 1             # traps: key "z" is missing
+x := m["z"]             # traps: key "z" is missing
 mut g := Map[int, Map[int, str]]()
 g[1] = Map[int, str]()
 g[1][2] = "x"           # inserts key 2 into g[1]
 g[3][4] = "y"           # traps: g has no key 3
+```
+
+**type.map.7** — When `m[k]` is the whole target of an arithmetic `op=`
+(`expr.op.2`) and `k` is missing, the operation starts from zero (`0`, `0.0`,
+or the sized type's zero) and inserts `k` at the end. Only the last step
+defaults: `m[a][b] += 1` still needs `m[a]`. `V` is numeric, since `op=` needs
+an arithmetic type. *(ADR 0251)*
+
+```ail fragment
+mut counts := Map[str, int]()
+for w in ["a", "b", "a"]
+    counts[w] += 1      # {"a": 2, "b": 1}
 ```
 
 **type.map.4** — Two maps are `==` when they have the same keys with equal
@@ -534,10 +696,21 @@ both plausible readings. `for mut` over a set, or over `m.keys()` or
   `s.contains(x)` returns a `bool`; `s.sorted()` returns a `List[T]` (`T` MUST
   be `Ord`); `s.is_subset(t)` returns a `bool`.
 
+**type.coll.16** — `s.union(t)`, `s.intersect(t)` and `s.difference(t)`
+return a new `Set[T]` (`T` MUST be `Hash`): the elements in either set, in
+both, or in `s` but not `t`. The result keeps `s`'s order, then (for `union`)
+the new elements of `t` in order. A `List[T]` has the same three methods
+taking a `List[T]`, so `m.keys().union(n.keys())` works; the result is still a
+set. *(ADR 0340)*
+
+**type.map.8** — On a `Map[K, List[T]]`, `m.push(k, x)` (`mut self`) appends
+`x` to the list at `k`, and starts an empty list first when `k` is missing. On
+a map with any other value type it is a compile-time error. *(ADR 0341)*
+
 The diagnostics for `m.get(k, d)`, `contains_key` and `items()` suggest
 `v := m.get(k) else d`, `contains`, and iterating `keys()` and indexing.
 
-```ail
+```ail fragment
 mut seen := Set[str]()
 first := seen.add("a")  # true
 again := seen.add("a")  # false: already there

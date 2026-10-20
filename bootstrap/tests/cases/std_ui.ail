@@ -1,0 +1,57 @@
+## std.ui.1-8 without a display: the types, a window that is not open, and
+## events built by hand (a test can drive a UI loop without a window).
+use std.ui
+
+fn describe(e ui.Event) str
+    match e
+        Key(key, ctrl, alt, shift) =>
+            mods := if ctrl
+                "ctrl-"
+            else
+                ""
+            "key {mods}{key} alt={alt} shift={shift}"
+        Resize(cols, rows) => "resize {cols}x{rows}"
+        Close => "close"
+        Mouse(col, row, button, kind) => "mouse {button} {kind} {col},{row}"
+        Scroll(lines) => "scroll {lines}"
+
+fn main()
+    mut all := List[ui.Event]()
+    all.push(Key(key: "s", ctrl: true, alt: false, shift: false))
+    all.push(Resize(cols: 100, rows: 30))
+    all.push(Close)
+    all.push(Mouse(col: 3, row: 4, button: "left", kind: "drag"))
+    all.push(Scroll(lines: -3))
+    for e in all
+        print(describe(e))
+    # std.ui.2, std.ui.8: a window that is not open is 0 by 0 and closed.
+    mut w := ui.Window(handle: 0)
+    s := w.size()
+    print("{s.cols}x{s.rows}")
+    w.clear(0x000000)
+    w.put(0, 0, "ignored", 0xFFFFFF, 0)
+    w.cursor(-1, -1)
+    w.set_title("ignored")
+    m := w.modifiers()
+    print("{m.ctrl} {m.alt} {m.shift}")
+    # std.ui.16-18: styles, named colors and caret shapes.
+    w.put_styled(
+        0,
+        0,
+        "ignored",
+        ui.YELLOW,
+        ui.BLACK,
+        ui.Style(bold: true, italic: false, underline: true),
+    )
+    w.set_cursor(0, 0, Block)
+    print("{ui.RED} {ui.WHITE} {ui.BLACK}")
+    # std.ui.15: a window that is not open keeps the default font size.
+    w.set_font_size(13)
+    print(w.font_size())
+    w.present()
+    print(describe(w.next_event()))
+    if e := w.poll_event()
+        print(describe(e))
+    w.close()
+    err := ui.UiError(kind: "no_display", message: "none")
+    print(err)

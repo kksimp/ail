@@ -1,0 +1,7 @@
+# ail fmt: off
+@test
+fn lonely()
+    assert(true)
+
+fn main()
+    print(1)

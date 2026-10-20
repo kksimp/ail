@@ -1,0 +1,11 @@
+# trace.watch.4: a map's `m[k] = e` and `remove`, and a set's `add`, are shown
+# with the key and the element.
+
+fn main()
+    mut m := {"a": 1}
+    m["b"] = 2
+    m["b"] += 5
+    m.remove("a")
+    mut s := {1, 2}
+    s.add(3)
+    print(m.len() + s.len())

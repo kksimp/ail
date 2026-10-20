@@ -1,0 +1,6 @@
+# The `with` variable is written back, so it is `mut` (conc.share.6).
+
+fn main()
+    m := Mutex(0)
+    with m as x
+        print(x)

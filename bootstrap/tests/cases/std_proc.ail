@@ -1,0 +1,15 @@
+## std.proc.1: run a program directly, without a shell, and capture its output.
+use std.proc
+
+fn main() !
+    out := proc.run("echo", ["hello", "$HOME"])?
+    print(out.status)
+    print(out.out.trim())
+    print(out.err == "")
+    failed := proc.run("sh", ["-c", "exit 3"])?
+    print(failed.status)
+    r := proc.run("ail-no-such-program", []) else err
+        print(err)
+        out
+    report := proc.Output(status: 0, out: "made", err: "")
+    print(report.out)

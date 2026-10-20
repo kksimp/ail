@@ -3,13 +3,13 @@
 //! this pass rewrites `x` to `self.x` and `f(...)` to `self.f(...)`, and
 //! reports locals and parameters that would hide a member.
 
-use std::collections::HashSet;
+use crate::fasthash::FastSet as HashSet;
 
 use crate::ast::{Block, Cond, Else, Expr, InterpPart, Pattern, Program, Stmt, Within};
 use crate::diag::{Diagnostic, Pos};
 
 /// The prelude's functions, which a bare call could also mean.
-const PRELUDE_FNS: &[&str] = &["print", "unreachable"];
+const PRELUDE_FNS: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 pub fn rewrite(prog: &mut Program, diags: &mut Vec<Diagnostic>) {
     let free: HashSet<String> = prog
@@ -20,7 +20,7 @@ pub fn rewrite(prog: &mut Program, diags: &mut Vec<Diagnostic>) {
         .chain(PRELUDE_FNS.iter().map(|n| n.to_string()))
         .collect();
     for i in 0..prog.fns.len() {
-        if prog.fns[i].receiver.is_none() || prog.fns[i].body.is_none() {
+        if prog.fns[i].receiver.is_none() || (prog.fns[i].body.is_none() && prog.fns[i].contracts.is_empty()) {
             continue;
         }
         let (owner, fields, methods) = members(prog, i);
@@ -31,9 +31,32 @@ pub fn rewrite(prog: &mut Program, diags: &mut Vec<Diagnostic>) {
         for p in &prog.fns[i].params {
             cx.declare(&p.name, p.pos);
         }
-        let mut body = prog.fns[i].body.take().expect("a body");
-        cx.block(&mut body);
-        prog.fns[i].body = Some(body);
+        // contract.decl.2: a method's contracts see its members too.
+        let mut contracts = std::mem::take(&mut prog.fns[i].contracts);
+        for c in &mut contracts {
+            cx.expr(&mut c.cond);
+            for (_, e) in &mut c.olds {
+                cx.expr(e);
+            }
+        }
+        prog.fns[i].contracts = contracts;
+        if let Some(mut body) = prog.fns[i].body.take() {
+            cx.block(&mut body);
+            prog.fns[i].body = Some(body);
+        }
+    }
+    // contract.inv.1: an invariant sees the struct's fields and methods.
+    for k in 0..prog.structs.len() {
+        if prog.structs[k].invariants.is_empty() {
+            continue;
+        }
+        let (owner, fields, methods) = type_members(prog, &prog.structs[k].name.clone());
+        let mut cx = Cx { owner, fields, methods, free: &free, diags: &mut *diags };
+        let mut invariants = std::mem::take(&mut prog.structs[k].invariants);
+        for c in &mut invariants {
+            cx.expr(&mut c.cond);
+        }
+        prog.structs[k].invariants = invariants;
     }
 }
 
@@ -47,14 +70,24 @@ fn members(prog: &Program, i: usize) -> (String, HashSet<String>, HashSet<String
     let ty = match f.within {
         Within::Trait(t) => {
             let methods = method_names(&prog.traits[t].methods).into_iter().collect();
-            return (prog.traits[t].name.clone(), HashSet::new(), methods);
+            return (prog.traits[t].name.clone(), HashSet::default(), methods);
         }
         Within::Impl(k) => prog.impls[k].target.name.clone(),
         Within::TopLevel => match &f.owner {
             Some(o) => o.name.clone(),
-            None => return (String::new(), HashSet::new(), HashSet::new()),
+            None => return (String::new(), HashSet::default(), HashSet::default()),
         },
     };
+    type_members(prog, &ty)
+}
+
+/// The field and method names of type `ty`, including the methods its
+/// traits provide.
+fn type_members(prog: &Program, ty: &str) -> (String, HashSet<String>, HashSet<String>) {
+    let method_names = |fs: &[usize]| -> Vec<String> {
+        fs.iter().filter(|&&m| prog.fns[m].receiver.is_some()).map(|&m| prog.fns[m].name.clone()).collect()
+    };
+    let ty = ty.to_string();
     let fields: HashSet<String> =
         prog.structs.iter().filter(|s| s.name == ty).flat_map(|s| s.fields.iter().map(|fd| fd.name.clone())).collect();
     let mut methods: HashSet<String> = prog
@@ -125,7 +158,7 @@ impl Cx<'_> {
                 self.expr(cond);
                 self.block(body);
             }
-            Stmt::For { var, var_pos, iter, body, .. } => {
+            Stmt::For { var, var_pos, iter, body, .. } | Stmt::With { mutex: iter, var, var_pos, body, .. } => {
                 self.expr(iter);
                 let (var, pos) = (var.clone(), *var_pos);
                 self.declare(&var, pos);
@@ -137,6 +170,7 @@ impl Cx<'_> {
                 self.otherwise(otherwise);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
+            Stmt::Defer(s, _) => self.stmt(s),
         }
     }
 
@@ -194,26 +228,46 @@ impl Cx<'_> {
             }
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.expr(x);
                     }
                 }
             }
             Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&mut c.iter);
+                    let (var, pos) = (c.var.clone(), c.var_pos);
+                    self.declare(&var, pos);
+                    if let Some(cond) = &mut c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(pairs, _) => pairs.iter_mut().for_each(|(k, v)| {
                 self.expr(k);
                 self.expr(v);
             }),
             Expr::Method { recv, args, .. } => {
                 self.expr(recv);
-                args.iter_mut().for_each(|a| self.expr(&mut a.value));
+                for a in args.iter_mut() {
+                    // expr.key.2: a key function's parameter is a new local.
+                    if let Some((name, pos)) = a.param.clone() {
+                        self.declare(&name, pos);
+                    }
+                    self.expr(&mut a.value);
+                }
             }
             Expr::Field { recv, .. } => self.expr(recv),
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);
@@ -268,6 +322,7 @@ impl Cx<'_> {
             | Expr::Char(..)
             | Expr::Bool(..)
             | Expr::None(_)
+            | Expr::Hole(_)
             | Expr::Name(..)
             | Expr::TypeArgs { .. } => {}
         }

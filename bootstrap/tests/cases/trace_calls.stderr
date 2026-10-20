@@ -1,0 +1,12 @@
+trace: call main() at 10:4
+trace:   call fact(n = 3) at 11:11
+trace:   contract fact requires `n >= 0`: held
+trace:     call fact(n = 2) at 8:9
+trace:     contract fact requires `n >= 0`: held
+trace:       call fact(n = 1) at 8:9
+trace:       contract fact requires `n >= 0`: held
+trace:       fact returned 1
+trace:     fact returned 2
+trace:   fact returned 6
+trace: main returned ()
+trace: summary: 11 events shown, 0 dropped (call 4, return 4, contract 3)

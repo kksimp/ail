@@ -1,5 +1,6 @@
 //! Syntax tree for the subset the bootstrap supports.
 
+
 use crate::diag::Pos;
 
 #[derive(Debug, Default)]
@@ -12,6 +13,107 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub consts: Vec<ConstDecl>,
+    /// `use` declarations of every file (mod.use.1).
+    pub uses: Vec<Use>,
+    /// The lines that start with `pub`: a declaration or struct field on one
+    /// of them is public (mod.vis.1). Every declaration starts its own line.
+    pub public: crate::fasthash::FastSet<usize>,
+    /// The source files of a package, in line order (`modules.rs`). Empty
+    /// for a single-file program without imports.
+    pub files: Vec<SourceFile>,
+    /// The capabilities each package manifest grants (eff.cap.4-5,
+    /// `packages.rs`). Empty without an `ail.pkg`.
+    pub grants: Vec<Grant>,
+    /// The code derive generators wrote, one per deriving `impl`; each is
+    /// a file of `files` (ct.gen.1-4, `derive.rs`).
+    pub generated: Vec<Generated>,
+}
+
+/// The methods a derive generator wrote for one `impl` (ct.gen.1-4).
+#[derive(Debug, Clone)]
+pub struct Generated {
+    /// Index into `Program::files`: its path is `gen:impl:TYPE.TRAIT`.
+    pub file: usize,
+    /// The deriving `impl`'s position.
+    pub impl_pos: Pos,
+    /// `Version.ToJson`
+    pub label: String,
+    /// The generator's name, `derive_to_json`.
+    pub generator: String,
+}
+
+/// `caps LIST` on a manifest line: the code of `package` (empty for the
+/// root package) may reach only `caps` (eff.cap.4-5).
+#[derive(Debug, Clone)]
+pub struct Grant {
+    pub package: String,
+    pub caps: Vec<&'static str>,
+    /// The manifest line's name.
+    pub pos: Pos,
+    /// From the package's own `package` line (eff.cap.5), not from a `dep`
+    /// line (eff.cap.4).
+    pub own: bool,
+}
+
+/// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
+#[derive(Debug, Clone)]
+pub struct Use {
+    pub path: Vec<(String, Pos)>,
+    pub alias: Option<(String, Pos)>,
+    pub pos: Pos,
+}
+
+impl Use {
+    /// The name the module is available under: the alias, or the last segment.
+    pub fn name(&self) -> &(String, Pos) {
+        self.alias.as_ref().unwrap_or_else(|| self.path.last().expect("a use path has a segment"))
+    }
+
+    /// `a.b.c`
+    pub fn dotted(&self) -> String {
+        self.path.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(".")
+    }
+}
+
+/// One source file of a package: its lines are numbered from `base + 1`.
+#[derive(Debug, Clone)]
+pub struct SourceFile {
+    pub path: String,
+    pub src: String,
+    /// The module's import path, `a.b` (mod.unit.2); empty for the root module.
+    pub module: String,
+    pub base: usize,
+}
+
+/// Each file of a package is numbered from a multiple of this, so a
+/// position tells its file (the first file starts at 0).
+pub const FILE_LINES: usize = 1 << 20;
+
+impl Program {
+    /// The file a position is in, if the program has more than one.
+    pub fn file_at(&self, pos: Pos) -> Option<&SourceFile> {
+        if is_prelude(pos) {
+            return None;
+        }
+        self.files.iter().rev().find(|f| f.base < pos.line)
+    }
+
+    /// The import path of the module a position is in (mod.unit.2); empty
+    /// for the root module and the prelude.
+    pub fn module_at(&self, pos: Pos) -> &str {
+        self.file_at(pos).map_or("", |f| f.module.as_str())
+    }
+
+    /// Whether the declaration at `pos` is marked `pub`, or is in the prelude.
+    pub fn is_pub(&self, pos: Pos) -> bool {
+        is_prelude(pos) || self.public.contains(&pos.line)
+    }
+
+    /// Whether the declaration at `decl` is hidden from code at `at`: it is
+    /// private and in another module (mod.vis.1).
+    pub fn hidden(&self, decl: Pos, at: Pos) -> bool {
+        !self.is_pub(decl) && self.module_at(decl) != self.module_at(at)
+    }
 }
 
 /// `NAME := expr` at the top level: a constant (mod.const.1).
@@ -19,6 +121,9 @@ pub struct Program {
 pub struct ConstDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub value: Expr,
 }
 
@@ -44,8 +149,14 @@ pub struct GenericParam {
 pub struct TraitDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     /// Indexes into `Program::fns`.
     pub methods: Vec<usize>,
+    /// `@derive(f)` before `trait`: the derive generator's name and where it
+    /// is written (ct.derive.1).
+    pub derive: Option<(String, Pos)>,
 }
 
 /// `impl Trait for Type`, optionally with an indented block of functions
@@ -67,15 +178,25 @@ pub struct ImplDecl {
 pub struct StructDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique struct` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
+    /// `invariant COND` lines (contract.inv.1).
+    pub invariants: Vec<Contract>,
 }
 
 #[derive(Debug)]
 pub struct Field {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub ty: TypeRef,
 }
 
@@ -85,7 +206,12 @@ pub struct Field {
 pub struct EnumDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique enum` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
 }
@@ -95,6 +221,9 @@ pub struct EnumDecl {
 pub struct Variant {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub fields: Vec<Field>,
 }
 
@@ -103,9 +232,14 @@ pub struct Variant {
 /// blocks have the trait or the implementing type as their owner.
 #[derive(Debug)]
 pub struct FnDecl {
+    /// Attributes written before `fn` (gram.attr.1-2).
+    pub attrs: Vec<Attr>,
     pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     /// The function's own type parameters (gen.decl.1, gen.method.3).
     pub generics: Vec<GenericParam>,
     pub receiver: Option<Receiver>,
@@ -114,6 +248,37 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+    /// `requires` and `ensures` lines before the body (contract.decl.1).
+    pub contracts: Vec<Contract>,
+    /// For an `impl` method: the trait's method of the same name, when that
+    /// has contracts, which the implementation inherits (contract.inh.1);
+    /// an index into `Program::fns`. Set by `parser::contracts::link`.
+    pub inherits: Option<usize>,
+}
+
+/// `requires COND`, `ensures COND` or a struct's `invariant COND`
+/// (contract.decl.1-2, contract.inv.1).
+#[derive(Debug)]
+pub struct Contract {
+    /// `true` for `ensures`, `false` for `requires`.
+    pub ensures: bool,
+    pub cond: Expr,
+    /// The condition as written, for traps and `ail api` (contract.req.1).
+    pub text: String,
+    pub pos: Pos,
+    /// The `old(e)` calls of an `ensures` condition, in order: the hidden
+    /// name the condition reads instead and `e`, evaluated on entry
+    /// (contract.ens.3).
+    pub olds: Vec<(String, Expr)>,
+}
+
+/// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
+#[derive(Debug, Clone)]
+pub struct Attr {
+    pub name: String,
+    pub pos: Pos,
+    /// The string argument, as in `@deprecated("why")` (gram.attr.3).
+    pub arg: Option<String>,
 }
 
 /// Where a function is declared.
@@ -149,20 +314,28 @@ impl FnDecl {
     pub fn top_level(&self) -> bool {
         self.within == Within::TopLevel
     }
+
+    pub fn has_attr(&self, name: &str) -> bool {
+        self.attrs.iter().any(|a| a.name == name)
+    }
 }
 
-/// `self` or `mut self` (trait.method.1).
+/// `self`, `mut self` or `move self` (trait.method.1, own.move.6).
 #[derive(Debug, Clone, Copy)]
 pub struct Receiver {
     pub mutable: bool,
+    /// `move self`: the method consumes its receiver (own.move.6).
+    pub moved: bool,
 }
 
-/// `name Type` or `mut name Type` (gram.fn.2, own.param.1-2).
+/// `name Type`, `mut name Type` or `move name Type` (gram.fn.2,
+/// own.param.1-2, own.move.1).
 #[derive(Debug)]
 pub struct Param {
     pub name: String,
     pub pos: Pos,
     pub mutable: bool,
+    pub moved: bool,
     pub ty: TypeRef,
 }
 
@@ -184,6 +357,8 @@ pub enum TypeKind {
     Fallible { ok: Option<Box<TypeRef>>, errors: Option<Vec<TypeRef>> },
     /// `any Trait` (trait.any.1)
     Any(String),
+    /// `ref T` (own.ref.1)
+    Ref(Box<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;
@@ -211,8 +386,10 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
-    /// `for x in e`, or `for mut x in e` (expr.loop.6).
+    /// `for x in e`, or `for mut x in e` (expr.loop.6); `par` when written
+    /// `par for` (conc.par.5).
     For {
+        par: bool,
         var: String,
         var_pos: Pos,
         mutable: bool,
@@ -230,14 +407,26 @@ pub enum Stmt {
         value: Expr,
         otherwise: Else,
     },
+    /// `defer S` (own.defer.1); `pos` is the `defer`'s.
+    Defer(Box<Stmt>, Pos),
+    /// `with m as mut x`: hold mutex `m` for the block, with its value in
+    /// `x`, written back when the block ends (conc.share.6); `pos` is the
+    /// `with`'s.
+    With {
+        mutex: Expr,
+        var: String,
+        var_pos: Pos,
+        body: Block,
+        pos: Pos,
+    },
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
-            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) => *p,
+            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
         }
     }
@@ -299,6 +488,8 @@ impl BinOp {
 pub enum UnOp {
     Neg,
     Not,
+    /// `spawn f(args)`: start a task (conc.task.1, ADR 0186).
+    Spawn,
 }
 
 #[derive(Debug)]
@@ -314,6 +505,8 @@ pub enum Expr {
     Bool(bool, Pos),
     /// `none` (type.opt.4)
     None(Pos),
+    /// `todo`, a typed hole (expr.hole.1-2).
+    Hole(Pos),
     /// A name, including `self` and bare enum variants (type.enum.3).
     Name(String, Pos),
     /// A generic function or type with explicit type arguments, `f[int]` or
@@ -394,12 +587,27 @@ pub enum Expr {
         context: Option<Box<Expr>>,
         pos: Pos,
     },
+    /// `[e for x in xs if c]`, `{e for ...}` or `{k: v for ...}`, a
+    /// comprehension (expr.comp.1); `pos` is the opening bracket's.
+    Comp {
+        kind: CompKind,
+        elem: Box<Expr>,
+        /// The value of a map comprehension, `{k: v for ...}`.
+        value: Option<Box<Expr>>,
+        clauses: Vec<CompFor>,
+        pos: Pos,
+    },
     /// `e else d` or `e else return ...` as an expression (err.else.6): the
     /// value of `e`, or the fallback when it is absent or failed. `pos` is
     /// the `else`'s.
     Else {
         value: Box<Expr>,
         otherwise: Box<Else>,
+        pos: Pos,
+    },
+    /// `ref e`: a new shared cell holding the value of `e` (own.ref.1, ADR 0067).
+    Ref {
+        value: Box<Expr>,
         pos: Pos,
     },
 }
@@ -415,6 +623,7 @@ impl Expr {
             | Expr::Char(_, p)
             | Expr::Bool(_, p)
             | Expr::None(p)
+            | Expr::Hole(p)
             | Expr::Name(_, p)
             | Expr::TypeArgs { pos: p, .. }
             | Expr::List(_, p)
@@ -423,6 +632,8 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Ref { pos: p, .. }
+            | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
             Expr::Range { lo: Some(e), .. } => e.pos(),
             Expr::Call { callee: e, .. }
@@ -434,6 +645,26 @@ impl Expr {
             | Expr::Else { value: e, .. } => e.pos(),
         }
     }
+}
+
+/// What a comprehension builds (expr.comp.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompKind {
+    List,
+    Set,
+    Map,
+}
+
+/// One `for x in xs` clause of a comprehension, with its optional `if`
+/// filter (expr.comp.2).
+#[derive(Debug)]
+pub struct CompFor {
+    /// Written `par for` (conc.par.12).
+    pub par: bool,
+    pub var: String,
+    pub var_pos: Pos,
+    pub iter: Expr,
+    pub cond: Option<Expr>,
 }
 
 /// A condition of `if` or `elif`: a `bool` expression, or a binding
@@ -448,14 +679,21 @@ pub enum Cond {
 pub enum InterpPart {
     Lit(String),
     Expr(Expr),
+    /// `{expression:spec}` (lex.str.7).
+    Fmt(Expr, crate::lexer::FormatSpec),
 }
 
-/// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).
+/// A call argument: `value`, `mut place` (own.param.2), `move name`
+/// (own.move.2) or `label: value` (type.struct.3).
 #[derive(Debug)]
 pub struct Arg {
     pub label: Option<(String, Pos)>,
     pub mutable: bool,
+    pub moved: bool,
     pub value: Expr,
+    /// `|x|` before the value: a key function, whose value is evaluated
+    /// once per element with `x` bound to it (expr.key.1, ADR 0250).
+    pub param: Option<(String, Pos)>,
 }
 
 #[derive(Debug)]
@@ -514,6 +752,17 @@ pub fn place_path(e: &Expr) -> Option<(&str, Vec<PathStep<'_>>)> {
             path.push(PathStep::Index(index));
             Some((root, path))
         }
+        _ => None,
+    }
+}
+
+/// The root name of a place expression, as `place_path(e).map(|(root, _)| root)`
+/// but without building the path (ADR 0219).
+pub fn place_root(e: &Expr) -> Option<&str> {
+    match e {
+        Expr::Name(n, _) => Some(n.as_str()),
+        Expr::Field { recv, .. } => place_root(recv),
+        Expr::Index { recv, index, .. } if !matches!(**index, Expr::Range { .. }) => place_root(recv),
         _ => None,
     }
 }

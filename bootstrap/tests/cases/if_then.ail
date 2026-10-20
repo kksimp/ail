@@ -1,0 +1,14 @@
+## expr.if.8: the one-line `if c then a else b`; `then` is still a name elsewhere.
+fn sign(n int) str
+    if n < 0 then "negative" else "non-negative"
+
+fn main()
+    then := 3
+    print(sign(-2))
+    print("{if then > 2 then "big" else "small"}")
+    mut xs := []
+    xs.push(if then == 3 then 1 + 1 else 0)
+    print(xs)
+    v := if x := "12".to_int() then x * 2 else 0
+    print(v)
+    if then > 1 then print("yes") else print("no")

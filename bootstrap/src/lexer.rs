@@ -5,25 +5,45 @@
 //! implement yet produce a `bootstrap.unsupported` diagnostic instead of a
 //! wrong answer.
 
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 
 pub const UNSUPPORTED: &str = "bootstrap.unsupported";
 
-/// Reserved words (lex.kw.1, ADR 0114, ADR 0120). `c` is deliberately absent (lex.kw.2).
+/// Reserved words (lex.kw.1, ADR 0114, ADR 0120, ADR 0210). `c` is deliberately absent (lex.kw.2).
 pub const KEYWORDS: &[&str] = &[
-    "and", "any", "as", "break", "continue", "defer", "elif", "else", "enum", "error", "extern", "false", "fn", "for",
-    "if", "impl", "in", "match", "move", "mut", "none", "not", "or", "pub", "ref", "return", "self", "spawn", "struct",
-    "trait", "true", "unique", "unsafe", "use", "while",
+    "and", "any", "as", "break", "continue", "defer", "elif", "else", "ensures", "enum", "error", "extern", "false",
+    "fn", "for", "if", "impl", "in", "invariant", "match", "move", "mut", "none", "not", "or", "par", "pub", "ref", "requires",
+    "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe", "use", "while", "with",
 ];
 
 /// Symbols, longest first so that `..=` wins over `..` and `.`.
-const SYMBOLS: &[&str] = &[
+pub const SYMBOLS: &[&str] = &[
     "..=", "..", "->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||", ".", ":", ",",
     "(", ")", "[", "]", "{", "}", "=", "<", ">", "+", "-", "*", "/", "%", "!", "?", "@", "|",
 ];
 
 /// A line ending in one of these continues on the next line (lex.stmt.2).
 const BINARY_SYMBOLS: &[&str] = &["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="];
+
+/// Whether a line starts with a binary operator that cannot begin a statement, so it
+/// continues the previous one (lex.stmt.2 (5)): `and`, `or`, `+ * / % == != < <= > >=`.
+fn leading_operator(rest: &[char]) -> bool {
+    let word = |w: &str| {
+        rest.len() >= w.len()
+            && rest.iter().zip(w.chars()).all(|(a, b)| *a == b)
+            && rest.get(w.len()).is_none_or(|c| !(c.is_alphanumeric() || *c == '_'))
+    };
+    if word("and") || word("or") {
+        return true;
+    }
+    let two = rest.get(1).copied();
+    match rest[0] {
+        '=' | '!' => two == Some('='),
+        '<' | '>' => true,
+        '+' | '*' | '/' | '%' => two != Some('='),
+        _ => false,
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
@@ -52,7 +72,82 @@ pub enum Tok {
 pub enum Part {
     Lit(String),
     Code(Vec<Token>),
+    /// `{expression:spec}` (lex.str.7): the expression's tokens and its
+    /// format specification.
+    Fmt(Vec<Token>, FormatSpec),
 }
+
+/// A format specification after the `:` in `{expression:spec}` (lex.str.7):
+/// `[[fill]align][width][.precision][x]`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct FormatSpec {
+    pub fill: Option<char>,
+    /// `<`, `>` or `^`.
+    pub align: Option<char>,
+    pub width: Option<usize>,
+    /// Decimal places of a float (`.N`).
+    pub precision: Option<usize>,
+    /// `x`: lowercase hexadecimal for an int.
+    pub hex: bool,
+}
+
+impl FormatSpec {
+    /// Parse the text after the `:`; the error is the problem, for lex.str.7.
+    pub fn parse(spec: &str) -> Result<FormatSpec, String> {
+        let c: Vec<char> = spec.chars().collect();
+        let is_align = |ch: char| matches!(ch, '<' | '>' | '^');
+        let mut f = FormatSpec::default();
+        let mut i = 0;
+        if c.len() >= 2 && is_align(c[1]) {
+            f.fill = Some(c[0]);
+            f.align = Some(c[1]);
+            i = 2;
+        } else if !c.is_empty() && is_align(c[0]) {
+            f.align = Some(c[0]);
+            i = 1;
+        }
+        let number = |c: &[char], i: &mut usize| -> Result<Option<usize>, String> {
+            let start = *i;
+            while *i < c.len() && c[*i].is_ascii_digit() {
+                *i += 1;
+            }
+            if start == *i {
+                return Ok(None);
+            }
+            let text: String = c[start..*i].iter().collect();
+            text.parse().map(Some).map_err(|_| format!("`{text}` is too large"))
+        };
+        if c.get(i) == Some(&'0') && c.get(i + 1).is_some_and(char::is_ascii_digit) {
+            return Err("a width can't start with 0; write the fill and alignment, e.g. `0>4`".into());
+        }
+        f.width = number(&c, &mut i)?;
+        if c.get(i) == Some(&'.') {
+            i += 1;
+            f.precision = Some(number(&c, &mut i)?.ok_or("`.` needs the number of decimal places")?);
+        }
+        if c.get(i) == Some(&'x') {
+            f.hex = true;
+            i += 1;
+        }
+        if i < c.len() {
+            let rest: String = c[i..].iter().collect();
+            return Err(format!("unexpected `{rest}`"));
+        }
+        if f.width.is_some_and(|w| w > MAX_FORMAT_WIDTH) {
+            return Err(format!("a width is at most {MAX_FORMAT_WIDTH}"));
+        }
+        if f.precision.is_some_and(|p| p > MAX_FORMAT_WIDTH) {
+            return Err(format!("decimal places are at most {MAX_FORMAT_WIDTH}"));
+        }
+        if f.hex && f.precision.is_some() {
+            return Err("`x` and `.N` can't be combined".into());
+        }
+        Ok(f)
+    }
+}
+
+/// Largest width or precision a format specification accepts (lex.str.7).
+pub const MAX_FORMAT_WIDTH: usize = 1000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
@@ -64,7 +159,58 @@ pub struct Token {
 const UNIT: usize = 4;
 
 pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
-    let mut lx = Lexer { tokens: Vec::new(), diags: Vec::new(), open: Vec::new(), in_interp: 0 };
+    let (tokens, diags, _) = lex_with_comments(src);
+    (tokens, diags)
+}
+
+/// A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
+/// The parser never sees comments; the formatter keeps them (ADR 0169).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Comment {
+    pub pos: Pos,
+    pub text: String,
+}
+
+/// `lex`, plus a side table of every comment in source order. The token
+/// stream is exactly the one `lex` returns.
+pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
+    let (tokens, diags, comments, unit) = lex_scaled(src, 1);
+    match unit {
+        // The file indents by 2 or 3 spaces (lex.block.2, ADR 0263): lex it
+        // again at that unit, so one diagnostic covers the whole file.
+        Some(g) => {
+            let (tokens, diags, comments, _) = lex_scaled(src, g);
+            (tokens, diags, comments)
+        }
+        None => (tokens, diags, comments),
+    }
+}
+
+/// The keyword spelled by `word`, if any (lex.kw.1), without building a `String`.
+fn keyword(word: &[char]) -> Option<&'static str> {
+    if word.len() > 9 || !word[0].is_ascii_lowercase() {
+        return None;
+    }
+    KEYWORDS.iter().copied().find(|k| k.len() == word.len() && k.chars().zip(word).all(|(a, b)| a == *b))
+}
+
+fn gcd(a: usize, b: usize) -> usize {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// Lex with one indentation unit of `scale` spaces; the last result is the
+/// unit to retry with when the file doesn't indent by 4.
+fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>, Option<usize>) {
+    let mut lx = Lexer {
+        tokens: Vec::new(),
+        diags: Vec::new(),
+        open: Vec::new(),
+        in_interp: 0,
+        comments: Vec::new(),
+        scale,
+        logical: Vec::new(),
+        tabs: Vec::new(),
+    };
     let mut indents = vec![0usize];
     let mut continuing = false; // previous line ended in a way that continues the statement
     let lines: Vec<Vec<char>> =
@@ -80,8 +226,23 @@ pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         let lead = line.iter().take_while(|c| **c == ' ' || **c == '\t').count();
         let rest_is_blank = line[lead..].is_empty() || line[lead] == '#';
         if rest_is_blank {
+            lx.comment(line, lead, line_no);
             li += 1;
             continue; // blank and comment-only lines don't affect blocks (lex.block note)
+        }
+
+        // lex.stmt.2 (4): a line starting with `.name` continues the previous statement
+        // (a chained call); the statement's newline is taken back.
+        if lx.open.is_empty()
+            && !continuing
+            && (line[lead] == '.' && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+                || leading_operator(&line[lead..]))
+            && matches!(lx.tokens.last().map(|t| &t.tok), Some(Tok::Newline))
+            && lx.tokens.len() >= 2
+            && !matches!(lx.tokens[lx.tokens.len() - 2].tok, Tok::Indent | Tok::Dedent)
+        {
+            lx.tokens.pop();
+            continuing = true;
         }
 
         if lx.open.is_empty() && !continuing {
@@ -151,7 +312,26 @@ pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
 
     let end = Pos { line: last_line, col: 1 };
     if let Some((c, pos)) = lx.open.last().copied() {
-        lx.diags.push(Diagnostic::new("lex.stmt.2", pos, format!("this `{c}` is never closed")));
+        let mut d = Diagnostic::new("lex.stmt.2", pos, format!("this `{c}` is never closed"));
+        // Close the brackets where the line ends, when they all opened on it.
+        if lx.open.iter().all(|(_, p)| p.line == pos.line) {
+            let closers: String = lx.open.iter().rev().map(|(c, _)| match c {
+                '(' => ')',
+                '[' => ']',
+                _ => '}',
+            }).collect();
+            d = d.fix("close the brackets at the end of the line", vec![Edit::at_line_end(pos, closers)]);
+        }
+        lx.diags.push(d);
+        // Close them for the parser too, so one report isn't followed by another.
+        for (c, _) in lx.open.clone().into_iter().rev() {
+            let sym = match c {
+                '(' => ")",
+                '[' => "]",
+                _ => "}",
+            };
+            lx.tokens.push(Token { tok: Tok::Sym(sym), pos: end });
+        }
         lx.push(Tok::Newline, end);
     }
     while indents.len() > 1 {
@@ -159,7 +339,8 @@ pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         lx.push(Tok::Dedent, end);
     }
     lx.push(Tok::Eof, end);
-    (lx.tokens, lx.diags)
+    let unit = lx.indent_diags();
+    (lx.tokens, lx.diags, lx.comments, unit)
 }
 
 struct Lexer {
@@ -169,11 +350,28 @@ struct Lexer {
     open: Vec<(char, Pos)>,
     /// Depth of string interpolation being lexed.
     in_interp: usize,
+    /// Comments, for the formatter (`lex_with_comments`).
+    comments: Vec<Comment>,
+    /// Spaces per indentation level in this run (1 = the standard 4).
+    scale: usize,
+    /// Every statement-starting line: its number, the characters of leading
+    /// whitespace and their width (a tab counts as one unit).
+    logical: Vec<(usize, usize, usize)>,
+    /// The part of `logical` indented with a tab.
+    tabs: Vec<(usize, usize, usize)>,
 }
 
 impl Lexer {
     fn push(&mut self, tok: Tok, pos: Pos) {
         self.tokens.push(Token { tok, pos });
+    }
+
+    /// Record the comment at `line[at..]`, if there is one.
+    fn comment(&mut self, line: &[char], at: usize, line_no: usize) {
+        if line.get(at) == Some(&'#') {
+            let text: String = line[at..].iter().collect();
+            self.comments.push(Comment { pos: Pos { line: line_no, col: at + 1 }, text: text.trim_end().to_string() });
+        }
     }
 
     /// Stand-in for a literal that was reported as an error, so the parser
@@ -190,16 +388,18 @@ impl Lexer {
         ));
     }
 
-    /// Width of leading whitespace, reporting tabs and partial units.
+    /// Width of leading whitespace in indentation units of four. Tabs and
+    /// other units are collected and reported once per file (`indent_diags`).
     fn indent_width(&mut self, lead: &[char], line_no: usize) -> usize {
-        if let Some(i) = lead.iter().position(|c| *c == '\t') {
-            self.diags.push(
-                Diagnostic::new("lex.block.4", Pos { line: line_no, col: i + 1 }, "tab character in indentation")
-                    .help("indent with 4 spaces per level"),
-            );
-        }
+        let tabbed = lead.contains(&'\t');
         let width: usize = lead.iter().map(|c| if *c == '\t' { UNIT } else { 1 }).sum();
-        if !width.is_multiple_of(UNIT) {
+        self.logical.push((line_no, lead.len(), width));
+        if tabbed {
+            self.tabs.push((line_no, lead.len(), width));
+        } else if self.scale > 1 {
+            return width / self.scale * UNIT;
+        }
+        if !tabbed && !width.is_multiple_of(UNIT) && self.scale == 1 {
             self.diags.push(
                 Diagnostic::new(
                     "lex.block.2",
@@ -210,6 +410,55 @@ impl Lexer {
             );
         }
         width / UNIT * UNIT
+    }
+
+    /// The indentation unit of a file that doesn't use 4: the common divisor
+    /// of its statements' indentation, when that is 2 or 3 spaces.
+    fn unit_guess(&self) -> Option<usize> {
+        let g = self.logical.iter().map(|x| x.2).filter(|w| *w > 0).fold(0, gcd);
+        let odd = self.logical.iter().any(|x| !x.2.is_multiple_of(UNIT));
+        // The first level is the unit itself: a 4-space file with one odd
+        // line has 4 there.
+        let first = self.logical.iter().map(|x| x.2).filter(|w| *w > 0).min();
+        (matches!(g, 2 | 3) && odd && first == Some(g) && self.tabs.is_empty()).then_some(g)
+    }
+
+    /// The file-level indentation diagnostics (lex.block.2, lex.block.4):
+    /// one per file, each with a fix that rewrites every statement's
+    /// indentation. Returns the unit to re-lex with when the file doesn't
+    /// indent by 4.
+    fn indent_diags(&mut self) -> Option<usize> {
+        if let Some(&(line, _, _)) = self.tabs.first() {
+            let edits: Vec<Edit> = self
+                .tabs
+                .iter()
+                .map(|&(l, n, w)| Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / UNIT * UNIT)))
+                .collect();
+            self.diags.push(
+                Diagnostic::new("lex.block.4", Pos { line, col: 1 }, "tab character in indentation")
+                    .help("indent with 4 spaces per level")
+                    .fix("replace the tabs with 4 spaces per level", edits),
+            );
+        }
+        if self.scale == 1 {
+            // The standard unit: an odd line was reported on its own, unless
+            // the whole file turned out to use 2 or 3 spaces.
+            return self.unit_guess();
+        }
+        let g = self.scale;
+        let first = self.logical.iter().find(|x| x.2 > 0)?.0;
+        let edits: Vec<Edit> = self
+            .logical
+            .iter()
+            .filter(|x| x.2 > 0)
+            .map(|&(l, n, w)| Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / g * UNIT)))
+            .collect();
+        self.diags.push(
+            Diagnostic::new("lex.block.2", Pos { line: first, col: 1 }, format!("this file indents by {g} spaces; a block is indented by exactly 4"))
+                .help("use 4 spaces per level")
+                .fix(format!("re-indent the file from {g} to 4 spaces per level"), edits),
+        );
+        None
     }
 
     /// Lex `line[start..]`. Stops at a multi-line string's opening `"""`
@@ -230,7 +479,11 @@ impl Lexer {
                     ));
                     i += 1;
                 }
-                '#' => break, // comment to end of line (lex.comment.1, lex.comment.2)
+                '#' => {
+                    // comment to end of line (lex.comment.1, lex.comment.2)
+                    self.comment(line, i, line_no);
+                    break;
+                }
                 '"' if starts_triple(line, i) => {
                     if self.in_interp > 0 {
                         self.diags.push(Diagnostic::new(
@@ -252,9 +505,19 @@ impl Lexer {
                 }
                 '\'' => i = self.char_literal(line, i, line_no),
                 ';' => {
+                    let rest = line[i + 1..].iter().position(|c| *c != ' ' && *c != '\t');
+                    let edit = match rest {
+                        None => Edit::trim_before(pos),
+                        Some(k) if line[i + 1 + k] != '#' => {
+                            let indent: String = line.iter().take_while(|c| **c == ' ').collect();
+                            Edit::span(pos, Pos { line: line_no, col: i + 2 + k }, format!("\n{indent}"))
+                        }
+                        Some(_) => Edit::trim_before(pos),
+                    };
                     self.diags.push(
                         Diagnostic::new("lex.stmt.3", pos, "AIL has no `;`; a statement ends at the end of its line")
-                            .help("remove the `;` and put the next statement on its own line"),
+                            .help("remove the `;` and put the next statement on its own line")
+                            .fix("end the statement here, without the `;`", vec![edit]),
                     );
                     // Recover as if the line ended here, so the parser doesn't report it again.
                     if self.open.is_empty() && self.in_interp == 0 {
@@ -262,20 +525,68 @@ impl Lexer {
                     }
                     i += 1;
                 }
+                '/' if line.get(i + 1) == Some(&'/') => {
+                    let first = line[..i].iter().all(|c| *c == ' ' || *c == '\t');
+                    let mut d = Diagnostic::new(
+                        "gram.foreign.1",
+                        pos,
+                        "`//` isn't a comment or an operator in AIL",
+                    );
+                    d = if first {
+                        d.help("comments start with `#`").fix("write `#`", vec![Edit::span(pos, Pos { line: line_no, col: i + 3 }, "#")])
+                    } else {
+                        d.help("write `#` for a comment; `/` is integer division and rounds toward zero")
+                    };
+                    self.diags.push(d);
+                    break;
+                }
+                '/' if line.get(i + 1) == Some(&'*') => {
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, "`/*` doesn't start a comment in AIL")
+                            .help("comments start with `#` and run to the end of the line"),
+                    );
+                    break;
+                }
+                '\\' if line[i + 1..].iter().all(|c| c.is_whitespace()) => {
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, "AIL doesn't use `\\` to continue a line")
+                            .help("end the line with an operator or a comma, or wrap the expression in parentheses")
+                            .fix("remove the `\\`", vec![Edit::trim_before(pos)]),
+                    );
+                    i += 1;
+                }
+                '&' if line.get(i + 1) != Some(&'&') => {
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, "AIL has no `&`")
+                            .help("write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes"),
+                    );
+                    i += 1;
+                }
                 c if c.is_ascii_digit() => i = self.number(line, i, line_no),
                 c if c.is_alphabetic() || c == '_' => {
                     let end = i + line[i..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').count();
+                    // A keyword is matched on the characters, so only a name allocates.
+                    if let Some(k) = keyword(&line[i..end]) {
+                        self.push(Tok::Kw(k), pos);
+                        i = end;
+                        continue;
+                    }
                     let word: String = line[i..end].iter().collect();
-                    let tok = match KEYWORDS.iter().find(|k| **k == word) {
-                        Some(k) => Tok::Kw(k),
-                        None => Tok::Ident(word),
-                    };
-                    self.push(tok, pos);
+                    if matches!(word.as_str(), "f" | "u") && line.get(end) == Some(&'"') {
+                        self.diags.push(
+                            Diagnostic::new("gram.foreign.1", pos, format!("`{word}\"...\"` isn't a string prefix in AIL"))
+                                .help("every string interpolates `{expression}`; write the string without the prefix")
+                                .fix(format!("remove the `{word}`"), vec![Edit::span(pos, Pos { line: line_no, col: i + 2 }, "")]),
+                        );
+                        i = end;
+                        continue;
+                    }
+                    self.push(Tok::Ident(word), pos);
                     i = end;
                 }
                 _ => {
-                    let rest: String = line[i..line.len().min(i + 3)].iter().collect();
-                    match SYMBOLS.iter().find(|s| rest.starts_with(**s)) {
+                    let rest = &line[i..line.len().min(i + 3)];
+                    match SYMBOLS.iter().find(|s| s.len() <= rest.len() && s.chars().zip(rest).all(|(a, b)| a == *b)) {
                         Some(sym) => {
                             self.symbol(sym, pos);
                             i += sym.len();
@@ -382,7 +693,23 @@ impl Lexer {
                         self.forget_brackets(line_no);
                         return quoted.then_some(to);
                     };
-                    let code = self.sub_lex(line, i + 1, close, line_no);
+                    let colon = spec_colon(&line[..close], i + 1);
+                    let code = self.sub_lex(line, i + 1, colon.unwrap_or(close), line_no);
+                    let mut spec = None;
+                    if let Some(c) = colon {
+                        let text: String = line[c + 1..close].iter().collect();
+                        match FormatSpec::parse(&text) {
+                            Ok(f) => spec = Some(f),
+                            Err(why) => self.diags.push(
+                                Diagnostic::new(
+                                    "lex.str.7",
+                                    Pos { line: line_no, col: c + 2 },
+                                    format!("invalid format specification `{text}`: {why}"),
+                                )
+                                .help("a specification is `[[fill]align][width][.decimals][x]`, e.g. `{n:>8}`, `{r:.2}`, `{n:0>4x}`"),
+                            ),
+                        }
+                    }
                     if code.len() == 1 {
                         self.diags.push(
                             Diagnostic::new("lex.str.2", here, "empty `{}` in a string")
@@ -392,7 +719,10 @@ impl Lexer {
                         if !value.is_empty() {
                             parts.push(Part::Lit(std::mem::take(value)));
                         }
-                        parts.push(Part::Code(code));
+                        match spec {
+                            Some(f) => parts.push(Part::Fmt(code, f)),
+                            None => parts.push(Part::Code(code)),
+                        }
                     }
                     i = close + 1;
                 }
@@ -532,10 +862,17 @@ impl Lexer {
             return start + 3;
         }
         let end = line[start + 1..].iter().position(|c| *c == '\'').map_or(line.len(), |p| start + p + 2);
-        self.diags.push(
-            Diagnostic::new("lex.str.4", pos, "a character literal holds exactly one character")
-                .help("write a string in double quotes: \"...\""),
-        );
+        let mut d = Diagnostic::new("lex.str.4", pos, "a character literal holds exactly one character")
+            .help("write a string in double quotes: \"...\"");
+        let body = &line[start + 1..end.saturating_sub(1).max(start + 1)];
+        if end <= line.len() && line.get(end - 1) == Some(&'\'') && !body.iter().any(|c| matches!(c, '"' | '\\' | '{')) {
+            let close = Pos { line: line_no, col: end };
+            d = d.fix(
+                "write it as a string",
+                vec![Edit::span(pos, Pos { line: line_no, col: start + 2 }, "\""), Edit::span(close, Pos { line: line_no, col: end + 1 }, "\"")],
+            );
+        }
+        self.diags.push(d);
         self.placeholder(pos);
         end
     }
@@ -707,6 +1044,38 @@ fn float_end(line: &[char], start: usize) -> Option<usize> {
 }
 
 /// Index of the `}` matching the `{` at `line[open]`, skipping nested strings.
+/// The `:` that starts a format specification (lex.str.7) in the
+/// interpolation whose expression begins at `from`: the first one outside
+/// brackets, strings and character literals.
+fn spec_colon(line: &[char], from: usize) -> Option<usize> {
+    let mut depth = 0;
+    let mut i = from;
+    while i < line.len() {
+        match line[i] {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            '"' => {
+                i = skip_string(line, i)?;
+                continue;
+            }
+            '\'' if line.get(i + 1) == Some(&'\\') => {
+                if let Some(end) = line[i + 3..].iter().position(|c| *c == '\'') {
+                    i += end + 4;
+                    continue;
+                }
+            }
+            '\'' if line.get(i + 2) == Some(&'\'') => {
+                i += 3;
+                continue;
+            }
+            ':' if depth == 0 && line.get(i + 1) != Some(&'=') => return Some(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 fn find_close(line: &[char], open: usize) -> Option<usize> {
     let mut depth = 0;
     let mut i = open;
@@ -812,6 +1181,14 @@ mod tests {
                 Eof
             ]
         );
+    }
+
+    #[test]
+    fn a_line_may_start_with_a_binary_operator() {
+        assert_eq!(rules("x := a\n    and b\n"), Vec::<&str>::new());
+        assert_eq!(toks("x := a\n    + b\n").iter().filter(|t| **t == Tok::Newline).count(), 1);
+        // `-` can start a statement, so it does not continue one.
+        assert_eq!(toks("x := a\n-b\n").iter().filter(|t| **t == Tok::Newline).count(), 2);
     }
 
     #[test]

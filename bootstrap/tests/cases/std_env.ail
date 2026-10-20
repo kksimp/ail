@@ -1,0 +1,13 @@
+## std.env.1-5: arguments, variables, the working directory and home.
+use std.env
+
+fn main()
+    print(env.args())
+    print(env.get("AIL_NO_SUCH_VARIABLE_FOR_TESTS"))
+    path := env.get("PATH") else ""
+    print(path != "")
+    print(env.cwd() != "")
+    print(env.program().ends_with("std_env.ail"))
+    # std.env.6: HOME or USERPROFILE is set wherever the tests run.
+    home := env.home() else ""
+    print(home != "")

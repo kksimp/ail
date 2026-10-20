@@ -1,0 +1,621 @@
+# 17. Standard modules
+
+Chapter key: `std`
+
+> **Status:** Drafted (partial). Specified: importing the standard modules,
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> designed: the rest of the standard library, and capability effects
+> (plan §3.2), which another lane adds.
+
+The standard modules reach the machine through small, typed functions whose
+failures are values (ADR 0157). There is no string-typed shell.
+
+## Imports
+
+**std.use.1** — `use std.NAME` imports the standard module `NAME`, available
+under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
+The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time` and `ui`. Importing
+`std` itself, a submodule of a standard module, or any other `std.NAME` is a
+compile-time error that lists the modules. *(ADR 0157)*
+
+**std.use.2** — A standard module's functions and types are referred to by
+qualified name, `fs.read_text(path)` and `fs.IoError` (`mod.use.2`). A
+module is not a value, and naming a function or type the
+module doesn't have is a compile-time error. *(ADR 0157)*
+
+**std.use.3** — Two imports in one file MUST NOT make modules available under
+the same name. A local MUST NOT reuse the name of a module imported with
+`use` (`expr.bind.5`). *(ADR 0157)*
+
+**std.use.4** — Every standard module is in scope under its own name without
+a `use` line, unless the program declares a type, trait, function or constant
+with that name, or imports something else under it. A local with the name
+hides the module in its scope: calling one of the module's functions through
+it is a compile-time error that says so. `use std.NAME` stays valid and
+behaves as `std.use.1`. *(ADR 0277)*
+
+```ail
+fn main()
+    print(path.ext("notes.txt"))   # txt
+```
+
+## Errors
+
+**std.err.1** — A failure of `std.fs` is the error struct `fs.IoError`, with
+fields `path str` (the path the function was given) and `kind str`. A
+failure to start a process is the error struct `proc.ProcError`, with
+fields `cmd str` and `kind str`. `kind` is one of `not_found`,
+`permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`,
+`timed_out` (a process killed at its time limit, `std.proc.2`),
+`cancelled` (`proc.run` in a cancelled task, `conc.cancel.2`) and `other`,
+and is the same for the same failure on every platform. `std.net` fails
+with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282, ADR 0321)*
+
+```ail
+use std.fs
+
+fn load(path str) str ! fs.IoError
+    fs.read_text(path)? "loading {path}"
+
+fn main()
+    text := fs.read_text("notes.txt") else err
+        print("{err.kind}: {err.path}")
+        ""
+```
+
+## Files: `std.fs`
+
+**std.fs.1** — `read_text(path str) str ! IoError` returns the whole file as
+text. A directory fails with `is_dir`; a file that isn't UTF-8 fails with
+`invalid_utf8`. *(ADR 0157)*
+
+**std.fs.2** — `write_text(path str, text str) ! IoError` creates the file or
+replaces its contents. *(ADR 0157)*
+
+**std.fs.3** — `append_text(path str, text str) ! IoError` creates the file
+or adds to its end. *(ADR 0157)*
+
+**std.fs.4** — `exists(path str) bool` is whether anything exists at the
+path. *(ADR 0157)*
+
+**std.fs.5** — `list_dir(path str) List[str] ! IoError` returns the names
+(not paths) of the directory's entries, sorted by their bytes. *(ADR 0157)*
+
+**std.fs.6** — `remove(path str) ! IoError` removes a file or an empty
+directory. A directory with entries fails with `not_empty`; nothing removes
+a tree. *(ADR 0157)*
+
+**std.fs.7** — `make_dir(path str) ! IoError` creates a directory and any
+missing parents. An existing directory is not a failure. *(ADR 0157)*
+
+**std.fs.8** — `walk(dir str) List[str] ! IoError` returns every file
+below `dir` at any depth, each as `dir` joined with its path below it
+(`path.join`), sorted by bytes. Directories are not listed, names that start
+with `.` are, and a symbolic link to a directory is listed, not followed.
+Any directory that can't be read fails with that directory's path.
+*(ADR 0281)*
+
+**std.fs.9** — `glob(pattern str) List[str]` returns the existing paths
+that match `pattern`, sorted by bytes, without duplicates. The pattern's
+components are split at `/`. In a component, `*` matches any run of
+characters and `?` exactly one, and neither matches a leading `.` unless
+the component starts with `.`; any other character matches itself. A whole
+component `**` matches zero or more directories (not starting with `.`),
+and a trailing `**` matches everything below. A pattern starting with `/`
+is absolute; otherwise paths are relative to the working directory and are
+returned without a leading `./`. Directories that can't be read are
+skipped, so `glob` never fails. *(ADR 0281)*
+
+**std.fs.10** — `metadata(path str) Metadata ! IoError` returns
+`struct Metadata { size int, modified_ms int, is_dir bool }`: the size in
+bytes (`0` for a directory), the last modification time in milliseconds
+since 1970-01-01T00:00:00Z, and whether it is a directory. Symbolic links
+are followed. *(ADR 0281)*
+
+**std.fs.11** — `rename(from str, to str) ! IoError` moves a file or
+directory, replacing a file at `to`. *(ADR 0281)*
+
+**std.fs.12** — `copy(from str, to str) ! IoError` copies the file `from`
+to `to`, replacing a file there. A directory `from` fails with `is_dir`;
+nothing copies a tree. For `rename` and `copy`, a failure's `path` is
+`from` when `from` is missing (or, for `copy`, a directory), else `to`.
+*(ADR 0281)*
+
+```ail
+use std.fs
+
+fn main() !
+    for p in fs.glob("examples/*.ail")
+        m := fs.metadata(p)?
+        print("{p} {m.size}")
+```
+
+## Environment: `std.env`
+
+**std.env.1** — `args() List[str]` returns the program's arguments: the
+words after the program's file, so `ail run tool.ail a b` gives
+`["a", "b"]`. *(ADR 0159)*
+
+**std.env.2** — `get(name str) str?` returns an environment variable, or
+`none` when it isn't set or isn't UTF-8. *(ADR 0157)*
+
+**std.env.3** — `cwd() str` returns the working directory. If it can't be
+read, the program traps. *(ADR 0157)*
+
+**std.env.4** — `program() str` returns the program's file path as it was
+given to `ail run`. *(ADR 0159)*
+
+**std.env.5** — `vars() Map[str, str]` returns the environment variables
+whose names and values are UTF-8, in order of their names' bytes.
+*(ADR 0282)*
+
+**std.env.6** — `home() str?` returns the user's home directory: `HOME`,
+else `USERPROFILE` (Windows), or `none` when neither is set or one is
+empty. *(ADR 0296)*
+
+## Paths: `std.path`
+
+**std.path.1** — `std.path` works on path text only: it never touches the
+file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
+
+**std.path.2** — A separator is `/`, and also `\` on Windows.
+`dir(p str) str` is the text before the last separator: `.` when there is
+none, and the separator itself for a path in the root (`dir("/x")` is `/`).
+`base(p str) str` is the text after the last separator. *(ADR 0253)*
+
+**std.path.3** — `ext(p str) str` is the text after the last `.` of
+`base(p)`, without the dot, and `""` when there is none or the only `.` is the
+first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
+
+**std.path.4** — `join(a str, b str) str` is `b` when `b` starts with a
+separator or `a` is empty; otherwise `a` and `b` with one `/` between.
+*(ADR 0253)*
+
+```ail
+use std.path
+
+fn main()
+    print(path.dir("examples/logscan.ail"))    # examples
+    print(path.base("examples/logscan.ail"))   # logscan.ail
+    print(path.ext("archive.tar.gz"))          # gz
+    print(path.join("examples", "data"))       # examples/data
+```
+
+## Standard input and output: `std.io`
+
+**std.io.1** — `read_line() str?` reads one line from standard input,
+without its line ending (`\n` or `\r\n`), or returns `none` at the end of
+input. Bytes that aren't UTF-8 become U+FFFD. *(ADR 0157)*
+
+**std.io.2** — `read_all() str` reads the rest of standard input.
+*(ADR 0157)*
+
+**std.io.3** — `eprint(value)` writes the value's text form and a newline to
+standard error, as `print` does to standard output (`mod.main.3`). Output
+already printed reaches standard output first. *(ADR 0157)*
+
+**std.io.4** — `exit(code int)` ends the program with exit status `code`,
+after writing any pending standard output. It never returns, so the code
+after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
+*(ADR 0157)*
+
+## Processes: `std.proc`
+
+**std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
+program `cmd` with the arguments `args`, directly and without a shell, and
+waits for it. `cmd` is found on `PATH` unless it contains a path separator.
+The process inherits the working directory and the environment, reads an
+empty standard input, and its standard output and standard error are
+captured. The result is `struct Output { status int, out str, err str }`:
+the exit status (128 plus the signal number if a signal ended it, as shells
+report it) and the captured text, with bytes that aren't UTF-8 as U+FFFD. A
+process that runs and fails is a successful `run` with a nonzero
+`status`; only a process that can't start is a `ProcError`. *(ADR 0160)*
+
+```ail
+use std.proc
+
+fn main() !
+    r := proc.run("git", ["status", "--short"])?
+    if r.status != 0
+        print("git failed: {r.err}")
+```
+
+**std.proc.2** — `run` takes two optional parameters after `args`, which
+may be left off from the end (ADR 0284): `input str?` and
+`timeout_ms int?`. With `input`, the process reads that text as its
+standard input, which is then closed; `none` gives an empty input. With
+`timeout_ms`, a process still running after that many milliseconds is
+killed and `run` fails with `ProcError` of kind `timed_out`; its output is
+discarded. A negative `timeout_ms` traps. Standard output already printed
+is written before the process starts. *(ADR 0282)*
+
+**std.proc.3** — `which(name str) str?` returns the path of the program
+that `run(name, ...)` would start, or `none` when there is none: `name`
+itself when it contains a separator and is an executable file, otherwise
+the first executable `DIR/name` for the directories of `PATH` in order
+(on Windows, also with each extension of `PATHEXT`). *(ADR 0282)*
+
+```ail
+use std.proc
+
+fn main() !
+    if proc.which("sort") == none
+        return
+    r := proc.run("sort", [], "b\na\n", 2000)?
+    print(r.out)
+```
+
+## Network: `std.net`
+
+**std.net.1** — Every function of `std.net` has the effects `net` and
+`io` (`eff.infer.4`), so `--deny net`, a package's capability grants and
+`--deterministic` (`eff.det.1`) cover it. *(ADR 0283)*
+
+**std.net.2** — `get(url str) Response ! NetError` sends an HTTP/1.1 `GET`
+and returns `struct Response { status int, headers Map[str, str], body str }`:
+the status code, the headers with names in lowercase in the order they
+arrived (a repeated header's values joined with `, `), and the body as
+text, with bytes that aren't UTF-8 as U+FFFD. A response with any status is
+a success; only a request that gets no response fails. Redirects (`301`,
+`302`, `303`, `307`, `308` with a `Location`) are followed, at most five.
+Connecting, and each read and write, time out after 30 seconds.
+*(ADR 0283)*
+
+**std.net.3** — `post(url str, body str, content_type str) Response ! NetError`
+sends `body` as an HTTP/1.1 `POST` with that `Content-Type`, and returns
+the response as `get` does, without following redirects. *(ADR 0283)*
+
+**std.net.4** — A failure is `error struct NetError { url str, kind str,
+message str }`: the URL given, a short kind, and a sentence for people.
+`kind` is `bad_url` (not `http://HOST[:PORT][/PATH]`), `tls` (an `https`
+URL: the bootstrap has no TLS yet), `not_found` (the host has no address),
+`refused`, `timed_out`, `protocol` (a malformed response, or too many
+redirects) or `other`. *(ADR 0283)*
+
+```ail
+use std.net
+
+fn main() !
+    r := net.get("http://127.0.0.1:8080/health") else err
+        print("{err.kind}: {err.message}")
+        return
+    print("{r.status} {r.headers["content-type"]}")
+```
+
+## Clock: `std.time`
+
+**std.time.1** — `now_ms() int` returns the time in milliseconds since
+1970-01-01T00:00:00Z. *(ADR 0157)*
+
+**std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
+milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+## Randomness: `std.random`
+
+**std.random.1** — `use std.random` provides `int`, `float`, `seed` and
+`shuffle`. Each has the capability `random` (`eff.infer.4`). *(ADR 0206)*
+
+**std.random.2** — `int(lo int, hi int) int` returns a uniformly distributed
+integer with `lo <= n <= hi`; both bounds are inclusive. It traps if `lo >
+hi`. `float() float` returns a uniformly distributed float with `0 <= x <
+1`. *(ADR 0206)*
+
+**std.random.3** — The functions draw from one generator. `seed(s int)`, or
+`ail run --seed S`, sets its state from `s`: the draws that follow are then a
+function of `s` and of the calls made, so a run repeats. Without a seed the
+generator starts from the clock. The sequence for a given seed is not
+specified across releases. `--seed` needs an integer (exit status 2
+otherwise). *(ADR 0206, ADR 0207)*
+
+**std.random.4** — `shuffle(mut xs)` reorders any `List[T]` in place so that
+every order is equally likely (Fisher-Yates). The argument is marked `mut`
+(`own.param.2`) and must be a list. *(ADR 0206)*
+
+**std.random.5** — `ail run --deterministic` rejects every program that
+reaches `random` (`eff.det.2`). *(ADR 0207)*
+
+```ail
+use std.random
+
+fn main()
+    random.seed(1)
+    mut deck := [1, 2, 3, 4, 5]
+    random.shuffle(mut deck)
+    print(deck.len())
+    print(random.int(1, 6) <= 6)
+```
+
+## Windows: `std.ui`
+
+A window showing a grid of monospace text cells, with keyboard and resize
+events: enough for a text editor or a dashboard. Colors are `int`s
+`0xRRGGBB`; only the low 24 bits count. *(ADR 0177)*
+
+```ail skip=context
+struct Window              # a handle; at most one window is open
+struct Size
+    cols int
+    rows int
+struct Modifiers
+    ctrl bool
+    alt bool
+    shift bool
+enum Event
+    Key(key str, ctrl bool, alt bool, shift bool)
+    Resize(cols int, rows int)
+    Close
+    Mouse(col int, row int, button str, kind str)
+    Scroll(lines int)
+error struct UiError
+    kind str               # "no_display", "closed" or "other"
+    message str
+```
+
+**std.ui.1** — `open(title str, cols int, rows int) Window ! UiError` opens
+a window `cols` by `rows` cells in size, with every cell blank (a space,
+light grey on black). It fails with `kind` `no_display` when no window can
+be shown (no display, or a run without a window host), and `other` when
+`cols` or `rows` is outside 1 to 1000 or a window is already open. *(ADR 0177)*
+
+**std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
+`present`, `next_event`, `poll_event`, `modifiers`, `set_title` and `close`; naming another is a
+compile-time error. All but `size(self) Size` and `modifiers(self) Modifiers`
+take `mut self`. `size` is the
+grid's size in cells, which follows `Resize` events; it is 0 by 0 for a
+window that was never opened or has been closed with `close`. *(ADR 0177)*
+
+**std.ui.3** — `clear(mut self, bg int)` makes every cell a space on `bg`.
+*(ADR 0177)*
+
+**std.ui.4** — `put(mut self, col int, row int, text str, fg int, bg int)`
+writes `text` into the cells from (`col`, `row`) rightwards, one character
+per cell; columns and rows count from 0 at the top left. What falls outside
+the grid on any side is dropped, so any `col` and `row` are allowed. A
+character outside printable Latin-1 (U+0020–U+007E, U+00A0–U+00FF),
+including a tab, shows as `?`. *(ADR 0177)*
+
+**std.ui.5** — Drawing is buffered: `clear` and `put` change only the grid,
+and `present(mut self)` shows it. `cursor(mut self, col int, row int)` sets
+where the caret, a thin bar in white or black, whichever shows on the cell's
+background, is drawn at the next `present`; a position outside the grid,
+such as (-1, -1), hides it. *(ADR 0177)*
+
+**std.ui.6** — `next_event(mut self) Event` waits for the next event;
+`poll_event(mut self) Event?` returns `none` at once if there is none.
+`Resize` reports a new size in cells, and the grid has that size before the
+event is returned: cells that still fit are kept, new cells are blank.
+`Close` means the window was closed (std.ui.8). *(ADR 0177)*
+
+**std.ui.7** — In `Key(key, ctrl, alt, shift)`, `key` is either the typed
+character (`"a"`, `"A"`, `" "`, `"é"`, following the keyboard layout and
+Shift) or one of the names `enter`, `tab`, `backspace`, `delete`, `escape`,
+`up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown` and `f1`
+to `f12`. While Ctrl is held, a text key gives its unshifted character
+(Ctrl-S is `Key("s", true, false, false)`, Ctrl-Shift-S has `shift` true),
+and no typed character is reported. On macOS, Command reports as `ctrl`.
+Modifier keys alone give no event. *(ADR 0177)*
+
+**std.ui.8** — When the user closes the window, the next event is `Close`.
+After that, and after `close(mut self)`, the window is closed: `next_event`
+and `poll_event` return `Close`, and drawing does nothing. A program that
+ends closes its window. *(ADR 0177)*
+
+**std.ui.9** — `ui.open`, `ui.clipboard_get`, `ui.clipboard_set` and every
+`Window` method give the capability `ui`
+and the effect `io` (`eff.infer.4`), so `ail run --deny ui` refuses a program
+that can open a window (`eff.cap.1`). *(ADR 0177)*
+
+```ail
+use std.ui
+
+fn main()
+    mut w := ui.open("Hello", 40, 5) else err
+        print("no window: {err.kind}")
+        return
+    while true
+        w.clear(0x202020)
+        w.put(1, 1, "Hello, AIL (Esc quits)", 0xFFFFFF, 0x202020)
+        w.present()
+        match w.next_event()
+            Key(key, _, _, _) =>
+                if key == "escape"
+                    break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => continue
+            Close => break
+    w.close()
+```
+
+**std.ui.10** — `Mouse(col, row, button, kind)` reports a mouse button over
+cell (`col`, `row`): `button` is `left`, `right` or `middle`, and `kind` is
+`down` when it is pressed, `up` when it is released, and `drag` when the
+mouse moves to another cell while it is held. Movement with no button held
+gives no event. *(ADR 0240)*
+
+**std.ui.11** — `Scroll(lines)` reports the wheel or a trackpad: `lines` is
+the number of text lines to scroll, positive towards the end of a document.
+A wheel notch is about 3 lines. *(ADR 0240)*
+
+**std.ui.12** — `clipboard_set(text str)` puts `text` on the clipboard, and
+`clipboard_get() str?` returns its text, or `none` when it holds no text.
+Under `ail run` this is the system clipboard where the platform's tools
+reach it (`pbcopy` on macOS, `wl-copy`, `xclip` or `xsel` on Linux,
+PowerShell on Windows); otherwise, and always under `ail test`, it is a
+clipboard of the program's own, so tests never read or change the user's.
+Neither needs an open window. *(ADR 0240)*
+
+**std.ui.13** — `set_title(mut self, text str)` changes the window's title;
+on a closed window it does nothing. *(ADR 0240)*
+
+**std.ui.14** — `modifiers(self) Modifiers` returns which of Ctrl, Alt and
+Shift were held when the last event that `next_event` or `poll_event`
+returned happened (as std.ui.7 reports them, Command counting as Ctrl on
+macOS), so a program can tell a Shift-click from a click. Before any event,
+and on a closed window, all three are false. *(ADR 0242)*
+
+**std.ui.15** — `set_font_size(mut self, px int)` changes the font to the
+available size nearest `px` (the smaller on a tie); `font_size(self) int`
+returns it. A size is a cell height in pixels, one of 10, 12, 13, 14, 15,
+18, 20, 24, 26, 28, 30, 36 and 40; a window opens at 20. The window keeps
+its size in pixels, so when the number of cells that fit changes, a
+`Resize` event follows (std.ui.7) and the grid takes the new size when the
+program receives it. On a window that is not open, `set_font_size` does
+nothing visible. *(ADR 0243)*
+
+**std.ui.16** — `put_styled(mut self, col int, row int, text str, fg int,
+bg int, style Style)` is `put` (std.ui.4) with a `ui.Style(bold, italic,
+underline)` drawn into each cell; `put` draws plain text. The backend
+synthesises the styles from the one font: bold thickens strokes, italic
+slants them, underline marks the row below the baseline. *(ADR 0294)*
+
+**std.ui.17** — `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`,
+`ORANGE`, `RED`, `WHITE` and `YELLOW` are `int` colors (0xRRGGBB) usable
+wherever a color is. Any other `ui.NAME` that isn't a function or type is
+an error naming the colors. *(ADR 0294)*
+
+**std.ui.18** — `set_cursor(mut self, col int, row int, shape Cursor)`
+places the caret like `cursor` (std.ui.5) and sets its shape: `Bar` (a
+thin line at the cell's left, `cursor`'s shape), `Block` (the cell's colors
+swapped) or `Underline` (a line at the cell's foot). *(ADR 0294)*
+
+### Widgets: `std.ui.widgets`
+
+**std.ui.19** — `use std.ui.widgets` imports a standard module written in
+AIL and shipped inside the toolchain. It is an ordinary module (spec 16):
+its items are used qualified (`widgets.ListView`), its source is shown as
+`<std>/ui/widgets.ail` in diagnostics, and it needs the `ui` capability
+only where it draws. It is the one standard module with a submodule path.
+*(ADR 0314)*
+
+**std.ui.20** — A widget's colors come from a theme, a `Map[str, int]` keyed
+by the kinds the editor's themes use (`bg`, `fg`, `pane_bg`, `line_bg`,
+`select_bg`, `status_bg`, `status_fg`, `gutter_fg`); `widgets.color(theme,
+kind)` gives a kind's color, with the dark default for a kind the theme
+leaves out. *(ADR 0315)*
+
+**std.ui.21** — Every widget has `render(self, r Rect, theme) List[Run]`,
+which is pure and fills exactly the cells of `r`; `draw(self, mut w, r,
+theme)`, which puts those runs on a window; and `on_event(mut self, ev
+ui.Event, ...) Action`, where `Action` is `Ignored` (not for this widget),
+`Changed`, `Submit` (Enter, a press, or a click on a choice) or `Cancel`
+(Escape). Widgets that take mouse events also take their `Rect`.
+`widgets.text_rows(runs, cols, rows)` gives the text a window would show,
+so a program can print or test a screen without one. *(ADR 0315)*
+
+**std.ui.22** — `ListView` shows the items that `widgets.fuzzy` keeps for
+its `filter`: those holding the filter's characters in order, ignoring
+case. Typing edits the filter; Up, Down, PageUp and PageDown move the
+selection, which stays visible; `chosen()` is the selected item. With no
+match it shows its `empty` text. *(ADR 0315)*
+
+**std.ui.23** — `TextField` edits one line: printable keys insert at the
+cursor, and Backspace, Delete, Left, Right, Home and End do what they
+name. `caret_col(r)` is the caret's column, and `draw` places the caret
+there. *(ADR 0315)*
+
+**std.ui.24** — `Button` is pressed by a click, or by Enter or Space while
+`focused`. `Dialog` shows a message above its choices; Left, Right and Tab
+move between them. `Pane` scrolls lines with a cursor line (a `cursor`
+outside the lines highlights none) and takes the wheel. `Tree` shows
+`Node`s in depth-first order, hiding the children of a closed node; Right
+opens, Left closes, Enter opens or closes a parent and submits a leaf.
+*(ADR 0315)*
+
+## Tensors: `std.tensor`
+
+Dense arrays of numbers whose operations run as whole-array kernels: on the
+CPU's vector unit and, for large products, on several cores. This is the
+CPU slice of ADR 0247; accelerator backends wait on OQ-090. *(ADR 0328)*
+
+**std.tensor.1** — `tensor.Tensor[T]` is a value (ADRs 0060–0063) holding
+a shape and `int` or `float` elements, row-major. It has no fields and no
+struct literal; it is built by std.tensor.2 and read by its methods, none
+of which changes the receiver. Its functions and methods have no effects
+(`eff.infer.4`). A tensor of any other element type is a compile-time
+error. *(ADR 0328)*
+
+**std.tensor.2** — `tensor.from(xs List[T])` is the 1-D tensor of `xs`;
+`tensor.from(xs List[T], shape List[int])` gives it `shape`.
+`tensor.zeros(shape List[int])` is all zeros, `Tensor[float]` unless the
+expected type is `Tensor[int]`. A negative size, or a shape whose element
+count differs from `xs.len()`, traps. *(ADR 0328)*
+
+**std.tensor.3** — The methods are `add`, `dot`, `len`, `map`, `matmul`,
+`max`, `mean`, `mul`, `reshape`, `shape`, `sum`, `to_list` and `transpose`
+(ADR 0345). `shape() List[int]`,
+`len() int` (the element count), `to_list() List[T]` (row-major), and
+`reshape(shape List[int]) Tensor[T]` (the same elements; traps like
+std.tensor.2 when the count differs). Any other method is a compile-time
+error that lists them. *(ADR 0328)*
+
+**std.tensor.4** — `a.add(b)` and `a.mul(b)` are elementwise `+` and `*`;
+`a.dot(b) T` is the sum of the elementwise products. `a` and `b` have the
+same element type (checked) and MUST have equal shapes: otherwise the call
+traps. *(ADR 0328)*
+
+**std.tensor.5** — On `float` tensors, `add` and `mul` round each element
+as `+` and `*` do. `sum` and `dot` add in this order: element `i` (or
+product `i`) goes to partial sum `i % 16` for the first `16 * (n / 16)`
+elements; the partial sums then halve, `s[i] += s[i + h]` for `h` = 8, 4,
+2, 1; the remaining elements are added to `s[0]` in order. Products are
+rounded before they are added (no fused multiply-add). So a result is the
+same on every target and vector unit (ADR 0008), though it can differ in
+the last bits from a plain loop that adds left to right. *(ADR 0329)*
+
+**std.tensor.6** — On `int` tensors, `sum`, `dot` and `matmul` add in
+index order and trap when a product or a running sum doesn't fit `int`;
+`add` and `mul` trap when an element's result doesn't fit. *(ADR 0329)*
+
+**std.tensor.7** — `a.matmul(b) Tensor[T]` multiplies an `m` by `k` tensor
+by a `k` by `n` one. Element `(i, j)` adds `a(i, p) * b(p, j)` for `p` from
+0 to `k - 1`, in that order, starting from zero: exactly the plain triple
+loop. Tensors that aren't both 2-D, or whose inner sizes differ, trap. When
+`m * k * n` is at least 64³ the rows are split across the thread pool
+(`conc.par.9`); the result doesn't change. *(ADR 0329)*
+
+**std.tensor.8** — `t.map(|x| e)` evaluates `e` once per element, in
+row-major order, with `x` bound to the element, and gives a tensor of the
+same shape. `e` is `int` or `float` and decides the new element type.
+*(ADR 0328)*
+
+**std.tensor.9** — Two tensors are `==` when their shapes and their
+elements are equal. A tensor's text form is the call that rebuilds it:
+`tensor.from([1.0, 2.0])`, with the shape after the list when the tensor
+isn't 1-D. *(ADR 0328)*
+
+**std.tensor.10** — `a + b`, `a - b` and `a * b` with a tensor operand are
+elementwise, with no other arithmetic operator defined for tensors. Both
+operands are tensors with one element type and equal shapes (`a + b` is
+`a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the other a
+scalar of its element type, on either side, which is taken with every
+element: `t * 2.0`, `1.0 - t`. An `int` literal beside a `Tensor[float]` is a
+`float` (`type.num.10`). Rounding is std.tensor.5's and overflow
+std.tensor.6's; other operand types are a compile-time error, and unequal
+shapes trap. `+=`, `-=` and `*=` follow. Matrix product stays
+`a.matmul(b)`. *(ADR 0344)*
+
+**std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
+to a `T`; `t.sum(axis int)`, `t.max(axis)` and `t.mean(axis)` reduce along
+one axis to a `Tensor[T]` whose shape drops that axis. Each result adds its
+elements, taken along the axis in index order, in std.tensor.5's order, so
+the axis sum of a row equals `sum()` of that row bit for bit; `int` sums are
+std.tensor.6's. `max` keeps the first element and replaces it by each later
+one that is `>` it: a NaN never replaces it, and ties keep the earlier one.
+`mean` is the sum divided by the count, and is a compile-time error on
+`Tensor[int]`. An axis outside `0` to rank − 1 traps, and so do `max` and
+`mean` of zero elements. *(ADR 0345)*
+
+**std.tensor.12** — `t.transpose()` of an `m` by `n` tensor is the `n` by
+`m` tensor whose element `(j, i)` is `t`'s `(i, j)`. A tensor that isn't
+2-D traps. *(ADR 0345)*
+
+```ail
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(a.sum(0))           # tensor.from([4.0, 6.0])
+    print(a.transpose().max(1))   # tensor.from([3.0, 4.0])
+    print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
+    print(a.map(|x| x * 2.0).sum())   # 20.0
+    print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32
+```

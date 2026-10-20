@@ -1,0 +1,127 @@
+# 18. Effects and capabilities
+
+Chapter key: `eff`
+
+> **Status:** Drafted (partial). Specified: inferred effect sets, `@pure`, and
+> denying capabilities to a program. Not yet designed: effects written in
+> signatures. Capability grants in package manifests are specified with
+> denial. Deterministic mode is specified in the last section.
+
+## Inference
+
+**eff.infer.1** — Every function has an *effect set*: the effects `io`,
+`fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
+`proc`, `clock`, `random`, `net` and `ui`. The set is inferred; it is never written in
+source. *(ADR 0163)*
+
+**eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
+`!T` or `!`, and `mutates` if it has a `mut` parameter or `mut self`. Both
+come from its own signature only. *(ADR 0163)* A function also has `mutates`
+if its body writes through a `ref` (`own.ref.4`): assigns to a place in a
+cell, passes one `mut`, or calls a `mut self` method on a `ref`. *(ADR 0192)*
+
+**eff.infer.3** — A function has every effect other than `fail` and
+`mutates` that any function it may call has. The effect sets of a program
+are the least sets that satisfy this rule (a fixed point over the call
+graph, so recursion is allowed). Constants contribute nothing: they are
+computed at compile time and may call only compile-time-safe code
+(`ct.const.2`). *(ADR 0163, ADR 0225)*
+
+**eff.infer.4** — The sources of effects are: `print` gives `io`; the
+standard modules give their module's effects: `fs.*` gives `fs` and `io`,
+`env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`,
+`net.*` gives `net` and `io` (`std.net.1`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
+of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
+`spawn`. *(ADR 0163, ADR 0283)*
+
+**eff.infer.5** — A call whose target is known from the types (a free
+function, an inherent method, an associated function, or a trait method on a
+value whose type has an `impl`) may call only that target. Any other trait
+call (through `any Trait`, a type parameter, or the qualified form) may call
+every implementation of that method in the program, including the trait's
+default. Operators other than arithmetic and `and`/`or`, string
+interpolation, `print` and the built-in methods may call every implementation
+of the standard traits `Eq`, `Ord`, `ToStr` and `Hash`. *(ADR 0163, ADR 0015)*
+
+**eff.infer.6** — `ail effects FILE` prints one line per function, `ID {e1,
+e2}`, sorted by stable id (`fn:name`, `method:Type.name`) with each set
+sorted. With `--json`, it prints one object
+`{"ail_api":1,"effects":{"ID":["e1","e2"],...}}`. The prelude's functions are
+not listed. *(ADR 0163)*
+
+```ail
+fn log(msg str)
+    print(msg)
+
+fn main()
+    log("hi")
+```
+
+`ail effects` prints `fn:log {io}` and `fn:main {io}`.
+
+## Pure functions
+
+**eff.pure.1** — A function marked `@pure` MUST NOT have `io`, `unsafe`,
+`spawn` or any capability. It MAY have `fail` and `mutates`. The diagnostic
+names, for each forbidden effect, the shortest chain of calls that adds it,
+such as `f -> save -> log -> print`. *(ADR 0164)*
+
+```ail
+@pure fn double(x int) int
+    x * 2
+
+fn main()
+    print(double(21))
+```
+
+## Denying capabilities
+
+**eff.cap.1** — `ail run --deny LIST FILE` and `ail check --deny LIST FILE`
+reject, at compile time, a program whose `main` has a denied capability. The
+diagnostic is at `main` and names the chain of calls that reaches the
+capability, such as `main -> save -> fs.write_text`. *(ADR 0165)*
+
+**eff.cap.2** — `LIST` is a comma-separated list of capabilities, or `all`
+for every capability. Any other name is a usage error (exit status 2) that
+lists the capabilities. In a manifest's `caps LIST` (`eff.cap.4–5`), `none`
+is also accepted, and an unknown name is a compile-time error at the
+manifest line. *(ADR 0165, ADR 0232)*
+
+**eff.cap.3** — `io` and the other effects are not capabilities and can't be
+denied: printing is how a program reports, and failure and mutation are
+already in signatures. *(ADR 0165)*
+
+**eff.cap.4** — A `dep` line's `caps LIST` (`mod.pkg.2`) grants that
+dependency the listed capabilities and no others; a `dep` line without
+`caps` grants none. Each function belongs to the package whose name is the
+first segment of its module, or else to the root package. A package's
+functions, including what they reach through other packages, must reach only
+capabilities that each grant of that package includes. Otherwise it is a
+compile-time error at the manifest line, one per grant and capability,
+naming a chain of calls from a function of the package (a public one if any
+reaches the capability), such as `geo.size -> clockwork.home -> env.cwd`.
+*(ADR 0232)*
+
+**eff.cap.5** — `caps LIST` on a `package` line limits that package's own
+functions the same way (`eff.cap.4`); for the root package it is an
+allow-list for the program. A `package` line without `caps` sets no limit.
+*(ADR 0232)*
+
+## Deterministic execution
+
+**eff.det.1** — A program whose `main` reaches none of the capabilities
+`clock`, `random`, `proc` and `net`, and has no `spawn`, produces the same
+output on every run given the same inputs: its arguments, environment
+variables, files and standard input. Map and set iteration is in insertion
+order (`type.map.1`), and hash values are never visible, so neither can vary
+a run. Programs with tasks are outside this rule until task scheduling is
+specified. *(ADR 0207)*
+
+**eff.det.2** — `ail run --deterministic FILE` and `ail check
+--deterministic FILE` are `--deny clock,net,proc,random` (`eff.cap.1`), and
+combine with `--deny`. `fs`, `env` and standard input are inputs, not
+sources of nondeterminism, so they stay allowed. *(ADR 0207)*
+
+**eff.det.3** — `ail run --seed S FILE` seeds `std.random` (`std.random.3`).
+A program that uses `random` and runs with a seed repeats without being
+denied the capability. *(ADR 0207)*

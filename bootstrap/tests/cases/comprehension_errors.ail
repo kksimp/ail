@@ -1,0 +1,24 @@
+## Comprehension errors (expr.comp.2-3, ADR 0182).
+fn show(x int)
+    print(x)
+
+fn main()
+    xs := [1, 2, 3]
+    a := [x for x in xs if x]
+    b := [show(x) for x in xs]
+    c := [xs for xs in [[1]]]
+    d := {x.to_float() for x in xs}
+    e := [half(x) for x in xs]
+    f := [y for x in xs]
+    g := names([x for x in xs])
+
+fn names(n List[str]) int
+    n.len()
+
+error enum Odd
+    IsOdd
+
+fn half(n int) !int
+    if n % 2 != 0
+        return IsOdd
+    n / 2

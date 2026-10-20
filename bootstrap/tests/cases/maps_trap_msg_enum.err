@@ -1,1 +1,4 @@
 $FILE:7:12: trap[type.map.3]: the map has no key Dir.South
+  7 |     print(m[Dir.South])
+    |            ^
+  at 7:12 in main(); m = {Dir.North: 1}

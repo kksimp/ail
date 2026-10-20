@@ -1,0 +1,70 @@
+# own.uniq.1-4, own.move.1-2, own.defer.1-2: a unique value is released
+# exactly once, by its last owner, in reverse order of declaration.
+unique struct Lock
+    id int
+
+impl Drop for Lock
+    fn drop(mut self)
+        print("unlock {id}")
+
+unique struct Pair
+    a Lock
+    b Lock
+
+impl Drop for Pair
+    fn drop(mut self)
+        print("drop pair {a.id}+{b.id}")
+
+unique enum Token
+    Fresh(n int)
+    Spent
+
+error struct Bad
+    why str
+
+fn acquire(id int) Lock ! Bad
+    if id < 0
+        return Bad(why: "negative")
+    Lock(id: id)
+
+fn first(n int) Lock?
+    if n > 0
+        return Lock(id: n)
+    none
+
+fn early(flag bool) int
+    l := Lock(id: 20)
+    if flag
+        return l.id
+    defer print("defer in early")
+    l.id + 1
+
+fn hand_back() Lock
+    l := Lock(id: 30)
+    l
+
+fn peek(l Lock) int
+    l.id
+
+fn release(move l Lock)
+    print("release {l.id} by hand")
+
+fn main() ! Bad
+    print(early(true))
+    print(early(false))
+    h := hand_back()
+    print("got {h.id}, peek {peek(h)}")
+    p := Pair(a: Lock(id: 40), b: Lock(id: 41))
+    mut x := Lock(id: 50)
+    x = Lock(id: 51)
+    acquire(60)?
+    k := acquire(61)?
+    release(move k)
+    if f := first(70)
+        print("first {f.id}")
+    t := Token.Fresh(n: 1)
+    for i in 0..2
+        g := Lock(id: 80 + i)
+    moved := x
+    defer print("main's defer")
+    print("main ends")

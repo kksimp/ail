@@ -72,18 +72,13 @@ enum Json
     Str(s str)
     Arr(items List[Json])
     Obj(members List[Member])
-error struct ParseError
+error struct ParseError "parse error at {line}:{col}: {msg}"
     line int
     col int
     msg str
-impl ToStr for ParseError
-    fn to_str(self) str
-        "parse error at {line}:{col}: {msg}"
 struct Parser
     chars List[char]
     pos int
-fn Parser.new(text str) Parser
-    Parser(text.chars(), 0)
 fn Parser.fail_at(self, at int, msg str) ParseError
     lines := chars[..at].join("").split('\n')
     last := lines.last() else ""
@@ -249,7 +244,7 @@ fn Parser.parse_number(mut self) !Json
         return Float(text.to_float() else return fail_at(start, "invalid number"))
     Int(text.to_int() else return fail_at(start, "number out of range"))
 fn parse(text str) Json ! ParseError
-    mut p := Parser.new(text)
+    mut p := Parser(text.chars(), 0)
     p.parse_document()
 fn quote(s str) str
     mut out := ["\""]
@@ -263,10 +258,7 @@ fn quote(s str) str
             '\u{8}' => "\\b"
             '\u{c}' => "\\f"
             _ =>
-                if c.code() < 0x20
-                    "\\u{c.code().to_hex().pad_left(4, '0')}"
-                else
-                    "{c}"
+                if c.code() < 0x20 then "\\u{c.code().to_hex().pad_left(4, '0')}" else "{c}"
         out.push(piece)
     out.push("\"")
     out.join("")
@@ -277,15 +269,9 @@ fn compact(v Json) str
         Int(n) => "{n}"
         Float(x) => "{x}"
         Str(s) => quote(s)
-        Arr(items) =>
-            mut parts := []
-            for item in items
-                parts.push(compact(item))
-            "[{parts.join(",")}]"
+        Arr(items) => "[{[compact(item) for item in items].join(",")}]"
         Obj(members) =>
-            mut parts := []
-            for m in members
-                parts.push("{quote(m.key)}:{compact(m.value)}")
+            parts := ["{quote(m.key)}:{compact(m.value)}" for m in members]
             "\{{parts.join(",")}}"
 fn pretty(v Json, level int) str
     pad := "  ".repeat(level + 1)
@@ -294,18 +280,14 @@ fn pretty(v Json, level int) str
         Arr(items) =>
             if items.len() == 0
                 return "[]"
-            mut lines := []
-            for item in items
-                lines.push("{pad}{pretty(item, level + 1)}")
+            lines := ["{pad}{pretty(item, level + 1)}" for item in items]
             "[\n{lines.join(",\n")}\n{close}]"
         Obj(members) =>
             if members.len() == 0
                 return "\{}"
-            mut lines := []
-            for m in members
-                lines.push("{pad}{quote(m.key)}: {pretty(m.value, level + 1)}")
+            lines := ["{pad}{quote(m.key)}: {pretty(m.value, level + 1)}" for m in members]
             "\{\n{lines.join(",\n")}\n{close}}"
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) => compact(v)
+        Null | Bool | Int | Float | Str => compact(v)
 enum Step
     Key(name str)
     Index(i int)
@@ -328,14 +310,14 @@ fn Json.get(self, key str) Json?
                 if m.key == key
                     return m.value
             none
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Arr(_) => none
+        Null | Bool | Int | Float | Str | Arr => none
 fn Json.at(self, i int) Json?
     match self
         Arr(items) =>
             if i < 0 or i >= items.len()
                 return none
             items[i]
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Obj(_) => none
+        Null | Bool | Int | Float | Str | Obj => none
 fn query(doc Json, steps List[Step]) Json?
     mut current := doc
     for step in steps
@@ -347,18 +329,13 @@ struct Stats
     counts Map[str, int]
     max_depth int
     total float
-fn Stats.new() Stats
-    mut counts := {}
-    for kind in KINDS
-        counts[kind] = 0
-    Stats(counts, 0, 0)
 fn kind_of(v Json) str
     match v
-        Obj(_) => "object"
-        Arr(_) => "array"
-        Str(_) => "string"
-        Int(_) | Float(_) => "number"
-        Bool(_) => "boolean"
+        Obj => "object"
+        Arr => "array"
+        Str => "string"
+        Int | Float => "number"
+        Bool => "boolean"
         Null => "null"
 fn walk(v Json, depth int, mut stats Stats)
     stats.counts[kind_of(v)] += 1
@@ -373,7 +350,7 @@ fn walk(v Json, depth int, mut stats Stats)
                 walk(item, depth + 1, mut stats)
         Int(n) => stats.total += n.to_float()
         Float(x) => stats.total += x
-        Null | Bool(_) | Str(_) => return
+        Null | Bool | Str => return
 fn main() !
     doc := parse(DOCUMENT)?
     print("== pretty ==")
@@ -395,7 +372,7 @@ fn main() !
         else
             print("not found: {path}")
     print("== stats ==")
-    mut stats := Stats.new()
+    mut stats := Stats({kind: 0 for kind in KINDS}, 0, 0)
     walk(doc, 1, mut stats)
     for kind in KINDS
         print("{kind}: {stats.counts[kind]}")

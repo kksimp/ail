@@ -1,0 +1,37 @@
+## An agent-style tool (ADR 0157): read a file, measure it, run a command,
+## and report. Every step that can fail says so in its type.
+
+struct Stats
+    lines int
+    blank int
+    comments int
+    functions List[str]
+
+fn measure(text str) Stats
+    mut stats := Stats(lines: 0, blank: 0, comments: 0, functions: [])
+    for line in text.lines()
+        stats.lines += 1
+        t := line.trim()
+        if t == ""
+            stats.blank += 1
+        elif t.starts_with("##")
+            stats.comments += 1
+        elif name := t.strip_prefix("fn ")
+            stats.functions.push(name.split("(")[0])
+    stats
+
+fn base_name(path str) str
+    parts := path.split("/")
+    parts[parts.len() - 1]
+
+fn main() !
+    path := env.program()
+    stats := measure(fs.read_text(path)? "reading my own source")
+    print("file: {base_name(path)}")
+    print("lines: {stats.lines} ({stats.blank} blank, {stats.comments} comments)")
+    print("functions: {stats.functions.join(", ")}")
+    echo := proc.run("echo", ["measured", base_name(path)])? "running echo"
+    print("echo said: {echo.out.trim()} (status {echo.status})")
+    missing := fs.read_text("{path}.missing") else err
+        "{err.kind}"
+    print("a missing file is {missing}")

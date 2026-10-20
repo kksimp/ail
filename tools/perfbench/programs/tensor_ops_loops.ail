@@ -1,0 +1,35 @@
+# The work of `tensor_ops.ail` in plain loops over lists.
+fn main()
+    n := 256
+    a := [(i % 17).to_float() * 0.25 for i in 0..n * n]
+    b := [(i % 13).to_float() * 0.5 for i in 0..n * n]
+    mut total := 0.0
+    for r in 0..10
+        d := [(a[i] + b[i]) * a[i] - b[i] * 0.5 for i in 0..n * n]
+        mut t := [0.0 for i in 0..n * n]
+        for i in 0..n
+            for j in 0..n
+                t[j * n + i] = d[i * n + j]
+        for j in 0..n
+            for i in 0..n
+                total += t[i * n + j]
+        for j in 0..n
+            mut m := a[j]
+            for i in 1..n
+                if a[i * n + j] > m
+                    m = a[i * n + j]
+            total += m
+        for i in 0..n
+            mut s := 0.0
+            for j in 0..n
+                s += b[i * n + j]
+            total += s / n.to_float()
+        mut best := 0.0
+        for i in 0..n
+            mut s := 0.0
+            for j in 0..n
+                s += t[i * n + j]
+            if i == 0 or s > best
+                best = s
+        total += best
+    print(total)

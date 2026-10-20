@@ -1,0 +1,15 @@
+struct Counter
+    n int
+
+fn Counter.bump(mut self, by int)
+    self.n += by
+
+fn add(mut c Counter, by int)
+    c.n = c.n + by
+    c.bump(1)
+
+fn main()
+    mut c := Counter(n: 0)
+    c.bump(2)
+    add(mut c, 5)
+    print(c.n)

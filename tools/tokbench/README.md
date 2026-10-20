@@ -61,6 +61,8 @@ Results may be off by about one token per file.
 
 ## Corpus
 
+The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh docs/language-card.md`.
+
 | Directory | Contents |
 |---|---|
 | `corpus/r1/` | Round-1 block-style samples (A–D) plus Rust and Go references, as measured in [syntax-measurements-r1.md](../../docs/design/syntax-measurements-r1.md). They use candidate syntax from before later decisions. |
@@ -68,4 +70,20 @@ Results may be off by about one token per file.
 | `corpus/r3/` | Operators, trait-typed parameters, dynamic dispatch, and attribute variants (ADRs 0077–0083). |
 | `corpus/r4/` | Printing, interpolation, collection types and literals, `elif`, optional wrapping, and ranges (ADRs 0088–0093). |
 | `corpus/r5/` | Concurrency (colorless vs. async/await), visibility (`pub` vs. capitalisation), and import styles. |
+| `corpus/r8/` | Format specifications (`{x:>8}`, `{r:.2}`) vs `pad_left`/`to_hex`/`to_fixed` calls on a table-and-money program (ADR 0173). |
+| `corpus/programs/NAME/` | Whole programs with Python twins (and Go, Rust, TypeScript, C or Swift ports for some), compared in [program-measurements-r2.md](../../docs/design/program-measurements-r2.md), [-r3.md](../../docs/design/program-measurements-r3.md) and [-r5.md](../../docs/design/program-measurements-r5.md). The `.ail` files are `examples/NAME.ail` without comments, blank lines or `@test` functions (the agent-tool programs `logscan`, `tasks`, `build`, `snapdiff` and `csvreport` keep their tests, as their twins do): regenerate them with `python3 tools/tokbench/corpus_from_examples.py`. |
+| `corpus/r9/` | One 4-dependency package manifest in seven formats: line per dependency, indented, dotted keys, TOML (two forms), JSON, AIL literal (ADR 0230). |
 | `corpus/current/` | Samples in the syntax decided so far (as of 2026-10-04). `tokenize.ail` predates ADR 0089 (it still indexes a `str` directly) and also uses constructs that aren't decided yet: `while`, `char`, slicing, `+=`, `and`, methods that mutate a `mut` binding, and returning an error value. Corpus files hold no explanatory comments, because comments would distort the counts. |
+
+## Attribution
+
+`attribute.py` (measurement only) says where the tokens of the
+`corpus/programs/` go: for each construct class (signature types, `fn`,
+`self`, `:=`, `mut`, `use`, `else`, `?`, indentation, ...) it deletes that
+class from every program and reports the difference, for AIL and for Python.
+Run it after `run.sh` has set up once:
+
+```sh
+tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
+```
+

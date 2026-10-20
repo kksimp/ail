@@ -1,0 +1,44 @@
+
+struct Finding
+    severity str
+    rule str
+    line int
+
+fn to_finding(doc Json) Finding?
+    severity := doc.str("severity")?
+    rule := doc.str("rule")?
+    at := doc.num("line")?
+    Finding(severity, rule, line: at.to_int())
+
+fn parse_findings(report str) List[Finding]
+    [to_finding(parse_json(line) else continue) else continue for line in report.lines()]
+
+fn count(found List[Finding], severity str) int
+    [f for f in found if f.severity == severity].len()
+
+fn main() !
+    here := path.dir(env.program())
+    mut errors := 0
+    mut warnings := 0
+    for name in fs.list_dir(here)? "listing examples"
+        if not name.ends_with(".ail")
+            continue
+        r := proc.run("{here}/../ail", ["check", "--json", "{here}/{name}"])? "checking {name}"
+        found := parse_findings(r.err)
+        errors += count(found, "error")
+        warnings += count(found, "warning")
+        for f in found
+            print("{name}:{f.line} {f.severity} {f.rule}")
+    print("{errors} errors, {warnings} warnings")
+    if errors > 0
+        io.exit(1)
+
+@test fn counts_by_severity()
+    report := "\{\"severity\":\"error\",\"rule\":\"a.b.1\",\"line\":3}\nnot json\n\{\"severity\":\"warning\",\"rule\":\"c.d.2\",\"line\":9}"
+    found := parse_findings(report)
+    assert_eq(found.len(), 2)
+    assert_eq(count(found, "error"), 1)
+    assert_eq(found[1].line, 9)
+
+@test fn empty_report_has_no_findings()
+    assert_eq(parse_findings("").len(), 0)

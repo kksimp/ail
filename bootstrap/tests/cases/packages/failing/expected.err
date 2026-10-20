@@ -1,0 +1,3 @@
+error: calc.CalcError.Odd(n: 3)
+  at $FILE/calc/calc.ail:6:9
+  at $FILE/main.ail:5:23

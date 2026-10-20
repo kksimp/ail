@@ -1,0 +1,541 @@
+# AIL language card
+
+> v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
+> [quick reference](quick-reference.md) has the long form. Budget 8,000 tokens
+> on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
+
+## Running programs
+
+```sh
+./ail run FILE.ail           # check, then run
+./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail test FILE.ail          # run the `@test` functions (--coverage, --trace)
+./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
+./ail api --text FILE.ail    # declarations and `##` docs without bodies; --card, --symbols
+./ail explain RULE           # a rule's text, its ADRs and an example
+./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
+./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
+```
+
+`todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
+
+Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
+need no `use`: `fs.read_text(p)`. A local of the same name hides one.
+
+A program needs `fn main()`. `print(value)` writes any value and a newline.
+
+## Layout
+
+- Blocks are indented by exactly 4 spaces. No tabs, braces or `;`.
+- A statement ends at the end of its line, unless the line ends inside
+  `(`, `[` or `{`, or after a binary operator or a comma.
+- `#` starts a comment. `##` starts a doc comment.
+
+## Functions
+
+```ail
+fn add(a int, b int) int     # `name Type`, no colon; return type after `)`
+    a + b                    # the last expression is the result
+
+fn greet(name str)           # no return type: returns nothing
+    print("hello, {name}")
+
+fn half(n int) int
+    requires n >= 0          # contract: a pure bool; false traps
+    ensures result * 2 <= n  # `result` is the returned value
+    n / 2
+```
+
+`return x` or bare `return` exits early. In `ensures`, `old(e)` is `e` on entry. A trait
+method's contracts bind its impls; a struct's `invariant COND` lines hold after
+construction and each `mut self` method.
+
+## Bindings
+
+```ail
+x := 1           # `:=` declares a new name (immutable)
+mut n := 0       # mutable
+n = 5            # `=` changes an existing `mut` name
+n += 1           # also -= *= /= %=
+```
+
+A name can't be declared twice in one function, even in an inner block: to
+update a `mut` variable in a loop, use `=`.
+
+## Types
+
+`int` (64-bit), `float` (64-bit IEEE), `bool` (`true`, `false`), `str`,
+`char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
+`T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
+
+`t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
+
+`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
+
+Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
+
+## Structs, enums and methods
+
+```ail
+struct Point
+    x int
+    y int
+
+enum Color
+    Red
+    Green
+
+fn Point.sum(self) int            # method; `self` is read-only
+    x + y                         # fields and methods by bare name (self.x)
+
+fn Point.shift(mut self, dx int)  # may change self
+    x += dx
+
+fn Point.origin() Point           # associated function: Point.origin()
+    Point(x: 0, y: 0)
+
+fn main()
+    mut p := Point(y: 2, x: 1)    # name fields, in any order
+    p.shift(3)                    # `mut self` methods need a `mut` variable
+    print(p.sum())                # method calls always have ()
+    c := Color.Red                # qualified, unless the type is known: `c = Green`
+    p.x = 10                      # fields of a `mut` variable can be assigned
+```
+
+`==` and `print` work on every value: `print(p)` shows `Point(x: 1, y: 2)`.
+
+Variants can carry fields. Build them like structs; match them by position:
+
+```ail
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
+```
+
+## Absence and errors
+
+```ail
+fn find(names List[str], wanted str) int?   # an int, or `none`
+    for i in 0..names.len()
+        if names[i] == wanted
+            return i
+    none
+
+error enum ParseError                       # only `error` types can be errors
+    Empty "empty input"                     # optional message: its display text
+    BadNumber(text str) "bad number {text}"
+
+fn parse(s str) int ! ParseError            # an int, or a ParseError
+    if s == ""
+        return Empty                        # returning an error value fails
+    n := s.to_int() else return BadNumber(text: s)
+    n
+
+fn total(items List[str]) !int              # `!int`: the errors are inferred
+    mut sum := 0
+    for s in items
+        sum += parse(s)? "item {s}"         # `?` passes a failure on, with context
+    sum
+
+fn main() !                                 # main can fail; the error is reported
+    i := find(["a", "b"], "b") else -1      # `else`: a fallback value...
+    n := parse("12") else return            # ...or leave...
+    t := total(["1", "x"]) else err         # ...or handle the error
+        print("bad input: {err}")           # bad input: bad number x
+        0
+    print("{i} {n} {t}")
+    if v := parse("7")                      # handle both outcomes, then go on
+        print("got {v}")
+    else err
+        print("error: {err}")
+```
+
+- `?` on an optional before an `else` goes to it: `xs.first()?.name else ""`.
+- In a function with inferred errors (`!T`, `!`) and in `@test` functions,
+  `?` on `none` fails with the error `Absent`: `port := text.to_int()? "port"`.
+- A result that can fail must be handled: with `?`, `else`, or by returning it.
+  `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
+- Several error types: `fn load() Config ! IoError | ParseError`. No success
+  value: `fn save() ! IoError` (or `fn save() !`); `save() else return` leaves.
+
+## Traits and generics
+
+```ail
+trait Shape
+    fn area(self) int
+    fn describe(self) str           # a default; defaults call other methods on `self`
+        "shape: {area()}"
+
+struct Circle
+    r int
+
+struct Square
+    s int
+
+impl Shape for Circle                # defines every method without a default
+    fn area(self) int
+        3 * r * r
+
+impl Shape for Square
+    fn area(self) int
+        s * s
+    fn describe(self) str           # an `impl` replaces a default
+        "square {s}"
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version                # no body: compares the fields in order, so `<` works
+
+struct Stack[T]                     # a generic type; its methods use `T` and `Self`
+    items List[T]
+
+fn Stack[T].push_twice(mut self, x T)
+    items.push(x)
+    items.push(x)
+
+fn Stack[T].top(self) T?
+    items.last()
+
+enum Color
+    Red
+    Green
+    Rgb(r int, g int, b int)
+
+fn is_red(c Color) bool
+    match c
+        Red => true
+        Rgb => false                # bare `Rgb` matches any fields
+        Green => false
+
+fn main()
+    mut shapes := List[any Shape]()
+    shapes.push(Circle(r: 2))
+    shapes.push(Square(s: 3))
+    for s in shapes
+        print(s.describe())
+    print(Version(major: 1, minor: 2) < Version(major: 1, minor: 3))
+    mut st := Stack[int](items: [])
+    st.push_twice(4)
+    print(st.top())
+    print(is_red(Color.Red))
+
+fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
+    mut best := items[0]
+    for x in items
+        if x > best
+            best = x
+    best
+```
+
+- `impl Ord for Version` with no body compares the fields in order. `<` and
+  friends work on `int`, `str`, lists and `Ord` types. Customise with
+  `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
+- `impl ToJson for T` and `impl FromJson for T` with no body derive
+  `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name; lists,
+  `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
+  `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
+  that writes an empty `impl`'s methods; `ail api --expanded` shows them.
+
+Optionals nest and `else` works inside expressions:
+
+```ail
+fn first_word(s str) str?
+    s.split(" ").first()
+
+fn pick(xs List[int?]) int??
+    xs.first()                      # `int??`: no element, or an element that is `none`
+
+fn sign(n int) str
+    if n < 0
+        return "neg"
+    if n >= 0
+        return "non-neg"
+    unreachable("n is an int")      # stops the program; has any type
+
+fn main()
+    a := first_word("") else "-"            # `else` inside an expression
+    n := (["7"].first() else "0").to_int() else 0
+    print("{a} {n + (first_word("a b") else "").len()} {sign(n)}")
+    if v := pick([none, 3])                 # peels one level: v is `int?`
+        print(v)
+```
+
+## Control flow
+
+```ail skip=context
+if a < b
+    print("less")
+elif a == b
+    print("equal")
+else
+    print("greater")
+
+kind := if n < 0     # `if` used as a value needs `else`;
+    "negative"       # elif/else line up with the line the `if` starts on
+else
+    "non-negative"
+sign := if n < 0 then "-" else "+"   # the one-line form
+
+while n > 0
+    n -= 1
+
+for x in xs          # also: for i in 0..n (excludes n), for i in 1..=n
+    if x == 0
+        continue
+    if x > 9
+        break
+
+label := match c     # must cover every variant; `_` covers the rest
+    Red => "red"
+    Green => "green"  # an arm can also be an indented block
+
+match ch             # literals and `|`; ints, strings and chars need `_`
+    '+' | '-' => continue           # a one-line statement arm
+    '0' => total += 1
+    _ => return ch
+```
+
+`if` and `match` work as statements or values; a function can end with either.
+
+## Operators and strings
+
+- `+ - * / %` on `int`. Overflow and division by zero stop the program (a
+  trap). `/` rounds toward zero.
+- `== != < <= > >=` (see above for which types). Comparisons can't be
+  chained: write `a < b and b < c`.
+- `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
+  `if n != 0`, not `if n`.
+- `float`: `+ - * /`, never traps; no mixing with `int`: `n.to_float()`,
+  `x.to_int()`. An int literal works where a float is expected.
+- Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
+  overflow traps; `x.to_u8()` converts.
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`).
+
+## Strings and characters
+
+```ail skip=context
+s := "total: {a + b}"      # interpolates any expression; `\{` is a literal brace
+c := 'x'                   # a char; '\n', '\'', '\u{e9}'
+print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
+```
+
+- Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
+  align (numbers default right, others left); `.N` needs a float, `x` an int.
+- `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
+  `"2.5".to_float()` a `float?`.
+- `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
+  `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
+  `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+- `xs.join(", ")` joins any list (`cs.join("")` for chars).
+- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
+  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
+- There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
+
+## Lists
+
+```ail skip=context
+mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
+first := xs[0]         # out of bounds stops the program
+part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..], xs[..2]
+xs.push(4)             # push, pop, sort and swap need a `mut` variable
+xs.swap(0, 1)
+xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
+n := xs.len()          # int
+mut out := []          # typed by its first use: out.push("a") makes a List[str]
+```
+
+Also `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`; `pop()`/`first()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
+`sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`, `take(n)`. Slices
+don't clamp and negative indexes are errors. Order by a key (stable):
+`xs.sorted(by: |p| -p.age)`, also `sort`, `min`, `max`.
+
+Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
+`{k: v for ...}`.
+
+`for x in xs` gives a copy of each element. To change the elements
+themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1`.
+
+## Maps and sets
+
+```ail skip=context
+mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
+ages["cy"] = 40                        # inserts or replaces
+ages["dan"] += 1                       # `op=` on a missing key starts at 0
+mut counts := {}                       # typed by first use: counts[w] += 1
+b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
+for name in ages.keys()                # `for k in m` is an error; also values()
+    print("{name}: {ages[name]}")
+mut seen := Set[str]()                 # or a literal: {"a", "b"}
+if seen.add("x")                       # true if it wasn't there
+    print("new")
+```
+
+Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`). Keys can't be floats.
+
+## Values and `mut`
+
+Assigning or passing copies: changing `b` after `b := a` never changes `a`.
+
+```ail skip=context
+fn bump(mut p Point)   # the caller sees the change
+    p.x += 1
+
+bump(mut q)            # `mut` again at the call, on a `mut` variable
+```
+
+Two `mut` arguments of one call can't refer to the same value.
+
+## Ownership
+
+`unique` types are never copied; they move, and `Drop` cleans them up. `ref T` is a
+cell that copies share. Lists of unique values move in with `xs.push(move x)`,
+out with `pop`, and `xs[i]` borrows.
+
+```ail
+unique struct Conn
+    id int
+
+impl Drop for Conn                  # runs when the value goes away
+    fn drop(mut self)
+        print("close {id}")
+
+fn Conn.finish(move self) int       # consumes the receiver: `c.finish()`
+    id
+
+fn release(move c Conn)             # `move` parameter: the caller writes `move c`
+    print("release {c.id}")
+
+struct Node
+    value int
+    children List[ref Node]         # `ref T`: a shared, mutable cell
+
+fn main()
+    defer print("done")             # runs when the block ends, in reverse order
+    a := Conn(id: 1)                # a `unique` value is never copied
+    b := Conn(id: 2)
+    release(move a)                 # `a` is unusable afterwards
+    n := b.finish()                 # so is `b`
+    root := ref Node(value: 1, children: [])
+    other := root                   # a copy of the reference, same cell
+    other.value = 2                 # root.value is now 2
+    print("{n} {root.value}")
+```
+
+## Tasks
+
+```ail skip=context
+t := spawn load(1)          # a task; args are copies
+p := t.wait()?              # result, or fails with Trapped
+g := TaskGroup()            # tasks returning nothing; waited at block end
+g.add(spawn work(2))
+ch := Channel[int](8)       # send waits while full; close() when done
+v := ch.recv() else break   # none once closed and empty
+for v in ch                 # receives until closed and empty
+    print(v)
+m := Mutex(0)               # get, set, swap
+with m as mut x             # holds m; stores x back on any exit
+    x += 1
+n := Atomic(0)              # int/bool: load, store, add (old value), cas
+g.cancel()                  # task.cancelled(), task.check()? in the task
+ys := [f(x) par for x in xs]   # elements on all cores, in order
+```
+
+Wait or `add` each task exactly once, on every path. A deadlock traps.
+
+`par for` and `par` comprehensions use all cores; the result is what the sequential
+loop gives, and provable conflicts are errors:
+
+```ail
+fn main()
+    xs := [1, 2, 3, 4]
+    mut out := [0, 0, 0, 0]
+    par for i in 0..4               # asserts the iterations are independent
+        out[i] = xs[i] * xs[i]
+    sq := [x * x par for x in xs]   # a list computed on the thread pool
+    n := Atomic(0)                  # shared by tasks and `par for` without a lock
+    par for x in xs
+        n.add(x)
+    print("{out} {sq} {n.load()}")
+```
+
+## Contracts
+
+```ail
+fn divide(a int, b int) int
+    requires b != 0                 # a pure bool; false traps at the call
+    ensures result * b + a % b == a # `result` is the returned value
+    a / b
+
+struct Account
+    balance int
+    invariant balance >= 0          # holds after construction and every `mut self` method
+
+fn Account.add(mut self, n int)
+    ensures balance == old(balance) + n   # `old(e)`: `e` on entry
+    balance += n
+```
+
+A trait method's contracts bind its implementations. `ail run --no-contracts` skips the checks.
+
+## Tests
+
+```ail
+fn double(x int) int
+    x * 2
+
+@test fn doubles()                  # `ail test`; `?` works inside a test
+    assert_eq(double(4), 8)         # traps showing both values
+    assert(double(1) == 2)
+
+@test fn add_commutes(a int, b int) # parameters: a property on generated inputs
+    assert_eq(a + b, b + a)         # --cases N, --seed S replays; failures shrink
+```
+
+A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printed output.
+
+## Packages, effects and the system
+
+`ail.pkg` in a package root lists the package and its dependencies; each `dep`
+is imported by name and may reach only the capabilities in its `caps`:
+
+```text
+package notes caps fs
+dep geo path ../geo caps fs
+```
+
+Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
+`env`, `proc`, `clock`, `random`, `net`, `ui`. `@pure fn f()` is an error if it reaches
+one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
+
+A window is a grid of text cells; draw with `put`, then `present`:
+
+```ail
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)      # col, row, text, fg, bg
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, _, _, _) =>                   # "a", "enter"; (key, ctrl, alt, shift)
+                if key == "escape"
+                    break
+            Close => break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
+```
+
+A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
+`matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
+`ToJson`/`FromJson` derives read and write JSON.

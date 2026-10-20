@@ -1,0 +1,10 @@
+# own.defer.3: a deferred statement can't leave its block or declare anything.
+fn f() int
+    defer return 1
+    defer x := 2
+    2
+
+fn main()
+    for i in 0..2
+        defer break
+    print(f())

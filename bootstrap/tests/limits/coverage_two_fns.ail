@@ -1,0 +1,12 @@
+fn used(x int) int
+    if x > 1
+        return x * 2
+    x
+
+@test fn runs_used()
+    assert_eq(used(1), 1)
+    assert_eq(used(2), 4)
+
+fn unused(x int) int
+    y := x + 1
+    y * 2

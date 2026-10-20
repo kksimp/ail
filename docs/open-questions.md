@@ -171,20 +171,16 @@ generic code (ADR 0080), as Swift's witness tables provide. To be decided
 with the standard library (`Default`, numeric `zero`). `Hash` already
 behaves as if it required `Eq` (a `[T Hash]` bound allows `==`,
 [ADR 0133](decisions/0133-automatic-hash.md)), so the answer must cover it.
+`FromJson` for generic types (`Pair[A, B]`) waits on this: its derived
+`Pair.from_json` must call `A.from_json` through a bound
+([ADR 0343](decisions/0343-json-derives-maps-optionals-enum-payloads.md)).
 *Owner: AI under ADR 0076.*
 
 ## OQ-040 — `else` as an expression
 **Resolved** by [ADR 0144](decisions/0144-else-as-an-expression.md) (`e else d` is the loosest operator).
 
 ## OQ-041 — Format specifications in interpolation
-`"{x}"` gives only the default text form. Width, fill, precision and radix
-(`f"{x:>8}"`, `f"{n:04x}"`, `f"{r:.2f}"` in Python) are written today with
-`pad_left(width, fill)` and `to_hex()` ([ADR 0135](decisions/0135-string-literals-and-methods.md)),
-and fixed decimal places can't be written at all. Options: a spec after `:`
-inside the braces (Python, Rust; compact, but a mini-language to learn),
-methods only (`x.to_fixed(2)`; one way, longer), or both. Recommendation:
-measure on programs that print tables and money before deciding.
-*Owner: AI under ADR 0076.*
+**Resolved** by [ADR 0173](decisions/0173-format-specifications-in-interpolation.md) (`{x:>8}`, `{r:.2}`, `{n:0>4x}`).
 
 ## OQ-042 — Custom hashing
 `Hash` is automatic and can't be implemented by hand
@@ -197,18 +193,168 @@ programs, so output never depends on the hash function. *Owner: AI under
 ADR 0076; decide when a real program needs it.*
 
 ## OQ-043 — `s.len()`: bytes or characters
-`str` has no `len()` yet; `s.chars().len()` counts characters
-([ADR 0135](decisions/0135-string-literals-and-methods.md)). Python counts
-code points, Rust and Go count bytes, Swift counts grapheme clusters. Options:
-`len()` in bytes plus `chars().len()` (fast and honest about cost, but
-surprising to Python users), `len()` in characters (O(n) unless cached), or
-no `len()` at all with named views (`bytes().len()`, `chars().len()`).
-Decide with `s.bytes()` and string slicing. *Owner: AI under ADR 0076.*
+**Resolved** by [ADR 0208](decisions/0208-str-len-counts-characters.md) (`len()` counts characters, `byte_len()` bytes).
 
 ## OQ-044 — Nested optionals
-`m.get(k)` on a `Map[K, V?]` has type `V??`, and `none` could mean either
-level. Options: nested optionals are distinct types and `none` is the outer
-one (Swift); optionals flatten (TypeScript's `undefined`; loses
-information); or `Map` values can't be optional (restrictive). Recommendation:
-the first, with a diagnostic when `none` is ambiguous. *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0209](decisions/0209-nested-optionals.md) (distinct nested types, `none` is the outermost).
+
+## OQ-045 — Capability manifests for packages
+**Resolved** by [ADR 0232](decisions/0232-capabilities-per-dependency.md) (`caps LIST` per `dep` line in `ail.pkg`, default none, checked at compile time by the `--deny` inference).
+
+## OQ-046 — Deterministic execution mode
+**Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).
+
+## OQ-047 — Inserting into and removing from lists
+**Resolved** by [ADR 0214](decisions/0214-list-editing-methods.md) (`insert`, `remove_at`, `extend`, `clear`, `reverse`, `first`).
+
+## OQ-048 — Editing text without string indexing
+**Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
+
+## OQ-049 — A package registry and version ranges
+Dependencies come from a path or a pinned git commit
+([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
+central registry with names and semver ranges (`dep json 1.4`), resolved
+into `ail.lock` (recommended eventually: short `dep` lines and discovery for
+agents, but it needs hosting, accounts, a naming policy and a solver);
+(b) git URLs only, with tags as versions (no service to run; long URLs in
+every manifest); (c) a registry that only maps names to git URLs and commits
+(no solver; small service). Involves hosting and publishing, so it is the
+designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
+
+## OQ-050 — Unique values in generic code, sets and traits
+**Partly resolved:** `move self` receivers by
+[ADR 0317](decisions/0317-move-self-receivers.md); lists and maps of unique
+values by [ADR 0318](decisions/0318-unique-values-in-lists-and-maps.md) and
+[ADR 0319](decisions/0319-copying-methods-on-unique-collections.md).
+Still open: unique values as type arguments of user generics, `ref`
+contents, map keys and set elements; `move self` in traits; `List[Task[T]]`
+(a `TaskGroup` covers it today); and moving out of a field
+(destructuring, [ADR 0190](decisions/0190-moves-and-use-after-move.md)).
+Options for generics: (a) a `Copy`-like bound every generic parameter has
+unless it opts out (`[T unique]`), which also opens `move self` in traits;
+(b) keep the restriction. Recommendation: (a), designed with the standard
+library's resource types (files, sockets). *Owner: AI under ADR 0076, with
+the standard-library resource types.*
+
+## OQ-060 — Loop invariants and static proof for contracts
+Items (1) `old(x)`, (2) inherited trait contracts and (3) type invariants are
+**resolved** by [ADR 0303](decisions/0303-contract-old.md),
+[ADR 0304](decisions/0304-trait-contract-inheritance.md) and
+[ADR 0305](decisions/0305-struct-invariants.md); checks stay run-time
+([ADRs 0210–0213](decisions/0210-contract-syntax.md)). Still open: (a) loop
+invariants (recommended: wait; `assert` inside the loop covers the run-time
+case and a prover is the only reason to name one); (b) static proof, and
+whether an optimising build keeps the checks it can't prove (recommended:
+keep them, so `--no-contracts` stays an explicit choice); (c) invariants on
+enums, and checks for writes through `mut` parameters outside the type's
+methods (recommended: revisit with (b), since both need a prover to be cheap).
+*Owner: AI under ADR 0076.*
+
+## OQ-071 — Standard modules without `use` lines
+**Resolved** by [ADR 0277](decisions/0277-standard-modules-without-use.md)
+(option a: in scope unless the program has something else by that name).
+
+## OQ-072 — Display text written on error variants
+**Resolved** by [ADR 0278](decisions/0278-messages-on-error-types.md) (option a:
+a message after each variant or the struct's name).
+
+## OQ-090 — May accelerator drivers compile AIL-generated code?
+ADR 0010 forbids external backends. GPUs and NPUs can't be reached without
+the OS driver compiling what AIL hands it: SPIR-V (Vulkan), MSL (Metal), a
+Core ML model, an ONNX graph. Options: (a) AIL generates the SPIR-V, MSL or
+graph with its own code generator, and the driver's compiler counts as part
+of the platform, like CPU microcode (recommended: it is the only way to
+reach these devices at all, and nothing of LLVM's ships with AIL);
+(b) CPU only, no GPU or NPU ever; (c) allow vendor libraries (cuDNN, MPS) as
+opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
+section 6 and [ADR 0247](decisions/0247-std-tensor-and-accel-capability.md).
+The CPU slice exists (`std.tensor`, ADRs 0328–0329); [ADR 0330](decisions/0330-tensor-accelerator-backends-plug-in.md)
+lists what a device backend needs decided here. Still missing from the CPU
+slice: `conv2d`, activations, `f32`, indexing, `/` and unary `-`, broadcasting
+beyond a scalar, and fusing chains of elementwise calls (axis reductions,
+`transpose` and `+ - *` landed in ADRs 0344–0345).
+*Owner: designer (it reads ADR 0010, a designer decision).*
+
+## OQ-091 — Field attributes for derive generators
+A `ToJson` derive (ADR 0227) wants per-field options (`@json("user_id")`,
+skip a field). Today an unknown attribute is an error (`test.attr.1`), and
+`FieldInfo` (ADR 0229) has no attributes. Options: (a) a trait declares the
+attribute names its generator reads (`@derive(derive_json, attrs: [json])`),
+and `FieldInfo` gains `attrs`; unknown names stay errors (recommended: still
+one place that says what an attribute means, and typos are caught);
+(b) any `@name(...)` on a field is allowed and passed through (shortest, but
+a typo is silently ignored); (c) no field options; a type that needs them
+writes the `impl` by hand. *Owner: AI under ADR 0076.* **Update
+2026-10-20:** the `ToJson`/`FromJson` derives (ADR 0308) use field names as
+member names, which `examples/` needs; still open until a program needs a
+rename, with (a) recommended.
+
+## OQ-092 — Type information in constants and compile-time assertions
+`TypeInfo` reaches only derive generators (`refl.info.2`). A compile-time
+check such as "every variant of `Cmd` has a help line" needs it in a
+constant. Options: (a) a prelude `type_info[T]()` callable only in
+compile-time code, plus `assert` in constants as a compile error
+(recommended when a use appears: small, and still no run-time reflection);
+(b) only through derives (status quo); (c) Zig-style `@typeInfo` anywhere at
+compile time (rejected in ADR 0225 and ADR 0229). *Owner: AI under ADR 0076.*
+**Update 2026-10-20:** generators now receive `TypeInfo` (ADR 0306); no
+program needs it in a constant yet, so this stays open with (a) recommended.
+
+## OQ-093 — Generating items other than an impl body
+Generated code is limited to the methods of the deriving `impl` and
+associated functions of its type (`ct.gen.1`, ADR 0307). Bindings generated from a schema, or a type per table, would
+need generators that add types or functions to a module. Options: (a) defer
+until a real use appears (recommended: C headers already have ADR 0103, and
+every current need is an impl); (b) a module-level `@generate(f)` whose items
+appear in `ail api --expanded` like derives. *Owner: AI under ADR 0076.*
+
+## OQ-094 — Downcasting `any Trait`
+`refl.run.1` gives no way to recover the concrete type of an `any Trait`
+value. Options: (a) none (recommended for now: an enum is the checked way to
+hold one of several known types, and `match` is exhaustive); (b) a checked
+`x as T?` returning `none` on a mismatch (needs a type tag per value, which
+`any Trait` already has as its method table); (c) a trait method the author
+writes. *Owner: designer (it changes what `any Trait` promises).*
+
+## OQ-095 — Compile-time evaluation limits
+`ct.eval.3` sets 100,000,000 steps and 1 GiB per constant or derive.
+Options: (a) keep these and let a package manifest raise the step limit
+(recommended: a constant that needs more is rare, and the limit is
+deterministic); (b) a per-program total budget instead of per item (bounds
+the whole build, but one large constant starves the rest); (c) no memory
+limit (simpler, but a runaway allocation takes the machine down). *Owner: AI
+under ADR 0076, measured once the evaluator counts steps.*
+
+## OQ-096 — Showing built-in derives in `ail api --expanded`
+**Resolved** by [ADR 0309](decisions/0309-api-expanded-output.md): option (b),
+`"derived_by": "built-in"`; template text would show code that doesn't run.
+`trait.derive.1`'s `Eq`, `Ord` and `ToStr` derives are specified as if a
+prelude generator wrote them, but the bootstrap implements them natively.
+Options: (a) `--expanded` prints their equivalent AIL text from a fixed
+template (recommended: one rule for every derive, and an agent sees what
+`cmp` compares); (b) list them by name only, like automatic implementations
+(cheapest); (c) write the prelude generators in AIL and drop the native code
+(slower in the interpreter). *Owner: AI under ADR 0076.*
+
+## OQ-097 — Weaker atomic orderings, cancel trees, and send under cancellation
+Lane 72 (ADRs 0320–0322) left three follow-ups. (1) `conc.atomic.2` requires
+acquire, release, acquire-release and relaxed orderings; the bootstrap has
+only SeqCst. Options: (a) a trailing named argument, `a.load(order: Relaxed)`
+(recommended: rare, so the token cost lands only where it's used); (b)
+separate methods (`load_relaxed`); (c) wait for the native backend. (2)
+Cancelling a task doesn't reach tasks it already started (only tasks it
+starts later). Options: (a) cancel the whole tree, as structured concurrency
+suggests (recommended once tasks record their parent); (b) keep it per
+task. (3) A cancelled task blocked in `send` on a full channel still
+waits. Options: (a) `send` returns `! Cancelled` (breaks every existing
+call's type); (b) keep waiting, so a cancelled producer is released by its
+consumer (current); (c) drop the value and return. *Owner: AI under ADR 0076.*
+
+## OQ-113 — A matrix product operator
+`a.matmul(b)` is the only spelling of the matrix product (ADR 0344). Options:
+(a) keep the method (recommended: `matmul` is rare in agent code, so the
+token gain is under the 2% tie, and the operator set is fixed by ADR 0077);
+(b) `a @ b` as in Python, which needs a new operator against `trait.op.2`,
+and `@` already starts attributes (`@inline`), so a line that starts with an
+operand-less `@` reads two ways; (c) a named operator such as `a matmul b`,
+which no other part of AIL has. *Owner: designer (amends ADR 0077).*

@@ -1,0 +1,29 @@
+## `?` on an optional inside the value of an `else` goes to that `else`
+## (err.prop.4, ADR 0252).
+struct Item
+    name str
+    tags List[str]
+
+fn first_tag(items List[Item]) str
+    items.first()?.tags.first()? else "-"
+
+fn label(j Json) str
+    j.get("user")?.str("name") else "anonymous"
+
+fn depth(j Json) int?
+    inner := j.get("a")?.get("b") else return 0
+    inner.num("c")?.to_int()
+
+fn main()
+    print(first_tag([Item(name: "x", tags: ["red", "big"])]))
+    print(first_tag([Item(name: "x", tags: [])]))
+    print(first_tag([]))
+    doc := parse_json("\{\"user\": \{\"name\": \"kim\"}, \"a\": \{\"b\": \{\"c\": 4}}}") else return
+    print(label(doc))
+    print(label(Json.Null))
+    print(depth(doc))
+    print(depth(Json.Null))
+    n := doc.get("a")?.get("b")?.num("c") else 0.0
+    print(n)
+    for x in doc.arr("missing") else [Json.Str("none")]
+        print(x)

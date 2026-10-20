@@ -10,9 +10,10 @@ Chapter key: `lex`
 ## Keywords
 
 **lex.kw.1** — These words are reserved keywords and MUST NOT be used as
-names: `and any as break continue defer elif else enum error extern false fn
-for if impl in match move mut none not or pub ref return self spawn struct
-trait true unique unsafe use while`. *(ADR 0114, ADR 0120)*
+names: `and any as break continue defer elif else ensures enum error extern
+false fn for if impl in invariant match move mut none not or par pub ref requires
+return self spawn struct todo trait true unique unsafe use while with`.
+*(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305)*
 
 **lex.kw.2** — `c` is not reserved. It has its FFI meaning only directly
 after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*
@@ -49,7 +50,12 @@ indentation. *(ADR 0040)*
 **lex.stmt.2** — A newline does not end a statement when it occurs:
 1. inside an unclosed `(`, `[` or `{`,
 2. immediately after a binary operator or a comma, or
-3. inside a multi-line string literal that is not yet closed (`lex.str.3`).
+3. inside a multi-line string literal that is not yet closed (`lex.str.3`), or
+4. when the next line's first token is `.` followed by a name (a chained call,
+   ADR 0323), or
+5. when the next line's first token is `and`, `or`, `+`, `*`, `/`, `%`, `==`,
+   `!=`, `<`, `<=`, `>` or `>=` (a long expression split before an operator,
+   ADR 0346). `-` is left out because it can begin a statement.
 
 The next line is then a continuation of the same statement. Continuation lines
 do not open or close blocks. *(ADR 0034, ADR 0135)*
@@ -71,7 +77,7 @@ It documents the declaration that immediately follows it. *(ADR 0043)*
 **lex.comment.3** — There are no block (multi-line delimited) comments.
 *(ADR 0043)*
 
-```ail
+```ail skip=context
 ## Returns the area of a circle.
 fn area(r f64) f64
     # pi is a library constant
@@ -91,7 +97,7 @@ form of the expression. `\{` produces a literal `{`. An interpolation MUST NOT
 begin with `{`: `{{` is a compile-time error whose help says a literal brace
 is `\{`. *(ADR 0089, ADR 0135)*
 
-```ail
+```ail error=lex.str.2
 msg := "Hello, {name}! You have {count} new messages."
 a := "\{x}"          # the text {x}
 b := "{{x}}"         # compile-time error: a literal brace is \{
@@ -124,7 +130,7 @@ follows these rules, in this order. *(ADR 0089, ADR 0135)*
    statement (`lex.stmt.2`), and the literal's lines aren't block structure
    (`lex.block.1`).
 
-```ail
+```ail skip=context
 one := """say "hi" to {name}"""     # one line: say "hi" to Ada
 two := """
     a
@@ -165,7 +171,7 @@ escapes and no interpolation: `\` and `{` are literal characters.
 3. `r` MUST be immediately followed by the opening `"`. `r "x"` is the name
    `r` followed by a string, since `r` isn't a keyword (`lex.kw.1`).
 
-```ail
+```ail fragment
 pat := r"\d+\.\d+"                  # the text \d+\.\d+
 src := r"""
     fn main()
@@ -176,6 +182,33 @@ src := r"""
 > **Rationale:** raw strings suit embedded source text and regex-like text.
 > A plain string is cheaper for a short escape (a raw form costs about 7%
 > more tokens there, measured), so raw strings don't replace plain ones.
+
+**lex.str.7** — An interpolation may carry a format specification:
+`{expression:spec}`. The `:` is the first one outside brackets, strings and
+character literals. The specification is `[[fill]align][width][.decimals][x]`
+and nothing else:
+
+- `align` is `<` (left), `>` (right) or `^` (centre); `fill` is any one
+  character before it. The default fill is a space. Without `align`, numbers
+  are right-aligned and everything else is left-aligned.
+- `width` is a decimal number with no leading `0` (write `0>4`); text longer
+  than `width` isn't cut. Width counts characters.
+- `.decimals` and `x` are typed by `type.str.11`.
+- `width` and `decimals` are at most 1000. `x` and `.decimals` don't combine.
+
+Anything else is a compile-time error whose help shows the grammar. There is
+no `{x!r}`, sign, `#`, `,` or `e` form. *(ADR 0173)*
+
+```ail fragment
+n := 255
+r := 3.14159
+print("[{n:>6}][{r:.2}][{n:0>4x}][{"ab":^6}][{"ab":*<5}]")
+```
+
+```ail error=lex.str.7
+n := 1
+print("{n:03}")      # compile-time error: write {n:0>3}
+```
 
 ## Numeric literals
 
@@ -194,7 +227,7 @@ literal first (`-9223372036854775808.abs()` is an error). A floating-point liter
 rounded (`type.num.8`); one whose value overflows to infinity is an error.
 *(ADR 0094, ADR 0130, ADR 0138)*
 
-```ail
+```ail error=lex.num.3
 lo := -9223372036854775808     # valid: the minimum int
 hi := 9223372036854775808      # compile-time error: doesn't fit int
 big := 1e999                   # compile-time error: overflows float

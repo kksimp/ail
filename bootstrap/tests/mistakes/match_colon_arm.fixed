@@ -1,0 +1,11 @@
+enum Color
+    Red
+    Green
+
+fn f(c Color) int
+    match c
+        Red => 1
+        Green => 2
+
+fn main()
+    print(f(Color.Red))

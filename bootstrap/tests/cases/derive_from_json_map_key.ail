@@ -1,0 +1,9 @@
+## FromJson reads maps with `str` keys only, as JSON objects have (json.derive.2, ct.derive.4).
+struct Scores
+    by_id Map[int, str]
+
+impl FromJson for Scores
+
+fn main()
+    s := Scores.from_json(Json.Null) else return
+    print(s)

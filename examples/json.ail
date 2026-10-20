@@ -3,6 +3,7 @@
 
 WHITESPACE := " \t\n\r"
 KINDS := ["object", "array", "string", "number", "boolean", "null"]
+
 DOCUMENT := r"""
 {
   "meta": {"version": 3, "count": 3, "generated": "2026-10-05", "archived": null},
@@ -39,6 +40,7 @@ DOCUMENT := r"""
   "snowman": "\u2603"
 }
 """
+
 QUERIES := [
     "users[1].name",
     "meta.count",
@@ -51,6 +53,7 @@ QUERIES := [
     "users.name",
     "users[x]",
 ]
+
 BAD_INPUTS := [
     "\{\"name\": \"Ann\", \"age\": 30,}",
     "\{\"name\" \"Ann\"}",
@@ -64,9 +67,11 @@ BAD_INPUTS := [
     "\"bad \\u12G4\"",
     "",
 ]
+
 struct Member
     key str
     value Json
+
 enum Json
     Null
     Bool(b bool)
@@ -75,43 +80,48 @@ enum Json
     Str(s str)
     Arr(items List[Json])
     Obj(members List[Member])
-error struct ParseError
+
+error struct ParseError "parse error at {line}:{col}: {msg}"
     line int
     col int
     msg str
-impl ToStr for ParseError
-    fn to_str(self) str
-        "parse error at {line}:{col}: {msg}"
+
 struct Parser
     chars List[char]
     pos int
-fn Parser.new(text str) Parser
-    Parser(text.chars(), 0)
+
 fn Parser.fail_at(self, at int, msg str) ParseError
     lines := chars[..at].join("").split('\n')
     last := lines.last() else ""
     ParseError(line: lines.len(), col: last.chars().len() + 1, msg)
+
 fn Parser.fail(self, msg str) ParseError
     fail_at(pos, msg)
+
 fn Parser.at_end(self) bool
     pos >= chars.len()
+
 fn Parser.peek(self) char?
     if at_end()
         return none
     chars[pos]
+
 fn Parser.unexpected(self) ParseError
     if c := peek()
         return fail("unexpected character '{c}'")
     fail("unexpected end of input")
+
 fn Parser.skip_whitespace(mut self)
     while not at_end() and WHITESPACE.contains(chars[pos])
         pos += 1
+
 fn Parser.parse_document(mut self) !Json
     value := parse_value()?
     skip_whitespace()
     if not at_end()
         return fail("extra data after value")
     value
+
 fn Parser.parse_value(mut self) !Json
     skip_whitespace()
     c := peek() else return unexpected()
@@ -129,12 +139,14 @@ fn Parser.parse_value(mut self) !Json
             if take_word("null")
                 return Null
             unexpected()
+
 fn Parser.take_word(mut self, word str) bool
     end := pos + word.chars().len()
     if end > chars.len() or chars[pos..end].join("") != word
         return false
     pos = end
     true
+
 fn Parser.parse_object(mut self) !Json
     pos += 1
     skip_whitespace()
@@ -156,6 +168,7 @@ fn Parser.parse_object(mut self) !Json
         members.push(Member(key, parse_value()?))
         if end_of_container('}')?
             return Obj(members)
+
 fn Parser.parse_array(mut self) !Json
     pos += 1
     skip_whitespace()
@@ -167,6 +180,7 @@ fn Parser.parse_array(mut self) !Json
         items.push(parse_value()?)
         if end_of_container(']')?
             return Arr(items)
+
 fn Parser.end_of_container(mut self, close char) !bool
     skip_whitespace()
     if peek() == close
@@ -180,6 +194,7 @@ fn Parser.end_of_container(mut self, close char) !bool
     if peek() == ']' or peek() == '}'
         return fail_at(comma, "trailing comma")
     false
+
 fn Parser.parse_string(mut self) !str
     start := pos
     pos += 1
@@ -197,6 +212,7 @@ fn Parser.parse_string(mut self) !str
                 pos += 1
     pos += 1
     text.join("")
+
 fn Parser.parse_escape(mut self, start int) !char
     escape := pos
     pos += 1
@@ -211,6 +227,7 @@ fn Parser.parse_escape(mut self, start int) !char
         't' => '\t'
         'u' => parse_unicode(escape)
         _ => return fail_at(escape, "invalid escape '\\{c}'")
+
 fn Parser.parse_unicode(mut self, escape int) !char
     end := pos + 4
     if end > chars.len()
@@ -221,11 +238,13 @@ fn Parser.parse_unicode(mut self, escape int) !char
     ch := char.from_code(code) else return fail_at(escape, "surrogate escapes are not supported")
     pos = end
     ch
+
 fn Parser.skip_digits(mut self) int
     start := pos
     while not at_end() and chars[pos].is_digit()
         pos += 1
     pos - start
+
 fn Parser.parse_number(mut self) !Json
     start := pos
     if peek() == '-'
@@ -251,9 +270,11 @@ fn Parser.parse_number(mut self) !Json
     if is_float
         return Float(text.to_float() else return fail_at(start, "invalid number"))
     Int(text.to_int() else return fail_at(start, "number out of range"))
+
 fn parse(text str) Json ! ParseError
-    mut p := Parser.new(text)
+    mut p := Parser(text.chars(), 0)
     p.parse_document()
+
 fn quote(s str) str
     mut out := ["\""]
     for c in s.chars()
@@ -266,13 +287,11 @@ fn quote(s str) str
             '\u{8}' => "\\b"
             '\u{c}' => "\\f"
             _ =>
-                if c.code() < 0x20
-                    "\\u{c.code().to_hex().pad_left(4, '0')}"
-                else
-                    "{c}"
+                if c.code() < 0x20 then "\\u{c.code().to_hex().pad_left(4, '0')}" else "{c}"
         out.push(piece)
     out.push("\"")
     out.join("")
+
 fn compact(v Json) str
     match v
         Null => "null"
@@ -280,16 +299,11 @@ fn compact(v Json) str
         Int(n) => "{n}"
         Float(x) => "{x}"
         Str(s) => quote(s)
-        Arr(items) =>
-            mut parts := []
-            for item in items
-                parts.push(compact(item))
-            "[{parts.join(",")}]"
+        Arr(items) => "[{[compact(item) for item in items].join(",")}]"
         Obj(members) =>
-            mut parts := []
-            for m in members
-                parts.push("{quote(m.key)}:{compact(m.value)}")
+            parts := ["{quote(m.key)}:{compact(m.value)}" for m in members]
             "\{{parts.join(",")}}"
+
 fn pretty(v Json, level int) str
     pad := "  ".repeat(level + 1)
     close := "  ".repeat(level)
@@ -297,21 +311,19 @@ fn pretty(v Json, level int) str
         Arr(items) =>
             if items.len() == 0
                 return "[]"
-            mut lines := []
-            for item in items
-                lines.push("{pad}{pretty(item, level + 1)}")
+            lines := ["{pad}{pretty(item, level + 1)}" for item in items]
             "[\n{lines.join(",\n")}\n{close}]"
         Obj(members) =>
             if members.len() == 0
                 return "\{}"
-            mut lines := []
-            for m in members
-                lines.push("{pad}{quote(m.key)}: {pretty(m.value, level + 1)}")
+            lines := ["{pad}{quote(m.key)}: {pretty(m.value, level + 1)}" for m in members]
             "\{\n{lines.join(",\n")}\n{close}}"
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) => compact(v)
+        Null | Bool | Int | Float | Str => compact(v)
+
 enum Step
     Key(name str)
     Index(i int)
+
 fn parse_path(path str) List[Step]?
     mut steps := List[Step]()
     for part in path.split(".")
@@ -324,6 +336,7 @@ fn parse_path(path str) List[Step]?
                 return none
             steps.push(Index(inner[0].to_int()?))
     steps
+
 fn Json.get(self, key str) Json?
     match self
         Obj(members) =>
@@ -331,14 +344,16 @@ fn Json.get(self, key str) Json?
                 if m.key == key
                     return m.value
             none
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Arr(_) => none
+        Null | Bool | Int | Float | Str | Arr => none
+
 fn Json.at(self, i int) Json?
     match self
         Arr(items) =>
             if i < 0 or i >= items.len()
                 return none
             items[i]
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Obj(_) => none
+        Null | Bool | Int | Float | Str | Obj => none
+
 fn query(doc Json, steps List[Step]) Json?
     mut current := doc
     for step in steps
@@ -346,23 +361,21 @@ fn query(doc Json, steps List[Step]) Json?
             Key(name) => current.get(name)?
             Index(i) => current.at(i)?
     current
+
 struct Stats
     counts Map[str, int]
     max_depth int
     total float
-fn Stats.new() Stats
-    mut counts := {}
-    for kind in KINDS
-        counts[kind] = 0
-    Stats(counts, 0, 0)
+
 fn kind_of(v Json) str
     match v
-        Obj(_) => "object"
-        Arr(_) => "array"
-        Str(_) => "string"
-        Int(_) | Float(_) => "number"
-        Bool(_) => "boolean"
+        Obj => "object"
+        Arr => "array"
+        Str => "string"
+        Int | Float => "number"
+        Bool => "boolean"
         Null => "null"
+
 fn walk(v Json, depth int, mut stats Stats)
     stats.counts[kind_of(v)] += 1
     match v
@@ -376,7 +389,8 @@ fn walk(v Json, depth int, mut stats Stats)
                 walk(item, depth + 1, mut stats)
         Int(n) => stats.total += n.to_float()
         Float(x) => stats.total += x
-        Null | Bool(_) | Str(_) => return
+        Null | Bool | Str => return
+
 fn main() !
     doc := parse(DOCUMENT)?
     print("== pretty ==")
@@ -398,7 +412,7 @@ fn main() !
         else
             print("not found: {path}")
     print("== stats ==")
-    mut stats := Stats.new()
+    mut stats := Stats({kind: 0 for kind in KINDS}, 0, 0)
     walk(doc, 1, mut stats)
     for kind in KINDS
         print("{kind}: {stats.counts[kind]}")

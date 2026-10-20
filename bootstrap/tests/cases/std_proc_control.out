@@ -1,0 +1,10 @@
+apple
+fig
+pear
+
+done
+proc.ProcError(cmd: "sleep", kind: "timed_out")
+-1
+true
+none
+true

@@ -5,6 +5,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | Document | What it's for |
 |---|---|
 | [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
+| [language-card.md](language-card.md) | The whole language in one read, under 8,000 tokens, for AI agents (non-normative) |
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
 | [roadmap.md](roadmap.md) | Phased development plan |
@@ -19,10 +20,17 @@ Design notes:
   token-efficiency and performance levels are realistic?
 - [design/performance-beyond-c.md](design/performance-beyond-c.md): research
   on matching or beating C for systems and allocation-heavy code.
+- [design/automatic-parallelism.md](design/automatic-parallelism.md): using
+  every core, SIMD and NPUs automatically without changing results.
 - [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
   make AIL easiest and most efficient for an AI author (proposals).
+- [design/diagnostics-audit.md](design/diagnostics-audit.md): 109 plausible AI
+  mistakes, what each diagnostic says, and what `ail fix` resolves.
+- [design/ai-first-plan.md](design/ai-first-plan.md): the 2026-10-20 plan
+  for the AI-as-operator features (semantic API, effects and capabilities,
+  standard modules), efficiency, and the buildout lanes.
 - [design/syntax-measurements-r1.md](design/syntax-measurements-r1.md): first
   real tokenizer measurements of candidate syntax (block style, signatures,
   keywords).
@@ -42,8 +50,35 @@ Design notes:
   write AIL from the quick reference.
 - [design/program-measurements-r2.md](design/program-measurements-r2.md):
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
+- [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
+  moves from the bootstrap's crate shim to platform APIs through `extern c`.
+- [design/semantic-api.md](design/semantic-api.md): the machine-readable
+  interfaces of `ail`: diagnostics schema, fixes, `ail explain`, `ail api`,
+  `ail fix`, with the `api.*` and `fix.*` rules.
+- [design/packages.md](design/packages.md): `ail.pkg` manifests, dependencies
+  and per-dependency capability grants.
+- [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
+  writes.
+- [design/compile-time-execution.md](design/compile-time-execution.md),
+  [design/metaprogramming.md](design/metaprogramming.md),
+  [design/reflection.md](design/reflection.md),
+  [design/ir-architecture.md](design/ir-architecture.md): topics 16–19:
+  compile-time constants, derive generators, compile-time reflection, and the
+  compiler tiers.
+- [design/program-measurements-r5.md](design/program-measurements-r5.md),
+  [design/program-measurements-r8.md](design/program-measurements-r8.md): the
+  agent-tool corpus against Python after rounds 5 and 8.
+- [design/cards/](design/cards/README.md): `ail api --card` output for the
+  editor and the standard library, kept fresh by a test.
+- [design/program-measurements-r3.md](design/program-measurements-r3.md):
+  where AIL's tokens go per construct against Python, and the round-3 changes.
 
 Tools:
+- [tools/edit/](../tools/edit/edit.ail): the AIL code editor, written in AIL
+  (headless core plus a `std.ui` window front end).
+- [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run
+  `tools/perfbench/run.sh [RUNS]`; results in
+  [design/interpreter-performance.md](design/interpreter-performance.md).
 - [tools/tokbench/](../tools/tokbench/README.md): token measurement harness.
   Run `tools/tokbench/run.sh` (macOS/Linux) or `tools\tokbench\run.ps1`
   (Windows), and it sets itself up.

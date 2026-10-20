@@ -17,7 +17,7 @@ fn main()
     print("a" == "a")
     print("a" != "a")
     print(true == false)
-    total := 1 +
+    total := 1 + # a trailing operator continues the statement (lex.stmt.2)
         2 +
         3
     print(total)

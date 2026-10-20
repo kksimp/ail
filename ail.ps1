@@ -94,7 +94,7 @@ if ($systemRust -eq $pin) {
 }
 
 if ($args.Count -gt 0 -and $args[0] -eq 'selftest') {
-    & $cargo test --quiet --release --manifest-path $manifest
+    & $cargo test --quiet --release --manifest-path $manifest @($args | Select-Object -Skip 1)
     exit $LASTEXITCODE
 }
 

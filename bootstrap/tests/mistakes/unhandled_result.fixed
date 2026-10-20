@@ -1,0 +1,9 @@
+error enum E
+    Bad
+
+fn g() int ! E
+    1
+
+fn main() ! E
+    x := g()?
+    print(x)
