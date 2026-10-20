@@ -21,6 +21,7 @@ pub fn set_enabled(on: bool) {
 }
 
 /// Whether `f`'s contracts are checked on this call (contract.run.1-3).
+#[inline]
 pub(super) fn active(f: &FnDecl) -> bool {
     !f.contracts.is_empty() && ENABLED.load(AtomicOrdering::Relaxed) && !CHECKING.with(Cell::get)
 }
@@ -28,6 +29,7 @@ pub(super) fn active(f: &FnDecl) -> bool {
 impl<'a, W: Write> Interp<'a, W> {
     /// contract.req.1: each `requires` holds once the parameters are bound.
     /// A failure is the caller's: it traps at the call.
+    #[inline(never)]
     pub(super) fn check_requires(&mut self, f: &'a FnDecl, env: &mut Env<'a>, call: Pos) -> Result<(), Trap> {
         for c in f.contracts.iter().filter(|c| !c.ensures) {
             if !self.holds(c, env)? {
@@ -48,6 +50,7 @@ impl<'a, W: Write> Interp<'a, W> {
     /// contract.ens.1: each `ensures` holds for a success value, with
     /// `result` bound to it. A failure is the function's: it traps at the
     /// `ensures` line and names where the function returned.
+    #[inline(never)]
     pub(super) fn check_ensures(
         &mut self,
         f: &'a FnDecl,

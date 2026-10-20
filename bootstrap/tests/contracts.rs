@@ -29,7 +29,9 @@ fn failed_ensures_names_the_result_and_where_it_returned() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "{stderr}");
     assert!(
-        stderr.contains(":4:5: trap[contract.ens.1]: `divide` ensures `result * b == a`, but it returned 3 at 5:5 with a = 7, b = 2"),
+        stderr.contains(
+            ":4:5: trap[contract.ens.1]: `divide` ensures `result * b == a`, but it returned 3 at 5:5 with a = 7, b = 2"
+        ),
         "{stderr}"
     );
 }

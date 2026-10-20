@@ -78,6 +78,7 @@ aren't run.
 | 14 | [FFI and C interoperability](14-ffi.md) | `ffi` | Drafted (partial) |
 | 18 | [Effects and capabilities](18-effects.md) | `eff` | Drafted (partial) |
 | 19 | [Testing](19-testing.md) | `test` | Drafted (partial) |
+| 20 | [Contracts](20-contracts.md) | `contract` | Drafted (partial) |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |
 | 16 | Reflection | `refl` | Not started |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |

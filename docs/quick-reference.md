@@ -503,3 +503,17 @@ implementation.
 @pure fn area(w int, h int) int   # error if it reaches print or a capability
     w * h
 ```
+
+## Contracts
+
+Lines directly under the signature; conditions are pure `bool`s. `result` is
+the returned value in `ensures`. A failed `requires` traps at the call
+(`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`), both
+with the arguments' values. `ail run --no-contracts` skips the checks.
+
+```ail
+fn divide(a int, b int) int
+    requires b != 0
+    ensures result * b + a % b == a
+    a / b
+```

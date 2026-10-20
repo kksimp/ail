@@ -234,7 +234,11 @@ pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
                 Diagnostic::new(
                     "contract.decl.3",
                     c.pos,
-                    format!("the `{word}` condition of `{}` must be pure, but it has {}", f.full_name(), what.join(", ")),
+                    format!(
+                        "the `{word}` condition of `{}` must be pure, but it has {}",
+                        f.full_name(),
+                        what.join(", ")
+                    ),
                 )
                 .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
             );

@@ -231,3 +231,13 @@ Recommendation: specify the guarantee for single-task programs now, since
 the bootstrap already iterates maps in insertion order, and keep the flag for
 the rest. *Owner: AI under ADR 0076, after the effects lane lands.*
 
+## OQ-060 — Contracts beyond runtime checks
+[ADRs 0210–0213](decisions/0210-contract-syntax.md) add `requires` and
+`ensures`, checked at run time. Open: (1) `old(x)`, a parameter's value on
+entry, for `ensures` on `mut` parameters (recommended: add it, evaluated only
+when checks are on); (2) whether implementations inherit a trait method's
+contracts (recommended: yes, with Liskov rules: an implementation may weaken
+`requires` and strengthen `ensures`); (3) type invariants and loop
+invariants; (4) static proof, and whether an optimising build keeps the
+checks it can't prove (recommended: keep them, so `--no-contracts` stays an
+explicit choice). *Owner: AI under ADR 0076.*
