@@ -11,7 +11,7 @@ Chapter key: `eff`
 
 **eff.infer.1** — Every function has an *effect set*: the effects `io`,
 `fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
-`proc`, `clock`, `random`, `net` and `ui`. The set is inferred; it is never written in
+`proc`, `clock`, `random`, `net`, `net.serve` and `ui`. The set is inferred; it is never written in
 source. *(ADR 0163)*
 
 **eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
@@ -30,7 +30,7 @@ computed at compile time and may call only compile-time-safe code
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`,
-`net.*` gives `net` and `io` (`std.net.1`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
+`net.*` gives `net` and `io` (`std.net.1`), and `net.serve` and `net.listen` also give `net.serve` (`std.net.14`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
 of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
 `spawn`. *(ADR 0163, ADR 0283)*
 

@@ -740,6 +740,9 @@ pub struct Arg {
 #[derive(Debug)]
 pub struct Arm {
     pub pat: Pattern,
+    /// `pattern if cond =>`: the arm applies only when `cond` is true
+    /// (expr.match.11).
+    pub guard: Option<Expr>,
     pub body: Block,
 }
 
@@ -759,6 +762,8 @@ pub enum Pattern {
         bindings: Option<Vec<(String, Pos)>>,
         pos: Pos,
     },
+    /// `lo..hi` or `lo..=hi` over integer or character literals (expr.match.12).
+    Range { lo: Literal, hi: Literal, inclusive: bool, pos: Pos },
 }
 
 /// The value of a literal pattern.
@@ -773,7 +778,11 @@ pub enum Literal {
 impl Pattern {
     pub fn pos(&self) -> Pos {
         match self {
-            Pattern::Wildcard(p) | Pattern::Literal(_, p) | Pattern::Or(_, p) | Pattern::Variant { pos: p, .. } => *p,
+            Pattern::Wildcard(p)
+            | Pattern::Literal(_, p)
+            | Pattern::Or(_, p)
+            | Pattern::Variant { pos: p, .. }
+            | Pattern::Range { pos: p, .. } => *p,
         }
     }
 }

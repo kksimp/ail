@@ -66,6 +66,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.tracing & super::trace::EFFECTS != 0 {
             self.trace_effect(module, f, &values, pos);
         }
+        if matches!(module, "hash" | "compress") {
+            return Ok(self.codec_call(module, f, &values, pos));
+        }
         let str_arg = |i: usize| match &values[i] {
             Value::Str(s) => s.clone(),
             other => unreachable!("checked: str, found {other:?}"),
@@ -332,12 +335,48 @@ impl<'a, W: Write> Interp<'a, W> {
                 return self.select(&chans, pos);
             }
             ("proc", "which") => super::osext::which(&str_arg(0)).map_or(Value::None, text),
-            ("net", "get" | "post") => {
-                let url = str_arg(0);
-                let result = if f == "get" {
-                    super::net::get(&url)
-                } else {
-                    super::net::post(&url, &str_arg(1), &str_arg(2))
+            ("net", "serve") => self.net_serve(&str_arg(0), pos),
+            ("net", "listen") => self.net_listen(&str_arg(0), pos),
+            ("net", "connect" | "connect_tls") => self.net_connect(&str_arg(0), values[1].int(), f == "connect_tls", pos),
+            ("net", "options") => {
+                let s = self.structs["net.Options"];
+                let empty = || Value::Map(Rc::new(Table::default()));
+                let fields = vec![
+                    empty(),
+                    empty(),
+                    text(""),
+                    Value::Int(super::net::TIMEOUT.as_millis() as i64),
+                    Value::Int(super::net::MAX_REDIRECTS as i64),
+                ];
+                Value::Struct(s, Rc::new(fields))
+            }
+            ("net", "get" | "post" | "request") => {
+                let url = str_arg(if f == "request" { 1 } else { 0 });
+                super::netsock::set_yielder(self.yielder());
+                let result = match f {
+                    "get" => super::net::get(&url),
+                    "post" => super::net::post(&url, &str_arg(1), &str_arg(2)),
+                    _ => {
+                        let Value::Struct(_, o) = &values[2] else { unreachable!("checked: net.Options") };
+                        let Value::Str(body) = &o[2] else { unreachable!("checked: str") };
+                        let (timeout_ms, redirects) = (o[3].int(), o[4].int());
+                        if timeout_ms <= 0 || redirects < 0 {
+                            return stop(
+                                "std.net.6",
+                                pos,
+                                format!("`timeout_ms` is at least 1 and `max_redirects` at least 0, not {timeout_ms} and {redirects}"),
+                            );
+                        }
+                        let opts = super::net::Opts {
+                            headers: super::netsock::options_pairs(&o[0]),
+                            query: super::netsock::options_pairs(&o[1]),
+                            body: body.to_string(),
+                            content_type: None,
+                            timeout: std::time::Duration::from_millis(timeout_ms as u64),
+                            max_redirects: redirects as usize,
+                        };
+                        super::net::request(&str_arg(0), &url, &opts)
+                    }
                 };
                 match result {
                     Ok(r) => {
@@ -355,6 +394,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             ("mem", _) => return self.mem_call(f, &values, pos),
+            ("regex", _) => return self.regex_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());
                 if lo > hi {

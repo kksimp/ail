@@ -42,14 +42,17 @@ pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated"]
 
 ## The standard modules (std.use.1), sorted.
 pub STD_MODULES := [
+    "compress",
     "env",
     "fs",
+    "hash",
     "io",
     "mem",
     "net",
     "path",
     "proc",
     "random",
+    "regex",
     "tensor",
     "task",
     "time",

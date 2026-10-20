@@ -1,0 +1,370 @@
+# std.regex search vectors (std.regex.4-5). Format: PATTERN<TAB>TEXT<TAB>RESULT.
+# PATTERN is verbatim. TEXT escapes: \n \t \r \f \v \a and \\. RESULT is `-` for no match, else
+# `S-E` for the whole match followed by ` S-E` (or `_` when the group did not take part) per group, in characters.
+# Expectations were produced with an independent engine (Python's re, ASCII classes) and reviewed by hand.
+a	a	0-1
+a	b	-
+a	bab	1-2
+	abc	0-0
+		0-0
+abc	xxabcxx	2-5
+abc	ab	-
+a.c	abc	0-3
+a.c	a\nc	-
+(?s)a.c	a\nc	0-3
+a|b	xb	1-2
+a|ab	ab	0-1
+ab|a	ab	0-2
+a*	aaa	0-3
+a*	baaa	0-0
+a+	baaab	1-4
+a?	a	0-1
+a?	b	0-0
+a*?	aaa	0-0
+a+?	aaa	0-1
+a??	a	0-0
+a{3}	aaaa	0-3
+a{2,}	aaaa	0-4
+a{2,3}	aaaa	0-3
+a{2,3}?	aaaa	0-2
+a{0}	a	0-0
+a{0,1}b	ab	0-2
+a{,3}	a{,3}	0-5
+a{x}	a{x}	0-4
+a{	a{	0-2
+{	{	0-1
+(a)	a	0-1 0-1
+(a)(b)	ab	0-2 0-1 1-2
+(a)|(b)	b	0-1 _ 0-1
+(a)|(b)	a	0-1 0-1 _
+(a*)+	aa	0-2 0-2
+(a*)*	b	0-0 _
+(a|b)*	abab	0-4 3-4
+(a+)(b+)?	aac	0-2 0-2 _
+(a+)(b+)?	aabb	0-4 0-2 2-4
+((a)(b))	ab	0-2 0-2 0-1 1-2
+(a(b)?)+	aba	0-3 2-3 1-2
+(?:a)(b)	ab	0-2 1-2
+(?:a|b)+c	abac	0-4
+(a)(?:b)(c)	abc	0-3 0-1 2-3
+(a*)(a*)	aaa	0-3 0-3 3-3
+(a*?)(a*)	aaa	0-3 0-0 0-3
+(a+?)(a*)	aaa	0-3 0-1 1-3
+^a	ab	0-1
+^b	ab	-
+b$	ab	1-2
+a$	ab	-
+^$		0-0
+^$	a	-
+^	abc	0-0
+$	abc	3-3
+\Aab	ab	0-2
+ab\z	ab	0-2
+\Ab	ab	-
+a\z	ab	-
+(?m)^b	a\nb	2-3
+(?m)a$	a\nb	0-1
+^b	a\nb	-
+a$	a\nb	-
+(?m)^$	a\n\nb	2-2
+(?m)^	a\nb	0-0
+(?m)$	a\nb	1-1
+\bfoo\b	a foo b	2-5
+\bfoo\b	afoo b	-
+\Boo	foo	1-3
+\Bo	foo	1-2
+\b	  	-
+\b	 a	1-1
+\B	 a	0-0
+\b		-
+\B		0-0
+\d+	ab123c	2-5
+\D+	12ab34	2-4
+\w+	  ab_1 	2-6
+\W+	ab  cd	2-4
+\s+	ab \t\ncd	2-5
+\S+	  ab  	2-4
+[abc]	xcx	1-2
+[^abc]	abcd	3-4
+[a-c]+	xabcabcx	1-7
+[a-cx-z]+	aqxz	0-1
+[]a]+	a]]a	0-4
+[^]a]+	]ab]	2-3
+[a-]+	a-a	0-3
+[-a]+	-a-	0-3
+[\d]+	ab12	2-4
+[\D]+	12ab	2-4
+[\w-]+	a-b c	0-3
+[\]]	]	0-1
+[\\]	\\	0-1
+[.]	a.b	1-2
+[$^]+	a^$b	1-3
+[a-z&&b]	b	0-1
+[[:alpha:]]+	12ab34	2-4
+[[:^alpha:]]+	ab12cd	2-4
+[[:digit:][:upper:]]+	aB1c	1-3
+[[:space:]]+	a \tb	1-3
+[[:punct:]]+	ab!?c	2-4
+[[:xdigit:]]+	xyz1aFg	3-6
+[[:word:]]+	!ab_1!	1-5
+\.	a.b	1-2
+\*	a*b	1-2
+\(\)	()	0-2
+\[\]	[]	0-2
+\{\}	{}	0-2
+\|	a|b	1-2
+\\	a\\b	1-2
+\/	a/b	1-2
+\-	a-b	1-2
+\^\$	^$	0-2
+\n	a\nb	1-2
+\t	a\tb	1-2
+\r\n	a\r\nb	1-3
+\x41	xAx	1-2
+\x{41}	xAx	1-2
+\x{263A}	a☺b	1-2
+[\x41-\x43]+	xABCD	1-4
+\f	\f	0-1
+\v	\v	0-1
+\a	\a	0-1
+(?i)abc	xABCx	1-4
+(?i)ABC	abc	0-3
+(?i)a+	aAaB	0-3
+(?i)[a-c]+	xABcd	1-4
+(?i)[^a]	Ab	1-2
+(?i)k	K	0-1
+a(?i)b	aB	0-2
+a(?i)b	AB	-
+(?i:a)b	Ab	0-2
+(?i:a)b	AB	-
+(?i)a(?-i)b	AB	-
+(?i)a(?-i)b	Ab	0-2
+(?i)\w+	Ab_9	0-4
+(?s).	\n	0-1
+(?-s).	\n	-
+(?s:.)+	a\nb	0-3
+(?i)é	É	0-1
+(?i)straße	STRASSE	-
+(?P<n>a)	a	0-1 0-1
+(?P<n>a)(?P<m>b)	ab	0-2 0-1 1-2
+(?P<n>a)|(?P<m>b)	b	0-1 _ 0-1
+(?P<year>\d{4})-(?P<mon>\d\d)	d 2026-10	2-9 2-6 7-9
+(a)(?P<x>b)(c)	abc	0-3 0-1 1-2 2-3
+(a+)+b	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaac	-
+(a|aa)+$	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab	-
+(.*)*x	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	-
+(x+x+)+y	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	-
+a*a*a*a*b	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	-
+(?:a?){10}a{10}	aaaaaaaaaa	0-10
+(a?){3}	aa	0-2 2-2
+(a|b)*?c	abac	0-4 2-3
+(?:(?:a|b)c)+	acbcxac	0-4
+.*b	aabab	0-5
+.*?b	aabab	0-3
+.+	\nab	1-3
+x*	yyy	0-0
+(\w+)@(\w+)\.com	mail bob@example.com now	5-20 5-8 9-16
+(\d+)-(\d+)-(\d+)	on 2026-10-20.	3-13 3-7 8-10 11-13
+https?://[^/\s]+	see http://a.b/c	4-14
+#[0-9a-fA-F]{6}\b	c #12aBcD;	2-9
+^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$	192.168.0.1	0-11 0-3 4-7 8-9 10-11
+^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$	192.168.0	-
+(\w+)\s+(\w+)	hello big world	0-9 0-5 6-9
+(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)	abcdefghijk	0-11 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 9-10 10-11
+é+	caféé!	3-5
+日本	これは日本語	3-5
+[日本]+	これは日本語	3-5
+.	😀	0-1
+😀+	a😀😀b	1-3
+^.$	😀	0-1
+a+	aaaa	0-4
+a|b|c|d	xxd	2-3
+(|a)+	aaa	0-3 2-3
+(a|)+	aaa	0-3 2-3
+()	x	0-0 0-0
+(a*)+$	aaa	0-3 0-3
+(a*)*$	aaab	4-4 _
+(?:)	x	0-0
+[a-a]	a	0-1
+[^a-z]	abC	2-3
+[^\n]+	ab\ncd	0-2
+[\n]	a\nb	1-2
+[\s\S]+	a\nb	0-3
+\s*	  a	0-2
+\s*$	a  	1-3
+a.*?c	abcabc	0-3
+a.*c	abcabc	0-6
+<.+?>	<a><b>	0-3
+<.+>	<a><b>	0-6
+\$\d+\.\d\d	cost $12.50 now	5-11
+(?:a{2}){2}	aaaaa	0-4
+(?:ab){2,3}	abababab	0-6
+(a{2}){2}	aaaa	0-4 2-4
+(?i)[k-l]	K	0-1
+(?i)σ	Σ	0-1
+(?i)ǆ	ǅ	0-1
+# --- hand-verified: Unicode classes, case folding, POSIX, limits (std.regex.9-10) ---
+\p{L}+	12héllo!	2-7
+\p{Lu}	abC	2-3
+\p{Ll}+	ABcdE	2-4
+\pL+	1ab	1-3
+\PL+	ab12c	2-4
+\p{^L}+	ab12c	2-4
+\p{N}+	a١٢b	1-3
+\p{Nd}+	a٣4b	1-3
+\p{Greek}+	abγδε	2-5
+\p{Han}+	ab日本c	2-4
+\p{Cyrillic}+	xПривет!	1-7
+\p{Latin}+	αabβ	1-3
+\p{P}+	a!?b	1-3
+\p{S}+	a+=b	1-3
+\p{Z}	a b	1-2
+\p{Any}	x	0-1
+[\p{L}\d]+	-a1é-	1-4
+[^\p{L}]+	ab12cd	2-4
+\w+	héllo	0-1
+\d	٣	-
+[[:alpha:]]	é	-
+(?i)\p{Lu}	a	0-1
+(?i)é	É	0-1
+(?i)σ	Σ	0-1
+(?i)[é]	É	0-1
+(?i)k	K	0-1
+(?i)straße	STRASSE	-
+(?i)ǆ	ǅ	0-1
+(?ms)^.$	a\nb	0-1
+(?i)a(?-i)b	Ab	0-2
+a{,3}	a{,3}	0-5
+[[:^alpha:]]+	ab12cd	2-4
+\bé	café é	3-4
+(?i)ß	SS	-
+x*	日本	0-0
+.	\n	-
+[^a]	\n	0-1
+ERR	(	unclosed_group	0
+ERR	a(b	unclosed_group	1
+ERR	(?	unclosed_group	0
+ERR	)	unopened_group	0
+ERR	a)	unopened_group	1
+ERR	(a))	unopened_group	3
+ERR	[a	unclosed_class	0
+ERR	[	unclosed_class	0
+ERR	[^	unclosed_class	0
+ERR	x[a-	unclosed_class	1
+ERR	\	bad_escape	0
+ERR	\q	bad_escape	0
+ERR	\xZ	bad_escape	0
+ERR	\x{110000}	bad_escape	0
+ERR	\x{	bad_escape	0
+ERR	*	nothing_to_repeat	0
+ERR	+a	nothing_to_repeat	0
+ERR	a|*	nothing_to_repeat	2
+ERR	(?:?)	nothing_to_repeat	3
+ERR	a**	bad_repeat	2
+ERR	a+*	bad_repeat	2
+ERR	a{1}{2}	bad_repeat	4
+ERR	a{3,2}	bad_repeat	1
+ERR	a{1001}	bad_repeat	1
+ERR	a{2,1001}	bad_repeat	1
+ERR	[z-a]	bad_range	1
+ERR	[a-\d]	bad_range	3
+ERR	[[:foo:]]	bad_class	1
+ERR	\p{Foo}	bad_class	0
+ERR	\p{L	bad_class	0
+ERR	[\p{Klingon}]	bad_class	1
+ERR	(?P<>a)	bad_group_name	4
+ERR	(?P<1a>x)	bad_group_name	4
+ERR	(?P<a>x)(?P<a>y)	bad_group_name	12
+ERR	(?P<a-b>x)	bad_group_name	5
+ERR	(?P<a	bad_group_name	4
+ERR	(?z)	bad_flag	2
+ERR	(?i-z)	bad_flag	4
+ERR	(?=a)	unsupported	0
+ERR	(?!a)	unsupported	0
+ERR	(?<=a)	unsupported	0
+ERR	(?<!a)	unsupported	0
+ERR	\1	unsupported	0
+ERR	(a)\1	unsupported	3
+ERR	(?P=n)	unsupported	0
+ERR	(a{1000}){1000}	too_large	0
+ERR	((a{1000}){1000}){1000}	too_large	0
+ALL	a	banana	1-2 3-4 5-6
+ALL	a*	baaac	0-0 1-4 5-5
+ALL	a*	aaa	0-3
+ALL		abc	0-0 1-1 2-2 3-3
+ALL	\d+	a1b22c333	1-2 3-5 6-9
+ALL	\b	ab cd	0-0 2-2 3-3 5-5
+ALL	x*	abc	0-0 1-1 2-2 3-3
+ALL	a|	aab	0-1 1-2 3-3
+ALL	(a)(b)?	abaab	0-2 2-3 3-5
+ALL	[a-c]	abcabc	0-1 1-2 2-3 3-4 4-5 5-6
+ALL	\w+	hi there, you	0-2 3-8 10-13
+ALL	$	abc	3-3
+ALL	^	abc	0-0
+ALL	(?m)^	a\nb\nc	0-0 2-2 4-4
+ALL	aa	aaaaa	0-2 2-4
+ALL	a??	aa	0-0 1-1 2-2
+ALL	\s*	a b	0-0 1-2 3-3
+ALL	.	日本語	0-1 1-2 2-3
+ALL	\B	abc	1-1 2-2
+ALL	b*	abbbc	0-0 1-4 5-5
+ALL	z	abc	-
+ALL			0-0
+REPLACE	a	banana	o	bonono
+REPLACE_FIRST	a	banana	o	bonana
+REPLACE	(\w+)@(\w+)	ann@x bo@y	$2:$1	x:ann y:bo
+REPLACE_FIRST	(\w+)@(\w+)	ann@x bo@y	$2:$1	x:ann bo@y
+REPLACE	(?P<k>\w+)=(?P<v>\w+)	a=1 b=2	${v}=${k}	1=a 2=b
+REPLACE_FIRST	(?P<k>\w+)=(?P<v>\w+)	a=1 b=2	${v}=${k}	1=a b=2
+REPLACE	a*	baaac	-	-b-c-
+REPLACE_FIRST	a*	baaac	-	-baaac
+REPLACE		abc	-	-a-b-c-
+REPLACE_FIRST		abc	-	-abc
+REPLACE	x	abc	y	abc
+REPLACE_FIRST	x	abc	y	abc
+REPLACE	b	abc	$$	a$c
+REPLACE_FIRST	b	abc	$$	a$c
+REPLACE	b	abc	$0$0	abbc
+REPLACE_FIRST	b	abc	$0$0	abbc
+REPLACE	(b)	abc	[$1]	a[b]c
+REPLACE_FIRST	(b)	abc	[$1]	a[b]c
+REPLACE	(?P<x>b)	abc	${x}x	abxc
+REPLACE_FIRST	(?P<x>b)	abc	${x}x	abxc
+REPLACE	b	abc	$	a$c
+REPLACE_FIRST	b	abc	$	a$c
+REPLACE	b	abc	$-	a$-c
+REPLACE_FIRST	b	abc	$-	a$-c
+REPLACE	(a)|(b)	ab	<$1|$2>	<a|><|b>
+REPLACE_FIRST	(a)|(b)	ab	<$1|$2>	<a|>b
+REPLACE	\s+	a  b \t c	 	a b c
+REPLACE_FIRST	\s+	a  b \t c	 	a b \t c
+REPLACE	(\d+)	a1b22	<$1>	a<1>b<22>
+REPLACE_FIRST	(\d+)	a1b22	<$1>	a<1>b22
+REPLACE	^	ab	>	>ab
+REPLACE_FIRST	^	ab	>	>ab
+REPLACE	$	ab	<	ab<
+REPLACE_FIRST	$	ab	<	ab<
+REPLACE	é	café	e	cafe
+REPLACE_FIRST	é	café	e	cafe
+REPLACE	(.)	日本	$1$1	日日本本
+REPLACE_FIRST	(.)	日本	$1$1	日日本
+REPLACE	b	abcb		ac
+REPLACE_FIRST	b	abcb		acb
+REPLACE	B	abc	x	abc
+REPLACE_FIRST	B	abc	x	abc
+SPLIT	,	a,b,c	a¦b¦c
+SPLIT	,	a,b,	a¦b¦
+SPLIT	,	,a	¦a
+SPLIT	,		
+SPLIT	,	,	¦
+SPLIT	\s+	a  b c	a¦b¦c
+SPLIT		abc	a¦b¦c
+SPLIT	x*	abc	a¦b¦c
+SPLIT	b	abc	a¦c
+SPLIT	a	aaa	¦¦¦
+SPLIT	[,;]\s*	a, b;c	a¦b¦c
+SPLIT	^	abc	abc
+SPLIT	$	abc	abc
+SPLIT	z	abc	abc
+SPLIT	(,)	a,b	a¦b
+SPLIT	\d	a1b2c	a¦b¦c

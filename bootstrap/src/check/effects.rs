@@ -16,7 +16,7 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `std.net` gives `net` (std.net.1).
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -58,14 +58,30 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             ],
             &["fs", "io"],
         ),
+        // std.hash.1: values only. std.compress.1: the byte functions are
+        // values only; the file and directory ones read and write files.
+        "hash" => (&["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"], &[]),
+        "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
+            (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
+        }
+        "compress" => (&["deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib"], &[]),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run", "which", "start", "wait", "kill"], &["proc", "io"]),
         // std.net.1: every request reaches the network.
-        "net" => (&["get", "post"], &["net", "io"]),
+        "net" if matches!(name, "serve" | "listen") => {
+            // std.net.14: a server needs the narrower capability as well.
+            return Some(&["net", "net.serve", "io"]);
+        }
+        "net" => (&["get", "post", "request", "options", "connect", "connect_tls"], &["net", "io"]),
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
+        // std.regex.1: text in, text out, so no effects.
+        "regex" => (
+            &["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+            &[],
+        ),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
         // std.tz.1-2: reads the tz database files, and `TZ`.
         "tz" => (&["offset", "system"], &["fs", "env"]),
@@ -662,6 +678,13 @@ impl<'p, 'r> Walker<'p, 'r> {
                         self.add(e, format!("{m}.{name}"));
                     }
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && m.starts_with("net.")
+                {
+                    // std.net.14: the methods of the handles `net.serve`, `net.listen` and `net.connect` make.
+                    for e in ["net", "io"] {
+                        self.add(e, (*m).to_string());
+                    }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && let Some(effects) = std_effects("ui", "Window")
                 {
                     for &e in effects {
@@ -720,6 +743,9 @@ impl<'p, 'r> Walker<'p, 'r> {
             Expr::Match { scrutinee, arms, .. } => {
                 self.expr(scrutinee);
                 for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&arm.body);
                 }
             }
@@ -851,7 +877,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

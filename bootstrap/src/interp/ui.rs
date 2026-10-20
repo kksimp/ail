@@ -24,7 +24,11 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// `w.m(args)` on a `ui.Window` (std.ui.2-8). The window's state lives
     /// in `crate::ui`, so a `mut self` receiver is only read here.
-    pub(super) fn ui_method(&mut self, m: &str, recv: &'a Expr, args: &'a [Arg], _pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+    pub(super) fn ui_method(&mut self, m: &str, recv: &'a Expr, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        // The methods of the `std.net` handles share `StdCall::Method` (std.net.9-12).
+        if let Some(rest) = m.strip_prefix("net.") {
+            return self.net_method(rest, recv, args, pos, env);
+        }
         let Value::Struct(_, fields) = self.eval(recv, env)? else { unreachable!("checked: a ui.Window") };
         let id = fields[0].int();
         let mut values = Vec::with_capacity(args.len());

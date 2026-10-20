@@ -341,11 +341,41 @@ fn main()
     print(has_area(Shape.Circle(r: 1)))
 ```
 
-> **Note:** not yet designed: range patterns (`'0'..='9'`), guards
-> (`x if x > 0`), or-patterns that bind names, patterns nested inside a
-> variant's fields (`expr.match.6`), and warning-suppression syntax. The
-> diagnostics for range patterns and guards suggest an `if` chain.
-> *(ADR 0138)*
+**expr.match.11** — An arm may carry a guard, `pattern if cond => result`.
+`cond` is a `bool` expression checked after the pattern matches, with the
+pattern's bindings in scope. When it is `false`, matching goes on with the
+next arm. A guarded arm covers no values for exhaustiveness (`expr.match.2`)
+or redundancy (`expr.match.5`), so a `match` whose arms are all guarded needs
+an unguarded one. A guard on an or-pattern applies to every alternative.
+*(ADR 0452)*
+
+**expr.match.12** — A range pattern is `lo..hi` or `lo..=hi`, where `lo` and
+`hi` are both `int` literals (with an optional `-`) or both `char` literals.
+It matches the values from `lo` up to but not including `hi` (`..`), or up to
+and including it (`..=`), as `for` ranges do (`expr.loop.3`). The range MUST
+be non-empty, and its type MUST be the scrutinee's. A range covers some
+values, never all, so a `match` that uses ranges needs a `_` arm, and an
+arm after `_` is still unreachable (`expr.match.5`). A range may be an
+alternative of an or-pattern. *(ADR 0453)*
+
+```ail
+fn grade(score int) str
+    match score
+        90..=100 => "A"
+        _ if score >= 60 => "pass"
+        0..60 => "fail"
+        _ => "?"
+
+fn main()
+    print(grade(95))
+    print(grade(70))
+    print(grade(30))
+```
+
+> **Note:** not yet designed: or-patterns that bind names, patterns nested
+> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+> scrutinee (`n if n > 0`), open-ended ranges (`10..`), and warning-
+> suppression syntax. *(ADR 0138, ADR 0452, ADR 0453)*
 
 ## Comprehensions
 

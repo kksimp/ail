@@ -1,0 +1,6 @@
+fn main()
+    a := 6
+    b := 3
+    print(a & b)
+    c := a ^ b
+    print(c)

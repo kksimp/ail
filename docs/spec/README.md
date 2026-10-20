@@ -87,6 +87,7 @@ aren't run.
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
+| std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).
