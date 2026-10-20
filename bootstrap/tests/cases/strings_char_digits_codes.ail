@@ -4,11 +4,39 @@ fn has(n int) bool
 
 fn main()
     # to_digit by radix
-    print(['7'.to_digit(10), '7'.to_digit(7), '7'.to_digit(8), '0'.to_digit(2), '1'.to_digit(2), '2'.to_digit(2)])
-    print(['a'.to_digit(16), 'A'.to_digit(16), 'f'.to_digit(16), 'F'.to_digit(16), 'g'.to_digit(16), 'G'.to_digit(16)])
-    print(['g'.to_digit(17), 'G'.to_digit(17), 'z'.to_digit(36), 'Z'.to_digit(36), 'z'.to_digit(35), 'Z'.to_digit(35)])
+    print([
+        '7'.to_digit(10),
+        '7'.to_digit(7),
+        '7'.to_digit(8),
+        '0'.to_digit(2),
+        '1'.to_digit(2),
+        '2'.to_digit(2),
+    ])
+    print([
+        'a'.to_digit(16),
+        'A'.to_digit(16),
+        'f'.to_digit(16),
+        'F'.to_digit(16),
+        'g'.to_digit(16),
+        'G'.to_digit(16),
+    ])
+    print([
+        'g'.to_digit(17),
+        'G'.to_digit(17),
+        'z'.to_digit(36),
+        'Z'.to_digit(36),
+        'z'.to_digit(35),
+        'Z'.to_digit(35),
+    ])
     print(['9'.to_digit(10), '9'.to_digit(9), 'a'.to_digit(10), 'a'.to_digit(11), 'A'.to_digit(11)])
-    print(['٣'.to_digit(10), '５'.to_digit(10), 'ａ'.to_digit(36), 'é'.to_digit(36), '-'.to_digit(36), ' '.to_digit(36)])
+    print([
+        '٣'.to_digit(10),
+        '５'.to_digit(10),
+        'ａ'.to_digit(36),
+        'é'.to_digit(36),
+        '-'.to_digit(36),
+        ' '.to_digit(36),
+    ])
     print(['0'.to_digit(36), '5'.to_digit(36), '5'.to_digit(6), '5'.to_digit(5)])
     # is_digit implies to_digit(10)
     mut ok := true
@@ -32,7 +60,16 @@ fn main()
                 same = false
     print(same)
     # ordering is by code point
-    print(['a' < 'b', 'b' < 'a', 'a' <= 'a', 'Z' < 'a', 'é' > 'z', '😀' > '\u{FFFF}', 'a' >= 'b', '\0' < ' '])
+    print([
+        'a' < 'b',
+        'b' < 'a',
+        'a' <= 'a',
+        'Z' < 'a',
+        'é' > 'z',
+        '😀' > '\u{FFFF}',
+        'a' >= 'b',
+        '\0' < ' ',
+    ])
     print(['a' == 'a', 'a' == 'A', 'a' != 'b', 'é' == '\u{e9}', '\'' == '\u{27}'])
     print(['b', 'A', 'a', 'é', 'Z', '😀', '0'].sorted())
     print(['b', 'A', 'a'].min())

@@ -6,6 +6,7 @@ KEYWORDS := {"let", "if", "else", "while", "fn", "return", "true", "false", "and
 TWO_CHAR_OPS := {"==", "!=", "<=", ">="}
 ONE_CHAR_OPS := r"+-*/%<>=(){},"
 ESCAPES := {'n': '\n', '"': '"', '\\': '\\'}
+
 BINARY_LEVELS := [
     ["or"],
     ["and"],
@@ -130,7 +131,10 @@ fn Lexer.string(mut self, pos Pos) Token ! MiniError
                 e := peek()
                 if e == '\0' or e == '\n'
                     continue
-                decoded := ESCAPES.get(e) else return MiniError(escape_pos, "unknown escape '\\{e}'")
+                decoded := ESCAPES.get(e) else return MiniError(
+                    escape_pos,
+                    "unknown escape '\\{e}'",
+                )
                 advance()
                 parts.push(decoded)
             _ => parts.push(advance())
@@ -480,7 +484,10 @@ fn Interp.eval(mut self, e Expr) Value ! MiniError
 
 fn Interp.logical(mut self, pos Pos, op str, left Expr, right Expr) Value ! MiniError
     a := eval(left)?
-    x := a.as_bool() else return MiniError(pos, "type mismatch: '{op}' needs bool operands, got {a.type_name()}")
+    x := a.as_bool() else return MiniError(
+        pos,
+        "type mismatch: '{op}' needs bool operands, got {a.type_name()}",
+    )
     if (op == "and" and not x) or (op == "or" and x)
         return a
     b := eval(right)?
@@ -497,7 +504,10 @@ fn binary(pos Pos, op str, a Value, b Value) Value ! MiniError
         if sa := a.as_str()
             if sb := b.as_str()
                 return Str("{sa}{sb}")
-    mismatch := MiniError(pos, "type mismatch: cannot apply '{op}' to {a.type_name()} and {b.type_name()}")
+    mismatch := MiniError(
+        pos,
+        "type mismatch: cannot apply '{op}' to {a.type_name()} and {b.type_name()}",
+    )
     x := a.as_int() else return mismatch
     y := b.as_int() else return mismatch
     if (op == "/" or op == "%") and y == 0
