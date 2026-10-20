@@ -49,6 +49,10 @@ All verified on Linux x86-64 and macOS ARM64.
 - `std.tensor`: value-typed `Tensor[int|float]` with elementwise operators, reductions, `matmul`, `transpose`; AVX2, NEON or scalar kernels chosen at run time with one specified summation order, `matmul` on the thread pool; device backends designed only (ADRs 0328–0330, 0344–0345, 0247).
 - `std.ui`: a window of monospace text cells with keys, resize, mouse, scroll, clipboard, modifiers, font sizes, text styles and colors; capability `ui` (ADRs 0177–0179, 0240, 0242–0243, 0294; [gui-path.md](design/gui-path.md)). `std.ui.widgets`, the first standard module written in AIL (ADRs 0314–0316, `examples/dashboard.ail`).
 
+### Native runtime (batch 2, lane 122)
+
+`compiler/rt/rt.ail`: the native runtime in AIL, tested under the interpreter on a byte-addressed machine model: integer and float text byte-identical to the interpreter (checked on 2,400 random floats and the edge cases), string and list objects, bump allocator, buffered `print`, trap records (ADRs 0404–0409; ABI in [design/native-abi.md](design/native-abi.md)). Not yet: real syscalls and entry point (need lane 120's encoders and lane 126's raw pointers), the collector, frame metadata for trace parity.
+
 ### Tooling
 
 - **Semantic API:** diagnostics schema v1 (ADR 0145), `ail explain` covering every emitted rule (ADRs 0146, 0335), typed holes `todo` (ADR 0147), `ail api` with ids, references, doc comments, contracts and effects (ADRs 0150–0152, 0213), `ail api --locals|--type|--refs`, `--card` and package directories (ADRs 0258–0261, 0310–0311, 0325–0327), `ail check --errors` (ADR 0286), `ail effects`, and `ail fix` with anchored fixes for 88 of 140 corpus programs (ADRs 0202–0205, 0264, 0285, 0335). Foreign syntax is reported once with a help (ADR 0262). See [semantic-api.md](design/semantic-api.md).
