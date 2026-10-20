@@ -201,6 +201,9 @@ pub struct Resolved {
     /// `tensor.from` and `tensor.zeros` calls typed `Tensor[int]`, by the
     /// position of the name (std.tensor.2).
     pub int_tensors: std::collections::HashSet<Pos>,
+    /// Chains of elementwise tensor operations that run fused (std.tensor.20),
+    /// by the chain's position.
+    pub fused: std::collections::HashSet<Pos>,
     /// The declaration a name, call, method, field or variant refers to, by
     /// the use's position, as an `ail api` symbol id (api.id.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
@@ -2663,6 +2666,13 @@ impl<'p> Checker<'p> {
     /// whether the value is used (expr.if.4).
     fn expr(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         let t = self.expr_of(e, expect, need);
+        // std.tensor.20: a tensor-valued chain of elementwise operations runs fused.
+        if matches!(e, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Method { .. })
+            && self.tensor_elem(&t).is_some()
+            && crate::fuse::plan(e).is_some()
+        {
+            self.resolved.fused.insert(e.pos());
+        }
         if self.record {
             let text = if matches!(t, Ty::Err) { "?".to_string() } else { self.ty_name(&t) };
             if let Expr::Method { name_pos, .. } | Expr::Field { name_pos, .. } = e {

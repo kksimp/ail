@@ -13,6 +13,7 @@ mod derive;
 mod diag;
 mod explain;
 mod fasthash;
+mod fuse;
 mod doctest;
 mod edit;
 mod docs;
