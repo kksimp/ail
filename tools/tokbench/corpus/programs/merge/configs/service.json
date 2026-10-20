@@ -1,0 +1,3 @@
+{"name": "api", "replicas": 3, "env": {"MODE": "prod", "LOG": "info"},
+ "health": {"kind": "Http", "path": "/up", "every_s": 10},
+ "routes": [{"prefix": "/v1"}, {"prefix": "/v2", "weight": 0.25}]}

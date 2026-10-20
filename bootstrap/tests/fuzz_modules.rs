@@ -61,7 +61,10 @@ fn templates(dir: &Path) -> Vec<Template> {
 }
 
 fn fill(t: &Template, i: &Input) -> String {
-    t.body.replace("{{TEXT2}}", &literal(&i.text2)).replace("{{TEXT}}", &literal(&i.text)).replace("{{INT}}", &i.int.to_string())
+    // `{{BYTES}}` is the hex secondary input as a list of ints.
+    let bytes = |h: &str| format!("[{}]", (0..h.len() / 2).map(|k| i64::from_str_radix(&h[2 * k..2 * k + 2], 16).unwrap_or(0).to_string()).collect::<Vec<_>>().join(", "));
+    let body = if t.body.contains("{{BYTES}}") { t.body.replace("{{BYTES}}", &bytes(&i.text2)) } else { t.body.clone() };
+    body.replace("{{TEXT2}}", &literal(&i.text2)).replace("{{TEXT}}", &literal(&i.text)).replace("{{INT}}", &i.int.to_string())
 }
 
 fn smoke() -> bool {

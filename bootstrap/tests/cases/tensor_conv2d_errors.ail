@@ -1,0 +1,4 @@
+# std.tensor.16: `conv2d` on `int` tensors is a compile-time error.
+fn main()
+    a := tensor.from([1, 2, 3, 4], [2, 2])
+    print(a.conv2d(a))

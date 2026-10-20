@@ -775,6 +775,8 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
     match t.shape
         Optional(inner) => ungeneratable(inner, seen)
         RefTo => "ref"
+        PtrTo => "a raw pointer"
+        FnType => "fn"
         AnyTrait(tr) => "any {tr}"
         Fallible => "a fallible type"
         Named(n, args) =>
@@ -829,6 +831,19 @@ fn Checker.no_unique(mut self, t Ty, at ast.Pos, what str)
             at,
             "{show(t)} is a unique type, so it can't be {what}",
             "hold it in a local, a `move` parameter, or a field of another `unique` type",
+        )
+
+## unsafe.ptr.1: a raw pointer points to a type with a fixed C layout.
+fn Checker.ptr_target(mut self, inner Ty, at ast.Pos)
+    ok := match inner
+        Int | Float | Bool | Num(_) | PtrOf(_) | Unknown => true
+        _ => false
+    if not ok
+        err_help(
+            "unsafe.ptr.1",
+            at,
+            "a raw pointer can't point to {show(inner)}, which has no fixed C layout",
+            "point to `int`, `float`, `bool`, a sized number such as `u8`, or another pointer",
         )
 
 fn Checker.check_unique_fields(mut self)

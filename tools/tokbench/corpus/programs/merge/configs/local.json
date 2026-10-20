@@ -1,0 +1,1 @@
+{"port": 9090, "debug": true, "tags": ["local", "dev"], "limits": {"memory_mb": 1024}, "unknown": 1}

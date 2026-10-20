@@ -1,0 +1,14 @@
+## std.proc.8: run a program with bytes in and bytes out.
+use std.proc
+
+fn main() !
+    r := proc.run_bytes("cat", [], b"\x00\xff\x80bytes")?
+    print("{r.status} {r.out} {r.err.len()}")
+    e := proc.run_bytes("sh", ["-c", "printf '\\377' 1>&2; exit 2"])?
+    print("{e.status} {e.out.len()} {e.err.hex()}")
+    t := proc.run_bytes("cat", [], b"timed", 5000)?
+    print(t.out.text())
+    r2 := proc.run_bytes("ail-no-such-program", []) else err
+        print(err.kind)
+        r
+    print(r2.status)

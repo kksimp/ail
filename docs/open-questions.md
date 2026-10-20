@@ -328,3 +328,24 @@ expr.call.1).
 
 **Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md)
 (option a: an `if` operand is written in parentheses, expr.if.8).
+
+## OQ-118 — Which transcendental functions the language and the native backend need
+
+The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
+or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
+(`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
+`exp` and `tanh`, through the platform's libm, so they already differ in the
+last bit between operating systems. A bit-exact match of libm across hosts
+isn't possible, so any new function needs a stated tolerance.
+
+Options:
+- **a.** Add nothing now. The native compiler doesn't need these functions.
+  `sigmoid` and `tanh` stay interpreter-only until native tensors exist.
+- **b.** Add `exp` and `tanh` natively, within 1 ulp of the platform libm
+  (a new rule in `std.tensor.13`), so native tensors can run the activations.
+  Defer `sin`, `cos`, `atan2`, `pow` and the rest until a program needs them.
+- **c.** Add a full `std.math` (`sin` to `cbrt`) now, within 1 ulp, with an
+  algorithm from an Apache-2.0-compatible source and a NOTICE credit.
+
+Recommendation: **b.** It gives native tensors their activations without
+committing the language to a whole math library that no program yet calls.

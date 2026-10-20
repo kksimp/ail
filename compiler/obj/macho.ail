@@ -1,0 +1,223 @@
+## Mach-O executables for macOS on ARM64 (ADR 0389). dyld loads them
+## (macOS has no static executables), so they name `/usr/lib/dyld` and
+## libSystem, but import nothing: the code makes system calls itself
+## (ADR 0406). The code is position-independent (`adrp`/`add`), so the image
+## needs no fixups and loads at any slide. The writer signs the file ad hoc
+## itself, as Apple Silicon requires: a code directory of SHA-256 page
+## hashes, as `codesign -s -` writes.
+use codegen
+
+MACHO_BASE := 4294967296
+MACHO_PAGE := 16384
+HEADER := 32
+
+## The executable, signed with `ident` as its identifier.
+pub fn macho(img codegen.Image, ident str) List[int]
+    cmds := load_commands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    code_off := align_up(HEADER + cmds.len(), 16)
+    data_off := align_up(code_off + img.code.len(), 16)
+    text_size := align_up(data_off + img.data.len(), MACHO_PAGE)
+    bss := MACHO_BASE + text_size
+    bss_size := align_up(8 * img.globals, MACHO_PAGE)
+    link_off := text_size
+    # __LINKEDIT: a string table of 8 bytes, then the signature.
+    strings := 8
+    sig_off := align_up(link_off + strings, 16)
+    name := codegen.utf8(ident)
+    slots := (sig_off + 4095) / 4096
+    cd_size := 88 + name.len() + 1 + 32 * slots
+    sig_size := 20 + cd_size
+    link_size := sig_off + sig_size - link_off
+    code := link(img, MACHO_BASE + code_off, MACHO_BASE + data_off, bss)
+    mut out := List[int]()
+    put(mut out, 4277009103, 4)
+    put(mut out, 16777228, 4)
+    put(mut out, 0, 4)
+    put(mut out, 2, 4)
+    final := load_commands([
+        text_size,
+        bss_size,
+        link_off,
+        link_size,
+        code_off + img.entry,
+        sig_off,
+        sig_size,
+        code_off,
+        img.code.len(),
+        data_off,
+        img.data.len(),
+    ])
+    put(mut out, COMMANDS, 4)
+    put(mut out, final.len(), 4)
+    # MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL | MH_PIE
+    put(mut out, 2097285, 4)
+    put(mut out, 0, 4)
+    out.extend(final)
+    pad_to(mut out, code_off)
+    out.extend(code)
+    pad_to(mut out, data_off)
+    out.extend(img.data)
+    pad_to(mut out, sig_off)
+    sign(mut out, name, slots, text_size)
+    out
+
+COMMANDS := 11
+
+## The load commands, from the layout `v`: the sizes and offsets of
+## __TEXT, __bss, __LINKEDIT, the entry, the signature, the code and the
+## constants. Called once with zeros to learn their size.
+fn load_commands(v List[int]) List[int]
+    text_size := v[0]
+    bss_size := v[1]
+    link_off := v[2]
+    link_size := v[3]
+    mut c := List[int]()
+    segment64(mut c, "__PAGEZERO", 0, MACHO_BASE, 0, 0, 0, 0)
+    segment64(mut c, "__TEXT", MACHO_BASE, text_size, 0, text_size, 5, 2)
+    section(mut c, "__text", "__TEXT", MACHO_BASE + v[7], v[8], v[7], 2, 2147484672)
+    section(mut c, "__const", "__TEXT", MACHO_BASE + v[9], v[10], v[9], 4, 0)
+    segment64(mut c, "__DATA", MACHO_BASE + text_size, bss_size, text_size, 0, 3, 1)
+    section(mut c, "__bss", "__DATA", MACHO_BASE + text_size, bss_size, 0, 4, 1)
+    segment64(
+        mut c,
+        "__LINKEDIT",
+        MACHO_BASE + text_size + bss_size,
+        align_up(link_size, MACHO_PAGE),
+        link_off,
+        link_size,
+        1,
+        0,
+    )
+    # LC_SYMTAB: no symbols, an empty string table.
+    put(mut c, 2, 4)
+    put(mut c, 24, 4)
+    put(mut c, 0, 4)
+    put(mut c, 0, 4)
+    put(mut c, link_off, 4)
+    put(mut c, 8, 4)
+    # LC_DYSYMTAB, all empty.
+    put(mut c, 11, 4)
+    put(mut c, 80, 4)
+    for _ in 0..18
+        put(mut c, 0, 4)
+    dylib_name(mut c, 14, "/usr/lib/dyld", 12, 32)
+    # LC_LOAD_DYLIB libSystem (dyld requires it of a main executable).
+    put(mut c, 12, 4)
+    put(mut c, 56, 4)
+    put(mut c, 24, 4)
+    put(mut c, 2, 4)
+    put(mut c, 85917696, 4)
+    put(mut c, 65536, 4)
+    text(mut c, "/usr/lib/libSystem.B.dylib", 32)
+    # LC_BUILD_VERSION: macOS 11.0, no tools.
+    put(mut c, 50, 4)
+    put(mut c, 24, 4)
+    put(mut c, 1, 4)
+    put(mut c, 720896, 4)
+    put(mut c, 720896, 4)
+    put(mut c, 0, 4)
+    # LC_MAIN
+    put(mut c, 2147483688, 4)
+    put(mut c, 24, 4)
+    put(mut c, v[4], 8)
+    put(mut c, 0, 8)
+    # LC_CODE_SIGNATURE
+    put(mut c, 29, 4)
+    put(mut c, 16, 4)
+    put(mut c, v[5], 4)
+    put(mut c, v[6], 4)
+    c
+
+## LC_LOAD_DYLINKER-shaped: a command with one string at offset `at`.
+fn dylib_name(mut c List[int], cmd int, name str, at int, size int)
+    put(mut c, cmd, 4)
+    put(mut c, size, 4)
+    put(mut c, at, 4)
+    text(mut c, name, size - at)
+
+## `s` padded with zeros to `n` bytes.
+fn text(mut c List[int], s str, n int)
+    bytes := codegen.utf8(s)
+    for i in 0..n
+        c.push(if i < bytes.len() then bytes[i] else 0)
+
+fn segment64(
+    mut c List[int],
+    name str,
+    vmaddr int,
+    vmsize int,
+    fileoff int,
+    filesize int,
+    prot int,
+    nsects int,
+)
+    put(mut c, 25, 4)
+    put(mut c, 72 + 80 * nsects, 4)
+    text(mut c, name, 16)
+    put(mut c, vmaddr, 8)
+    put(mut c, vmsize, 8)
+    put(mut c, fileoff, 8)
+    put(mut c, filesize, 8)
+    put(mut c, prot, 4)
+    put(mut c, prot, 4)
+    put(mut c, nsects, 4)
+    put(mut c, 0, 4)
+
+fn section(mut c List[int], name str, seg str, addr int, size int, offset int, align int, flags int)
+    text(mut c, name, 16)
+    text(mut c, seg, 16)
+    put(mut c, addr, 8)
+    put(mut c, size, 8)
+    put(mut c, offset, 4)
+    put(mut c, align, 4)
+    put(mut c, 0, 4)
+    put(mut c, 0, 4)
+    put(mut c, flags, 4)
+    put(mut c, 0, 4)
+    put(mut c, 0, 4)
+    put(mut c, 0, 4)
+
+fn pad_to(mut out List[int], n int)
+    while out.len() < n
+        out.push(0)
+
+## Big-endian, as code signatures are.
+fn put_be(mut out List[int], v int, n int)
+    for i in 0..n
+        out.push(v.shr(8 * (n - 1 - i)).bit_and(255))
+
+## Append an ad hoc signature: a superblob holding one code directory that
+## hashes each 4 KiB page of the file so far.
+fn sign(mut out List[int], name List[int], slots int, text_size int)
+    limit := out.len()
+    cd_size := 88 + name.len() + 1 + 32 * slots
+    put_be(mut out, 4208856256, 4)
+    put_be(mut out, 20 + cd_size, 4)
+    put_be(mut out, 1, 4)
+    put_be(mut out, 0, 4)
+    put_be(mut out, 20, 4)
+    # The code directory, version 0x20400.
+    put_be(mut out, 4208856066, 4)
+    put_be(mut out, cd_size, 4)
+    put_be(mut out, 132096, 4)
+    # CS_ADHOC | CS_LINKER_SIGNED
+    put_be(mut out, 131074, 4)
+    put_be(mut out, 88 + name.len() + 1, 4)
+    put_be(mut out, 88, 4)
+    put_be(mut out, 0, 4)
+    put_be(mut out, slots, 4)
+    put_be(mut out, limit, 4)
+    out.extend([32, 2, 0, 12])
+    for _ in 0..4
+        put_be(mut out, 0, 4)
+    put_be(mut out, 0, 8)
+    put_be(mut out, 0, 8)
+    put_be(mut out, text_size, 8)
+    # CS_EXECSEG_MAIN_BINARY
+    put_be(mut out, 1, 8)
+    out.extend(name)
+    out.push(0)
+    for k in 0..slots
+        from := 4096 * k
+        to := if from + 4096 < limit then from + 4096 else limit
+        out.extend(sha256(out, from, to))

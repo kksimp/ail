@@ -21,7 +21,7 @@ def measure(text):
             stats.functions.append(t[3:].split("(")[0])
     return stats
 def main():
-    path = sys.argv[1]
+    path = sys.argv[1] if len(sys.argv) > 1 else "tool.ail"
     with open(path) as f:
         stats = measure(f.read())
     name = os.path.basename(path)

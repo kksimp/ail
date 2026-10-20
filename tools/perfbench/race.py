@@ -96,9 +96,19 @@ def build_native(prog, tmp, build_args):
     return out
 
 
+def size_args(prog):
+    """The words of NAME.args beside the program, passed to every column."""
+    path = os.path.splitext(prog)[0] + ".args"
+    if not os.path.isfile(path):
+        return []
+    with open(path) as f:
+        return f.read().split()
+
+
 def build_c(src, tmp, cc):
     out = os.path.join(tmp, "%s-%s" % (cc, os.path.basename(src)[:-2]))
-    p = subprocess.run([cc, "-O2", "-o", out, src, "-lm"], stdout=subprocess.PIPE,
+    # -ffp-contract=off: no fused multiply-adds, so floats match AIL and Python.
+    p = subprocess.run([cc, "-O2", "-ffp-contract=off", "-o", out, src, "-lm"], stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
     return out if p.returncode == 0 else None
 
@@ -152,18 +162,19 @@ def main():
     try:
         for p in progs:
             name = os.path.splitext(os.path.basename(p))[0]
-            res = {"ail": measure([AIL, "run", p], runs, a.timeout)}
+            argv = size_args(p)
+            res = {"ail": measure([AIL, "run", p] + argv, runs, a.timeout)}
             ref = res["ail"].get("out")
             if a.native and native_ok:
                 exe = build_native(p, tmp, a.build_args)
-                res["native"] = measure([exe], runs, a.timeout) if exe else {"err": "build"}
+                res["native"] = measure([exe] + argv, runs, a.timeout) if exe else {"err": "build"}
             for cc in cols_c:
                 src = twin(p, ".c")
                 exe = build_c(src, tmp, cc) if src else None
-                res[cc] = measure([exe], runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
+                res[cc] = measure([exe] + argv, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
             if py:
                 src = twin(p, ".py")
-                res["python"] = measure([py, src], runs, a.timeout) if src else {"err": "no twin"}
+                res["python"] = measure([py, src] + argv, runs, a.timeout) if src else {"err": "no twin"}
             for c, r in res.items():
                 if "out" in r and ref is not None and r["out"] != ref:
                     res[c] = {"err": "DIFF"}  # drag.out.1
