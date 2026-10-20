@@ -233,7 +233,7 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(Value::Unit);
         }
         let slot = slot_mut(env, &p, false)?;
-        Ok(match (slot, name) {
+        let result = match (slot, name) {
             (Value::List(items), "push") => {
                 Rc::make_mut(items).push(a.pop().expect("checked: one argument"));
                 Value::Unit
@@ -255,7 +255,10 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             (Value::Set(t), "remove") => Value::Bool(Rc::make_mut(t).remove(&a[0]).is_some()),
             (other, _) => unreachable!("checked: `{name}` on {other:?}"),
-        })
+        };
+        a.clear();
+        self.arg_pool.push(a);
+        Ok(result)
     }
 
     fn read_only(&mut self, v: Value, name: &str, a: &mut Vec<Value>, pos: Pos) -> Result<Value, Trap> {
