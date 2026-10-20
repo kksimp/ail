@@ -103,6 +103,8 @@ pub struct Variant {
 /// blocks have the trait or the implementing type as their owner.
 #[derive(Debug)]
 pub struct FnDecl {
+    /// Attributes written before `fn` (gram.attr.1-2).
+    pub attrs: Vec<Attr>,
     pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
@@ -114,6 +116,13 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+}
+
+/// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
+#[derive(Debug, Clone)]
+pub struct Attr {
+    pub name: String,
+    pub pos: Pos,
 }
 
 /// Where a function is declared.

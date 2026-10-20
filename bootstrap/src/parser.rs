@@ -11,9 +11,9 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart,
-    Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef,
-    UnOp, Variant, Within, is_prelude,
+    Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
+    InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
+    TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
@@ -105,6 +105,12 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             }
             Tok::Kw("fn") => {
                 if let Some(f) = p.function(Within::TopLevel) {
+                    prog.fns.push(f);
+                }
+            }
+            // `@name fn ...` (gram.attr.1-2)
+            Tok::Sym("@") => {
+                if let Some(f) = p.attributed_function() {
                     prog.fns.push(f);
                 }
             }
@@ -407,6 +413,49 @@ impl Parser {
         f
     }
 
+    /// `@name` or `@name(args)`, repeated, then a function on the same line
+    /// (gram.attr.1-2).
+    fn attributed_function(&mut self) -> Option<FnDecl> {
+        let mut attrs = Vec::new();
+        while self.at_sym("@") {
+            self.i += 1;
+            let Some((name, pos)) = self.name("an attribute name after `@`", "gram.attr.1") else {
+                self.skip_statement();
+                return None;
+            };
+            if self.at_sym("(") {
+                let mut depth = 0usize;
+                loop {
+                    match self.peek() {
+                        Tok::Sym("(") => depth += 1,
+                        Tok::Sym(")") => depth -= 1,
+                        Tok::Newline | Tok::Eof => break,
+                        _ => {}
+                    }
+                    self.i += 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            attrs.push(Attr { name, pos });
+        }
+        if !self.at_kw("fn") {
+            let pos = self.pos();
+            self.error_help(
+                "gram.attr.2",
+                pos,
+                "an attribute applies to a function declared on the same line",
+                "write `@test fn name()` on one line",
+            );
+            self.skip_statement();
+            return None;
+        }
+        let mut f = self.function(Within::TopLevel)?;
+        f.attrs = attrs;
+        Some(f)
+    }
+
     fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
         self.bump(); // fn
         let (first, first_pos) = self.name("a function name after `fn`", "gram.fn.1")?;
@@ -501,7 +550,7 @@ impl Parser {
         } else {
             Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
         };
-        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within })
+        Some(FnDecl { attrs: Vec::new(), owner, name, pos, generics, receiver, params, ret, body, within })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).

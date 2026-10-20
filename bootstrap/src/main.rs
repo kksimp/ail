@@ -19,6 +19,7 @@ usage: ail <command> [--json] [args]
 commands:
   run FILE      check and run an AIL program
   check FILE    check a program without running it
+  test FILE     run the program's `@test` functions
   version       print the version
 
 options:
@@ -35,6 +36,7 @@ fn main() -> ExitCode {
     match rest.as_slice() {
         ["run", file] => run_file(file, json, true),
         ["check", file] => run_file(file, json, false),
+        ["test", file] => run_tests(file, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -99,4 +101,84 @@ fn run_file(path: &str, json: bool, execute: bool) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+/// `ail test FILE` (test.run.1-4): check, run each `@test` function on its
+/// own, report in source order. Exit 0 if all pass, 1 if any fails, 2 if
+/// the program is rejected.
+fn run_tests(path: &str, json: bool) -> ExitCode {
+    let src = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: can't read {path}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let (tokens, mut diags) = lexer::lex(&src);
+    let (program, parse_diags) = parser::parse_with_prelude(tokens);
+    diags.extend(parse_diags);
+    let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
+    diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
+    let mut resolved = check::Resolved::default();
+    if diags.is_empty() {
+        (diags, resolved) = check::check(&program);
+    }
+    // test.run.1: a file of tests needs no `main`.
+    if !program.fns.iter().any(|f| f.name == "main" && f.owner.is_none() && f.top_level()) {
+        diags.retain(|d| d.rule != "mod.main.1" || d.pos.line != 1);
+    }
+    let rejected = diags.iter().any(|d| !d.warning);
+    if !diags.is_empty() {
+        diag::report(&mut diags, path, &src, json);
+    }
+    if rejected {
+        return ExitCode::from(2);
+    }
+    let outcomes = std::thread::Builder::new()
+        .stack_size(STACK_BYTES)
+        .spawn(move || {
+            interp::run_tests(&program, &resolved)
+                .into_iter()
+                .map(|o| (o.name, o.pos, o.failure, o.output))
+                .collect::<Vec<_>>()
+        })
+        .expect("spawn interpreter thread")
+        .join();
+    let Ok(outcomes) = outcomes else {
+        eprintln!("{path}: internal error in the bootstrap interpreter");
+        return ExitCode::from(1);
+    };
+    let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
+    let passed = outcomes.len() - failed;
+    for (name, pos, failure, output) in &outcomes {
+        if json {
+            let (status, message) = match failure {
+                Some(m) => ("fail", m.as_str()),
+                None => ("pass", ""),
+            };
+            println!(
+                "{{\"test\":{},\"status\":\"{status}\",\"line\":{},\"col\":{},\"message\":{}}}",
+                diag::json_str(name),
+                pos.line,
+                pos.col,
+                diag::json_str(message)
+            );
+        } else {
+            match failure {
+                None => println!("ok {name}"),
+                Some(m) => {
+                    println!("FAIL {name}: {m} at {}:{}", pos.line, pos.col);
+                    for line in output.lines() {
+                        println!("  | {line}");
+                    }
+                }
+            }
+        }
+    }
+    if json {
+        println!("{{\"summary\":true,\"passed\":{passed},\"failed\":{failed}}}");
+    } else {
+        println!("{passed} passed, {failed} failed");
+    }
+    if failed == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }

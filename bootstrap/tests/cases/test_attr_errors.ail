@@ -1,0 +1,14 @@
+@bogus fn helper() int
+    1
+
+@test fn takes(x int)
+    assert(x == 1)
+
+@test fn returns() int
+    1
+
+@test fn ok_one()
+    assert(true)
+
+fn main()
+    ok_one()

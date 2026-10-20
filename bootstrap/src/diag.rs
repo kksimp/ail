@@ -80,7 +80,7 @@ fn to_json(d: &Diagnostic, path: &str) -> String {
     s
 }
 
-fn json_str(v: &str) -> String {
+pub fn json_str(v: &str) -> String {
     let mut s = String::with_capacity(v.len() + 2);
     s.push('"');
     for c in v.chars() {
