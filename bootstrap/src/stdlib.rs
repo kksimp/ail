@@ -50,7 +50,10 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
-    &["add", "dot", "len", "map", "matmul", "max", "mean", "mul", "reshape", "shape", "sum", "to_list", "transpose"];
+    &[
+        "add", "dot", "len", "map", "matmul", "max", "mean", "mul", "relu", "reshape", "shape", "sigmoid", "sum", "tanh",
+        "to_list", "transpose",
+    ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
 /// position of the function's name.

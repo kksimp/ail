@@ -1,130 +1,195 @@
-# Native ABI: calling convention, value layout, runtime, traps
+# Native ABI and runtime
 
-> **Non-normative design note,** 2026-10-20, lanes 120 (backend) and 122
-> (runtime) of the [finish plan](finish-plan.md). The decided parts are
-> ADRs 0384–0393 (backend) and 0404–0411 (runtime). Keep this note current
-> when either side changes.
+> **Non-normative design note,** 2026-10-20 (lane 122 of the
+> [finish plan](finish-plan.md); shared with lane 120, the native backend, and
+> lane 126, FFI). Decided parts: ADRs
+> [0404](../decisions/0404-native-calling-convention-and-value-layouts.md) to
+> [0409](../decisions/0409-float-text-by-exact-digit-generation.md). Lane 120
+> may amend this note; keep it current.
 
-## 1. Scope
+The native executables of `ail build` link no libc. The **runtime** is AIL code
+under `compiler/rt/` that the backend compiles into every executable. Runtime
+files carry the Runtime Exception header (see [Licensing](#licensing)).
 
-The native subset (ADR 0384): `int`, `float`, `bool`, string literals,
-lists of numbers, locals, arithmetic, comparisons, `if`, `while`, `for`
-over ranges and lists, calls, `return`, `print`. Everything here is for
-code the AIL compiler under `compiler/` generates and for the runtime in
-`compiler/rt/`, which is compiled by the same backend from AIL source.
-There is no libc and no external linker or assembler (ADR 0010, ADR 0017).
+## 1. Targets and calling convention
 
-## 2. Targets
+| Target | Object | Int args | Float args | Return | Stack |
+|---|---|---|---|---|---|
+| Linux x86-64 | ELF | rdi rsi rdx rcx r8 r9 | xmm0-7 | rax, xmm0 | 16-byte aligned at call |
+| Linux ARM64 | ELF | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
+| macOS ARM64 | Mach-O | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
+| Windows x86-64 | PE | stub, `plat.win.1` | | | not built yet |
 
-| Target | Object | Entry | Syscalls |
+AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
+`extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
+registers go on the stack, 8 bytes each, in order. Callee-saved registers are
+the platform's. No variadics. Structs are passed by pointer.
+
+## 2. Value layouts
+
+All values are 64-bit and little-endian (ADR 0007). In registers and in list
+elements each scalar takes 8 bytes.
+
+| Type | Layout |
+|---|---|
+| `int` | `i64` |
+| `float` | `f64` (IEEE 754 binary64) |
+| `bool` | `i64`, 0 or 1 |
+| `char` | `i64`, a Unicode scalar value |
+| `str` | pointer to a **string object** |
+| `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
+
+**String object** (immutable, 16-byte aligned):
+
+```text
++0   u64  bytes    length in UTF-8 bytes
++8   u64  chars    length in characters  (str.len(), ADR 0208, O(1))
++16  u8[] data     UTF-8, `bytes` long, no terminator
+```
+
+A literal is a string object in read-only data. `chars` is computed once when
+the object is built, which makes `s.len()` free and byte indexing impossible.
+
+**List object** (a value; copied on `mut` aliasing by the compiler, ADR 0060):
+
+```text
++0   u64  len     elements in use
++8   u64  cap     elements allocated
++16  ptr  data    cap * 8 bytes, separate allocation
+```
+
+`data` is separate so `push` can grow without moving the header the caller
+holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
+for list indexing).
+
+**Heap object header.** None in this revision. A collector (ADR 0012's ladder)
+needs type information; the plan is a second ABI revision with an 8-byte word
+before each object, and the allocator already returns 16-byte aligned
+addresses with 8 bytes of slack for it (ADR 0407).
+
+## 3. Entry and exit
+
+The linker script of lane 120 points the object's entry at `_start` (ELF) or
+`_main` (Mach-O, `LC_MAIN`), both defined by the runtime:
+
+1. take the stack pointer, set up the heap (§5), save `argc`/`argv` for
+   `env.args()` (later);
+2. call the program's `main`;
+3. `exit(0)`.
+
+`exit(code)` flushes the stdout buffer (§6) first. A trap exits with **1**
+(`err.trap.3`).
+
+## 4. Syscalls (the only OS interface)
+
+| Operation | Linux x86-64 | Linux ARM64 | macOS ARM64 |
 |---|---|---|---|
-| Linux x86-64 (x86-64-v3) | static ELF64, no interpreter | `_start` | `syscall`; number in `rax`; args `rdi rsi rdx r10 r8 r9` |
-| Linux ARM64 (ARMv8.2-A) | static ELF64 | `_start` | `svc #0`; number in `x8`; args `x0`–`x5` |
-| macOS ARM64 | Mach-O, `LC_MAIN`, dyld and libSystem loaded but unused, ad hoc signed | `_main` | `svc #0x80`; number in `x16`; args `x0`–`x5`; carry set on error |
-
-Syscall numbers the runtime uses:
-
-| Call | Linux x86-64 | Linux ARM64 | macOS ARM64 |
-|---|---|---|---|
+| instruction | `syscall` | `svc #0` | `svc #0x80` |
+| number register | rax | x8 | x16 |
+| args | rdi rsi rdx r10 r8 r9 | x0-x5 | x0-x5 |
+| result | rax (`-errno` on error) | x0 (`-errno`) | x0, carry set = error (x0 is errno) |
+| `exit` | 60 (`exit_group` 231) | 93 (`exit_group` 94) | 1 |
 | `write` | 1 | 64 | 4 |
 | `mmap` | 9 | 222 | 197 |
 | `munmap` | 11 | 215 | 73 |
-| `exit_group` / `exit` | 231 | 94 | 1 |
+| `read` | 0 | 63 | 3 |
 
-macOS raw syscalls are not a stable Apple interface, but `write`, `mmap`
-and `exit` have not changed numbers since 10.0; the runtime confines them to
-one function per call (`rt.sys_*`) so moving to libSystem imports later is
-local. Windows: not targeted yet (ADR 0004 asks for awareness): the runtime
-would call `kernel32` through an import table, so `rt.sys_*` is the only
-layer that changes.
+`mmap` flags: `PROT_READ|PROT_WRITE` = 3; `MAP_PRIVATE|MAP_ANONYMOUS` = `0x22`
+on Linux and `0x1002` on macOS (`MAP_ANON` is `0x1000`). fd `-1`, offset 0.
 
-## 3. Calling convention (AIL to AIL)
+Linux clobbers `rcx` and `r11` on x86-64. The shim is four functions
+(`sys_exit`, `sys_write`, `sys_mmap`, `sys_read`) so each target is one file
+(`compiler/rt/sys_*.ail`).
 
-The registers follow the platform C convention so FFI (lane 126) needs no
-shuffling, with one difference on x86-64: **`xmm8`–`xmm13` are
-callee-saved** in AIL code, mirroring AAPCS64's `d8`–`d15`, so float values
-live across calls stay in registers on both targets. An `extern` call saves
-them itself.
+**macOS risk.** Apple documents `libSystem` as the stable interface and
+reserves the right to change raw syscall numbers. The raw route works on
+current macOS ARM64 and is what the first slice uses; the fallback is to import
+`_write`, `_exit` and `_mmap` from `libSystem` through the dyld stubs lane 126
+needs for `extern` anyway. Only the four shim functions change (ADR 0406).
 
-| | x86-64 | ARM64 |
-|---|---|---|
-| int, bool, pointer arguments | `rdi rsi rdx rcx r8 r9` | `x0`–`x7` |
-| float arguments | `xmm0`–`xmm7` | `d0`–`d7` |
-| result | `rax` or `xmm0` | `x0` or `d0` |
-| callee-saved | `rbx rbp r12`–`r15`, `xmm8`–`xmm13` | `x19`–`x28`, `x29`, `x30`, `d8`–`d15` |
-| backend scratch (never allocated) | `rax rdx r10 r11`, `xmm14 xmm15` | `x9 x10 x16 x17`, `d30 d31` |
-| stack | 16-byte aligned at each call | 16-byte aligned always |
+## 5. Allocator
 
-Arguments beyond the registers are not in the subset yet (a function with
-more than 6 int or 8 float parameters is rejected, `native.subset.1`).
+A bump allocator over `mmap`ed chunks: first chunk 1 MiB, each later chunk
+`max(request, 2 * previous)`, 16-byte alignment, zeroed by the kernel, never
+freed. `alloc(n)` aborts with trap `run.limit.2` if `mmap` fails. This is
+the interim for the GC (ADR 0407).
 
-## 4. Value layout
+## 6. Output
 
-| AIL type | Native form |
-|---|---|
-| `int` | 64-bit two's complement in a GPR |
-| `float` | IEEE 754 binary64 in a vector register |
-| `bool` | 0 or 1 in a GPR (full width) |
-| `str` (literals) | pointer to a static record: `bytes i64`, `chars i64`, then the UTF-8 bytes |
-| `List[int]`, `List[float]`, `List[bool]` | pointer to a heap header: `len i64`, `cap i64`, `data ptr`; elements are 8 bytes each |
-
-Lists keep value semantics (own.val.*): binding or assigning a list from a
-variable or element copies it (`rt.list_copy`); a fresh value (a call
-result, a literal, `List[int]()`) is not copied; a read-only parameter is
-not copied because the callee can't change it; a `mut` parameter passes the
-header pointer, so the callee's changes are the caller's.
-
-## 5. Memory
-
-`rt.alloc(bytes)` bumps a pointer through 1 MiB-or-larger chunks from
-`mmap`. Nothing is freed yet (no GC in the subset); a list's growth
-doubles its capacity and copies.
-
-The runtime keeps its state (output buffer pointer and length, heap
-cursor and limit) in 8-byte global slots in a writable data segment,
-reached with the `global(k)` primitive.
-
-## 6. Runtime primitives
-
-The runtime is ordinary AIL in `compiler/rt/` plus these primitives, which
-the backend expands inline. They are declared in `compiler/rt/prim.ail`
-(bodies `todo`) so the bootstrap's checker accepts the runtime; calling
-them anywhere except `compiler/rt/` is an error (`native.prim.1`).
-
-| Primitive | Meaning |
-|---|---|
-| `load64(a)`, `store64(a, v)` | 8-byte load and store |
-| `load8(a)`, `store8(a, v)` | byte load (zero-extended) and store |
-| `loadf(a)`, `storef(a, x)` | float load and store |
-| `syscall(n, a, b, c, d, e, f)` | raw system call per §2; result in an `int` |
-| `global(k)` | address of global slot `k` |
-| `str_addr(s)` | address of a string literal's record |
-| `float_bits(x)`, `bits_float(n)` | reinterpret between `float` and `int` |
+`print` appends to a 64 KiB stdout buffer and flushes when full, at exit, at a
+trap, and before reading stdin. Standard error is unbuffered. The interpreter's
+text is the oracle: integers in decimal with a leading `-`; floats per
+`type.num.7` (ADR 0409); strings as is.
 
 ## 7. Traps
 
-A trap prints what the interpreter prints first, then exits with status 1
-(ADR 0035):
+`rt_trap(rec)` takes a pointer to a **trap record** the compiler emits per
+trap site, then writes to standard error and exits 1:
 
 ```text
-PATH:LINE:COL: trap[RULE]: MESSAGE
-  LINE | source line
-       |   ^
++0   ptr  file      string object, the source path
++8   i64  line
++16  i64  col
++24  ptr  rule      string object, e.g. "expr.arith.3"
++32  ptr  message   string object, e.g. "division by zero in `1 / 0`"
 ```
 
-The message has the interpreter's text with the run-time values
-(`` `9223372036854775807 + 1` overflows `int` ``, `index 5 is out of
-bounds for a list of length 2`, ``division by zero in `5 / 0` ``). The
-interpreter's frame lines (`at 3:13 in main(); x = …`) are not printed
-yet: the native code keeps no frame map. Each trap site is a record in
-read-only data (rule, message pieces, position, source line), and the
-code jumps to a stub that passes the site and the operand values to
-`rt.trap_*`, which flushes stdout first so the two streams interleave as
-in the interpreter.
+Output, byte for byte the first line the interpreter prints:
 
-## 8. Output
+```text
+FILE:LINE:COL: trap[RULE]: MESSAGE
+```
 
-`print` appends to a 64 KiB buffer that is flushed when full, before a
-trap, and at exit. Integers print in decimal; floats as the interpreter
-prints them (lane 122: shortest round-trip, Python's form); `bool` as
-`true`/`false`; lists as `[1, 2, 3]`.
+The interpreter then adds a source excerpt and a stack trace. The native
+version doesn't yet (frame metadata is a later ABI addition, ADR 0405). The
+differential harness compares exit status, the rule ID and the first line;
+`.trap` files hold the rule ID.
+
+Runtime-raised traps use records the runtime owns: `type.coll.4` (index out of
+range), `run.limit.2`. Compiler-emitted checks: `expr.arith.3` (division
+by zero), `expr.arith.1` (overflow), per `expr.arith` in spec chapter 5.
+
+## 8. What the runtime provides to compiled code
+
+| Symbol | Meaning |
+|---|---|
+| `rt_start` | entry, §3 |
+| `rt_exit(code)` | flush, then exit |
+| `rt_alloc(n)` | §5 |
+| `rt_trap(rec)` | §7 |
+| `rt_str_new(ptr, bytes)` | build a string object, computing `chars` |
+| `rt_str_cat(a, b)` | concatenate |
+| `rt_str_int(n)`, `rt_str_float(x)` | number to string object |
+| `rt_print_str(s)` | append `s` and a newline to the stdout buffer |
+| `rt_list_new(cap)`, `rt_list_push(l, v)`, `rt_list_get(l, i)`, `rt_list_set(l, i, v)`, `rt_list_len(l)`, `rt_list_copy(l)` | §2 |
+
+The AIL source of record (`compiler/rt/*.ail`) is today written against a
+**memory model** (a `List[int]` of bytes and word-addressed helpers) so it runs
+and is tested under the interpreter. When lane 126 lands raw pointers the same
+modules switch their load/store helpers to `unsafe` pointer operations; the
+algorithms don't change (ADR 0404).
+
+## 9. FFI hook (with lane 126)
+
+An `extern "c" fn` in a native program resolves in one of two ways: **static**,
+a symbol the runtime itself provides (`rt_*`), or **dynamic**, a symbol from a
+shared library named in the declaration. Dynamic needs an `LC_LOAD_DYLIB` /
+`DT_NEEDED` and an import table; the ELF and Mach-O writers of lane 120 add
+them when the first dynamic `extern` appears. Until then a native program with
+an `extern` is rejected by `ail build` with `ffi.native.1` (to be written by
+lane 126).
+
+## Licensing
+
+[ADR 0510](../decisions/0510-licence-apache-2-with-runtime-exception.md): the
+repository is Apache 2.0 with a Runtime Library Exception, and `compiler/rt/`
+is Runtime Code. Every file there starts with the header
+
+```text
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+```
+
+Nothing in `compiler/rt/` is ported from another project; the float text
+algorithm is written from the textbook description (ADR 0409), so there is no
+third-party notice to carry.
