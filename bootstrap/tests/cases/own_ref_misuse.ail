@@ -1,0 +1,19 @@
+# own.ref.1, own.ref.6, mod.const.2: what a `ref` can't do.
+struct Node
+    value int
+
+ROOT := ref Node(value: 1)
+
+fn nothing()
+    print("x")
+
+fn main()
+    a := ref Node(value: 1)
+    a = ref Node(value: 2)
+    b := ref nothing()
+    print(a < a)
+    n := Node(value: 3)
+    m := ref n
+    m.value = 4
+    print(n.value)
+    s := {a}

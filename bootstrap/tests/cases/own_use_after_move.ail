@@ -1,0 +1,31 @@
+# own.uniq.2, own.move.2, own.defer.3: no use of a binding after a move, on
+# any path.
+unique struct File
+    fd int
+
+fn close(move f File)
+    print(f.fd)
+
+fn take(move n int)
+    print(n)
+
+fn main()
+    a := File(fd: 1)
+    close(move a)
+    print(a.fd)
+    b := File(fd: 2)
+    if b.fd > 1
+        close(move b)
+    print(b.fd)
+    c := File(fd: 3)
+    while c.fd < 10
+        close(move c)
+    d := File(fd: 4)
+    e := d
+    print(d.fd)
+    n := 5
+    take(move n)
+    print(n)
+    g := File(fd: 6)
+    defer print(g.fd)
+    close(move g)

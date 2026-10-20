@@ -1,0 +1,13 @@
+# own.defer.1-3: deferred statements run at block exit, last first.
+fn work(n int) int
+    defer print("leave work {n}")
+    for i in 0..n
+        defer print("  end of iteration {i}")
+        if i == 1
+            continue
+        print("  iteration {i}")
+    n * 2
+
+fn main()
+    defer print("main done")
+    print(work(3))

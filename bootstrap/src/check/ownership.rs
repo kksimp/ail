@@ -145,6 +145,15 @@ impl<'p> Checker<'p> {
                 }
                 None => {}
             },
+            _ if place_path(e).is_some() && rule == "own.move.2" => {
+                let root = place_path(e).map_or("", |(r, _)| r);
+                self.error_help(
+                    "own.move.3",
+                    e.pos(),
+                    format!("only a whole local binding can be moved, and this is part of `{root}`"),
+                    format!("move `{root}` itself, or pass a new value"),
+                );
+            }
             _ if place_path(e).is_some() => {
                 let root = place_path(e).map_or("", |(r, _)| r);
                 self.error_help(
@@ -154,12 +163,6 @@ impl<'p> Checker<'p> {
                     format!("move the whole of `{root}`, or use the value where it is"),
                 );
             }
-            _ if rule == "own.move.2" => self.error_help(
-                "own.move.3",
-                e.pos(),
-                "only a local binding can be moved",
-                "remove the `move`; a new value is already the callee's",
-            ),
             _ => {}
         }
     }

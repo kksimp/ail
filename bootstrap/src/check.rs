@@ -2946,6 +2946,13 @@ impl<'p> Checker<'p> {
         }
         let quiet = self.diags.len() > before;
         self.finish(what, vars, &mut binds, pos, quiet);
+        // own.uniq.5: generic code may copy its values, so a unique type
+        // can't be a function's type argument.
+        for (v, t) in &binds {
+            if sig.generics[sig.owner.min(sig.generics.len())..].contains(v) {
+                self.no_unique(t, pos, "a type argument");
+            }
+        }
         // own.excl.1-2: two `mut` places must not overlap. A read-only argument
         // that overlaps a `mut` one is fine: it is passed as a copy (own.excl.4).
         let mut items: Vec<(&'p Expr, bool)> = Vec::new();

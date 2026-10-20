@@ -781,7 +781,8 @@ impl<'a, W: Write> Interp<'a, W> {
             result = self.stmt(s, env);
             // A new unique value nobody took is released at once.
             if i + 1 < stmts.len()
-                && let Stmt::Expr(Expr::Call { .. } | Expr::Method { .. }) = s
+                && let Stmt::Expr(e) = s
+                && !matches!(e, Expr::Name(..) | Expr::Field { .. } | Expr::Index { .. } | Expr::If { .. } | Expr::Match { .. })
                 && let Ok(v) = &mut result
             {
                 let v = std::mem::replace(v, Value::Unit);

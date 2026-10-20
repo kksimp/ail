@@ -1,0 +1,9 @@
+ref Counter(n: 2, log: [2, 4, 198, 14])
+2
+10
+true
+false
+4
+ref Node(value: 1, edges: [ref Node(value: 2, edges: [ref ...])])
+20
+100
