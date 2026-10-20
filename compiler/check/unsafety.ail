@@ -43,3 +43,153 @@ fn Checker.note_unsafe_call(mut self, i int, at ast.Pos)
         "{what} is an unsafe operation, allowed only inside an `unsafe` block",
         "wrap the call in `unsafe`, ideally inside a safe AIL function that checks the preconditions",
     )
+
+## unsafe.op.1: `what` is an unsafe operation (raw memory, a pointer
+## access), allowed only inside an `unsafe` block.
+fn Checker.note_unsafe_op(mut self, what str, at ast.Pos)
+    if unsafe_depth > 0
+        return
+    err_help(
+        "unsafe.op.1",
+        at,
+        "{what} is an unsafe operation, allowed only inside an `unsafe` block",
+        "wrap it in `unsafe`, ideally inside a safe AIL function that checks the preconditions",
+    )
+
+## A type with a fixed C layout: a number, a `bool` or a raw pointer.
+@allow("expr.match.3") fn c_layout(t Ty) bool
+    match t
+        Int | Float | Bool | Num(_) | PtrOf(_) => true
+        _ => false
+
+## ffi.decl.3: an `extern c fn` has only types with a C layout, no `mut`
+## parameters, and fits the registers of a C call (six integer-like and
+## eight float arguments).
+fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
+    sig := sigs[idx]
+    mut ints := 0
+    mut floats := 0
+    for i in 0..f.params.len().min(sig.params.len())
+        p := f.params[i]
+        t := sig.params[i].ty
+        if p.mutable
+            err_help(
+                "ffi.decl.3",
+                p.pos,
+                "an `extern c fn` parameter is passed by value, not `mut`",
+                "pass a raw pointer `*T` to let C write to memory",
+            )
+        if not c_layout(t) and t != Ty.Unknown
+            err_help(
+                "ffi.decl.3",
+                p.ty.pos,
+                "{show(t)} has no C layout, so it can't be a parameter of an `extern c fn`",
+                "use `int`, `float`, `bool`, a sized number such as `i32` or `u8`, or a raw pointer `*T`",
+            )
+        if t == Ty.Float or t == Ty.Num("f32")
+            floats += 1
+        else
+            ints += 1
+    if ints > 6 or floats > 8
+        err_help(
+            "ffi.decl.3",
+            f.pos,
+            "`{f.name}` takes {ints} integer-like and {floats} float arguments; a C call takes at most 6 and 8",
+            "declare a smaller wrapper, or pass a pointer to a struct-like buffer",
+        )
+    if not c_layout(sig.ret) and sig.ret != Ty.Unknown and sig.ret != Ty.Unit
+        mut at := f.pos
+        if r := f.ret
+            at = r.pos
+        err_help(
+            "ffi.decl.3",
+            at,
+            "{show(sig.ret)} has no C layout, so it can't be the result of an `extern c fn`",
+            "return `int`, `float`, `bool`, a sized number or a raw pointer, or nothing",
+        )
+
+## The methods of a raw pointer `*T` (unsafe.ptr.2-3), sorted.
+PTR_METHODS := ["is_null", "offset", "read", "write"]
+
+## `p.read()`, `p.write(v)`, `p.offset(n)` and `p.is_null()` on a raw
+## pointer `rt` to `target` (unsafe.ptr.2-3).
+fn Checker.ptr_method(
+    mut self,
+    rt Ty,
+    target Ty,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    if not PTR_METHODS.contains(n)
+        args_only(args)
+        err_help(
+            "unsafe.ptr.3",
+            at,
+            "a raw pointer has no method `{n}`",
+            "its methods are {list_names(PTR_METHODS)}",
+        )
+        return Ty.Unknown
+    if not c_layout(target)
+        args_only(args)
+        return Ty.Unknown
+    std_any.add(pos_key(at))
+    if n != "is_null"
+        note_unsafe_op("`{n}` on a raw pointer", at)
+    mut params := List[Ty]()
+    mut ret := Ty.Bool
+    if n == "read"
+        ret = target
+    elif n == "write"
+        params = [target]
+        ret = Ty.Unit
+    elif n == "offset"
+        params = [Ty.Int]
+        ret = rt
+    check_call("ptr.{n}", plain_sig(none, params, ret), [], args, none, at, expect)
+
+## `mem.alloc(n, example)`, `mem.cast(p, example)` and `mem.free(p)`: the
+## pointee type comes from an example value or from the pointer
+## (unsafe.mem.3). None for the other `std.mem` functions.
+@allow("expr.match.3")
+fn Checker.mem_generic(mut self, f str, args List[ast.Arg], at ast.Pos, expect Ty?) Ty?
+    if f != "alloc" and f != "cast" and f != "free"
+        return none
+    want := if f == "free" then 1 else 2
+    mut tys := [quiet_type(a.value) for a in args]
+    if args.len() != want
+        unknowns := [Ty.Unknown for _ in 0..want]
+        return check_call(
+            "mem.{f}",
+            plain_sig(none, unknowns, Ty.Unknown),
+            [],
+            args,
+            none,
+            at,
+            expect,
+        )
+    mut params := List[Ty]()
+    if f != "alloc"
+        mut is_ptr := tys[0] == Ty.Unknown
+        match tys[0]
+            PtrOf => is_ptr = true
+            _ => is_ptr = is_ptr
+        if not is_ptr
+            err_help(
+                "unsafe.ptr.1",
+                expr_pos(args[0].value),
+                "`mem.{f}` takes a raw pointer, but this is {show(tys[0])}",
+                "a raw pointer is `*T`, such as the result of `mem.alloc` or `mem.cstr`",
+            )
+            tys[0] = Ty.Unknown
+        params.push(tys[0])
+    else
+        params.push(Ty.Int)
+    mut ret := Ty.Unit
+    if f != "free"
+        example := tys[1]
+        ptr_target(example, expr_pos(args[1].value))
+        params.push(example)
+        ret = if example == Ty.Unknown then Ty.Unknown else Ty.PtrOf(example)
+    check_call("mem.{f}", plain_sig(none, params, ret), [], args, none, at, expect)

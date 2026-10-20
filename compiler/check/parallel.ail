@@ -332,7 +332,7 @@ fn Scan.expr(mut self, e ast.Expr)
                 "makes a `ref` cell, which copies share",
                 "iterations may write through the cell in any order; keep the loop sequential (drop `par`)",
             )
-        Str | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
+        Str | Bytes | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
         Name => read_place(e, false)
         Member(recv, _, _) =>
             if not read_place(e, false)
@@ -464,7 +464,7 @@ fn holds_int(f ast.FnDecl, fx Facts, n str) int
                     if ["float", "f64", "f32"].contains(t)
                         return 0
                     return -1
-                Optional | Fallible | AnyTrait | RefTo | FnType => return -1
+                Optional | Fallible | AnyTrait | RefTo | PtrTo | FnType => return -1
     body := f.body else return -1
     mut found := -1
     for l in each_let(body)

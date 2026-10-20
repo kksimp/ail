@@ -755,6 +755,27 @@ fn Checker.pending_recv(self, recv ast.Expr) int?
     pending_of(n)
 
 @allow("expr.match.3")
+
+## type.bytes.13: `bytes.from_list(xs)`, `bytes.from_hex(s)`,
+## `bytes.from_base64(s)` and `bytes.zeros(n)`.
+fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
+    mut sig := plain_sig(none, [Ty.ListOf(Ty.Num("u8"))], Ty.Bytes)
+    if n == "from_hex" or n == "from_base64"
+        sig = plain_sig(none, [Ty.Str], Ty.Opt(Ty.Bytes))
+    elif n == "zeros"
+        sig = plain_sig(none, [Ty.Int], Ty.Bytes)
+    elif n != "from_list"
+        args_only(args)
+        err_help(
+            "type.bytes.13",
+            at,
+            "`bytes` has no associated function `{n}`",
+            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
+        )
+        return Ty.Unknown
+    check_call("bytes.{n}", sig, [], args, none, at, expect)
+
+@allow("expr.match.3")
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
     if k := pending_recv(recv)
@@ -800,6 +821,9 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             if has_targs
                 explicit = explicit_args(head, def_params(d), targs, at)
             return associated(d, explicit, n, at, args, expect)
+        # type.bytes.13: `bytes.from_list(xs)` and the like.
+        if head == "bytes" and not has_targs
+            return bytes_assoc(n, at, args, expect)
         # type.char.4: `char.from_code(n)`.
         if head == "char" and not has_targs
             if n != "from_code"
@@ -841,8 +865,12 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             sn := prog.structs[s].name
             if sn == "ui.Window"
                 return ui_method(recv, n, at, args, expect)
+            if tn := sn.strip_prefix("net.")
+                if t := net_method(recv, tn, n, at, args, expect)
+                    return t
             if sn == "tensor.Tensor"
                 return tensor_method(recv, rt, n, at, args, expect)
+        PtrOf(target) => return ptr_method(rt, target, n, at, args, expect)
         _ => rt = rt
     cands := candidates(rt, n)
     if cands.len() == 0
@@ -1219,6 +1247,21 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
     rt := expr(recv, none, true)
     if reject_unhandled(rt, expr_pos(recv))
         return Ty.Unknown
+    # std.tensor.15: `t[i]` and `t[lo..hi]` are tensors. The rank falls by one
+    # for `t[i]` at run time, so the type stays `tensor.Tensor[T]`.
+    if tensor_elem(rt) != none
+        match index
+            Range(lo, hi, _, _) => range_bounds(lo, hi)
+            _ =>
+                it := expr(index, Ty.Int, true)
+                if not accepts(Ty.Int, it)
+                    err_help(
+                        "std.tensor.15",
+                        expr_pos(index),
+                        "a tensor index must be `int`, found {show(it)}",
+                        "index with an `int`, or slice with `lo..hi`",
+                    )
+        return rt
     # `m[k]` (type.map.3).
     if is_map_ty(rt)
         if is_range(index)
@@ -1253,9 +1296,22 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
         _ =>
             it := expr(index, Ty.Int, true)
             if not accepts(Ty.Int, it)
-                err("type.coll.4", expr_pos(index), "a list index must be `int`, found {show(it)}")
+                if rt == Ty.Bytes
+                    err(
+                        "type.bytes.3",
+                        expr_pos(index),
+                        "a `bytes` index must be `int`, found {show(it)}",
+                    )
+                else
+                    err(
+                        "type.coll.4",
+                        expr_pos(index),
+                        "a list index must be `int`, found {show(it)}",
+                    )
     match rt
         ListOf(t) => if slice then rt else t
+        # type.bytes.3-4: an element is a `u8`; a slice is `bytes`.
+        Bytes => if slice then rt else Ty.Num("u8")
         Unknown => Ty.Unknown
         Str =>
             err_help(

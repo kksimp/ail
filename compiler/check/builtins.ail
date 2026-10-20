@@ -41,6 +41,22 @@ pub STR_METHODS := [
     "lines",
     "len",
     "byte_len",
+    "to_bytes",
+]
+
+## type.bytes.7-12
+pub BYTES_METHODS := [
+    "len",
+    "to_str",
+    "text",
+    "to_list",
+    "concat",
+    "find",
+    "starts_with",
+    "ends_with",
+    "contains",
+    "hex",
+    "base64",
 ]
 
 pub CHAR_METHODS := [
@@ -208,6 +224,25 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.ListOf(Ty.Str))
             if n == "len" or n == "byte_len"
                 return read([], Ty.Int)
+            if n == "to_bytes"
+                return read([], Ty.Bytes)
+            none
+        # type.bytes.7-12: `bytes` is immutable, so no method changes it.
+        Bytes =>
+            if n == "len"
+                return read([], Ty.Int)
+            if n == "to_str"
+                return read([], Ty.Opt(Ty.Str))
+            if n == "text" or n == "hex" or n == "base64"
+                return read([], Ty.Str)
+            if n == "to_list"
+                return read([], Ty.ListOf(Ty.Num("u8")))
+            if n == "concat"
+                return read([Ty.Bytes], Ty.Bytes)
+            if n == "find"
+                return read([Ty.Bytes], Ty.Opt(Ty.Int))
+            if n == "starts_with" or n == "ends_with" or n == "contains"
+                return read([Ty.Bytes], Ty.Bool)
             none
         Char =>
             if ["is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower"].contains(n)
@@ -377,6 +412,7 @@ fn read(params List[Ty], result Ty) Builtin?
 @allow("expr.match.3") fn builtin_names(t Ty) List[str]
     match t
         Str => STR_METHODS
+        Bytes => BYTES_METHODS
         Char => CHAR_METHODS
         Int => INT_METHODS
         Float => FLOAT_METHODS

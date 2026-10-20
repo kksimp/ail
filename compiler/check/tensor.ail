@@ -6,7 +6,12 @@ use ast
 
 TENSOR_METHODS := [
     "add",
+    "argmax",
+    "argmin",
+    "clamp",
+    "conv2d",
     "dot",
+    "item",
     "len",
     "map",
     "matmul",
@@ -15,6 +20,7 @@ TENSOR_METHODS := [
     "mul",
     "relu",
     "reshape",
+    "round",
     "shape",
     "sigmoid",
     "sum",
@@ -116,6 +122,30 @@ fn Checker.tensor_method(
             "convert first: `t.map(|x| x.to_float()).mean()`",
         )
         return Ty.Unknown
+    if elem == Ty.Int and (n == "round" or n == "clamp" or n == "conv2d")
+        args_only(args)
+        if n == "round"
+            err_help(
+                "std.tensor.19",
+                at,
+                "`round` is on `float` tensors, and this one holds `int`",
+                "a tensor of `int` already has whole numbers",
+            )
+        elif n == "clamp"
+            err_help(
+                "std.tensor.18",
+                at,
+                "`clamp` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).clamp(lo, hi)`",
+            )
+        else
+            err_help(
+                "std.tensor.16",
+                at,
+                "`conv2d` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).conv2d(k)`",
+            )
+        return Ty.Unknown
     if (n == "relu" or n == "sigmoid" or n == "tanh") and elem == Ty.Int
         args_only(args)
         err_help(
@@ -133,16 +163,28 @@ fn Checker.tensor_method(
         ret = Ty.Int
     elif n == "to_list"
         ret = Ty.ListOf(elem)
+    elif n == "item"
+        ret = elem
     elif n == "sum" or n == "max" or n == "mean"
         # std.tensor.11: over every element, or over one axis.
         if args.len() == 0
             ret = elem
         else
             params = [Ty.Int]
+    elif n == "round"
+        ret = tensor_ty(Ty.Int)
+    elif n == "argmax" or n == "argmin"
+        if args.len() == 0
+            ret = Ty.Int
+        else
+            params = [Ty.Int]
+            ret = tensor_ty(Ty.Int)
+    elif n == "clamp"
+        params = [elem, elem]
     elif n == "dot"
         params = [rt]
         ret = elem
-    elif n == "add" or n == "mul" or n == "matmul"
+    elif n == "add" or n == "mul" or n == "matmul" or n == "conv2d"
         params = [rt]
     elif n == "reshape"
         params = [Ty.ListOf(Ty.Int)]

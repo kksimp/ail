@@ -142,6 +142,10 @@ fn Checker.check_fn(mut self, idx int)
         a
         for a in f.attrs if a.name == "allow" and a.arg == "expr.match.3"
     ].len() > 0
+    if f.ext != none
+        check_extern(idx, f)
+        end_fn(idx)
+        return
     if f.body == none
         if f.contracts.len() > 0
             check_bodyless_contracts(idx, f)
@@ -751,6 +755,8 @@ fn Checker.condition(mut self, cond ast.Expr)
     match t
         ListOf(e) => e
         SetOf(e) => e
+        # type.bytes.5: iterating `bytes` gives each `u8`.
+        Bytes => Ty.Num("u8")
         Conc(k, e) =>
             if k == "Channel"
                 # conc.share.7: the loop synchronises with other tasks (conc.par.2).
@@ -851,6 +857,16 @@ fn Checker.range_bounds(mut self, lo ast.Expr?, hi ast.Expr?)
 ## ---- Assignment and places ----
 
 fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at ast.Pos)
+    # std.tensor.15: a tensor is a value, so `t[i] = v` is an error.
+    if tensor_element_target(target)
+        expr(value, none, true)
+        err_help(
+            "std.tensor.15",
+            expr_pos(target),
+            "a tensor's elements can't be assigned: a tensor is a value",
+            "build a new tensor with `map`, or with `tensor.from`",
+        )
+        return
     # type.coll.13: `m[k] = v`, `m[k] += n` or `x = e` can fix a pending
     # local's type; `op=` starts a missing key at zero.
     settle_by_assign(target, op, value)
@@ -888,6 +904,16 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             )
         expr(value, none, true)
         return
+    # type.bytes.2: `bytes` never changes in place.
+    if bytes_element_target(target)
+        err_help(
+            "type.bytes.2",
+            expr_pos(target),
+            "`bytes` is immutable, so an element can't be assigned",
+            "build a new value: `b = b[..i] + bytes.from_list([x]) + b[i + 1..]`, or edit a `List[u8]` and convert it with `bytes.from_list`",
+        )
+        expr(value, none, true)
+        return
     require_mutable(target, none, "assigned")
     vt := expr(value, tt, true)
     consume(value, vt)
@@ -895,6 +921,21 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
         operator(o, tt, vt, at)
     elif not accepts(tt, vt)
         mismatch("expr.bind.6", expr_pos(value), tt, vt)
+
+## `t[i]` where `t` is a local tensor.
+@allow("expr.match.3") fn Checker.tensor_element_target(self, target ast.Expr) bool
+    match target
+        Index(recv, _, _) =>
+            n := name_of(recv) else return false
+            l := local(n) else return false
+            tensor_elem(l.ty) != none
+        _ => false
+
+## `b[i]` where `b` is `bytes`.
+@allow("expr.match.3") fn Checker.bytes_element_target(mut self, target ast.Expr) bool
+    match target
+        Index(recv, _, _) => quiet_type(recv) == Ty.Bytes
+        _ => false
 
 @allow("expr.match.3")
 fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr)

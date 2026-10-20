@@ -73,6 +73,7 @@ manifest checks eff.cap.4–5 (ADR 0380).
 | 4+ | Ported the batch branch's checker changes: match guards and range patterns (ADRs 0452–0453, expr.match.11–12), `unsafe` blocks and functions and C calls (unsafe.block.1–3, ffi.call.1), bit methods on `int`, tensor `relu`/`sigmoid`/`tanh` and `/` (std.tensor.10, std.tensor.13); `unsafe_allowed` added to the program dump | 579 of 579 programs; 2,960 bodies; 557 of 557 diagnostics, all messages identical (2026-10-20) |
 | 4+ | Ported named arguments (lane 130, expr.call.3): `Sig.names`, `arg_slots` and `slot_of` in `check_call` | 581 of 581 programs; 563 of 563 diagnostics, all messages identical (2026-10-20) |
 | 4+ | Ported function values (lane 130, type.fn.1–3): `fn_value`, `call_value`, `FnTy` in `bind`, `subst_unknown` and `has_param`, and the effect of a function named as a value | 584 of 584 programs; 570 of 570 diagnostics, all messages identical (2026-10-20) |
+| 4+ | Ported the second batch merge: `bytes` (type.bytes.2–6, 13; its methods and `str.to_bytes`), raw pointers and `std.mem` (unsafe.op.1, unsafe.ptr.1–3, unsafe.mem.3), `extern c fn` declarations (ffi.decl.3), `std.net` handles (std.net.9, `net.ail`), `task.select` (conc.select.1), tensor indexing, `-t` and the new tensor methods (std.tensor.14–19), the new `std` functions (hash, compress, regex, tz, proc, net), and effects per standard function (`net.serve` capability) | 662 of 662 programs; 3,928 bodies; 666 of 666 diagnostics, all messages identical (2026-10-20) |
 
 ### Slice 4 report (2026-10-20)
 

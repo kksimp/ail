@@ -8,6 +8,7 @@ use ast
 @allow("expr.match.3") fn Checker.expr(mut self, e ast.Expr, expect Ty?, need bool) Ty
     match e
         Str => Ty.Str
+        Bytes => Ty.Bytes
         Int(v, at) =>
             # type.num.10: an integer literal where a float is expected is a float.
             if expect == Ty.Float
@@ -591,6 +592,9 @@ fn Checker.unary(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos) Ty
     t := expr(operand, want, true)
     if reject_unhandled(t, expr_pos(operand))
         return Ty.Unknown
+    # std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
+    if neg and tensor_elem(t) != none
+        return t
     if neg and t == Ty.Float
         return Ty.Float
     if neg
@@ -702,6 +706,9 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
                 return lt
         if lt == Ty.Float and op != ast.BinOp.Rem
             return Ty.Float
+        # type.bytes.6: `a + b` joins two `bytes`.
+        if lt == Ty.Bytes and op == ast.BinOp.Add
+            return Ty.Bytes
         if lt == Ty.Str and op == ast.BinOp.Add
             err_help(
                 "trait.op.1",

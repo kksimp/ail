@@ -6,6 +6,7 @@ use ast
 pub fn expr_pos(e ast.Expr) ast.Pos
     match e
         Str(_, p) => p
+        Bytes(_, p) => p
         Interp(_, p) => p
         Int(_, p) => p
         Float(_, p) => p

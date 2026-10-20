@@ -1,0 +1,88 @@
+## `std.net`'s handle types (spec 17-std, std.net.9-12), as `check/net.rs`:
+## the types of `srv.accept()`, `ex.respond(r)`, `conn.read(n)` and the rest
+## on a `net.Server`, `net.Exchange`, `net.Listener` or `net.Conn`. The
+## functions that make them are ordinary standard functions (stdlib.ail).
+use ast
+
+## Each handle type's methods, as `stdlib::NET_METHODS`.
+NET_METHODS := [
+    ["Server", "accept", "addr", "close"],
+    ["Exchange", "respond", "respond_bytes"],
+    ["Listener", "accept", "addr", "close"],
+    [
+        "Conn",
+        "close",
+        "peer",
+        "read",
+        "read_bytes",
+        "read_line",
+        "set_timeout",
+        "write",
+        "write_bytes",
+    ],
+]
+
+## `recv.n(args)` where `recv` is the `std.net` handle `net.{tn}`; none for
+## any other struct of `std.net`, so the caller goes on.
+fn Checker.net_method(
+    mut self,
+    recv ast.Expr,
+    tn str,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty?
+    mut names := List[str]()
+    for row in NET_METHODS
+        if row[0] == tn
+            names = row[1..]
+    if names.len() == 0
+        return none
+    if not names.contains(n)
+        args_only(args)
+        mut d := new_diag("std.net.9", at, "`net.{tn}` has no method `{n}`")
+        if s := suggest(n, names)
+            d = d.did_you_mean(s)
+        else
+            d = d.with_help("its methods are {list_names(names)}")
+        diags.push(d)
+        return Ty.Unknown
+    net_methods[pos_key(at)] = "net.{tn}.{n}"
+    std_any.add(pos_key(at))
+    key := "{tn}.{n}"
+    mut params := List[Ty]()
+    mut ret := Ty.Unit
+    if key == "Server.accept"
+        ret = net_fails(std_named("net.Exchange"))
+    elif key == "Listener.accept"
+        ret = net_fails(std_named("net.Conn"))
+    elif n == "addr" or n == "peer"
+        ret = Ty.Str
+    elif n == "respond"
+        params = [std_named("net.Response")]
+        ret = net_fails(Ty.Unit)
+    elif n == "respond_bytes"
+        params = [Ty.Int, Ty.MapOf(key: Ty.Str, value: Ty.Str), Ty.Bytes]
+        ret = net_fails(Ty.Unit)
+    elif n == "read"
+        params = [Ty.Int]
+        ret = net_fails(Ty.Str)
+    elif n == "read_line"
+        ret = net_fails(Ty.Opt(Ty.Str))
+    elif n == "write"
+        params = [Ty.Str]
+        ret = net_fails(Ty.Unit)
+    elif n == "read_bytes"
+        params = [Ty.Int]
+        ret = net_fails(Ty.Bytes)
+    elif n == "write_bytes"
+        params = [Ty.Bytes]
+        ret = net_fails(Ty.Unit)
+    elif n == "set_timeout"
+        params = [Ty.Int]
+    check_call("net.{tn}.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)
+
+## `t ! net.NetError`.
+fn Checker.net_fails(self, t Ty) Ty
+    Ty.Res(t, Errs.ErrSet([std_named("net.NetError")]))

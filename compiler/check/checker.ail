@@ -123,6 +123,7 @@ pub struct Checker
     pub assoc_calls Map[int, int]
     pub std_fns Map[int, str]
     pub std_methods Set[int]
+    pub net_methods Map[int, str]
     ## Writes through a `ref`, by `pos_key` of the place (own.ref.4).
     pub ref_writes Set[int]
     ## For the parallel-loop pass (conc.par.2, conc.atomic.6): calls of a
@@ -220,6 +221,7 @@ pub fn new_checker(p ast.Program) Checker
         assoc_calls: Map[int, int](),
         std_fns: Map[int, str](),
         std_methods: Set[int](),
+        net_methods: Map[int, str](),
         ref_writes: Set[int](),
         handle_calls: Set[int](),
         atomic_calls: Set[int](),
@@ -942,7 +944,7 @@ fn Checker.no_unique(mut self, t Ty, at ast.Pos, what str)
         )
 
 ## unsafe.ptr.1: a raw pointer points to a type with a fixed C layout.
-fn Checker.ptr_target(mut self, inner Ty, at ast.Pos)
+@allow("expr.match.3") fn Checker.ptr_target(mut self, inner Ty, at ast.Pos)
     ok := match inner
         Int | Float | Bool | Num(_) | PtrOf(_) | Unknown => true
         _ => false

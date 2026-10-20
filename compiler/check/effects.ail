@@ -10,28 +10,97 @@ use ast
 fn impure(e str) bool
     e != "fail" and e != "mutates"
 
-## The effects of a standard-module function `module.name` (eff.infer.4).
-fn std_effects(module str) List[str]
-    if module == "fs"
-        return ["fs", "io"]
-    if module == "env"
-        return ["env"]
-    if module == "io"
-        return ["io"]
-    if module == "proc"
-        return ["proc", "io"]
+## The effects of a standard-module function `module.name` (eff.infer.4);
+## none when the module has no such function.
+fn std_effects(module str, name str) List[str]?
+    for row in STD_EFFECTS
+        if row.module == module and row.names.contains(name)
+            return row.effects
+    none
+
+## A group of standard functions with the same effects.
+struct StdEffects
+    module str
+    names List[str]
+    effects List[str]
+
+STD_EFFECTS := [
+    StdEffects(
+        module: "fs",
+        names: [
+            "read_text",
+            "write_text",
+            "append_text",
+            "read_bytes",
+            "write_bytes",
+            "append_bytes",
+            "exists",
+            "list_dir",
+            "remove",
+            "make_dir",
+            "rename",
+            "copy",
+            "walk",
+            "glob",
+            "metadata",
+        ],
+        effects: ["fs", "io"],
+    ),
+    # std.hash.1: values only. std.compress.1: the byte functions are values
+    # only; the file and directory ones read and write files.
+    StdEffects(
+        module: "hash",
+        names: ["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
+        effects: [],
+    ),
+    StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
+    StdEffects(
+        module: "compress",
+        names: ["deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib"],
+        effects: [],
+    ),
+    StdEffects(module: "env", names: ["args", "get", "cwd", "home", "program", "vars"], effects: ["env"]),
+    StdEffects(
+        module: "proc",
+        names: ["run", "run_bytes", "which", "start", "wait", "kill"],
+        effects: ["proc", "io"],
+    ),
+    StdEffects(module: "io", names: ["read_line", "read_all", "read_bytes", "eprint", "exit"], effects: ["io"]),
+    # std.net.14: a server needs the narrower capability as well.
+    StdEffects(module: "net", names: ["serve", "listen"], effects: ["net", "net.serve", "io"]),
     # std.net.1: every request reaches the network.
-    if module == "net"
-        return ["net", "io"]
-    if module == "random"
-        return ["random"]
-    if module == "time"
-        return ["clock"]
+    StdEffects(
+        module: "net",
+        names: [
+            "get",
+            "post",
+            "request",
+            "get_bytes",
+            "post_bytes",
+            "request_bytes",
+            "options",
+            "connect",
+            "connect_tls",
+        ],
+        effects: ["net", "io"],
+    ),
+    # std.path.1, std.regex.1: text only, so no effects.
+    StdEffects(module: "path", names: ["base", "dir", "ext", "join"], effects: []),
+    StdEffects(module: "random", names: ["int", "float", "seed", "shuffle"], effects: ["random"]),
+    StdEffects(
+        module: "regex",
+        names: ["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+        effects: [],
+    ),
+    StdEffects(module: "time", names: ["now_ms", "sleep_ms"], effects: ["clock"]),
+    # std.tz.1-2: reads the tz database files, and `TZ`.
+    StdEffects(module: "tz", names: ["offset", "system"], effects: ["fs", "env"]),
+    # std.tensor.1: values only. conc.cancel.2: reads the running task's flag.
+    StdEffects(module: "tensor", names: ["from", "zeros"], effects: []),
+    StdEffects(module: "task", names: ["cancelled", "check", "select"], effects: []),
     # std.ui.9: opening a window and every `ui.Window` method.
-    if module == "ui"
-        return ["ui", "io"]
-    # std.path.1, std.tensor.1, conc.cancel.2: no effects.
-    []
+    StdEffects(module: "ui", names: ["open", "clipboard_get", "clipboard_set", "Window"], effects: ["ui", "io"]),
+]
 
 ## The effects a function or expression has directly, each with its source
 ## (`print`, `fs.write_text`, `T ! E`), and the functions it may call.
@@ -47,6 +116,8 @@ struct Facts
     assoc_calls Map[int, int]
     std_fns Map[int, str]
     std_methods Set[int]
+    ## `net` handle methods, by key (`net.Conn.read`).
+    net_methods Map[int, str]
     ref_writes Set[int]
     handle_calls Set[int]
     atomic_calls Set[int]
@@ -89,6 +160,7 @@ fn Checker.facts(self) Facts
         assoc_calls: assoc_calls,
         std_fns: std_fns,
         std_methods: std_methods,
+        net_methods: net_methods,
         ref_writes: ref_writes,
         handle_calls: handle_calls,
         atomic_calls: atomic_calls,
@@ -420,7 +492,7 @@ fn Walked.otherwise(mut self, prog ast.Program, fx Facts, o ast.Else)
 
 fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
     match e
-        Str | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
+        Str | Bytes | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
         # type.fn.2: naming a function as a value counts as calling it, since
         # the value can be called wherever it ends up.
         Name(_, at) =>
@@ -477,12 +549,15 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
             elif tr := fx.trait_calls.get(key)
                 for i in implementations(prog, tr, n)
                     call(i)
-            elif std_head(fx, key, recv) != none
-                module := fx.std_fns.get(key) else ""
-                for ef in std_effects(module)
-                    add(ef, "{std_head(fx, key, recv) else module}.{n}")
+            elif efs := std_fn_effects(fx, key, recv, n)
+                for ef in efs
+                    add(ef, "{std_head(fx, key, recv) else ""}.{n}")
+            elif m := fx.net_methods.get(key)
+                # std.net.14: the methods of the handles `net.serve`, `net.listen` and `net.connect` make.
+                for ef in ["net", "io"]
+                    add(ef, m)
             elif fx.std_methods.contains(key)
-                for ef in std_effects("ui")
+                for ef in ["ui", "io"]
                     add(ef, "ui.Window.{n}")
             elif not is_enum_name(prog, recv)
                 # A built-in method (`xs.sort()`, `m.get(k)`) may compare,
@@ -534,6 +609,13 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
         OrElse(value, o, _) =>
             expr(prog, fx, value)
             otherwise(prog, fx, o)
+
+## The effects of a recorded standard call `m.f(...)`; none when `f` has
+## no listed effects.
+fn std_fn_effects(fx Facts, key int, recv ast.Expr, n str) List[str]?
+    if std_head(fx, key, recv) == none
+        return none
+    std_effects(fx.std_fns.get(key)?, n)
 
 ## The module name written in `m.f(...)`, for a recorded standard call.
 @allow("expr.match.3") fn std_head(fx Facts, key int, recv ast.Expr) str?
