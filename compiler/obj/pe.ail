@@ -104,8 +104,24 @@ pub fn pe(img codegen.Image, dlls List[PeDll]) List[int]
         else
             put(mut out, 0, 8)
     pe_section(mut out, ".text", img.code.len(), code_rva, text_raw, PE_HEADERS, 1610612768)
-    pe_section(mut out, ".rdata", img.data.len(), rdata, rdata_raw, PE_HEADERS + text_raw, 1073741888)
-    pe_section(mut out, ".idata", idata_len, idata, idata_raw, PE_HEADERS + text_raw + rdata_raw, 3221225536)
+    pe_section(
+        mut out,
+        ".rdata",
+        img.data.len(),
+        rdata,
+        rdata_raw,
+        PE_HEADERS + text_raw,
+        1073741888,
+    )
+    pe_section(
+        mut out,
+        ".idata",
+        idata_len,
+        idata,
+        idata_raw,
+        PE_HEADERS + text_raw + rdata_raw,
+        3221225536,
+    )
     pe_section(mut out, ".bss", bss_size, bss, 0, 0, 3221225600)
     pe_pad(mut out, PE_HEADERS)
     out.extend(pe_resolve(img, table.slots, code_rva, rdata, bss))
@@ -186,7 +202,13 @@ fn pe_imports(dlls List[PeDll], base int) PeImports
             put(mut out, 0, 2)
             out.extend(codegen.utf8(f))
             out.push(0)
-    PeImports(bytes: out, iat: if lookups.len() > 0 then iats[0] else 0, iat_size: iat_size, dir_size: dirs, slots: slots)
+    PeImports(
+        bytes: out,
+        iat: if lookups.len() > 0 then iats[0] else 0,
+        iat_size: iat_size,
+        dir_size: dirs,
+        slots: slots,
+    )
 
 ## The code with its relocations resolved, for `.text` at RVA `code_rva`,
 ## `.rdata` at `rdata` and `.bss` at `bss`.
@@ -253,4 +275,9 @@ pub fn pe_sample() List[int]
 ## `call qword ptr [rip + slot]` through the import `name`: FF 15 and a rel32.
 fn pe_call_import(mut img codegen.Image, name str)
     img.code.extend([255, 21, 0, 0, 0, 0])
-    img.relocs.push(codegen.Reloc(at: img.code.len() - 4, kind: "rel32", sym: "imp:{name}", tail: 0))
+    img.relocs.push(codegen.Reloc(
+        at: img.code.len() - 4,
+        kind: "rel32",
+        sym: "imp:{name}",
+        tail: 0,
+    ))
