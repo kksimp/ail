@@ -8,7 +8,7 @@
 
 #![allow(dead_code)]
 
-mod client;
+pub(crate) mod client;
 mod codec;
 mod record;
 mod schedule;
