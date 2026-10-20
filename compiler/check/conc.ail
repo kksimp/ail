@@ -291,7 +291,7 @@ fn pos_key(p ast.Pos) int
 ## conc.atomic.7 (ADR 0352): `order: O` on an atomic method, where `O` is a
 ## prelude ordering the method can use.
 @allow("expr.match.3") fn Checker.atomic_order(mut self, method str, arg ast.Arg)
-    mut want := no_ty()
+    mut want := none
     if d := types.get("AtomicOrder")
         match d
             DEnum(i) => want = Ty.Enum(i, [])

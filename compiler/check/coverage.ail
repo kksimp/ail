@@ -164,6 +164,7 @@ pub COVERED_RULES := [
     "type.num.14",
     "type.opt.3",
     "type.opt.4",
+    "type.opt.9",
     "type.str.11",
     "type.str.2",
     "type.struct.4",

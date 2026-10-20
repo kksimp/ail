@@ -180,7 +180,7 @@ fn Checker.unique_builtin(mut self, rt Ty, n str, at ast.Pos, nparams int) List[
 
 ## `ref e` (own.ref.1).
 @allow("expr.match.3") fn Checker.ref_expr(mut self, value ast.Expr, at ast.Pos, expect Ty?) Ty
-    mut hint := no_ty()
+    mut hint := none
     if e := expect
         match e
             RefOf(t) => hint = t

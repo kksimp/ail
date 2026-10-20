@@ -147,6 +147,8 @@ pub struct Pending
     pub name str
     pub lit ast.Pos
     pub brace bool
+    ## Whether it is `none`, typed by its first assignment (type.opt.9).
+    pub opt bool
     pub index int
 
 pub struct Moved

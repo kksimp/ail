@@ -42,7 +42,7 @@ fn is_number(t Ty) bool
 @allow("expr.match.3")
 fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
     shape := Ty.ListOf(Ty.Int)
-    mut wanted := no_ty()
+    mut wanted := none
     if t := expect
         if e := tensor_elem(t)
             if is_number(e)

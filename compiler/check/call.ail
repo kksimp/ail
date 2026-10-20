@@ -3,7 +3,7 @@
 use ast
 
 @allow("expr.match.3") fn Checker.list(mut self, elems List[ast.Expr], at ast.Pos, expect Ty?) Ty
-    mut hint := no_ty()
+    mut hint := none
     if t := expect
         match opt_inner(t)
             ListOf(x) => hint = x
@@ -159,6 +159,10 @@ fn Checker.args_only(mut self, args List[ast.Arg])
 fn no_binds() List[Bind]?
     none
 
+## An absent type, for a local read before its first assignment.
+fn no_ty() Ty?
+    none
+
 fn no_tys() List[Ty]?
     none
 
@@ -207,8 +211,8 @@ fn Checker.map_literal(mut self, entries List[ast.MapEntry], at ast.Pos, expect 
             "use `\{}` where a map or set is expected, or write `Map[K, V]()` or `Set[T]()`",
         )
         return Ty.Unknown
-    mut kh := no_ty()
-    mut vh := no_ty()
+    mut kh := none
+    mut vh := none
     match expected
         MapOf(k, v) =>
             kh = k
@@ -225,7 +229,7 @@ fn Checker.map_literal(mut self, entries List[ast.MapEntry], at ast.Pos, expect 
 ## `{a, b, ...}` (type.coll.2).
 @allow("expr.match.3")
 fn Checker.set_literal(mut self, items List[ast.Expr], at ast.Pos, expect Ty?) Ty
-    mut hint := no_ty()
+    mut hint := none
     match opt_inner(expect else Ty.Unknown)
         SetOf(x) => hint = x
         _ => hint = none
@@ -270,7 +274,7 @@ fn Checker.duplicate_literals(mut self, items List[ast.Expr], what str)
 ## The common type of a literal's elements: the expected one, which each
 ## must fit, or else the first element's.
 fn Checker.elements(mut self, items List[ast.Expr], hint Ty?, what str) Ty
-    mut known := no_ty()
+    mut known := none
     if h := hint
         if not has_unknown(h)
             known = h
@@ -383,7 +387,7 @@ fn Checker.check_call(
         a := args[k]
         p := sig.params[k]
         hint := subst_unknown(p.ty, binds, vars)
-        mut want_hint := no_ty()
+        mut want_hint := none
         if hint != Ty.Unknown
             want_hint = hint
         t := expr(a.value, want_hint, true)
@@ -584,7 +588,7 @@ fn Checker.fields_literal(
             err("type.struct.4", where, "field `{fname}` is given more than once{how}")
         given[i] = true
         hint := subst_unknown(ts[i], binds, vars)
-        mut want_hint := no_ty()
+        mut want_hint := none
         if hint != Ty.Unknown
             want_hint = hint
         t := expr(a.value, want_hint, true)
@@ -687,7 +691,7 @@ fn Checker.pending_recv(self, recv ast.Expr) int?
 fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
     # type.coll.13: `xs.push(x)` or `s.add(x)` can fix a pending local's type.
     if k := pending_recv(recv)
-        if args.len() == 1
+        if args.len() == 1 and not pending[k].opt
             if n == "push" and not pending[k].brace
                 t := quiet_type(args[0].value)
                 if k2 := pending_recv(recv)
@@ -1306,8 +1310,8 @@ fn Checker.comprehension(
     expect Ty?,
 ) Ty
     want := opt_inner(expect else Ty.Unknown)
-    mut hint := no_ty()
-    mut vhint := no_ty()
+    mut hint := none
+    mut vhint := none
     match form
         ListComp =>
             match want
@@ -1364,7 +1368,7 @@ fn Checker.comprehension(
 
 ## The element (or key, or value) of a comprehension (expr.comp.3).
 fn Checker.comp_part(mut self, e ast.Expr, hint Ty?) Ty
-    mut h := no_ty()
+    mut h := none
     if x := hint
         if not has_unknown(x)
             h = x

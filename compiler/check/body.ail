@@ -159,7 +159,7 @@ fn Checker.check_fn(mut self, idx int)
     push_params(f, sig)
     check_contracts(f, sig.ret)
     need := not returns_nothing(sig.ret)
-    mut want := no_ty()
+    mut want := none
     if need
         want = sig.ret
     got := block(body, want, need)
@@ -246,7 +246,7 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
     for i in 0..stmts.len()
         s := stmts[i]
         last := i + 1 == stmts.len()
-        mut want := no_ty()
+        mut want := none
         if last
             want = expect
         ty = stmt(s, want, last and need)
@@ -272,6 +272,11 @@ fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
         ListLit(xs, _) => xs.len() == 0
         SetLit(xs, _) => xs.len() == 0
         MapLit(xs, _) => xs.len() == 0
+        _ => false
+
+@allow("expr.match.3") fn is_none_literal(e ast.Expr) bool
+    match e
+        NoneLit => true
         _ => false
 
 @allow("expr.match.3") fn is_list_literal(e ast.Expr) bool
@@ -338,8 +343,10 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         _ => false
 
 fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, otherwise ast.Else?)
-    # type.coll.13: `x := []` or `{}` is typed by its first use.
-    if is_empty_literal(value) and otherwise == none
+    # type.coll.13: `x := []` or `{}` is typed by its first use; type.opt.9:
+    # so is a `mut` local that starts as `none`.
+    opt := mutable and is_none_literal(value)
+    if (is_empty_literal(value) or opt) and otherwise == none
         if declare(n, at)
             index := locals.len()
             locals.push(Local(
@@ -352,7 +359,8 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
             pending.push(Pending(
                 name: n,
                 lit: expr_pos(value),
-                brace: not is_list_literal(value),
+                brace: not is_list_literal(value) and not opt,
+                opt: opt,
                 index: index,
             ))
         return
@@ -435,6 +443,10 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
     match t
         Res => true
         _ => false
+
+## `t` as an optional: `T?` stays, and `T` becomes `T?`.
+fn as_opt(t Ty) Ty
+    if is_opt(t) then t else Ty.Opt(t)
 
 @allow("expr.match.3") fn is_opt(t Ty) bool
     match t
@@ -600,8 +612,10 @@ fn Checker.declare(mut self, n str, at ast.Pos) bool
     if is_prelude_line(at.line) or module_at(prog, at) != ""
         return true
     mut what := ""
+    # A local may shadow a function (ADR 0469); a call of it in the local's
+    # block is expr.call.1.
     if fns.contains(n) or PRELUDE_FNS.contains(n)
-        what = "a function"
+        return true
     elif types.contains(n) or BUILTIN_TYPES.contains(n)
         what = "a type"
     elif consts.contains(n)
@@ -642,6 +656,15 @@ fn Checker.settle(mut self, k int, t Ty)
 ## Report a use of pending local `k` before its type is known.
 fn Checker.unsettled(mut self, k int, at ast.Pos)
     p := pending.remove_at(k)
+    if p.opt
+        err_help(
+            "type.opt.9",
+            at,
+            "the type of `{p.name}` isn't known yet",
+            "its first assignment should fix it, such as `{p.name} = e`",
+        )
+        locals[p.index].ty = Ty.Unknown
+        return
     ctor := if p.brace then "`Map[K, V]()` or `Set[T]()`" else "`List[T]()`"
     first := if p.brace then "`{p.name}.add(x)` or `{p.name}[k] = v`" else "`{p.name}.push(x)`"
     err_help(
@@ -668,6 +691,14 @@ fn Checker.end_scope(mut self, mark int)
     while k < pending.len()
         if pending[k].index >= mark
             p := pending.remove_at(k)
+            if p.opt
+                err_help(
+                    "type.opt.9",
+                    p.lit,
+                    "nothing fixes the type of `{p.name}`",
+                    "assign it a value with `{p.name} = e` first",
+                )
+                continue
             ctor := if p.brace then "`Map[K, V]()` or `Set[T]()`" else "`List[T]()`"
             err_help(
                 "type.coll.13",
@@ -871,6 +902,11 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
                 return
             k := pending_of(n) else return
             vt := quiet_type(value)
+            if pending[k].opt
+                # type.opt.9: the first value gives `T?` (type.opt.5).
+                if vt != Ty.Unknown and vt != Ty.Unit and vt != Ty.Never
+                    settle(k, as_opt(vt))
+                return
             brace := pending[k].brace
             if (not brace and is_list_ty(vt)) or (brace and (is_map_ty(vt) or is_set_ty(vt)))
                 settle(k, vt)

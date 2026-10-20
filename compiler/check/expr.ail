@@ -140,7 +140,8 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if k := pending_of(n)
         want := opt_inner(expect else Ty.Unknown)
         brace := pending[k].brace
-        if (is_list_ty(want) and not brace) or ((is_map_ty(want) or is_set_ty(want)) and brace)
+        if (is_list_ty(want) and not brace and not pending[k].opt)
+            or ((is_map_ty(want) or is_set_ty(want)) and brace)
             settle(k, want)
             return want
         unsettled(k, at)
@@ -728,6 +729,8 @@ pub struct Agree
     pub failed bool
     pub part str
     pub construct str
+    ## The `none` branches, typed once the other branches are (type.opt.10).
+    pub none_at List[ast.Pos]
 
 fn new_agree(expect Ty?, need bool, part str, construct str) Agree
     Agree(
@@ -737,9 +740,14 @@ fn new_agree(expect Ty?, need bool, part str, construct str) Agree
         failed: false,
         part: part,
         construct: construct,
+        none_at: [],
     )
 
 fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
+    if a.need and a.expect == none and body.len() == 1
+        if p := bare_none(body[0])
+            a.none_at.push(p)
+            return
     mut hint := a.expect
     if hint == none
         hint = a.first
@@ -782,6 +790,16 @@ fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
     if not same(t, f)
         a.failed = true
         err("expr.if.4", where, "this {a.part} is {show(t)}, but the first {a.part} is {show(f)}")
+
+## The position of `none` when `s` is just that.
+@allow("expr.match.3") fn bare_none(s ast.Stmt) ast.Pos?
+    match s
+        Eval(e) =>
+            match e
+                NoneLit(p) => return p
+                _ => return none
+        _ => return none
+    none
 
 fn agree_result(a Agree) Ty
     if not a.need
@@ -877,7 +895,20 @@ fn Checker.if_expr(
         end_scope(mark)
     if need and els == none
         return Ty.Unknown
-    agree_result(agree)
+    t := agree_result(agree)
+    # type.opt.10: a bare `none` branch takes `T?` from the other branches.
+    if agree.none_at.len() == 0 or is_opt(t) or t == Ty.Unknown
+        return t
+    if t == Ty.Never
+        for p in agree.none_at
+            err_help(
+                "type.opt.4",
+                p,
+                "the type of `none` isn't known here",
+                "use `none` where a `T?` is expected, e.g. as an argument or a return value",
+            )
+        return Ty.Unknown
+    Ty.Opt(t)
 
 ## The names a pattern binds, with their types.
 pub struct Binding
