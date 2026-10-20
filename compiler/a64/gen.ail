@@ -620,6 +620,39 @@ fn Gen.shift(mut self, i mir.Inst)
     put_gpr(i.dst, d)
 
 fn Gen.call(mut self, i mir.Inst)
+    if i.name == "rt.list_push" or i.name == "rt.list_pushf"
+        push(i)
+        return
+    call_out(i)
+
+## `xs.push(v)` with room to spare is a store and a length update; only a
+## full list calls the runtime, which grows it (native-abi.md §2).
+fn Gen.push(mut self, i mir.Inst)
+    # The value first: building a constant may use the scratch registers.
+    v := i.args[1]
+    float := f.vals[v].is_float()
+    # x0 is free between calls.
+    r := if float then fpr(v, X0) else gpr(v, 0)
+    l := gpr(i.args[0], S0)
+    slow := a.label()
+    done := a.label()
+    a.ldr(S2, l, 0)
+    a.ldr(S1, l, 8)
+    a.cmp_rr(S2, S1)
+    a.b_cond(EQ, slow)
+    a.ldr(S1, l, 16)
+    if float
+        a.str_d_idx(r, S1, S2)
+    else
+        a.str_idx(r, S1, S2)
+    a.alu_ri("add", S2, S2, 1)
+    a.str(S2, l, 0)
+    a.b(done)
+    a.bind(slow)
+    call_out(i)
+    a.bind(done)
+
+fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0

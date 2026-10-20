@@ -448,14 +448,14 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
                 problem(f.pos, "`{f.name}` must end with its result")
         else
             finish(return_of(-1))
-    func := simplify(Func(
+    func := simplify(fold(simplify(Func(
         name: fname,
         params: params,
         ret: ret,
         blocks: blocks,
         vals: vals,
         names: names,
-    ))
+    ))))
     for err in verify(func)
         problems.push(Problem(
             rule: "native.build.2",
