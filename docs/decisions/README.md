@@ -203,3 +203,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
 | [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
 | [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |
+| [0214](0214-list-editing-methods.md) | List `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first` (resolves OQ-047) *(delegated)* | Accepted | 2026-10-20 |
+| [0215](0215-str-slice-and-search-methods.md) | `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper` (resolves OQ-048) *(delegated)* | Accepted | 2026-10-20 |

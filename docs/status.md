@@ -39,6 +39,7 @@ are implemented; `docs/language-card.md` is the whole language in under 4,000
 tokens. Linux selftest passes; macOS verification is pending.
 Lane 25 added property tests (`@test` with parameters, `--cases`, `--seed`, shrinking) and doc examples as tests (ADRs 0198–0201; spec `test.prop.*`, `test.doc.*`).
 Lane 27 (ADRs 0206–0209, resolves OQ-043, OQ-044, OQ-046): `std.random` (`int`, `float`, `seed`, `shuffle`; capability `random`), `ail run --deterministic` and `--seed`, `str.len()` counting characters with `byte_len()`, and nested optionals (`T??`).
+Lane 31 (ADRs 0214–0215, resolves OQ-047, OQ-048): list `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first`; `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`; the editor uses them (tokens -0.9%).
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
 Lane 28 added `requires`/`ensures` contracts, checked at run time (ADRs 0210–0213, `contract.*`).
@@ -117,4 +118,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-048; 043, 044 and 046 are resolved).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-048; 043, 044, 046, 047 and 048 are resolved).
