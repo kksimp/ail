@@ -1,0 +1,30 @@
+# std.json: accessors with `?` and `else` (json.query.1)
+fn second_tag(doc Json) str?
+    doc.get("user")?.get("tags")?.at(1)?.as_str()
+
+fn name(doc Json) str?
+    doc.get("user")?.get("name")?.as_str()
+
+fn age(doc Json) float?
+    doc.get("user")?.get("age")?.as_num()
+
+fn is_ok(doc Json) bool?
+    doc.get("user")?.get("ok")?.as_bool()
+
+fn tags(doc Json) List[Json]?
+    doc.get("user")?.get("tags")?.as_arr()
+
+fn main() !
+    doc := parse_json("\{\"user\": \{\"name\": \"Ann\", \"age\": 30.5, \"ok\": true, \"tags\": [\"a\", \"b\"]}}")?
+    print(second_tag(doc) else "none")
+    print(name(doc) else "?")
+    print(age(doc) else -1.0)
+    print(is_ok(doc) else false)
+    ts := tags(doc) else []
+    print(ts.len())
+    print((doc.get("nope") else Json.Null).to_text())
+    print((doc.at(0) else Json.Null).to_text())
+    print(Json.Num(1.0).as_str() else "not a string")
+    members := doc.as_obj() else []
+    print(members.len())
+    print(Json.Arr([Json.Num(1.0), Json.Str("x")]).to_text())

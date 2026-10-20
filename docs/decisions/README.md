@@ -154,3 +154,13 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0158](0158-standard-io-errors.md) | Standard failures are `fs.IoError` and `proc.ProcError` with a short `kind` *(delegated)* | Accepted | 2026-10-20 |
 | [0159](0159-program-arguments.md) | `ail run FILE ARGS...` gives the program its arguments and its path *(delegated)* | Accepted | 2026-10-20 |
 | [0160](0160-process-runs.md) | `proc.run` runs a program directly and fails only if it can't start *(delegated)* | Accepted | 2026-10-20 |
+| [0161](0161-std-json-in-the-prelude.md) | `std.json` lives in the prelude as `Json`, `parse_json`, with `float` numbers *(delegated)* | Accepted | 2026-10-20 |
+| [0162](0162-optional-prelude-modules.md) | Optional prelude modules are read only when named *(delegated)* | Accepted | 2026-10-20 |
+| [0163](0163-inferred-effect-sets.md) | Every function has an inferred effect set, shown by `ail effects` *(delegated)* | Accepted | 2026-10-20 |
+| [0164](0164-pure-functions.md) | `@pure` rejects a function with I/O, `unsafe`, `spawn` or a capability *(delegated)* | Accepted | 2026-10-20 |
+| [0165](0165-capability-denial.md) | `--deny` rejects at compile time a program that reaches a denied capability *(delegated)* | Accepted | 2026-10-20 |
+| [0167](0167-test-functions-and-ail-test.md) | Tests are `@test` functions run by `ail test FILE [--json]` *(delegated)* | Accepted | 2026-10-20 |
+| [0168](0168-assert-and-assert-eq.md) | `assert` and `assert_eq` are prelude functions allowed anywhere *(delegated)* | Accepted | 2026-10-20 |
+| [0172](0172-spec-conformance-harness.md) | Every `ail` block in the spec runs as a conformance test, tagged by expectation *(delegated)* | Accepted | 2026-10-20 |
+| [0173](0173-format-specifications-in-interpolation.md) | Interpolation takes format specs: `{x:>8}`, `{r:.2}`, `{n:0>4x}` (resolves OQ-041) *(delegated)* | Accepted | 2026-10-20 |
+| [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |

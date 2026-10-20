@@ -5,6 +5,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | Document | What it's for |
 |---|---|
 | [vision.md](vision.md) | Identity, goals, and design philosophy (from the founding brief) |
+| [language-card.md](language-card.md) | The whole language in one read, under 4,000 tokens, for AI agents (non-normative) |
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
 | [roadmap.md](roadmap.md) | Phased development plan |
@@ -23,6 +24,9 @@ Design notes:
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
   make AIL easiest and most efficient for an AI author (proposals).
+- [design/ai-first-plan.md](design/ai-first-plan.md): the 2026-10-20 plan
+  for the AI-as-operator features (semantic API, effects and capabilities,
+  standard modules), efficiency, and the buildout lanes.
 - [design/syntax-measurements-r1.md](design/syntax-measurements-r1.md): first
   real tokenizer measurements of candidate syntax (block style, signatures,
   keywords).

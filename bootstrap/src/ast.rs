@@ -120,6 +120,8 @@ pub struct Variant {
 /// blocks have the trait or the implementing type as their owner.
 #[derive(Debug)]
 pub struct FnDecl {
+    /// Attributes written before `fn` (gram.attr.1-2).
+    pub attrs: Vec<Attr>,
     pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
@@ -131,6 +133,13 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+}
+
+/// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
+#[derive(Debug, Clone)]
+pub struct Attr {
+    pub name: String,
+    pub pos: Pos,
 }
 
 /// Where a function is declared.
@@ -165,6 +174,10 @@ impl FnDecl {
     /// A free function, method or associated function declared at the top level.
     pub fn top_level(&self) -> bool {
         self.within == Within::TopLevel
+    }
+
+    pub fn has_attr(&self, name: &str) -> bool {
+        self.attrs.iter().any(|a| a.name == name)
     }
 }
 
@@ -465,6 +478,8 @@ pub enum Cond {
 pub enum InterpPart {
     Lit(String),
     Expr(Expr),
+    /// `{expression:spec}` (lex.str.7).
+    Fmt(Expr, crate::lexer::FormatSpec),
 }
 
 /// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).

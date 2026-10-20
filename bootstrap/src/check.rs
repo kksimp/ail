@@ -19,6 +19,8 @@
 
 mod builtins;
 mod stdlib;
+pub mod effects;
+mod testing;
 mod traits;
 
 use std::collections::HashMap;
@@ -140,13 +142,16 @@ pub struct Resolved {
     pub optional_try: std::collections::HashSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
     pub float_literals: std::collections::HashSet<Pos>,
+    /// The function each method or associated function call runs, by the
+    /// position of its name, when that is known statically (eff.infer.3).
+    pub targets: HashMap<Pos, usize>,
     pub std: Std,
     /// Calls to the standard modules, by the position of the name (std.use.2).
     pub std_calls: HashMap<Pos, crate::stdlib::StdCall>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
-const PRELUDE: &[&str] = &["print", "unreachable"];
+const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &["int", "i64", "float", "f64", "str", "char", "bool", "List", "Map", "Set"];
 
@@ -197,6 +202,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.check_uses();
     c.check_deferred_bounds();
     c.check_main();
+    c.check_attrs();
     c.check_impls();
     // err.type.6: inferred error sets are the least fixed point over all
     // functions, found by re-checking them silently until nothing changes.
@@ -220,6 +226,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     }
     c.resolved.impls = c.impl_of.clone();
     c.resolved.std = c.std;
+    c.diags.extend(effects::check_pure(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 
@@ -801,7 +808,7 @@ impl<'p> Checker<'p> {
             Expr::None(_) => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(x) = p {
+                    if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
                         self.constant_expr(x);
                     }
                 }
@@ -1968,7 +1975,7 @@ impl<'p> Checker<'p> {
             | Expr::Name(..)
             | Expr::TypeArgs { .. } => None,
             Expr::Interp(parts, _) => parts.iter().find_map(|p| match p {
-                InterpPart::Expr(y) => e(y),
+                InterpPart::Expr(y) | InterpPart::Fmt(y, _) => e(y),
                 InterpPart::Lit(_) => None,
             }),
             Expr::List(items, _) => items.iter().find_map(e),
@@ -2027,9 +2034,17 @@ impl<'p> Checker<'p> {
             }
             Expr::Interp(parts, _) => {
                 for part in parts {
-                    if let InterpPart::Expr(x) = part {
-                        let t = self.expr(x, None, true);
-                        self.text_form(&t, x.pos(), "lex.str.2");
+                    match part {
+                        InterpPart::Expr(x) => {
+                            let t = self.expr(x, None, true);
+                            self.text_form(&t, x.pos(), "lex.str.2");
+                        }
+                        InterpPart::Fmt(x, spec) => {
+                            let t = self.expr(x, None, true);
+                            self.text_form(&t, x.pos(), "lex.str.2");
+                            self.format_spec(&t, spec, x.pos());
+                        }
+                        InterpPart::Lit(_) => {}
                     }
                 }
                 Ty::Str
@@ -2077,6 +2092,26 @@ impl<'p> Checker<'p> {
 
     /// Every value has a text form (trait.auto.2); "no value" and an
     /// unhandled failure don't.
+    /// `{x:spec}` (lex.str.7, type.str.11): `.N` needs a float, `x` an int.
+    fn format_spec(&mut self, t: &Ty, spec: &crate::lexer::FormatSpec, pos: Pos) {
+        if spec.precision.is_some() && !matches!(t, Ty::Float | Ty::Err) {
+            self.error_help(
+                "type.str.11",
+                pos,
+                "`.N` in a format specification needs a `float`",
+                "round a float with `{x:.2}`; to cut an int or text, convert it first",
+            );
+        }
+        if spec.hex && !matches!(t, Ty::Int | Ty::Err) {
+            self.error_help(
+                "type.str.11",
+                pos,
+                "`x` in a format specification needs an `int`",
+                "drop the `x`, or convert the value to an `int` first",
+            );
+        }
+    }
+
     fn text_form(&mut self, t: &Ty, pos: Pos, no_value_rule: &'static str) {
         match t {
             Ty::Unit => self.error(no_value_rule, pos, "this expression produces no value"),
@@ -2450,6 +2485,9 @@ impl<'p> Checker<'p> {
             self.check_call(n, &sig, Vec::new(), args, None, npos, None);
             return Ty::Never;
         }
+        if n == "assert" || n == "assert_eq" {
+            return self.assert_call(n, args, npos);
+        }
         if let Some(t) = targs.and_then(|a| self.collection_constructor(n, a, npos)) {
             if !args.is_empty() {
                 self.args_only(args);
@@ -2481,6 +2519,7 @@ impl<'p> Checker<'p> {
             None => {}
         }
         if let Some(&i) = self.fns.get(n.as_str()) {
+            self.reject_test_call(i, npos);
             let sig = self.sigs[i].clone();
             let binds = match targs {
                 Some(a) => {
@@ -3080,6 +3119,7 @@ impl<'p> Checker<'p> {
                         if mutable {
                             self.require_mutable(recv, Some("trait.method.3"), "the receiver of a `mut self` method");
                         }
+                        self.resolved.targets.insert(pos, *i);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
                                 sig.generics[..sig.owner].iter().copied().zip(a.iter().cloned()).collect()
@@ -3146,6 +3186,9 @@ impl<'p> Checker<'p> {
             self.require_mutable(recv, Some("trait.method.3"), "the receiver of a `mut self` method");
         }
         self.resolved.calls.insert(pos, Call::Trait(tr));
+        if let Some(&k) = traits::con_of(rt).and_then(|c| self.impl_of.get(&(tr, c))) {
+            effects::record_impl_target(self.prog, &mut self.resolved, pos, k, tr, name);
+        }
         let binds = vec![(self.trait_self[tr], rt.clone())];
         self.check_call(name, &sig, binds, args, Some(recv), pos, expect)
     }
@@ -3236,6 +3279,7 @@ impl<'p> Checker<'p> {
             }
             None => Vec::new(),
         };
+        self.resolved.targets.insert(pos, i);
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 

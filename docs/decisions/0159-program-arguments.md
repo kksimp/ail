@@ -30,7 +30,7 @@ off-by-one that `argv[0]` causes.
 
 - `ail run FILE --json` now passes `--json` to the program; write
   `ail run --json FILE` for JSON diagnostics. No test or script relied on
-  the old order.
+  the old order. `--deny LIST` (ADR 0165) also goes before FILE.
 
 ## Rejected alternatives
 
