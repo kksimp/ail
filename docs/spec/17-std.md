@@ -299,3 +299,12 @@ Shift were held when the last event that `next_event` or `poll_event`
 returned happened (as std.ui.7 reports them, Command counting as Ctrl on
 macOS), so a program can tell a Shift-click from a click. Before any event,
 and on a closed window, all three are false. *(ADR 0242)*
+
+**std.ui.15** — `set_font_size(mut self, px int)` changes the font to the
+available size nearest `px` (the smaller on a tie); `font_size(self) int`
+returns it. A size is a cell height in pixels, one of 10, 12, 13, 14, 15,
+18, 20, 24, 26, 28, 30, 36 and 40; a window opens at 20. The window keeps
+its size in pixels, so when the number of cells that fit changes, a
+`Resize` event follows (std.ui.7) and the grid takes the new size when the
+program receives it. On a window that is not open, `set_font_size` does
+nothing visible. *(ADR 0243)*

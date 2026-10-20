@@ -61,7 +61,9 @@ tested under X11 (Xvfb); macOS is pending. The path to a native layer is in
 [gui-path.md](design/gui-path.md). Mouse, scroll, clipboard and window titles
 followed (ADR 0240, `std.ui.10–13`), and the editor's window front end got
 tabs, a Ctrl-P file picker, mouse selection, wheel scrolling, the system
-clipboard and F5/F6 runs (ADR 0241).
+clipboard and F5/F6 runs (ADR 0241). Shift-click (ADR 0242,
+`std.ui.14`) and font sizes (ADR 0243, `std.ui.15`: `--font N`, Ctrl-+,
+Ctrl--) came next.
 
 Lane 37 (ADRs 0222–0229) designed topics 16–19: four compiler tiers (AST, HIR, MIR, machine IR), constants computed at compile time by calling compile-time-safe functions (implemented: `ct.const.1–3`), derive generators whose output `ail api --expanded` shows, and compile-time-only reflection.
 
