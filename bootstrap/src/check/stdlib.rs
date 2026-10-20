@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
 use crate::ast::{Arg, TypeRef};
 use crate::diag::{Diagnostic, Edit, Pos};
-use crate::lexer::UNSUPPORTED;
 use crate::stdlib::{self, StdCall};
 
 impl<'p> Checker<'p> {

@@ -10,10 +10,9 @@ const MAX_ROUNDS: usize = 5;
 
 /// Lex, parse and check `src`; the diagnostics are settled (sorted, spans and
 /// anchored edits resolved).
-fn diagnose(src: &str) -> Vec<Diagnostic> {
-    let (tokens, mut diags) = crate::lexer::lex(src);
-    let (program, parse_diags) = crate::parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
+fn diagnose(path: &str, src: &str) -> Vec<Diagnostic> {
+    // The file's own module plus what it imports (mod.unit.1-5).
+    let (program, mut diags) = crate::modules::load_src(path, src);
     let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
     diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
     if diags.is_empty() {
@@ -94,7 +93,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
     let mut rounds = 0;
     let mut out = String::new();
     for round in 1..=MAX_ROUNDS {
-        let chosen = choose(&diagnose(&src), &src);
+        let chosen = choose(&diagnose(path, &src), &src);
         if chosen.is_empty() {
             break;
         }
@@ -122,7 +121,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             src = f;
         }
     }
-    let mut left = diagnose(&src);
+    let mut left = diagnose(path, &src);
     let errors = left.iter().filter(|d| !d.warning).count();
     if applied > 0 && src != original {
         if dry {
