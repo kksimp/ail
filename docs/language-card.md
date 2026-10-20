@@ -326,7 +326,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
   `x.to_int()`. An int literal works where a float is expected.
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`).
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(n)`, `shr(n)` (count 0-63).
 
 ## Strings and characters
 
@@ -524,6 +524,8 @@ dep geo path ../geo caps fs
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
+
+`unsafe` and a block allow `unsafe fn` calls (and C calls, raw pointers); `ail.pkg` needs `unsafe allow`.
 
 A window is a grid of text cells; draw with `put`, then `present`:
 

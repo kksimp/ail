@@ -97,7 +97,9 @@ Any directory that can't be read fails with that directory's path.
 
 **std.fs.9** — `glob(pattern str) List[str]` returns the existing paths
 that match `pattern`, sorted by bytes, without duplicates. The pattern's
-components are split at `/`. In a component, `*` matches any run of
+components are split at `/` (and at `\` on Windows). On Windows a pattern
+that starts with a drive and a separator (`C:\`) is absolute, as one that
+starts with a separator is everywhere. In a component, `*` matches any run of
 characters and `?` exactly one, and neither matches a leading `.` unless
 the component starts with `.`; any other character matches itself. A whole
 component `**` matches zero or more directories (not starting with `.`),
@@ -161,15 +163,17 @@ file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
 **std.path.2** — A separator is `/`, and also `\` on Windows.
 `dir(p str) str` is the text before the last separator: `.` when there is
 none, and the separator itself for a path in the root (`dir("/x")` is `/`).
-`base(p str) str` is the text after the last separator. *(ADR 0253)*
+On Windows a drive's root keeps its separator (`dir("C:\x")` is `C:\`).
+`base(p str) str` is the text after the last separator. *(ADR 0253, ADR 0504)*
 
 **std.path.3** — `ext(p str) str` is the text after the last `.` of
 `base(p)`, without the dot, and `""` when there is none or the only `.` is the
 first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
 
 **std.path.4** — `join(a str, b str) str` is `b` when `b` starts with a
-separator or `a` is empty; otherwise `a` and `b` with one `/` between.
-*(ADR 0253)*
+separator or `a` is empty; on Windows also when `b` starts with a drive and
+a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
+*(ADR 0253, ADR 0504)*
 
 ```ail
 use std.path
@@ -204,7 +208,10 @@ after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 **std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
-The process inherits the working directory and the environment, reads an
+On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
+starts `npm.cmd` (ADR 0504). A batch file (`.cmd`, `.bat`) runs through the
+system's command interpreter and fails as a `ProcError` when an argument has
+characters the system won't pass to it. The process inherits the working directory and the environment, reads an
 empty standard input, and its standard output and standard error are
 captured. The result is `struct Output { status int, out str, err str }`:
 the exit status (128 plus the signal number if a signal ended it, as shells
@@ -702,8 +709,8 @@ error that lists them. *(ADR 0328)*
 same element type (checked) and MUST have equal shapes: otherwise the call
 traps. *(ADR 0328)*
 
-**std.tensor.5** — On `float` tensors, `add` and `mul` round each element
-as `+` and `*` do. `sum` and `dot` add in this order: element `i` (or
+**std.tensor.5** — On `float` tensors, `add`, `mul` and `/` round each element
+as `+`, `*` and `/` do. `sum` and `dot` add in this order: element `i` (or
 product `i`) goes to partial sum `i % 16` for the first `16 * (n / 16)`
 elements; the partial sums then halve, `s[i] += s[i + h]` for `h` = 8, 4,
 2, 1; the remaining elements are added to `s[0]` in order. Products are
@@ -732,16 +739,17 @@ elements are equal. A tensor's text form is the call that rebuilds it:
 `tensor.from([1.0, 2.0])`, with the shape after the list when the tensor
 isn't 1-D. *(ADR 0328)*
 
-**std.tensor.10** — `a + b`, `a - b` and `a * b` with a tensor operand are
-elementwise, with no other arithmetic operator defined for tensors. Both
-operands are tensors with one element type and equal shapes (`a + b` is
-`a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the other a
-scalar of its element type, on either side, which is taken with every
-element: `t * 2.0`, `1.0 - t`. An `int` literal beside a `Tensor[float]` is a
-`float` (`type.num.10`). Rounding is std.tensor.5's and overflow
-std.tensor.6's; other operand types are a compile-time error, and unequal
-shapes trap. `+=`, `-=` and `*=` follow. Matrix product stays
-`a.matmul(b)`. *(ADR 0344)*
+**std.tensor.10** — `a + b`, `a - b`, `a * b` and `a / b` with a tensor
+operand are elementwise, with no other arithmetic operator defined for
+tensors. Both operands are tensors with one element type and equal shapes
+(`a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the
+other a scalar of its element type, on either side, which is taken with
+every element: `t * 2.0`, `1.0 - t`, `8.0 / t`. `/` is defined on `float`
+tensors only; `/` on a `Tensor[int]` is a compile-time error. An `int`
+literal beside a `Tensor[float]` is a `float` (`type.num.10`). Rounding is
+std.tensor.5's and overflow std.tensor.6's; other operand types are a
+compile-time error, and unequal shapes trap. `+=`, `-=` and `*=` follow.
+Matrix product stays `a.matmul(b)`. *(ADR 0344, ADR 0507)*
 
 **std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
 to a `T`; `t.sum(axis int)`, `t.max(axis)` and `t.mean(axis)` reduce along
@@ -757,6 +765,16 @@ one that is `>` it: a NaN never replaces it, and ties keep the earlier one.
 **std.tensor.12** — `t.transpose()` of an `m` by `n` tensor is the `n` by
 `m` tensor whose element `(j, i)` is `t`'s `(i, j)`. A tensor that isn't
 2-D traps. *(ADR 0345)*
+
+**std.tensor.13** — `t.relu()`, `t.sigmoid()` and `t.tanh()` apply an
+activation to each element of a `float` tensor and give a tensor of the
+same shape. `relu(x)` is `x` when `x > 0.0` and `0.0` otherwise, except
+that a NaN stays NaN. `sigmoid(x)` is `1.0 / (1.0 + exp(-x))` and `tanh` is
+the hyperbolic tangent, both with the platform's `exp` and `tanh`, so their
+last bit may differ between operating systems. Each element is computed by
+the same scalar code on every ISA, so std.tensor.5's vector paths don't
+apply to them.
+These methods on a `Tensor[int]` are a compile-time error. *(ADR 0507)*
 
 ```ail
 fn main()

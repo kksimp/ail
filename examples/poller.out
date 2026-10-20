@@ -1,0 +1,5 @@
+offline (refused), using the local copy
+api     up    120.0ms
+db      up    8.0ms
+queue   DOWN
+1 down

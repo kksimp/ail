@@ -1,0 +1,13 @@
+## expr.bind.5: a local may shadow a function; calling it in the local's block is expr.call.1.
+fn word(s str) str
+    "word {s}"
+
+fn show(s str) str
+    word := s.to_upper()
+    "{word}!"
+
+fn main()
+    print(show("a"))
+    print(word("b"))
+    max := 3
+    print(max + 1)

@@ -367,7 +367,7 @@ mod tests {
         assert!(is_rule_id("expr.hole.1"));
         assert!(!is_rule_id("expr.hole"));
         assert!(!is_rule_id("Expr.hole.1"));
-        assert!(explain("expr.nope.1").is_none());
+        assert!(explain("no.such.rule").is_none());
         assert!(explain(UNSUPPORTED).is_some());
     }
 }

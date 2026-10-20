@@ -65,7 +65,7 @@ order, over the rules and lines the AIL checker covers so far
 | Slice | Scope | Agreement |
 |---|---|---|
 | 1 | Names, types, prelude: the declaration passes, 42 rules outside function bodies | 491 of 491 programs (2026-10-20) |
-| 2 | Expressions and statements | not started |
+| 2 | Expressions and statements | not started. Must include the ADR 0468 and 0469 rules (type.opt.9, type.opt.10, expr.bind.5 for functions); the parenthesised `if` operand is already in `compiler/syntax` |
 | 3 | Ownership and effects | not started |
 
 ## Language gaps found writing the compiler in AIL
@@ -81,9 +81,9 @@ order, over the rules and lines the AIL checker covers so far
 | A module's locals clashed with the root module's items (`expr.bind.5`) | Fixed (ADR 0377) |
 | An or-pattern can't bind names (`Struct(_, xs) \| Enum(_, xs) => ...`, expr.match.8) | Open; arms repeated |
 | A catch-all `_` over an enum always warns (expr.match.3), with no way to suppress it (ADR 0056 left the syntax open); the checker's code has dozens | Open |
-| No literal for an empty optional of a given type (`Ty?()` isn't valid, and `mut x := none` has no type) | Open: [OQ-114](../open-questions.md); a helper `fn no_ty() Ty?`, or a generic `absent[T]()` returning `none` |
+| `mut x := none` had no type | Fixed: [ADR 0468](../decisions/0468-optional-none-locals-and-if-branches.md) (type.opt.9); a local read before its first assignment still needs `absent[T]()` |
 | No bit shifts (`<<`) | Open; constants instead |
-| `if c then x else none` with a plain `T` for `x` doesn't infer `T?` (`type.opt.4`) | Worked around: a helper function; [OQ-115](../open-questions.md) |
-| A local can't take the name of any item in its module (`expr.bind.5`); with a module of several files, a helper `word` in one file forbids a local `word` in all | Open: [OQ-116](../open-questions.md) |
-| `if` can't be an operand, even in parentheses (`col + (if raw then 4 else 3)`) | Worked around: two whole branches; [OQ-117](../open-questions.md) |
+| `if c then x else none` with a plain `T` for `x` doesn't infer `T?` (`type.opt.4`) | Fixed: [ADR 0468](../decisions/0468-optional-none-locals-and-if-branches.md) (type.opt.10) |
+| A local can't take the name of any item in its module (`expr.bind.5`); with a module of several files, a helper `word` in one file forbids a local `word` in all | Fixed: [ADR 0469](../decisions/0469-locals-may-shadow-functions.md) (a local may shadow a function) |
+| `if` can't be an operand, even in parentheses (`col + (if raw then 4 else 3)`) | Fixed: [ADR 0470](../decisions/0470-parenthesised-if-operand.md) (expr.if.8) |
 | The Rust lexer continued names with any Unicode numeric (`x٣`); AIL's `is_alnum` takes ASCII digits only | Fixed: names are letters, ASCII digits, `_` (ADR 0372) |
