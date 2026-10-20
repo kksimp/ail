@@ -49,6 +49,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "env" => (&["args", "get", "cwd", "program"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
+        // std.path.1: text only, so no effects.
+        "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
         // std.ui.9: opening a window and every `ui.Window` method.

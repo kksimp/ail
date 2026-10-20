@@ -1,0 +1,6 @@
+## std.path errors: unknown function, wrong argument type (std.use.2, expr.call.2).
+use std.path
+
+fn main()
+    print(path.dirname("a/b"))
+    print(path.join("a", 1))

@@ -254,3 +254,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0273](0273-pure-tasks-off-the-scheduler.md) | Pure tasks run on their own threads; tasks with handles keep the scheduler *(delegated)* | Accepted | 2026-10-20 |
 | [0274](0274-pool-fallback-runs-in-order.md) | When the pool can't give the sequential result, the loop reruns in order *(delegated)* | Accepted | 2026-10-20 |
 | [0275](0275-run-parallel-flag-and-pool-log.md) | `ail run --parallel`, `AIL_THREADS` and `AIL_PAR_LOG` *(delegated)* | Accepted | 2026-10-20 |
+| [0250](0250-key-functions-and-take.md) | Sort and pick by key with `by: \|x\| key`, and `xs.take(n)` *(delegated)* | Accepted | 2026-10-20 |
+| [0251](0251-map-op-assign-starts-from-zero.md) | `m[k] += v` on a missing key starts from zero *(delegated)* | Accepted | 2026-10-20 |
+| [0252](0252-question-mark-goes-to-else.md) | A `?` on an optional inside an `else` value goes to that `else` *(delegated)* | Accepted | 2026-10-20 |
+| [0253](0253-std-path.md) | `std.path`: `dir`, `base`, `ext` and `join` on path text *(delegated)* | Accepted | 2026-10-20 |
+| [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
+| [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |

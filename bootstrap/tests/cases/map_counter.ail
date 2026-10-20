@@ -1,0 +1,16 @@
+## `m[k] op= v` on a missing key starts from zero (type.map.7, ADR 0251).
+fn main()
+    mut words := Map[str, int]()
+    for w in "a b a c a b".split(" ")
+        words[w] += 1
+    print(words)
+    mut total := Map[str, float]()
+    total["x"] += 1.5
+    total["x"] += 1
+    total["y"] -= 2.0
+    print(total)
+    mut grid := Map[int, Map[str, int]]()
+    grid[1] = Map[str, int]()
+    grid[1]["n"] *= 5
+    grid[1]["m"] += 4
+    print(grid)

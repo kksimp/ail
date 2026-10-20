@@ -417,6 +417,10 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
     if a.is("..") || a.is("..=") || b.is("..") || b.is("..=") {
         return false;
     }
+    // `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.
+    if a.is("|") && before.is_some_and(opens_key) {
+        return false;
+    }
     if prefix(before, a) {
         return false;
     }
@@ -424,6 +428,11 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
         return !a.ends_operand();
     }
     true
+}
+
+/// A `|` after this token opens a key function's parameter (expr.key.1).
+fn opens_key(t: &FTok) -> bool {
+    t.is("(") || t.is(",") || t.is(":")
 }
 
 /// `a` is a prefix operator: `-x`, `!T`.
@@ -441,14 +450,21 @@ fn flat(toks: &[FTok]) -> String {
     let mut out = String::new();
     let mut prev: Option<&FTok> = None;
     let mut before: Option<&FTok> = None;
+    // The opening `|` of a key function `|x|` (expr.key.1), whose closing `|` is unspaced.
+    let mut open_bar = None;
     for (i, t) in toks.iter().enumerate() {
         if t.is(",") && toks.get(i + 1).is_some_and(FTok::closes) {
             continue;
         }
+        let closing_bar = t.is("|") && i >= 2 && open_bar == Some(i - 2);
         if let Some(p) = prev
+            && !closing_bar
             && spaced(before, p, t)
         {
             out.push(' ');
+        }
+        if t.is("|") && prev.is_some_and(opens_key) {
+            open_bar = Some(i);
         }
         out.push_str(&t.text);
         before = prev;
@@ -822,6 +838,7 @@ mod tests {
         );
         assert_eq!(fmt("fn f(a int,b int) !int\n    a\n"), "fn f(a int, b int) !int\n    a\n");
         assert_eq!(fmt("fn f() int ! E\n    1\n"), "fn f() int ! E\n    1\n");
+        assert_eq!(fmt("fn f()\n    xs.sorted(by:| x |-x)\n"), "fn f()\n    xs.sorted(by: |x| -x)\n");
         assert_eq!(fmt("x := xs[1 ..]\ny := a [0]\n"), "x := xs[1..]\ny := a[0]\n");
     }
 

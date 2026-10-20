@@ -2,6 +2,7 @@
 use std.env
 use std.fs
 use std.io
+use std.path
 use std.proc
 
 struct Finding
@@ -10,29 +11,19 @@ struct Finding
     line int
 
 fn to_finding(doc Json) Finding?
-    severity := doc.get("severity")?.as_str()?
-    rule := doc.get("rule")?.as_str()?
-    at := doc.get("line")?.as_num()?
+    severity := doc.str("severity")?
+    rule := doc.str("rule")?
+    at := doc.num("line")?
     Finding(severity: severity, rule: rule, line: at.to_int())
 
 fn parse_findings(report str) List[Finding]
-    mut found := []
-    for line in report.lines()
-        doc := parse_json(line) else continue
-        f := to_finding(doc) else continue
-        found.push(f)
-    found
+    [to_finding(parse_json(line) else continue) else continue for line in report.lines()]
 
 fn count(found List[Finding], severity str) int
-    mut n := 0
-    for f in found
-        if f.severity == severity
-            n += 1
-    n
+    [f for f in found if f.severity == severity].len()
 
 fn main() !
-    parts := env.program().split("/")
-    here := parts[..parts.len() - 1].join("/")
+    here := path.dir(env.program())
     mut errors := 0
     mut warnings := 0
     for name in fs.list_dir(here)? "listing examples"

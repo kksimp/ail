@@ -114,6 +114,10 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(e) => self.io_error(&path, error_kind(&e), pos),
                 }
             }
+            ("path", "dir") => text(crate::stdlib::path_dir(&str_arg(0))),
+            ("path", "base") => text(crate::stdlib::path_split(&str_arg(0)).1),
+            ("path", "ext") => text(crate::stdlib::path_ext(&str_arg(0))),
+            ("path", "join") => text(crate::stdlib::path_join(&str_arg(0), &str_arg(1))),
             ("env", "args") => {
                 let args = PROGRAM.get().map(|(_, a)| a.as_slice()).unwrap_or_default();
                 Value::List(Rc::new(args.iter().map(|a| text(a.as_str())).collect()))

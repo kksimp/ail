@@ -342,3 +342,26 @@ fn Json.as_obj(self) List[JsonMember]?
     match self
         Obj(members) => members
         Null | Bool(_) | Num(_) | Str(_) | Arr(_) => none
+
+## Typed fields: member `key` when it holds that variant, else `none` (json.query.2).
+fn Json.str(self, key str) str?
+    get(key)?.as_str()
+
+fn Json.num(self, key str) float?
+    get(key)?.as_num()
+
+fn Json.bool(self, key str) bool?
+    get(key)?.as_bool()
+
+fn Json.arr(self, key str) List[Json]?
+    get(key)?.as_arr()
+
+## Replaces the first member named `key`, or adds one at the end; traps unless
+## this is an object (json.query.3).
+fn Json.set(mut self, key str, value Json)
+    mut members := as_obj() else unreachable("json.query.3: `set` needs a JSON object")
+    if i := [m.key for m in members].index_of(key)
+        members[i].value = value
+    else
+        members.push(JsonMember(key: key, value: value))
+    self = Json.Obj(members)

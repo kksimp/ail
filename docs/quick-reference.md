@@ -215,8 +215,10 @@ fn main() !                                 # main can fail; the error is report
 - `if x := e` also works on optionals (`else` without a name), and in `elif`.
   On a result that can fail, it needs an `else`.
 - `else` also works inside an expression: `Min => nums.min() else 0`,
-  `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`.
-- `?` on an optional works only in a function that returns an optional.
+  `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`, and in a `for`
+  header: `for x in j.arr("items") else []`.
+- `?` on an optional works in a function that returns an optional, or before
+  an `else`, which then catches the `none`: `j.get("u")?.str("name") else "?"`.
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
@@ -425,8 +427,17 @@ empty := List[int]()   # an empty list of a given type, anywhere
 Also: `xs.insert(i, x)`, `xs.remove_at(i)`, `xs.extend(ys)`, `xs.clear()`, `xs.reverse()`; `xs.pop()`, `xs.first()` and `xs.last()` (give `T?`), `xs.contains(x)`,
 `xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
 (a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
-`xs.sum()` (ints or floats). Slices don't clamp, and negative indexes are
-errors: write `xs[xs.len() - 1]` or `xs.last()`.
+`xs.sum()` (ints or floats), `xs.take(n)` (the first `n`, or fewer). Slices
+don't clamp, and negative indexes are errors: write `xs[xs.len() - 1]` or
+`xs.last()`.
+
+Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
+`max`; stable, so sort by name first, then by count):
+
+```ail fragment
+counts := {"b": 2, "a": 2, "c": 5}
+top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
+```
 
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:
@@ -476,7 +487,7 @@ fn main()
 ```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
-ages["ann"] += 1                       # the key must exist, or the program stops
+ages["ann"] += 1                       # `op=` on a missing key starts from 0
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
 for name in ages.keys()                # `for k in m` is an error; also values()
@@ -499,6 +510,8 @@ program uses it.
 ```ail
 doc := parse_json("\{\"a\": [1, \"x\"]}")?   # Json ! JsonError; err.at is the char offset
 doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/as_bool/as_arr/as_obj)
+doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
+doc.set("id", Json.Str("x"))                   # replace or add a member (mut doc)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
 ```
 
@@ -617,6 +630,7 @@ fn main() !
 |---|---|
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents); all but `exists` are `! fs.IoError` |
 | `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
+| `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |

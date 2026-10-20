@@ -648,6 +648,9 @@ pub struct Arg {
     pub mutable: bool,
     pub moved: bool,
     pub value: Expr,
+    /// `|x|` before the value: a key function, whose value is evaluated
+    /// once per element with `x` bound to it (expr.key.1, ADR 0250).
+    pub param: Option<(String, Pos)>,
 }
 
 #[derive(Debug)]

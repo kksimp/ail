@@ -227,7 +227,13 @@ impl Cx<'_> {
             }),
             Expr::Method { recv, args, .. } => {
                 self.expr(recv);
-                args.iter_mut().for_each(|a| self.expr(&mut a.value));
+                for a in args.iter_mut() {
+                    // expr.key.2: a key function's parameter is a new local.
+                    if let Some((name, pos)) = a.param.clone() {
+                        self.declare(&name, pos);
+                    }
+                    self.expr(&mut a.value);
+                }
             }
             Expr::Field { recv, .. } => self.expr(recv),
             Expr::Index { recv, index, .. } => {

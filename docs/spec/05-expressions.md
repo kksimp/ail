@@ -362,6 +362,38 @@ fn main()
     print([t.to_int() else continue for t in ["1", "x", "3"]])  # [1, 3]
 ```
 
+## Key functions
+
+**expr.key.1** — An argument written `by: |x| e` is a key function. It is
+allowed only as the one argument of a list's `sorted`, `sort`, `min` and
+`max`, and of a set's `sorted`; anywhere else, and a `by:` argument without
+`|x|`, is a compile-time error. A key function isn't a value: it can't be
+bound, returned, stored or passed to a user function. *(ADR 0250)*
+
+**expr.key.2** — `x` is a new immutable binding of the element type
+(`expr.bind.4`: it MUST NOT repeat a name already declared), visible only in
+`e`. `e` is an ordinary expression and sees the enclosing locals. *(ADR 0250)*
+
+**expr.key.3** — `e` MUST be `Ord`. It is evaluated once per element, in the
+collection's order, before any comparison. *(ADR 0250)*
+
+**expr.key.4** — `sorted(by:)` and `sort(by:)` order the elements by their
+keys and are stable; `min(by:)` and `max(by:)` return the first element with
+the least (greatest) key as a `T?`, or `none` if the list is empty.
+*(ADR 0250)*
+
+```ail
+struct Person
+    name str
+    age int
+
+fn main()
+    people := [Person(name: "bo", age: 30), Person(name: "al", age: 25)]
+    print([p.name for p in people.sorted(by: |p| p.age)])   # ["al", "bo"]
+    counts := {"b": 2, "a": 2, "c": 5}
+    print(counts.keys().sorted().sorted(by: |k| -counts[k]).take(2))   # ["c", "a"]
+```
+
 ## Integer arithmetic
 
 **expr.arith.1** — When the mathematical result of `+`, `-` (binary or

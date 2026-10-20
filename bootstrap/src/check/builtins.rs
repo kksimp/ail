@@ -88,7 +88,7 @@ pub(super) const F32_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt
 pub(super) const LIST_METHODS: &[&str] =
     &[
         "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
-        "index_of", "join", "sum", "min", "max", "sorted", "sort",
+        "index_of", "join", "sum", "min", "max", "sorted", "sort", "take",
     ];
 pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
 pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset"];
@@ -187,6 +187,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "swap" => make(true, vec![Int, Int], Unit, Need::Nothing),
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
                 "last" | "first" => read(vec![], opt(e)),
+                "take" => read(vec![Int], list(e)),
                 "insert" => make(true, vec![Int, e], Unit, Need::Nothing),
                 "remove_at" => make(true, vec![Int], e, Need::Nothing),
                 "extend" => make(true, vec![list(e)], Unit, Need::Nothing),
@@ -248,6 +249,9 @@ pub(super) fn builtin_names(t: &Ty) -> &'static [&'static str] {
 impl<'p> Checker<'p> {
     /// `x.name(args)` for a built-in method of `x`'s type.
     pub(super) fn builtin_call(&mut self, recv: &'p Expr, rt: &Ty, name: &str, pos: Pos, args: &'p [Arg]) -> Ty {
+        if let Some(t) = self.keyed_call(recv, rt, name, pos, args) {
+            return t;
+        }
         let b = builtin(rt, name).expect("a built-in method");
         // type.str.6: these take a `str` or a `char`.
         if *rt == Ty::Str && matches!(name, "contains" | "starts_with" | "ends_with" | "split") && args.len() == 1 {
