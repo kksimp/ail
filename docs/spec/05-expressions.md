@@ -90,6 +90,25 @@ type, or satisfy its constraint for a generic parameter. No implicit conversion
 applies, except optional wrapping (`type.opt.5`) and conversion to `any Trait`
 (`trait.any.3`). *(ADR 0108, ADR 0129)*
 
+**expr.call.3** — An argument of a call to a user-declared function or
+method may be named, `name: value`, where `name` is a parameter. Positional
+arguments come first and fill the leading parameters; the named ones follow
+and fill the rest in any order. Every parameter MUST be given exactly once, so
+a missing one is `expr.call.1`, and an unknown name, a repeated name, a name
+for a parameter already given by position, or a positional argument after a
+named one is an error. Arguments are evaluated in parameter order, not source
+order. `mut` and `move` go before the value (`f(mut v: xs)`). Built-in
+functions and methods don't take named arguments. There are no default
+values, so a named argument never leaves a parameter out. *(ADR 0454)*
+
+```ail
+fn show(tag str, n int, scale int) str
+    "{tag}:{n * scale}"
+
+fn main()
+    print(show("a", scale: 3, n: 4))
+```
+
 ## Blocks
 
 **expr.block.1** — A block is an expression. Its value is the value of its

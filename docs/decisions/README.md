@@ -371,6 +371,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0452](0452-match-guards.md) | Match guards: `pattern if cond => result` *(delegated)* | Accepted | 2026-10-20 |
 | [0453](0453-range-patterns.md) | Range patterns: `lo..hi` and `lo..=hi` over integer and character literals *(delegated)* | Accepted | 2026-10-20 |
+| [0454](0454-named-arguments.md) | Named arguments at call sites: `f(a, dy: 2, dx: 1)` *(delegated)* | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
 | [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |

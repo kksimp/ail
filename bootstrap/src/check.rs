@@ -197,6 +197,9 @@ pub struct Resolved {
     /// the use's position, as an `ail api` symbol id (api.id.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
+    /// For a call with named arguments, by the position of its first label:
+    /// the argument indices in parameter order (expr.call.3).
+    pub arg_order: HashMap<Pos, Vec<usize>>,
     /// Methods called on a task, group, channel or mutex handle, by the
     /// position of the name: they synchronise with other tasks (conc.par.2).
     pub handle_calls: FastSet<Pos>,
@@ -361,6 +364,9 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
 struct Sig {
     receiver: Option<bool>,
     params: Vec<(bool, Ty)>,
+    /// The parameters' names, for named arguments (expr.call.3); empty for
+    /// a built-in whose parameters have no names.
+    names: Vec<String>,
     /// Which parameters are `move` (own.move.1); empty when none are.
     moves: Vec<bool>,
     ret: Ty,
@@ -371,7 +377,7 @@ struct Sig {
 
 impl Sig {
     fn plain(receiver: Option<bool>, params: Vec<(bool, Ty)>, ret: Ty) -> Self {
-        Sig { receiver, params, moves: Vec::new(), ret, generics: Vec::new(), owner: 0, declared: 0 }
+        Sig { receiver, params, names: Vec::new(), moves: Vec::new(), ret, generics: Vec::new(), owner: 0, declared: 0 }
     }
 }
 
@@ -835,6 +841,7 @@ impl<'p> Checker<'p> {
             let sig = Sig {
                 receiver: f.receiver.map(|r| r.mutable),
                 params,
+                names: f.params.iter().map(|p| p.name.clone()).collect(),
                 moves: if f.params.iter().any(|p| p.moved) { f.params.iter().map(|p| p.moved).collect() } else { Vec::new() },
                 ret,
                 generics,
@@ -3469,22 +3476,18 @@ impl<'p> Checker<'p> {
         for a in args {
             if let Some((_, ppos)) = &a.param {
                 self.key_misplaced(*ppos);
-            } else if let Some((_, lpos)) = &a.label {
-                self.unsupported(*lpos, "named arguments are not supported by the bootstrap yet (ADR 0058)");
             }
         }
         let vars = &sig.generics;
-        if args.len() != sig.params.len() {
+        let Some(order) = self.arg_slots(what, sig, args, pos) else {
             self.args_only(args);
-            self.error(
-                "expr.call.1",
-                pos,
-                format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len())),
-            );
             return subst_unknown(&sig.ret, &binds, vars);
-        }
+        };
         let before = self.diags.len();
-        for (k, (a, (pmut, pty))) in args.iter().zip(&sig.params).enumerate() {
+        for &i in &order {
+            let a = &args[i];
+            let k = self.slot_of(sig, args, i);
+            let (pmut, pty) = &sig.params[k];
             let hint = subst_unknown(pty, &binds, vars);
             let t = self.expr(&a.value, (hint != Ty::Err).then_some(&hint), true);
             self.move_arg(a, sig.moves.get(k).copied().unwrap_or(false));
@@ -3531,7 +3534,7 @@ impl<'p> Checker<'p> {
         if let Some(r) = recv {
             items.push((r, sig.receiver == Some(true)));
         }
-        items.extend(args.iter().zip(&sig.params).map(|(a, (pmut, _))| (&a.value, *pmut && a.mutable)));
+        items.extend(order.iter().map(|&i| (&args[i].value, sig.params[self.slot_of(sig, args, i)].0 && args[i].mutable)));
         for j in 0..items.len() {
             for i in 0..j {
                 if items[i].1 && items[j].1 && self.certainly_overlap(items[i].0, items[j].0) {
@@ -3586,6 +3589,103 @@ impl<'p> Checker<'p> {
                 self.require(&t, b, pos, what);
             }
         }
+    }
+
+    /// The parameter that argument `i` fills: its place when none are named,
+    /// else the named parameter, or the next one for a positional argument.
+    fn slot_of(&self, sig: &Sig, args: &[Arg], i: usize) -> usize {
+        match &args[i].label {
+            Some((n, _)) if !sig.names.is_empty() => sig.names.iter().position(|m| m == n).unwrap_or(i),
+            _ => i,
+        }
+    }
+
+    /// expr.call.3: check the labels of a call and return the argument
+    /// indices in parameter order, or `None` after reporting a problem
+    /// (including a wrong argument count, expr.call.1).
+    fn arg_slots(&mut self, what: &str, sig: &Sig, args: &'p [Arg], pos: Pos) -> Option<Vec<usize>> {
+        let named = args.iter().position(|a| a.label.is_some());
+        let miscount = |s: &mut Self| {
+            s.error(
+                "expr.call.1",
+                pos,
+                format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len())),
+            );
+        };
+        let Some(first) = named else {
+            if args.len() != sig.params.len() {
+                miscount(self);
+                return None;
+            }
+            return Some((0..args.len()).collect());
+        };
+        let first_pos = args[first].label.as_ref().map(|(_, p)| *p).unwrap_or(pos);
+        if sig.names.is_empty() || sig.names.len() != sig.params.len() {
+            self.error_help(
+                "expr.call.3",
+                first_pos,
+                format!("`{what}` doesn't take named arguments"),
+                "pass the arguments by position",
+            );
+            return None;
+        }
+        let mut filled: Vec<Option<usize>> = vec![None; sig.params.len()];
+        let mut ok = true;
+        for (i, a) in args.iter().enumerate() {
+            let slot = match &a.label {
+                None if i > first => {
+                    self.error_help(
+                        "expr.call.3",
+                        a.value.pos(),
+                        "a positional argument can't follow a named one",
+                        "name this argument too, or move it before the named ones",
+                    );
+                    ok = false;
+                    continue;
+                }
+                None => i,
+                Some((n, lpos)) => match sig.names.iter().position(|m| m == n) {
+                    Some(k) => k,
+                    None => {
+                        let names: Vec<&str> = sig.names.iter().map(String::as_str).collect();
+                        let mut d = Diagnostic::new("expr.call.3", *lpos, format!("`{what}` has no parameter `{n}`"));
+                        if let Some(s) = suggest(n, &names) {
+                            d = d.did_you_mean(n, s);
+                        }
+                        self.diags.push(d);
+                        ok = false;
+                        continue;
+                    }
+                },
+            };
+            if slot >= filled.len() {
+                miscount(self);
+                return None;
+            }
+            if filled[slot].is_some() {
+                let at = a.label.as_ref().map_or(a.value.pos(), |(_, p)| *p);
+                let how = if a.label.is_some() { "" } else { " by position" };
+                self.error("expr.call.3", at, format!("parameter `{}` is given more than once{how}", sig.names[slot]));
+                ok = false;
+            } else {
+                filled[slot] = Some(i);
+            }
+        }
+        if !ok {
+            return None;
+        }
+        let missing: Vec<&str> = (0..filled.len()).filter(|&k| filled[k].is_none()).map(|k| sig.names[k].as_str()).collect();
+        if !missing.is_empty() {
+            self.error(
+                "expr.call.1",
+                pos,
+                format!("`{what}` is missing {}", list_names(&missing)),
+            );
+            return None;
+        }
+        let order: Vec<usize> = filled.into_iter().flatten().collect();
+        self.resolved.arg_order.insert(first_pos, order.clone());
+        Some(order)
     }
 
     fn print_call(&mut self, args: &'p [Arg], pos: Pos) -> Ty {
