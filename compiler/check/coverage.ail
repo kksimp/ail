@@ -6,7 +6,7 @@ use ast
 ## The rules the declaration passes (slice 1), the bodies (slice 2) and the
 ## flow passes ported so far (slice 3) report.
 ## Left out until slice 3 checks them too: the rules the flow passes also
-## report, own.move.2, own.move.6, own.uniq.2, own.defer.3 and conc.par.12.
+## report, conc.par.12.
 pub COVERED_RULES := [
     "bootstrap.unsupported",
     "conc.atomic.3",
@@ -87,14 +87,19 @@ pub COVERED_RULES := [
     "mod.main.3",
     "mod.unit.1",
     "mod.vis.1",
+    "own.defer.3",
     "own.excl.2",
     "own.excl.5",
+    "own.move.2",
     "own.move.3",
+    "own.move.4",
+    "own.move.6",
     "own.param.1",
     "own.param.2",
     "own.ref.5",
     "own.uniq.1",
     "own.uniq.10",
+    "own.uniq.2",
     "own.uniq.5",
     "own.uniq.6",
     "own.uniq.8",
