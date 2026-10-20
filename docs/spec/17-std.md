@@ -400,8 +400,8 @@ fn main() !
 
 **std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new
 NUL-terminated copy of `s`; `from_cstr(p *u8) str`, which reads a
-NUL-terminated string (invalid UTF-8 becomes U+FFFD); and `free(p *u8)`, which
-frees a block. Each is an unsafe operation (`unsafe.op.1`), and a block that is
+NUL-terminated string (invalid UTF-8 becomes U+FFFD); `alloc(n, example) *T`,
+`cast(p, example) *T`, `null() *u8` and `free(p)` (`unsafe.mem.3`). Each is an unsafe operation (`unsafe.op.1`), and a block that is
 not freed leaks. The rules for bad pointers are `unsafe.mem.1-2`. *(ADR 0434)*
 
 ```ail fragment
