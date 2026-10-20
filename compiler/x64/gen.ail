@@ -64,8 +64,11 @@ pub fn generate(m mir.Module) codegen.Image
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
-    # _start: align the stack, run `main`, exit 0.
+    # _start: pass argc and argv to `rt.init`, align the stack, run `main`,
+    # exit 0.
     a.alu_rr("xor", RBP, RBP)
+    a.mov_rm(RDI, at(RSP, 0))
+    a.lea(RSI, at(RSP, 8))
     a.alu_ri("and", RSP, -16)
     a.call_sym("rt.init")
     a.call_sym("main")
@@ -746,7 +749,7 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, 0)
             put_gpr(i.dst, d)
-        "str_addr" | "list_addr" | "list_at" =>
+        "str_addr" | "str_at" | "list_addr" | "list_at" =>
             parallel([move_of(loc[i.dst], i.args[0])])
         "float_bits" =>
             d := out_gpr(i.dst, S1)

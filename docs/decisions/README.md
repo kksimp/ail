@@ -376,6 +376,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0387](0387-static-executables-and-ail-build.md) | `ail build`: static executables with the runtime compiled from AIL, checked first *(delegated)* | Accepted | 2026-10-20 |
 | [0388](0388-arm64-code-generation.md) | ARM64 code generation: AAPCS64, the same allocator, checks through the flags *(delegated)* | Accepted | 2026-10-20 |
 | [0389](0389-mach-o-signed-by-the-backend.md) | Mach-O executables, dynamically loaded but importing nothing, signed ad hoc by the backend *(delegated)* | Accepted | 2026-10-20 |
+| [0390](0390-native-subset-for-the-drag-race.md) | The native subset grows to the drag-race programs: arguments, `to_int() else`, constant expressions, `{x:.N}`, strings and nested lists *(delegated)* | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |

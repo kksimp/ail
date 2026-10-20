@@ -11,7 +11,7 @@
 ./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail build FILE.ail [-o OUT] # native executable for the host (or --target x86_64-linux|aarch64-linux|aarch64-macos): numbers, lists of numbers, loops, free functions (native.build.3)
+./ail build FILE.ail [-o OUT] # native executable for the host (or --target x86_64-linux|aarch64-linux|aarch64-macos): numbers, strings, lists, loops, free functions, env.args() (native.subset.1)
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
 ./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot

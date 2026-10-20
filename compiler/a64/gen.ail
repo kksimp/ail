@@ -89,8 +89,13 @@ pub fn generate(m mir.Module, os int) codegen.Image
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
-    # The entry: run `main`, exit 0. The stack is 16-byte aligned on entry.
+    # The entry: pass argc and argv to `rt.init`, run `main`, exit 0. The
+    # stack is 16-byte aligned on entry. Linux leaves argc at `sp` and argv
+    # after it; dyld calls the macOS entry with them in x0 and x1.
     a.mov_ri(FP, 0)
+    if os == LINUX
+        a.ldr(0, 31, 0)
+        a.alu_ri("add", 1, 31, 8)
     a.bl("rt.init")
     a.bl("main")
     a.mov_ri(0, 0)
@@ -677,7 +682,10 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, os)
             put_gpr(i.dst, d)
-        "str_addr" | "list_addr" | "list_at" => parallel([move_of(loc[i.dst], i.args[0])])
+        "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(
+            loc[i.dst],
+            i.args[0],
+        )])
         "float_bits" =>
             d := out_gpr(i.dst, S1)
             a.fmov_xd(d, fpr(i.args[0], X0))

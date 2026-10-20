@@ -19,14 +19,17 @@ with its own encoders and object writers (ADR 0010).
 
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function (no methods, generics or contracts) over
-`int`, `float`, `bool`, string literals (`str` values that are literals or
-copies of them) and lists of those numbers, using locals, arithmetic,
-comparisons, `and`/`or`/`not`, `if` (statement or value), `while`, `for`
-over a range or a list, `break`, `continue`, `return`, calls, `print` of
-those values or an interpolation of them, `xs[i]`, `xs[i] = v`, `len`,
-`push`, and the methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`,
-`floor`, `ceil`, and the bit operations of expr.bit.1. Any other construct is reported at its position under this
-rule, all of them at once, and nothing is built. *(ADR 0384)*
+`int`, `float`, `bool`, `str`, and lists of those and of lists, using
+locals, constants whose values are literals, other constants and operators
+on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
+value), `while`, `for` over a range or a list, `break`, `continue`,
+`return`, calls, `print` of those values or an interpolation of them (with
+`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
+`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
+methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
+and the bit operations of expr.bit.1. Any other construct is reported at its
+position under this rule, all of them at once, and nothing is built.
+*(ADRs 0384, 0390)*
 
 ```ail
 fn steps(n int) int

@@ -38,6 +38,10 @@ fn global(k int) int
 fn str_addr(s str) int
     todo
 
+## A string at an address.
+fn str_at(p int) str
+    todo
+
 ## A list's address, and a list at an address.
 fn list_addr(xs List[int]) int
     todo
