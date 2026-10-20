@@ -1,0 +1,12 @@
+# A fixed index out of range traps on the first iteration, and not at all
+# when the loop runs no times (type.coll.4).
+fn pick(xs List[int], k int, n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[k] * i
+    s
+
+fn main()
+    print(pick([1, 2, 3], 9, 0))
+    print(pick([1, 2, 3], 2, 4))
+    print(pick([1, 2, 3], 3, 4))

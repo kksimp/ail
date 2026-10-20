@@ -696,7 +696,12 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
     if recv == none
-        problem(pos, "`else` on a binding isn't in the native subset yet, but for `s.to_int()`")
+        if lower_os_let_else(name, pos, value, other)
+            return
+        problem(
+            pos,
+            "`else` on a binding isn't in the native subset yet, but for `s.to_int()` and the OS calls",
+        )
         declare(name, Ty.Unknown, -1)
         return
     s := lower_value(recv?, Ty.Str) else
@@ -766,10 +771,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             lower_expr(e, Ty.Unit)
-        Handle(value, _) => problem(
-            expr_pos(value),
-            "`else` handlers aren't in the native subset yet",
-        )
+        Handle(value, other) => lower_os_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
         Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
@@ -1108,7 +1110,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Match(_, _, pos) => unsupported(pos, "`match`")
         Try(_, _, pos) => unsupported(pos, "`?`")
         Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
-        OrElse(_, _, pos) => unsupported(pos, "`else`")
+        OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
@@ -1418,14 +1420,7 @@ fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
                         out(v, ipos)?
                     Fmt(x, spec) =>
                         v := lower_value(x, none)?
-                        plain := spec.fill == none and spec.align == none and spec.width == none
-                        n := spec.precision else -1
-                        if not plain or spec.hex or n < 0 or not v.ty.is_float()
-                            return unsupported(
-                                ipos,
-                                "format specifications other than `.N` on a float",
-                            )
-                        call("rt.out_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Unit)
+                        lower_fmt_print(v, spec, ipos)?
         _ =>
             v := lower_value(args[0].value, none)?
             out(v, pos)?
@@ -1474,6 +1469,9 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
         return Val(id: call("rt.args", [], t), ty: t)
+    om := os_module(recv)
+    if om != ""
+        return lower_os_method(om, name, npos, args)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
