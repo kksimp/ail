@@ -1,0 +1,16 @@
+## err.prop.2, err.ctx.2: `?` on an optional needs an optional result or an
+## inferred error set; context needs something that can fail.
+error struct BadPort
+    text str
+
+fn port(text str) int ! BadPort
+    text.to_int()?
+
+fn count(text str) int?
+    text.to_int()? "count"
+
+fn plain(text str) int
+    text.to_int()?
+
+fn main()
+    print(plain("1"))

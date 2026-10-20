@@ -14,6 +14,7 @@ use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
 use crate::docs;
 
+pub mod card;
 pub mod errors;
 mod query;
 
@@ -26,7 +27,7 @@ fn is_prelude(pos: Pos) -> bool {
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api FILE [--text | --pretty] [--symbols] [--json]\n       ail api (--locals | --type | --refs) FILE LINE COL [--pretty] [--json]\n";
+pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api FILE [--text | --pretty] [--symbols] [--json]\n       ail api (--locals | --type | --refs) FILE LINE COL [--pretty] [--json]\n";
 
 /// How the outline is written (api.out.2, api.text.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +42,9 @@ pub enum Form {
 
 /// `ail api ...`; `json` asks for diagnostics as JSON lines.
 pub fn command(args: &[&str], json: bool) -> ExitCode {
+    if args.contains(&"--card") {
+        return card::command(args, json);
+    }
     if let Some(q) = args.iter().find_map(|a| query::Query::from_flag(a)) {
         return query::command(q, args, json);
     }

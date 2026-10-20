@@ -266,6 +266,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0253](0253-std-path.md) | `std.path`: `dir`, `base`, `ext` and `join` on path text *(delegated)* | Accepted | 2026-10-20 |
 | [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
 | [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |
+| [0277](0277-standard-modules-without-use.md) | Standard modules are in scope without `use` *(delegated)* | Accepted | 2026-10-20 |
+| [0278](0278-messages-on-error-types.md) | Error types carry their messages *(delegated)* | Accepted | 2026-10-20 |
+| [0279](0279-question-mark-on-optionals-fails-with-absent.md) | `?` on an optional fails with `Absent` where errors are inferred, and tests can fail *(delegated)* | Accepted | 2026-10-20 |
+| [0280](0280-one-line-if-and-round-5-measurements.md) | One-line `if c then a else b`, `{}` typed by `m[k] op= n`, and the round-5 measurements *(delegated)* | Accepted | 2026-10-20 |
 | [0288](0288-run-limits-timeout-memory-steps.md) | `ail run` takes `--timeout`, `--max-memory` and `--max-steps` *(delegated)* | Accepted | 2026-10-20 |
 | [0289](0289-test-coverage.md) | `ail test --coverage` reports lines and functions run *(delegated)* | Accepted | 2026-10-20 |
 | [0290](0290-test-failure-shows-trap-snapshot.md) | `ail test` prints the trap snapshot under a failure *(delegated)* | Accepted | 2026-10-20 |
@@ -288,3 +292,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0303](0303-contract-old.md) | `old(e)` in `ensures`: the value on entry *(delegated)* | Accepted | 2026-10-20 |
 | [0304](0304-trait-contract-inheritance.md) | Implementations inherit trait method contracts: own `requires` weaken, own `ensures` add *(delegated)* | Accepted | 2026-10-20 |
 | [0305](0305-struct-invariants.md) | Struct `invariant` lines, checked at construction and after `mut self` methods *(delegated)* | Accepted | 2026-10-20 |
+| [0312](0312-editor-agent-panel.md) | The editor's agent panel: info (Ctrl-I), trace (Shift-F5) and failure paths (Ctrl-Shift-E) in one pane *(delegated)* | Accepted | 2026-10-20 |
+| [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
+| [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
+| [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
+| [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |

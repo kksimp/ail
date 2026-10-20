@@ -178,6 +178,22 @@ else err
     print("error: {err}")
 ```
 
+**expr.if.8** — `if c then a else b` is the one-line form of an `if` with one
+condition and an `else`: `a` and `b` are expressions on the same line, and its
+value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
+`then` is a keyword only right after the condition, so it stays usable as a
+name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
+without `else` is a compile-time error. *(ADR 0280)*
+
+```ail
+fn sign(n int) str
+    if n < 0 then "negative" else "non-negative"
+
+fn main()
+    print(sign(-2))
+    print("{if 3 > 2 then "big" else "small"}")
+```
+
 **expr.if.4** — An `if` or `match` whose value is used (bound, passed,
 returned, or ending a block whose value is used) MUST produce a value on every
 path, so such an `if` MUST have an `else`. All its branches or arms MUST have

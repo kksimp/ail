@@ -1,0 +1,14 @@
+## err.msg.1-2: messages only on error types, on every variant or none, and
+## not on generic types.
+error enum E
+    A "a"
+    B(x int)
+
+error enum G[T]
+    V(x T) "v"
+
+enum Plain
+    P "p"
+
+fn main()
+    print(E.A)

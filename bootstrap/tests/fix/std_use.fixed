@@ -1,4 +1,0 @@
-use std.time
-
-fn main()
-    print(time.now_ms() > 0)
