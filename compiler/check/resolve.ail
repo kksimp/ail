@@ -73,6 +73,8 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
         ty = Ty.Num(n)
     elif n == "str"
         ty = Ty.Str
+    elif n == "bytes"
+        ty = Ty.Bytes
     elif n == "char"
         ty = Ty.Char
     elif n == "bool"
@@ -222,6 +224,7 @@ fn Checker.ty_name(self, t Ty) str
         Float => "float"
         Num(n) => n
         Str => "str"
+        Bytes => "bytes"
         Char => "char"
         Bool => "bool"
         Unit => "no value"

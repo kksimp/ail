@@ -190,6 +190,20 @@ fn word(t: &Tok, out: &mut String) {
             escape(s, out);
             out.push('"');
         }
+        Tok::Bytes(b) => {
+            out.push_str("b\"");
+            for &c in b {
+                match c {
+                    b'"' | b'\\' => {
+                        out.push('\\');
+                        out.push(c as char);
+                    }
+                    0x20..=0x7e => out.push(c as char),
+                    _ => out.push_str(&format!("\\x{c:02x}")),
+                }
+            }
+            out.push('"');
+        }
         Tok::Interp(parts) => {
             out.push('"');
             for part in parts {

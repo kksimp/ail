@@ -1,0 +1,5 @@
+# type.bytes.4: a slice out of range traps.
+fn main()
+    b := b"abc"
+    print(b[1..3])
+    print(b[2..9])
