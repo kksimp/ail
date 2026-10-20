@@ -55,6 +55,12 @@ pub(super) const CHAR_METHODS: &[&str] = &[
     "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower", "to_upper", "to_lower", "code", "to_digit",
 ];
 pub(super) const INT_METHODS: &[&str] = &[
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "bit_not",
+    "shl",
+    "shr",
     "checked_add",
     "checked_sub",
     "checked_mul",
@@ -140,6 +146,10 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub"
             | "saturating_mul" => read(vec![Int], Int),
             "abs" => read(vec![], Int),
+            // expr.bit.1-2: bitwise operations on the 64-bit two's complement value.
+            "bit_and" | "bit_or" | "bit_xor" => read(vec![Int], Int),
+            "bit_not" => read(vec![], Int),
+            "shl" | "shr" => read(vec![Int], Int),
             "to_float" => read(vec![], Float),
             "to_hex" => read(vec![], Str),
             _ => convert(name).map(|k| Builtin { mutates: false, params: vec![], ret: Ty::Num(k), need: Need::Nothing }),

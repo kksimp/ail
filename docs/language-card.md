@@ -326,7 +326,7 @@ match ch             # literals and `|`; ints, strings and chars need `_`
   `x.to_int()`. An int literal works where a float is expected.
 - Sized numbers `i8`…`u64`, `f32`: typed by context, same-type operands only,
   overflow traps; `x.to_u8()` converts.
-- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`).
+- `int`: `min`, `max`, `abs`, `to_hex`, `checked_add` (`int?`); bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl(n)`, `shr(n)` (count 0-63).
 
 ## Strings and characters
 

@@ -107,6 +107,7 @@ daytime gate and is then in the batch branch.
 - Lanes PR against the batch branch `claude/project-thread-ipafhh`, not
   `main`, so one macOS run gates a round rather than every slice
   (ADR 0085 still holds for the final PR).
-- The batch runs until the designer's next morning (12:00 UTC
-  2026-10-21) unless the designer says otherwise; the integrator replans
-  and refills lanes as they finish.
+- The batch runs until it is done (designer's decision, 2026-10-20
+  17:02 UTC): no deadline. The integrator replans and refills lanes as
+  they finish, merges the batch branch to `main` at the end of each day
+  after the macOS gate, and posts a daily report.

@@ -408,6 +408,8 @@ no `break` can end a function too.
   annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
+- Bits on `int` (64-bit two's complement): `a.bit_and(b)`, `bit_or`, `bit_xor`,
+  `n.bit_not()`, `n.shl(k)`, `n.shr(k)` (arithmetic; `k` in `0..=63`, else trap `expr.bit.2`).
 
 ## Strings and characters
 
