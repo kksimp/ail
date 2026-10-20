@@ -1,0 +1,4 @@
+fn main()
+    s := "abc"
+    print(s.length())
+    print(s.size())

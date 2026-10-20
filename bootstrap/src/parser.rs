@@ -15,7 +15,7 @@ use crate::ast::{
     InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
     TypeRef, UnOp, Variant, Within, is_prelude,
 };
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
@@ -466,10 +466,12 @@ impl Parser {
                 self.skip_statement();
                 return None;
             };
+            let mut arg = None;
             if self.at_sym("(") {
                 let mut depth = 0usize;
                 loop {
                     match self.peek() {
+                        Tok::Str(text) if depth == 1 && arg.is_none() => arg = Some(text.clone()),
                         Tok::Sym("(") => depth += 1,
                         Tok::Sym(")") => depth -= 1,
                         Tok::Newline | Tok::Eof => break,
@@ -481,7 +483,7 @@ impl Parser {
                     }
                 }
             }
-            attrs.push(Attr { name, pos });
+            attrs.push(Attr { name, pos, arg });
         }
         if !self.at_kw("fn") {
             let pos = self.pos();
@@ -762,21 +764,13 @@ impl Parser {
 
     /// `T` or `T?` (type.opt.2).
     fn optional_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
-        let t = self.named_type(expected, rule)?;
-        if !self.eat_sym("?") {
-            return Some(t);
+        let mut t = self.named_type(expected, rule)?;
+        // type.opt.6: `T??` is an optional of an optional.
+        while self.eat_sym("?") {
+            let pos = t.pos;
+            t = TypeRef { kind: TypeKind::Optional(Box::new(t)), pos };
         }
-        if self.at_sym("?") {
-            let at = self.pos();
-            self.error(
-                UNSUPPORTED,
-                at,
-                "nested optional types are not supported by the bootstrap yet (spec type.opt.2)",
-            );
-            return None;
-        }
-        let pos = t.pos;
-        Some(TypeRef { kind: TypeKind::Optional(Box::new(t)), pos })
+        Some(t)
     }
 
     /// `Name` or `Name[Arg, ...]` (gram.generic.1), or a module's type
@@ -1509,7 +1503,10 @@ impl Parser {
             } else if self.at_kw("else") {
                 let else_pos = self.bump().pos;
                 if self.at_kw("if") {
-                    self.error_help("expr.if.1", else_pos, "AIL writes `else if` as `elif`", "write `elif`");
+                    let d = Diagnostic::new("expr.if.1", else_pos, "AIL writes `else if` as `elif`")
+                        .help("write `elif`")
+                        .fix("write `elif`", vec![Edit::replace(else_pos, "else if", "elif")]);
+                    self.diags.push(d);
                     return None;
                 }
                 // `else err` binds the error (expr.if.6).

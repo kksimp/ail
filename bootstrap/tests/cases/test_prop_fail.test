@@ -1,0 +1,6 @@
+{"test":"small_numbers","status":"fail","line":7,"col":11,"message":"trap[test.assert.1]: assertion failed","cases":16,"seed":8109999444648784389,"input":"a = 100"}
+{"test":"short_lists","status":"fail","line":10,"col":11,"message":"trap[test.assert.1]: assertion failed","cases":20,"seed":12536253502476333499,"input":"xs = [0, 0, 0]"}
+{"test":"short_text","status":"fail","line":13,"col":11,"message":"trap[test.assert.1]: assertion failed","cases":15,"seed":3077318343536731645,"input":"s = \"aaaa\""}
+{"test":"only_dots","status":"fail","line":16,"col":11,"message":"trap[test.assert.1]: assertion failed","cases":2,"seed":7440353416138571956,"input":"s = Shape.Circle(r: 0)"}
+{"test":"passes","status":"pass","line":18,"col":10,"message":"","cases":100,"seed":807675809502014172}
+{"summary":true,"passed":1,"failed":4}

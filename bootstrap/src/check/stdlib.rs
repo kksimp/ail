@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
 use crate::ast::{Arg, TypeRef};
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 use crate::stdlib::{self, StdCall};
 
 impl<'p> Checker<'p> {
@@ -117,6 +117,9 @@ impl<'p> Checker<'p> {
         if (module, f) == ("io", "eprint") {
             return Some(self.eprint_call(args, pos));
         }
+        if (module, f) == ("random", "shuffle") {
+            return Some(self.shuffle_call(args, pos));
+        }
         let (params, ret) = self.std_signature(module, f);
         let sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
         Some(self.check_call(&what, &sig, Vec::new(), args, None, pos, expect))
@@ -149,10 +152,51 @@ impl<'p> Checker<'p> {
                 vec![Str, list(Str)],
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
+            ("random", "int") => (vec![Int, Int], Int),
+            ("random", "float") => (vec![], Ty::Float),
+            ("random", "seed") => (vec![Int], Unit),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
+            ("ui", "open") => (
+                vec![Str, Int, Int],
+                Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
+            ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
         }
+    }
+
+    /// std.random.4: `random.shuffle(mut xs)` reorders any `List[T]` in place.
+    fn shuffle_call(&mut self, args: &'p [Arg], pos: Pos) -> Ty {
+        if args.len() != 1 {
+            self.args_only(args);
+            self.error(
+                "std.random.4",
+                pos,
+                format!("`shuffle` takes exactly one argument, but {} given", super::was_were(args.len())),
+            );
+            return Ty::Unit;
+        }
+        let a = &args[0];
+        let t = self.expr(&a.value, None, true);
+        if !a.mutable {
+            self.error_help(
+                "own.param.2",
+                a.value.pos(),
+                "this parameter is `mut`, so the argument must be marked `mut`",
+                "write `mut` before the argument",
+            );
+        } else {
+            self.require_mutable(&a.value, Some("own.param.2"), "passed `mut`");
+        }
+        if !matches!(t, Ty::List(_) | Ty::Err) {
+            self.error_help(
+                "std.random.4",
+                a.value.pos(),
+                format!("`shuffle` needs a list, not {}", self.ty_name(&t)),
+                "to pick one element, use `xs[random.int(0, xs.len() - 1)]`",
+            );
+        }
+        Ty::Unit
     }
 
     /// std.io.3: `io.eprint(value)` takes one value with a text form, as
@@ -186,12 +230,13 @@ impl<'p> Checker<'p> {
 
     /// std.use.2: a standard module's name used without its import.
     fn not_imported(&mut self, module: &str, pos: Pos) {
-        self.error_help(
-            "std.use.2",
-            pos,
-            format!("the standard module `{module}` is not imported"),
-            format!("add `use std.{module}` at the top of the file"),
-        );
+        let d = Diagnostic::new("std.use.2", pos, format!("the standard module `{module}` is not imported"))
+            .help(format!("add `use std.{module}` at the top of the file"))
+            .fix(
+                format!("add `use std.{module}`"),
+                vec![Edit::insert(Pos { line: 1, col: 1 }, format!("use std.{module}\n"))],
+            );
+        self.diags.push(d);
     }
 
     /// A module's type written `m.Type` (std.use.2). `None` when `name` has

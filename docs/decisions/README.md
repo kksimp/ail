@@ -178,5 +178,24 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
+| [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
+| [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
+| [0194](0194-sized-numeric-types.md) | Sized numeric types: contextual literals, same-type arithmetic, trapping overflow *(delegated)* | Accepted | 2026-10-20 |
+| [0195](0195-sized-numeric-conversions.md) | Sized numbers convert with `to_<type>()` methods *(delegated)* | Accepted | 2026-10-20 |
+| [0196](0196-inline-attribute.md) | `@inline` is accepted and recorded as a hint *(delegated)* | Accepted | 2026-10-20 |
+| [0197](0197-deprecated-attribute.md) | `@deprecated("reason")` warns at each use *(delegated)* | Accepted | 2026-10-20 |
+| [0198](0198-test-properties.md) | Run a test with parameters as a property *(delegated)* | Accepted | 2026-10-20 |
+| [0199](0199-property-seeds-and-shrinking.md) | Seed properties from the test name and shrink failures *(delegated)* | Accepted | 2026-10-20 |
+| [0200](0200-doc-examples-as-tests.md) | Run doc-comment examples as tests *(delegated)* | Accepted | 2026-10-20 |
+| [0201](0201-doc-example-output-comments.md) | Assert example output with `# => text` comments *(delegated)* | Accepted | 2026-10-20 |
+| [0202](0202-more-machine-applicable-fixes.md) | Offer fixes for five more common mistakes: `mut`, `elif`, `?`, missing match arms, `use std.x` *(delegated)* | Accepted | 2026-10-20 |
+| [0203](0203-ail-fix-command.md) | `ail fix` applies diagnostics' fixes until none are left *(delegated)* | Accepted | 2026-10-20 |
+| [0204](0204-anchored-fix-edits.md) | The checker names some fix positions by rule, and the tool resolves them *(delegated)* | Accepted | 2026-10-20 |
+| [0205](0205-related-notes-on-duplicates.md) | Duplicate declarations point at the first one *(delegated)* | Accepted | 2026-10-20 |
+| [0206](0206-std-random.md) | Add `std.random` with a process-wide seedable generator *(delegated)* | Accepted | 2026-10-20 |
+| [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
+| [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
+| [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
