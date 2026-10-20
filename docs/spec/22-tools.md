@@ -344,6 +344,7 @@ what `ail run FILE` writes to standard output.
 `{"snapshot":"assert_eq"|"doc"|"out","file","line","col","old","new"}` and
 the summary is `{"snapshots":true,"dry_run","updated","files","skipped"}`.
 
+
 ## Semantic diff
 
 **diff.out.1** — `ail diff OLD NEW` compares two versions of a program: two
@@ -698,3 +699,39 @@ status is 2 when there are errors, 0 otherwise. The files are written even
 when there are errors, unless `--if-clean` is given.
 **edit.out.3** — `--dry-run` writes nothing and prints a unified diff of
 each file that would change; `--diff` prints the diff and writes.
+
+```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
+@test
+fn adds()
+    assert_eq(1 + 1, 3)
+```
+
+```ail tool=test,--update,--dry-run,FILE expect=would rules=snap.update.3
+@test
+fn repeated()
+    for i in [1, 2]
+        assert_eq(i, 1)
+```
+
+```ail tool=test,--update,--dry-run,FILE expect=would rules=snap.update.4
+## Doubles a number.
+##
+## ```ail
+## print(double(2))
+## # => 5
+## ```
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(1))
+```
+
+```ail tool=test,--update,--dry-run,--json,FILE expect=dry_run rules=snap.update.6
+@test
+fn adds()
+    assert_eq(1 + 1, 3)
+```
+
+```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
+```

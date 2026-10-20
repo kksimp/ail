@@ -570,7 +570,7 @@ for each byte. *(ADR 0414)*
   with its padding and no other character.
 - `bytes.zeros(n)` is `n` zero bytes; it traps if `n` is negative or above 2^32.
 
-```ail fragment
+```ail fragment rules=type.bytes.1,type.bytes.2,type.bytes.3,type.bytes.4,type.bytes.5,type.bytes.6,type.bytes.7,type.bytes.8,type.bytes.9,type.bytes.10,type.bytes.11,type.bytes.12,type.bytes.13
 b := b"hello\x00\n"
 print(b.len())                       # 7
 print(b[1])                          # 101
@@ -581,6 +581,28 @@ print("hi".to_bytes().to_list())     # [104, 105]
 print(bytes.from_base64("aGk=") else b"")
 for x in b"abc"
     print(x)                         # 97 98 99
+print(b.to_str() else "bad")         # bad: the NUL byte is valid UTF-8, so this prints the text
+print(b"\xff".text().len())          # 1: one U+FFFD
+print(b.find(b"ll") else -1)         # 2
+print(b.contains(b"lo"))             # true
+print(b.starts_with(b"he"))          # true
+print(b.ends_with(b"\n"))            # true
+print("é".to_bytes().len())          # 2
+print(bytes.zeros(3).hex())          # 000000
+print(bytes.from_list([104, 105]))   # b"hi"
+print(bytes.from_hex("ff") else b"") # b"\xff"
+```
+
+```ail error=type.bytes.2 rules=type.bytes.2
+fn main()
+    b := b"ab"
+    b[0] = 0x63                          # bytes are immutable: no element assignment
+```
+
+```ail norun rules=type.bytes.3,type.bytes.4
+fn main()
+    b := b"abc"
+    print(b[3])                          # traps: index 3 is not below b.len()
 ```
 
 ## Characters

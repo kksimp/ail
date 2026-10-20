@@ -1539,3 +1539,21 @@ fn main()
     print(tz.system().len() > 0)                     # "UTC" on Windows until the registry reader lands
     print(tz.offset("UTC", 0) else 0)                # 0
 ```
+
+## Examples for bytes I/O
+
+```ail rules=std.fs.13,std.fs.14
+use std.fs
+
+fn main() !
+    fs.write_bytes("spec-bytes.bin", b"\x00\xffhi")?
+    print(fs.read_bytes("spec-bytes.bin")?)
+    fs.append_bytes("spec-bytes.bin", b"!")?
+    print(fs.read_bytes("spec-bytes.bin")?)
+```
+
+```ail norun rules=std.io.5
+fn main()
+    data := io.read_bytes()                 # reads the rest of standard input, undecoded
+    print(data.len())
+```
