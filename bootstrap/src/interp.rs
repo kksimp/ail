@@ -805,6 +805,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.returned = Some((v, *pos));
                 return Err(Exit::Return);
             }
+            Stmt::Expr(Expr::If { branches, els, else_err, .. }) => return self.eval_if(branches, els, else_err, env),
             Stmt::Expr(e) => return self.eval(e, env),
             // err.else.4: the `else` runs only on a failure.
             Stmt::Handle { value, otherwise } => {
@@ -909,12 +910,19 @@ impl<'a, W: Write> Interp<'a, W> {
         // A plain local needs no `Place`: same steps as below with an empty path.
         if let Expr::Name(n, _) = target {
             let slot = env.iter().rposition(|(m, _)| name_eq(m, n)).expect("checked: a local");
-            if let (Some(op), Value::Int(a)) = (op, &env[slot].1)
-                && let Some(b) = self.int_leaf(value, env)
-                && let Some(v) = int_op(op, *a, b)
-            {
-                env[slot].1 = v;
-                return Ok(());
+            // An int local updated with int operands is overwritten in place: no `Value` built or dropped.
+            if matches!(env[slot].1, Value::Int(_)) {
+                let new = match op {
+                    None => self.int_val(value, env),
+                    Some(op) => match (&env[slot].1, self.int_leaf(value, env)) {
+                        (Value::Int(a), Some(b)) => int_arith(op, *a, b),
+                        _ => None,
+                    },
+                };
+                if let (Some(r), Value::Int(a)) = (new, &mut env[slot].1) {
+                    *a = r;
+                    return Ok(());
+                }
             }
             let v = match op {
                 None => self.eval(value, env)?,
