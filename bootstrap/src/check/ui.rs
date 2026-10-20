@@ -47,7 +47,8 @@ impl<'p> Checker<'p> {
         let (params, ret) = match m {
             "size" => (vec![], ty("ui.Size")),
             "modifiers" => (vec![], ty("ui.Modifiers")),
-            "clear" => (vec![Int], Unit),
+            "font_size" => (vec![], Int),
+            "clear" | "set_font_size" => (vec![Int], Unit),
             "put" => (vec![Int, Int, Str, Int, Int], Unit),
             "cursor" => (vec![Int, Int], Unit),
             "set_title" => (vec![Str], Unit),

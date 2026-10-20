@@ -287,6 +287,8 @@ impl<'a> Scan<'a> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            // `defer` runs at block exit; its statement is part of the body (own.defer.1).
+            Stmt::Defer(inner, _) => self.stmt(inner),
         }
     }
 
@@ -372,6 +374,18 @@ impl<'a> Scan<'a> {
 
     fn expr(&mut self, e: &'a Expr) {
         match e {
+            // A `ref` cell is shared by every copy of it (own.ref.1), so
+            // iterations that make one may also write through it.
+            Expr::Ref { value, pos } => {
+                self.expr(value);
+                self.problem(
+                    "conc.par.2",
+                    *pos,
+                    false,
+                    "makes a `ref` cell, which copies share".to_string(),
+                    "iterations may write through the cell in any order; keep the loop sequential (drop `par`)",
+                );
+            }
             Expr::Str(..)
             | Expr::Int(..)
             | Expr::Float(..)
@@ -586,6 +600,7 @@ fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
             expr_blocks(value, f);
             other(otherwise, f);
         }
+        Stmt::Defer(inner, _) => each_block(inner, f),
     }
 }
 

@@ -1,0 +1,18 @@
+# own.uniq.3, own.defer.1: cleanups and deferred statements run when a
+# scope exits by a trap.
+unique struct Lock
+    id int
+
+impl Drop for Lock
+    fn drop(mut self)
+        print("unlock {id}")
+
+fn inner(n int) int
+    l := Lock(id: n)
+    defer print("inner defer")
+    xs := [1, 2]
+    xs[n]
+
+fn main()
+    a := Lock(id: 1)
+    print(inner(5))

@@ -8,6 +8,7 @@ is headless: an `Editor` value, `Command`s that change it, and a pure
 
 ```sh
 ./ail run tools/edit/edit.ail FILE                     # the editor, in a window
+./ail run tools/edit/edit.ail --font 15 FILE           # ...with a smaller font (10 to 40)
 ./ail run tools/edit/edit.ail --print FILE             # print one screen as text
 ./ail run tools/edit/edit.ail --print --check FILE     # ...after Ctrl-K
 ./ail run tools/edit/edit.ail --print --outline FILE   # ...with the outline
@@ -28,8 +29,9 @@ is headless: an `Editor` value, `Command`s that change it, and a pure
 | Tab | Spaces to the next multiple of 4 (AIL has no tabs, lex.block.1) |
 | Backspace | In indentation, removes one level |
 | Ctrl-Space | Complete the word: after `.`, fields, variants and methods; otherwise the file's declarations (with signatures), keywords and words in the buffer. Up/Down choose, Enter or Tab accepts, Escape closes |
-| F12 | Go to the definition of the name under the cursor (`ail api --symbols`) |
-| Ctrl-I | Show the declaration and doc comment of the name under the cursor |
+| F12 | Go to the definition of the name under the cursor, locals included (`ail api --refs`, else the `--symbols` index) |
+| F2 | Rename the local or declaration under the cursor everywhere in the file (`ail api --refs`) |
+| Ctrl-I | Show the type of the expression under the cursor, and the signature and doc comment of what it names (`ail api --type`) |
 | Ctrl-Shift-F | Format with `ail fmt` (also on save, when the program has no errors) |
 | `(` `[` `{` `"` | Insert the closing pair; typing the closer steps over it; Backspace in an empty pair deletes both |
 | Ctrl-/ | Comment or uncomment the line or selected lines |
@@ -51,6 +53,8 @@ is headless: an `Editor` value, `Command`s that change it, and a pure
 | Ctrl-P | Open a file: type part of its path (letters in order), Up/Down, Enter |
 | Ctrl-Tab, Ctrl-Shift-Tab | Next, previous tab; a click on a tab selects it |
 | Ctrl-W | Close the tab; with unsaved changes, press it twice |
+| F2 | Rename the name under the cursor: through `ail api` for declarations, else every whole word; the prompt shows the count, Enter applies (ADR 0244) |
+| Ctrl-+ (or Ctrl-=), Ctrl--, Ctrl-0 | Larger, smaller, default font size (ADR 0243) |
 | Mouse | Click places the caret, drag or Shift-click selects, the wheel scrolls, a click on a diagnostic jumps to it |
 
 The `ail` it runs is `$AIL`, else `./ail` when started from the repository
@@ -85,5 +89,7 @@ imports resolve as they will on save.
 - The word under the cursor is marked wherever else it appears on screen;
   each line with a diagnostic shows the first message after its text;
   typing `else` or `elif` lines it up with its `if`.
-- Not yet: types of locals in completion (the API has no local types yet),
-  Shift-click selection.
+- Completion offers the locals in scope with their types (`ail api --locals`)
+  and, after `x.`, only the members of `x`'s type (`ail api --type`). The
+  position queries need a program that parses; otherwise the editor falls
+  back to the outline index and the buffer's words.

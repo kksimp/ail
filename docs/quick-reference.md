@@ -20,6 +20,7 @@
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
+./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms, use std.x); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
@@ -516,6 +517,41 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 
 Two `mut` arguments of one call can't refer to the same value.
 
+## Shared cells, resources and `move`
+
+`ref T` is the one way to share a value: copies of a reference see each
+other's changes, and fields and methods reach the contents directly.
+
+```ail
+root := ref Node(value: 1, children: [])
+alias := root
+alias.value = 2        # root.value is 2; any copy may change the cell
+print(root == alias)   # true: same cell (`==` on refs is identity)
+```
+
+A `unique` type can't be copied: binding, assigning, returning or storing it
+moves it, and using the old name afterwards (on any path) is an error. Its
+`impl Drop` runs once, when its last owner's block ends, even on a trap.
+`defer S` runs `S` when the block ends; cleanups and defers run last first.
+
+```ail
+unique struct File
+    fd int
+
+impl Drop for File
+    fn drop(mut self)
+        print("closing {fd}")
+
+fn close(move f File)  # takes ownership; the caller writes `move` too
+    print("bye {f.fd}")
+
+f := File(fd: 3)
+close(move f)          # f can't be used after this
+```
+
+A unique value can't be a list element, map value, `ref` contents or type
+argument yet (OQ-050).
+
 ## Modules
 
 A module is a directory of `.ail` files sharing one namespace. `use a.b`
@@ -582,7 +618,7 @@ fn main() !
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
-| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |
 
 A window is a grid of text cells; draw with `put`, then `present`:
 
