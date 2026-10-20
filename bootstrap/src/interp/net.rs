@@ -21,7 +21,7 @@ pub const MAX_REDIRECTS: usize = 5;
 pub struct Opts {
     pub headers: Vec<(String, String)>,
     pub query: Vec<(String, String)>,
-    pub body: String,
+    pub body: Vec<u8>,
     pub content_type: Option<String>,
     pub timeout: Duration,
     pub max_redirects: usize,
@@ -32,7 +32,7 @@ impl Default for Opts {
         Opts {
             headers: Vec::new(),
             query: Vec::new(),
-            body: String::new(),
+            body: Vec::new(),
             content_type: None,
             timeout: TIMEOUT,
             max_redirects: MAX_REDIRECTS,
@@ -41,11 +41,14 @@ impl Default for Opts {
 }
 
 /// A response: status, headers (names in lowercase, in arrival order, a
-/// repeated header's values joined with `, `), and the body as text.
+/// repeated header's values joined with `, `), and the body as bytes.
 pub struct Response {
     pub status: i64,
     pub headers: Vec<(String, String)>,
-    pub body: String,
+    /// Each header's values one by one, in arrival order (std.net.17).
+    pub all: Vec<(String, Vec<String>)>,
+    /// The body's bytes, undecoded (type.bytes.1).
+    pub body: Vec<u8>,
 }
 
 /// A failure (std.net.4): the URL, its kind and a sentence for people.
@@ -66,8 +69,8 @@ pub fn get(url: &str) -> Result<Response, NetFail> {
 
 /// std.net.3: `POST url` with `body` of type `content_type`. Redirects are
 /// returned, not followed.
-pub fn post(url: &str, body: &str, content_type: &str) -> Result<Response, NetFail> {
-    let opts = Opts { body: body.to_string(), content_type: Some(content_type.to_string()), ..Opts::default() };
+pub fn post(url: &str, body: &[u8], content_type: &str) -> Result<Response, NetFail> {
+    let opts = Opts { body: body.to_vec(), content_type: Some(content_type.to_string()), ..Opts::default() };
     request("POST", url, &opts)
 }
 
@@ -273,7 +276,7 @@ fn exchange_once(method: &str, url: &str, opts: &Opts) -> Result<Response, NetFa
     }
     head.push_str("\r\n");
     let mut bytes = head.into_bytes();
-    bytes.extend_from_slice(opts.body.as_bytes());
+    bytes.extend_from_slice(&opts.body);
     // The stream waits cooperatively when tasks are running, so a client and
     // a server in one program both make progress (std.net.8).
     let stream = Coop::for_client(stream, opts.timeout).map_err(|e| io("other", e))?;
@@ -343,6 +346,7 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| protocol(format!("no status code in `{status_line}`")))?;
     let mut headers: Vec<(String, String)> = Vec::new();
+    let mut all: Vec<(String, Vec<String>)> = Vec::new();
     loop {
         let line = read_line(&mut r)?;
         if line.is_empty() {
@@ -352,6 +356,10 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
             return Err(protocol(format!("bad header line `{line}`")));
         };
         let (name, value) = (name.trim().to_ascii_lowercase(), value.trim().to_string());
+        match all.iter_mut().find(|(k, _)| *k == name) {
+            Some((_, vs)) => vs.push(value.clone()),
+            None => all.push((name.clone(), vec![value.clone()])),
+        }
         match headers.iter_mut().find(|(k, _)| *k == name) {
             Some((_, v)) => {
                 v.push_str(", ");
@@ -388,7 +396,7 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
     } else {
         r.read_to_end(&mut body).map_err(|e| (connect_kind(&e), e.to_string()))?;
     }
-    Ok(Response { status, headers, body: String::from_utf8_lossy(&body).into_owned() })
+    Ok(Response { status, headers, all, body })
 }
 
 #[cfg(test)]
@@ -415,7 +423,7 @@ mod tests {
         let raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: 1\r\nx-a: 2\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n";
         let r = read_response(raw.as_bytes(), "GET").ok().unwrap();
         assert_eq!(r.status, 200);
-        assert_eq!(r.body, "Wikipedia");
+        assert_eq!(r.body, b"Wikipedia");
         assert_eq!(r.headers[1], ("x-a".to_string(), "1, 2".to_string()));
     }
 }

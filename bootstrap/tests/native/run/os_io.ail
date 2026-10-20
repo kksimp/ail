@@ -1,0 +1,12 @@
+# std.io.1-4: standard error is written after pending standard output;
+# standard input is empty in the test harness.
+fn main()
+    print("one")
+    io.eprint("two {3}")
+    print("three")
+    io.eprint(1.5)
+    line := io.read_line() else "end of input"
+    print(line)
+    print(io.read_all().len())
+    io.exit(7)
+    print("never")

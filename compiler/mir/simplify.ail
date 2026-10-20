@@ -1,0 +1,113 @@
+## Cleaning up freshly lowered MIR (ADR 0384): parameters that receive one
+## value everywhere are replaced by it (Braun et al.'s trivial phis), blocks
+## nothing reaches are dropped, and pure instructions whose values nobody
+## reads are removed.
+
+pub fn simplify(f Func) Func
+    remove_dead(drop_unreachable(remove_trivial_params(f)))
+
+## The argument each edge into `b` passes for parameter `k`.
+fn incoming(f Func, b int, k int) List[int]
+    mut out := List[int]()
+    for q in f.blocks
+        for e in 0..q.term.targets.len()
+            if q.term.targets[e] == b
+                out.push(q.term.args[e][k])
+    out
+
+fn resolve(repl List[int], v int) int
+    mut x := v
+    while repl[x] != x
+        x = repl[x]
+    x
+
+fn remove_trivial_params(f Func) Func
+    mut g := f
+    mut repl := [i for i in 0..g.vals.len()]
+    mut changed := true
+    while changed
+        changed = false
+        for b in 1..g.blocks.len()
+            mut k := 0
+            while k < g.blocks[b].params.len()
+                p := g.blocks[b].params[k]
+                mut only := -1
+                mut many := false
+                for a in incoming(g, b, k)
+                    x := resolve(repl, a)
+                    if x == p or x == only
+                        continue
+                    if only < 0
+                        only = x
+                    else
+                        many = true
+                if many or only < 0
+                    k += 1
+                    continue
+                repl[p] = only
+                g.blocks[b].params.remove_at(k)
+                for q in 0..g.blocks.len()
+                    for e in 0..g.blocks[q].term.targets.len()
+                        if g.blocks[q].term.targets[e] == b
+                            g.blocks[q].term.args[e].remove_at(k)
+                changed = true
+    final := [resolve(repl, v) for v in 0..repl.len()]
+    for b in 0..g.blocks.len()
+        for i in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[i].args = [final[a] for a in g.blocks[b].insts[i].args]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = final[t.cond]
+        if t.value >= 0
+            t.value = final[t.value]
+        t.args = [[final[a] for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
+
+fn drop_unreachable(f Func) Func
+    mut seen := [false for _ in 0..f.blocks.len()]
+    mut work := [0]
+    seen[0] = true
+    while work.len() > 0
+        w := work.pop() else 0
+        for s in f.blocks[w].term.targets
+            if not seen[s]
+                seen[s] = true
+                work.push(s)
+    mut map := [-1 for _ in 0..f.blocks.len()]
+    mut n := 0
+    for b in 0..f.blocks.len()
+        if seen[b]
+            map[b] = n
+            n += 1
+    mut g := f
+    mut blocks := List[Block]()
+    for b in 0..f.blocks.len()
+        if seen[b]
+            mut blk := f.blocks[b]
+            blk.term.targets = [map[t] for t in blk.term.targets]
+            blocks.push(blk)
+    g.blocks = blocks
+    g
+
+fn remove_dead(f Func) Func
+    mut g := f
+    mut changed := true
+    while changed
+        changed = false
+        mut used := [false for _ in 0..g.vals.len()]
+        for blk in g.blocks
+            for i in blk.insts
+                for u in i.args
+                    used[u] = true
+            for u in blk.term.uses()
+                used[u] = true
+        for b in 0..g.blocks.len()
+            mut keep := List[Inst]()
+            for i in g.blocks[b].insts
+                if i.dst >= 0 and not used[i.dst] and i.is_pure()
+                    changed = true
+                    continue
+                keep.push(i)
+            g.blocks[b].insts = keep
+    g

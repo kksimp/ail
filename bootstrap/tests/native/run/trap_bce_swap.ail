@@ -1,0 +1,12 @@
+# The loop replaces a row with a shorter one, so a hoisted row would be
+# stale: the trap (type.coll.4) must come from the second row's access.
+fn run(mut a List[List[int]], n int) int
+    mut s := 0
+    for i in 0..n
+        s += a[1][i]
+        a[1] = [i]
+    s
+
+fn main()
+    mut rows := [[1, 2, 3], [4, 5, 6]]
+    print(run(mut rows, 3))

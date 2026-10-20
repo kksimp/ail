@@ -1,4 +1,3 @@
-
 struct Sale
     region str
     product str

@@ -95,9 +95,13 @@ pub enum Ty {
     Any(usize),
     /// `ref T` (own.ref.1).
     Ref(Box<Ty>),
+    /// `*T`, a raw pointer: an address with no ownership (unsafe.ptr.1).
+    Ptr(Box<Ty>),
     /// `Task[T]`, `TaskGroup` (with `Unit`), `Channel[T]` and `Mutex[T]`
     /// (conc.task.1, conc.share.2-3, ADRs 0186-0189).
     Conc(conc::Conc, Box<Ty>),
+    /// `fn(A, B) R`, a function value (type.fn.1); `Unit` when it has no result.
+    Fn(Vec<Ty>, Box<Ty>),
 }
 
 /// The error part of `T ! E`: an explicit set, or the inferred set of a
@@ -197,10 +201,19 @@ pub struct Resolved {
     /// `tensor.from` and `tensor.zeros` calls typed `Tensor[int]`, by the
     /// position of the name (std.tensor.2).
     pub int_tensors: std::collections::HashSet<Pos>,
+    /// Chains of elementwise tensor operations that run fused (std.tensor.20),
+    /// by the chain's position.
+    pub fused: std::collections::HashSet<Pos>,
     /// The declaration a name, call, method, field or variant refers to, by
     /// the use's position, as an `ail api` symbol id (api.id.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
+    /// For a call with named arguments, by the position of its first label:
+    /// the argument indices in parameter order (expr.call.3).
+    pub arg_order: HashMap<Pos, Vec<usize>>,
+    /// Names of declared functions used as values, by the name's position,
+    /// with the function's index (type.fn.2).
+    pub fn_values: HashMap<Pos, usize>,
     /// Methods called on a task, group, channel or mutex handle, by the
     /// position of the name: they synchronise with other tasks (conc.par.2).
     pub handle_calls: FastSet<Pos>,
@@ -364,6 +377,9 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
 struct Sig {
     receiver: Option<bool>,
     params: Vec<(bool, Ty)>,
+    /// The parameters' names, for named arguments (expr.call.3); empty for
+    /// a built-in whose parameters have no names.
+    names: Vec<String>,
     /// Which parameters are `move` (own.move.1); empty when none are.
     moves: Vec<bool>,
     ret: Ty,
@@ -374,7 +390,7 @@ struct Sig {
 
 impl Sig {
     fn plain(receiver: Option<bool>, params: Vec<(bool, Ty)>, ret: Ty) -> Self {
-        Sig { receiver, params, moves: Vec::new(), ret, generics: Vec::new(), owner: 0, declared: 0 }
+        Sig { receiver, params, names: Vec::new(), moves: Vec::new(), ret, generics: Vec::new(), owner: 0, declared: 0 }
     }
 }
 
@@ -513,6 +529,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
         (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => same(x, y),
         (Ty::Map(k, v), Ty::Map(l, w)) => same(k, l) && same(v, w),
         (Ty::Conc(a, x), Ty::Conc(b, y)) => a == b && same(x, y),
+        (Ty::Fn(xs, r), Ty::Fn(ys, s)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y)) && same(r, s),
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) => {
             s == t && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y))
         }
@@ -528,6 +545,7 @@ fn has_err(t: &Ty) -> bool {
         Ty::Map(k, v) => has_err(k) || has_err(v),
         Ty::Res(x, _) => has_err(x),
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(has_err),
+        Ty::Fn(ps, r) => ps.iter().any(has_err) || has_err(r),
         _ => false,
     }
 }
@@ -836,6 +854,7 @@ impl<'p> Checker<'p> {
             let sig = Sig {
                 receiver: f.receiver.map(|r| r.mutable),
                 params,
+                names: f.params.iter().map(|p| p.name.clone()).collect(),
                 moves: if f.params.iter().any(|p| p.moved) { f.params.iter().map(|p| p.moved).collect() } else { Vec::new() },
                 ret,
                 generics,
@@ -1136,12 +1155,22 @@ impl<'p> Checker<'p> {
                 self.no_unique(&inner_ty, inner.pos, "the contents of a `ref`");
                 return Ty::Ref(Box::new(inner_ty));
             }
+            TypeKind::Ptr(inner) => {
+                let inner_ty = self.resolve_type(inner);
+                self.ptr_target(&inner_ty, inner.pos);
+                return Ty::Ptr(Box::new(inner_ty));
+            }
             TypeKind::Fallible { .. } => {
                 self.unsupported(
                     t.pos,
                     "a type that can fail is only supported as a function's return type in the bootstrap (spec err.type.1)",
                 );
                 return Ty::Err;
+            }
+            TypeKind::Fn { params, ret } => {
+                let ps = params.iter().map(|p| self.resolve_type(p)).collect();
+                let r = ret.as_ref().map_or(Ty::Unit, |r| self.resolve_type(r));
+                return Ty::Fn(ps, Box::new(r));
             }
             TypeKind::Any(tr) => {
                 return match self.trait_named(tr, t.pos, "trait.any.1") {
@@ -1544,8 +1573,13 @@ impl<'p> Checker<'p> {
             Ty::Param(p) => self.tparams[*p].name.clone(),
             Ty::Any(tr) => format!("any {}", self.prog.traits[*tr].name),
             Ty::Ref(t) => format!("ref {}", self.ty_name(t)),
+            Ty::Ptr(t) => format!("*{}", self.ty_name(t)),
             Ty::Conc(conc::Conc::Group, _) => "TaskGroup".into(),
             Ty::Conc(k, t) => format!("{}[{}]", k.name(), self.ty_name(t)),
+            Ty::Fn(ps, r) => {
+                let ps: Vec<String> = ps.iter().map(|p| self.ty_name(p)).collect();
+                if **r == Ty::Unit { format!("fn({})", ps.join(", ")) } else { format!("fn({}) {}", ps.join(", "), self.ty_name(r)) }
+            }
         }
     }
 
@@ -1576,6 +1610,10 @@ impl<'p> Checker<'p> {
     // ---- Functions and blocks ----
 
     fn check_fn(&mut self, idx: usize, f: &'p FnDecl) {
+        if f.ext.is_some() {
+            self.check_extern(idx, f);
+            return;
+        }
         let Some(body) = &f.body else {
             if !f.contracts.is_empty() {
                 self.check_bodyless_contracts(idx, f);
@@ -1638,6 +1676,10 @@ impl<'p> Checker<'p> {
                 self.mismatch("expr.block.2", at, &sig.ret, &got);
             } else {
                 let mut d = Diagnostic::new("expr.block.2", at, msg);
+                if sig.ret == Ty::Int && got == Ty::Float {
+                    // Two candidates, the likelier first; neither is applied, since each is a choice.
+                    d = d.help("convert the value with `x.to_int()`, or declare the return type `float` instead");
+                }
                 if f.ret.is_some() {
                     d = d.note(ret_pos, "the return type is declared here");
                 }
@@ -1972,6 +2014,13 @@ impl<'p> Checker<'p> {
                 let dt = self.expr(d, Some(&ok), true);
                 if !self.accepts(&ok, &dt) {
                     self.mismatch("err.else.1", d.pos(), &ok, &dt);
+                    if let Expr::Float(f, p) = d
+                        && ok == Ty::Int
+                        && f.fract() == 0.0
+                        && let Some(last) = self.diags.last_mut().filter(|x| x.rule == "err.else.1")
+                    {
+                        last.fixes.push(crate::fix::number::whole_float(*p, *f));
+                    }
                 }
             }
             Else::Leave(stmt) => {
@@ -2326,6 +2375,21 @@ impl<'p> Checker<'p> {
     // ---- Assignment and places ----
 
     fn assign(&mut self, target: &'p Expr, op: Option<BinOp>, value: &'p Expr, pos: Pos) {
+        // std.tensor.15: a tensor is a value, so `t[i] = v` is an error; build a new tensor.
+        if let Expr::Index { recv, .. } = target
+            && let Expr::Name(n, _) = &**recv
+            && let Some(l) = self.locals.iter().rev().find(|l| l.name == *n)
+            && self.tensor_elem(&l.ty).is_some()
+        {
+            self.expr(value, None, true);
+            self.error_help(
+                "std.tensor.15",
+                target.pos(),
+                "a tensor's elements can't be assigned: a tensor is a value",
+                "build a new tensor with `map`, or with `tensor.from`",
+            );
+            return;
+        }
         // type.coll.13: `m[k] = v`, `m[k] += n` or `x = e` can fix a pending
         // local's type; `op=` starts a missing key at zero (ADR 0251, ADR 0280).
         if let Expr::Index { recv, index, .. } = target
@@ -2602,6 +2666,13 @@ impl<'p> Checker<'p> {
     /// whether the value is used (expr.if.4).
     fn expr(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         let t = self.expr_of(e, expect, need);
+        // std.tensor.20: a tensor-valued chain of elementwise operations runs fused.
+        if matches!(e, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Method { .. })
+            && self.tensor_elem(&t).is_some()
+            && crate::fuse::plan(e).is_some()
+        {
+            self.resolved.fused.insert(e.pos());
+        }
         if self.record {
             let text = if matches!(t, Ty::Err) { "?".to_string() } else { self.ty_name(&t) };
             if let Expr::Method { name_pos, .. } | Expr::Field { name_pos, .. } = e {
@@ -2762,6 +2833,73 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// type.fn.2: the name of a declared function used as a value, `f := double`.
+    fn fn_value(&mut self, n: &str, i: usize, pos: Pos) -> Ty {
+        let f = &self.prog.fns[i];
+        let sig = self.sigs[i].clone();
+        let why = if f.receiver.is_some() || f.owner.is_some() {
+            Some("a method")
+        } else if !sig.generics.is_empty() {
+            Some("generic")
+        } else if sig.params.iter().any(|(m, _)| *m) || sig.moves.iter().any(|m| *m) {
+            Some("a function with a `mut` or `move` parameter")
+        } else if matches!(sig.ret, Ty::Res(..)) {
+            Some("a function that can fail")
+        } else if f.is_test() {
+            Some("a test")
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            self.error_help(
+                "type.fn.2",
+                pos,
+                format!("`{n}` is {why}, so it can't be used as a value"),
+                "wrap the call in a plain function and pass that",
+            );
+            return Ty::Err;
+        }
+        self.resolved.symbols.insert(pos, format!("fn:{n}"));
+        self.resolved.fn_values.insert(pos, i);
+        Ty::Fn(sig.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(sig.ret))
+    }
+
+    /// type.fn.3: call a value of function type.
+    fn call_value(&mut self, what: &str, t: Ty, args: &'p [Arg], pos: Pos) -> Ty {
+        let Ty::Fn(params, ret) = t else {
+            self.args_only(args);
+            if t != Ty::Err {
+                self.error("expr.call.1", pos, format!("`{what}` is a value, not a function"));
+            }
+            return Ty::Err;
+        };
+        if let Some((_, lpos)) = args.iter().find_map(|a| a.label.as_ref()) {
+            self.args_only(args);
+            self.error_help("expr.call.3", *lpos, "a function value takes no named arguments", "pass them by position");
+            return Ty::Err;
+        }
+        if args.len() != params.len() {
+            self.args_only(args);
+            self.error(
+                "expr.call.1",
+                pos,
+                format!("`{what}` takes {}, but {} given", count(params.len(), "argument"), was_were(args.len())),
+            );
+            return *ret;
+        }
+        for (a, want) in args.iter().zip(&params) {
+            let t = self.expr(&a.value, (!has_err(want)).then_some(want), true);
+            self.move_arg(a, false);
+            if a.mutable {
+                self.error_help("own.param.2", a.value.pos(), "this parameter isn't `mut`", "remove the `mut`");
+            }
+            if !self.accepts(want, &t) {
+                self.mismatch("expr.call.2", a.value.pos(), want, &t);
+            }
+        }
+        *ret
+    }
+
     fn name(&mut self, n: &str, pos: Pos, expect: Option<&Ty>) -> Ty {
         if let Some(k) = self.pending_of(n) {
             let want = match expect {
@@ -2822,8 +2960,11 @@ impl<'p> Checker<'p> {
         if self.module_as_value(n, pos) {
             return Ty::Err;
         }
-        if self.fns.contains_key(n) || PRELUDE.contains(&n) {
-            self.unsupported(pos, format!("using the function `{n}` as a value is not supported by the bootstrap yet"));
+        if let Some(&i) = self.fns.get(n) {
+            return self.fn_value(n, i, pos);
+        }
+        if PRELUDE.contains(&n) {
+            self.unsupported(pos, format!("using the built-in function `{n}` as a value is not supported by the bootstrap yet"));
             return Ty::Err;
         }
         if let Some(def) = self.types.get(n).copied() {
@@ -3158,19 +3299,15 @@ impl<'p> Checker<'p> {
             Expr::Name(n, p) => (n, *p, None),
             Expr::TypeArgs { name, args, pos } => (name, *pos, Some(args.as_slice())),
             _ => {
-                self.expr(callee, None, true);
-                self.args_only(args);
-                self.unsupported(
-                    callee.pos(),
-                    "calling the result of an expression is not supported by the bootstrap yet",
-                );
-                return Ty::Err;
+                let t = self.expr(callee, None, true);
+                return self.call_value("this value", t, args, callee.pos());
             }
         };
-        if targs.is_none() && self.local(n).is_some() {
-            self.args_only(args);
-            self.error("expr.call.1", npos, format!("`{n}` is a value, not a function"));
-            return Ty::Err;
+        if targs.is_none()
+            && let Some(l) = self.local(n)
+        {
+            let t = l.ty.clone();
+            return self.call_value(n, t, args, npos);
         }
         if n == "print" {
             return self.print_call(args, npos);
@@ -3488,22 +3625,18 @@ impl<'p> Checker<'p> {
         for a in args {
             if let Some((_, ppos)) = &a.param {
                 self.key_misplaced(*ppos);
-            } else if let Some((_, lpos)) = &a.label {
-                self.unsupported(*lpos, "named arguments are not supported by the bootstrap yet (ADR 0058)");
             }
         }
         let vars = &sig.generics;
-        if args.len() != sig.params.len() {
+        let Some(order) = self.arg_slots(what, sig, args, pos) else {
             self.args_only(args);
-            self.error(
-                "expr.call.1",
-                pos,
-                format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len())),
-            );
             return subst_unknown(&sig.ret, &binds, vars);
-        }
+        };
         let before = self.diags.len();
-        for (k, (a, (pmut, pty))) in args.iter().zip(&sig.params).enumerate() {
+        for &i in &order {
+            let a = &args[i];
+            let k = self.slot_of(sig, args, i);
+            let (pmut, pty) = &sig.params[k];
             let hint = subst_unknown(pty, &binds, vars);
             let t = self.expr(&a.value, (hint != Ty::Err).then_some(&hint), true);
             self.move_arg(a, sig.moves.get(k).copied().unwrap_or(false));
@@ -3550,7 +3683,7 @@ impl<'p> Checker<'p> {
         if let Some(r) = recv {
             items.push((r, sig.receiver == Some(true)));
         }
-        items.extend(args.iter().zip(&sig.params).map(|(a, (pmut, _))| (&a.value, *pmut && a.mutable)));
+        items.extend(order.iter().map(|&i| (&args[i].value, sig.params[self.slot_of(sig, args, i)].0 && args[i].mutable)));
         for j in 0..items.len() {
             for i in 0..j {
                 if items[i].1 && items[j].1 && self.certainly_overlap(items[i].0, items[j].0) {
@@ -3605,6 +3738,109 @@ impl<'p> Checker<'p> {
                 self.require(&t, b, pos, what);
             }
         }
+    }
+
+    /// The parameter that argument `i` fills: its place when none are named,
+    /// else the named parameter, or the next one for a positional argument.
+    fn slot_of(&self, sig: &Sig, args: &[Arg], i: usize) -> usize {
+        match &args[i].label {
+            Some((n, _)) if !sig.names.is_empty() => sig.names.iter().position(|m| m == n).unwrap_or(i),
+            _ => i,
+        }
+    }
+
+    /// expr.call.3: check the labels of a call and return the argument
+    /// indices in parameter order, or `None` after reporting a problem
+    /// (including a wrong argument count, expr.call.1).
+    fn arg_slots(&mut self, what: &str, sig: &Sig, args: &'p [Arg], pos: Pos) -> Option<Vec<usize>> {
+        let named = args.iter().position(|a| a.label.is_some());
+        let miscount = |s: &mut Self| {
+            s.error(
+                "expr.call.1",
+                pos,
+                format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len())),
+            );
+        };
+        let Some(first) = named else {
+            if args.len() != sig.params.len() {
+                miscount(self);
+                return None;
+            }
+            return Some((0..args.len()).collect());
+        };
+        let first_pos = args[first].label.as_ref().map(|(_, p)| *p).unwrap_or(pos);
+        if sig.names.is_empty() || sig.names.len() != sig.params.len() {
+            self.error_help(
+                "expr.call.3",
+                first_pos,
+                format!("`{what}` doesn't take named arguments"),
+                "pass the arguments by position",
+            );
+            return None;
+        }
+        let mut filled: Vec<Option<usize>> = vec![None; sig.params.len()];
+        let mut ok = true;
+        for (i, a) in args.iter().enumerate() {
+            let slot = match &a.label {
+                None if i > first => {
+                    let name = sig.names.get(i).filter(|n| !args.iter().any(|b| b.label.as_ref().is_some_and(|(m, _)| m == *n)));
+                    let mut d = Diagnostic::new("expr.call.3", a.value.pos(), "a positional argument can't follow a named one")
+                        .help("name this argument too, or move it before the named ones");
+                    if let Some(n) = name {
+                        d = d.fix(format!("name it `{n}:`"), vec![crate::fix::named::name_positional(a.value.pos(), n)]);
+                    }
+                    self.diags.push(d);
+                    ok = false;
+                    continue;
+                }
+                None => i,
+                Some((n, lpos)) => match sig.names.iter().position(|m| m == n) {
+                    Some(k) => k,
+                    None => {
+                        let names: Vec<&str> = sig.names.iter().map(String::as_str).collect();
+                        let mut d = Diagnostic::new("expr.call.3", *lpos, format!("`{what}` has no parameter `{n}`"));
+                        if let Some(s) = suggest(n, &names) {
+                            d = d.did_you_mean(n, s);
+                        }
+                        self.diags.push(d);
+                        ok = false;
+                        continue;
+                    }
+                },
+            };
+            if slot >= filled.len() {
+                miscount(self);
+                return None;
+            }
+            if filled[slot].is_some() {
+                let at = a.label.as_ref().map_or(a.value.pos(), |(_, p)| *p);
+                let how = if a.label.is_some() { "" } else { " by position" };
+                self.error_help(
+                    "expr.call.3",
+                    at,
+                    format!("parameter `{}` is given more than once{how}", sig.names[slot]),
+                    "pass each parameter once: remove one of the two arguments",
+                );
+                ok = false;
+            } else {
+                filled[slot] = Some(i);
+            }
+        }
+        if !ok {
+            return None;
+        }
+        let missing: Vec<&str> = (0..filled.len()).filter(|&k| filled[k].is_none()).map(|k| sig.names[k].as_str()).collect();
+        if !missing.is_empty() {
+            self.error(
+                "expr.call.1",
+                pos,
+                format!("`{what}` is missing {}", list_names(&missing)),
+            );
+            return None;
+        }
+        let order: Vec<usize> = filled.into_iter().flatten().collect();
+        self.resolved.arg_order.insert(first_pos, order.clone());
+        Some(order)
     }
 
     fn print_call(&mut self, args: &'p [Arg], pos: Pos) -> Ty {
@@ -3739,8 +3975,13 @@ impl<'p> Checker<'p> {
                 self.error("type.struct.5", a.value.pos(), msg);
             }
         }
-        let missing: Vec<&str> =
-            fields.iter().zip(&given).filter(|(_, g)| !**g).map(|(f, _)| f.name.as_str()).collect();
+        // std.net.17: `net.Response(...)` may leave `all_headers` out.
+        let missing: Vec<&str> = fields
+            .iter()
+            .zip(&given)
+            .filter(|(f, g)| !**g && !(type_label == "net.Response" && f.name == "all_headers"))
+            .map(|(f, _)| f.name.as_str())
+            .collect();
         if !missing.is_empty() && !lost {
             let msg = format!(
                 "`{type_label}(...)` is missing {} {}",
@@ -3922,6 +4163,9 @@ impl<'p> Checker<'p> {
             return t;
         }
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
+        if let Some(t) = self.ptr_method(&rt, name, pos, args, expect) {
             return t;
         }
         let cands = self.candidates(&rt, name);
@@ -4293,6 +4537,20 @@ impl<'p> Checker<'p> {
         let rt = self.expr(recv, None, true);
         if self.reject_unhandled(&rt, recv.pos()) {
             return Ty::Err;
+        }
+        // std.tensor.15: `t[i]` and `t[lo..hi]` are tensors. The rank falls by one
+        // for `t[i]` at run time, so the type stays `tensor.Tensor[T]`.
+        if self.tensor_elem(&rt).is_some() {
+            if let Expr::Range { lo, hi, .. } = index {
+                self.range_bounds(lo.as_deref(), hi.as_deref());
+            } else {
+                let it = self.expr(index, Some(&Ty::Int), true);
+                if !self.accepts(&Ty::Int, &it) {
+                    let msg = format!("a tensor index must be `int`, found {}", self.show(&it));
+                    self.error_help("std.tensor.15", index.pos(), msg, "index with an `int`, or slice with `lo..hi`");
+                }
+            }
+            return rt;
         }
         // `m[k]` (type.map.3).
         if let Ty::Map(k, v) = &rt {
@@ -5214,6 +5472,7 @@ fn may_be_same(a: &Ty, b: &Ty) -> bool {
             Ty::List(e) | Ty::Opt(e) | Ty::Set(e) | Ty::Conc(_, e) => has_param(e),
             Ty::Map(k, v) => has_param(k) || has_param(v),
             Ty::Struct(_, args) | Ty::Enum(_, args) => args.iter().any(has_param),
+            Ty::Fn(ps, r) => ps.iter().any(has_param) || has_param(r),
             _ => false,
         }
     }

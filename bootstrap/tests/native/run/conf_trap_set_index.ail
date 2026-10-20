@@ -1,0 +1,7 @@
+# Assigning past the end of a list traps (type.coll.4).
+fn main()
+    mut xs := [1, 2, 3]
+    xs[2] = 7
+    print(xs)
+    xs[3] = 8
+    print(xs)

@@ -152,11 +152,20 @@ impl<'p> Checker<'p> {
         };
         self.resolved.std_calls.insert(pos, StdCall::Fn(module, f));
         let what = format!("{head}.{f}");
+        if module == "mem" {
+            self.note_unsafe_op(&format!("`{what}`"), pos);
+            if let Some(t) = self.mem_generic(f, args, pos, expect) {
+                return Some(t);
+            }
+        }
         if module == "tensor" {
             return Some(self.tensor_call(f, args, pos, expect));
         }
         if (module, f) == ("io", "eprint") {
             return Some(self.eprint_call(args, pos));
+        }
+        if module == "hash" || (module == "compress" && matches!(f, "deflate" | "gzip" | "zlib")) {
+            return Some(self.bytes_like_call(module, f, args, pos));
         }
         if (module, f) == ("random", "shuffle") {
             return Some(self.shuffle_call(args, pos));
@@ -165,7 +174,7 @@ impl<'p> Checker<'p> {
             return Some(self.select_call(args, pos));
         }
         let (mut params, ret) = self.std_signature(module, f);
-        if (module, f) == ("proc", "run") {
+        if matches!((module, f), ("proc", "run" | "run_bytes")) {
             // std.proc.2: `input str?` and `timeout_ms int?` may be left off
             // from the end.
             params.truncate(args.len().clamp(2, 4));
@@ -211,11 +220,7 @@ impl<'p> Checker<'p> {
             ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
-            ("hash", "sha256" | "sha384" | "sha512") => (vec![Str], Str),
-            ("hash", "hmac_sha256") => (vec![Str, Str], Str),
-            ("hash", "crc32" | "hash64") => (vec![Str], Int),
-            ("compress", "deflate" | "gzip" | "zlib") => (vec![Str], list(Int)),
-            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![list(Int)], compress(Str)),
+            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![Ty::Bytes], compress(Ty::Bytes)),
             ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
@@ -228,6 +233,11 @@ impl<'p> Checker<'p> {
                 vec![Str, list(Str), opt(Str), opt(Int)],
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
+            // std.proc.8 (ADR 0417)
+            ("proc", "run_bytes") => (
+                vec![Str, list(Str), opt(Ty::Bytes), opt(Int)],
+                Ty::Res(Box::new(std_ty("proc.RawOutput")), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
             ("proc", "which") => (vec![Str], opt(Str)),
             // std.proc.4-7 (ADR 0424)
             ("proc", "start") => (
@@ -239,14 +249,22 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
             ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
-            ("net", "get" | "post" | "request") => (
+            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => (
                 match f {
-                    "get" => vec![Str],
+                    "get" | "get_bytes" => vec![Str],
                     "post" => vec![Str, Str, Str],
+                    "post_bytes" => vec![Str, Ty::Bytes, Str],
                     _ => vec![Str, Str, std_ty("net.Options")],
                 },
-                Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
+                Ty::Res(
+                    Box::new(std_ty(if f.ends_with("_bytes") { "net.RawResponse" } else { "net.Response" })),
+                    Errs::Set(vec![std_ty("net.NetError")]),
+                ),
             ),
+            // unsafe.mem.1: C strings in memory the program frees itself.
+            ("mem", "cstr") => (vec![Str], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
+            ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
+            ("mem", "null") => (vec![], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("net", "options") => (vec![], std_ty("net.Options")),
             ("net", "serve" | "listen" | "connect" | "connect_tls") => {
                 let (params, ok) = match f {
@@ -285,6 +303,41 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
             ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
+        }
+    }
+
+    /// std.hash.1, std.compress.1: the data arguments of `std.hash` and of
+    /// `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
+    fn bytes_like_call(&mut self, module: &str, f: &str, args: &'p [Arg], pos: Pos) -> Ty {
+        let rule = if module == "hash" { "std.hash.1" } else { "std.compress.1" };
+        let want = if f == "hmac_sha256" { 2 } else { 1 };
+        if args.len() != want {
+            self.args_only(args);
+            self.error(
+                rule,
+                pos,
+                format!("`{module}.{f}` takes {want} argument(s), but {} given", super::was_were(args.len())),
+            );
+        } else {
+            for a in args {
+                if a.mutable {
+                    self.error_help("own.param.2", a.value.pos(), "this parameter isn't `mut`", "remove the `mut`");
+                }
+                let t = self.expr(&a.value, None, true);
+                if !matches!(t, Ty::Str | Ty::Bytes | Ty::Err) {
+                    self.error_help(
+                        rule,
+                        a.value.pos(),
+                        format!("`{module}.{f}` needs `bytes` or `str`, not {}", self.ty_name(&t)),
+                        "convert a list of ints with `bytes.from_list(xs)`",
+                    );
+                }
+            }
+        }
+        match f {
+            "crc32" | "hash64" => Ty::Int,
+            "deflate" | "gzip" | "zlib" => Ty::Bytes,
+            _ => Ty::Str,
         }
     }
 

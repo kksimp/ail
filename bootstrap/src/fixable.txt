@@ -1,4 +1,5 @@
 conc.share.6
+err.else.1
 err.else.3
 err.prop.1
 err.ret.1
@@ -6,6 +7,7 @@ err.use.1
 expr.bind.1
 expr.bind.3
 expr.bind.4
+expr.call.3
 expr.if.1
 expr.if.2
 expr.loop.1

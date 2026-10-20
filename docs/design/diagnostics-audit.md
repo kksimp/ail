@@ -190,3 +190,19 @@ Networking and regex (lane 147): an unhandled `net.get` or `regex.compile`
 stays `err.use.1` with no fix, for the same reason as dates: the error type is
 another module's. Corpus: 146 programs, 90 fixed (62%). `regex.search` (a
 Python name) is `std.use.2` with no fix; the help lists the real functions.
+
+Braces in strings (lane 147, from the whole-task study): `lex.str.2` for an
+empty `{}` or an unclosed `{` now has a fix that writes `\{` (`bootstrap/src/fix/string.rs`).
+A `}` after the escaped brace stays literal. Corpus: 148 programs, 92 fixed (62%).
+
+Named arguments (lane 147, ADR 0454): a positional argument after a named one
+is `expr.call.3` with a fix that names it with the parameter it fills
+(`bootstrap/src/fix/named.rs`); a duplicate parameter gets a help and no fix,
+since which of the two arguments is meant is a choice. Corpus: 150 programs,
+93 fixed (62%).
+
+Whole-number float defaults (lane 147): `n else 2.0` where `int` is expected
+is `err.else.1` with a fix to `2` (`bootstrap/src/fix/number.rs`; the anchored edit
+matches `2.0` only). Corpus: 151 programs, 94 fixed (62%). The whole-task t2 slip
+is a different error: `doc.num` gives `float`, so `retries + 1` ends in `float`
+under `!int`. Its fix is a choice (`.to_int()`, or `!float`), so none is applied.

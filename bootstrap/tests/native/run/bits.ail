@@ -1,0 +1,13 @@
+fn main()
+    x := 1000
+    print(x.shl(3))
+    print((-8).shr(1))
+    print(x.bit_and(255))
+    print(x.bit_or(7))
+    print(x.bit_xor(1023))
+    print(x.bit_not())
+    mut k := 0
+    while k < 64
+        print(1.shl(k))
+        k += 9
+    print(x.shr(k))

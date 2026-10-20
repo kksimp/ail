@@ -1,0 +1,5 @@
+# std.tensor.18, std.tensor.19: `clamp` and `round` take float tensors.
+fn main()
+    i := tensor.from([1, 2, 3])
+    print(i.clamp(0.0, 1.0))
+    print(i.round())

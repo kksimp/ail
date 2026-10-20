@@ -1,0 +1,14 @@
+use modutil.num
+
+pub struct Shape
+    pub side int
+    corner Point
+
+pub fn Shape.unit() Shape
+    Shape(side: 1, corner: Point(x: 0, y: 0))
+
+pub fn Shape.grow(mut self, k int)
+    side = num.twice(side) * k
+
+pub fn area(s Shape) int
+    s.side * s.side / (s.side - s.side)

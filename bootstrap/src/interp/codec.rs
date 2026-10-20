@@ -1,7 +1,7 @@
 //! `std.hash` and `std.compress` at run time (std.hash.1-4,
 //! std.compress.1-6, ADRs 0442-0446): thin wrappers over `crate::codec` and
-//! `net::crypto`. Binary data is a `List[int]` of bytes until the `bytes`
-//! type lands (ADR 0442).
+//! `net::crypto`. Binary data is `bytes`; `str` is also accepted where data
+//! goes in (ADR 0442).
 
 use std::rc::Rc;
 
@@ -20,8 +20,8 @@ const LEVEL: u32 = 6;
 fn bytes_of(v: &Value) -> Vec<u8> {
     match v {
         Value::Str(s) => s.as_bytes().to_vec(),
-        Value::List(xs) => xs.iter().map(|x| if let Value::Int(i) = x { *i as u8 } else { 0 }).collect(),
-        other => unreachable!("checked: str or List[int], found {other:?}"),
+        Value::Bytes(b) => b.to_vec(),
+        other => unreachable!("checked: str or bytes, found {other:?}"),
     }
 }
 
@@ -33,7 +33,7 @@ fn text(v: &Value) -> &str {
 }
 
 fn list(b: Vec<u8>) -> Value {
-    Value::List(Rc::new(b.into_iter().map(|x| Value::Int(x as i64)).collect()))
+    super::bytes::bytes_value(b)
 }
 
 impl<'a, W: std::io::Write> Interp<'a, W> {
@@ -74,10 +74,8 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
     }
 
     fn decoded(&self, r: Result<Vec<u8>, CodecError>, pos: Pos) -> Value {
-        match r.and_then(|b| {
-            String::from_utf8(b).map_err(|_| CodecError::new("invalid_utf8", "the data is not valid UTF-8 text"))
-        }) {
-            Ok(t) => Value::Str(t.into()),
+        match r {
+            Ok(b) => list(b),
             Err(e) => self.error(e, pos),
         }
     }

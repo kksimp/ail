@@ -173,6 +173,12 @@ enum Ins<'a> {
         src: Opnd,
         pos: Pos,
     },
+    /// std.tensor.20: a fused chain over the values of `srcs`, the chain's names.
+    Fused {
+        dst: Opnd,
+        srcs: Box<[Opnd]>,
+        prog: std::rc::Rc<[crate::fuse::FOp]>,
+    },
     Jump(u32),
     /// Jump to `t` when the `bool` in `src` is `when`.
     JumpIf {
@@ -807,6 +813,16 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     /// Code that leaves the value of `e` in `dst`.
     fn expr_to(&mut self, e: &'a Expr, dst: Opnd) {
+        // std.tensor.20: a fused chain of tensor operations is one instruction.
+        if !self.it.resolved.fused.is_empty()
+            && matches!(e, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Method { .. })
+            && self.it.resolved.fused.contains(&e.pos())
+            && let Some(plan) = crate::fuse::plan(e)
+        {
+            let srcs: Box<[Opnd]> = plan.names.iter().map(|n| self.operand(n)).collect();
+            self.emit(Ins::Fused { dst, srcs, prog: plan.ops.into() });
+            return;
+        }
         match e {
             Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
                 match self.literal(e) {
@@ -1881,6 +1897,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     let v = Value::Bool(!get!(*src).bool());
                     put(*dst, v, env, base, regs);
                 }
+                Ins::Fused { dst, srcs, prog } => {
+                    pc += 1;
+                    let vals: Vec<Value> = srcs.iter().map(|s| get!(*s).clone()).collect();
+                    for s in srcs.iter() {
+                        done(*s, regs);
+                    }
+                    let v = self.fused_values(prog, &vals)?;
+                    put(*dst, v, env, base, regs);
+                }
                 Ins::Neg { dst, src, pos } => {
                     pc += 1;
                     let v = match take!(*src) {
@@ -1936,7 +1961,12 @@ impl<'a, W: Write> Interp<'a, W> {
                             let i = get!(*idx).int();
                             bytes::at(b, i, *pos)?
                         }
-                        other => unreachable!("checked: list, map or bytes, found {other:?}"),
+                        // std.tensor.15: `t[i]` drops axis 0.
+                        Value::Tensor(t) => match t.row(get!(*idx).int()) {
+                            Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+                            Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        },
+                        other => unreachable!("checked: list, map, bytes or tensor, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
