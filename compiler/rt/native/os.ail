@@ -1,0 +1,776 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The operating-system layer of the native runtime (ADRs 0580, 0581):
+## `std.fs`, `std.env`, `std.io` and `std.time` by direct system calls, with
+## no libc (native-abi.md §4). One function per operation. A fallible one
+## returns a value and records its outcome: `os_ok()` is whether it
+## succeeded and `os_kind()` the `fs.IoError.kind` when it did not
+## (std.err.1), the same on every platform. The lowering turns that into an
+## `else` (lower_os.ail); lane 175's error values replace the status.
+##
+## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). Windows
+## (`plat.win.1`) has no native target yet: its calls are not built.
+
+# Global slots 32-47 are this file's (native-abi.md §2 lists the ranges).
+OS_OK := 32
+OS_ERR := 33
+OS_AREA := 34
+OUT_FD := 35
+IN_BUF := 36
+IN_POS := 37
+IN_LEN := 38
+OUT_TTY := 39
+
+# Offsets in the scratch area (OS_AREA), allocated on first use.
+OS_PATH_A := 0
+OS_PATH_B := 4096
+OS_TMP := 8192
+OS_DENTS := 12288
+OS_DENTS_SIZE := 32768
+OS_AREA_SIZE := 45056
+OS_PATH_MAX := 4095
+OS_IN_SIZE := 65536
+
+# `fs.IoError.kind` codes (std.err.1).
+K_NOT_FOUND := 1
+K_PERMISSION := 2
+K_EXISTS := 3
+K_IS_DIR := 4
+K_NOT_DIR := 5
+K_NOT_EMPTY := 6
+K_INVALID_UTF8 := 7
+K_OTHER := 10
+
+# ---- system calls: one name per operation, three numbers (native-abi.md §4) ----
+
+fn os_pick(x64 int, a64 int, mac int) int
+    t := target()
+    if t == 0
+        return x64
+    if t == 1
+        return a64
+    mac
+
+## `-errno` or a non-negative result.
+fn os_open(path int, flags int, mode int) int
+    if target() == 2
+        return syscall(5, path, flags, mode, 0, 0, 0)
+    syscall(os_pick(257, 56, 0), -100, path, flags, mode, 0, 0)
+
+fn os_close(fd int) int
+    syscall(os_pick(3, 57, 6), fd, 0, 0, 0, 0, 0)
+
+fn os_read(fd int, p int, n int) int
+    syscall(os_pick(0, 63, 3), fd, p, n, 0, 0, 0)
+
+fn os_lseek(fd int, off int, whence int) int
+    syscall(os_pick(8, 62, 199), fd, off, whence, 0, 0, 0)
+
+fn os_access(path int) int
+    if target() == 2
+        return syscall(33, path, 0, 0, 0, 0, 0)
+    syscall(os_pick(269, 48, 0), -100, path, 0, 0, 0, 0)
+
+fn os_mkdir(path int) int
+    if target() == 2
+        return syscall(136, path, 511, 0, 0, 0, 0)
+    syscall(os_pick(258, 34, 0), -100, path, 511, 0, 0, 0)
+
+## A file, or with `dir` an empty directory.
+fn os_unlink(path int, dir bool) int
+    if target() == 2
+        return syscall(if dir then 137 else 10, path, 0, 0, 0, 0, 0)
+    syscall(os_pick(263, 35, 0), -100, path, if dir then 512 else 0, 0, 0, 0)
+
+fn os_rename(from int, to int) int
+    if target() == 2
+        return syscall(128, from, to, 0, 0, 0, 0)
+    syscall(os_pick(264, 38, 0), -100, from, -100, to, 0, 0)
+
+## Directory entries into `buf`: Linux `getdents64`, macOS `getdirentries64`.
+fn os_getdents(fd int, buf int, n int) int
+    if target() == 2
+        return syscall(344, fd, buf, n, os_scratch(OS_TMP + 64), 0, 0)
+    syscall(os_pick(217, 61, 0), fd, buf, n, 0, 0, 0)
+
+## `open` flags: 0 read, 1 create and truncate for writing, 2 create and append.
+fn os_open_flags(mode int) int
+    if mode == 0
+        return 0
+    mac := target() == 2
+    if mode == 1
+        return if mac then 1537 else 577
+    if mac then 521 else 1089
+
+# ---- status ----
+
+fn os_ok() bool
+    load64(global(OS_OK)) != 0
+
+fn os_kind() int
+    load64(global(OS_ERR))
+
+## `fs.IoError.kind` for an `errno`, the same on every platform.
+fn os_errno_kind(e int) int
+    if e == 2
+        return K_NOT_FOUND
+    if e == 13 or e == 1
+        return K_PERMISSION
+    if e == 17
+        return K_EXISTS
+    if e == 21
+        return K_IS_DIR
+    if e == 20
+        return K_NOT_DIR
+    if e == os_pick(39, 39, 66)
+        return K_NOT_EMPTY
+    K_OTHER
+
+## The kind's name, for an `fs.IoError` value.
+fn kind_name(k int) str
+    if k == K_NOT_FOUND
+        return "not_found"
+    if k == K_PERMISSION
+        return "permission"
+    if k == K_EXISTS
+        return "exists"
+    if k == K_IS_DIR
+        return "is_dir"
+    if k == K_NOT_DIR
+        return "not_dir"
+    if k == K_NOT_EMPTY
+        return "not_empty"
+    if k == K_INVALID_UTF8
+        return "invalid_utf8"
+    "other"
+
+fn os_succeed()
+    store64(global(OS_OK), 1)
+    store64(global(OS_ERR), 0)
+
+fn os_fail_kind(k int)
+    store64(global(OS_OK), 0)
+    store64(global(OS_ERR), k)
+
+## Record a failed call; `r` is its negative result.
+fn os_fail_errno(r int)
+    os_fail_kind(os_errno_kind(0 - r))
+
+# ---- scratch memory and paths ----
+
+## The address `off` bytes into the scratch area, which is allocated on first
+## use (paths, directory entries and small results; no allocation per call).
+fn os_scratch(off int) int
+    mut a := load64(global(OS_AREA))
+    if a == 0
+        a = alloc(OS_AREA_SIZE)
+        store64(global(OS_AREA), a)
+    a + off
+
+## `s` as a NUL-terminated path in the scratch slot at `off`, or 0 when it
+## doesn't fit or holds a NUL.
+fn os_cstr(off int, s str) int
+    p := str_addr(s)
+    n := load64(p)
+    if n > OS_PATH_MAX or n == 0
+        return 0
+    d := os_scratch(off)
+    copy_bytes(d, p + 16, n)
+    store8(d + n, 0)
+    for i in 0..n
+        if load8(d + i) == 0
+            return 0
+    d
+
+## The length of the C string at `p`.
+fn os_c_len(p int) int
+    mut n := 0
+    while load8(p + n) != 0
+        n += 1
+    n
+
+## A string object of `n` bytes copied from `p`, with its characters counted.
+fn os_str_from(p int, n int) str
+    mut chars := 0
+    for i in 0..n
+        if load8(p + i).bit_and(192) != 128
+            chars += 1
+    s := str_new(n, chars)
+    copy_bytes(s + 16, p, n)
+    str_at(s)
+
+## The characters of `n` UTF-8 bytes at `p`, or -1 when they aren't UTF-8
+## (the shortest encodings, no surrogates, nothing above U+10FFFF).
+fn os_utf8_chars(p int, n int) int
+    mut i := 0
+    mut chars := 0
+    while i < n
+        # Eight ASCII bytes at a time.
+        while i + 8 <= n and load64(p + i).bit_and(-9187201950435737472) == 0
+            i += 8
+            chars += 8
+        if i >= n
+            break
+        c := load8(p + i)
+        if c < 128
+            i += 1
+        elif c >= 194 and c <= 223
+            if i + 1 >= n or load8(p + i + 1).bit_and(192) != 128
+                return -1
+            i += 2
+        elif c >= 224 and c <= 239
+            if i + 2 >= n
+                return -1
+            c1 := load8(p + i + 1)
+            c2 := load8(p + i + 2)
+            if c1.bit_and(192) != 128 or c2.bit_and(192) != 128
+                return -1
+            if (c == 224 and c1 < 160) or (c == 237 and c1 > 159)
+                return -1
+            i += 3
+        elif c >= 240 and c <= 244
+            if i + 3 >= n
+                return -1
+            c1 := load8(p + i + 1)
+            if load8(p + i + 2).bit_and(192) != 128 or load8(p + i + 3).bit_and(192) != 128
+                return -1
+            if c1.bit_and(192) != 128 or (c == 240 and c1 < 144) or (c == 244 and c1 > 143)
+                return -1
+            i += 4
+        else
+            return -1
+        chars += 1
+    chars
+
+## Bytes of `a` against `b`, by byte value: -1, 0 or 1.
+fn os_str_cmp(a int, b int) int
+    na := load64(a)
+    nb := load64(b)
+    n := if na < nb then na else nb
+    for i in 0..n
+        x := load8(a + 16 + i)
+        y := load8(b + 16 + i)
+        if x != y
+            return if x < y then - 1 else 1
+    if na == nb
+        return 0
+    if na < nb then - 1 else 1
+
+# ---- std.fs ----
+
+## `fs.exists(path)` (std.fs.4).
+fn fs_exists(path str) bool
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        return false
+    os_access(p) == 0
+
+## Everything readable from `fd`, as a string object whose `bytes` is its
+## length (`chars` is left for the caller); a negative `errno` on failure.
+fn os_read_fd(fd int) int
+    mut cap := 65536
+    size := os_lseek(fd, 0, 2)
+    # A directory reports a huge size; trust only a plausible one.
+    if size > 0 and size < 1073741824 and os_lseek(fd, 0, 0) == 0
+        cap = size + 1
+    mut s := str_new(cap, 0)
+    mut n := 0
+    while true
+        if n == cap
+            cap = cap * 2
+            t := str_new(cap, 0)
+            copy_bytes(t + 16, s + 16, n)
+            s = t
+        r := os_read(fd, s + 16 + n, cap - n)
+        if r == -4
+            continue
+        if r < 0
+            return r
+        if r == 0
+            break
+        n += r
+    store64(s, n)
+    s
+
+## `fs.read_text(path)` (std.fs.1): the file, or "" with `os_ok()` false and
+## the kind `not_found`, `is_dir`, `invalid_utf8`...
+fn fs_read_text(path str) str
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return ""
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        return ""
+    s := os_read_fd(fd)
+    os_close(fd)
+    if s < 0
+        os_fail_errno(s)
+        return ""
+    chars := os_utf8_chars(s + 16, load64(s))
+    if chars < 0
+        os_fail_kind(K_INVALID_UTF8)
+        return ""
+    store64(s + 8, chars)
+    os_succeed()
+    str_at(s)
+
+## Write all of `s` to `fd`; 0, or a negative `errno`.
+fn os_write_all(fd int, p int, n int) int
+    mut done := 0
+    while done < n
+        r := syscall(os_pick(1, 64, 4), fd, p + done, n - done, 0, 0, 0)
+        if r == -4
+            continue
+        if r < 0
+            return r
+        done += r
+    0
+
+## `fs.write_text` (std.fs.2, mode 1) and `fs.append_text` (std.fs.3, mode 2).
+fn os_write_file(path str, text str, mode int)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return
+    fd := os_open(p, os_open_flags(mode), 438)
+    if fd < 0
+        os_fail_errno(fd)
+        return
+    t := str_addr(text)
+    r := os_write_all(fd, t + 16, load64(t))
+    os_close(fd)
+    if r < 0
+        os_fail_errno(r)
+        return
+    os_succeed()
+
+fn fs_write_text(path str, text str)
+    os_write_file(path, text, 1)
+
+fn fs_append_text(path str, text str)
+    os_write_file(path, text, 2)
+
+## Shell sort of the string pointers in `data[0..n]` by bytes.
+fn os_sort_names(data int, n int)
+    mut gap := n / 2
+    while gap > 0
+        for i in gap..n
+            v := load64(data + 8 * i)
+            mut j := i
+            while j >= gap and os_str_cmp(load64(data + 8 * (j - gap)), v) > 0
+                store64(data + 8 * j, load64(data + 8 * (j - gap)))
+                j -= gap
+            store64(data + 8 * j, v)
+        gap = gap / 2
+
+## `fs.list_dir(path)` (std.fs.5): the entry names, sorted by their bytes.
+fn fs_list_dir(path str) List[int]
+    mut out := List[int]()
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return out
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        return out
+    buf := os_scratch(OS_DENTS)
+    mac := target() == 2
+    while true
+        n := os_getdents(fd, buf, OS_DENTS_SIZE)
+        if n == -4
+            continue
+        if n < 0
+            os_close(fd)
+            os_fail_errno(n)
+            return out
+        if n == 0
+            break
+        mut at := 0
+        while at < n
+            e := buf + at
+            off := if mac then 21 else 19
+            name := e + off
+            len := os_c_len(name)
+            dots := os_name_is_dots(name, len)
+            if not dots
+                s := os_str_from(name, len)
+                out.push(str_addr(s))
+            at += load8(e + 16) + load8(e + 17) * 256
+    os_close(fd)
+    os_succeed()
+    q := list_addr(out)
+    os_sort_names(load64(q + 16), load64(q))
+    out
+
+fn os_name_is_dots(name int, len int) bool
+    if len == 1
+        return load8(name) == 46
+    len == 2 and load8(name) == 46 and load8(name + 1) == 46
+
+## `fs.remove(path)` (std.fs.6): a file, or an empty directory.
+fn fs_remove(path str)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return
+    mut r := os_unlink(p, false)
+    # A directory: Linux says EISDIR, macOS EPERM.
+    if r == -21 or (r == -1 and target() == 2)
+        r = os_unlink(p, true)
+    if r < 0
+        os_fail_errno(r)
+        return
+    os_succeed()
+
+## Whether `p` names a directory: reading a directory fails with EISDIR.
+fn os_is_dir_at(p int) bool
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        return false
+    r := os_read(fd, os_scratch(OS_TMP), 1)
+    os_close(fd)
+    r == -21
+
+## `fs.make_dir(path)` (std.fs.7): the directory and any missing parents; an
+## existing directory is not a failure.
+fn fs_make_dir(path str)
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return
+    n := os_c_len(p)
+    for i in 1..n
+        if load8(p + i) == 47
+            store8(p + i, 0)
+            os_mkdir(p)
+            store8(p + i, 47)
+    r := os_mkdir(p)
+    if r == -17 and os_is_dir_at(p)
+        os_succeed()
+        return
+    if r < 0
+        os_fail_errno(r)
+        return
+    os_succeed()
+
+## `fs.rename(from, to)` (std.fs.11). A failure's kind is `from`'s when
+## `from` is missing; the path to report is the caller's (`rename_failed_on_from`).
+fn fs_rename(from str, to str)
+    a := os_cstr(OS_PATH_A, from)
+    b := os_cstr(OS_PATH_B, to)
+    if a == 0 or b == 0
+        os_fail_kind(K_NOT_FOUND)
+        return
+    r := os_rename(a, b)
+    if r < 0
+        os_fail_errno(r)
+        return
+    os_succeed()
+
+# ---- std.env ----
+
+## The environment vector: after `argv`'s NULL (native-abi.md §3).
+fn os_envp() int
+    load64(global(ARGV)) + 8 * (load64(global(ARGC)) + 1)
+
+## `env.get(name)` (std.env.2): "" with `os_ok()` false when unset or not UTF-8.
+fn env_get(name str) str
+    q := str_addr(name)
+    n := load64(q)
+    mut e := os_envp()
+    while load64(e) != 0
+        c := load64(e)
+        mut same := load8(c + n) == 61
+        mut i := 0
+        while same and i < n
+            if load8(c + i) != load8(q + 16 + i)
+                same = false
+            i += 1
+        if same
+            len := os_c_len(c + n + 1)
+            if os_utf8_chars(c + n + 1, len) < 0
+                break
+            os_succeed()
+            return os_str_from(c + n + 1, len)
+        e += 8
+    os_fail_kind(K_NOT_FOUND)
+    ""
+
+## `env.home()` (std.env.6): `HOME`, else `USERPROFILE`, when not empty.
+fn env_home() str
+    h := env_get("HOME")
+    if os_ok() and h.len() > 0
+        return h
+    u := env_get("USERPROFILE")
+    if os_ok() and u.len() > 0
+        return u
+    os_fail_kind(K_NOT_FOUND)
+    ""
+
+## `env.program()` (std.env.4): the program's path as it was given.
+fn env_program() str
+    c := load64(load64(global(ARGV)))
+    os_str_from(c, os_c_len(c))
+
+## `env.cwd()` (std.env.3). Traps when it can't be read.
+fn env_cwd() str
+    buf := os_scratch(OS_TMP)
+    mut r := 0
+    if target() == 2
+        # No `getcwd` call: open "." and ask for its path (F_GETPATH).
+        dot := os_scratch(OS_PATH_A)
+        store8(dot, 46)
+        store8(dot + 1, 0)
+        fd := os_open(dot, 0, 0)
+        if fd < 0
+            r = fd
+        else
+            r = syscall(92, fd, 50, buf, 0, 0, 0)
+            os_close(fd)
+            if r >= 0
+                r = os_c_len(buf) + 1
+    else
+        r = syscall(os_pick(79, 17, 0), buf, 4096, 0, 0, 0, 0)
+    if r <= 0
+        flush()
+        out_str("trap[std.env.3]: can't read the working directory\n")
+        flush_to(2)
+        sys_exit(1)
+    os_str_from(buf, r - 1)
+
+# ---- std.time ----
+
+## `time.now_ms()` (std.time.1): milliseconds since 1970-01-01T00:00:00Z.
+fn time_now_ms() int
+    ts := os_scratch(OS_TMP)
+    if target() == 2
+        # `gettimeofday`: seconds, then microseconds in 32 bits.
+        syscall(116, ts, 0, 0, 0, 0, 0)
+        return load64(ts) * 1000 + load64(ts + 8).bit_and(4294967295) / 1000
+    syscall(os_pick(228, 113, 0), 0, ts, 0, 0, 0, 0)
+    load64(ts) * 1000 + load64(ts + 8) / 1000000
+
+## `time.sleep_ms(ms)` (std.time.2). A negative `ms` is reported without the
+## source excerpt (the check's trap site comes with lane 120's next slice).
+fn time_sleep_ms(ms int)
+    if ms < 0
+        os_usage_trap("std.time.2", "a negative sleep")
+    if ms == 0
+        return
+    ts := os_scratch(OS_TMP)
+    if target() == 2
+        # `select` with no descriptors and a timeout: seconds, microseconds.
+        store64(ts, ms / 1000)
+        store64(ts + 8, ms % 1000 * 1000)
+        syscall(93, 0, 0, 0, 0, ts, 0)
+        return
+    store64(ts, ms / 1000)
+    store64(ts + 8, ms % 1000 * 1000000)
+    syscall(os_pick(35, 101, 0), ts, 0, 0, 0, 0, 0)
+
+# ---- std.io ----
+
+## A misuse the interpreter traps on, with its rule; exit 1 (err.trap.3).
+fn os_usage_trap(rule str, what str)
+    flush()
+    out_str("trap[")
+    out_str(rule)
+    out_str("]: ")
+    out_str(what)
+    out_byte(10)
+    flush_to(2)
+    sys_exit(1)
+
+## `io.exit(code)` (std.io.4): flush, then end. A status outside 0 to 255 traps.
+fn io_exit(code int)
+    if code < 0 or code > 255
+        flush()
+        out_str("trap[std.io.4]: exit status ")
+        out_int(code)
+        out_str(" is outside 0 to 255\n")
+        flush_to(2)
+        sys_exit(1)
+    exit(code)
+
+## Whether standard output is a terminal, so each line is written when it is
+## complete (a program that prints progress shows it as `ail run` does). The
+## first call asks the terminal driver (`ioctl` TCGETS, or TIOCGETA on macOS)
+## and remembers: 1 not a terminal, 2 a terminal.
+fn line_buffered() bool
+    mut k := load64(global(OUT_TTY))
+    if k == 0
+        buf := os_scratch(OS_TMP)
+        r := if target() == 2 then syscall(54, 1, 1078490131, buf, 0, 0, 0) else syscall(
+            os_pick(16, 29, 0),
+            1,
+            21505,
+            buf,
+            0,
+            0,
+            0,
+        )
+        k = if r == 0 then 2 else 1
+        store64(global(OUT_TTY), k)
+    k == 2
+
+## `io.eprint(x)` (std.io.3): what `print` would write, to standard error;
+## standard output is flushed first, so the two interleave as they ran.
+fn err_begin()
+    flush()
+    store64(global(OUT_FD), 2)
+
+fn err_end()
+    flush_to(2)
+    store64(global(OUT_FD), 1)
+
+## Refill the standard-input buffer; false at the end of input.
+fn os_in_fill() bool
+    flush()
+    mut b := load64(global(IN_BUF))
+    if b == 0
+        b = alloc(OS_IN_SIZE)
+        store64(global(IN_BUF), b)
+    while true
+        r := os_read(0, b, OS_IN_SIZE)
+        if r == -4
+            continue
+        if r <= 0
+            store64(global(IN_POS), 0)
+            store64(global(IN_LEN), 0)
+            return false
+        store64(global(IN_POS), 0)
+        store64(global(IN_LEN), r)
+        return true
+    false
+
+## Bytes of standard input up to and with the next `\n`, or to the end, as
+## an unchecked string object; `os_ok()` is false at the end of input.
+fn os_read_until_newline() int
+    mut out := str_new(256, 0)
+    mut cap := 256
+    mut n := 0
+    mut seen := false
+    while true
+        if load64(global(IN_POS)) >= load64(global(IN_LEN))
+            if not os_in_fill()
+                break
+        b := load64(global(IN_BUF))
+        pos := load64(global(IN_POS))
+        end := load64(global(IN_LEN))
+        mut i := pos
+        while i < end and load8(b + i) != 10
+            i += 1
+        take := i - pos
+        if n + take > cap
+            while n + take > cap
+                cap = cap * 2
+            t := str_new(cap, 0)
+            copy_bytes(t + 16, out + 16, n)
+            out = t
+        copy_bytes(out + 16 + n, b + pos, take)
+        n += take
+        seen = true
+        if i < end
+            store64(global(IN_POS), i + 1)
+            break
+        store64(global(IN_POS), end)
+    if not seen
+        os_fail_kind(K_NOT_FOUND)
+        return out
+    store64(out, n)
+    os_succeed()
+    out
+
+## `s` as text, each maximal run of bytes that begin a UTF-8 sequence but
+## don't finish a valid one replaced by U+FFFD (std.io.1).
+fn os_lossy(s int) str
+    n := load64(s)
+    chars := os_utf8_chars(s + 16, n)
+    if chars >= 0
+        store64(s + 8, chars)
+        return str_at(s)
+    sb_reset()
+    mut i := 0
+    while i < n
+        c := load8(s + 16 + i)
+        if c < 128
+            sb_byte(c)
+            i += 1
+            continue
+        need := if c >= 194
+            and c <= 223 then 2 else if c >= 224
+            and c <= 239 then 3 else if c >= 240
+            and c <= 244 then 4 else 0
+        # How many bytes of a valid sequence start here.
+        mut k := if need == 0 then 0 else 1
+        mut ok := need > 0
+        while ok and k < need
+            if i + k >= n
+                ok = false
+            else
+                b := load8(s + 16 + i + k)
+                mut lo := 128
+                mut hi := 191
+                if k == 1
+                    if c == 224
+                        lo = 160
+                    if c == 237
+                        hi = 159
+                    if c == 240
+                        lo = 144
+                    if c == 244
+                        hi = 143
+                if b < lo or b > hi
+                    ok = false
+                else
+                    k += 1
+        if ok
+            for m in 0..need
+                sb_byte(load8(s + 16 + i + m))
+            i += need
+        else
+            sb_byte(239)
+            sb_byte(191)
+            sb_byte(189)
+            i += if k == 0 then 1 else k
+    sb_str()
+
+## `io.read_line()` (std.io.1): the next line without `\n` or `\r\n`;
+## `os_ok()` is false at the end of input.
+fn io_read_line() str
+    s := os_read_until_newline()
+    if not os_ok()
+        return ""
+    n := load64(s)
+    if n > 0 and load8(s + 15 + n) == 13
+        store64(s, n - 1)
+    os_lossy(s)
+
+## `io.read_all()` (std.io.2): the rest of standard input.
+fn io_read_all() str
+    mut cap := 4096
+    mut s := str_new(cap, 0)
+    mut n := 0
+    while true
+        if load64(global(IN_POS)) >= load64(global(IN_LEN))
+            if not os_in_fill()
+                break
+        b := load64(global(IN_BUF))
+        pos := load64(global(IN_POS))
+        take := load64(global(IN_LEN)) - pos
+        if n + take > cap
+            while n + take > cap
+                cap = cap * 2
+            t := str_new(cap, 0)
+            copy_bytes(t + 16, s + 16, n)
+            s = t
+        copy_bytes(s + 16 + n, b + pos, take)
+        n += take
+        store64(global(IN_POS), pos + take)
+    store64(s, n)
+    os_succeed()
+    os_lossy(s)
