@@ -1,7 +1,8 @@
 ## Preparing MIR for code generation (ADR 0386), the same for every target:
 ## edges that pass arguments out of a two-way branch get a block of their
-## own, so a block's moves happen on one edge only; blocks are put in
-## reverse postorder, so a loop's body follows its header.
+## own, so a block's moves happen on one edge only; edges to a block that
+## only jumps on go straight to its target; blocks are put in reverse
+## postorder, so a loop's body follows its header.
 use mir
 
 ## Split each branch edge that passes arguments: the new block jumps to the
@@ -23,7 +24,32 @@ pub fn split_edges(f mir.Func) mir.Func
             ))
             g.blocks[b].term.targets[e] = g.blocks.len() - 1
             g.blocks[b].term.args[e] = []
+    thread_jumps(g)
+
+## Retarget each edge into an empty block that jumps on without arguments.
+fn thread_jumps(f mir.Func) mir.Func
+    n := f.blocks.len()
+    mut fwd := [b for b in 0..n]
+    for b in 1..n
+        mut t := b
+        mut steps := 0
+        while t != 0 and is_forwarder(f.blocks[t]) and steps < n
+            t = f.blocks[t].term.targets[0]
+            steps += 1
+        fwd[b] = t
+    mut g := f
+    for b in 0..n
+        for e in 0..g.blocks[b].term.targets.len()
+            to := g.blocks[b].term.targets[e]
+            if g.blocks[b].term.args[e].len() == 0
+                g.blocks[b].term.targets[e] = fwd[to]
     g
+
+fn is_forwarder(blk mir.Block) bool
+    blk.params.len() == 0
+        and blk.insts.len() == 0
+        and blk.term.kind == "jump"
+        and blk.term.args[0].len() == 0
 
 ## The blocks in reverse postorder from the entry.
 pub fn block_order(f mir.Func) List[int]

@@ -140,7 +140,24 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
         l.lower_fn(f)
     if l.problems.len() > 0
         return Problems(items: l.problems.sorted(by: |p| p.pos.line * 100000 + p.pos.col))
-    Module(path: path, funcs: l.funcs, strs: l.strs, sites: l.sites, lines: text.lines())
+    m := inline_module(Module(
+        path: path,
+        funcs: l.funcs,
+        strs: l.strs,
+        sites: l.sites,
+        lines: text.lines(),
+    ))
+    mut errs := List[Problem]()
+    for f in m.funcs
+        for err in verify(f)
+            errs.push(Problem(
+                rule: "native.build.2",
+                pos: ast.Pos(line: 1, col: 1),
+                message: "internal error: invalid MIR after inlining: {f.name}: {err}",
+            ))
+    if errs.len() > 0
+        return Problems(items: errs)
+    m
 
 fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
@@ -448,14 +465,14 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
                 problem(f.pos, "`{f.name}` must end with its result")
         else
             finish(return_of(-1))
-    func := simplify(Func(
+    func := simplify(fold(simplify(Func(
         name: fname,
         params: params,
         ret: ret,
         blocks: blocks,
         vals: vals,
         names: names,
-    ))
+    ))))
     for err in verify(func)
         problems.push(Problem(
             rule: "native.build.2",
@@ -601,9 +618,11 @@ fn Lower.copy_list(mut self, v Val) int
     while t.elem() != none
         depth += 1
         t = t.elem() else Ty.Unknown
+    # A `List[bool]` holds bytes (native-abi.md §2).
+    bytes := konst(if t == Ty.Bool then 1 else 8, Ty.Int)
     if depth == 0
-        return call("rt.list_copy", [v.id], v.ty)
-    call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int)], v.ty)
+        return call("rt.list_copy", [v.id, bytes], v.ty)
+    call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int), bytes], v.ty)
 
 fn is_place(e ast.Expr) bool
     match e
@@ -1113,7 +1132,10 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
     Val(id: l, ty: Ty.List(elem))
 
 fn push_fn(elem Ty) str
-    if elem.is_float() then "rt.list_pushf" else "rt.list_push"
+    match elem
+        Float => "rt.list_pushf"
+        Bool => "rt.list_pushb"
+        _ => "rt.list_push"
 
 fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) Val?
     match callee

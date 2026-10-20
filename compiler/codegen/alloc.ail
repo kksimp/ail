@@ -6,8 +6,12 @@
 ## Positions: a block's parameters are defined at its start + 1; each
 ## instruction reads at 2k and writes at 2k + 1; the terminator reads at
 ## the block's last position. A value's interval runs from its definition
-## to its last use, widened to the ends of every block it is live through,
-## and to the ends of the blocks that pass it to a block parameter.
+## to its last use, widened to the ends of every block it is live through.
+## A block parameter's interval starts at its block: the moves that write it
+## end a predecessor whose only successor is that block (critical edges are
+## split), and every value live across those moves is live into the block
+## too, so it conflicts with the parameter there. The argument and the
+## parameter can then share a register, and the move disappears.
 use mir
 
 ## Where a value lives: a register (0-63, targets number vector registers
@@ -38,9 +42,25 @@ pub struct Alloc
 pub fn is_remat(i mir.Inst) bool
     i.op == "const" or i.op == "fconst" or i.op == "str"
 
-## Whether an instruction clobbers the caller-saved registers.
+## Whether an instruction clobbers the caller-saved registers. A `push`
+## calls the runtime only when the list is full, and that slow path saves
+## the registers itself, so values stay in caller-saved registers across it.
 pub fn is_call(i mir.Inst) bool
-    i.op == "call" or i.op == "prim" and i.name == "syscall"
+    if i.op == "call"
+        return not is_push(i)
+    i.op == "prim" and i.name == "syscall"
+
+pub fn is_push(i mir.Inst) bool
+    i.op == "call"
+        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+
+## The caller-saved registers that hold some value of the function.
+pub fn caller_used(al Alloc, t Target) List[int]
+    mut out := List[int]()
+    for l in al.loc
+        if (t.int_caller.contains(l) or t.float_caller.contains(l)) and not out.contains(l)
+            out.push(l)
+    out.sorted()
 
 pub fn allocate(f mir.Func, t Target) Alloc
     n := f.vals.len()
@@ -61,34 +81,48 @@ pub fn allocate(f mir.Func, t Target) Alloc
         bend[b] = pos
         pos += 2
     live_in := liveness(f, order)
-    mut start := [-1 for _ in 0..n]
-    mut end := [-1 for _ in 0..n]
+    # Each value's live ranges, block by block: from its definition (or the
+    # block's start when it is live in) to its last use (or the block's end
+    # when it is live out). Between ranges it has a hole, where another
+    # value may use its register.
+    mut ranges := [List[int]() for _ in 0..n]
     mut calls := List[int]()
     for b in order
         blk := f.blocks[b]
+        mut first := [-1 for _ in 0..n]
+        mut last := [-1 for _ in 0..n]
+        for v in 0..n
+            if live_in[b][v]
+                first[v] = bstart[b]
+                last[v] = bstart[b]
         for p in blk.params
-            extend(mut start, mut end, p, bstart[b] + 1)
+            first[p] = bstart[b] + 1
+            last[p] = bstart[b] + 1
         mut k := bstart[b] + 2
         for i in blk.insts
             for a in i.args
-                extend(mut start, mut end, a, k)
+                last[a] = k
             if i.dst >= 0
-                extend(mut start, mut end, i.dst, k + 1)
+                first[i.dst] = k + 1
+                last[i.dst] = k + 1
             if is_call(i)
                 calls.push(k)
             k += 2
         for a in blk.term.uses()
-            extend(mut start, mut end, a, bend[b])
-        for s in blk.term.targets
+            last[a] = bend[b]
+        for succ in blk.term.targets
             for v in 0..n
-                if live_in[s][v]
-                    extend(mut start, mut end, v, bend[b])
-            # A parameter is written at the end of each block that jumps to it.
-            for p in f.blocks[s].params
-                extend(mut start, mut end, p, bend[b])
+                if live_in[succ][v]
+                    last[v] = bend[b]
         for v in 0..n
-            if live_in[b][v]
-                extend(mut start, mut end, v, bstart[b])
+            if first[v] >= 0
+                add_range(mut ranges[v], first[v], last[v])
+    mut start := [-1 for _ in 0..n]
+    mut end := [-1 for _ in 0..n]
+    for v in 0..n
+        if ranges[v].len() > 0
+            start[v] = ranges[v][0]
+            end[v] = ranges[v][ranges[v].len() - 1]
     mut hints := [List[int]() for _ in 0..n]
     for blk in f.blocks
         for e in 0..blk.term.targets.len()
@@ -115,6 +149,7 @@ pub fn allocate(f mir.Func, t Target) Alloc
         saved: [],
         start: start,
         end: end,
+        ranges: ranges,
         calls: calls,
         hints: hints,
     )
@@ -122,11 +157,29 @@ pub fn allocate(f mir.Func, t Target) Alloc
         s.assign(v, f.vals[v].is_float(), t)
     Alloc(loc: s.loc, order: order, slots: s.slots, saved: s.saved.sorted())
 
-fn extend(mut start List[int], mut end List[int], v int, p int)
-    if start[v] < 0 or p < start[v]
-        start[v] = p
-    if p > end[v]
-        end[v] = p
+## Append the range `from..=to`, joining it to the last one when they meet
+## (consecutive blocks are 2 positions apart).
+fn add_range(mut r List[int], from int, to int)
+    n := r.len()
+    if n > 0 and r[n - 1] >= from - 2
+        if to > r[n - 1]
+            r[n - 1] = to
+        return
+    r.push(from)
+    r.push(to)
+
+## Whether two values' ranges overlap.
+fn overlaps(a List[int], b List[int]) bool
+    mut i := 0
+    mut j := 0
+    while i < a.len() and j < b.len()
+        if a[i + 1] < b[j]
+            i += 2
+        elif b[j + 1] < a[i]
+            j += 2
+        else
+            return true
+    false
 
 ## Which values are live on entry to each block (the block's parameters
 ## are defined there, so they are not).
@@ -172,15 +225,27 @@ struct Scan
     saved List[int]
     start List[int]
     end List[int]
+    ranges List[List[int]]
     calls List[int]
     hints List[List[int]]
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
 fn Scan.crosses(self, v int) bool
+    r := ranges[v]
     for c in calls
-        if start[v] < c and end[v] > c
-            return true
+        mut k := 0
+        while k < r.len()
+            if r[k] < c and r[k + 1] > c
+                return true
+            k += 2
     false
+
+## Whether register `r` is free for all of `v`'s ranges.
+fn Scan.free(self, r int, v int) bool
+    for a in active
+        if loc[a] == r and overlaps(ranges[a], ranges[v])
+            return false
+    true
 
 fn Scan.assign(mut self, v int, float bool, t Target)
     # Free the registers of values that ended.
@@ -189,9 +254,6 @@ fn Scan.assign(mut self, v int, float bool, t Target)
         if end[a] >= start[v]
             keep.push(a)
     active = keep
-    mut used := Set[int]()
-    for a in active
-        used.add(loc[a])
     cross := crosses(v)
     mut pool := List[int]()
     if float
@@ -205,19 +267,23 @@ fn Scan.assign(mut self, v int, float bool, t Target)
     mut pick := -1
     for h in hints[v]
         r := loc[h]
-        if r >= 0 and r < SLOT_BASE and not used.contains(r) and pool.contains(r)
+        if r >= 0 and r < SLOT_BASE and pool.contains(r) and free(r, v)
             pick = r
             break
     if pick < 0
         for r in pool
-            if not used.contains(r)
+            if free(r, v)
                 pick = r
                 break
     if pick < 0
-        # Spill whichever of `v` and the active values in its pool ends last.
+        # Spill whichever of `v` and the values in its way ends last, when
+        # that value alone holds its register over `v`'s ranges.
         mut victim := -1
         for a in active
-            if pool.contains(loc[a]) and (victim < 0 or end[a] > end[victim])
+            if pool.contains(loc[a]) and overlaps(
+                ranges[a],
+                ranges[v],
+            ) and (victim < 0 or end[a] > end[victim]) and sole(a, v)
                 victim = a
         if victim >= 0 and end[victim] > end[v]
             pick = loc[victim]
@@ -234,6 +300,13 @@ fn Scan.assign(mut self, v int, float bool, t Target)
     active.push(v)
     if (t.int_callee.contains(pick) or t.float_callee.contains(pick)) and not saved.contains(pick)
         saved.push(pick)
+
+## Whether `a` is the only active value whose use of its register meets `v`.
+fn Scan.sole(self, a int, v int) bool
+    for b in active
+        if b != a and loc[b] == loc[a] and overlaps(ranges[b], ranges[v])
+            return false
+    true
 
 fn Scan.new_slot(mut self) int
     slots += 1

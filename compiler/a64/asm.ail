@@ -246,6 +246,19 @@ pub fn Asm.ldrb(mut self, t int, n int)
 pub fn Asm.strb(mut self, t int, n int)
     word(956301312 + n * 32 + t)
 
+## `ldrb`/`strb wt, [xn, #k]` (k < 4096) and `[xn, xm]`.
+pub fn Asm.ldrb_off(mut self, t int, n int, k int)
+    word(960495616 + k * 1024 + n * 32 + t)
+
+pub fn Asm.strb_off(mut self, t int, n int, k int)
+    word(956301312 + k * 1024 + n * 32 + t)
+
+pub fn Asm.ldrb_idx(mut self, t int, n int, m int)
+    word(rrr(945842176, t, n, m))
+
+pub fn Asm.strb_idx(mut self, t int, n int, m int)
+    word(rrr(941647872, t, n, m))
+
 ## `stp a, b, [sp, #-16]!` and `ldp a, b, [sp], #16`.
 pub fn Asm.push_pair(mut self, a int, b int)
     word(2843738112 + 126 * 32768 + b * 1024 + SP * 32 + a)

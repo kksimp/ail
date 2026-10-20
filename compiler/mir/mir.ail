@@ -157,5 +157,5 @@ pub fn Inst.is_pure(self) bool
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "copy" => true
         "band" | "bor" | "bxor" | "bnot" => true
-        "add" | "sub" | "mul" | "neg" | "shl" | "shr" => site < 0
+        "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => site < 0
         _ => false

@@ -101,9 +101,21 @@ fn out_byte(b int)
     store8(load64(global(OUT_BUF)) + n, b)
     store64(global(OUT_LEN), n + 1)
 
+## Copy into the buffer in as few pieces as fit, flushing when it fills.
 fn out_bytes(p int, n int)
-    for i in 0..n
-        out_byte(load8(p + i))
+    mut from := p
+    mut left := n
+    while left > 0
+        mut used := load64(global(OUT_LEN))
+        if used == OUT_CAP
+            flush()
+            used = 0
+        room := OUT_CAP - used
+        k := if left < room then left else room
+        copy_bytes(load64(global(OUT_BUF)) + used, from, k)
+        store64(global(OUT_LEN), used + k)
+        from += k
+        left -= k
 
 ## A string object: +0 bytes, +8 chars, +16 UTF-8 (native-abi.md §2).
 fn out_str(s str)
@@ -222,7 +234,7 @@ fn out_list_bool(xs List[int])
     out_byte(91)
     for i in 0..n
         out_sep(i)
-        out_bool(load64(data + 8 * i) != 0)
+        out_bool(load8(data + i) != 0)
     out_byte(93)
 
 fn out_list_float(xs List[int])
@@ -238,47 +250,62 @@ fn out_list_float(xs List[int])
 # ---- lists (native-abi.md §2) ----
 
 ## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
-fn list_new(cap int) List[int]
+## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
+fn list_alloc(cap int, size int) List[int]
     p := alloc(24)
     c := if cap < 4 then 4 else cap
     store64(p + 8, c)
-    store64(p + 16, alloc(8 * c))
+    store64(p + 16, alloc(size * c))
     list_at(p)
 
-fn list_grow(p int)
+fn list_new(cap int) List[int]
+    list_alloc(cap, 8)
+
+fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
-    data := alloc(8 * cap)
-    copy_bytes(data, load64(p + 16), 8 * load64(p))
+    data := alloc(size * cap)
+    copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
     store64(p + 16, data)
 
+## The slow paths of `push`: the code generator stores in place while the
+## list has room, and calls these when it is full.
 fn list_push(xs List[int], v int)
     p := list_addr(xs)
     n := load64(p)
     if n == load64(p + 8)
-        list_grow(p)
+        list_grow(p, 8)
     store64(load64(p + 16) + 8 * n, v)
     store64(p, n + 1)
 
 fn list_pushf(xs List[int], x float)
     list_push(xs, float_bits(x))
 
-fn list_copy(xs List[int]) List[int]
+fn list_pushb(xs List[int], b bool)
     p := list_addr(xs)
     n := load64(p)
-    q := list_addr(list_new(n))
-    copy_bytes(load64(q + 16), load64(p + 16), 8 * n)
+    if n == load64(p + 8)
+        list_grow(p, 1)
+    store8(load64(p + 16) + n, if b then 1 else 0)
+    store64(p, n + 1)
+
+fn list_copy(xs List[int], size int) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    q := list_addr(list_alloc(n, size))
+    copy_bytes(load64(q + 16), load64(p + 16), size * n)
     store64(q, n)
     list_at(q)
 
-## A copy of `xs` and of the lists in it, `depth` levels down.
-fn list_copy_deep(xs List[int], depth int) List[int]
-    ys := list_copy(xs)
+## A copy of `xs` and of the lists in it, `depth` levels down; the innermost
+## lists' elements are `size` bytes.
+fn list_copy_deep(xs List[int], depth int, size int) List[int]
+    ys := list_copy(xs, 8)
     q := list_addr(ys)
     items := load64(q + 16)
     for i in 0..load64(q)
         inner := list_at(load64(items + 8 * i))
-        c := if depth > 1 then list_copy_deep(inner, depth - 1) else list_copy(inner)
+        c := if depth > 1 then list_copy_deep(inner, depth - 1, size) else list_copy(inner, size)
         store64(items + 8 * i, list_addr(c))
     ys
 

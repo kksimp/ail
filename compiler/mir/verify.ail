@@ -89,7 +89,7 @@ fn check_types(f Func, i Inst, mut errs List[str])
 
 ## `dom[b][d]`: block `d` dominates block `b` (the iterative data-flow
 ## algorithm; MIR functions are small).
-fn dominators(f Func) List[List[bool]]
+pub fn dominators(f Func) List[List[bool]]
     n := f.blocks.len()
     mut preds := [List[int]() for _ in 0..n]
     for b in 0..n

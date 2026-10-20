@@ -36,6 +36,34 @@ binarytrees) to 50x (nbody, spectralnorm).
 **Against C:** native AIL loses every program, by 1.65x (nbody) to 7x
 (binarytrees). The float kernels are closest; list-heavy code is furthest.
 
+## After the first optimisations (ADR 0391)
+
+The same race after lifetime holes, MIR folding and CSE, inlining, inline
+`push` and byte-sized `List[bool]`:
+
+| program | size | native | clang -O2 | gcc -O2 | python | native/clang | native/gcc | native/python |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| collatz | 1000000 | 0.261 | 0.171 | 0.200 | 9.551 | 1.53 | 1.30 | 0.03 |
+| nbody | 1000000 | 0.103 | 0.053 | 0.054 | 5.364 | 1.93 | 1.91 | 0.02 |
+| spectralnorm | 1000 | 0.073 | 0.051 | 0.043 | 5.585 | 1.42 | 1.71 | 0.01 |
+| mandelbrot | 1000 | 0.095 | 0.074 | 0.081 | 3.188 | 1.28 | 1.17 | 0.03 |
+| fannkuch | 10 | 0.847 | 0.211 | 0.177 | 7.840 | 4.02 | 4.78 | 0.11 |
+| sieve | 30000000 | 0.209 | 0.174 | 0.204 | 5.718 | 1.20 | 1.02 | 0.04 |
+| matmul | 400 | 0.186 | 0.044 | 0.046 | 3.418 | 4.29 | 4.02 | 0.05 |
+| binarytrees | 17 | 0.595 | 0.172 | 0.106 | 3.644 | 3.47 | 5.63 | 0.16 |
+| fasta | 5000000 | 0.183 | 0.055 | 0.061 | 1.079 | 3.33 | 3.01 | 0.17 |
+
+Instructions retired at the `.args` sizes (callgrind), before → after:
+collatz 326M → 188M, sieve 367M → 144M, binarytrees 644M → 381M, fannkuch
+635M → 442M, matmul 285M → 223M, fasta 151M → 75M, nbody 106M → 92M,
+spectralnorm 151M → 95M, mandelbrot 74M → 44M. Wall times on this shared VM
+vary by about 10% between runs; nbody's 1.93 is within that of its earlier
+1.65.
+
+**Against C:** sieve is level with gcc, and collatz, spectralnorm and
+mandelbrot are within 1.7x. fannkuch, matmul, binarytrees and fasta stay
+at 3–5.6x.
+
 ## perfbench sizes (`tools/perfbench/run.sh --all`, min of 5)
 
 The `.args` sizes, now passed to every column. C finishes most in under
@@ -93,8 +121,14 @@ compiler), and build the compiler natively once the subset covers it
 
 ## Next steps, in order of expected gain
 
-1. Inline list access and bounds checks; hoist checks over `0..xs.len()`.
-2. Constant folding, strength reduction of division by powers of two.
-3. Overflow-check elimination on loop induction variables.
-4. Inlining of small leaf functions.
-5. Cache the runtime's machine code.
+Done in ADR 0391: constant folding, the `% 2^k` mask, overflow checks ruled
+out by a dominating bound, inline `push`, inlining of leaf functions. Left:
+
+1. **Bounds checks in loops** (matmul, fannkuch): hoist the check over
+   `0..xs.len()` and index without it; keep row pointers in registers.
+2. **List allocation** (fannkuch, binarytrees): start lists at their
+   literal or known size; free short-lived lists once a collector exists.
+3. **Callee-saved registers** (binarytrees): save only the ones a function
+   uses on the paths that need them.
+4. **Division by a power of two** as a shift with a sign fix (collatz).
+5. Cache the runtime's machine code (compile time).
