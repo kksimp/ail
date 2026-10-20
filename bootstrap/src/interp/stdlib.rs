@@ -66,6 +66,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.tracing & super::trace::EFFECTS != 0 {
             self.trace_effect(module, f, &values, pos);
         }
+        if matches!(module, "hash" | "compress") {
+            return Ok(self.codec_call(module, f, &values, pos));
+        }
         let str_arg = |i: usize| match &values[i] {
             Value::Str(s) => s.clone(),
             other => unreachable!("checked: str, found {other:?}"),

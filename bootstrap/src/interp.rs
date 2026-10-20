@@ -29,6 +29,7 @@ pub mod parallel;
 mod net;
 mod osext;
 mod spawn;
+mod codec;
 mod random;
 mod tz;
 mod stdlib;

@@ -4,6 +4,7 @@ Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
 > and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
+> and `std.compress`, `std.fs`, `std.env`, `std.hash`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -183,6 +184,88 @@ fn main()
     print(path.base("examples/logscan.ail"))   # logscan.ail
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
+```
+
+## Hashing: `std.hash`
+
+**std.hash.1** — `std.hash` works on values only, so its functions have no
+effects (`eff.infer.4`). Each takes `str` and hashes its UTF-8 bytes; when
+the `bytes` type lands the same functions take `bytes` too (ADR 0442).
+
+**std.hash.2** — `sha256(s str) str`, `sha384(s str) str` and
+`sha512(s str) str` return the digest of FIPS 180-4 as lower-case hex.
+`hmac_sha256(key str, s str) str` returns the HMAC of RFC 2104 and RFC 4231
+as lower-case hex. *(ADR 0442)*
+
+**std.hash.3** — `crc32(s str) int` returns the CRC-32 of RFC 1952
+(polynomial 0xEDB88320) as an `int` from 0 to 2^32 - 1. *(ADR 0445)*
+
+**std.hash.4** — `hash64(s str) int` is a fast 64-bit hash for tables and
+checksums, not for security. Its value for a given input is the same on
+every platform and version, and may be any `int`. *(ADR 0444)*
+
+```ail
+use std.hash
+
+fn main()
+    print(hash.sha256("abc"))    # ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    print(hash.crc32("123456789"))   # 3421780262
+```
+
+## Compression: `std.compress`
+
+**std.compress.1** — Binary data is a `List[int]` of values 0 to 255 until
+the `bytes` type lands (ADR 0443). `deflate(s str) List[int]` and
+`gzip(s str) List[int]` compress the UTF-8 bytes of `s` at a fixed level (6)
+into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952). They
+never fail, and the same input gives the same output on every platform.
+They have no effects.
+
+**std.compress.2** — `inflate(data List[int]) str ! compress.CompressError`
+and `gunzip(data List[int]) str ! compress.CompressError` reverse them.
+`CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
+data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
+CRC-32 or size mismatch), `too_big` (std.compress.4), `invalid_utf8` (the
+result is not text), `unsafe_path`, `unsupported`, or an I/O kind of
+`std.err.1` for file functions. *(ADR 0443)*
+
+**std.compress.3** — `gunzip` accepts the optional header fields of
+RFC 1952 and several members in a row, and checks every member's CRC-32 and
+size. `gzip` writes no timestamp or name. *(ADR 0445)*
+
+**std.compress.4** — A decompression whose output would pass 2^30 bytes
+fails with kind `too_big` before it allocates more. *(ADR 0445)*
+
+**std.compress.5** — `gzip_file(src str, dst str)`,
+`gunzip_file(src str, dst str)`, `zip_dir(dir str, dst str)` and
+`unzip(archive str, dir str)` return `Unit ! compress.CompressError` and
+have the effects `fs` and `io`. `zip_dir` stores every file under `dir`
+(symbolic links skipped) with `/`-separated relative names sorted by name,
+a fixed 1980-01-01 timestamp, and each file stored or deflated, whichever is
+smaller; an empty directory is an entry ending in `/`. The archive is
+deterministic. No zip64: more than 65535 files or any size over 4 GiB fails
+with `too_big`. `unzip` creates `dir`, checks every CRC-32, and fails with
+`unsafe_path`, before writing anything, when any name is absolute, has a
+`..`, `.` or empty component, or contains `\`, `:` or a NUL. Encrypted
+entries and methods other than store and deflate fail with `unsupported`.
+*(ADR 0446)*
+
+**std.compress.7** — `zlib(s str) List[int]` and
+`unzlib(data List[int]) str ! compress.CompressError` use the zlib wrapper of
+RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
+streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
+and `unsupported` for a preset dictionary. *(ADR 0443)*
+
+**std.compress.6** — Output is read by the system `gzip` and `unzip` and
+their output is read back; the project's tests check this when the tools
+exist and say so when they don't. *(ADR 0445)*
+
+```ail
+use std.compress
+
+fn main() !
+    z := compress.gzip("abc abc abc abc")
+    print(compress.gunzip(z)?)
 ```
 
 ## Standard input and output: `std.io`

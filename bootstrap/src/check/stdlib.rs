@@ -191,6 +191,7 @@ impl<'p> Checker<'p> {
             Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
             _ => unreachable!("std/types.ail declares `{name}`"),
         };
+        let compress = |t: Ty| Ty::Res(Box::new(t), Errs::Set(vec![std_ty("compress.CompressError")]));
         let io = |t: Ty| Ty::Res(Box::new(t), Errs::Set(vec![std_ty("fs.IoError")]));
         match (module, f) {
             ("fs", "read_text") => (vec![Str], io(Str)),
@@ -207,6 +208,12 @@ impl<'p> Checker<'p> {
             ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
+            ("hash", "sha256" | "sha384" | "sha512") => (vec![Str], Str),
+            ("hash", "hmac_sha256") => (vec![Str, Str], Str),
+            ("hash", "crc32" | "hash64") => (vec![Str], Int),
+            ("compress", "deflate" | "gzip" | "zlib") => (vec![Str], list(Int)),
+            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![list(Int)], compress(Str)),
+            ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),

@@ -9,6 +9,7 @@ use crate::lexer::lex;
 
 /// Each standard module and its functions (std.use.1-2), sorted.
 pub const MODULES: &[(&str, &[&str])] = &[
+    ("compress", &["deflate", "gunzip", "gunzip_file", "gzip", "gzip_file", "inflate", "unzip", "unzlib", "zip_dir", "zlib"]),
     ("env", &["args", "cwd", "get", "home", "program", "vars"]),
     (
         "fs",
@@ -17,6 +18,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
             "walk", "write_text",
         ],
     ),
+    ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
     ("net", &["get", "post"]),
     ("path", &["base", "dir", "ext", "join"]),
@@ -75,6 +77,7 @@ pub enum StdCall {
 /// Each type of a standard module, declared in `std/types.ail`: its name
 /// there, and its module.
 const TYPES: &[(&str, &str)] = &[
+    ("CompressError", "compress"),
     ("IoError", "fs"),
     ("Metadata", "fs"),
     ("Response", "net"),
