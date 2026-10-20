@@ -18,7 +18,7 @@ impl<'p> Checker<'p> {
     }
 
     /// The element type of `t` when it is a `tensor.Tensor[T]`.
-    fn tensor_elem(&self, t: &Ty) -> Option<Ty> {
+    pub(super) fn tensor_elem(&self, t: &Ty) -> Option<Ty> {
         match t {
             Ty::Struct(s, args) if self.prog.structs[*s].name == "tensor.Tensor" => {
                 Some(args.first().cloned().unwrap_or(Ty::Err))

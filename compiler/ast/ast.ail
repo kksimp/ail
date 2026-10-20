@@ -249,6 +249,8 @@ pub enum UnOp
 
 pub enum Expr
     Str(value str, pos Pos)
+    ## `b"..."`: its bytes as lowercase hex (lex.bytes.1).
+    Bytes(hex str, pos Pos)
     Interp(parts List[InterpPart], pos Pos)
     ## The literal's value in decimal: JSON numbers can't hold every `int`.
     Int(value str, pos Pos)
@@ -325,6 +327,7 @@ pub struct Arg
 
 pub struct Arm
     pub pat Pattern
+    pub guard Expr?
     pub body List[Stmt]
 
 pub enum Pattern
@@ -332,6 +335,7 @@ pub enum Pattern
     Literal(value Literal, pos Pos)
     Alt(alts List[Pattern], pos Pos)
     Variant(qualifier str?, name str, bindings List[Ident]?, pos Pos)
+    Range(lo Literal, hi Literal, inclusive bool, pos Pos)
 
 pub enum Literal
     IntLit(value str)

@@ -179,6 +179,19 @@ escapes and no interpolation: `\` and `{` are literal characters.
 3. `r` MUST be immediately followed by the opening `"`. `r "x"` is the name
    `r` followed by a string, since `r` isn't a keyword (`lex.kw.1`).
 
+**lex.bytes.1** — A `bytes` literal is `b"..."`. Its text is ASCII, with the
+escapes `\n \t \r \0 \\ \"` and `\xHH` (two hex digits, either case) for any
+byte. It has no interpolation, so `{` is a literal character, and it ends at
+the next unescaped `"`, on the same line. A non-ASCII character, an unknown
+escape or a missing closing `"` is an error. `b` MUST be immediately followed
+by the opening `"`; `b "x"` is the name `b` followed by a string. The literal's
+type is `bytes` (`type.bytes.1`). *(ADR 0413)*
+
+```ail fragment
+magic := b"\x89PNG\r\n\x1a\n"        # eight bytes
+req := b"GET / HTTP/1.1\r\n\r\n"
+```
+
 ```ail fragment
 pat := r"\d+\.\d+"                  # the text \d+\.\d+
 src := r"""

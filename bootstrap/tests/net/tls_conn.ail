@@ -1,0 +1,20 @@
+## std.net.13 against the local `openssl s_server` that `tests/net.rs`
+## starts: a raw TLS connection, one request written and the first line of
+## the reply read; then a connection whose certificate doesn't match.
+use std.env
+use std.net
+
+fn first_line(host str, port int) str
+    c := net.connect_tls(host, port) else err
+        return "{err.kind}: {err.message}"
+    c.write("GET / HTTP/1.0\r\nHost: {host}\r\n\r\n") else err
+        return "write {err.kind}"
+    line := c.read_line() else err
+        return "read {err.kind}"
+    c.close()
+    line else "(none)"
+
+fn main()
+    port := env.args()[0].to_int() else 0
+    print(first_line("localhost", port))
+    print(first_line("127.0.0.1", port))

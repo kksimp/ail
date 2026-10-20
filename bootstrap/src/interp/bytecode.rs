@@ -514,7 +514,7 @@ fn writes(e: &Expr, t: Option<&str>, moves: &crate::fasthash::FastMap<Pos, &'sta
     };
     let arg = |a: &Arg| ((a.mutable || a.moved) && hits(&a.value)) || (t.is_none() && a.param.is_some()) || w(&a.value);
     match e {
-        Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => false,
+        Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => false,
         Expr::Name(n, pos) => moves.contains_key(pos) && t.is_none_or(|t| t == n),
         Expr::Binary { lhs, rhs, .. } => w(lhs) || w(rhs),
         Expr::Unary { op: UnOp::Neg | UnOp::Not, operand, .. } => w(operand),
@@ -565,7 +565,7 @@ fn compilable(b: &Block) -> bool {
                     expr(c) && compilable(b)
                 }) && els.as_ref().is_none_or(|b| compilable(b))
             }
-            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| compilable(&a.body)),
+            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(expr) && compilable(&a.body)),
             Expr::Binary { lhs, rhs, .. } => expr(lhs) && expr(rhs),
             Expr::Unary { operand, .. } => expr(operand),
             Expr::Method { recv, args, .. } => expr(recv) && args.iter().all(|a| expr(&a.value)),
@@ -642,6 +642,7 @@ fn has_try(e: &Expr) -> bool {
         Expr::Int(..)
         | Expr::Float(..)
         | Expr::Str(..)
+        | Expr::Bytes(..)
         | Expr::Char(..)
         | Expr::Bool(..)
         | Expr::None(_)
@@ -743,7 +744,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// The constant an expression always has, as the walker computes it.
     fn literal(&mut self, e: &'a Expr) -> Option<Opnd> {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
+            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
                 let v = self.it.eval(e, &mut Vec::new()).ok()?;
                 Some(self.konst(v))
             }
@@ -807,7 +808,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// Code that leaves the value of `e` in `dst`.
     fn expr_to(&mut self, e: &'a Expr, dst: Opnd) {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
+            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
                 match self.literal(e) {
                     Some(k) => {
                         self.emit(Ins::Move { dst, src: k });
@@ -894,12 +895,24 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
                         self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
                     }
+                    // expr.match.11: a false guard drops the bindings and tries the next arm.
+                    let fails = arm.guard.as_ref().map(|g| self.cond_jump(g, false));
                     self.block(&arm.body, t);
-                    if self.depth() > mark {
+                    let bound = self.depth() > mark;
+                    if bound {
                         self.scope.truncate(mark as usize);
                         self.emit(Ins::Truncate(mark));
                     }
                     ends.push(self.emit(Ins::Jump(0)));
+                    if let Some(fails) = fails {
+                        let here = self.here();
+                        for f in fails {
+                            self.patch(f, here);
+                        }
+                        if bound {
+                            self.emit(Ins::Truncate(mark));
+                        }
+                    }
                     let next = self.here();
                     self.patch(test, next);
                 }
@@ -1544,7 +1557,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     fn effect_free(&self, e: &Expr) -> bool {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => true,
+            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => true,
             Expr::Name(n, pos) => self.local(n).is_some() && !self.it.resolved.moves.contains_key(pos),
             _ => false,
         }
@@ -1873,6 +1886,11 @@ impl<'a, W: Write> Interp<'a, W> {
                     let v = match take!(*src) {
                         Value::Float(x) => Value::Float(-x),
                         Value::Num(k, bits) => negate(k, bits, *pos)?,
+                        // std.tensor.14: elementwise on a tensor.
+                        Value::Tensor(t) => match t.neg() {
+                            Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+                            Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        },
                         v => {
                             let v = v.int();
                             match v.checked_neg() {
@@ -1914,7 +1932,11 @@ impl<'a, W: Write> Interp<'a, W> {
                             let k = get!(*idx);
                             map_value(t, k, || key_text(k), *pos)?.clone()
                         }
-                        other => unreachable!("checked: list or map, found {other:?}"),
+                        Value::Bytes(b) => {
+                            let i = get!(*idx).int();
+                            bytes::at(b, i, *pos)?
+                        }
+                        other => unreachable!("checked: list, map or bytes, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
@@ -2338,6 +2360,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     let r = (*it & !KIND) as usize;
                     if let Value::Set(t) = &regs[r] {
                         regs[r] = Value::List(Rc::new(t.key_list()));
+                    } else if let Value::Bytes(b) = &regs[r] {
+                        regs[r] = Value::List(Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()));
                     }
                     regs[(*idx & !KIND) as usize] = Value::Int(0);
                 }

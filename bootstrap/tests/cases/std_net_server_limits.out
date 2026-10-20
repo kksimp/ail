@@ -1,0 +1,10 @@
+while slow waits: ok GET /fast 0
+slow: HTTP/1.1 200 OK
+HTTP/1.1 400 Bad Request
+HTTP/1.1 400 Bad Request
+HTTP/1.1 505 HTTP Version Not Supported
+HTTP/1.1 400 Bad Request
+HTTP/1.1 400 Bad Request
+HTTP/1.1 413 Content Too Large
+HTTP/1.1 200 OK
+HTTP/1.1 200 OK

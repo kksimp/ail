@@ -1,0 +1,20 @@
+## A local HTTP round trip (std.net server, ADRs 0418-0423): a server on
+## 127.0.0.1 takes one request and answers it, while a task makes the request
+## with std.net. Nothing leaves the machine, so the example runs offline.
+##   ./ail run examples/loopback.ail
+
+use std.net
+
+fn ask(url str) net.Response ! net.NetError
+    net.get(url)
+
+fn main() ! Trapped | net.NetError
+    srv := net.serve("127.0.0.1:0")?
+    url := "http://{srv.addr()}/hello?name=ail"
+    t := spawn ask(url)
+    ex := srv.accept()?
+    print("server got {ex.request.method} {ex.request.path} query {ex.request.query}")
+    ex.respond(net.Response(status: 200, headers: {}, body: "hi there"))?
+    reply := t.wait()?
+    print("client got {reply.status}: {reply.body}")
+    srv.close()

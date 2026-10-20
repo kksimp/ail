@@ -1,0 +1,7 @@
+{"test":"find_all_never_overlaps","status":"pass","line":11,"col":10,"message":"","cases":100,"seed":17903146744064958628}
+{"test":"find_all_matches_the_text_it_names","status":"pass","line":19,"col":10,"message":"","cases":100,"seed":9840776343729066849}
+{"test":"replace_with_the_match_is_identity","status":"pass","line":24,"col":10,"message":"","cases":100,"seed":15154290353562188802}
+{"test":"is_match_agrees_with_find","status":"pass","line":28,"col":10,"message":"","cases":100,"seed":10315239147374858896}
+{"test":"split_pieces_hold_no_match","status":"pass","line":35,"col":10,"message":"","cases":100,"seed":804633078074961543}
+{"test":"escaped_text_matches_itself","status":"pass","line":40,"col":10,"message":"","cases":100,"seed":11843016697386369004}
+{"summary":true,"passed":6,"failed":0}

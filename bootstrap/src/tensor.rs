@@ -167,6 +167,22 @@ impl Tensor {
         Ok(Tensor { shape: self.shape.clone(), data })
     }
 
+    /// std.tensor.14: `-t`, elementwise. A `float` is negated exactly; an
+    /// `int` that is `i64::MIN` traps (std.tensor.6).
+    pub fn neg(&self) -> Result<Tensor, Fault> {
+        let data = match &self.data {
+            Data::F(v) => Data::F(v.iter().map(|&x| -x).collect()),
+            Data::I(v) => {
+                let mut out = Vec::with_capacity(v.len());
+                for &x in v {
+                    out.push(x.checked_neg().ok_or_else(overflow)?);
+                }
+                Data::I(out)
+            }
+        };
+        Ok(Tensor { shape: self.shape.clone(), data })
+    }
+
     /// std.tensor.13: an activation of each element of a `float` tensor.
     /// The scalar code below runs on every target, so the results agree
     /// across ISAs (std.tensor.5, lockstep ADR 0008).

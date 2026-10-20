@@ -3,6 +3,7 @@
 __pycache__/
 .DS_Store
 # Private Rust toolchain (ADR 0087), verification worktrees (ADR 0085), build output.
+.toolchain
 .toolchain/
 .verify/
 bootstrap/target/
