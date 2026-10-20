@@ -30,7 +30,8 @@ All verified on Linux x86-64 and macOS ARM64.
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
 - `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slice 1 (declarations) agrees with `ail check` on every corpus program; the selftest `self_hosted_check` holds it there. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 - `compiler/mir/`: the native backend's MIR in AIL (ADR 0384): flat instructions in SSA with block parameters, built from the AIL syntax tree by Braun et al.'s construction, cleaned up and verified; `ail run compiler mir FILE` prints it. The native subset is numbers, string literals, lists of numbers and free functions (native.subset.1, [23-native.md](spec/23-native.md)); the ABI is in [native-abi.md](design/native-abi.md).
-- `compiler/x64/`, `compiler/codegen/`, `compiler/obj/`, `compiler/rt/native/`: x86-64 code generation (ADR 0385), linear-scan allocation (ADR 0386), static ELF executables with the runtime compiled from AIL (ADR 0387). `ail build FILE` works on Linux x86-64 (native.build.3); `bootstrap/tests/native.rs` builds each `tests/native/run/` program and compares it with `ail run`. ARM64 and Mach-O follow (lane 120).
+- `compiler/x64/`, `compiler/codegen/`, `compiler/obj/`, `compiler/rt/native/`: x86-64 code generation (ADR 0385), linear-scan allocation (ADR 0386), static ELF executables with the runtime compiled from AIL (ADR 0387). `ail build FILE` works on Linux x86-64 (native.build.3); `bootstrap/tests/native.rs` builds each `tests/native/run/` program and compares it with `ail run`.
+- `compiler/a64/`, `compiler/obj/macho.ail`: ARM64 code generation (ADR 0388) and signed Mach-O executables (ADR 0389); `ail build --target aarch64-linux|aarch64-macos`. Linux ARM64 is tested under qemu where installed; macOS ARM64 in the designer's gate.
 
 ### Language (2026-10-20 batch)
 

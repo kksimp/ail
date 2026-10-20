@@ -7,6 +7,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 |---|---|
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
+| **Ad hoc signature** | A code signature with no certificate: SHA-256 hashes of the file's pages in a code directory. Apple Silicon runs only signed executables; `ail build` signs Mach-O files this way itself (ADR 0389). |
 | **ADR** | Architecture Decision Record: one file per design decision in `docs/decisions/`. See ADR 0001. |
 | **AEAD** | Authenticated encryption with associated data: a cipher that encrypts and authenticates in one step and refuses to decrypt on a bad tag. TLS 1.3 uses ChaCha20-Poly1305 and AES-GCM (ADR 0366). |
 | **Agent-tool corpus** | The benchmark programs of the kind an AI agent writes when operating a computer (`logscan`, `tasks`, `build`, and since ADR 0280 `snapdiff` and `csvreport`), each with a Python twin, measured for tokens and speed. See ADRs 0217 and 0218. |

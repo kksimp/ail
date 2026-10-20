@@ -9,7 +9,8 @@
 #   ail run compiler build FILE RT [TARGET]
 #                                         an executable of a program as hex text, with the runtime
 #                                         in directory RT, for x86_64-linux (the default) or
-#                                         aarch64-linux (ADRs 0385, 0388; `ail build`)
+#                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
+#                                         `ail build`)
 # With several files, each output starts with a line `== PATH`.
 use a64
 use ast
@@ -50,6 +51,9 @@ fn main() !
             match target
                 "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
                 "aarch64-linux" => print(obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)))
+                "aarch64-macos" =>
+                    name := args[1].split("/").last() else args[1]
+                    print(obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))))
                 _ =>
                     io.eprint("error[native.build.3]: unknown target `{target}`")
                     io.exit(2)

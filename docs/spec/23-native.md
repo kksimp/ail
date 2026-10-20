@@ -4,7 +4,8 @@ Chapter key: `native`
 
 > **Status:** Drafted (partial). Specified: what the native subset is, how a
 > program outside it is reported, what a native executable must match, and
-> the `ail build` command. Implemented for Linux x86-64.
+> the `ail build` command. Implemented for Linux x86-64, Linux ARM64 and
+> macOS ARM64.
 > The backend's representations and the ABI are non-normative and live in
 > [ir-architecture.md](../design/ir-architecture.md) and
 > [native-abi.md](../design/native-abi.md).
@@ -50,11 +51,13 @@ may be absent. *(ADRs 0384, 0385)*
 verifier, ir-architecture.md §4) is reported under this rule as an internal
 error, never turned into code. *(ADR 0384)*
 
-**native.build.3** — `ail build FILE [-o OUT]` checks the program as `ail
-check` does and stops on its errors, then reports native.subset.1 problems,
-then writes an executable for the host to OUT (default: FILE's name without
-`.ail`, in the current directory). A host the backend can't target yet, or a
-failure to write the file, is reported under this rule. *(ADR 0387)*
+**native.build.3** — `ail build FILE [-o OUT] [--target T]` checks the
+program as `ail check` does and stops on its errors, then reports
+native.subset.1 problems, then writes an executable to OUT (default: FILE's
+name without `.ail`, in the current directory). T is `x86_64-linux`,
+`aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
+host's. A host with no target of its own and no `--target`, or a failure to
+write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
 
 ```text
 $ ail build examples/hello.ail
