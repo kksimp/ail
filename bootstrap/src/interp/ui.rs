@@ -41,6 +41,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 let m = ui::modifiers(id).map(Value::Bool).to_vec();
                 Value::Struct(self.structs["ui.Modifiers"], Rc::new(m))
             }
+            "font_size" => Value::Int(ui::font_size(id)),
+            "set_font_size" => {
+                ui::set_font_size(id, int(0));
+                Value::Unit
+            }
             "clear" => {
                 ui::clear(id, int(0));
                 Value::Unit
