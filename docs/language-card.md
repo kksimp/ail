@@ -532,7 +532,7 @@ one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
 `unsafe` and a block allow `unsafe fn` calls, C calls and `std.mem`; `ail.pkg` needs `unsafe allow`.
 `extern c "libm" fn hypot(a float, b float) float` declares a C function (types `int`, `float`,
-`bool`, `i32`, `u8`, `*T`...; a C `int` is `i32`); `mem.cstr(s) *u8`, `mem.from_cstr(p)`, `mem.free(p)`.
+`bool`, `i32`, `u8`, `*T`...; a C `int` is `i32`); `mem.cstr(s) *u8`, `mem.from_cstr(p)`, `mem.alloc(n, 0) *int`, `mem.free(p)`; `p.read()`, `p.write(v)`, `p.offset(n)`.
 
 A window is a grid of text cells; draw with `put`, then `present`:
 

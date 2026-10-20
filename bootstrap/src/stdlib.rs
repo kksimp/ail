@@ -20,7 +20,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ),
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
-    ("mem", &["cstr", "free", "from_cstr"]),
+    ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("net", &["connect", "connect_tls", "get", "listen", "options", "post", "request", "serve"]),
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["kill", "run", "start", "wait", "which"]),
@@ -92,6 +92,24 @@ pub enum StdCall {
     Tensor(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
+    /// `p.m(...)` on a raw pointer (unsafe.ptr.3-5): the method's name and
+    /// the type the pointer points to.
+    Ptr(&'static str, PtrElem),
+}
+
+/// What a raw pointer points to (unsafe.ptr.1), as memory holds it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PtrElem {
+    /// `int`: 8 bytes.
+    Int,
+    /// `float`: 8 bytes.
+    Float,
+    /// `bool`: 1 byte.
+    Bool,
+    /// A sized number: its width.
+    Num(crate::num::Num),
+    /// Another pointer: 8 bytes.
+    Ptr,
 }
 
 /// Each type of a standard module, declared in `std/types.ail`: its name

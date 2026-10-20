@@ -3893,6 +3893,9 @@ impl<'p> Checker<'p> {
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
+        if let Some(t) = self.ptr_method(&rt, name, pos, args, expect) {
+            return t;
+        }
         let cands = self.candidates(&rt, name);
         match cands.as_slice() {
             [] => {

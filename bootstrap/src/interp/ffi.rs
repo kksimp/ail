@@ -25,6 +25,7 @@ use super::{Env, Exit, Flow, Interp, Trap, Value, trap};
 use crate::ast::{FnDecl, TypeKind, TypeRef};
 use crate::diag::Pos;
 use crate::num::Num;
+use crate::stdlib::PtrElem;
 
 /// How a parameter or result travels (ffi.map.1).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -260,17 +261,131 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
     }
 }
 
-/// Memory the program got from `std.mem` and has not freed, by address and
-/// size; and the addresses it freed since (unsafe.mem.2).
+/// Memory the program got from `std.mem` and has not freed, and what it freed, by
+/// address and size (unsafe.ptr.4-6, unsafe.mem.2). A freed range is forgotten
+/// when a new block overlaps it, since `malloc` reuses addresses.
 #[derive(Default)]
 struct Blocks {
     live: std::collections::BTreeMap<usize, usize>,
-    freed: std::collections::HashSet<usize>,
+    freed: std::collections::BTreeMap<usize, usize>,
+}
+
+impl Blocks {
+    fn add(&mut self, at: usize, len: usize) {
+        let gone: Vec<usize> = self.freed.range(..at + len.max(1)).filter(|(s, n)| **s + (**n).max(1) > at).map(|(s, _)| *s).collect();
+        for s in gone {
+            self.freed.remove(&s);
+        }
+        self.live.insert(at, len);
+    }
+
+    /// The block of `map` that holds `addr`, as (start, length).
+    fn holding(map: &std::collections::BTreeMap<usize, usize>, addr: usize) -> Option<(usize, usize)> {
+        map.range(..=addr).next_back().filter(|(s, n)| addr < **s + **n).map(|(s, n)| (*s, *n))
+    }
 }
 
 fn blocks() -> &'static Mutex<Blocks> {
     static B: OnceLock<Mutex<Blocks>> = OnceLock::new();
     B.get_or_init(|| Mutex::new(Blocks::default()))
+}
+
+fn size_of(e: PtrElem) -> usize {
+    match e {
+        PtrElem::Int | PtrElem::Float | PtrElem::Ptr => 8,
+        PtrElem::Bool => 1,
+        PtrElem::Num(k) => match k {
+            Num::I8 | Num::U8 => 1,
+            Num::I16 | Num::U16 => 2,
+            Num::I32 | Num::U32 | Num::F32 => 4,
+            Num::U64 => 8,
+        },
+    }
+}
+
+/// The layout a value is stored with: a `Value::Int` is `int` or a pointer, both 8 bytes.
+fn elem_of(v: &Value) -> PtrElem {
+    match v {
+        Value::Float(_) => PtrElem::Float,
+        Value::Bool(_) => PtrElem::Bool,
+        Value::Num(k, _) => PtrElem::Num(*k),
+        _ => PtrElem::Int,
+    }
+}
+
+/// unsafe.ptr.4-6: an access of `size` bytes at `addr` is inside no freed block,
+/// is not null, and does not run past the end of a block of the program's own. Memory
+/// that came from C is trusted, as unsafe code must be.
+fn check_access(addr: usize, size: usize) -> Result<(), (&'static str, String)> {
+    if addr < 4096 {
+        return Err(("unsafe.ptr.4", format!("access through a null pointer (address {addr})")));
+    }
+    let b = blocks().lock().unwrap();
+    // The end of a block counts as inside it, so a read one past the end traps too.
+    let near = b.live.range(..=addr).next_back().filter(|(s, n)| addr <= **s + **n).map(|(s, n)| (*s, *n));
+    if let Some((start, len)) = near {
+        if addr + size > start + len {
+            return Err((
+                "unsafe.ptr.5",
+                format!("access of {size} bytes at offset {} runs past the end of a {len}-byte block", addr - start),
+            ));
+        }
+    } else if Blocks::holding(&b.freed, addr).is_some() {
+        return Err(("unsafe.ptr.6", "access to a block that was already freed".to_string()));
+    }
+    Ok(())
+}
+
+/// Read what `e` describes at `addr`.
+///
+/// # Safety
+/// `addr` must be readable for `size_of(e)` bytes.
+#[cfg(unix)]
+unsafe fn load(addr: usize, e: PtrElem) -> Value {
+    // SAFETY: the caller promises readability; unaligned reads are allowed.
+    unsafe {
+        let p = addr as *const u8;
+        match e {
+            PtrElem::Int | PtrElem::Ptr => Value::Int(std::ptr::read_unaligned(p as *const i64)),
+            PtrElem::Float => Value::Float(std::ptr::read_unaligned(p as *const f64)),
+            PtrElem::Bool => Value::Bool(*p != 0),
+            PtrElem::Num(k) => Value::Num(
+                k,
+                match k {
+                    Num::I8 => i64::from(std::ptr::read_unaligned(p as *const i8)),
+                    Num::U8 => i64::from(*p),
+                    Num::I16 => i64::from(std::ptr::read_unaligned(p as *const i16)),
+                    Num::U16 => i64::from(std::ptr::read_unaligned(p as *const u16)),
+                    Num::I32 => i64::from(std::ptr::read_unaligned(p as *const i32)),
+                    Num::U32 | Num::F32 => i64::from(std::ptr::read_unaligned(p as *const u32)),
+                    Num::U64 => std::ptr::read_unaligned(p as *const i64),
+                },
+            ),
+        }
+    }
+}
+
+/// Write `v` as `e` at `addr`.
+///
+/// # Safety
+/// `addr` must be writable for `size_of(e)` bytes.
+#[cfg(unix)]
+unsafe fn store(addr: usize, e: PtrElem, v: &Value) {
+    // SAFETY: the caller promises writability; unaligned writes are allowed.
+    unsafe {
+        let p = addr as *mut u8;
+        match (e, v) {
+            (PtrElem::Float, Value::Float(x)) => std::ptr::write_unaligned(p as *mut f64, *x),
+            (PtrElem::Bool, Value::Bool(b)) => *p = u8::from(*b),
+            (PtrElem::Num(k), Value::Num(_, bits)) => match size_of(PtrElem::Num(k)) {
+                1 => *p = *bits as u8,
+                2 => std::ptr::write_unaligned(p as *mut u16, *bits as u16),
+                4 => std::ptr::write_unaligned(p as *mut u32, *bits as u32),
+                _ => std::ptr::write_unaligned(p as *mut i64, *bits),
+            },
+            (_, v) => std::ptr::write_unaligned(p as *mut i64, v.int()),
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -283,9 +398,56 @@ mod libc {
     }
 }
 
+fn stop<T>(rule: &'static str, pos: Pos, message: String) -> Flow<T> {
+    Err(Exit::Trap(Box::new(Trap { rule, pos, message })))
+}
+
 impl<'a, W: std::io::Write> Interp<'a, W> {
-    /// `std.mem` (unsafe.mem.1-2): C strings in memory from C's own `malloc`,
-    /// so a block can be handed to C and freed there, or the other way round.
+    /// `p.read()`, `p.write(v)`, `p.offset(n)`, `p.is_null()` (unsafe.ptr.2).
+    pub(super) fn ptr_method(
+        &mut self,
+        m: &str,
+        elem: PtrElem,
+        recv: &'a crate::ast::Expr,
+        args: &'a [crate::ast::Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        let addr = self.eval(recv, env)?.int() as usize;
+        let mut values = Vec::with_capacity(args.len());
+        for a in args {
+            values.push(self.eval(&a.value, env)?);
+        }
+        let size = size_of(elem);
+        match m {
+            "is_null" => Ok(Value::Bool(addr == 0)),
+            "offset" => Ok(Value::Int((addr as i64).wrapping_add(values[0].int().wrapping_mul(size as i64)))),
+            "read" | "write" => {
+                #[cfg(not(unix))]
+                {
+                    return stop("ffi.load.3", pos, "raw pointers are not supported on Windows yet (ffi.load.3)".into());
+                }
+                #[cfg(unix)]
+                {
+                    if let Err((rule, msg)) = check_access(addr, size) {
+                        return stop(rule, pos, msg);
+                    }
+                    // SAFETY: inside `unsafe` (checked); the address is not null, inside a live block
+                    // or outside every block of ours (memory from C, trusted).
+                    if m == "read" {
+                        Ok(unsafe { load(addr, elem) })
+                    } else {
+                        unsafe { store(addr, elem, &values[0]) };
+                        Ok(Value::Unit)
+                    }
+                }
+            }
+            _ => unreachable!("check::unsafety::PTR_METHODS lists `{m}`"),
+        }
+    }
+
+    /// `std.mem` (unsafe.mem.1-3): memory from C's own `malloc`, so a block can
+    /// be handed to C and freed there, or the other way round.
     pub(super) fn mem_call(&mut self, f: &str, values: &[Value], pos: Pos) -> Flow<Value> {
         #[cfg(not(unix))]
         {
@@ -295,22 +457,43 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
         #[cfg(unix)]
         {
             let addr = |i: usize| values[i].int() as usize;
+            let new_block = |bytes: usize| -> Option<usize> {
+                // SAFETY: `malloc` has no preconditions; a zero size is rounded up to one.
+                let p = unsafe { libc::malloc(bytes.max(1)) } as usize;
+                (p != 0).then(|| {
+                    blocks().lock().unwrap().add(p, bytes);
+                    p
+                })
+            };
             match f {
+                "null" => Ok(Value::Int(0)),
+                "cast" => Ok(Value::Int(addr(0) as i64)),
+                "alloc" => {
+                    let (n, init) = (values[0].int(), &values[1]);
+                    let e = elem_of(init);
+                    let Some(bytes) = usize::try_from(n).ok().and_then(|n| n.checked_mul(size_of(e))) else {
+                        return stop("unsafe.mem.3", pos, format!("`alloc` of {n} elements of {} bytes is out of range", size_of(e)));
+                    };
+                    let Some(p) = new_block(bytes) else {
+                        return stop("unsafe.mem.1", pos, "out of memory".into());
+                    };
+                    for i in 0..bytes / size_of(e).max(1) {
+                        // SAFETY: the block holds `bytes` bytes, written here element by element.
+                        unsafe { store(p + i * size_of(e), e, init) };
+                    }
+                    Ok(Value::Int(p as i64))
+                }
                 "cstr" => {
                     let Value::Str(s) = &values[0] else { unreachable!("checked: a str") };
                     let bytes = s.as_bytes();
-                    // SAFETY: `n + 1` bytes are allocated and written before use.
-                    let p = unsafe { libc::malloc(bytes.len() + 1) } as *mut u8;
-                    if p.is_null() {
+                    let Some(p) = new_block(bytes.len() + 1) else {
                         return stop("unsafe.mem.1", pos, "out of memory".into());
-                    }
+                    };
+                    // SAFETY: `len + 1` bytes were allocated for this.
                     unsafe {
-                        std::ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len());
-                        *p.add(bytes.len()) = 0;
+                        std::ptr::copy_nonoverlapping(bytes.as_ptr(), p as *mut u8, bytes.len());
+                        *(p as *mut u8).add(bytes.len()) = 0;
                     }
-                    let mut b = blocks().lock().unwrap();
-                    b.freed.remove(&(p as usize));
-                    b.live.insert(p as usize, bytes.len() + 1);
                     Ok(Value::Int(p as i64))
                 }
                 "from_cstr" => {
@@ -320,8 +503,7 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                     }
                     let b = blocks().lock().unwrap();
                     // A block of ours is scanned only up to its end; a pointer from C trusts its NUL.
-                    let known = b.live.range(..=a).next_back().filter(|(s, n)| a < **s + **n);
-                    let len = match known {
+                    let len = match Blocks::holding(&b.live, a) {
                         Some((s, n)) => {
                             // SAFETY: `a..s+n` lies inside a live block of ours.
                             let bytes = unsafe { std::slice::from_raw_parts(a as *const u8, s + n - a) };
@@ -331,6 +513,9 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                                     return stop("unsafe.mem.1", pos, "`from_cstr` found no NUL before the end of the block".into());
                                 }
                             }
+                        }
+                        None if Blocks::holding(&b.freed, a).is_some() => {
+                            return stop("unsafe.ptr.6", pos, "`from_cstr` of a block that was already freed".into());
                         }
                         // SAFETY: the program claims `a` is a C string (it is inside `unsafe`).
                         None => unsafe { libc::strlen(a as *const std::ffi::c_char) },
@@ -342,9 +527,9 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                 "free" => {
                     let a = addr(0);
                     let mut b = blocks().lock().unwrap();
-                    if b.live.remove(&a).is_some() {
-                        b.freed.insert(a);
-                    } else if a == 0 || b.freed.contains(&a) {
+                    if let Some(len) = b.live.remove(&a) {
+                        b.freed.insert(a, len);
+                    } else if a == 0 || b.freed.contains_key(&a) {
                         let why = if a == 0 { "a null pointer" } else { "a pointer that was already freed" };
                         return stop("unsafe.mem.2", pos, format!("`free` of {why}"));
                     }
@@ -356,8 +541,4 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
             }
         }
     }
-}
-
-fn stop<T>(rule: &'static str, pos: Pos, message: String) -> Flow<T> {
-    Err(Exit::Trap(Box::new(Trap { rule, pos, message })))
 }
