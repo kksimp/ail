@@ -1,0 +1,35 @@
+# fuzz-input: date
+# fuzz-needs: std.time.date
+# std.time.date on hostile text, zones and instants: no crash, and what parses
+# prints back to an equal instant.
+use std.time.date
+
+fn main()
+    text := {{TEXT}}
+    other := {{TEXT2}}
+    n := {{INT}}
+    p := date.parse_iso(text) else err
+        print("rejected {err.why.len() > 0}")
+        q := date.parse_in(text, other) else e2
+            print("rejected zone {e2.why.len() > 0}")
+            return
+        print(q.iso().len() > 0)
+        return
+    again := date.parse_iso(p.iso()) else e3
+        print("FAIL iso does not parse again: {e3.why}")
+        return
+    if again.unix_ms() != p.unix_ms()
+        print("FAIL iso changed the instant")
+    z := p.in_zone("UTC") else e4
+        print("FAIL in_zone UTC: {e4.why}")
+        return
+    if z.unix_ms() != p.unix_ms()
+        print("FAIL in_zone changed the instant")
+    print(p.format(other).len() >= 0)
+    at := date.at(n, "UTC") else e5
+        print("at rejected")
+        return
+    print(at.iso().len() > 0)
+    day := date.parse_date(text) else e6
+        return
+    print(day.iso().len() > 0)
