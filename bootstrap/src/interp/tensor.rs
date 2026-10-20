@@ -150,6 +150,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
             "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,
             "matmul" => wrap(t.matmul(&tensor_arg()))?,
+            "conv2d" => wrap(t.conv2d(&tensor_arg()))?,
             "item" => match t.item().map_err(|e| trapped(e, pos))? {
                 Scalar::F(x) => Value::Float(x),
                 Scalar::I(n) => Value::Int(n),

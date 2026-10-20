@@ -111,6 +111,16 @@ impl<'p> Checker<'p> {
             );
             return Some(Ty::Err);
         }
+        if m == "conv2d" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.16",
+                pos,
+                "`conv2d` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).conv2d(k)`",
+            );
+            return Some(Ty::Err);
+        }
         if matches!(m, "relu" | "sigmoid" | "tanh") && elem == Ty::Int {
             self.args_only(args);
             let msg = format!("`{m}` is on `float` tensors, and this one holds `int`");
@@ -128,7 +138,7 @@ impl<'p> Checker<'p> {
             "sum" | "max" | "mean" => (vec![Ty::Int], t),
             "transpose" => (vec![], t),
             "dot" => (vec![t], elem),
-            "add" | "mul" | "matmul" => (vec![t.clone()], t),
+            "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
             "relu" | "sigmoid" | "tanh" => (vec![], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),
