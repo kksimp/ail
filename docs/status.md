@@ -43,6 +43,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native key functions and function values (ADRs 0571-0573): `sorted`/`sort` with `by: |x| e` compile inline with a stable runtime merge sort; function values are function addresses called with `icall`.
 - Native contracts (ADR 0612): `requires` is checked in the caller at the call, `ensures` and `old(e)` in the function at each return, with the interpreter's message; conditions call unchecked `.nc` copies (contract.run.2). Struct `invariant` lines are checked at construction and after `mut self` methods. Contracts across modules and function values of contracted functions are not yet native.
 - Native `unsafe` blocks, `@test` and `@deprecated` (ADR 0613): a block lowers as a plain block, `@test` functions are left out of the build.
+- Native `std.path`, `std.hash` and `std.random` (ADR 0614): runtime functions in AIL (`compiler/rt/native/path.ail`, `hash.ail`, `random.ail`) called as `path.dir(p)`; `hash64`, SHA-2 and HMAC match the interpreter and Python's hashlib.
 
 ### Language (2026-10-20 batch)
 

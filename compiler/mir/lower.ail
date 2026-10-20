@@ -1557,6 +1557,9 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
+    sm := std_module(recv)
+    if sm != ""
+        return lower_std_call(sm, name, npos, args)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",

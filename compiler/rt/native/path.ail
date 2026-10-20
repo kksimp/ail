@@ -1,0 +1,79 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.path` (std.path.1-4, ADR 0614): text only, `/` the separator. The
+## Windows rules (a backslash, a drive's root) wait for the Windows target.
+## A call `path.NAME(...)` is a call of `path_NAME` here, and only the
+## functions a program calls are compiled in.
+
+## The byte index of the last `/` in the `n` bytes at `p`, or -1.
+fn path_last_sep(p int, n int) int
+    mut i := n - 1
+    while i >= 0
+        if load8(p + i) == 47
+            return i
+        i -= 1
+    -1
+
+## The string of the `n` bytes at `src`.
+fn path_piece(src int, n int) str
+    mut chars := 0
+    mut i := 0
+    while i < n
+        if load8(src + i).bit_and(192) != 128
+            chars += 1
+        i += 1
+    s := str_new(n, chars)
+    copy_bytes(s + 16, src, n)
+    str_at(s)
+
+## std.path.2: the text before the last separator.
+fn path_dir(p str) str
+    a := str_addr(p)
+    n := load64(a)
+    i := path_last_sep(a + 16, n)
+    if i < 0
+        return "."
+    if i == 0
+        return path_piece(a + 16, 1)
+    path_piece(a + 16, i)
+
+## std.path.2: the text after the last separator.
+fn path_base(p str) str
+    a := str_addr(p)
+    n := load64(a)
+    i := path_last_sep(a + 16, n)
+    path_piece(a + 16 + i + 1, n - i - 1)
+
+## std.path.3: the text after the last `.` of the base name; none when the
+## only `.` is the first character.
+fn path_ext(p str) str
+    a := str_addr(p)
+    n := load64(a)
+    start := path_last_sep(a + 16, n) + 1
+    mut i := n - 1
+    while i > start
+        if load8(a + 16 + i) == 46
+            return path_piece(a + 16 + i + 1, n - i - 1)
+        i -= 1
+    ""
+
+## std.path.4: `b` under `a` with one separator between.
+fn path_join(a str, b str) str
+    x := str_addr(a)
+    y := str_addr(b)
+    nx := load64(x)
+    ny := load64(y)
+    if nx == 0 or (ny > 0 and load8(y + 16) == 47)
+        return b
+    if load8(x + 16 + nx - 1) == 47
+        return sb_pair(a, "", b)
+    sb_pair(a, "/", b)
+
+## `a`, `mid`, `b` as one string.
+fn sb_pair(a str, mid str, b str) str
+    sb_reset()
+    sb_text(a)
+    sb_text(mid)
+    sb_text(b)
+    sb_str()

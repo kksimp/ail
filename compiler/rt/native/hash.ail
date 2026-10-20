@@ -1,0 +1,500 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.hash` (std.hash.3-4, ADR 0614) over the UTF-8 bytes of a string. A
+## call `hash.NAME(...)` is a call of `hash_NAME` here. The runtime's integer
+## arithmetic wraps, which the 64-bit hashes rely on.
+
+M32 := 4294967295
+
+## std.hash.3: CRC-32 (RFC 1952, polynomial 0xEDB88320), bit by bit.
+fn hash_crc32(s str) int
+    a := str_addr(s)
+    n := load64(a)
+    mut crc := M32
+    mut i := 0
+    while i < n
+        crc = crc.bit_xor(load8(a + 16 + i))
+        mut k := 0
+        while k < 8
+            if crc.bit_and(1) == 1
+                crc = crc.shr(1).bit_xor(3988292384)
+            else
+                crc = crc.shr(1)
+            k += 1
+        i += 1
+    crc.bit_xor(M32)
+
+## The 128-bit product of `a` and `b` as unsigned numbers, its two halves
+## folded together by xor.
+fn hash_mix(a int, b int) int
+    a0 := a.bit_and(M32)
+    a1 := a.shr(32).bit_and(M32)
+    b0 := b.bit_and(M32)
+    b1 := b.shr(32).bit_and(M32)
+    p00 := a0 * b0
+    p01 := a0 * b1
+    p10 := a1 * b0
+    p11 := a1 * b1
+    mid := p00.shr(32).bit_and(M32) + p01.bit_and(M32) + p10.bit_and(M32)
+    lo := p00.bit_and(M32).bit_or(mid.shl(32))
+    hi := p11 + p01.shr(32).bit_and(M32) + p10.shr(32).bit_and(M32) + mid.shr(32).bit_and(M32)
+    lo.bit_xor(hi)
+
+## std.hash.4: the wyhash-style 64-bit hash, bit for bit as the interpreter's.
+fn hash_hash64(s str) int
+    a := str_addr(s)
+    n := load64(a)
+    p := a + 16
+    p0 := -6884282663029611473
+    p1 := -1800455987208640293
+    p2 := -8161530843051276573
+    mut h := p0.bit_xor(n * p1)
+    mut off := 0
+    while off + 16 <= n
+        h = hash_mix(load64(p + off).bit_xor(p1), load64(p + off + 8).bit_xor(h))
+        off += 16
+    mut rest := n - off
+    if rest >= 8
+        h = hash_mix(load64(p + off).bit_xor(p2), h.bit_xor(p1))
+        off += 8
+        rest -= 8
+    mut tail := 0
+    mut i := 0
+    while i < rest
+        tail = tail.bit_or(load8(p + off + i).shl(8 * i))
+        i += 1
+    (hash_mix(tail.bit_xor(p2).bit_xor(rest), h.bit_xor(p0)) * p1).bit_xor(h)
+
+# ---- SHA-2 (std.hash.2, FIPS 180-4) and HMAC (RFC 2104) ----
+
+## Lower-case hex of the `n` bytes at `p`.
+fn hash_hex(p int, n int) str
+    sb_reset()
+    mut i := 0
+    while i < n
+        b := load8(p + i)
+        hi := b.shr(4)
+        lo := b.bit_and(15)
+        sb_byte(if hi < 10 then 48 + hi else 87 + hi)
+        sb_byte(if lo < 10 then 48 + lo else 87 + lo)
+        i += 1
+    sb_str()
+
+## `n` zero bytes.
+fn hash_zeros(n int) int
+    p := alloc(n)
+    mut i := 0
+    while i < n
+        store8(p + i, 0)
+        i += 1
+    p
+
+fn hash_rotr32(x int, n int) int
+    x.shr(n).bit_or(x.shl(32 - n)).bit_and(M32)
+
+## The 64-bit logical shift right by `n` from 1 to 63.
+fn hash_lsr(x int, n int) int
+    x.shr(n).bit_and(1.shl(64 - n) - 1)
+
+fn hash_rotr64(x int, n int) int
+    hash_lsr(x, n).bit_or(x.shl(64 - n))
+
+## The big-endian word of `w` bytes at `p`.
+fn hash_be(p int, w int) int
+    mut v := 0
+    mut i := 0
+    while i < w
+        v = v.shl(8).bit_or(load8(p + i))
+        i += 1
+    v
+
+## The `w`-byte big-endian bytes of `v` at `p`.
+fn hash_put_be(p int, v int, w int)
+    mut i := 0
+    while i < w
+        store8(p + i, v.shr(8 * (w - 1 - i)).bit_and(255))
+        i += 1
+
+## One 64-byte SHA-256 block at `blk` into the eight words at `h`.
+fn hash_sha256_block(h int, blk int, w int, k List[int])
+    mut t := 0
+    while t < 16
+        store64(w + 8 * t, hash_be(blk + 4 * t, 4))
+        t += 1
+    while t < 64
+        x := load64(w + 8 * (t - 15))
+        y := load64(w + 8 * (t - 2))
+        s0 := hash_rotr32(x, 7).bit_xor(hash_rotr32(x, 18)).bit_xor(x.shr(3))
+        s1 := hash_rotr32(y, 17).bit_xor(hash_rotr32(y, 19)).bit_xor(y.shr(10))
+        store64(
+            w + 8 * t,
+            (load64(w + 8 * (t - 16)) + s0 + load64(w + 8 * (t - 7)) + s1).bit_and(M32),
+        )
+        t += 1
+    mut a := load64(h)
+    mut b := load64(h + 8)
+    mut c := load64(h + 16)
+    mut d := load64(h + 24)
+    mut e := load64(h + 32)
+    mut f := load64(h + 40)
+    mut g := load64(h + 48)
+    mut hh := load64(h + 56)
+    t = 0
+    while t < 64
+        s1 := hash_rotr32(e, 6).bit_xor(hash_rotr32(e, 11)).bit_xor(hash_rotr32(e, 25))
+        ch := e.bit_and(f).bit_xor(e.bit_not().bit_and(M32).bit_and(g))
+        t1 := (hh + s1 + ch + k[t] + load64(w + 8 * t)).bit_and(M32)
+        s0 := hash_rotr32(a, 2).bit_xor(hash_rotr32(a, 13)).bit_xor(hash_rotr32(a, 22))
+        maj := a.bit_and(b).bit_xor(a.bit_and(c)).bit_xor(b.bit_and(c))
+        t2 := (s0 + maj).bit_and(M32)
+        hh = g
+        g = f
+        f = e
+        e = (d + t1).bit_and(M32)
+        d = c
+        c = b
+        b = a
+        a = (t1 + t2).bit_and(M32)
+        t += 1
+    store64(h, (load64(h) + a).bit_and(M32))
+    store64(h + 8, (load64(h + 8) + b).bit_and(M32))
+    store64(h + 16, (load64(h + 16) + c).bit_and(M32))
+    store64(h + 24, (load64(h + 24) + d).bit_and(M32))
+    store64(h + 32, (load64(h + 32) + e).bit_and(M32))
+    store64(h + 40, (load64(h + 40) + f).bit_and(M32))
+    store64(h + 48, (load64(h + 48) + g).bit_and(M32))
+    store64(h + 56, (load64(h + 56) + hh).bit_and(M32))
+
+## SHA-256 of the `n` bytes at `src`: the 32-byte digest goes to `out`.
+fn hash_sha256_raw(src int, n int, out int)
+    k := [
+        1116352408,
+        1899447441,
+        3049323471,
+        3921009573,
+        961987163,
+        1508970993,
+        2453635748,
+        2870763221,
+        3624381080,
+        310598401,
+        607225278,
+        1426881987,
+        1925078388,
+        2162078206,
+        2614888103,
+        3248222580,
+        3835390401,
+        4022224774,
+        264347078,
+        604807628,
+        770255983,
+        1249150122,
+        1555081692,
+        1996064986,
+        2554220882,
+        2821834349,
+        2952996808,
+        3210313671,
+        3336571891,
+        3584528711,
+        113926993,
+        338241895,
+        666307205,
+        773529912,
+        1294757372,
+        1396182291,
+        1695183700,
+        1986661051,
+        2177026350,
+        2456956037,
+        2730485921,
+        2820302411,
+        3259730800,
+        3345764771,
+        3516065817,
+        3600352804,
+        4094571909,
+        275423344,
+        430227734,
+        506948616,
+        659060556,
+        883997877,
+        958139571,
+        1322822218,
+        1537002063,
+        1747873779,
+        1955562222,
+        2024104815,
+        2227730452,
+        2361852424,
+        2428436474,
+        2756734187,
+        3204031479,
+        3329325298,
+    ]
+    iv := [
+        1779033703,
+        3144134277,
+        1013904242,
+        2773480762,
+        1359893119,
+        2600822924,
+        528734635,
+        1541459225,
+    ]
+    h := alloc(64)
+    mut i := 0
+    while i < 8
+        store64(h + 8 * i, iv[i])
+        i += 1
+    w := alloc(512)
+    full := n - n % 64
+    mut off := 0
+    while off < full
+        hash_sha256_block(h, src + off, w, k)
+        off += 64
+    rest := n - full
+    blocks := if rest < 56 then 1 else 2
+    tail := hash_zeros(128)
+    copy_bytes(tail, src + full, rest)
+    store8(tail + rest, 128)
+    hash_put_be(tail + 64 * blocks - 8, n * 8, 8)
+    hash_sha256_block(h, tail, w, k)
+    if blocks == 2
+        hash_sha256_block(h, tail + 64, w, k)
+    i = 0
+    while i < 8
+        hash_put_be(out + 4 * i, load64(h + 8 * i), 4)
+        i += 1
+
+## One 128-byte SHA-512 block at `blk` into the eight words at `h`.
+fn hash_sha512_block(h int, blk int, w int, k List[int])
+    mut t := 0
+    while t < 16
+        store64(w + 8 * t, hash_be(blk + 8 * t, 8))
+        t += 1
+    while t < 80
+        x := load64(w + 8 * (t - 15))
+        y := load64(w + 8 * (t - 2))
+        s0 := hash_rotr64(x, 1).bit_xor(hash_rotr64(x, 8)).bit_xor(hash_lsr(x, 7))
+        s1 := hash_rotr64(y, 19).bit_xor(hash_rotr64(y, 61)).bit_xor(hash_lsr(y, 6))
+        store64(w + 8 * t, load64(w + 8 * (t - 16)) + s0 + load64(w + 8 * (t - 7)) + s1)
+        t += 1
+    mut a := load64(h)
+    mut b := load64(h + 8)
+    mut c := load64(h + 16)
+    mut d := load64(h + 24)
+    mut e := load64(h + 32)
+    mut f := load64(h + 40)
+    mut g := load64(h + 48)
+    mut hh := load64(h + 56)
+    t = 0
+    while t < 80
+        s1 := hash_rotr64(e, 14).bit_xor(hash_rotr64(e, 18)).bit_xor(hash_rotr64(e, 41))
+        ch := e.bit_and(f).bit_xor(e.bit_not().bit_and(g))
+        t1 := hh + s1 + ch + k[t] + load64(w + 8 * t)
+        s0 := hash_rotr64(a, 28).bit_xor(hash_rotr64(a, 34)).bit_xor(hash_rotr64(a, 39))
+        maj := a.bit_and(b).bit_xor(a.bit_and(c)).bit_xor(b.bit_and(c))
+        t2 := s0 + maj
+        hh = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+        t += 1
+    store64(h, load64(h) + a)
+    store64(h + 8, load64(h + 8) + b)
+    store64(h + 16, load64(h + 16) + c)
+    store64(h + 24, load64(h + 24) + d)
+    store64(h + 32, load64(h + 32) + e)
+    store64(h + 40, load64(h + 40) + f)
+    store64(h + 48, load64(h + 48) + g)
+    store64(h + 56, load64(h + 56) + hh)
+
+## SHA-512 (or SHA-384, `wide` false) of the `n` bytes at `src`: the digest
+## goes to `out`, 64 bytes (48 for SHA-384).
+fn hash_sha512_raw(src int, n int, out int, wide bool)
+    k := [
+        4794697086780616226,
+        8158064640168781261,
+        -5349999486874862801,
+        -1606136188198331460,
+        4131703408338449720,
+        6480981068601479193,
+        -7908458776815382629,
+        -6116909921290321640,
+        -2880145864133508542,
+        1334009975649890238,
+        2608012711638119052,
+        6128411473006802146,
+        8268148722764581231,
+        -9160688886553864527,
+        -7215885187991268811,
+        -4495734319001033068,
+        -1973867731355612462,
+        -1171420211273849373,
+        1135362057144423861,
+        2597628984639134821,
+        3308224258029322869,
+        5365058923640841347,
+        6679025012923562964,
+        8573033837759648693,
+        -7476448914759557205,
+        -6327057829258317296,
+        -5763719355590565569,
+        -4658551843659510044,
+        -4116276920077217854,
+        -3051310485924567259,
+        489312712824947311,
+        1452737877330783856,
+        2861767655752347644,
+        3322285676063803686,
+        5560940570517711597,
+        5996557281743188959,
+        7280758554555802590,
+        8532644243296465576,
+        -9096487096722542874,
+        -7894198246740708037,
+        -6719396339535248540,
+        -6333637450476146687,
+        -4446306890439682159,
+        -4076793802049405392,
+        -3345356375505022440,
+        -2983346525034927856,
+        -860691631967231958,
+        1182934255886127544,
+        1847814050463011016,
+        2177327727835720531,
+        2830643537854262169,
+        3796741975233480872,
+        4115178125766777443,
+        5681478168544905931,
+        6601373596472566643,
+        7507060721942968483,
+        8399075790359081724,
+        8693463985226723168,
+        -8878714635349349518,
+        -8302665154208450068,
+        -8016688836872298968,
+        -6606660893046293015,
+        -4685533653050689259,
+        -4147400797238176981,
+        -3880063495543823972,
+        -3348786107499101689,
+        -1523767162380948706,
+        -757361751448694408,
+        500013540394364858,
+        748580250866718886,
+        1242879168328830382,
+        1977374033974150939,
+        2944078676154940804,
+        3659926193048069267,
+        4368137639120453308,
+        4836135668995329356,
+        5532061633213252278,
+        6448918945643986474,
+        6902733635092675308,
+        7801388544844847127,
+    ]
+    h := alloc(64)
+    mut i := 0
+    if wide
+        iv := [
+            7640891576956012808,
+            -4942790177534073029,
+            4354685564936845355,
+            -6534734903238641935,
+            5840696475078001361,
+            -7276294671716946913,
+            2270897969802886507,
+            6620516959819538809,
+        ]
+        while i < 8
+            store64(h + 8 * i, iv[i])
+            i += 1
+    else
+        iv := [
+            -3766243637369397544,
+            7105036623409894663,
+            -7973340178411365097,
+            1526699215303891257,
+            7436329637833083697,
+            -8163818279084223215,
+            -2662702644619276377,
+            5167115440072839076,
+        ]
+        while i < 8
+            store64(h + 8 * i, iv[i])
+            i += 1
+    w := alloc(640)
+    full := n - n % 128
+    mut off := 0
+    while off < full
+        hash_sha512_block(h, src + off, w, k)
+        off += 128
+    rest := n - full
+    blocks := if rest < 112 then 1 else 2
+    tail := hash_zeros(256)
+    copy_bytes(tail, src + full, rest)
+    store8(tail + rest, 128)
+    hash_put_be(tail + 128 * blocks - 8, n * 8, 8)
+    hash_sha512_block(h, tail, w, k)
+    if blocks == 2
+        hash_sha512_block(h, tail + 128, w, k)
+    i = 0
+    while i < 8
+        hash_put_be(out + 8 * i, load64(h + 8 * i), 8)
+        i += 1
+
+## std.hash.2: `sha256`, `sha384` and `sha512` as lower-case hex.
+fn hash_sha256(s str) str
+    a := str_addr(s)
+    out := alloc(32)
+    hash_sha256_raw(a + 16, load64(a), out)
+    hash_hex(out, 32)
+
+fn hash_sha384(s str) str
+    a := str_addr(s)
+    out := alloc(64)
+    hash_sha512_raw(a + 16, load64(a), out, false)
+    hash_hex(out, 48)
+
+fn hash_sha512(s str) str
+    a := str_addr(s)
+    out := alloc(64)
+    hash_sha512_raw(a + 16, load64(a), out, true)
+    hash_hex(out, 64)
+
+## std.hash.2: HMAC-SHA-256 (RFC 2104) as lower-case hex.
+fn hash_hmac_sha256(key str, s str) str
+    kp := str_addr(key)
+    kn := load64(kp)
+    block := hash_zeros(64)
+    if kn > 64
+        hash_sha256_raw(kp + 16, kn, block)
+    else
+        copy_bytes(block, kp + 16, kn)
+    sp := str_addr(s)
+    n := load64(sp)
+    inner := alloc(64 + n)
+    mut i := 0
+    while i < 64
+        store8(inner + i, load8(block + i).bit_xor(54))
+        i += 1
+    copy_bytes(inner + 64, sp + 16, n)
+    digest := alloc(32)
+    hash_sha256_raw(inner, 64 + n, digest)
+    outer := alloc(96)
+    i = 0
+    while i < 64
+        store8(outer + i, load8(block + i).bit_xor(92))
+        i += 1
+    copy_bytes(outer + 64, digest, 32)
+    mac := alloc(32)
+    hash_sha256_raw(outer, 96, mac)
+    hash_hex(mac, 32)
