@@ -1,0 +1,17 @@
+# test.run.1 with tasks: each test's tasks end with the test (conc.task.4).
+
+fn double(x int) int
+    x * 2
+
+fn stuck(ch Channel[int])
+    v := ch.recv() else return
+    print(v)
+
+@test fn tasks_in_a_test() !
+    t := spawn double(21)
+    assert_eq(t.wait()?, 42)
+
+@test fn deadlock_fails_the_test()
+    ch := Channel[int](1)
+    g := TaskGroup()
+    g.add(spawn stuck(ch))

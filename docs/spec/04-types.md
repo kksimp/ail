@@ -396,6 +396,26 @@ arguments. *(ADR 0135)*
 "ab".pad_right(4, ' ')      # "ab  "
 ```
 
+**type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
+`a` up to but excluding `b` (indexes count characters, as `len()` does:
+`type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
+clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
+`i` is out of range or negative. *(ADR 0215)*
+
+**type.str.14** — `s.find(sub)` returns the character index of the first
+occurrence of `sub` as an `int?`, or `none`. `s.replace(from, to)` returns a
+copy with every non-overlapping occurrence of `from` replaced by `to`, left
+to right; it traps if `from` is empty. `s.to_lower()` and `s.to_upper()`
+return the Unicode lower- and upper-case forms. `sub`, `from` and `to` are
+`str`s. *(ADR 0215)*
+
+```ail fragment
+s := "Héllo"
+a := s.slice(1, 3)       # "él"
+i := s.find("llo")       # 2
+t := s.replace("l", "L") # "HéLLo"
+```
+
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
 
@@ -531,6 +551,28 @@ xs.join(", ")           # a, b
 [1, 2, 3].join("")      # 123
 [["a"], ["b"]].join("+")  # ["a"]+["b"]
 xs.index_of("b")        # 1
+```
+
+**type.coll.14** — A list has these further methods. *(ADR 0214)*
+- `xs.insert(i, x)` puts `x` at index `i`, moving later elements up. `i` MAY
+  equal `xs.len()` (append). Receiver `mut self`.
+- `xs.remove_at(i)` removes and returns the element at `i` as a `T`.
+  Receiver `mut self`.
+- `xs.extend(ys)` appends the elements of the `List[T]` `ys`. Receiver
+  `mut self`.
+- `xs.clear()` removes every element and `xs.reverse()` reverses in place.
+  Receivers are `mut self`.
+- `xs.first()` returns the first element as a `T?`, or `none` if empty.
+
+`insert` traps unless `0 <= i <= xs.len()` and `remove_at` traps unless
+`0 <= i < xs.len()`, both under rule `type.coll.4`. There is no `xs[a..b]`
+method: slicing is `type.coll.4`.
+
+```ail fragment
+mut xs := [1, 2, 3]
+xs.insert(1, 9)       # [1, 9, 2, 3]
+n := xs.remove_at(0)  # 1
+xs.extend([4, 5])     # [9, 2, 3, 4, 5]
 ```
 
 **type.coll.10** — Open-ended slices `xs[a..]`, `xs[..b]` and `xs[..=b]` follow

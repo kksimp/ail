@@ -11,13 +11,13 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` or
-/// `spawn` yet, so nothing gives those two.
+/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` yet, so
+/// nothing gives it; `spawn` gives `spawn`.
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -51,6 +51,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "proc" => (&["run"], &["proc", "io"]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.ui.9: opening a window and every `ui.Window` method.
+        "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,
     };
     names.contains(&name).then_some(effects)
@@ -201,6 +203,53 @@ pub fn check_pure(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
                 "remove `@pure`, or move the effect out of `{name}` and pass its result in as an argument"
             )),
         );
+    }
+    diags
+}
+
+/// contract.decl.3: a contract's condition has no effect but `fail`. It
+/// must not print, reach a capability or change a `mut` argument, so that
+/// turning checks off (contract.run.3) can't change what a program does.
+pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.fns.iter().all(|f| f.contracts.is_empty()) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut w = Walker::new(prog, resolved);
+    let mut diags = Vec::new();
+    for f in &prog.fns {
+        for c in &f.contracts {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.cond);
+            let mut bad: BTreeMap<&str, String> = BTreeMap::new();
+            for (e, source) in &w.direct {
+                bad.insert(e, source.clone());
+            }
+            for &j in &w.calls {
+                for &e in fx.of(j) {
+                    bad.entry(e).or_insert_with(|| fx.chain(j, e));
+                }
+            }
+            bad.remove("fail");
+            if bad.is_empty() {
+                continue;
+            }
+            let word = if c.ensures { "ensures" } else { "requires" };
+            let what: Vec<String> = bad.iter().map(|(e, chain)| format!("`{e}` via {chain}")).collect();
+            diags.push(
+                Diagnostic::new(
+                    "contract.decl.3",
+                    c.pos,
+                    format!(
+                        "the `{word}` condition of `{}` must be pure, but it has {}",
+                        f.full_name(),
+                        what.join(", ")
+                    ),
+                )
+                .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
+            );
+        }
     }
     diags
 }
@@ -473,6 +522,18 @@ impl<'p, 'r> Walker<'p, 'r> {
                 }
             }
             Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&c.iter);
+                    if let Some(cond) = &c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(pairs, _) => {
                 for (k, v) in pairs {
                     self.expr(k);
@@ -514,6 +575,12 @@ impl<'p, 'r> Walker<'p, 'r> {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
                     }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && let Some(effects) = std_effects("ui", "Window")
+                {
+                    for &e in effects {
+                        self.add(e, format!("ui.Window.{m}"));
+                    }
                 } else if let Expr::Name(m, _) = &**recv
                     && self.prog.enums.iter().any(|d| d.name == *m)
                 {
@@ -530,6 +597,11 @@ impl<'p, 'r> Walker<'p, 'r> {
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
+            }
+            // eff.infer.1: `spawn` starts a task (conc.task.1).
+            Expr::Unary { op: crate::ast::UnOp::Spawn, operand, .. } => {
+                self.add("spawn", "spawn");
+                self.expr(operand);
             }
             Expr::Unary { operand, .. } => self.expr(operand),
             Expr::Binary { op, lhs, rhs, .. } => {
@@ -682,7 +754,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

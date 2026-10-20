@@ -3,11 +3,9 @@ enum Grade
     B
     C
     F
-
 struct Student
     name str
     score int
-
 fn Student.grade(self) Grade
     if self.score >= 90
         A
@@ -17,14 +15,12 @@ fn Student.grade(self) Grade
         C
     else
         F
-
 fn Grade.label(self) str
     match self
         A => "excellent"
         B => "good"
         C => "passing"
         F => "failing"
-
 fn main()
     students := [
         Student(name: "Ada", score: 95),

@@ -3,12 +3,13 @@
 ## The core is headless: an `Editor` value, `Command`s that change it, and a
 ## pure `render` from the editor to a `Screen` of colored text runs. Front
 ## ends feed commands in and draw the screen: the `@test`s below, `--print`,
-## and the window front end on `std.ui` (window.ail.pending until it lands).
+## and the window front end on `std.ui`.
 
 use std.fs
 use std.env
 use std.proc
 use std.time
+use std.ui
 
 # Colors, 0xRRGGBB.
 BG := 0x1e1e1e
@@ -28,6 +29,7 @@ OP_FG := 0xd4d4d4
 ERROR_BG := 0x5a1d1d
 WARN_BG := 0x4d4a1d
 SELECT_BG := 0x264f78
+BRACKET_BG := 0x3b514d
 
 UNDO_LIMIT := 200
 INDENT := 4
@@ -66,6 +68,36 @@ struct Snapshot
     line int
     col int
 
+## What typing goes to while a prompt is open on the status line.
+enum Prompt
+    NoPrompt
+    FindText
+    ReplaceText
+    LineNumber
+
+## A declaration from `ail api --symbols` (docs/design/semantic-api.md).
+struct Symbol
+    id str
+    name str
+    kind str
+    line int
+    col int
+    signature str
+    doc str
+
+## A use of a declaration: `{id, line, col}` from `ail api --symbols`.
+struct SymbolRef
+    id str
+    line int
+    col int
+
+## One entry of the completion popup; sorted by text.
+struct Completion
+    text str
+    detail str
+
+impl Ord for Completion
+
 enum Pane
     Diags
     Text
@@ -94,12 +126,19 @@ struct Editor
     pane_text List[str]
     outline List[OutlineItem]
     outline_sel int
-    searching bool
+    prompt Prompt
+    input str
     selecting bool
     anchor_line int
     anchor_col int
     clip str
     query str
+    symbols List[Symbol]
+    refs List[SymbolRef]
+    indexed bool
+    completing bool
+    completions List[Completion]
+    comp_sel int
 
 fn Editor.new(path str, text str, cols int, rows int) Editor
     mut lines := text.split("\n")
@@ -128,8 +167,15 @@ fn Editor.new(path str, text str, cols int, rows int) Editor
         pane_text: [],
         outline: [],
         outline_sel: 0,
-        searching: false,
+        prompt: Prompt.NoPrompt,
+        input: "",
         query: "",
+        symbols: [],
+        refs: [],
+        indexed: false,
+        completing: false,
+        completions: [],
+        comp_sel: 0,
         selecting: false,
         anchor_line: 0,
         anchor_col: 0,
@@ -149,6 +195,7 @@ fn Editor.snapshot(mut self)
         undo = undo[1..]
     redo = []
     dirty = true
+    indexed = false
     diags = []
 
 fn Editor.set_col(mut self, c int)
@@ -158,10 +205,8 @@ fn Editor.set_col(mut self, c int)
 ## `xs[..from]`, then `mid`, then `xs[to..]`.
 fn splice(xs List[str], from int, to int, mid List[str]) List[str]
     mut out := xs[..from]
-    for s in mid
-        out.push(s)
-    for s in xs[to..]
-        out.push(s)
+    out.extend(mid)
+    out.extend(xs[to..])
     out
 
 ## Replaces the text from (l1, c1) up to (l2, c2), all 0-based, with `s`,
@@ -172,16 +217,19 @@ fn Editor.replace(mut self, l1 int, c1 int, l2 int, c2 int, s str)
 
 ## `replace` without an undo snapshot.
 fn Editor.edit(mut self, l1 int, c1 int, l2 int, c2 int, s str)
-    before := lines[l1].chars()[..c1].join("")
-    after := lines[l2].chars()[c2..].join("")
+    before := lines[l1].slice(0, c1)
+    after := lines[l2].slice(c2, lines[l2].len())
     mut parts := s.split("\n")
     end := parts.len() - 1
-    mut end_col := parts[end].chars().len()
+    mut end_col := parts[end].len()
     if end == 0
         end_col += c1
     parts[0] = "{before}{parts[0]}"
     parts[end] = "{parts[end]}{after}"
-    lines = splice(lines, l1, l2 + 1, parts)
+    tail := lines[l2 + 1..]
+    lines = lines[..l1]
+    lines.extend(parts)
+    lines.extend(tail)
     line = l1 + end
     set_col(end_col)
 
@@ -215,8 +263,7 @@ fn opens_block(s str) bool
     n >= 2 and (words[n - 1] == "else" or words[n - 2] == "else" or words[n - 2] == ":=" and (words[n - 1] == "match" or words[n - 1] == "if")) or t.contains(":= if ") or t.contains(":= match ")
 
 fn Editor.newline(mut self)
-    cs := cur()
-    head := cs[..col].join("")
+    head := lines[line].slice(0, col)
     mut n := indent_of(head).min(col)
     if opens_block(head)
         n += INDENT
@@ -224,18 +271,17 @@ fn Editor.newline(mut self)
 
 fn Editor.backspace(mut self)
     if col > 0
-        cs := cur()
-        head := cs[..col].join("")
+        head := lines[line].slice(0, col)
         mut n := 1
         if head.trim() == "" and col % INDENT == 0
             n = INDENT
         replace(line, col - n, line, col, "")
     elif line > 0
-        prev := lines[line - 1].chars().len()
+        prev := lines[line - 1].len()
         replace(line - 1, prev, line, 0, "")
 
 fn Editor.delete(mut self)
-    if col < cur().len()
+    if col < lines[line].len()
         replace(line, col, line, col + 1, "")
     elif line + 1 < lines.len()
         replace(line, col, line + 1, 0, "")
@@ -283,11 +329,11 @@ fn Editor.selection(self) Range?
 fn Editor.selected_text(self) str
     r := selection() else return ""
     if r.line == r.end_line
-        return lines[r.line].chars()[r.col..r.end_col].join("")
-    mut parts := [lines[r.line].chars()[r.col..].join("")]
+        return lines[r.line].slice(r.col, r.end_col)
+    mut parts := [lines[r.line].slice(r.col, lines[r.line].len())]
     for l in r.line + 1..r.end_line
         parts.push(lines[l])
-    parts.push(lines[r.end_line].chars()[..r.end_col].join(""))
+    parts.push(lines[r.end_line].slice(0, r.end_col))
     parts.join("\n")
 
 ## Copies the selection to the editor's clipboard; false if there is none.
@@ -313,6 +359,406 @@ fn sel_bg(sel Range?, l int, c int, bg int) int
     if l < r.line or l > r.end_line or l == r.line and c < r.col or l == r.end_line and c >= r.end_col
         return bg
     SELECT_BG
+
+# ---- Editing helpers ----------------------------------------------------
+
+OPENERS := "([\{\""
+CLOSERS := ")]}\""
+
+fn all_digits(s str) bool
+    for c in s.chars()
+        if not c.is_digit()
+            return false
+    true
+
+## Whether typing `t` should step over the same closer already at the cursor.
+fn Editor.over_closer(self, t str) bool
+    cs := cur()
+    t.chars().len() == 1 and CLOSERS.contains(t) and col < cs.len() and "{cs[col]}" == t
+
+## Inserts `t`, closing a bracket or quote typed before a space, a closer
+## or the end of the line: `(` gives `()` with the cursor inside.
+fn Editor.insert_paired(mut self, t str)
+    ts := t.chars()
+    if ts.len() != 1 or not OPENERS.contains(t)
+        insert(t)
+        return
+    cs := cur()
+    next_ok := col >= cs.len() or cs[col].is_space() or CLOSERS.contains(cs[col])
+    prev_word := col > 0 and is_word(cs[col - 1])
+    if not next_ok or t == "\"" and prev_word
+        insert(t)
+        return
+    k := OPENERS.chars().index_of(ts[0]) else 0
+    closer := CLOSERS.chars()[k]
+    insert("{t}{closer}")
+    set_col(col - 1)
+
+## Backspace between an empty pair, `(|)`, deletes both; true if it did.
+fn Editor.delete_pair(mut self) bool
+    cs := cur()
+    if col == 0 or col >= cs.len()
+        return false
+    i := OPENERS.chars().index_of(cs[col - 1]) else return false
+    if CLOSERS.chars()[i] != cs[col]
+        return false
+    replace(line, col - 1, line, col + 1, "")
+    true
+
+## The lines a line command acts on: the selection's, else the cursor's.
+fn Editor.line_span(self) Range
+    if r := selection()
+        mut end := r.end_line
+        if r.end_col == 0 and end > r.line
+            end -= 1
+        return Range(line: r.line, col: 0, end_line: end, end_col: 0)
+    Range(line: line, col: 0, end_line: line, end_col: 0)
+
+## Comments the lines out with `# ` at their least indentation, or, when
+## every non-blank one is already commented, removes the comments.
+fn Editor.toggle_comment(mut self)
+    span := line_span()
+    mut ind := 1000000
+    mut all_commented := true
+    for l in span.line..=span.end_line
+        t := lines[l]
+        if t.trim() == ""
+            continue
+        ind = ind.min(indent_of(t))
+        if not t.trim().starts_with("#")
+            all_commented = false
+    if ind == 1000000
+        return
+    snapshot()
+    for l in span.line..=span.end_line
+        cs := lines[l].chars()
+        if lines[l].trim() == ""
+            continue
+        i := indent_of(lines[l])
+        if all_commented
+            mut n := 1
+            if i + 1 < cs.len() and cs[i + 1] == ' '
+                n = 2
+            lines[l] = "{cs[..i].join("")}{cs[i + n..].join("")}"
+        else
+            lines[l] = "{cs[..ind].join("")}# {cs[ind..].join("")}"
+    set_col(col.min(cur().len()))
+
+fn Editor.duplicate_line(mut self)
+    span := line_span()
+    copy := lines[span.line..span.end_line + 1]
+    snapshot()
+    lines = splice(lines, span.end_line + 1, span.end_line + 1, copy)
+    line += copy.len()
+    selecting = false
+
+## Moves the cursor's line (or the selected lines) up or down one line.
+fn Editor.move_line(mut self, down bool)
+    span := line_span()
+    if not down and span.line == 0 or down and span.end_line + 1 >= lines.len()
+        return
+    block := lines[span.line..span.end_line + 1]
+    snapshot()
+    if down
+        other := lines[span.end_line + 1]
+        mut mid := [other]
+        for b in block
+            mid.push(b)
+        lines = splice(lines, span.line, span.end_line + 2, mid)
+        line += 1
+        anchor_line += 1
+    else
+        other := lines[span.line - 1]
+        mut mid := block
+        mid.push(other)
+        lines = splice(lines, span.line - 1, span.end_line + 1, mid)
+        line -= 1
+        anchor_line -= 1
+
+## The bracket matching the one at or just before the cursor, as a
+## position, searching at most 500 lines away.
+fn Editor.bracket_match(self) Range?
+    cs := cur()
+    mut c := col
+    if c >= cs.len() or not "()[]\{}".contains(cs[c])
+        c -= 1
+    if c < 0 or c >= cs.len()
+        return none
+    ch := cs[c]
+    pairs := "()[]\{}".chars()
+    i := pairs.index_of(ch) else return none
+    other := pairs[i + 1 - 2 * (i % 2)]
+    mut step := 1
+    if i % 2 == 1
+        step = -1
+    mut depth := 0
+    mut l := line
+    mut k := c
+    mut row := cs
+    while l >= 0 and l < lines.len() and (l - line).abs() <= 500
+        while k >= 0 and k < row.len()
+            if row[k] == ch
+                depth += 1
+            elif row[k] == other
+                depth -= 1
+                if depth == 0
+                    return Range(line: line, col: c, end_line: l, end_col: k)
+            k += step
+        l += step
+        if l < 0 or l >= lines.len()
+            break
+        row = lines[l].chars()
+        if step == 1
+            k = 0
+        else
+            k = row.len() - 1
+    none
+
+# ---- Code intelligence: `ail api`, `ail fmt` --------------------------
+
+struct ApiIndex
+    symbols List[Symbol]
+    refs List[SymbolRef]
+
+## Every declaration (nested ones too) and every reference in
+## `ail api --symbols` output.
+fn parse_api(text str) ApiIndex
+    mut syms := List[Symbol]()
+    mut refs := List[SymbolRef]()
+    j := parse_json(text.trim()) else return ApiIndex(symbols: syms, refs: refs)
+    mut pending := jarr(j, "items")
+    while pending.len() > 0
+        it := pending.pop() else break
+        syms.push(Symbol(
+            id: jstr(it, "id"),
+            name: jstr(it, "name"),
+            kind: jstr(it, "kind"),
+            line: jint(it, "line"),
+            col: jint(it, "col"),
+            signature: jstr(it, "signature"),
+            doc: jstr(it, "doc"),
+        ))
+        for key in ["fields", "variants", "methods"]
+            for sub in jarr(it, key)
+                pending.push(sub)
+    for r in jarr(j, "references")
+        refs.push(SymbolRef(id: jstr(r, "id"), line: jint(r, "line"), col: jint(r, "col")))
+    ApiIndex(symbols: syms, refs: refs)
+
+## Refreshes `symbols` and `refs` from `ail api --symbols` unless they are
+## current. A program with errors has no outline (api.out.5): the last good
+## index is kept, so its positions may be a little out of date.
+fn Editor.index(mut self)
+    if indexed
+        return
+    r := ail_on_buffer(["api", "--symbols"]) else return
+    if r.status == 0
+        api := parse_api(r.out)
+        symbols = api.symbols
+        refs = api.refs
+    indexed = true
+
+## The word under (or just before) the cursor: its start and end columns.
+fn Editor.word_at(self) Range?
+    cs := cur()
+    mut a := col
+    while a > 0 and is_word(cs[a - 1])
+        a -= 1
+    mut b := col
+    while b < cs.len() and is_word(cs[b])
+        b += 1
+    if a == b
+        return none
+    Range(line: line, col: a, end_line: line, end_col: b)
+
+fn Editor.symbol(self, id str) Symbol?
+    for sym in symbols
+        if sym.id == id
+            return sym
+    none
+
+## The declaration the word under the cursor names: through a reference at
+## the cursor, a declaration at the cursor, or else the first declaration
+## with that name.
+fn Editor.symbol_here(self) Symbol?
+    w := word_at() else return none
+    for r in refs
+        if r.line - 1 == line and r.col - 1 == w.col
+            if sym := symbol(r.id)
+                return sym
+    name := cur()[w.col..w.end_col].join("")
+    mut by_name := List[Symbol]()
+    for sym in symbols
+        if sym.line - 1 == line and sym.col - 1 == w.col
+            return sym
+        if sym.name == name
+            by_name.push(sym)
+    if by_name.len() > 0
+        return by_name[0]
+    none
+
+fn Editor.go_to_definition(mut self)
+    sym := symbol_here() else
+        message = "no declaration found here"
+        return
+    selecting = false
+    line = (sym.line - 1).max(0).min(lines.len() - 1)
+    set_col((sym.col - 1).max(0).min(cur().len()))
+    message = sym.signature
+
+fn Editor.hover(mut self)
+    sym := symbol_here() else
+        message = "nothing known about this name"
+        return
+    pane_text = [sym.signature]
+    if sym.doc != ""
+        for d in sym.doc.split("\n")
+            pane_text.push("## {d}")
+    pane_text.push("{sym.kind} {sym.id}, line {sym.line}")
+    pane = Text
+    message = "Esc closes"
+
+## Formats the buffer with `ail fmt`, keeping the cursor on its line. A
+## program with errors isn't formatted (fmt.safe).
+fn Editor.format(mut self) bool
+    r := ail_on_buffer(["fmt", "--stdout"]) else return false
+    if r.status != 0
+        message = "not formatted: fix the errors first (Ctrl-K)"
+        return false
+    if r.out == text()
+        return true
+    snapshot()
+    mut new := r.out.split("\n")
+    if new.len() > 1 and new[new.len() - 1] == ""
+        new.pop()
+    lines = new
+    line = line.min(lines.len() - 1)
+    set_col(col.min(cur().len()))
+    message = "formatted"
+    true
+
+## Names to complete the word before the cursor: after a `.`, the fields,
+## variants and methods the file declares and the words that follow a `.`
+## in the buffer; otherwise keywords, the file's declarations and the words
+## in the buffer. Sorted, at most 50.
+fn Editor.candidates(self) List[Completion]
+    cs := cur()
+    mut a := col
+    while a > 0 and is_word(cs[a - 1])
+        a -= 1
+    prefix := cs[a..col].join("")
+    member := a > 0 and cs[a - 1] == '.'
+    mut seen := Set[str]()
+    seen.add(prefix)
+    mut out := List[Completion]()
+    for sym in symbols
+        nested := sym.kind == "field" or sym.kind == "variant" or sym.kind == "method"
+        if nested == member and sym.name.starts_with(prefix) and seen.add(sym.name)
+            out.push(Completion(text: sym.name, detail: sym.signature))
+    if not member
+        for k in KEYWORDS.sorted()
+            if k.starts_with(prefix) and seen.add(k)
+                out.push(Completion(text: k, detail: "keyword"))
+    for l in lines
+        ls := l.chars()
+        mut i := 0
+        while i < ls.len()
+            if not is_word(ls[i]) or ls[i].is_digit()
+                i += 1
+                continue
+            mut j := i
+            while j < ls.len() and is_word(ls[j])
+                j += 1
+            if j - i >= 3 and j - i > prefix.chars().len() and (not member or i > 0 and ls[i - 1] == '.')
+                w := ls[i..j].join("")
+                if w.starts_with(prefix) and seen.add(w)
+                    out.push(Completion(text: w, detail: ""))
+            i = j
+    sorted := out.sorted()
+    sorted[..sorted.len().min(50)]
+
+## After a `.`, opens the completion popup when the index knows members.
+fn Editor.auto_complete_members(mut self)
+    cs := cur()
+    if symbols.len() == 0 or col < 2 or not is_word(cs[col - 2]) or cs[col - 2].is_digit()
+        return
+    open_completion()
+    if completing
+        message = ""
+
+## After a `(`, shows the signature of the function or method before it.
+fn Editor.signature_help(mut self)
+    cs := cur()
+    mut b := col - 1
+    while b > 0 and cs[b - 1] == ' '
+        b -= 1
+    mut a := b
+    while a > 0 and is_word(cs[a - 1])
+        a -= 1
+    if a == b
+        return
+    name := cs[a..b].join("")
+    for sym in symbols
+        if sym.name == name and (sym.kind == "fn" or sym.kind == "method")
+            message = sym.signature
+            return
+
+fn Editor.open_completion(mut self)
+    completions = candidates()
+    comp_sel = 0
+    completing = completions.len() > 0
+    if not completing
+        message = "no completions"
+
+## Keys while the completion popup is open: Up and Down choose, Enter or
+## Tab accepts, word characters and Backspace edit the word and refilter,
+## anything else closes it. True if `cmd` was used here.
+fn Editor.complete_key(mut self, cmd Command) bool
+    if cmd == Go(Up)
+        comp_sel = (comp_sel - 1).max(0)
+        return true
+    if cmd == Go(Down)
+        comp_sel = (comp_sel + 1).min(completions.len() - 1)
+        return true
+    if cmd == Newline or cmd == Tab
+        accept_completion()
+        return true
+    if cmd == Escape
+        completing = false
+        return true
+    if cmd == Backspace
+        backspace()
+        open_completion()
+        return true
+    if t := typed_word(cmd)
+        insert(t)
+        open_completion()
+        return true
+    completing = false
+    false
+
+## The text of an `Insert` of word characters, else `none`.
+fn typed_word(cmd Command) str?
+    match cmd
+        Insert(t) =>
+            for c in t.chars()
+                if not is_word(c)
+                    return none
+            t
+        Newline | Tab | Backspace | Delete | Go(_) | Select(_) | SelectAll | Copy | Cut => none
+        Paste | Undo | Redo | Find | FindNext | Fix | Escape | Quit | Resize(_, _) => none
+        Replace | ReplaceAll | GoToLine | ToggleComment | DuplicateLine | MoveLine(_) => none
+        Complete | GoToDefinition | Hover | Format | Save | Check | Explain | Outline => none
+
+fn Editor.accept_completion(mut self)
+    completing = false
+    if comp_sel >= completions.len()
+        return
+    cs := cur()
+    mut a := col
+    while a > 0 and is_word(cs[a - 1])
+        a -= 1
+    replace(line, a, line, col, completions[comp_sel].text)
 
 # ---- Movement -----------------------------------------------------------
 
@@ -346,17 +792,17 @@ fn Editor.pane_rows(self) int
 
 fn Editor.move_to_line(mut self, l int)
     line = l.max(0).min(lines.len() - 1)
-    col = goal.min(cur().len())
+    col = goal.min(lines[line].len())
 
 fn Editor.go(mut self, d Dir)
-    n := cur().len()
+    n := lines[line].len()
     match d
         Left =>
             if col > 0
                 set_col(col - 1)
             elif line > 0
                 line -= 1
-                set_col(cur().len())
+                set_col(lines[line].len())
         Right =>
             if col < n
                 set_col(col + 1)
@@ -372,7 +818,7 @@ fn Editor.go(mut self, d Dir)
             set_col(0)
         Bottom =>
             line = lines.len() - 1
-            set_col(cur().len())
+            set_col(lines[line].len())
         Home =>
             ind := indent_of(lines[line])
             if col == ind
@@ -411,7 +857,7 @@ fn Editor.scroll(mut self)
         left = col - w + 1
 
 fn Editor.gutter_width(self) int
-    "{lines.len()}".chars().len().max(3) + 1
+    "{lines.len()}".len().max(3) + 1
 
 # ---- Syntax highlighting ------------------------------------------------
 
@@ -468,8 +914,42 @@ fn quoted_end(cs List[char], q int, raw bool) int
         j += 1
     (j + 1).min(n)
 
-## The foreground color of each character of one line of AIL source. Each
-## line is colored on its own, so a `"""` string's inner lines look like code.
+TRIPLE := "\"\"\""
+
+## Just past the `"""` that closes a multi-line string (lex.str.3), searching
+## from `from`, or the end of the line.
+fn triple_end(cs List[char], from int) int
+    k := find_in(cs, TRIPLE.chars(), from) else return cs.len()
+    k + 3
+
+## Whether a line ends inside a `"""` string, given whether it starts in
+## one: each `"""` outside a comment opens or closes one.
+fn ends_in_triple(cs List[char], inside bool) bool
+    mut state := inside
+    mut i := 0
+    while i < cs.len()
+        if not state and cs[i] == '#'
+            break
+        if i + 2 < cs.len() and cs[i] == '"' and cs[i + 1] == '"' and cs[i + 2] == '"'
+            state = not state
+            i += 3
+        else
+            i += 1
+    state
+
+## The foreground colors of a line that may start inside a `"""` string.
+fn line_colors(cs List[char], inside bool) List[int]
+    if not inside
+        return colors(cs)
+    k := triple_end(cs, 0)
+    mut out := List[int]()
+    for _ in 0..k
+        out.push(STRING_FG)
+    out.extend(colors(cs[k..]))
+    out
+
+## The foreground color of each character of one line of AIL source, which
+## starts outside any `"""` string (see `line_colors`).
 fn colors(cs List[char]) List[int]
     mut out := List[int]()
     n := cs.len()
@@ -481,6 +961,9 @@ fn colors(cs List[char]) List[int]
         if c == '#'
             j = n
             fg = COMMENT_FG
+        elif c == '"' and i + 2 < n and cs[i + 1] == '"' and cs[i + 2] == '"'
+            j = triple_end(cs, i + 3)
+            fg = STRING_FG
         elif c == '"' or c == '\''
             j = quoted_end(cs, i, false)
             fg = STRING_FG
@@ -542,15 +1025,12 @@ fn Screen.band(mut self, row int, bg int)
 fn Screen.put(mut self, row int, col int, s str, fg int, bg int)
     if row < 0 or row >= rows or col >= cols
         return
-    cs := s.chars()
-    shown := cs[..cs.len().min(cols - col)].join("")
+    shown := s.slice(0, s.len().min(cols - col))
     spans.push(Span(row: row, col: col, text: shown, fg: fg, bg: bg))
-    have := text[row].chars()
-    mut pad := ""
-    if have.len() < col
-        pad = " ".repeat(col - have.len())
-    old_tail := have[(col + shown.chars().len()).min(have.len())..].join("")
-    text[row] = "{have[..col.min(have.len())].join("")}{pad}{shown}{old_tail}"
+    have := text[row]
+    pad := " ".repeat((col - have.len()).max(0))
+    old_tail := have.slice((col + shown.len()).min(have.len()), have.len())
+    text[row] = "{have.slice(0, col.min(have.len()))}{pad}{shown}{old_tail}"
 
 ## The background of character `c` (0-based) of line `l` (0-based): a
 ## diagnostic's span if one covers it, else `bg`.
@@ -594,10 +1074,20 @@ fn Editor.render(self) Screen
     gw := gutter_width()
     w := (cols - gw).max(0)
     sel := selection()
+    mut brackets := List[Range]()
+    if b := bracket_match()
+        brackets = [b]
+    mut inside := false
+    for l in 0..top.min(lines.len())
+        if lines[l].contains(TRIPLE)
+            inside = ends_in_triple(lines[l].chars(), inside)
     for r in 0..h
         l := top + r
         if l >= lines.len()
             break
+        starts_inside := inside
+        if lines[l].contains(TRIPLE)
+            inside = ends_in_triple(lines[l].chars(), inside)
         mut bg := BG
         if l == line
             bg = LINE_BG
@@ -607,7 +1097,7 @@ fn Editor.render(self) Screen
         cs := lines[l].chars()
         if left >= cs.len()
             continue
-        fgs := colors(cs)
+        fgs := line_colors(cs, starts_inside)
         end := cs.len().min(left + w)
         mut i := left
         while i < end
@@ -618,10 +1108,16 @@ fn Editor.render(self) Screen
                 j += 1
             s.put(r, gw + i - left, cs[i..j].join(""), fg, b)
             i = j
+    # The bracket at the cursor and its match.
+    for b in brackets
+        mark_bracket(mut s, b.line, b.col)
+        mark_bracket(mut s, b.end_line, b.end_col)
+    if completing
+        render_popup(mut s)
     # A diagnostic at the end of a line shows as one marked cell.
     for d in diags
         r := d.line - 1 - top
-        if r >= 0 and r < h and d.col - 1 >= lines[d.line - 1].chars().len()
+        if r >= 0 and r < h and d.col - 1 >= lines[d.line - 1].len()
             c := gw + d.col - 1 - left
             if c >= gw and c < cols
                 s.put(r, c, " ", FG, diag_bg([d], d.line - 1, d.col - 1, BG))
@@ -634,12 +1130,45 @@ fn Editor.render(self) Screen
     left_part := " {path}{flag}  Ln {line + 1}, Col {col + 1}  {counts}"
     s.put(status_row, 0, left_part, STATUS_FG, STATUS_BG)
     if message != ""
-        s.put(status_row, left_part.chars().len() + 2, "| {message}", STATUS_FG, STATUS_BG)
+        s.put(status_row, left_part.len() + 2, "| {message}", STATUS_FG, STATUS_BG)
     render_pane(mut s, status_row + 1)
     if line >= top and line < top + h
         s.cursor_row = line - top
         s.cursor_col = gw + col - left
     s
+
+fn Editor.mark_bracket(self, mut s Screen, l int, c int)
+    r := l - top
+    x := gutter_width() + c - left
+    if r >= 0 and r < text_rows() and x >= gutter_width() and x < cols
+        s.put(r, x, "{lines[l].chars()[c]}", FG, BRACKET_BG)
+
+## The completion popup: below the cursor (above it near the bottom), at
+## the start of the word, at most 8 entries around the selected one.
+fn Editor.render_popup(self, mut s Screen)
+    n := completions.len().min(8)
+    cs := cur()
+    mut a := col
+    while a > 0 and is_word(cs[a - 1])
+        a -= 1
+    mut width := 0
+    for c in completions
+        width = width.max(c.text.chars().len() + c.detail.chars().len() + 3)
+    width = width.min(60).min(cols)
+    x := (gutter_width() + a - left).max(0).min((cols - width).max(0))
+    mut y := line - top + 1
+    if y + n > text_rows()
+        y = line - top - n
+    first := (comp_sel - n + 1).max(0)
+    for k in 0..n
+        i := first + k
+        mut bg := PANE_BG
+        if i == comp_sel
+            bg = SELECT_BG
+        c := completions[i]
+        s.put(y + k, x, " ".repeat(width), FG, bg)
+        s.put(y + k, x + 1, c.text, FG, bg)
+        s.put(y + k, x + 2 + c.text.chars().len(), c.detail, GUTTER_FG, bg)
 
 fn Editor.render_pane(self, mut s Screen, first int)
     n := pane_rows()
@@ -708,7 +1237,17 @@ enum Command
     Escape
     Quit
     Resize(cols int, rows int)
+    Replace
+    ReplaceAll
+    GoToLine
+    ToggleComment
+    DuplicateLine
+    MoveLine(down bool)
     # These reach the file system or run `ail`; `Editor.run` handles them.
+    Complete
+    GoToDefinition
+    Hover
+    Format
     Save
     Check
     Explain
@@ -719,16 +1258,27 @@ enum Command
 fn Editor.apply(mut self, cmd Command)
     if cmd != Quit
         quit_armed = false
+    if prompt == NoPrompt
+        message = ""
     if pane == Outline and outline_key(cmd)
         scroll()
         return
-    if searching and search_key(cmd)
+    if completing and complete_key(cmd)
+        scroll()
+        return
+    if prompt != NoPrompt and prompt_key(cmd)
         scroll()
         return
     match cmd
         Insert(t) =>
-            cut_selection()
-            insert(t)
+            if not cut_selection() and over_closer(t)
+                set_col(col + 1)
+            else
+                insert_paired(t)
+            if t == "."
+                auto_complete_members()
+            elif t == "("
+                signature_help()
         Newline =>
             cut_selection()
             newline()
@@ -736,7 +1286,7 @@ fn Editor.apply(mut self, cmd Command)
             cut_selection()
             insert(" ".repeat(INDENT - col % INDENT))
         Backspace =>
-            if not cut_selection()
+            if not cut_selection() and not delete_pair()
                 backspace()
         Delete =>
             if not cut_selection()
@@ -764,11 +1314,22 @@ fn Editor.apply(mut self, cmd Command)
             insert(clip)
         Undo => undo_last()
         Redo => redo_last()
-        Find =>
-            searching = true
-            query = ""
-            message = "find: type, Enter or F3 for the next, Esc stops"
+        Find => open_prompt(FindText)
         FindNext => find(true)
+        Replace =>
+            if query == ""
+                open_prompt(FindText)
+                message = "find what? type it, then Ctrl-R"
+            else
+                open_prompt(ReplaceText)
+        ReplaceAll => replace_all()
+        GoToLine => open_prompt(LineNumber)
+        ToggleComment => toggle_comment()
+        DuplicateLine => duplicate_line()
+        MoveLine(down) => move_line(down)
+        Complete => open_completion()
+        GoToDefinition => go_to_definition()
+        Hover => hover()
         Fix => apply_fix()
         Escape =>
             pane = Diags
@@ -783,7 +1344,7 @@ fn Editor.apply(mut self, cmd Command)
         Resize(c, r) =>
             cols = c
             rows = r
-        Save | Check | Explain | Outline => return
+        Format | Save | Check | Explain | Outline => return
     scroll()
 
 ## Up, Down and Enter in the outline pane; true if `cmd` was one of them.
@@ -819,30 +1380,130 @@ fn Editor.apply_fix(mut self)
         i -= 1
     message = "applied: {d.fix_title}; Ctrl-K checks again"
 
-## Typing while finding (Ctrl-F): characters and Backspace edit the query
-## and search from the cursor; Enter finds the next match; Escape and any
-## other command stop finding. True if `cmd` was used here.
-fn Editor.search_key(mut self, cmd Command) bool
+## Opens a prompt on the status line.
+fn Editor.open_prompt(mut self, p Prompt)
+    completing = false
+    prompt = p
+    input = ""
+    if p == FindText
+        query = ""
+    show_prompt()
+
+fn Editor.show_prompt(mut self)
+    message = match prompt
+        NoPrompt => ""
+        FindText =>
+            if message.ends_with("(not found)")
+                "find: {query}_   (not found)"
+            else
+                "find: {query}_   (Enter/F3 next, Ctrl-R replace, Esc)"
+        ReplaceText => "replace `{query}` with: {input}_   (Enter one, Ctrl-Enter all, Esc)"
+        LineNumber => "go to line: {input}_"
+
+## Typing while a prompt is open: characters and Backspace edit it; Enter
+## acts (find the next match, replace this match, go to the line); Escape
+## and any other command close it. True if `cmd` was used here.
+fn Editor.prompt_key(mut self, cmd Command) bool
     match cmd
         Insert(t) =>
-            query = "{query}{t}"
-            find(false)
+            if prompt == FindText
+                query = "{query}{t}"
+                find(false)
+                show_prompt()
+                return true
+            if prompt == LineNumber and not all_digits(t)
+                return true
+            input = "{input}{t}"
+            show_prompt()
         Backspace =>
-            q := query.chars()
-            query = q[..(q.len() - 1).max(0)].join("")
-            find(false)
-        Newline | FindNext => find(true)
+            if prompt == FindText
+                query = drop_last(query)
+                find(false)
+            else
+                input = drop_last(input)
+            show_prompt()
+        Newline =>
+            match prompt
+                NoPrompt => return false
+                FindText =>
+                    find(true)
+                    show_prompt()
+                ReplaceText => replace_one()
+                LineNumber =>
+                    n := input.to_int() else 0
+                    prompt = NoPrompt
+                    message = ""
+                    if n > 0
+                        selecting = false
+                        line = (n - 1).min(lines.len() - 1)
+                        set_col(indent_of(lines[line]))
+        FindNext =>
+            find(true)
+            show_prompt()
+        Replace =>
+            if prompt == FindText and query != ""
+                prompt = ReplaceText
+                input = ""
+                show_prompt()
+        ReplaceAll =>
+            if prompt == ReplaceText
+                replace_all()
         Escape =>
-            searching = false
+            prompt = NoPrompt
             message = ""
-        Tab | Delete | Go(_) | Select(_) | SelectAll | Copy | Cut | Paste => return stop_search()
-        Undo | Redo | Find | Fix => return stop_search()
-        Quit | Resize(_, _) | Save | Check | Explain | Outline => return stop_search()
+        Tab | Delete | Go(_) | Select(_) | SelectAll | Copy | Cut | Paste => return close_prompt()
+        Undo | Redo | Find | Fix | GoToLine | ToggleComment | DuplicateLine => return close_prompt()
+        MoveLine(_) | Complete | GoToDefinition | Hover | Format => return close_prompt()
+        Quit | Resize(_, _) | Save | Check | Explain | Outline => return close_prompt()
     true
 
-fn Editor.stop_search(mut self) bool
-    searching = false
+fn Editor.close_prompt(mut self) bool
+    prompt = NoPrompt
     false
+
+fn drop_last(s str) str
+    s.slice(0, (s.len() - 1).max(0))
+
+## Replaces the match at the cursor, if the cursor is on one, then finds
+## the next.
+fn Editor.replace_one(mut self)
+    q := query.chars()
+    cs := cur()
+    if col + q.len() <= cs.len() and cs[col..col + q.len()] == q
+        replace(line, col, line, col + q.len(), input)
+        prompt = ReplaceText
+    find(false)
+    show_prompt()
+
+## Replaces every match of `query` with `input`, as one undo step.
+fn Editor.replace_all(mut self)
+    q := query.chars()
+    if q.len() == 0
+        return
+    mut count := 0
+    mut out := List[str]()
+    for l in lines
+        cs := l.chars()
+        mut parts := List[str]()
+        mut i := 0
+        mut last := 0
+        while i + q.len() <= cs.len()
+            if cs[i..i + q.len()] == q
+                parts.push(cs[last..i].join(""))
+                parts.push(input)
+                i += q.len()
+                last = i
+                count += 1
+            else
+                i += 1
+        parts.push(cs[last..].join(""))
+        out.push(parts.join(""))
+    if count > 0
+        snapshot()
+        lines = out
+        set_col(col.min(cur().len()))
+    prompt = NoPrompt
+    message = "replaced {count}"
 
 ## Where `q` occurs in `cs` at or after `start`, or `none`.
 fn find_in(cs List[char], q List[char], start int) int?
@@ -879,14 +1540,16 @@ fn Editor.find(mut self, next bool)
             return
     message = "find: {query} (not found)"
 
-## The command for a key from `std.ui` (`Event.Key`), or `none`.
 ## Moving with Shift held selects.
 fn go_or_select(d Dir, shift bool) Command
     if shift
         return Select(d)
     Go(d)
 
+## The command for a key from `std.ui` (`Event.Key`), or `none`.
 fn key_command(key str, ctrl bool, alt bool, shift bool) Command?
+    if ctrl and shift and (key == "f" or key == "F")
+        return Format
     if ctrl
         return match key
             "s" | "S" => Save
@@ -901,13 +1564,23 @@ fn key_command(key str, ctrl bool, alt bool, shift bool) Command?
             "v" | "V" => Paste
             "." => Fix
             "o" | "O" => Outline
+            "r" | "R" => Replace
+            "g" | "G" => GoToLine
+            "d" | "D" => DuplicateLine
+            "i" | "I" => Hover
+            "/" => ToggleComment
+            " " => Complete
+            "enter" => ReplaceAll
             "home" => go_or_select(Top, shift)
             "end" => go_or_select(Bottom, shift)
             "left" => go_or_select(WordLeft, shift)
             "right" => go_or_select(WordRight, shift)
             _ => none
     if alt
-        return none
+        return match key
+            "up" => MoveLine(false)
+            "down" => MoveLine(true)
+            _ => none
     match key
         "enter" => Newline
         "tab" => Tab
@@ -924,8 +1597,9 @@ fn key_command(key str, ctrl bool, alt bool, shift bool) Command?
         "pagedown" => go_or_select(PageDown, shift)
         "f1" => Explain
         "f3" => FindNext
+        "f12" => GoToDefinition
         _ =>
-            if key.chars().len() == 1
+            if key.len() == 1
                 return Insert(key)
             none
 
@@ -992,7 +1666,7 @@ fn parse_outline(text str) List[OutlineItem]
         t := l.trim()
         words := t.split(" ")
         n := words[0].to_int() else continue
-        rest := l.chars()[7.min(l.chars().len())..].join("")
+        rest := l.slice(7.min(l.len()), l.len())
         if rest.trim().starts_with("##")
             continue
         out.push(OutlineItem(line: n, text: rest))
@@ -1020,10 +1694,14 @@ fn Editor.ail_on_buffer(mut self, args List[str]) proc.Output?
 fn Editor.check(mut self)
     r := ail_on_buffer(["check", "--json"]) else return
     diags = parse_diags(r.err)
+    if diag_count("error") == 0
+        index()
     pane = Diags
-    message = "checked: {diag_count("error")} errors, {diag_count("warning")} warnings"
+    message = "checked"
 
+## Formats (when the program has no errors), writes the file, and checks it.
 fn Editor.save(mut self)
+    format()
     fs.write_text(path, text()) else err
         message = "can't save {err.path}: {err.kind}"
         return
@@ -1067,7 +1745,17 @@ fn Editor.toggle_outline(mut self)
 
 ## Applies any command, running `ail` or touching the file when it must.
 fn Editor.run(mut self, cmd Command)
-    if cmd == Save
+    if cmd == Complete or cmd == GoToDefinition or cmd == Hover
+        index()
+        apply(cmd)
+        scroll()
+        return
+    if cmd == Save or cmd == Check or cmd == Explain or cmd == Outline or cmd == Format
+        prompt = NoPrompt
+        completing = false
+    if cmd == Format
+        format()
+    elif cmd == Save
         save()
     elif cmd == Check
         check()
@@ -1277,15 +1965,15 @@ DIAG_JSON := "\{\"api\":1,\"severity\":\"error\",\"rule\":\"expr.name.1\",\"file
     assert_eq([ed.line, ed.col], [1, 0])
     ed.apply(Backspace)
     ed.apply(Insert("x"))
-    assert_eq(ed.message, "find: bx (not found)")
+    assert(ed.message.ends_with("(not found)"))
     ed.apply(Escape)
-    assert(not ed.searching)
+    assert_eq(ed.prompt, NoPrompt)
     ed.apply(Insert("Z"))
     assert_eq(ed.lines[1], "Zbeta")
     ed.apply(Find)
     ed.apply(Insert("a"))
     ed.apply(Go(Right))
-    assert(not ed.searching)
+    assert_eq(ed.prompt, NoPrompt)
     assert_eq(key_command("f3", false, false, false), FindNext)
 
 @test fn select_copy_cut_paste()
@@ -1319,6 +2007,192 @@ DIAG_JSON := "\{\"api\":1,\"severity\":\"error\",\"rule\":\"expr.name.1\",\"file
     assert_eq(ed.lines[0], "adef")
     assert(not ed.selecting)
 
+@test fn window_events_drive_the_editor()
+    mut ed := typed("", [])
+    mut evs := List[ui.Event]()
+    evs.push(Key(key: "h", ctrl: false, alt: false, shift: false))
+    evs.push(Key(key: "I", ctrl: false, alt: false, shift: true))
+    evs.push(Key(key: "left", ctrl: false, alt: false, shift: true))
+    evs.push(Key(key: "c", ctrl: true, alt: false, shift: false))
+    evs.push(Key(key: "end", ctrl: false, alt: false, shift: false))
+    evs.push(Key(key: "v", ctrl: true, alt: false, shift: false))
+    evs.push(Resize(cols: 60, rows: 20))
+    evs.push(Close)
+    for ev in evs
+        ed.on_event(ev)
+    assert_eq(ed.lines, ["hII"])
+    assert_eq([ed.cols, ed.rows], [60, 20])
+    assert(ed.quit_armed)
+    ed.on_event(Close)
+    assert(ed.quit)
+    mut w := ui.Window(handle: 0)
+    draw(mut w, ed.render())
+
+API_SRC := "struct P\n    x int\n\n## Adds.\nfn add(a int, b int) int\n    a + b\n\nfn main()\n    p := P(x: 1)\n    print(add(p.x, 2))"
+API_JSON := "\{\"api\":1,\"file\":\"t.ail\",\"items\":[\{\"kind\":\"struct\",\"name\":\"P\",\"id\":\"type:P\",\"line\":1,\"col\":8,\"doc\":null,\"signature\":\"struct P\",\"error\":false,\"fields\":[\{\"kind\":\"field\",\"name\":\"x\",\"id\":\"field:P.x\",\"line\":2,\"col\":5,\"doc\":null,\"signature\":\"x int\",\"type\":\"int\"}],\"methods\":[]},\{\"kind\":\"fn\",\"name\":\"add\",\"id\":\"fn:add\",\"line\":5,\"col\":4,\"doc\":\"Adds.\",\"signature\":\"fn add(a int, b int) int\",\"params\":[\{\"name\":\"a\",\"type\":\"int\",\"mut\":false},\{\"name\":\"b\",\"type\":\"int\",\"mut\":false}],\"returns\":\"int\",\"effects\":[]},\{\"kind\":\"fn\",\"name\":\"main\",\"id\":\"fn:main\",\"line\":8,\"col\":4,\"doc\":null,\"signature\":\"fn main()\",\"params\":[],\"returns\":null,\"effects\":[\"io\"]}],\"references\":[\{\"id\":\"type:P\",\"line\":9,\"col\":10},\{\"id\":\"field:P.x\",\"line\":9,\"col\":12},\{\"id\":\"fn:add\",\"line\":10,\"col\":11},\{\"id\":\"field:P.x\",\"line\":10,\"col\":17}]}"
+
+fn indexed(cmds List[Command]) Editor
+    mut ed := typed(API_SRC, [])
+    api := parse_api(API_JSON)
+    ed.symbols = api.symbols
+    ed.refs = api.refs
+    ed.indexed = true
+    ed.cols = 80
+    ed.rows = 20
+    for c in cmds
+        ed.apply(c)
+    ed
+
+@test fn api_index_parses_nested_symbols()
+    ed := indexed([])
+    mut names := List[str]()
+    for sym in ed.symbols
+        names.push(sym.id)
+    assert_eq(names.sorted(), ["field:P.x", "fn:add", "fn:main", "type:P"])
+    assert_eq(ed.refs.len(), 4)
+
+@test fn go_to_definition_and_hover()
+    mut ed := indexed([Go(Bottom), Go(Home), Go(WordRight), Go(WordRight)])
+    assert_eq(
+        ed.word_at() else Range(line: 0, col: 0, end_line: 0, end_col: 0),
+        Range(line: 9, col: 10, end_line: 9, end_col: 13),
+    )
+    ed.apply(GoToDefinition)
+    assert_eq([ed.line, ed.col], [4, 3])
+    assert_eq(ed.message, "fn add(a int, b int) int")
+    ed.apply(Hover)
+    assert_eq(ed.pane_text, ["fn add(a int, b int) int", "## Adds.", "fn fn:add, line 5"])
+    ed.apply(Go(Top))
+    ed.apply(Go(Down))
+    ed.apply(Go(Down))
+    ed.apply(GoToDefinition)
+    assert_eq(ed.message, "no declaration found here")
+
+@test fn completion_popup()
+    mut ed := indexed([Go(Bottom), Newline, Insert("a"), Complete])
+    assert(ed.completing)
+    mut texts := List[str]()
+    for c in ed.completions
+        texts.push(c.text)
+    assert_eq(texts, ["add", "and", "any", "as"])
+    s := ed.render()
+    assert(s.text[11].contains(" add fn add(a int, b int) int"))
+    ed.apply(Insert("n"))
+    assert_eq(ed.completions.len(), 2)
+    ed.apply(Go(Down))
+    ed.apply(Tab)
+    assert(not ed.completing)
+    assert_eq(ed.lines[10], "    any")
+    ed.apply(Insert("."))
+    ed.apply(Complete)
+    assert_eq(ed.completions[0].text, "x")
+    ed.apply(Insert(" "))
+    assert(not ed.completing)
+    assert_eq(key_command(" ", true, false, false), Complete)
+
+@test fn brackets_and_quotes_pair()
+    mut ed := typed("", [Insert("f"), Insert("("), Insert("\""), Insert("a")])
+    assert_eq(ed.lines[0], "f(\"a\")")
+    ed.apply(Insert("\""))
+    ed.apply(Insert(")"))
+    assert_eq(ed.lines[0], "f(\"a\")")
+    assert_eq(ed.col, 6)
+    ed.apply(Insert("["))
+    ed.apply(Backspace)
+    assert_eq(ed.lines[0], "f(\"a\")")
+    ed.apply(Go(Home))
+    ed.apply(Insert("("))
+    assert_eq(ed.lines[0], "(f(\"a\")")
+
+@test fn matching_bracket_is_marked()
+    mut ed := typed("f(a[1],\n  b)", [Go(Right)])
+    m := ed.bracket_match() else Range(line: 0, col: 0, end_line: 0, end_col: 0)
+    assert_eq(m, Range(line: 0, col: 1, end_line: 1, end_col: 3))
+    mut marked := 0
+    for sp in ed.render().spans
+        if sp.bg == BRACKET_BG
+            marked += 1
+    assert_eq(marked, 2)
+    ed.apply(Go(Bottom))
+    assert_eq(ed.bracket_match(), Range(line: 1, col: 3, end_line: 0, end_col: 1))
+
+@test fn comment_duplicate_and_move_lines()
+    mut ed := typed("fn f()\n    a\n\n    b", [Go(Down), Select(Down), Select(Down), Select(End)])
+    ed.apply(ToggleComment)
+    assert_eq(ed.lines, ["fn f()", "    # a", "", "    # b"])
+    ed.apply(ToggleComment)
+    assert_eq(ed.lines, ["fn f()", "    a", "", "    b"])
+    ed.apply(Go(Top))
+    ed.apply(DuplicateLine)
+    assert_eq(ed.lines[..2], ["fn f()", "fn f()"])
+    assert_eq(ed.line, 1)
+    ed.apply(MoveLine(true))
+    assert_eq(ed.lines[..3], ["fn f()", "    a", "fn f()"])
+    assert_eq(ed.line, 2)
+    ed.apply(MoveLine(false))
+    ed.apply(MoveLine(false))
+    assert_eq(ed.line, 0)
+    ed.apply(MoveLine(false))
+    assert_eq(ed.line, 0)
+    assert_eq(key_command("down", false, true, false), MoveLine(true))
+    assert_eq(key_command("/", true, false, false), ToggleComment)
+
+@test fn replace_and_go_to_line()
+    mut ed := typed("a b a\nab", [Find, Insert("a")])
+    ed.apply(Replace)
+    assert_eq(ed.prompt, ReplaceText)
+    for c in ["x", "y"]
+        ed.apply(Insert(c))
+    ed.apply(Newline)
+    assert_eq(ed.lines[0], "xy b a")
+    assert_eq([ed.line, ed.col], [0, 5])
+    ed.apply(ReplaceAll)
+    assert_eq(ed.lines, ["xy b xy", "xyb"])
+    assert_eq(ed.message, "replaced 2")
+    ed.apply(Undo)
+    assert_eq(ed.lines, ["xy b a", "ab"])
+    ed.apply(GoToLine)
+    for c in ["2", "x"]
+        ed.apply(Insert(c))
+    assert(ed.message.contains("go to line: 2_"))
+    ed.apply(Newline)
+    assert_eq(ed.line, 1)
+    assert_eq(key_command("g", true, false, false), GoToLine)
+    assert_eq(key_command("f", true, false, true), Format)
+
+## The color of the last run drawn over a cell.
+fn fg_at(s Screen, row int, col int) int
+    mut fg := -1
+    for sp in s.spans
+        if sp.row == row and sp.col <= col and col < sp.col + sp.text.len()
+            fg = sp.fg
+    fg
+
+@test fn multi_line_strings_are_highlighted()
+    src := "x := \"\"\"\n    fn not code\n    \"\"\" + y\n# \"\"\" comment\nfn f()"
+    mut ed := typed(src, [])
+    ed.cols = 60
+    s := ed.render()
+    assert_eq(fg_at(s, 0, 9), STRING_FG)
+    assert_eq(fg_at(s, 1, 8), STRING_FG)
+    assert_eq(fg_at(s, 2, 8), STRING_FG)
+    assert_eq(fg_at(s, 2, 12), OP_FG)
+    assert_eq(fg_at(s, 3, 6), COMMENT_FG)
+    assert_eq(fg_at(s, 4, 4), KEYWORD_FG)
+    assert(not ends_in_triple("# \"\"\"".chars(), false))
+
+@test fn dot_completes_and_paren_shows_signature()
+    mut ed := indexed([Go(Bottom), Newline, Insert("p"), Insert(".")])
+    assert(ed.completing)
+    assert_eq(ed.completions[0].text, "x")
+    ed.apply(Escape)
+    ed.apply(Backspace)
+    ed.apply(Backspace)
+    for c in ["a", "d", "d", "("]
+        ed.apply(Insert(c))
+    assert_eq(ed.message, "fn add(a int, b int) int")
+    assert_eq(ed.lines[10], "    add()")
+
 @test fn outline_parse_and_jump()
     items := parse_outline("    1  fn main()\n        ## Doc.\n   12      fn Point.x(self) int\n")
     assert_eq(items.len(), 2)
@@ -1335,7 +2209,493 @@ DIAG_JSON := "\{\"api\":1,\"severity\":\"error\",\"rule\":\"expr.name.1\",\"file
     assert_eq(ed.line, 11)
     assert_eq(ed.pane, Diags)
 
+@test fn mouse_clicks_drags_and_scrolls()
+    mut ed := typed("fn main()\n    print(1)\n    print(2)\n", [])
+    gw := ed.gutter_width()
+    ed.on_event(Mouse(col: gw + 4, row: 1, button: "left", kind: "down"))
+    assert_eq([ed.line, ed.col], [1, 4])
+    ed.on_event(Mouse(col: gw + 9, row: 2, button: "left", kind: "drag"))
+    ed.on_event(Mouse(col: gw + 9, row: 2, button: "left", kind: "up"))
+    assert_eq(ed.selected_text(), "print(1)\n    print")
+    # Past the end of a line, a click lands at its end.
+    ed.on_event(Mouse(col: 99, row: 0, button: "left", kind: "down"))
+    assert_eq([ed.line, ed.col], [0, 9])
+    assert(ed.selection() == none)
+    ed.on_event(Scroll(lines: 2))
+    assert_eq(ed.top, 2)
+    ed.on_event(Scroll(lines: -5))
+    assert_eq(ed.top, 0)
+
+@test fn clicking_a_diagnostic_jumps_to_it()
+    mut ed := typed("fn main()\n    prnt(1)\n", [])
+    ed.diags = parse_diags(DIAG_JSON)
+    ed.on_event(Mouse(col: 3, row: ed.text_rows() + 1, button: "left", kind: "down"))
+    assert_eq([ed.line, ed.col], [1, 4])
+
+@test fn run_output_goes_to_the_pane()
+    mut ed := typed("", [])
+    ed.show_output("run", proc.Output(status: 1, out: "a\nb\n", err: "oops\n"))
+    assert_eq(ed.pane, Text)
+    assert_eq(ed.pane_text, ["ail run: exit 1", "a", "b", "oops"])
+    assert_eq(extra_key("f5", false, false, false), RunFile)
+    assert(extra_key("f5", true, false, false) == none)
+
+@test fn tabs_and_the_picker()
+    mut ws := Workspace.new(typed("x", []))
+    ws.eds[0].path = "a.ail"
+    ws.eds.push(typed("y", []))
+    ws.eds[1].path = "dir/b.ail"
+    ws.on_event(Key(key: "tab", ctrl: true, alt: false, shift: false))
+    assert_eq(ws.active, 1)
+    ws.on_event(Key(key: "tab", ctrl: true, alt: false, shift: true))
+    assert_eq(ws.active, 0)
+    s := ws.render()
+    assert_eq(s.text[0], " a.ail   b.ail ")
+    assert_eq(s.text[1].trim(), "1 x")
+    ws.on_event(Mouse(col: 9, row: 0, button: "left", kind: "down"))
+    assert_eq(ws.active, 1)
+    assert(fuzzy("tools/edit/edit.ail", "EdA"))
+    assert(not fuzzy("tools/edit/edit.ail", "zz"))
+    ws.files = ["a.ail", "dir/b.ail", "dir/c.ail"]
+    ws.picking = true
+    ws.on_event(Key(key: "c", ctrl: false, alt: false, shift: false))
+    assert_eq(ws.matches(), ["dir/c.ail"])
+    ws.on_event(Key(key: "escape", ctrl: false, alt: false, shift: false))
+    assert(not ws.picking)
+    # Ctrl-W closes a clean tab; the last one quits.
+    ws.on_event(Key(key: "w", ctrl: true, alt: false, shift: false))
+    assert_eq(ws.eds.len(), 1)
+    ws.on_event(Key(key: "w", ctrl: true, alt: false, shift: false))
+    assert(ws.quit)
+
+@test fn quitting_asks_once_for_unsaved_tabs()
+    mut ws := Workspace.new(typed("", keys("x")))
+    ws.on_event(Close)
+    assert(not ws.quit)
+    ws.on_event(Close)
+    assert(ws.quit)
+
 # ---- Front ends ---------------------------------------------------------
+
+# ---- Window front end (std.ui) -----------------------------------------
+
+## Draws a screen: the runs in order, then the caret.
+fn draw(mut w ui.Window, s Screen)
+    w.clear(BG)
+    for sp in s.spans
+        w.put(sp.col, sp.row, sp.text, sp.fg, sp.bg)
+    w.cursor(s.cursor_col, s.cursor_row)
+    w.present()
+
+## Applies one window event. Closing the window is Ctrl-Q: with unsaved
+## changes the first close asks and the second quits.
+fn Editor.on_event(mut self, ev ui.Event)
+    match ev
+        Key(k, ctrl, alt, shift) =>
+            if cmd := extra_key(k, ctrl, alt, shift)
+                run_extra(cmd)
+            elif cmd := key_command(k, ctrl, alt, shift)
+                with_system_clipboard(cmd)
+        Resize(c, r) => apply(Command.Resize(cols: c, rows: r))
+        Close => apply(Quit)
+        Mouse(c, r, button, kind) => on_mouse(c, r, button, kind)
+        Scroll(n) => scroll_by(n)
+
+## Runs `cmd`, with Copy, Cut and Paste going through the system clipboard
+## (std.ui.12) as well as the editor's own.
+fn Editor.with_system_clipboard(mut self, cmd Command)
+    if cmd == Paste
+        if t := ui.clipboard_get()
+            clip = t
+    before := clip
+    run(cmd)
+    if (cmd == Copy or cmd == Cut) and clip != before or cmd == Copy and clip != ""
+        ui.clipboard_set(clip)
+
+# ---- Mouse and wheel ----------------------------------------------------
+
+## The buffer position under screen cell (`c`, `r`), or `none` outside the
+## text rows.
+fn Editor.position_at(self, c int, r int) Range?
+    if r < 0 or r >= text_rows() or lines.len() == 0
+        return none
+    l := (top + r).min(lines.len() - 1)
+    n := lines[l].chars().len()
+    at := (left + c - gutter_width()).max(0).min(n)
+    Range(line: l, col: at, end_line: l, end_col: at)
+
+## A click places the caret and starts a selection that a drag extends. A
+## click in the pane picks a diagnostic or an outline entry.
+fn Editor.on_mouse(mut self, c int, r int, button str, kind str)
+    if button != "left" or kind == "up"
+        return
+    if p := position_at(c, r)
+        if kind == "down"
+            selecting = true
+            anchor_line = p.line
+            anchor_col = p.col
+        line = p.line
+        set_col(p.col)
+        scroll()
+        return
+    if kind == "down"
+        click_pane(r - text_rows() - 1)
+
+## A click on row `i` of the pane: jump to that diagnostic or outline item.
+fn Editor.click_pane(mut self, i int)
+    if i < 0
+        return
+    if pane == Diags and i < diags.len()
+        d := diags[i]
+        line = (d.line - 1).max(0).min(lines.len() - 1)
+        set_col((d.col - 1).max(0).min(cur().len()))
+        selecting = false
+        scroll()
+    elif pane == Outline
+        start := (outline_sel - pane_rows() + 1).max(0)
+        if start + i < outline.len()
+            outline_sel = start + i
+            apply(Newline)
+
+## The wheel moves the view by `n` lines without moving the caret; the next
+## key brings the caret back into view.
+fn Editor.scroll_by(mut self, n int)
+    top = (top + n).min(lines.len() - 1).max(0)
+
+# ---- Running the program and its tests ----------------------------------
+
+## Commands of the window front end that aren't in `key_command`.
+enum Extra
+    RunFile
+    TestFile
+
+fn extra_key(key str, ctrl bool, alt bool, shift bool) Extra?
+    if ctrl or alt
+        return none
+    match key
+        "f5" => RunFile
+        "f6" => TestFile
+        _ => none
+
+## F5 runs the buffer with `ail run`, F6 its tests with `ail test`; the
+## output goes to the pane. Unsaved changes are run as they are.
+fn Editor.run_extra(mut self, x Extra)
+    words := match x
+        RunFile => ["run"]
+        TestFile => ["test"]
+    r := ail_on_buffer(words) else return
+    show_output(words[0], r)
+
+fn Editor.show_output(mut self, what str, r proc.Output)
+    pane_text = ["ail {what}: exit {r.status}"]
+    for l in r.out.lines()
+        pane_text.push(l)
+    for l in r.err.lines()
+        pane_text.push(l)
+    pane = Text
+    message = "{what}: exit {r.status}; Esc closes"
+
+# ---- Tabs ---------------------------------------------------------------
+
+## Several files, one tab each, and the Ctrl-P file picker. The editor in
+## each tab gets every row but the tab bar.
+struct Workspace
+    eds List[Editor]
+    active int
+    cols int
+    rows int
+    picking bool
+    query str
+    files List[str]
+    pick_sel int
+    quit_armed bool
+    quit bool
+    message str
+
+fn Workspace.new(ed Editor) Workspace
+    Workspace(
+        eds: [ed],
+        active: 0,
+        cols: ed.cols,
+        rows: ed.rows + 1,
+        picking: false,
+        query: "",
+        files: [],
+        pick_sel: 0,
+        quit_armed: false,
+        quit: false,
+        message: "",
+    )
+
+## The file name a tab shows: the path after its last `/`.
+fn base_name(path str) str
+    parts := path.split("/")
+    parts[parts.len() - 1]
+
+## Opens `path` in a new tab, or switches to it if it is open.
+fn Workspace.open(mut self, path str)
+    for i in 0..eds.len()
+        if eds[i].path == path
+            active = i
+            return
+    mut text := ""
+    if fs.exists(path)
+        got := fs.read_text(path) else err
+            message = "can't open {err.path}: {err.kind}"
+            return
+        text = got
+    mut ed := Editor.new(path, text, cols, (rows - 1).max(1))
+    ed.index()
+    eds.push(ed)
+    active = eds.len() - 1
+
+## Closes the active tab, asking first if it has unsaved changes. The
+## workspace quits when the last tab closes.
+fn Workspace.close_tab(mut self)
+    eds[active].apply(Quit)
+    if not eds[active].quit
+        return
+    mut rest := List[Editor]()
+    for i in 0..eds.len()
+        if i != active
+            rest.push(eds[i])
+    eds = rest
+    if eds.len() == 0
+        quit = true
+        return
+    active = active.min(eds.len() - 1)
+
+## Ctrl-Q: quit, asking first if any tab has unsaved changes.
+fn Workspace.quit_all(mut self)
+    mut unsaved := 0
+    for ed in eds
+        if ed.dirty
+            unsaved += 1
+    if unsaved > 0 and not quit_armed
+        quit_armed = true
+        message = "{unsaved} unsaved tab(s): Ctrl-Q again quits without saving"
+        return
+    quit = true
+
+fn Workspace.on_event(mut self, ev ui.Event)
+    if picking
+        pick_event(ev)
+        return
+    if ev != Close
+        quit_armed = false
+        message = ""
+    match ev
+        Key(k, ctrl, _, shift) =>
+            if ctrl and k == "tab"
+                n := eds.len()
+                if shift
+                    active = (active + n - 1) % n
+                else
+                    active = (active + 1) % n
+                return
+            if ctrl and (k == "w" or k == "W")
+                close_tab()
+                return
+            if ctrl and (k == "q" or k == "Q")
+                quit_all()
+                return
+            if ctrl and (k == "p" or k == "P")
+                start_picking()
+                return
+            eds[active].on_event(ev)
+        Resize(c, r) =>
+            cols = c
+            rows = r
+            for mut ed in eds
+                ed.apply(Command.Resize(cols: c, rows: (r - 1).max(1)))
+        Close => quit_all()
+        Mouse(c, r, button, kind) =>
+            if r == 0
+                if kind == "down"
+                    click_tab(c)
+                return
+            eds[active].on_event(Mouse(col: c, row: r - 1, button: button, kind: kind))
+        Scroll(_) => eds[active].on_event(ev)
+    if eds[active].quit
+        close_tab()
+
+## The columns each tab's label covers on the tab bar.
+fn Workspace.tab_labels(self) List[str]
+    mut out := List[str]()
+    for ed in eds
+        mut flag := ""
+        if ed.dirty
+            flag = " *"
+        out.push(" {base_name(ed.path)}{flag} ")
+    out
+
+fn Workspace.click_tab(mut self, c int)
+    mut x := 0
+    labels := tab_labels()
+    for i in 0..labels.len()
+        w := labels[i].chars().len()
+        if c >= x and c < x + w
+            active = i
+            return
+        x += w + 1
+
+# ---- The file picker (Ctrl-P) ---------------------------------------------
+
+## The files under `dir`, to `depth` levels, skipping hidden and build
+## directories, at most `limit` of them.
+fn list_files(dir str, depth int, limit int) List[str]
+    mut out := List[str]()
+    names := fs.list_dir(dir) else return out
+    for n in names
+        if out.len() >= limit
+            break
+        if n.starts_with(".") or n == "target"
+            continue
+        mut path := n
+        if dir != "."
+            path = "{dir}/{n}"
+        if sub := fs.list_dir(path)
+            if depth > 0 and sub.len() >= 0
+                for f in list_files(path, depth - 1, limit - out.len())
+                    out.push(f)
+        else
+            out.push(path)
+    out
+
+## Whether the characters of `q` appear in `s` in order, ignoring case.
+fn fuzzy(s str, q str) bool
+    cs := s.chars()
+    mut i := 0
+    for c in q.chars()
+        while i < cs.len() and cs[i].to_lower() != c.to_lower()
+            i += 1
+        if i == cs.len()
+            return false
+        i += 1
+    true
+
+fn Workspace.matches(self) List[str]
+    mut out := List[str]()
+    for f in files
+        if fuzzy(f, query)
+            out.push(f)
+    out
+
+fn Workspace.start_picking(mut self)
+    picking = true
+    query = ""
+    pick_sel = 0
+    files = list_files(".", 4, 2000)
+
+fn Workspace.pick_event(mut self, ev ui.Event)
+    match ev
+        Key(k, ctrl, _, _) =>
+            if ctrl
+                return
+            if k == "escape"
+                picking = false
+            elif k == "enter"
+                found := matches()
+                if pick_sel < found.len()
+                    open(found[pick_sel])
+                picking = false
+            elif k == "up"
+                pick_sel = (pick_sel - 1).max(0)
+            elif k == "down"
+                pick_sel += 1
+            elif k == "backspace"
+                cs := query.chars()
+                if cs.len() > 0
+                    query = cs[..cs.len() - 1].join("")
+                pick_sel = 0
+            elif k.chars().len() == 1
+                query = "{query}{k}"
+                pick_sel = 0
+        Close => quit_all()
+        Resize(_, _) =>
+            picking = false
+            on_event(ev)
+        Mouse(_, _, _, _) | Scroll(_) => return
+    pick_sel = pick_sel.min((matches().len() - 1).max(0))
+
+## The screen: the tab bar, the active editor below it, and the picker over
+## it when open.
+fn Workspace.render(self) Screen
+    mut s := Screen.new(cols, rows)
+    s.band(0, PANE_BG)
+    labels := tab_labels()
+    mut x := 0
+    for i in 0..labels.len()
+        mut bg := PANE_BG
+        mut fg := GUTTER_FG
+        if i == active
+            bg = BG
+            fg = FG
+        s.put(0, x, labels[i], fg, bg)
+        x += labels[i].chars().len() + 1
+    if message != ""
+        s.put(0, x + 1, message, STATUS_FG, PANE_BG)
+    inner := eds[active].render()
+    for sp in inner.spans
+        s.spans.push(Span(row: sp.row + 1, col: sp.col, text: sp.text, fg: sp.fg, bg: sp.bg))
+    for r in 0..inner.text.len()
+        if r + 1 < rows
+            s.text[r + 1] = inner.text[r]
+    s.text[0] = labels.join(" ")
+    if inner.cursor_row >= 0
+        s.cursor_row = inner.cursor_row + 1
+        s.cursor_col = inner.cursor_col
+    if picking
+        render_picker(mut s)
+    s
+
+fn Workspace.render_picker(self, mut s Screen)
+    w := (cols - 4).min(70).max(10)
+    x := (cols - w) / 2
+    found := matches()
+    shown := found.len().min(12)
+    s.put(1, x, " ".repeat(w), FG, SELECT_BG)
+    s.put(1, x, " open: {query}", STATUS_FG, SELECT_BG)
+    for i in 0..shown
+        mut bg := PANE_BG
+        if i == pick_sel
+            bg = LINE_BG
+        s.put(2 + i, x, " ".repeat(w), FG, bg)
+        s.put(2 + i, x + 1, found[i], FG, bg)
+    if found.len() == 0
+        s.put(2, x, " no file matches".pad_right(w, ' '), GUTTER_FG, PANE_BG)
+    s.cursor_row = 1
+    s.cursor_col = x + 7 + query.chars().len()
+
+## The event loop: wait for an event, apply it and any others already
+## pending, then draw once. The title shows the file and its unsaved mark.
+fn Workspace.window(mut self) ! ui.UiError
+    mut w := ui.open("edit", cols, rows)?
+    size := w.size()
+    on_event(Resize(cols: size.cols, rows: size.rows))
+    mut title := ""
+    while not quit
+        ed := eds[active]
+        mut t := "{ed.path} - edit"
+        if ed.dirty
+            t = "* {t}"
+        if t != title
+            w.set_title(t)
+            title = t
+        draw(mut w, render())
+        on_event(w.next_event())
+        while not quit
+            ev := w.poll_event() else break
+            on_event(ev)
+    w.close()
+
+## Opens the window, or prints one screen when there's no display.
+fn window_main(mut ed Editor, flags List[str])
+    ed.index()
+    mut ws := Workspace.new(ed)
+    ws.window() else err
+        print("edit: no window ({err.kind}: {err.message}); printing the screen instead")
+        print_screen(mut ed, flags)
 
 ## `--print`: render one screen to standard output instead of opening a
 ## window, after the commands named by `--check`, `--outline`, `--explain`.
@@ -1359,7 +2719,7 @@ fn bench(mut ed Editor)
     mut cells := 0
     for _ in 0..20
         for sp in ed.render().spans
-            cells += sp.text.chars().len()
+            cells += sp.text.len()
     ms := (time.now_ms() - start).to_float() / 20.0
     print("{ed.lines.len()} lines, {ed.cols}x{ed.rows} screen: {ms:.1} ms per render ({cells / 20} cells drawn)")
     t := time.now_ms()
@@ -1383,4 +2743,7 @@ fn main() !
     if flags.contains("--bench")
         bench(mut ed)
         return
-    print_screen(mut ed, flags)
+    if flags.contains("--print")
+        print_screen(mut ed, flags)
+        return
+    window_main(mut ed, flags)
