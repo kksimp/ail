@@ -633,6 +633,11 @@ the same scalar code on every ISA, so std.tensor.5's vector paths don't
 apply to them.
 These methods on a `Tensor[int]` are a compile-time error. *(ADR 0507)*
 
+**std.tensor.14** — `-t` on a tensor negates each element and gives a tensor
+of the same shape and element type. A `float` is negated exactly, so `-0.0`
+is a result. An `int` element that is the least `int` traps as in
+std.tensor.6. *(ADR 0508)*
+
 ```ail
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
