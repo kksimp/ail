@@ -221,8 +221,16 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
     Val(id: eq, ty: Ty.Bool)
 
-## `a == b` or `a != b` on lists or structs: the generated `eq.T`, element
-## by element or field by field (enums inside through `eq.E`).
+## Whether `t` is a struct or a list of structs or enums. Lists of numbers
+## and strings compare in the runtime (lane 173's `rt.list_eq`).
+fn holds_record(t Ty) bool
+    match t
+        Struct(_) | Enum(_) => true
+        List(e) => holds_record(e)
+        _ => false
+
+## `a == b` or `a != b` on structs or lists of structs or enums: the
+## generated `eq.T`, element by element or field by field.
 fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)

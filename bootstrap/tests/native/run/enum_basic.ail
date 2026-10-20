@@ -104,12 +104,11 @@ fn main()
     print(words[1] == Ast.Sym("."))
     print(words[1] == Ast.Node(Leaf(n: 1, f: 2.0, at: [3])))
     print(words[1] == Ast.Node(Leaf(n: 1, f: 2.0, at: [4])))
-    # `==` on lists and structs holding enums.
+    # `==` on lists of enums and on structs (lists of numbers and strings are
+    # lane 173's `rt.list_eq`).
     tys := [Ty.Int, Ty.List(Ty.Name("a"))]
     print(tys == [Ty.Int, Ty.List(Ty.Name("a"))])
     print(tys != [Ty.Int, Ty.List(Ty.Name("b"))])
     print(tys == [Ty.Int])
-    print([1, 2] == [1, 2])
-    print(["a"] != ["a"])
     print(it == Item(shape: Dot, op: Op.Times))
     print(Leaf(n: 1, f: 0.5, at: []) == Leaf(n: 1, f: 0.5, at: [1]))
