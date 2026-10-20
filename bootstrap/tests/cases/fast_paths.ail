@@ -130,11 +130,18 @@ fn main()
     mut counts := {"a": 1}
     counts["a"] = (counts.get("a") else 0) + 1
     counts["b"] = (counts.get("b") else 0) + 1
+    counts["a"] += 5
     print(counts)
+    mut flags := {1: true}
+    flags[2] = false
+    flags[1] = not flags[1]
+    print(flags)
     mut grid := [[1, 2], [3, 4]]
     grid[1][0] = grid[0][1] + 10
     print(grid)
     idx := 1
+    xs[idx] += 10
+    xs[0] = xs[0] * 2
     print(xs[idx] + xs[idx - 1])
     s := "ab"
     t := s

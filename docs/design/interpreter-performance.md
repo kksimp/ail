@@ -1,7 +1,9 @@
 # Interpreter performance
 
-Non-normative. Measurements for [ADR 0175](../decisions/0175-interpreter-fast-paths.md)
-and [ADR 0176](../decisions/0176-keep-name-based-locals.md). The interpreter is
+Non-normative. Measurements for [ADR 0175](../decisions/0175-interpreter-fast-paths.md),
+[ADR 0176](../decisions/0176-keep-name-based-locals.md) (round 1) and
+[ADR 0219](../decisions/0219-interpreter-speed-round-two.md)–[0220](../decisions/0220-interpreter-site-caches.md)
+(round 2, at the end). The interpreter is
 the permanent oracle ([ADR 0032](../decisions/0032-keep-rust-interpreter-as-oracle.md)),
 so every change had to keep it simple and leave output byte-identical.
 
@@ -10,7 +12,10 @@ so every change had to keep it simple and leave output byte-identical.
 `tools/perfbench/run.sh [RUNS]` builds the bootstrap and prints the min and
 median wall time of `examples/interp.ail`, `json.ail`, `sheet.ail` and
 `tools/perfbench/programs/loops.ail` (integer loops, list pushes, map updates,
-string building). It also times the matching Python program for reference.
+string building). It also times the matching Python program (the tokbench
+corpus twin, or `programs/NAME.py`) and prints `ratio`: AIL's min over Python's
+min, so below 1 beats CPython. It times the binary directly: the `./ail`
+wrapper's toolchain probe used to add about 0.1 s ([ADR 0221](../decisions/0221-ail-skips-toolchain-probe.md)).
 Wall time on a shared machine is noisy, so each change was judged by
 instruction counts from `valgrind --tool=callgrind` on a release build with
 debug info, which are stable to a fraction of a percent.
@@ -60,3 +65,77 @@ and in-place string appends for `s = "{s}x"` (quadratic, but only visible for
 strings of tens of thousands of characters). Next steps if more speed is wanted
 are caching call targets per call site and a bytecode form, which belongs in
 Stage 3 rather than in the oracle.
+
+## Round 2: beating CPython (lane 36)
+
+Goal: AIL at or below CPython's wall time on the benchmark programs. Python
+3 on the same machine (min of 15 runs, process start-up included on both sides;
+CPython's is about 17 ms).
+
+### Where the time went (before round 2)
+
+callgrind on `interp.ail` (1,383M instructions) and a 3,000-start collatz
+loop (397M):
+
+- A call to `eval` for every operand, even names and literals, and a `Value`
+  built and dropped for every int operation (collatz: 1,700 instructions per
+  loop iteration).
+- 1.46 million allocations in `interp.ail`: a call environment, an operand
+  vector and an argument vector per call; a path vector per place; a field
+  vector per struct; an empty list per unit variant; a copy of every string
+  literal; a pair vector per struct construction to work out which field each
+  argument sets. About 17% of the instructions were `malloc` and `free`.
+- Hashing: three string-keyed lookups per call, three per method call, the
+  checker's call table per method call; SipHash on every `Map` key.
+- Trait dispatch (`dispatch`, a table probe and name scan) on every `==`,
+  ordering and text conversion of a char, string or enum, though the program
+  implemented none of the traits.
+- Locals: counters showed 1.7 million lookups scanning 2.7 entries on average,
+  about 5% of the run. Below ADR 0176's threshold, so still name-based.
+
+### Changes kept
+
+Each was kept only with a measured drop in instructions on `interp.ail` or the
+collatz loop, and byte-identical output (stdout, stderr and exit code) on every
+example and test case against the build before it. Percentages are of the
+instruction count at that step.
+
+| Change | Effect |
+|---|---|
+| Int locals and literals read in place; `n % 2`, `3 * n`, conditions as `bool`; `/ %` inline | collatz −45% |
+| Call environments pooled; no-`mut` calls skip places and overlap check | interp −12% |
+| Inline `Value::clone`; string literals shared | interp −3% |
+| `mut` operands move into the callee environment: no operand or value vectors | interp −7% |
+| `return` value kept in the interpreter (`Flow` 48 to 32 bytes); field and index reads in own frames | collatz −4% |
+| Int locals overwritten in place; `if` statements skip `eval` | collatz −8% |
+| Place roots without a path vector; read-only receivers and arguments by value | interp −7% |
+| No trait dispatch when the program defines none of `Eq`, `Ord`, `ToStr` | interp −2% |
+| Per-site caches: call target, method resolution, field slots (ADR 0220) | interp −10% |
+| Field and index reads borrowed; shared empty field lists | interp −3% |
+| `local.field = e` without a place | interp −2% |
+| `mut` operands that are plain locals moved without places | interp −8% |
+| Fast integer hashing for map keys; pooled builtin argument lists | interp −2%, list push loop −12% |
+
+### Tried and dropped
+
+Two inline steps in `Place` (+1.5% on `interp.ail`), fat LTO with one codegen
+unit (no change in instructions, build 60 s instead of 25 s), `#[inline(never)]`
+on the cold statement arms and assignment inside `block` (more instructions on
+collatz), reading int operands two operators deep (no gain), a hand-written
+allocator (allocation is already down to 0.37 million calls).
+
+### Results (Linux x86-64)
+
+RESULTS_TABLE
+
+### Which programs beat CPython, and why not the rest
+
+RESULTS_PROSE
+
+### Left alone
+
+Slot-resolved locals (about 5% of a run, [ADR 0176](../decisions/0176-keep-name-based-locals.md)),
+`Rc<[Value]>` struct fields (halves struct allocations but touches every
+builtin), a 24-byte `Value`, in-place string appends (`s = "{s}x"` copies the
+string, which CPython avoids by reusing its buffer when the count is one), and
+the bytecode form, which belongs in Stage 3 and not in the oracle.

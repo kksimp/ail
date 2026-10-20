@@ -590,9 +590,14 @@ fn element(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
 /// With `insert`, a missing map key at the end of the path is added, for
 /// `m[k] = v` (type.map.3).
 fn slot_mut<'e>(env: &'e mut Env<'_>, p: &Place, insert: bool) -> Result<&'e mut Value, Trap> {
-    let mut v = &mut env[p.slot].1;
-    let last = p.path.len();
-    for (n, step) in p.path.iter().enumerate() {
+    slot_mut_at(env, p.slot, &p.path, insert)
+}
+
+/// `slot_mut` for a slot and a path of steps that need not be in a `Place`.
+fn slot_mut_at<'e>(env: &'e mut Env<'_>, slot: usize, path: &[Step], insert: bool) -> Result<&'e mut Value, Trap> {
+    let mut v = &mut env[slot].1;
+    let last = path.len();
+    for (n, step) in path.iter().enumerate() {
         v = match (step, v) {
             (Step::Key(k, pos), Value::Map(t)) => {
                 let t = Rc::make_mut(t);
@@ -634,8 +639,12 @@ enum Operand {
 
 /// The value at a place, without copying it.
 fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<&'e Value, Trap> {
-    let mut v = &env[p.slot].1;
-    for step in &p.path {
+    peek_at(env, p.slot, &p.path)
+}
+
+fn peek_at<'e>(env: &'e Env<'_>, slot: usize, path: &[Step]) -> Result<&'e Value, Trap> {
+    let mut v = &env[slot].1;
+    for step in path {
         v = match (step, v) {
             (Step::Field(i), Value::Struct(_, fields)) => &fields[*i],
             (Step::Index(i, pos), Value::List(items)) => element(items, *i, *pos)?,
@@ -1000,6 +1009,25 @@ impl<'a, W: Write> Interp<'a, W> {
             };
             let Value::Struct(_, fields) = &mut env[slot].1 else { unreachable!("checked: struct") };
             Rc::make_mut(fields)[index] = v;
+            return Ok(());
+        }
+        // `local[i] = e` and `local[i] op= e`: same steps as below, with the one step on the stack.
+        if let Expr::Index { recv, index, pos: at } = target
+            && let Expr::Name(n, _) = &**recv
+            && let Some(slot) = env.iter().rposition(|(m, _)| name_eq(m, n))
+        {
+            let is_map = matches!(env[slot].1, Value::Map(_));
+            let i = self.eval(index, env)?;
+            let steps = [if is_map { Step::Key(i, *at) } else { Step::Index(i.int(), *at) }];
+            let v = match op {
+                None => self.eval(value, env)?,
+                Some(op) => {
+                    let old = peek_at(env, slot, &steps)?.clone();
+                    let rhs = self.eval(value, env)?;
+                    self.binop(op, old, rhs, pos)?
+                }
+            };
+            *slot_mut_at(env, slot, &steps, op.is_none())? = v;
             return Ok(());
         }
         let p = self.place(target, env)?;

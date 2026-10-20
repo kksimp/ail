@@ -1,0 +1,8 @@
+# `m[k] op= e` on a missing key traps, while `m[k] = e` adds it (type.map.3).
+fn main()
+    mut m := {"a": 1}
+    m["b"] = 2
+    m["a"] += 10
+    print(m)
+    m["z"] += 1
+    print(m)

@@ -196,3 +196,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
 | [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
 | [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0219](0219-interpreter-speed-round-two.md) | Speed up the interpreter again with int fast paths, pooled allocations and in-place updates *(delegated)* | Accepted | 2026-10-20 |
+| [0220](0220-interpreter-site-caches.md) | Cache what a call site names, by the address of its expression *(delegated)* | Accepted | 2026-10-20 |
+| [0221](0221-ail-skips-toolchain-probe.md) | `./ail` runs the built binary directly when it is up to date *(delegated)* | Accepted | 2026-10-20 |
