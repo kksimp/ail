@@ -92,6 +92,7 @@ fn flush()
 
 ## Flush, then end the process.
 fn exit(code int)
+    err_report()
     flush()
     sys_exit(code)
 

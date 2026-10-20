@@ -381,6 +381,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0389](0389-mach-o-signed-by-the-backend.md) | Mach-O executables, dynamically loaded but importing nothing, signed ad hoc by the backend *(delegated)* | Accepted | 2026-10-20 |
 | [0390](0390-native-subset-for-the-drag-race.md) | The native subset grows to the drag-race programs: arguments, `to_int() else`, constant expressions, `{x:.N}`, strings and nested lists *(delegated)* | Accepted | 2026-10-20 |
 | [0391](0391-native-backend-optimisations.md) | First optimisations in the native backend: lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols *(delegated)* | Accepted | 2026-10-20 |
+| [0574](0574-native-optional-layout.md) | Native optionals: a pointer or 0, scalars boxed *(delegated)* | Accepted | 2026-10-20 |
+| [0575](0575-native-results-error-slot.md) | Native results: the error slot and a return trace *(delegated)* | Accepted | 2026-10-20 |
+| [0576](0576-native-error-values-messages.md) | Native error values: messages only, for now *(delegated)* | Accepted | 2026-10-20 |
 | [0392](0392-native-structs-and-methods.md) | Structs and methods in the native subset: heap header word, slots, copies at the boundary, `T.m` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0393](0393-native-modules.md) | Modules in the native backend: package loading, module-prefixed names, files in problems and traps *(delegated)* | Accepted | 2026-10-20 |
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
