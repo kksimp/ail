@@ -306,3 +306,43 @@ tree; the value is dropped and `send` returns).
 
 ## OQ-113 — A matrix product operator
 **Resolved** by [ADR 0382](decisions/0382-no-matrix-product-operator.md) (keep `a.matmul(b)`).
+
+## OQ-114 — A mutable local that starts as `none`
+Found writing the parser in AIL (lane 113): `mut owner := none` has no type,
+so 20 locals in `compiler/syntax/` start as `absent[ast.Owner]()`, from a
+generic helper that returns `none`. Options: (a) type an untyped `none` by
+the local's first assignment, as empty literals are typed by first use (ADR
+0143) (recommended: no new syntax, and the type is still found in one
+function); (b) a typed literal such as `none[T]` (explicit, but a new form
+for one case); (c) keep the helper (no language change; costs a helper and
+a type in every such local). *Owner: AI under ADR 0076.*
+
+## OQ-115 — `if c then x else none` where `x` is a plain `T`
+The branches have types `T` and an untyped `none`, and the checker reports
+`type.opt.4` instead of giving `T?`. Options: (a) when one branch is
+`none`, the `if` has type `T?` and the other branch converts by
+`type.opt.5` (recommended: what a reader expects, and it removes helper
+functions such as `char_text` in `compiler/syntax/parse.ail`); (b) keep it
+(one rule fewer, at the cost of a helper or an `if` statement per use).
+*Owner: AI under ADR 0076.*
+
+## OQ-116 — Locals named like an item of their module
+`expr.bind.5` forbids a local with the name of any item of the module. A
+module is a directory, so a private helper `word` in one file forbids a
+local `word` in every other file; the parser hit it for `at`, `word`,
+`operand` and `float`. Options: (a) let a local shadow a function (never a
+type) for the rest of its block, and report a call of the shadowed name
+there (recommended: locals stay free to name, and the one confusing use is
+still an error); (b) limit the rule to items declared in the same file
+(local reasoning, but moving a function between files changes which locals
+are legal); (c) keep it (no ambiguity, at the cost of renaming). *Owner:
+AI under ADR 0076.*
+
+## OQ-117 — `if` as an operand
+`col + if raw then 4 else 3` and `col + (if raw then 4 else 3)` are both
+syntax errors, so the one-line `if` (expr.if.8) only appears as a whole
+expression. Options: (a) allow it in parentheses (recommended: the bounds
+are plain, and the formatter can keep them); (b) allow it anywhere an
+operand is (shortest, but `a + if c then b else d + e` hides where the
+`else` branch ends); (c) keep it (no change; the lexer writes two whole
+branches). *Owner: AI under ADR 0076.*
