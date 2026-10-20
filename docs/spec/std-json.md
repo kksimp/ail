@@ -32,6 +32,14 @@ name, other control characters as `\u00XX`, everything else as itself. A
 number prints as the `float` does (`1.0`, `2.5`). The same value always gives
 the same text. *(ADR 0161)*
 
+**json.parse.2** — A number whose value doesn't fit a finite `float`
+(`1e999`) fails with the message `number out of range` at its first
+character, so a `Json.Num` read from text is always finite. *(ADR 0464)*
+
+**json.print.2** — `to_text` prints a `Num` that is infinite or NaN (only a
+program can build one) as `null`, so the text it gives always parses again
+and `parse_json(j.to_text())?.to_text() == j.to_text()`. *(ADR 0464)*
+
 ## Querying
 
 **json.query.1** — `Json.get(self, key str) Json?` is the first member named

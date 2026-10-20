@@ -72,6 +72,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
+| **Module fuzzer** | A template program in `bootstrap/tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
+| **Drag race** | `tools/perfbench/run.sh --all`: min and median wall time of AIL, native AIL, `clang -O2`, `gcc -O2` and Python on twin programs, with ratios (ADR 0460). |
 | **Generated code** | The text a derive generator returned, checked as if written in its `impl`; addressed `gen:impl:TYPE.TRAIT:LINE:COL` and shown by `ail api --expanded` (`ct.gen.*`, ADRs 0228, 0309). |
 | **Generated origin** | The provenance of generated code: the deriving `impl` and the generator, shown by `ail api --expanded` (`ct.gen.4`, ADR 0228). |
 | **Glob** | A path pattern with `*` and `?` inside a component and `**` for any number of directories; `fs.glob` returns the matching paths, sorted (`std.fs.9`, ADR 0281). |
@@ -111,7 +113,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
 | **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
-| **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). |
+| **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). As an operand it is parenthesised (ADR 0470). |
 | **Or-pattern** | `p1 | p2` in a `match` arm: matches when any alternative does; binds no names (ADR 0138). |
 | **Outline** | A program's declarations with signatures, doc comments, positions and ids but no bodies, printed by `ail api` (ADR 0150). |
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
@@ -125,6 +127,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
+| **`unsafe` block** | `unsafe` and an indented block: the only place an unsafe operation (`unsafe fn` call, later C calls and raw pointers) is allowed. A package may contain one only if its `ail.pkg` says `unsafe allow` (`unsafe.block.1–5`, ADR 0430). |
 | **Probe** | A one-to-three statement program that feeds edge values (extremes, zero, empty, non-ASCII) to an operation that may trap; a trap is correct, an interpreter panic is the finding (ADR 0269). |
 | **Property test** | A `@test` with parameters: `ail test` runs it on generated inputs from a replayable seed and shrinks a failure to the smallest failing input (ADR 0198–0199). |
 | **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |

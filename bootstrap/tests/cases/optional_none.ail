@@ -1,0 +1,24 @@
+## type.opt.9, type.opt.10: a `mut` local that starts as `none` takes its type
+## from its first assignment; `if c then x else none` is a `T?`.
+fn first_word(s str) str?
+    mut owner := none
+    for w in s.split(" ")
+        owner = w
+        break
+    owner
+
+fn half(n int) int?
+    x := if n % 2 == 0 then n / 2 else none
+    x
+
+fn main()
+    print(first_word("ab cd"))
+    print(half(8))
+    print(half(7))
+    mut best := none
+    best = 3
+    best = none
+    print(best)
+    mut count := none
+    count = 1
+    print(count)

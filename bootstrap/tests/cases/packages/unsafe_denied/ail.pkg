@@ -1,0 +1,4 @@
+# unsafe.block.3: a package contains `unsafe` code only if its manifest
+# allows it; the app's `package` line allows its own, `dep geo` is not allowed.
+package app unsafe allow
+dep geo path vendor/geo

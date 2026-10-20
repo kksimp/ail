@@ -376,6 +376,21 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0408](0408-buffered-output.md) | Output is buffered in the runtime; errors are not *(delegated)* | Accepted | 2026-10-20 |
 | [0409](0409-float-text-by-exact-digit-generation.md) | Float text by exact digit generation, written from the textbook *(delegated)* | Accepted | 2026-10-20 |
 | [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
+| [0430](0430-unsafe-blocks-and-functions-built.md) | `unsafe` blocks and `unsafe fn`, with a manifest opt-in, are built *(delegated)* | Accepted | 2026-10-20 |
+| [0460](0460-drag-race-harness.md) | The drag race is one Python harness that times AIL, native AIL, C and Python from twins *(delegated)* | Accepted | 2026-10-20 |
+| [0461](0461-module-fuzzers.md) | Module fuzzers are templates plus seeded input generators *(delegated)* | Accepted | 2026-10-20 |
+| [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
+| [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
+| [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
+| [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
+| [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
+| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
+| [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
+| [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
+| [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
+| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
+| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
+| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |

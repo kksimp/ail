@@ -306,6 +306,7 @@ impl<'p> Checker<'p> {
             Stmt::Defer(..) => Some("another `defer`"),
             Stmt::While { .. } | Stmt::For { .. } => Some("a loop"),
             Stmt::With { .. } => Some("a `with` block"),
+            Stmt::Unsafe { .. } => Some("an `unsafe` block"),
         };
         if let Some(what) = what {
             self.error_help(
