@@ -191,7 +191,7 @@ pub struct Resolved {
     /// position of the name (std.tensor.2).
     pub int_tensors: std::collections::HashSet<Pos>,
     /// The declaration a name, call, method, field or variant refers to, by
-    /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
+    /// the use's position, as an `ail api` symbol id (api.id.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
     /// Methods called on a task, group, channel or mutex handle, by the

@@ -40,6 +40,11 @@ enclosing expression. Otherwise the diagnostic has no fix
 
 ## Explain
 
+**explain.show.1** — `ail explain RULE` prints the rule's text from
+`docs/spec` and, when a chapter has a conformance example tagged
+`error=RULE`, that example and the plain block that directly follows it
+([ADR 0335](../decisions/0335-explain-and-fix-coverage.md)).
+
 **explain.list.1** — `ail explain` with no rule lists every rule of
 `docs/spec`: its ID, chapter key, file and whether `ail fix` repairs
 diagnostics of that rule. With `--json` it is one object with `count`,

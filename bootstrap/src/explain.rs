@@ -23,7 +23,7 @@ pub fn fixable(rule: &str) -> bool {
     FIXABLE.lines().any(|l| l == rule)
 }
 
-/// `ail explain [--json]` (err.explain.3): every rule, the chapter key and
+/// `ail explain [--json]` (explain.list.1): every rule, the chapter key and
 /// file it is in, and whether a fix exists; one line each, or one JSON object.
 pub fn list(json: bool) -> ExitCode {
     let mut rules: Vec<(&str, &str, &str)> = Vec::new();
@@ -163,7 +163,7 @@ pub fn explain(rule: &str) -> Option<Explanation> {
 }
 
 /// The first block tagged `error=RULE` anywhere in the specification, and the
-/// plain block that directly follows it, if any (err.explain.1).
+/// plain block that directly follows it, if any (explain.show.1).
 fn worked_example(rule: &str) -> Option<(String, Option<String>)> {
     let tag = format!("error={rule}");
     for (_, src) in SPEC {
