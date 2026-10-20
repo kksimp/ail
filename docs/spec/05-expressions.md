@@ -34,7 +34,10 @@ fn total(items List[Item]) i64
 ```
 
 **expr.bind.5** — Declaring a local name equal to a visible module-level
-item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
+type, constant, imported name, or prelude type is a compile-time error. A
+local may have the name of a function, module-level or prelude: it shadows
+the function for the rest of its block, and a call of that name there is
+`expr.call.1`. *(ADR 0084; ADR 0469)*
 
 **expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
 (`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
@@ -186,6 +189,9 @@ value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
 `then` is a keyword only right after the condition, so it stays usable as a
 name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
 without `else` is a compile-time error. *(ADR 0280)*
+
+An `if` used as an operand is written in parentheses: `col + (if raw then 4 else 3)`.
+Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
 
 ```ail rules=expr.if.8
 fn sign(n int) str
@@ -435,6 +441,21 @@ performance report. *(ADR 0035)*
 sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
 `a`, since that result is representable. *(ADR 0115)*
 
+**expr.bit.1** — An `int` has the methods `bit_and(b)`, `bit_or(b)` and
+`bit_xor(b)`, which combine the two 64-bit two's complement values bit by bit,
+and `bit_not()`, which flips every bit. `shl(n)` shifts left and discards the
+bits that leave the top; `shr(n)` shifts right and copies the sign bit into the
+vacated positions, so `(-8).shr(1)` is `-4`. *(ADR 0465)*
+
+**expr.bit.2** — A shift count must be in `0..=63`. A count outside that range
+MUST trap. *(ADR 0465)*
+
+```ail fragment
+flags := 5.bit_or(8)        # 13
+low := flags.bit_and(4)     # 4
+hi := (-8).shr(1)           # -4
+```
+
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is
 > decided in the error-handling chapter.
@@ -497,11 +518,20 @@ fn main()
 ```
 
 ```ail error=expr.bind.5
+struct Point
+    x int
+
+fn main()
+    Point := 3                # error: a local may not take a type's name
+    print(Point)
+```
+
+```ail rules=expr.bind.5
 fn helper() int
     4
 
 fn main()
-    helper := 3               # error: shadows a module-level function
+    helper := 3               # a local may shadow a function for its block
     print(helper)
 ```
 

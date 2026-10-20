@@ -9,7 +9,7 @@ use super::{Env, Flow, Interp, Trap, Value, float_text};
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
 use crate::ast::BinOp;
-use crate::tensor::{Data, Fault, Op, Reduce, Scalar, Sum, Tensor};
+use crate::tensor::{Activation, Data, Fault, Op, Reduce, Scalar, Sum, Tensor};
 
 fn trapped(f: Fault, pos: Pos) -> super::Exit {
     Trap { rule: f.rule, pos, message: f.message }.into()
@@ -131,6 +131,9 @@ impl<'a, W: Write> Interp<'a, W> {
             "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
             "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,
             "matmul" => wrap(t.matmul(&tensor_arg()))?,
+            "relu" => wrap(t.activate(Activation::Relu))?,
+            "sigmoid" => wrap(t.activate(Activation::Sigmoid))?,
+            "tanh" => wrap(t.activate(Activation::Tanh))?,
             "reshape" => {
                 let shape = ints(other.as_ref().expect("checked: a shape"));
                 let shape = Tensor::shape_of(&shape, Some(t.len())).map_err(|e| trapped(e, pos))?;
@@ -147,6 +150,7 @@ impl<'a, W: Write> Interp<'a, W> {
             BinOp::Add => Op::Add,
             BinOp::Sub => Op::Sub,
             BinOp::Mul => Op::Mul,
+            BinOp::Div => Op::Div,
             _ => return None,
         };
         let scalar = |v: &Value| match v {

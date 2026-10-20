@@ -357,3 +357,27 @@ Callgrind instructions, walker then tier:
 A step limit costs `loops` 38% on the tier and 21% on the walker. `loops` is
 nearly all one-line statements, and `hit` is the same call on both tiers.
 
+
+## Watch on the bytecode tier (lane 142)
+
+[ADR 0471](../decisions/0471-watch-on-the-bytecode-tier.md) lets `--watch`
+run on the tier. Assignments, `mut` bindings and mutating method calls hand
+off to the walker, which shows each watched value; the rest of the function
+stays on the tier. Watch-off runs cost the same instructions as before
+(callgrind; before = the batch branch at 037253b, after = this change):
+
+| Program | Before (instr) | After (instr) | Change |
+|---|---:|---:|---:|
+| loops, no watch | 1,874,659,459 | 1,874,657,257 | 0.0% |
+| parsum, no watch | 4,467,660,568 | 4,467,737,128 | +0.002% |
+| interp, no watch | 600,063,418 | 600,065,188 | +0.0003% |
+
+With `--watch total` (before = walker, the only option before this ADR):
+
+| Program | Walker (instr) | Tier (instr) | Tier / walker |
+|---|---:|---:|---:|
+| loops | 7,537,076,827 | 6,846,562,238 | 0.91 |
+| parsum (`par for`; the watch order varies run to run, so output is not compared) | 21,646,829,236 | 18,913,573,217 | 0.87 |
+
+The gain under `--watch` is smaller than without it, because the watched
+assignments and mutating calls are the walker's own code.

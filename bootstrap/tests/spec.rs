@@ -5,7 +5,7 @@
 //! The fence line says what to expect (documented in `docs/spec/README.md`):
 //! - ```` ```ail ````: must check clean (warnings allowed).
 //! - ```` ```ail fragment ````: a snippet that isn't a whole program. Column-0
-//!   declarations (`struct`, `enum`, `fn`, `trait`, `impl`, `const`, `use`,
+//!   declarations (`struct`, `enum`, `fn`, `trait`, `impl`, `const`, `use`, `unsafe fn`, `extern`,
 //!   `type`, `@attribute`, with their indented bodies) stay top level, and
 //!   every other line becomes the body of a generated `fn main()`. A block
 //!   that declares its own `main` is used as written.
@@ -31,6 +31,8 @@
 //!   status 0 and that stdout contains TEXT. The tool's output
 //!   format is non-normative (`docs/design/semantic-api.md`); this checks that
 //!   the tool runs on the example and prints what the rule describes.
+//! - ```` ```ail pkg=DIR status=N ````: with `tool=`, `DIR` is a copy of the case
+//!   package `bootstrap/tests/cases/packages/DIR` and the tool must exit N.
 //! - ```` ```ail fixture=DIR ````: a block with no code. `ail check` runs on the
 //!   case fixture `bootstrap/tests/cases/DIR` and must report every rule the
 //!   block cites (its `rules=` list).
@@ -57,6 +59,8 @@ struct Block {
     rules: Vec<String>,
     flags: Vec<String>,
     tool: Option<(Vec<String>, String)>,
+    pkg: Option<String>,
+    status: i32,
     fixture: Option<String>,
     code: String,
 }
@@ -94,7 +98,7 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                             true,
                             Vec::new(),
                         );
-                        let (mut flags, mut tool, mut fixture) = (Vec::new(), None, None);
+                        let (mut flags, mut tool, mut fixture, mut pkg, mut status) = (Vec::new(), None, None, None, 0);
                         let mut want = None;
                         for t in &tags {
                             if let Some(v) = t.strip_prefix("flags=") {
@@ -105,6 +109,10 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                                 want = Some(v.to_string());
                             } else if let Some(v) = t.strip_prefix("fixture=") {
                                 fixture = Some(v.to_string());
+                            } else if let Some(v) = t.strip_prefix("pkg=") {
+                                pkg = Some(v.to_string());
+                            } else if let Some(v) = t.strip_prefix("status=") {
+                                status = v.parse().unwrap();
                             }
                         }
                         if let (Some((_, text)), Some(w)) = (&mut tool, want) {
@@ -115,6 +123,8 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                                 || t.starts_with("tool=")
                                 || t.starts_with("expect=")
                                 || t.starts_with("fixture=")
+                                || t.starts_with("pkg=")
+                                || t.starts_with("status=")
                             {
                                 continue;
                             }
@@ -143,6 +153,8 @@ fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
                             flags,
                             tool,
                             fixture,
+                            pkg,
+                            status,
                             code,
                         });
                     } else {
@@ -163,8 +175,23 @@ fn has_main(code: &str) -> bool {
     code.lines().any(|l| l.starts_with("fn main"))
 }
 
-const DECLS: [&str; 13] =
-    ["struct ", "enum ", "error ", "unique ", "fn ", "trait ", "impl ", "const ", "use ", "type ", "@", "pub ", "#"];
+const DECLS: [&str; 15] = [
+    "struct ",
+    "enum ",
+    "error ",
+    "unique ",
+    "fn ",
+    "unsafe fn ",
+    "extern ",
+    "trait ",
+    "impl ",
+    "const ",
+    "use ",
+    "type ",
+    "@",
+    "pub ",
+    "#",
+];
 
 /// Split a fragment into top-level declarations and a `main` body.
 fn wrap_fragment(code: &str) -> String {
@@ -232,6 +259,20 @@ fn run_both_tiers(file: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Copies a directory tree (a case fixture) into `to`.
+fn copy_dir(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for e in fs::read_dir(from).unwrap() {
+        let e = e.unwrap();
+        let dest = to.join(e.file_name());
+        if e.file_type().unwrap().is_dir() {
+            copy_dir(&e.path(), &dest);
+        } else {
+            fs::copy(e.path(), dest).unwrap();
+        }
+    }
+}
+
 #[test]
 fn spec_examples() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -266,13 +307,19 @@ fn spec_examples() {
                 }
             }
         } else if let Some((args, want)) = &b.tool {
-            // A tool runs on the example and prints the text the rule describes. `FILE` in the
-            // arguments is the example, `DIR` its package directory (holding it as main.ail).
-            let code = if has_main(&b.code) { b.code.clone() } else { wrap_fragment(&b.code) };
+            // A tool runs on the example and prints the text the rule describes. `FILE` is the
+            // example, `DIR` its package directory: the block as main.ail, or a copy of the case
+            // fixture named by `pkg=`. The exit status must be `status=` (0 by default).
             let dir = tmp.join(format!("tool_{}_{}", b.chapter.trim_end_matches(".md"), b.line));
-            fs::create_dir_all(&dir).unwrap();
+            let _ = fs::remove_dir_all(&dir);
             let file = dir.join("main.ail");
-            fs::write(&file, &code).unwrap();
+            if let Some(p) = &b.pkg {
+                copy_dir(&root.join("tests/cases/packages").join(p), &dir);
+            } else {
+                fs::create_dir_all(&dir).unwrap();
+                let code = if has_main(&b.code) { b.code.clone() } else { wrap_fragment(&b.code) };
+                fs::write(&file, &code).unwrap();
+            }
             let args: Vec<String> = args
                 .iter()
                 .map(|a| match a.as_str() {
@@ -283,13 +330,14 @@ fn spec_examples() {
                 .collect();
             let out = Command::new(env!("CARGO_BIN_EXE_ail")).args(&args).current_dir(&dir).output().unwrap();
             let stdout = String::from_utf8_lossy(&out.stdout);
-            if !out.status.success() || !stdout.contains(want.as_str()) {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if out.status.code() != Some(b.status) || !format!("{stdout}{stderr}").contains(want.as_str()) {
                 ok = false;
                 failures.push(format!(
-                    "{at}: `ail {}` should print {want:?}; exit {:?}\n{stdout}{}",
+                    "{at}: `ail {}` should exit {} and print {want:?}; exit {:?}\n{stdout}{stderr}",
                     args.join(" "),
+                    b.status,
                     out.status.code(),
-                    String::from_utf8_lossy(&out.stderr)
                 ));
             }
         } else {

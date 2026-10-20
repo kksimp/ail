@@ -24,6 +24,8 @@ case fixtures in `bootstrap/tests/cases` already exercise the package rules.
   the block as `main.ail`. Output formats are non-normative
   ([semantic-api.md](../design/semantic-api.md)), so `expect` is a short fragment
   the rule describes, not a full output.
+- `pkg=DIR status=N` with `tool=` runs the tool on a copy of the case package
+  `bootstrap/tests/cases/packages/DIR`, which must exit N.
 - `fixture=DIR` checks `ail check` on the case fixture `bootstrap/tests/cases/DIR`
   and requires each rule the block cites in `rules=` to be reported there.
 - `explain.cover.*` is covered by a `tool=` example and is also enforced by
