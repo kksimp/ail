@@ -171,6 +171,7 @@ fn plain_sig(receiver bool?, params List[Ty], result Ty) Sig
     Sig(
         receiver: receiver,
         params: [SigParam(mutable: false, ty: t) for t in params],
+        names: [],
         moves: [],
         ret: result,
         generics: [],
@@ -372,20 +373,14 @@ fn Checker.check_call(
     for a in args
         if p := a.param
             key_misplaced(p.pos)
-        elif l := a.label
-            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
     vars := sig.generics
-    if args.len() != sig.params.len()
+    order := arg_slots(what, sig, args, at) else
         args_only(args)
-        err(
-            "expr.call.1",
-            at,
-            "`{what}` takes {count(sig.params.len(), "argument")}, but {was_were(args.len())} given",
-        )
         return subst_unknown(sig.ret, binds, vars)
     before := diags.len()
-    for k in 0..args.len()
-        a := args[k]
+    for i in order
+        a := args[i]
+        k := slot_of(sig, args, i)
         p := sig.params[k]
         hint := subst_unknown(p.ty, binds, vars)
         mut want_hint := none
@@ -435,9 +430,9 @@ fn Checker.check_call(
     if r := recv
         items.push(r)
         muts.push(sig.receiver == true)
-    for k in 0..args.len()
-        items.push(args[k].value)
-        muts.push(sig.params[k].mutable and args[k].mutable)
+    for i in order
+        items.push(args[i].value)
+        muts.push(sig.params[slot_of(sig, args, i)].mutable and args[i].mutable)
     for j in 0..items.len()
         for i in 0..j
             if muts[i] and muts[j] and certainly_overlap(items[i], items[j])
@@ -449,6 +444,83 @@ fn Checker.check_call(
                     hint,
                 )
     subst(sig.ret, binds)
+
+## The parameter that argument `i` fills: its place when none are named,
+## else the named parameter, or the next one for a positional argument.
+fn slot_of(sig Sig, args List[ast.Arg], i int) int
+    l := args[i].label else return i
+    if sig.names.len() == 0
+        return i
+    sig.names.index_of(l.name) else i
+
+## expr.call.3: check the labels of a call and return the argument indices
+## in parameter order, or `none` after reporting a problem (including a
+## wrong argument count, expr.call.1).
+fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos) List[int]?
+    miscount := "`{what}` takes {count(sig.params.len(), "argument")}, but {was_were(args.len())} given"
+    mut first := -1
+    for i in 0..args.len()
+        if args[i].label != none
+            first = i
+            break
+    if first < 0
+        if args.len() != sig.params.len()
+            err("expr.call.1", at, miscount)
+            return none
+        return [i for i in 0..args.len()]
+    first_pos := args[first].label?.pos else at
+    if sig.names.len() == 0 or sig.names.len() != sig.params.len()
+        err_help(
+            "expr.call.3",
+            first_pos,
+            "`{what}` doesn't take named arguments",
+            "pass the arguments by position",
+        )
+        return none
+    mut filled := [-1 for _ in sig.params]
+    mut ok := true
+    for i in 0..args.len()
+        a := args[i]
+        mut slot := i
+        if l := a.label
+            if k := sig.names.index_of(l.name)
+                slot = k
+            else
+                mut d := new_diag("expr.call.3", l.pos, "`{what}` has no parameter `{l.name}`")
+                if s := suggest(l.name, sig.names)
+                    d = d.did_you_mean(s)
+                diags.push(d)
+                ok = false
+                continue
+        elif i > first
+            err_help(
+                "expr.call.3",
+                expr_pos(a.value),
+                "a positional argument can't follow a named one",
+                "name this argument too, or move it before the named ones",
+            )
+            ok = false
+            continue
+        if slot >= filled.len()
+            err("expr.call.1", at, miscount)
+            return none
+        if filled[slot] >= 0
+            mut where := expr_pos(a.value)
+            mut how := " by position"
+            if l := a.label
+                where = l.pos
+                how = ""
+            err("expr.call.3", where, "parameter `{sig.names[slot]}` is given more than once{how}")
+            ok = false
+        else
+            filled[slot] = i
+    if not ok
+        return none
+    missing := [sig.names[k] for k in 0..filled.len() if filled[k] < 0]
+    if missing.len() > 0
+        err("expr.call.1", at, "`{what}` is missing {list_names(missing)}")
+        return none
+    filled
 
 @allow("expr.match.3") fn is_index(e ast.Expr) bool
     match e
