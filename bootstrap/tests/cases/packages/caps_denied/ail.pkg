@@ -1,0 +1,4 @@
+# `geo` reaches `fs` itself and `env` through its own dependency, and the
+# app's own code reaches `clock` (eff.cap.4-5).
+package app caps random
+dep geo path vendor/geo

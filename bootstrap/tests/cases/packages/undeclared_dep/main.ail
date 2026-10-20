@@ -1,0 +1,5 @@
+use a
+use b
+
+fn main()
+    print(a.twice(b.add(1, 2)))

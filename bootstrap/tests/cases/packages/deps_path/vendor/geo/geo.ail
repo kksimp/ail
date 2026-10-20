@@ -1,0 +1,14 @@
+# The root module of package `geo`; it shares `textkit` with the app.
+use std.fs
+use textkit
+use shapes
+
+pub struct Point
+    pub x int
+    pub y int
+
+pub fn describe(p Point) str
+    textkit.shout("point {p.x},{p.y} in a {shapes.UNIT}")
+
+pub fn has_cache() bool
+    fs.exists("geo-cache-that-does-not-exist")

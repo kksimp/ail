@@ -22,6 +22,22 @@ pub struct Program {
     /// The source files of a package, in line order (`modules.rs`). Empty
     /// for a single-file program without imports.
     pub files: Vec<SourceFile>,
+    /// The capabilities each package manifest grants (eff.cap.4-5,
+    /// `packages.rs`). Empty without an `ail.pkg`.
+    pub grants: Vec<Grant>,
+}
+
+/// `caps LIST` on a manifest line: the code of `package` (empty for the
+/// root package) may reach only `caps` (eff.cap.4-5).
+#[derive(Debug, Clone)]
+pub struct Grant {
+    pub package: String,
+    pub caps: Vec<&'static str>,
+    /// The manifest line's name.
+    pub pos: Pos,
+    /// From the package's own `package` line (eff.cap.5), not from a `dep`
+    /// line (eff.cap.4).
+    pub own: bool,
 }
 
 /// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
