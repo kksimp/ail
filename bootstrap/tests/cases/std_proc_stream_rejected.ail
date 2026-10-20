@@ -1,0 +1,13 @@
+# std.proc.7: `wait` and `kill` take the child with `move` and consume it
+# (own.move.2, own.uniq.2); conc.select.1: `select` takes a list of channels.
+use std.proc
+use std.task
+
+fn main() !
+    a := proc.start("cat", [])?
+    proc.wait(a)?
+    b := proc.start("cat", [])?
+    proc.kill(move b)
+    print(b.pid)
+    xs := [1, 2]
+    task.select(xs)

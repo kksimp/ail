@@ -1165,6 +1165,9 @@ impl<'p> Refs<'p> {
                 self.expr(scrutinee);
                 for arm in arms {
                     self.pattern(&arm.pat);
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&arm.body);
                 }
             }
@@ -1183,7 +1186,7 @@ impl<'p> Refs<'p> {
 
     fn pattern(&mut self, p: &Pattern) {
         match p {
-            Pattern::Wildcard(_) | Pattern::Literal(..) => {}
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
             Pattern::Or(ps, _) => {
                 for p in ps {
                     self.pattern(p);

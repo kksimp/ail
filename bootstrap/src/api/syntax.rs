@@ -619,7 +619,7 @@ fn expr(e: &Expr) -> J {
             "Match",
             vec![
                 ("scrutinee", expr(scrutinee)),
-                ("arms", arr(arms, |a| J::Obj(vec![("pat", pattern(&a.pat)), ("body", block(&a.body))]))),
+                ("arms", arr(arms, |a| J::Obj(vec![("pat", pattern(&a.pat)), ("guard", opt(&a.guard, expr)), ("body", block(&a.body))]))),
                 ("pos", pos(*p)),
             ],
         ),
@@ -670,15 +670,11 @@ fn cond(c: &Cond) -> J {
 fn pattern(p: &Pattern) -> J {
     match p {
         Pattern::Wildcard(at) => variant("Wildcard", vec![("pos", pos(*at))]),
-        Pattern::Literal(lit, at) => {
-            let value = match lit {
-                Literal::Int(v) => variant("IntLit", vec![("value", s(&v.to_string()))]),
-                Literal::Char(c) => variant("CharLit", vec![("value", s(&c.to_string()))]),
-                Literal::Str(t) => variant("StrLit", vec![("value", s(t))]),
-                Literal::Bool(b) => variant("BoolLit", vec![("value", J::Bool(*b))]),
-            };
-            variant("Literal", vec![("value", value), ("pos", pos(*at))])
-        }
+        Pattern::Literal(lit, at) => variant("Literal", vec![("value", literal(lit)), ("pos", pos(*at))]),
+        Pattern::Range { lo, hi, inclusive, pos: at } => variant(
+            "Range",
+            vec![("lo", literal(lo)), ("hi", literal(hi)), ("inclusive", J::Bool(*inclusive)), ("pos", pos(*at))],
+        ),
         Pattern::Or(alts, at) => variant("Alt", vec![("alts", arr(alts, pattern)), ("pos", pos(*at))]),
         Pattern::Variant { qualifier, name, bindings, pos: at } => variant(
             "Variant",
@@ -689,6 +685,15 @@ fn pattern(p: &Pattern) -> J {
                 ("pos", pos(*at)),
             ],
         ),
+    }
+}
+
+fn literal(lit: &Literal) -> J {
+    match lit {
+        Literal::Int(v) => variant("IntLit", vec![("value", s(&v.to_string()))]),
+        Literal::Char(c) => variant("CharLit", vec![("value", s(&c.to_string()))]),
+        Literal::Str(t) => variant("StrLit", vec![("value", s(t))]),
+        Literal::Bool(b) => variant("BoolLit", vec![("value", J::Bool(*b))]),
     }
 }
 

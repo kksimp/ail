@@ -511,7 +511,12 @@ fn children<'a>(e: &'a Expr, visit: &mut dyn FnMut(Node<'a>)) {
         }
         Expr::Match { scrutinee, arms, .. } => {
             ex(scrutinee, visit);
-            arms.iter().for_each(|a| visit(Node::B(&a.body)));
+            for a in arms {
+                if let Some(g) = &a.guard {
+                    ex(g, visit);
+                }
+                visit(Node::B(&a.body));
+            }
         }
         _ => {}
     }
@@ -671,6 +676,9 @@ fn expr_uses(name: &str, e: &Expr, cond: bool, u: &mut Uses) {
         Expr::Match { scrutinee, arms, .. } => {
             expr_uses(name, scrutinee, cond, u);
             for a in arms {
+                if let Some(g) = &a.guard {
+                    expr_uses(name, g, true, u);
+                }
                 a.body.iter().for_each(|s| stmt_uses(name, s, true, u));
             }
         }

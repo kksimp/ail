@@ -1,0 +1,6 @@
+fn main()
+    n := 3
+    match n
+        5..2 => print("a")
+        3..3 => print("b")
+        _ => print("c")

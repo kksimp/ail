@@ -27,6 +27,15 @@ needs a runnable example.
   it print every uncovered rule of every chapter, for example with
   `./ail selftest --test spec -- --nocapture`.
 
+## Amendment: specified but unbuilt rules
+
+A block tagged `skip=bootstrap` is counted for coverage, as it is for the
+rules it cites. Those rules are specified; the bootstrap doesn't build them
+yet (the `std.date` and `std.tz` modules, for now). The block is still checked
+by the spec's author, but not by the harness, until the feature lands and the
+tag is removed. Rules covered only this way are listed in the PR, so a reviewer
+can see which examples are unverified.
+
 ## Rejected alternatives
 
 - **A separate coverage table in `docs/status.md`.** It drifts from the spec and
@@ -42,5 +51,5 @@ needs a runnable example.
 
 Not applicable: this changes the test harness and the spec's examples, not the
 language syntax, so `tools/tokbench` does not apply. Example count after this
-change: 345 checked, 50 skipped (`skip=bootstrap`); zero uncovered rules in the
+change: 364 checked, 56 skipped (`skip=bootstrap`); zero uncovered rules in the
 five batch chapters.

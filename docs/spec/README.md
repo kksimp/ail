@@ -56,6 +56,7 @@ line says what to expect:
 | ```` ```ail error=RULE ```` | Must report `RULE` among its errors. Handled as `fragment` when it has no `fn main`. |
 | ```` ```ail skip=bootstrap ```` | Uses a feature the bootstrap doesn't implement yet. Counted, not run. Remove the tag when the feature lands. |
 | ```` ```ail skip=context ```` | An illustration that uses declarations the chapter doesn't show. Counted, not run. Prefer making the example self-contained. |
+| ```` ```ail skip=bootstrap rules=ID ```` | Counted for the rules it cites, not checked or run (ADR 0498): the feature is specified but not yet built. |
 | ```` ```ail norun ```` | Checked but not run: it traps on purpose, or needs a window, network or input the harness doesn't have. |
 | ```` ```ail rules=ID,ID ```` | Demonstrates the listed rules (ADR 0498). Every rule of the types, expressions, std, effects and tools chapters must be demonstrated; `AIL_LIST_UNCOVERED=1 ./ail selftest --test spec -- --nocapture` lists the rest. |
 | ```` ```ail flags=A,B ```` | Checked with those `ail check` flags, such as `--deterministic` or `--deny fs`. Not run. |
@@ -94,9 +95,10 @@ aren't run.
 | 15 | [Compile-time execution and metaprogramming](15-compile-time.md) | `ct` | Drafted (partial) |
 | 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
 | 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace` | Drafted (partial) |
-| 22 | [Tool lookups: api, explain, fix](22-tools.md) | `api`, `explain`, `fix` | Drafted (partial) |
+| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
+| std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).
