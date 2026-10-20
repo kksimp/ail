@@ -119,3 +119,27 @@ error struct UiError
 ## (std.tensor.1), so a tensor is `Eq` but neither ordered nor a key.
 struct Tensor[T]
     elements Map[int, T]
+
+## std.regex (ADR 0438). A regex is its pattern; compiled programs are cached
+## by the interpreter, so a copy costs nothing.
+struct Regex
+    pat str
+
+error struct RegexError
+    pattern str
+    at int
+    kind str
+    rule str
+    message str
+
+struct Match
+    start int
+    end int
+    text str
+
+## `groups[0]` is the whole match; a group that didn't take part is `none`.
+struct Captures
+    start int
+    end int
+    groups List[str?]
+    named Map[str, str]

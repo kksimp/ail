@@ -132,6 +132,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
 | **`par for` comprehension** | `[f(x) par for x in xs]`: a list whose elements are computed on the thread pool, in order, with the sequential result (`conc.par.12`, ADR 0302). |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
+| **Pike VM** | The matcher of `std.regex`: one thread per program position stepped across the text once, so every pattern runs in time proportional to pattern size times text length (`std.regex.4`, ADR 0438). |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
 | **Place** | A local binding, parameter or `self`, or a field or element of a place: something that can be assigned to or passed `mut`. It is *mutable* when its root is a `mut` binding, `mut` parameter or `mut self` (`own.place.1`, ADR 0117). |
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |

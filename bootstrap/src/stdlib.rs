@@ -24,6 +24,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["kill", "run", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
+    ("regex", &["captures", "compile", "escape", "find", "find_all", "is_match", "replace", "replace_first", "split"]),
     ("tensor", &["from", "zeros"]),
     ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
@@ -117,6 +118,10 @@ const TYPES: &[(&str, &str)] = &[
     ("Cursor", "ui"),
     ("UiError", "ui"),
     ("Tensor", "tensor"),
+    ("Regex", "regex"),
+    ("RegexError", "regex"),
+    ("Match", "regex"),
+    ("Captures", "regex"),
 ];
 
 /// The declarations of the standard modules' types, read with the prelude.

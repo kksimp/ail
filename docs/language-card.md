@@ -21,6 +21,7 @@
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
 standard modules (`compress`, `fs`, `env`, `hash`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time`, `ui`)
 need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -70,6 +71,8 @@ update a `mut` variable in a loop, use `=`.
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
+
+Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
 
 `t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 

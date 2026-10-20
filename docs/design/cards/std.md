@@ -82,4 +82,21 @@ error struct UiError
     message str
 struct Tensor[T]  ## std.tensor (ADR 0328): opaque; build with `tensor.from(xs, shape)` or
     elements Map[int, T]
+struct Regex  ## std.regex (ADR 0438). A regex is its pattern; compiled programs are cached
+    pat str
+error struct RegexError
+    pattern str
+    at int
+    kind str
+    rule str
+    message str
+struct Match
+    start int
+    end int
+    text str
+struct Captures  ## `groups[0]` is the whole match; a group that didn't take part is `none`.
+    start int
+    end int
+    groups List[str?]
+    named Map[str, str]
 ```

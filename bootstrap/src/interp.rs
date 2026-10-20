@@ -33,6 +33,7 @@ mod spawn;
 mod codec;
 mod random;
 mod tz;
+mod regex;
 mod stdlib;
 mod tasks;
 mod tensor;

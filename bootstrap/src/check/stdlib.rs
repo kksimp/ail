@@ -254,6 +254,17 @@ impl<'p> Checker<'p> {
                 };
                 (params, Ty::Res(Box::new(std_ty(ok)), Errs::Set(vec![std_ty("net.NetError")])))
             }
+            ("regex", "compile") => (
+                vec![Str],
+                Ty::Res(Box::new(std_ty("regex.Regex")), Errs::Set(vec![std_ty("regex.RegexError")])),
+            ),
+            ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
+            ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
+            ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
+            ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
+            ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),
+            ("regex", "escape") => (vec![Str], Str),
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
