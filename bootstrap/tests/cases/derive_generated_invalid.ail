@@ -1,0 +1,14 @@
+## Generated code is checked like written code; problems are reported at the impl (ct.gen.1, ct.gen.3).
+@derive(derive_first) trait First
+    fn first(self) str
+
+fn derive_first(t TypeInfo) str ! DeriveError
+    "fn first(self) str\n    {t.name}.nope\n"
+
+struct Pair
+    a int
+
+impl First for Pair
+
+fn main()
+    print(Pair(a: 1).first())

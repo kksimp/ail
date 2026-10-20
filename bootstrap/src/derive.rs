@@ -399,13 +399,18 @@ fn split(
 
 /// ct.gen.3: an error about generated text, at the `impl`, with a note there.
 fn at_impl(at: Pos, job: &Job, gen_pos: Pos, message: String) -> Diagnostic {
-    let mut d = Diagnostic::new(
+    Diagnostic::new(
         "ct.gen.1",
         at,
-        format!("the code `{}` generated for `{}` is invalid: {message}", job.generator, job.label),
-    );
-    d.notes.push(Note { pos: gen_pos, message: "in the generated code".into() });
-    d
+        format!(
+            "the code `{}` generated for this `impl` is invalid at gen:impl:{}:{}:{}: {message}",
+            job.generator,
+            job.label,
+            gen_pos.line % FILE_LINES,
+            gen_pos.col
+        ),
+    )
+    .help(format!("make `{}` return only `fn` definitions for the `impl` and its type", job.generator))
 }
 
 fn shift(tokens: &mut [Token], base: usize) {

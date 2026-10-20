@@ -46,9 +46,11 @@ const COMPARISONS: &[(&str, BinOp)] =
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
 const PRELUDE: &str = include_str!("prelude.ail");
 
-/// Names of the optional `std.json` prelude module (ADR 0161), with its
-/// derivable traits (ADR 0307).
-const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json", "ToJson", "FromJson"];
+/// Names of the optional `std.json` prelude module (ADR 0161).
+const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
+
+/// Names of its derivable traits, read with it only when named (ADR 0308).
+const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson"];
 
 /// Names of the optional `derive` prelude module: what a derive generator
 /// receives (refl.info.1, ADR 0306).
@@ -56,23 +58,29 @@ const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInf
 
 /// The always-read prelude, plus the `json` module (after its `## @module`
 /// marker) when the program names one of its items and declares none of
-/// them, and the `derive` module when `json` is read or the program names
-/// one of its items or writes `@derive`.
+/// them; its `jsonderive` part when the program names `ToJson` or
+/// `FromJson`; and the `derive` module when `jsonderive` is read or the
+/// program names one of its items or writes `@derive`.
 fn prelude_text(tokens: &[Token]) -> String {
     let (core, rest) = PRELUDE.split_once("## @module json\n").expect("prelude has a json module");
-    let (json, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
+    let (json, rest) = rest.split_once("## @module jsonderive\n").expect("prelude has a jsonderive module");
+    let (json_derive, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
     let wants = |names: &[&str]| {
         let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
         let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
         tokens.iter().any(named) && !declared
     };
-    let want_json = wants(JSON_NAMES);
+    let want_json_derive = wants(JSON_DERIVE_NAMES);
+    let want_json = want_json_derive || wants(JSON_NAMES);
     let at_derive = tokens.windows(2).any(|w| matches!((&w[0].tok, &w[1].tok), (Tok::Sym("@"), Tok::Ident(n)) if n == "derive"));
     let mut text = core.to_string();
     if want_json {
         text.push_str(json);
     }
-    if want_json || at_derive || wants(DERIVE_NAMES) {
+    if want_json_derive {
+        text.push_str(json_derive);
+    }
+    if want_json_derive || at_derive || wants(DERIVE_NAMES) {
         text.push_str(derive);
     }
     text

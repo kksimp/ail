@@ -417,6 +417,7 @@ fn Json.need_arr(self) List[Json] ! JsonError
     v := as_arr() else return JsonError(-1, "expected an array, found {kind()}")
     v
 
+## @module jsonderive
 ## A value with a JSON form. `impl ToJson for T` with no methods derives
 ## `to_json` with `derive_to_json` (ct.derive.2, ADR 0307).
 @derive(derive_to_json) trait ToJson
@@ -515,7 +516,7 @@ fn json_field(f FieldInfo) str ! DeriveError
     json_value(f.type_text, "j.need({key})?", 0)
 
 ## Text that reads a `type_text` from the `Json` expression `v`.
-fn json_value(type_text str, v str, depth int) str ! DeriveError
+fn json_value(type_text str, v str, nesting int) str ! DeriveError
     match type_text
         "str" => "{v}.need_str()?"
         "float" => "{v}.need_num()?"
@@ -524,8 +525,8 @@ fn json_value(type_text str, v str, depth int) str ! DeriveError
         "Json" => v
         _ =>
             if inner := type_text.strip_prefix("List[")
-                item := "e{depth}"
-                elem := json_value(inner.slice(0, inner.chars().len() - 1), item, depth + 1)?
+                item := "e{nesting}"
+                elem := json_value(inner.slice(0, inner.chars().len() - 1), item, nesting + 1)?
                 return "[{elem} for {item} in {v}.need_arr()?]"
             if type_text.contains("[") or type_text.contains("?") or type_text.contains(" ")
                 return DeriveError("`FromJson` can't read the type `{type_text}` yet")

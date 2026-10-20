@@ -292,5 +292,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0312](0312-editor-agent-panel.md) | The editor's agent panel: info (Ctrl-I), trace (Shift-F5) and failure paths (Ctrl-Shift-E) in one pane *(delegated)* | Accepted | 2026-10-20 |
 | [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
 | [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
+| [0306](0306-derive-generators-run-while-loading.md) | The bootstrap runs derive generators while it loads the program; `TypeInfo.is_error` *(delegated)* | Accepted | 2026-10-20 |
+| [0307](0307-generated-associated-functions.md) | Generated text may add associated functions of the deriving type *(delegated)* | Accepted | 2026-10-20 |
+| [0308](0308-tojson-fromjson-derives.md) | `ToJson` and `FromJson` are prelude derives written in AIL *(delegated)* | Accepted | 2026-10-20 |
+| [0309](0309-api-expanded-output.md) | `ail api --expanded` lists generated functions under their `impl`; built-in derives by name *(delegated)* | Accepted | 2026-10-20 |
 | [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
 | [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |

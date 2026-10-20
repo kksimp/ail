@@ -74,3 +74,25 @@ impl<'p> Api<'p> {
         Vec::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SRC: &str = "struct P\n    x int\n\nimpl ToJson for P\nimpl Eq for P\n\nfn main()\n    print(P(x: 1).to_json().to_text())\n";
+
+    #[test]
+    fn expanded_shows_generated_methods_with_origin() {
+        let out = outline_with("t.ail", SRC, false, Form::Json, true).unwrap();
+        assert!(out.contains("\"derived_by\":\"fn:derive_to_json\""), "{out}");
+        assert!(out.contains("\"derived_by\":\"built-in\""), "{out}");
+        assert!(out.contains("\"generator\":\"fn:derive_to_json\",\"at\":\"gen:impl:P.ToJson:1:4\""), "{out}");
+        assert!(out.contains("\"text\":\"fn to_json(self) Json\\n"), "{out}");
+    }
+
+    #[test]
+    fn plain_outline_leaves_generated_code_out() {
+        let out = outline_with("t.ail", SRC, false, Form::Json, false).unwrap();
+        assert!(!out.contains("to_json") && !out.contains("derived_by"), "{out}");
+    }
+}
