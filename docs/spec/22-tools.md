@@ -4,6 +4,7 @@ Chapter keys: `api`, `explain`, `fix`, `budget`
 Chapter keys: `api`, `explain`, `fix`, `snap`
 Chapter keys: `api`, `explain`, `fix`, `budget`, `diff`
 Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `edit`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -316,6 +317,7 @@ of the first record not shown.
 **budget.out.6** — A record is never cut, so a command whose whole output is
 one line (`ail api FILE`, `ail explain --json`) is shown whole; its text forms
 (`--text`) split into records.
+
 ## Snapshot updating
 **snap.update.1** — `ail test --update FILE` runs the tests of `FILE` as
 `ail test` does, and rewrites the expectations that failed so that they

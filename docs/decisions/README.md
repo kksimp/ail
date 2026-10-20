@@ -374,6 +374,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
+| [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
 | [0396](0396-ail-diff-semantic-diff.md) | `ail diff`: a semantic diff of declarations, diagnostics and test outcomes, also against a git revision *(delegated)* | Accepted | 2026-10-20 |
 | [0384](0384-mir-shape-and-native-subset.md) | MIR: flat instructions, block parameters, built on the fly; the native subset *(delegated)* | Accepted | 2026-10-20 |
 | [0385](0385-x86-64-code-generation.md) | x86-64 code generation: the C convention, scratch registers, checks that branch to trap stubs *(delegated)* | Accepted | 2026-10-20 |
