@@ -1,0 +1,15 @@
+error enum Bad
+    Neg
+
+fn load(n int) !int
+    if n < 0
+        return Neg
+    n
+
+fn run() !
+    x := load(1)
+    load(2)
+    print(x)
+
+fn main()
+    print(1)

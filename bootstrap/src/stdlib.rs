@@ -1,5 +1,5 @@
 //! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
-//! `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0177): their names, the functions
+//! `std.random`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0177): their names, the functions
 //! each provides, and the declarations of their types. The checker types
 //! calls to them in `check/stdlib.rs`; the interpreter runs them in
 //! `interp/stdlib.rs`.
@@ -13,6 +13,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("fs", &["append_text", "exists", "list_dir", "make_dir", "read_text", "remove", "write_text"]),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
     ("proc", &["run"]),
+    ("random", &["float", "int", "seed", "shuffle"]),
     ("time", &["now_ms", "sleep_ms"]),
     ("ui", &["open"]),
 ];

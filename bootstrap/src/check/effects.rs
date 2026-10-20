@@ -17,7 +17,11 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "net", "ui"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
+
+/// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
+/// capabilities whose results the program's inputs don't fix.
+pub const DETERMINISTIC_DENY: [&str; 4] = ["clock", "net", "proc", "random"];
 
 /// Effects that a `@pure` function may not have (eff.pure.1): everything but
 /// `fail` and `mutates`, which its signature already shows.
@@ -45,6 +49,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "env" => (&["args", "get", "cwd", "program"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
+        "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
         // std.ui.9: opening a window and every `ui.Window` method.
         "ui" => (&["open", "Window"], &["ui", "io"]),
@@ -613,7 +618,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "ui"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

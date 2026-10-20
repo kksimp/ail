@@ -29,6 +29,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
 ./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols)
+./ail fix FILE [--dry-run]         # apply the fixes diagnostics carry, re-check, repeat (ADR 0203)
 ./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
 ./ail selftest                     # the bootstrap's own tests
 ```
@@ -55,9 +56,11 @@ reported but don't stop a program from running.
 | `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8` |
 | `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8` |
 | `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics` (ADRs 0177–0179) | `std.ui.1–8` |
-| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2`, `std.ui.1` |
-| `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2` |
+| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
+| `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
+| `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
+| `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
@@ -78,7 +81,7 @@ package's are reported file by file.
   (`geo.Point(x: 1, y: 2)`). `use std.NAME` imports a standard module (below).
 
 - **Tests (ADRs 0167–0168):** `@test fn name()` on top-level functions
-  (attributes `@test` and `@pure` only; arguments are skipped), run by
+  (attributes `@test`, `@pure`, `@inline` and `@deprecated("why")`; other arguments are skipped), run by
   `ail test FILE [--json]`; `assert(cond)` and `assert_eq(a, b)` trap with
   `test.assert.1`. `NAME.test` cases hold the expected `--json` output.
 - **Property tests and doc examples (ADRs 0198–0201):** a `@test` with
@@ -131,7 +134,7 @@ package's are reported file by file.
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc`,
-  `std.time` and `std.ui` (a window of text cells; ADR 0177) (and `use std.NAME as d`), their functions called as
+  `std.random`, `std.time` and `std.ui` (a window of text cells; ADR 0177) (and `use std.NAME as d`), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
 - **Methods:** inside a method, the receiver's fields and methods by bare
   name (`pos += 1`, `peek()`); `[]` and `{}` declared with `:=` are typed by
@@ -164,7 +167,12 @@ Calls to the standard modules (`fs.*`, `env.*`, `io.*`, `proc.*`, `time.*`)
 are recognised by name; `unsafe` and `spawn` aren't parsed yet, so nothing
 has those effects.
 
-Not yet: `f32` and the sized integer types, `s.bytes()`, `T ! E` outside
+Sized numbers (ADRs 0194–0195): `i8 i16 i32 u8 u16 u32 u64 f32` with literals typed by
+context, same-type arithmetic that traps on overflow, `to_<type>()` conversions, and
+`@inline`/`@deprecated` (ADRs 0196–0197). Not yet: `u64` literals above `i64::MAX`,
+sized `for` ranges, `impl` on sized types.
+
+Not yet: `s.bytes()`, `T ! E` outside
 return types, matching on a set of error types, range patterns and guards,
 the arithmetic operator traits, trait functions without `self` and
 supertraits (OQ-039), associated types (OQ-037), methods for one

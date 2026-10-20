@@ -13,9 +13,12 @@
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output
+./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
+./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms, use std.x); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
 
@@ -345,6 +348,14 @@ no `break` can end a function too.
   rounds halves away from zero and gives a float: `2.5.round()` is `3.0`.
   Floats print like Python: `0.1 + 0.2` is `0.30000000000000004`, `1e16` is
   `1e+16`.
+- Sized numbers `i8 i16 i32 u8 u16 u32 u64 f32` (`i64` is `int`, `f64` is
+  `float`). A literal takes its type from context and must fit: `fn mix(a i32)`
+  called `mix(-7)`, `r: 255` for a `u8` field. Operators need two values of
+  one type and trap on overflow; no implicit widening. Convert with
+  `x.to_u8()` (traps if it doesn't fit), `x.to_int()`, `x.to_float()`,
+  `f.to_f32()`; `wrapping_add`, `checked_add` and `saturating_add` work on
+  every sized integer. Unsigned types have no unary `-`. Locals aren't
+  annotated: `x := 100.to_u8()`.
 - `int` extras: `a.min(b)`, `a.max(b)`, `n.abs()`, `n.to_hex()` (`ff`, no `0x`),
   `checked_add` (gives `int?`), `wrapping_add`, `saturating_add`, and so on.
 
@@ -508,6 +519,7 @@ fn main() !
 | `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
+| `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`; colors `0xRRGGBB` |
 
@@ -568,10 +580,14 @@ fn double(x int) int
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
-`fs`, `env`, `proc`, `clock`, `net`, `ui`. A call through `any Trait` counts every
+`fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. A call through `any Trait` counts every
 implementation.
 
 ```ail
 @pure fn area(w int, h int) int   # error if it reaches print or a capability
     w * h
 ```
+
+`@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
+area")` before a function warns at each call, with the reason (required).
+Unknown attributes are errors.
