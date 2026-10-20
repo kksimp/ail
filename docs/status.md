@@ -79,7 +79,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 `tools/edit/edit.ail`, a code editor written in AIL (ADRs 0180–0181, 0241): a headless, tested core driving `ail check --json`, fixes, `ail explain` and `ail api`, with a `std.ui` window front end. It has completion, hover, find and replace, format on save, tabs, a Ctrl-P picker, a command palette, project search and replace, a file tree, rename through references, themes, an agent panel (info, trace, failure paths, coverage, program card) per-directory session memory, a problems list that stays live, a replace preview with per-row accept, and tests on save (ADRs 0244, 0291–0296, 0312–0313, 0331, 0338–0339, 0353–0354).
 
-`tools/garlic/garlic.ail`, Garlic, a text-mode web browser written in AIL ([garlic-browser.md](design/garlic-browser.md), 2026-10-20): an HTML tokenizer and tree builder, text-cell layout with numbered links, history and find, a `std.ui` window, and a page model agents read (`--json`: roles, names, links and the cells each was drawn in). No CSS or JavaScript yet; a JavaScript engine in AIL is a parallel lane.
+`tools/garlic/garlic.ail`, Garlic, a text-mode web browser written in AIL ([garlic-browser.md](design/garlic-browser.md), 2026-10-20): an HTML tokenizer and tree builder, text-cell layout with numbered links, history and find, a `std.ui` window, forms (GET and POST), agent actions (`--do`, `--session`), and a page model agents read (`--json`: roles, names, values, links, changed nodes and the cells each was drawn in). No CSS or JavaScript yet; a JavaScript engine in AIL is a parallel lane.
 
 ## Design topics
 

@@ -124,25 +124,33 @@ an agent sees is exactly what a person sees. The design follows `ail api`
 An agent drives Garlic headless, with no window:
 
 - `--do ACTION:ARG` (repeatable, in order) before `--json` or `--print`:
-  `follow:3` (link number), `click:12` (node id; follows a link), `open:URL`,
-  `back`, `find:TEXT`, `scroll:ROW`, `reload`.
+  `follow:3` (link number), `click:12` (node id, as Enter: follows a link,
+  presses a button, toggles a box), `type:12=TEXT`, `submit:12` (the form
+  of node 12), `check:12`, `select:12=OPTION`, `open:URL`, `back`,
+  `find:TEXT`, `scroll:ROW`, `reload`.
 - `--session` keeps one browser open: one JSON action per line on stdin
-  (`{"do":"follow","link":3}`, `{"do":"find","text":"price"}`; the argument
-  is `link`, `id` or `row`, or `url` or `text`), answered with the page model
-  on one line. A failed action adds `"message"` to the model.
+  (`{"do":"follow","link":3}`, `{"do":"type","id":12,"text":"garlic"}`; the
+  argument is `link`, `id` or `row`, or `url` or `text`), answered with the
+  page model on one line. A failed action adds `"message"` to the model.
+- Form controls are targets like links: `textbox`, `checkbox`, `radio`,
+  `combobox` and `button` nodes carry `value` or `checked` and their
+  `actions`; names come from `aria-label`, `<label>`, `placeholder` or
+  `name`. Submitting follows HTML's form submission (simplified): GET puts
+  the URL-encoded fields in the query, POST sends them as the body.
+- `"changed"` lists the node ids changed since the page loaded (typing,
+  checking, and later scripts through the `html.Doc` mutation functions),
+  so an agent sees what its action or a script did.
 - `--viewport` lists only the nodes in the viewport. On the Go specification
   at 80 by 24 the model drops from 316 KB to 1.4 KB, which an agent can read
   page by page with `scroll`.
 
 Next for the agent angle, in order:
 
-1. **Forms**: `type` and `press` actions on inputs and buttons, GET forms
-   now, POST once `net.request` lands (lane 124).
-2. **Diffs**: after an action, report which nodes appeared, changed or left
+1. **Diffs**: after an action, report which nodes appeared, changed or left
    the viewport, rather than the whole page.
-3. **Token budgets**: `--budget N` trims the model (viewport first, then
+2. **Token budgets**: `--budget N` trims the model (viewport first, then
    headings and links, then text) like `ail api --card --budget`.
-4. **Provenance**: each node keeps its source position in the HTML, so an
+3. **Provenance**: each node keeps its source position in the HTML, so an
    agent can tell markup from rendering problems.
 
 The same idea gives the designer's PDF viewer its "search without OCR": a
@@ -176,9 +184,10 @@ the page show up in the page model so an agent can see what a script did.
 | Need | Where it stands | Blocks |
 |---|---|---|
 | HTTP GET over TLS 1.3 | done (`std.net`, ADR 0360) | nothing |
-| Request headers, methods, cookies | lane 124 | logins, forms with POST, sites that check `User-Agent` |
+| Request headers and methods | done (`net.request`, lane 124): Garlic sends its own `User-Agent` and `Accept`, and POSTs forms | nothing |
+| Cookies | none yet (Garlic can keep a jar once responses expose every `set-cookie`) | logins |
 | Binary bodies | lane 123 | images, non-UTF-8 pages, fonts |
-| gzip/deflate | lane 128 | `Accept-Encoding`, smaller transfers |
+| gzip/deflate | done (`std.compress`, lane 128), but `std.net` bodies are text, so a gzip body can't be decoded yet | `Accept-Encoding`, smaller transfers; needs a bytes body in `std.net` |
 | Regex | lane 127 | nothing essential (CSS and HTML are hand-written state machines) |
 | Pixel drawing, images, fonts | **no lane** | graphical rendering. Needs a `std.ui` pixel surface (blit an RGBA buffer), PNG/JPEG decoders (PNG needs deflate), and text shaping and rasterization (a bitmap font first, then TrueType outlines) |
 | JS engine | parallel lane (lane 160) | dynamic sites |
@@ -187,8 +196,8 @@ the page show up in the page model so an agent can see what a script did.
 ## Milestones
 
 1. **Text mode** (this note): fetch, parse, wrap, links, history, page model.
-2. **Forms and agent actions**: inputs, buttons, GET forms; `--do` and the
-   session mode; needs lane 124 for POST and cookies.
+2. **Forms and agent actions** (done): inputs, buttons, check boxes,
+   selects, GET and POST forms; `--do` and the session mode. Cookies next.
 3. **CSS on cells**: a CSS parser, selectors, cascade; `display`, colors,
    bold, margins, `display:none`; real tables.
 4. **Pixels**: a pixel surface in `std.ui`, a bitmap font, then images (PNG
