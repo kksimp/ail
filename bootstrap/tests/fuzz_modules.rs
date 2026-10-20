@@ -295,6 +295,11 @@ fn fuzz_native_strings() {
 }
 
 #[test]
+fn fuzz_native_options() {
+    native_differential("options", pure::options, false);
+}
+
+#[test]
 fn fuzz_native_maps() {
     native_differential("maps", pure::maps, false);
 }
@@ -382,5 +387,15 @@ fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
 fn dump_pure() {
     if let Ok(seed) = std::env::var("AIL_FUZZ_PURE") {
         print!("{}", pure::program(seed.parse().unwrap()));
+    }
+}
+
+/// `AIL_FUZZ_PURE=NAME:SEED cargo test --test fuzz_modules dump_pure -- --nocapture` prints a generated program.
+#[test]
+fn dump_named() {
+    if let Ok(v) = std::env::var("AIL_FUZZ_NAMED") {
+        let (name, seed) = v.split_once(':').unwrap();
+        let seed = seed.parse().unwrap();
+        print!("{}", match name { "strings" => pure::strings(seed), "maps" => pure::maps(seed), "options" => pure::options(seed), _ => pure::program(seed) });
     }
 }

@@ -371,3 +371,55 @@ pub fn maps(seed: u64) -> String {
     o.push_str("    mut words := Map[str, int]()\n    for w in [\"the\", \"cat\", \"the\", \"hat\", \"the\", \"end\"]\n        words[w] += 1\n    print(words)\n");
     o
 }
+
+// ---- optionals and results (native.opt, ADR 0574-0576) ----
+
+pub fn options(seed: u64) -> String {
+    let mut r = Rng::new(seed ^ 0x0971);
+    let (k, m, t) = (2 + r.below(5), 1 + r.below(9), 20 + r.below(200));
+    let mut o = format!(
+        "error struct Empty \"the list is empty\"\nerror struct Big \"the number is too big\"\n\n\
+fn find(xs List[int], want int) int?\n    for i in 0..xs.len()\n        if xs[i] == want\n            return i\n    none\n\n\
+fn pick(n int) int?\n    if n % {k} == 0\n        return none\n    n * {m}\n\n\
+fn halve(x float) float?\n    if x < 0.0\n        return none\n    x / 2.0\n\n\
+fn first(xs List[int]) int ! Empty\n    if xs.len() == 0\n        return Empty()\n    xs[0]\n\n\
+fn small(n int) int ! Big\n    if n > {t}\n        return Big()\n    n\n\n\
+fn both(a List[int], b List[int]) int ! Empty | Big\n    x := small(first(a)?)?\n    y := small(first(b)?)?\n    x + y\n\n\
+fn check(n int) ! Big\n    if n > {t}\n        return Big()\n\n\
+fn lookup(xs List[int], i int) int?\n    if i < 0 or i >= xs.len()\n        return none\n    xs[i]\n\n\
+fn twice(xs List[int], i int) int ! Empty\n    v := first(xs)?\n    w := lookup(xs, i) else return Empty()\n    v + w\n\n"
+    );
+    o.push_str("fn main()\n");
+    let list = |r: &mut Rng| -> String {
+        let n = r.below(4);
+        format!("[{}]", (0..n).map(|_| (r.below(300) as i64 - 20).to_string()).collect::<Vec<_>>().join(", "))
+    };
+    let xs = list(&mut r);
+    o.push_str(&format!("    xs := {xs}\n"));
+    for u in 0..6 + r.below(10) {
+        let n = r.below(40) as i64 - 5;
+        let l = list(&mut r);
+        let l2 = list(&mut r);
+        let b = match r.below(14) {
+            0 => format!("print(find(xs, {n}) else -1)"),
+            1 => format!("print(pick({n}) else -7)"),
+            2 => format!("if v := pick({n})\n        print(v + 1)\n    else\n        print(\"none\")"),
+            3 => format!("print(halve({n}.5) else 0.0)"),
+            4 => format!("w{u} := small({n} * 11) else err\n        print(\"failed: {{err}}\")\n        0\n    print(w{u})"),
+            5 => format!("print(both({l}, {l2}) else -9)"),
+            6 => format!("print(twice({l}, {n}) else -3)"),
+            7 => format!("check({n} * 9) else err\n        print(\"check: {{err}}\")"),
+            8 => format!("mut o{u} := pick({n})\n    print(o{u} else 5)\n    o{u} = none\n    print(o{u} else 100)\n    o{u} = {n}\n    print(o{u} else 100)"),
+            9 => format!("if pick({n}) == none\n        print(\"missing\")"),
+            10 => format!("if pick({n}) != none\n        print(\"found\")"),
+            11 => format!("mut count{u} := 0\n    for i in 0..{}\n        v := small(i * {}) else continue\n        count{u} += v\n    print(count{u})", 3 + r.below(10), 1 + r.below(60)),
+            12 => format!("if p := find(xs, {n})\n        print(\"p {{p}}\")\n    elif q := lookup(xs, {n})\n        print(\"q {{q}}\")\n    else\n        print(\"neither\")"),
+            _ => format!("m{u} := first({l}) else\n        print(\"fallback block\")\n        7\n    print(m{u})"),
+        };
+        o.push_str("    ");
+        o.push_str(&b);
+        o.push('\n');
+    }
+    o.push_str("    print(\"done\")\n");
+    o
+}
