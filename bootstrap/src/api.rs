@@ -995,7 +995,6 @@ impl<'p> Refs<'p> {
                 }
             }
             TypeKind::Optional(t) | TypeKind::Ref(t) | TypeKind::Ptr(t) => self.type_ref(t),
-            TypeKind::Optional(t) | TypeKind::Ref(t) => self.type_ref(t),
             TypeKind::Fn { params, ret } => {
                 params.iter().for_each(|p| self.type_ref(p));
                 if let Some(r) = ret {
