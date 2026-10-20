@@ -799,7 +799,13 @@ fn Gen.push(mut self, i mir.Inst)
 
 fn Gen.call_out(mut self, i mir.Inst)
     if i.name.starts_with("libsys.")
-        self.libsys_call(i)
+        # System DLL calls exist only on Windows (ADR 0606). Elsewhere the
+        # runtime reaches them only in paths the target never takes (macOS
+        # ulock under target() == 2), so the call traps if it is ever run.
+        if self.win
+            self.libsys_call(i)
+        else
+            a.ud2()
         return
     mut moves := List[Move]()
     mut ni := 0
