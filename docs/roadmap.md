@@ -59,7 +59,10 @@ proposal, not a decision.
    time, test time, tokens, memory, and keystroke/redraw latency).
 5. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
    atomic orderings (OQ-097).
-6. **Open language questions:** safe member access and matching on error sets
+6. **Post-1.0 (after milestone 8 and the native toolchain):** a Python
+   on-ramp, `ail port app.py` from typed Python to AIL, or a Python-syntax
+   front end (OQ-119, designer's question of 2026-10-20).
+7. **Open language questions:** safe member access and matching on error sets
    (OQ-029), custom hashing (OQ-042), unique values in generic code (OQ-050),
    loop invariants and static proof (OQ-060), downcasting `any Trait`
    (OQ-094).

@@ -346,3 +346,64 @@ are plain, and the formatter can keep them); (b) allow it anywhere an
 operand is (shortest, but `a + if c then b else d + e` hides where the
 `else` branch ends); (c) keep it (no change; the lexer writes two whole
 branches). *Owner: AI under ADR 0076.*
+
+## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
+
+The designer asked (2026-10-20) whether a `pail` module could let developers
+write Python in the AIL editor while the code is really AIL, to help adoption.
+Not before the core language and the native toolchain are complete.
+
+Options:
+- **a.** A Python-syntax front end that compiles directly: Python source in,
+  AIL semantics out. Every tool (`ail check`, `ail api`, diagnostics, the
+  card) would need a second syntax, and the parts of Python the semantics
+  can't express (untyped code, `eval`, monkey patching, shared-reference
+  aliasing where `b = a; b.append(1)` changes `a`, which AIL's mutable value
+  semantics forbids, ADRs 0060–0063) would have to be rejected with
+  Python-shaped diagnostics.
+- **b.** A one-way translator, `ail port app.py`, from typed Python to
+  readable AIL. Developers keep one language for the tooling and get an
+  on-ramp; the translator rejects the dynamic parts and the aliasing cases
+  with a message that names the AIL form. Precedents: Codon, Mojo and Nim
+  (each kept one language and offered a bridge).
+- **c.** Neither: AI agents already write AIL directly, and the editor's
+  cards and diagnostics are the on-ramp.
+
+Recommendation: **b.** One language in the tooling (the AI-first goal), a
+real on-ramp for Python developers, and no second syntax to keep in step
+with every rule. Decide after milestone 8; see the roadmap.
+
+## OQ-120 — Must a unique value be consumed, or does scope-end cleanup suffice?
+
+Lane 125 (streaming processes) kills a child process left running when the
+program ends (`std.proc.7`). A general rule that a unique value MUST be
+consumed (waited, closed, or moved) before its scope ends would replace that
+exit-time kill, but it changes `own.uniq.3` (ADR 0066, designer's decision):
+today a unique value's cleanup runs at scope end by any path, and nothing
+needs to be consumed. Task handles already must be waited (ADR 0096).
+
+Options:
+- **a.** Keep scope-end cleanup (ADR 0066). A stray child is killed by its
+  `Drop`, as `std.proc.7` says. Nothing changes.
+- **b.** Require consumption for every unique value: a unique local that is
+  neither moved nor consumed is a compile-time error. Precise, but
+  every unique value then needs a consuming call, and `defer`-style cleanup
+  stops being automatic.
+- **c.** Require it only for handles declared with a marker (for example
+  `unique(consume)`), keeping ADR 0066 for the rest.
+
+Recommendation: **a.** The model stays affine, not linear, which is simpler
+for agents; the exit-time kill is the `Drop` of the child and needs no new
+rule. Reopen only if stray handles cause real bugs.
+
+## OQ-121 — Closures as `std.net.http` handlers
+
+`std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
+because AIL has no anonymous functions or captured variables (`type.fn.3`,
+ADR 0456). A handler that needs state (a counter, a store) has to reach it
+through a `ref` global or a struct method. The question is whether function
+values should grow captures. Options: keep the rule (handlers are named
+functions plus explicit state) or add closures as a later language feature
+with their own ADR. Recommendation: keep the rule until a program shows the
+need; the AI-first measurement (ADR 0076) is tokens per handler, and the
+named form costs few.
