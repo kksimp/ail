@@ -133,6 +133,8 @@ allocator (allocation is already down to 0.37 million calls).
 | sheet | 130.5M → 82.7M (−37%) | 0.014 s vs 0.055 s | → 0.25 |
 | loops | 6,736M → 3,629M (−46%) | 0.249 s vs 0.244 s | 2.85 → 1.02 |
 
+After merging the plan branch (ownership, `ref` cells, tracing, tasks, thread pool), wall time was interp 0.093 s vs 0.088 s (1.06) and loops 0.244 s vs 0.232 s (1.05); the plan-branch binary took 0.178 s and 0.66 s on the same two. The fast paths step aside when a program has unique types or runs with `--watch`.
+
 Ratio is AIL min / CPython min; below 1.0 means AIL is faster. Instruction counts come from callgrind and are stable; wall time varies a few percent.
 
 ### Which programs beat CPython, and why not the rest
