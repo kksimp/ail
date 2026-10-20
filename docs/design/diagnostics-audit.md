@@ -185,3 +185,8 @@ alias (`date.DateError`), so the fix would add an unresolved name. Corpus:
 144 programs, 90 fixed (63%). The named-field fix for `date.Date(2026, 10, 20)`
 (`type.struct.7`) doesn't apply to a qualified call yet, since its anchor
 needs the callee as written.
+
+Networking and regex (lane 147): an unhandled `net.get` or `regex.compile`
+stays `err.use.1` with no fix, for the same reason as dates: the error type is
+another module's. Corpus: 146 programs, 90 fixed (62%). `regex.search` (a
+Python name) is `std.use.2` with no fix; the help lists the real functions.
