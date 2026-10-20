@@ -3,6 +3,7 @@ KEYWORDS := {"let", "if", "else", "while", "fn", "return", "true", "false", "and
 TWO_CHAR_OPS := {"==", "!=", "<=", ">="}
 ONE_CHAR_OPS := r"+-*/%<>=(){},"
 ESCAPES := {'n': '\n', '"': '"', '\\': '\\'}
+
 BINARY_LEVELS := [
     ["or"],
     ["and"],
@@ -11,12 +12,15 @@ BINARY_LEVELS := [
     ["+", "-"],
     ["*", "/", "%"],
 ]
+
 struct Pos
     line int
     col int
+
 error struct MiniError
     pos Pos
     msg str
+
 enum TokKind
     Int
     Str
@@ -24,32 +28,40 @@ enum TokKind
     Keyword
     Op
     End
+
 struct Token
     kind TokKind
     text str
     pos Pos
+
 fn Token.describe(self) str
     match kind
         End => "end of input"
         Int => "number {text}"
         Str => "string"
         Ident | Keyword | Op => "'{text}'"
+
 struct Lexer
     chars List[char]
     i int
     line int
     col int
+
 fn Lexer.new(src str) Lexer
     Lexer(chars: src.chars(), i: 0, line: 1, col: 1)
+
 fn Lexer.peek_at(self, offset int) char
     j := i + offset
     if j < chars.len()
         return chars[j]
     '\0'
+
 fn Lexer.peek(self) char
     peek_at(0)
+
 fn Lexer.pos(self) Pos
     Pos(line, col)
+
 fn Lexer.advance(mut self) char
     c := chars[i]
     i += 1
@@ -59,8 +71,10 @@ fn Lexer.advance(mut self) char
     else
         col += 1
     c
+
 fn Lexer.text_from(self, start int) str
     chars[start..i].join("")
+
 fn Lexer.skip_blank(mut self)
     while true
         match peek()
@@ -71,6 +85,7 @@ fn Lexer.skip_blank(mut self)
                 while peek() != '\0' and peek() != '\n'
                     advance()
             _ => return
+
 fn Lexer.token(mut self) Token ! MiniError
     pos := pos()
     c := peek()
@@ -96,6 +111,7 @@ fn Lexer.token(mut self) Token ! MiniError
         advance()
         return Token(Op, "{c}", pos)
     MiniError(pos, "unexpected character '{c}'")
+
 fn Lexer.string(mut self, pos Pos) Token ! MiniError
     advance()
     mut parts := []
@@ -118,6 +134,7 @@ fn Lexer.string(mut self, pos Pos) Token ! MiniError
             _ => parts.push(advance())
     advance()
     Token(Str, parts.join(""), pos)
+
 fn tokenize(src str) List[Token] ! MiniError
     mut lexer := Lexer.new(src)
     mut tokens := []
@@ -127,6 +144,7 @@ fn tokenize(src str) List[Token] ! MiniError
             tokens.push(Token(End, "", lexer.pos()))
             return tokens
         tokens.push(lexer.token()?)
+
 enum Expr
     IntLit(pos Pos, value int)
     StrLit(pos Pos, value str)
@@ -135,6 +153,7 @@ enum Expr
     Unary(pos Pos, op str, operand Expr)
     Binary(pos Pos, op str, left Expr, right Expr)
     Call(pos Pos, name str, args List[Expr])
+
 fn Expr.pos(self) Pos
     match self
         IntLit(pos, _) => pos
@@ -144,10 +163,12 @@ fn Expr.pos(self) Pos
         Unary(pos, _, _) => pos
         Binary(pos, _, _, _) => pos
         Call(pos, _, _) => pos
+
 struct FnDef
     name str
     params List[str]
     body List[Stmt]
+
 enum Stmt
     Let(pos Pos, name str, value Expr)
     Assign(pos Pos, name str, value Expr)
@@ -156,39 +177,50 @@ enum Stmt
     FnDecl(def FnDef)
     Return(pos Pos, value Expr?)
     ExprStmt(expr Expr)
+
 struct Parser
     tokens List[Token]
     i int
+
 fn Parser.peek(self) Token
     tokens[i]
+
 fn Parser.peek_next(self) Token
     tokens[(i + 1).min(tokens.len() - 1)]
+
 fn Parser.advance(mut self) Token
     tok := peek()
     if tok.kind != End
         i += 1
     tok
+
 fn Parser.at_any(self, ops List[str]) bool
     tok := peek()
     (tok.kind == Op or tok.kind == Keyword) and ops.contains(tok.text)
+
 fn Parser.at(self, text str) bool
     at_any([text])
+
 fn Parser.expected(self, what str) MiniError
     tok := peek()
     MiniError(tok.pos, "expected {what} but found {tok.describe()}")
+
 fn Parser.expect(mut self, text str) Token ! MiniError
     if not at(text)
         return expected("'{text}'")
     advance()
+
 fn Parser.expect_ident(mut self) str ! MiniError
     if peek().kind != Ident
         return expected("identifier")
     advance().text
+
 fn Parser.program(mut self) List[Stmt] ! MiniError
     mut stmts := []
     while peek().kind != End
         stmts.push(statement()?)
     stmts
+
 fn Parser.block(mut self) List[Stmt] ! MiniError
     expect("\{")?
     mut stmts := []
@@ -198,6 +230,7 @@ fn Parser.block(mut self) List[Stmt] ! MiniError
         stmts.push(statement()?)
     advance()
     stmts
+
 fn Parser.statement(mut self) Stmt ! MiniError
     tok := peek()
     pos := tok.pos
@@ -235,6 +268,7 @@ fn Parser.statement(mut self) Stmt ! MiniError
         advance()
         return Assign(pos, tok.text, expression(0)?)
     ExprStmt(expression(0)?)
+
 fn Parser.if_statement(mut self) Stmt ! MiniError
     pos := expect("if")?.pos
     cond := expression(0)?
@@ -244,6 +278,7 @@ fn Parser.if_statement(mut self) Stmt ! MiniError
         advance()
         else_body = if at("if") then[if_statement()?] else block()?
     If(pos, cond, then_body, else_body)
+
 fn Parser.expression(mut self, level int) Expr ! MiniError
     if level == BINARY_LEVELS.len()
         return unary()
@@ -253,11 +288,13 @@ fn Parser.expression(mut self, level int) Expr ! MiniError
         right := expression(level + 1)?
         left = Binary(op.pos, op.text, left, right)
     left
+
 fn Parser.unary(mut self) Expr ! MiniError
     if at("-") or at("not")
         op := advance()
         return Unary(op.pos, op.text, unary()?)
     primary()
+
 fn Parser.primary(mut self) Expr ! MiniError
     tok := peek()
     match tok.kind
@@ -293,29 +330,35 @@ fn Parser.primary(mut self) Expr ! MiniError
             expect(")")?
             inner
         End => expected("expression")
+
 enum Value
     Int(n int)
     Str(s str)
     Bool(b bool)
     Nil
+
 fn Value.type_name(self) str
     match self
         Int => "int"
         Str => "str"
         Bool => "bool"
         Nil => "nil"
+
 fn Value.as_int(self) int?
     match self
         Int(n) => n
         Str | Bool | Nil => none
+
 fn Value.as_str(self) str?
     match self
         Str(s) => s
         Int | Bool | Nil => none
+
 fn Value.as_bool(self) bool?
     match self
         Bool(b) => b
         Int | Str | Nil => none
+
 impl ToStr for Value
     fn to_str(self) str
         match self
@@ -323,12 +366,15 @@ impl ToStr for Value
             Str(s) => s
             Bool(b) => "{b}"
             Nil => "nil"
+
 enum Flow
     Next
     Returned(value Value)
+
 struct Env
     scopes List[Map[str, Value]]
     base int
+
 fn Env.find(self, name str) int?
     mut k := scopes.len()
     while k > base
@@ -338,32 +384,41 @@ fn Env.find(self, name str) int?
     if scopes[0].contains(name)
         return 0
     none
+
 fn Env.get(self, name str) Value?
     k := find(name)?
     scopes[k].get(name)
+
 struct Interp
     env Env
     functions Map[str, FnDef]
     depth int
+
 fn Interp.new() Interp
     Interp(Env([{}], 0), {}, 0)
+
 fn undefined_variable(pos Pos, name str) MiniError
     MiniError(pos, "undefined variable '{name}'")
+
 fn checked(pos Pos, result int?) Value ! MiniError
     Int(result else return MiniError(pos, "integer overflow"))
+
 fn Interp.run(mut self, program List[Stmt]) !
     exec_all(program)?
+
 fn Interp.exec_all(mut self, body List[Stmt]) Flow ! MiniError
     for stmt in body
         flow := exec(stmt)?
         if flow != Next
             return flow
     Next
+
 fn Interp.exec_block(mut self, body List[Stmt]) Flow ! MiniError
     env.scopes.push({})
     flow := exec_all(body)?
     env.scopes.pop()
     flow
+
 fn Interp.exec(mut self, stmt Stmt) Flow ! MiniError
     match stmt
         Let(_, name, value) => env.scopes[env.scopes.len() - 1][name] = eval(value)?
@@ -386,9 +441,11 @@ fn Interp.exec(mut self, stmt Stmt) Flow ! MiniError
             return Returned(Nil)
         ExprStmt(e) => eval(e)?
     Next
+
 fn Interp.condition(mut self, e Expr) bool ! MiniError
     v := eval(e)?
     (v.as_bool() else return MiniError(e.pos(), "type mismatch: condition must be bool, got {v.type_name()}"))
+
 fn Interp.eval(mut self, e Expr) Value ! MiniError
     match e
         IntLit(_, n) => Int(n)
@@ -411,6 +468,7 @@ fn Interp.eval(mut self, e Expr) Value ! MiniError
                 return logical(pos, op, left, right)
             binary(pos, op, eval(left)?, eval(right)?)
         Call(pos, name, args) => call(pos, name, [eval(arg)? for arg in args])
+
 fn Interp.logical(mut self, pos Pos, op str, left Expr, right Expr) Value ! MiniError
     a := eval(left)?
     x := a.as_bool() else return MiniError(
@@ -423,6 +481,7 @@ fn Interp.logical(mut self, pos Pos, op str, left Expr, right Expr) Value ! Mini
     if b.as_bool() == none
         return MiniError(pos, "type mismatch: '{op}' needs bool operands, got {b.type_name()}")
     b
+
 fn binary(pos Pos, op str, a Value, b Value) Value ! MiniError
     if op == "=="
         return Bool(a == b)
@@ -451,8 +510,10 @@ fn binary(pos Pos, op str, a Value, b Value) Value ! MiniError
         ">" => Bool(x > y)
         ">=" => Bool(x >= y)
         _ => unreachable("unknown operator {op}")
+
 fn wrong_arguments(pos Pos, name str, want int, got int) MiniError
     MiniError(pos, "wrong number of arguments: '{name}' takes {want} but got {got}")
+
 fn Interp.call(mut self, pos Pos, name str, args List[Value]) Value ! MiniError
     if name == "print" or name == "str"
         if args.len() != 1
@@ -480,6 +541,7 @@ fn Interp.call(mut self, pos Pos, name str, args List[Value]) Value ! MiniError
     match flow
         Next => Nil
         Returned(v) => v
+
 SCRIPTS := {
     "fibonacci": r"""
         // The first sixteen Fibonacci numbers, on one line
@@ -660,10 +722,12 @@ SCRIPTS := {
         }
         """,
 }
+
 fn run_script(source str) !
     mut parser := Parser(tokenize(source)?, 0)
     mut interp := Interp.new()
     interp.run(parser.program()?)?
+
 fn main()
     for name in SCRIPTS.keys()
         print("== {name} ==")
