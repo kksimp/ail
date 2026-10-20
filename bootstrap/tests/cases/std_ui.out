@@ -1,0 +1,9 @@
+key ctrl-s alt=false shift=false
+resize 100x30
+close
+mouse left drag 3,4
+scroll -3
+0x0
+close
+close
+ui.UiError(kind: "no_display", message: "none")

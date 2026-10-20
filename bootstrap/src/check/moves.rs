@@ -381,6 +381,42 @@ impl<'p> Walker<'p> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Expr::Comp { elem, value, clauses, .. } => self.comp(elem, value.as_deref(), clauses),
+        }
+    }
+
+    /// A comprehension (expr.comp.1): the first source is evaluated once and
+    /// the rest repeats, like a loop body, so a move of an outer binding in
+    /// it would repeat too (own.move.4).
+    fn comp(&mut self, elem: &'p Expr, value: Option<&'p Expr>, clauses: &'p [crate::ast::CompFor]) {
+        let mark = self.scope.len();
+        let mut entry = None;
+        for (i, c) in clauses.iter().enumerate() {
+            self.expr(&c.iter);
+            if i == 0 {
+                entry = self.state.clone();
+            }
+            self.declare(&c.var);
+            if let Some(cond) = &c.cond {
+                self.expr(cond);
+            }
+        }
+        self.expr(elem);
+        if let Some(v) = value {
+            self.expr(v);
+        }
+        self.scope.truncate(mark);
+        if let Some(st) = &mut self.state {
+            clauses.iter().for_each(|c| _ = st.remove(&c.var));
+        }
+        let (Some(entry), Some(now)) = (entry, &self.state) else { return };
+        let mut again: Vec<(&String, &Moved)> = now.iter().filter(|(n, _)| !entry.contains_key(*n)).collect();
+        again.sort_by_key(|(_, m)| (m.at.line, m.at.col));
+        for (n, m) in again {
+            self.diags.push(
+                Diagnostic::new("own.move.4", m.at, format!("`{n}` is moved inside a comprehension, so the next element would use it after the move"))
+                    .help(format!("move `{n}` outside the comprehension")),
+            );
         }
     }
 

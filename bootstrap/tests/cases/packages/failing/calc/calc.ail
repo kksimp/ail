@@ -1,0 +1,7 @@
+pub error enum CalcError
+    Odd(n int)
+
+pub fn half(n int) int ! CalcError
+    if n % 2 != 0
+        return CalcError.Odd(n)
+    n / 2

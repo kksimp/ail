@@ -47,6 +47,10 @@ print(count(
 **fmt.comma**: a list split over several lines has a trailing comma after its
 last element; a list on one line has none (ADR 0118).
 
+**fmt.comp**: a comprehension (ADR 0182) that doesn't fit splits before
+each `for` clause, its element on the first line, with no trailing comma:
+`[` / `    Pos(col: c, row: r)` / `    for r in rows` / `    for c in cols` / `]`.
+
 **fmt.blank**: one blank line separates two top-level declarations when
 either spans more than one line. Between single-line declarations (constants,
 `use`, empty `impl`s), and between statements in a block, a blank line from

@@ -11,6 +11,8 @@ pub struct Outcome {
     pub failure: Option<String>,
     /// What the test printed.
     pub output: String,
+    /// Set for a property test (test.prop.4).
+    pub prop: Option<PropInfo>,
 }
 
 impl<'a, W: Write> Interp<'a, W> {
@@ -34,7 +36,9 @@ impl<'a, W: Write> Interp<'a, W> {
 }
 
 /// Run every `@test` function in source order, each on its own (test.run.1-2).
-pub fn run_tests(prog: &Program, resolved: &Resolved) -> Vec<Outcome> {
+/// A property runs `cases` generated inputs from `seed`, or from a seed derived
+/// from its name (test.prop.3).
+pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u64>) -> Vec<Outcome> {
     let mut it = build(prog, resolved, Vec::<u8>::new());
     let mut outcomes = Vec::new();
     let mut const_failure = None;
@@ -46,6 +50,13 @@ pub fn run_tests(prog: &Program, resolved: &Resolved) -> Vec<Outcome> {
     }
     for f in prog.fns.iter().filter(|f| f.top_level() && f.owner.is_none() && f.is_test()) {
         it.depth = 0;
+        if !f.params.is_empty() && const_failure.is_none() {
+            let (pos, failure, info) = it.run_property(f, cases, seed.unwrap_or_else(|| super::prop::default_seed(&f.name)));
+            let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
+            it.out.get_mut().clear();
+            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: Some(info) });
+            continue;
+        }
         let (pos, failure) = match &const_failure {
             Some(t) => (t.pos, Some(format!("trap[{}]: {}", t.rule, t.message))),
             None => match it.call(f, None, Vec::new(), f.pos) {
@@ -57,10 +68,15 @@ pub fn run_tests(prog: &Program, resolved: &Resolved) -> Vec<Outcome> {
                 Err(t) => (t.pos, Some(format!("trap[{}]: {}", t.rule, t.message))),
             },
         };
+        // conc.task.4: a test's tasks end with it; copy what they printed.
+        if it.conc.is_some() {
+            it.task_print("");
+            super::tasks::shutdown(it.conc.take());
+        }
         let _ = it.out.flush();
         let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
         it.out.get_mut().clear();
-        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output });
+        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: None });
     }
     outcomes
 }

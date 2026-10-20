@@ -120,8 +120,8 @@ n := 0.0 / 0.0
 n < 1.0                 # false: the operator is IEEE
 ```
 
-> **Note:** float literal patterns are an error (`expr.match.7`). `f32` is
-> named by `type.num.1` but has no implementation yet.
+> **Note:** float literal patterns are an error (`expr.match.7`). The same
+> holds for `f32`.
 
 **type.num.12** — `int` has these methods. *(ADR 0137)*
 - `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`
@@ -144,6 +144,42 @@ x := 9223372036854775807
 x.checked_add(1)        # none
 x.wrapping_add(1)       # -9223372036854775808
 x.saturating_add(1)     # 9223372036854775807
+```
+
+**type.num.13** — A sized number is a value of one of the types of
+`type.num.1` other than `int` and `float`. Its literals are typed by context: an
+integer literal whose expected type is a sized integer type (a parameter, a
+field, a return value, or the other operand of an operator, written on either
+side) has that type; it MUST fit, or the program is rejected. A `-` applied to
+a literal belongs to the literal, so `-128` is an `i8`. An integer or float
+literal whose expected type is `f32` is an `f32`. With no expected type a
+literal is an `int` or a `float` (`type.num.3`). *(ADR 0194)*
+
+**type.num.14** — Arithmetic, unary `-` and comparison on sized numbers are
+defined only between two values of the same type; there is no implicit
+widening or conversion (`trait.op.3`). The sized integers support what `int`
+does (`type.num.5`), and a result outside the type traps (`expr.arith.1`,
+`expr.arith.3`); unary `-` isn't defined for the unsigned types. `f32` follows
+`type.num.6` in single precision and has no `%`. Every sized number is `Eq` and
+`Ord`; every one but `f32` is `Hash`. A sized integer has the methods of
+`type.num.12` (`checked_*`, `wrapping_*`, `saturating_*`, `abs`, `to_hex`,
+computed in the type; `checked_neg`, `wrapping_neg` and `abs` for the signed
+types only), and `f32` has `abs`, `floor`, `ceil`, `round` and `sqrt` in
+single precision. Text forms follow `type.num.7` (an `f32` uses the shortest
+digits that read back as an `f32`). *(ADR 0194)*
+
+**type.num.15** — Conversions are explicit methods named for the target:
+`to_i8`, `to_i16`, `to_i32`, `to_u8`, `to_u16`, `to_u32`, `to_u64` and `to_f32`
+on any integer type (including `int`), `to_f32` on `float`, and `to_int` and
+`to_float` back to `int` and `float` from any sized number. An integer
+conversion is exact and traps (`type.num.15`) when the value doesn't fit; a
+float conversion rounds to nearest, ties to even, and never traps, except
+`to_int` of an `f32`, which is `type.num.9`'s. *(ADR 0195)*
+
+```ail fragment
+a := 300.to_u16()       # a u16
+b := a.to_u32() * 2     # a u32: 600
+c := 0.5.to_f32() + 1   # an f32: 1 is a float literal
 ```
 
 ## Structs
@@ -254,6 +290,39 @@ fn find(id i64) User?
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
 converts implicitly to a present optional. *(ADR 0093)*
 
+**type.opt.6** — `T??` is an optional whose content is an optional `T?`; it
+is a different type from `T?`. Any number of `?` may follow a type. A value
+of type `T??` arises from collection methods on optional elements, for
+example `m.get(k)` on a `Map[K, V?]` and `xs.last()` on a `List[T?]`.
+*(ADR 0209)*
+
+**type.opt.7** — `none` is the absent value of the outermost level. `e else
+d`, `e?` and `if v := e` act on that level only and give an optional of the
+inner type: `m.get(k) else none` flattens a `V??` to a `V?`. A present value
+whose content is `none` is not `none`: `==` compares every level, and the
+text form of the present-but-empty value of a `T??` is `some(none)`. A `T`
+converts to a `T??` (`type.opt.5`, twice). *(ADR 0209)*
+
+**type.opt.8** — A `T?` does not convert to a `T??`, because its `none` would
+be ambiguous between the two levels. The error is the ordinary mismatch with
+a help that says so. *(ADR 0209)*
+
+```ail fragment
+fn lookup(m Map[str, int?], k str) int??
+    m.get(k)
+
+fn flat(m Map[str, int?], k str) int?
+    lookup(m, k) else none
+```
+
+```ail error=expr.block.2
+fn lift(v int?) int??
+    v
+
+fn main()
+    print(lift(none))
+```
+
 ## Booleans
 
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
@@ -264,11 +333,11 @@ Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 **type.str.1** — `str` is the type of immutable UTF-8 text. `char` is the type
 of a single Unicode scalar value. *(ADR 0089)*
 
-**type.str.2** — `str` doesn't support the indexing operator, `for` iteration
-or a `len()` method. Byte and character access go through explicit views:
-`s.bytes()` (not implemented yet) and `s.chars()` (`type.str.7`). The
-diagnostic for `s[i]` or `for c in s` suggests `s.chars()`, and for `s.len()`
-suggests `s.chars().len()`. *(ADR 0089, ADR 0135)*
+**type.str.2** — `str` doesn't support the indexing operator or `for`
+iteration. Character access goes through the explicit view `s.chars()`
+(`type.str.7`); `s.bytes()` is not implemented yet. The diagnostic for `s[i]`
+or `for c in s` suggests `s.chars()`. Length is `s.len()` (`type.str.12`).
+*(ADR 0089, ADR 0135, ADR 0208)*
 
 **type.str.3** — The text form of an `int` is its decimal representation,
 with a leading `-` when negative. The text form of a `bool` is `true` or
@@ -327,8 +396,39 @@ arguments. *(ADR 0135)*
 "ab".pad_right(4, ' ')      # "ab  "
 ```
 
+**type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
+`a` up to but excluding `b` (indexes count characters, as `len()` does:
+`type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
+clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
+`i` is out of range or negative. *(ADR 0215)*
+
+**type.str.14** — `s.find(sub)` returns the character index of the first
+occurrence of `sub` as an `int?`, or `none`. `s.replace(from, to)` returns a
+copy with every non-overlapping occurrence of `from` replaced by `to`, left
+to right; it traps if `from` is empty. `s.to_lower()` and `s.to_upper()`
+return the Unicode lower- and upper-case forms. `sub`, `from` and `to` are
+`str`s. *(ADR 0215)*
+
+```ail fragment
+s := "Héllo"
+a := s.slice(1, 3)       # "él"
+i := s.find("llo")       # 2
+t := s.replace("l", "L") # "HéLLo"
+```
+
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
+
+**type.str.12** — `s.len()` returns the number of characters (Unicode scalar
+values) of `s`, the same as `s.chars().len()` without building the list; it
+takes time proportional to the length. `s.byte_len()` returns the number of
+UTF-8 bytes. Grapheme clusters are not counted: `"e\u{301}".len()` is 2.
+*(ADR 0208)*
+
+```ail fragment
+n := "héllo".len()        # 5
+b := "héllo".byte_len()   # 6
+```
 
 **type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
 exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
@@ -451,6 +551,28 @@ xs.join(", ")           # a, b
 [1, 2, 3].join("")      # 123
 [["a"], ["b"]].join("+")  # ["a"]+["b"]
 xs.index_of("b")        # 1
+```
+
+**type.coll.14** — A list has these further methods. *(ADR 0214)*
+- `xs.insert(i, x)` puts `x` at index `i`, moving later elements up. `i` MAY
+  equal `xs.len()` (append). Receiver `mut self`.
+- `xs.remove_at(i)` removes and returns the element at `i` as a `T`.
+  Receiver `mut self`.
+- `xs.extend(ys)` appends the elements of the `List[T]` `ys`. Receiver
+  `mut self`.
+- `xs.clear()` removes every element and `xs.reverse()` reverses in place.
+  Receivers are `mut self`.
+- `xs.first()` returns the first element as a `T?`, or `none` if empty.
+
+`insert` traps unless `0 <= i <= xs.len()` and `remove_at` traps unless
+`0 <= i < xs.len()`, both under rule `type.coll.4`. There is no `xs[a..b]`
+method: slicing is `type.coll.4`.
+
+```ail fragment
+mut xs := [1, 2, 3]
+xs.insert(1, 9)       # [1, 9, 2, 3]
+n := xs.remove_at(0)  # 1
+xs.extend([4, 5])     # [9, 2, 3, 4, 5]
 ```
 
 **type.coll.10** — Open-ended slices `xs[a..]`, `xs[..b]` and `xs[..=b]` follow

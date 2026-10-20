@@ -1,0 +1,7 @@
+use lib
+
+fn main()
+    print(lib.secret())
+    print(lib.LIMIT)
+    k := lib.Kind.Hidden
+    print(lib.Account.open().owner)

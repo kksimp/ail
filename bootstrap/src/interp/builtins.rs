@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, load, put, take, trap, view, with_slot};
 use crate::ast::Arg;
 use crate::diag::Pos;
+use crate::num::Num;
 
 /// The hashable form of a key (type.map.2): only types whose equality is
 /// structural and exact can be keys, so equal keys have equal forms.
@@ -19,6 +20,7 @@ pub(super) enum Key {
     Str(Rc<str>),
     Char(char),
     None,
+    Nested(u32),
     Seq(Vec<Key>),
     Struct(usize, Vec<Key>),
     Variant(usize, usize, Vec<Key>),
@@ -28,11 +30,12 @@ impl Key {
     pub(super) fn of(v: &Value) -> Key {
         let all = |xs: &[Value]| xs.iter().map(Key::of).collect();
         match v {
-            Value::Int(n) => Key::Int(*n),
+            Value::Int(n) | Value::Num(_, n) => Key::Int(*n),
             Value::Bool(b) => Key::Bool(*b),
             Value::Str(s) => Key::Str(s.clone()),
             Value::Char(c) => Key::Char(*c),
             Value::None => Key::None,
+            Value::Nested(n) => Key::Nested(*n),
             Value::List(xs) => Key::Seq(all(xs)),
             Value::Struct(s, fields) => Key::Struct(*s, all(fields)),
             Value::Enum(e, i, fields) => Key::Variant(*e, *i, all(fields)),
@@ -132,7 +135,7 @@ impl Table {
 }
 
 fn opt(v: Option<Value>) -> Value {
-    v.unwrap_or(Value::None)
+    v.map_or(Value::None, Value::present)
 }
 
 fn s(text: impl AsRef<str>) -> Value {
@@ -198,7 +201,7 @@ impl<'a, W: Write> Interp<'a, W> {
             a.push(self.eval(&arg.value, env)?);
         }
         let mutating = |v: &Value| match v {
-            Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort"),
+            Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
             Value::Map(_) => name == "remove",
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
@@ -241,6 +244,38 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Unit
             }
             (Value::List(items), "pop") => opt(Rc::make_mut(items).pop()),
+            // type.coll.14: `insert` allows the index `len`, `remove_at` doesn't.
+            (Value::List(items), "insert") => {
+                let i = a[0].int();
+                if usize::try_from(i).map_or(true, |u| u > items.len()) {
+                    trap::<()>(
+                        "type.coll.4",
+                        pos,
+                        format!("insert index {i} is out of bounds for a list of length {}", items.len()),
+                    )?;
+                }
+                let x = a.pop().expect("checked: two arguments");
+                Rc::make_mut(items).insert(i as usize, x);
+                Value::Unit
+            }
+            (Value::List(items), "remove_at") => {
+                let i = a[0].int();
+                element(items, i, pos)?;
+                Rc::make_mut(items).remove(i as usize)
+            }
+            (Value::List(items), "extend") => {
+                let Value::List(more) = &a[0] else { unreachable!("checked: a list") };
+                Rc::make_mut(items).extend(more.iter().cloned());
+                Value::Unit
+            }
+            (Value::List(items), "clear") => {
+                Rc::make_mut(items).clear();
+                Value::Unit
+            }
+            (Value::List(items), "reverse") => {
+                Rc::make_mut(items).reverse();
+                Value::Unit
+            }
             (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
             (Value::Set(t), "add") => {
                 let x = a.pop().expect("checked: one argument");
@@ -259,10 +294,13 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Str(text) => self.str_method(&text, name, a, pos)?,
             Value::Char(c) => char_method(c, name, &a, pos)?,
             Value::Int(n) => int_method(n, name, &a, pos)?,
+            Value::Num(k, bits) if k.is_float() => f32_method(bits, name, pos)?,
+            Value::Num(k, bits) => sized_method(k, bits, name, &a, pos)?,
             Value::Float(x) => float_method(x, name, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
                 "last" => opt(items.last().cloned()),
+                "first" => opt(items.first().cloned()),
                 "contains" | "index_of" => {
                     let mut found = None;
                     for (i, x) in items.iter().enumerate() {
@@ -286,6 +324,27 @@ impl<'a, W: Write> Interp<'a, W> {
                     s(parts.join(sep))
                 }
                 "sum" => match items.first() {
+                    Some(Value::Num(k, _)) if k.is_float() => {
+                        let mut total = 0.0f32;
+                        for x in items.iter() {
+                            if let Value::Num(_, bits) = x {
+                                total += Num::f32_of(*bits);
+                            }
+                        }
+                        Value::Num(*k, Num::f32_bits(total))
+                    }
+                    Some(Value::Num(k, _)) => {
+                        let mut total: i128 = 0;
+                        for x in items.iter() {
+                            if let Value::Num(_, bits) = x {
+                                total += k.decode(*bits);
+                            }
+                            if !k.fits(total) {
+                                return trap("expr.arith.1", pos, format!("`sum` overflows `{}`", k.name()));
+                            }
+                        }
+                        Value::Num(*k, k.encode(total))
+                    }
                     Some(Value::Float(_)) => Value::Float(items.iter().map(|x| x.float()).sum()),
                     _ => {
                         let mut total: i64 = 0;
@@ -366,8 +425,41 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             "to_float" => opt(parse_float(text).map(Value::Float)),
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
+            "len" => Value::Int(text.chars().count() as i64),
+            "byte_len" => Value::Int(text.len() as i64),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
+            "to_lower" => s(text.to_lowercase()),
+            "to_upper" => s(text.to_uppercase()),
+            // type.str.13: character positions; bounds are never clamped.
+            "slice" => {
+                let (lo, hi) = (a[0].int(), a[1].int());
+                let n = text.chars().count();
+                match (usize::try_from(lo), usize::try_from(hi)) {
+                    (Ok(l), Ok(h)) if l <= h && h <= n => {
+                        s(text.chars().skip(l).take(h - l).collect::<String>())
+                    }
+                    _ => {
+                        return trap(
+                            "type.str.13",
+                            pos,
+                            format!("slice({lo}, {hi}) is out of bounds for a str of length {n}"),
+                        );
+                    }
+                }
+            }
+            "char_at" => opt(usize::try_from(a[0].int()).ok().and_then(|i| text.chars().nth(i)).map(Value::Char)),
+            "find" => {
+                let sub = arg_str(0);
+                opt(text.find(&*sub).map(|b| Value::Int(text[..b].chars().count() as i64)))
+            }
+            "replace" => {
+                let from = arg_str(0);
+                if from.is_empty() {
+                    return trap("type.str.14", pos, "`replace` needs a non-empty text to find".into());
+                }
+                s(text.replace(&*from, &arg_str(1)))
+            }
             "starts_with" => Value::Bool(text.starts_with(&*arg_str(0))),
             "ends_with" => Value::Bool(text.ends_with(&*arg_str(0))),
             "contains" => Value::Bool(text.contains(&*arg_str(0))),
@@ -470,7 +562,78 @@ fn int_method(n: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> 
         },
         "to_float" => Value::Float(n as f64),
         "to_hex" => s(if n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }),
-        _ => unreachable!("checked: int.{name}"),
+        _ => convert_int(i128::from(n), name, pos)?,
+    })
+}
+
+/// `to_i8` ... `to_f32` on an integer (type.num.15): exact where the value
+/// fits, a trap where it doesn't. `to_f32` rounds to nearest, as `to_float` does.
+fn convert_int(v: i128, name: &str, pos: Pos) -> Result<Value, Trap> {
+    let Some(&(_, k)) = crate::num::CONVERSIONS.iter().find(|(n, _)| *n == name) else {
+        unreachable!("checked: integer method {name}")
+    };
+    if k.is_float() {
+        return Ok(Value::Num(k, Num::f32_bits(v as f32)));
+    }
+    if !k.fits(v) {
+        return trap("type.num.15", pos, format!("`{v}` doesn't fit in `{}`", k.name()));
+    }
+    Ok(Value::Num(k, k.encode(v)))
+}
+
+/// Methods of the sized integers (type.num.14-15), computed exactly in 128 bits.
+fn sized_method(k: Num, bits: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> {
+    let n = k.decode(bits);
+    let m = || match &a[0] {
+        Value::Num(_, b) => k.decode(*b),
+        other => unreachable!("checked: {other:?} is not a {}", k.name()),
+    };
+    let (lo, hi) = k.range();
+    let wrap = |v: i128| {
+        let span = hi - lo + 1;
+        lo + (v - lo).rem_euclid(span)
+    };
+    let value = |v: i128| Value::Num(k, k.encode(v));
+    let checked = |r: Option<i128>| opt(r.filter(|v| k.fits(*v)).map(value));
+    Ok(match name {
+        "checked_add" => checked(Some(n + m())),
+        "checked_sub" => checked(Some(n - m())),
+        "checked_mul" => checked(n.checked_mul(m())),
+        "checked_div" => checked(n.checked_div(m())),
+        "checked_rem" => checked(n.checked_rem(m())),
+        "checked_neg" => checked(Some(-n)),
+        "wrapping_add" => value(wrap(n + m())),
+        "wrapping_sub" => value(wrap(n - m())),
+        "wrapping_mul" => value(wrap(n.wrapping_mul(m()))), // 2^128 is a multiple of every span
+        "wrapping_neg" => value(wrap(-n)),
+        "saturating_add" => value((n + m()).clamp(lo, hi)),
+        "saturating_sub" => value((n - m()).clamp(lo, hi)),
+        "saturating_mul" => value(n.checked_mul(m()).map_or(if (n < 0) == (m() < 0) { hi } else { lo }, |v| v.clamp(lo, hi))),
+        "abs" if k.fits(n.abs()) => value(n.abs()),
+        "abs" => return trap("type.num.14", pos, format!("`({n}).abs()` overflows `{}`", k.name())),
+        "to_int" => match i64::try_from(n) {
+            Ok(v) => Value::Int(v),
+            Err(_) => return trap("type.num.15", pos, format!("`{n}` doesn't fit in `int`")),
+        },
+        "to_float" => Value::Float(n as f64),
+        "to_hex" => s(if n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }),
+        _ => convert_int(n, name, pos)?,
+    })
+}
+
+/// Methods of `f32` (type.num.14-15).
+fn f32_method(bits: i64, name: &str, pos: Pos) -> Result<Value, Trap> {
+    let x = Num::f32_of(bits);
+    let f = |v: f32| Value::Num(Num::F32, Num::f32_bits(v));
+    Ok(match name {
+        "abs" => f(x.abs()),
+        "floor" => f(x.floor()),
+        "ceil" => f(x.ceil()),
+        "round" => f(x.round()),
+        "sqrt" => f(x.sqrt()),
+        "to_float" => Value::Float(f64::from(x)),
+        "to_int" => return float_method(f64::from(x), "to_int", pos),
+        _ => unreachable!("checked: f32.{name}"),
     })
 }
 
@@ -488,6 +651,7 @@ fn float_method(x: f64, name: &str, pos: Pos) -> Result<Value, Trap> {
             }
             Value::Int(x.trunc() as i64)
         }
+        "to_f32" => Value::Num(Num::F32, Num::f32_bits(x as f32)),
         _ => unreachable!("checked: float.{name}"),
     })
 }

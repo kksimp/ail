@@ -18,26 +18,38 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod contracts;
+mod random;
 mod stdlib;
+mod tasks;
 
+pub use contracts::set_enabled as set_contracts;
+pub use random::seed as set_seed;
 pub use stdlib::set_program;
+mod prop;
 mod testing;
+mod ui;
+pub use prop::PropInfo;
 pub use testing::run_tests;
 
 use builtins::{Key, Table, map_value};
+use tasks::Handle;
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt, TypeKind, UnOp,
-    place_path,
+    Arg, BinOp, Block, CompFor, CompKind, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt,
+    TypeKind, UnOp, place_path,
 };
 use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
+use crate::num::Num;
 
 #[derive(Clone, Debug)]
 enum Value {
     Unit,
     Int(i64),
     Float(f64),
+    /// A sized number (type.num.1) as its stored bits (`crate::num`).
+    Num(Num, i64),
     Bool(bool),
     Str(Rc<str>),
     Char(char),
@@ -51,10 +63,16 @@ enum Value {
     Set(Rc<Table>),
     /// The absent value of an optional (type.opt.4).
     None,
+    /// `present` applied `n >= 1` times to `none`: an optional of an
+    /// optional whose inner levels are absent (type.opt.7). Any other
+    /// present optional is its content, so `T` converts to `T?` for free.
+    Nested(u32),
     /// The failure of a `T ! E` result (err.model.1).
     Fail(Rc<Failure>),
     /// A `ref T` cell (own.ref.1): copies share it.
     Ref(Rc<RefCell<Value>>),
+    /// A task, task group, channel or mutex (conc.task.1, conc.share.2-3).
+    Handle(Handle),
 }
 
 /// An error value with its context messages and return trace (err.ctx.1-2).
@@ -66,6 +84,25 @@ struct Failure {
 }
 
 impl Value {
+    /// The optional that holds `v` (type.opt.7): `v` itself, unless `v` is
+    /// an absent optional, which would read as the outer `none`.
+    fn present(v: Value) -> Value {
+        match v {
+            Value::None => Value::Nested(1),
+            Value::Nested(n) => Value::Nested(n + 1),
+            v => v,
+        }
+    }
+
+    /// The content of a present optional (type.opt.7): `present`'s inverse.
+    fn unwrap_present(v: Value) -> Value {
+        match v {
+            Value::Nested(1) => Value::None,
+            Value::Nested(n) => Value::Nested(n - 1),
+            v => v,
+        }
+    }
+
     fn int(&self) -> i64 {
         match self {
             Value::Int(v) => *v,
@@ -134,13 +171,15 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn render(&self, path: &str) -> String {
+    /// `at` writes a position as `FILE:LINE:COL` (a program can have
+    /// several files).
+    pub fn render_with(&self, at: impl Fn(Pos) -> String) -> String {
         let mut s = format!("error: {}", self.error);
         for c in &self.context {
             let _ = write!(s, "\n  context: {c}");
         }
         for p in &self.trace {
-            let _ = write!(s, "\n  at {path}:{}:{}", p.line, p.col);
+            let _ = write!(s, "\n  at {}", at(*p));
         }
         s
     }
@@ -172,6 +211,12 @@ const MAX_DEPTH: usize = 10_000;
 
 /// Locals of one call, innermost last.
 type Env<'a> = Vec<(&'a str, Value)>;
+
+/// What a method's receiver is, when it isn't a built-in value.
+enum TypeOf<'a> {
+    Named(&'a str),
+    Handle(Handle),
+}
 
 /// A place (own.place.1) resolved to a local slot and a path of steps, or,
 /// when the place goes through a `ref` (own.ref.3), to `IN_CELL` and a path
@@ -270,6 +315,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         has_defer: prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b)),
         has_moves: !resolved.moves.is_empty(),
         showing: Vec::new(),
+        conc: None,
     }
 }
 
@@ -308,6 +354,16 @@ fn has_defer(b: &Block) -> bool {
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let stdout = io::stdout();
     let mut it = build(prog, resolved, stdout.lock());
+    let result = run_main(&mut it, prog);
+    if it.conc.is_some() {
+        // What tasks printed before a trap still reaches standard output.
+        it.task_print("");
+        tasks::shutdown(it.conc.take());
+    }
+    result
+}
+
+fn run_main<'a, W: Write>(it: &mut Interp<'a, W>, prog: &'a Program) -> Result<(), Stop> {
     // mod.const.1: constants are computed before the program runs.
     for c in &prog.consts {
         it.constant(&c.name, c.pos).map_err(|e| match e {
@@ -351,6 +407,8 @@ struct Interp<'a, W: Write> {
     has_moves: bool,
     /// The `ref` cells whose text form is being made, to show cycles.
     showing: Vec<*const RefCell<Value>>,
+    /// The task scheduler, once the program uses tasks (conc.task.1).
+    conc: Option<tasks::Ctx>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -361,15 +419,23 @@ fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
 /// back as the same value, in fixed notation when the decimal exponent is
 /// from -4 to 15 and in scientific notation otherwise, as Python's `repr`.
 fn float_text(x: f64) -> String {
-    if x.is_nan() {
+    float_shape(x.is_nan(), x.is_infinite(), x.is_sign_negative(), format!("{:e}", x.abs()))
+}
+
+/// An `f32`'s text form: the same shape, from the shortest digits that read back as an `f32`.
+fn float_text32(x: f32) -> String {
+    float_shape(x.is_nan(), x.is_infinite(), x.is_sign_negative(), format!("{:e}", x.abs()))
+}
+
+/// `sci` is the shortest round-trip scientific form of the magnitude, e.g. "1.2345e3" (type.num.7).
+fn float_shape(nan: bool, inf: bool, negative: bool, sci: String) -> String {
+    if nan {
         return "nan".into();
     }
-    if x.is_infinite() {
-        return if x > 0.0 { "inf".into() } else { "-inf".into() };
+    if inf {
+        return if negative { "-inf".into() } else { "inf".into() };
     }
-    let sign = if x.is_sign_negative() { "-" } else { "" };
-    // `{:e}` gives the shortest round-trip digits: "1.2345e3".
-    let sci = format!("{:e}", x.abs());
+    let sign = if negative { "-" } else { "" };
     let (mantissa, exp) = sci.split_once('e').expect("scientific form");
     let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
     let exp: i32 = exp.parse().expect("an exponent");
@@ -389,6 +455,83 @@ fn float_text(x: f64) -> String {
         format!("{}{rest}e{}{:02}", &digits[..1], if e < 0 { '-' } else { '+' }, e.abs())
     };
     format!("{sign}{body}")
+}
+
+/// type.num.11: numbers in numeric order, with NaN after every number.
+fn float_order(x: f64, y: f64) -> Ordering {
+    match (x.is_nan(), y.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        _ => x.partial_cmp(&y).expect("not NaN"),
+    }
+}
+
+/// A literal typed by context as `k` (type.num.13): `float` is its value as a
+/// float, `whole` its value as an integer. The checker has range-checked it.
+fn sized_literal(k: Num, float: f64, whole: i64) -> Value {
+    if k.is_float() { Value::Num(k, Num::f32_bits(float as f32)) } else { Value::Num(k, whole) }
+}
+
+/// Unary `-` on a sized number (type.num.14). A negated literal was
+/// range-checked by the checker as the negative number.
+fn negate(k: Num, bits: i64, pos: Pos) -> Flow<Value> {
+    if k.is_float() {
+        return Ok(Value::Num(k, Num::f32_bits(-Num::f32_of(bits))));
+    }
+    let n = -k.decode(bits);
+    if k.fits(n) {
+        return Ok(Value::Num(k, k.encode(n)));
+    }
+    let message = format!("`-({})` overflows `{}`", -n, k.name());
+    Err(Trap { rule: "type.num.14", pos, message }.into())
+}
+
+/// Arithmetic and comparison on two sized numbers of one type (type.num.14):
+/// integers trap on overflow and division by zero as `int` does.
+fn num_binop(op: BinOp, k: Num, a: i64, b: i64, pos: Pos) -> Result<Value, Trap> {
+    let sym = op.symbol();
+    if k.is_float() {
+        let (x, y) = (Num::f32_of(a), Num::f32_of(b));
+        let f = |v: f32| Value::Num(k, Num::f32_bits(v));
+        return Ok(match op {
+            BinOp::Add => f(x + y),
+            BinOp::Sub => f(x - y),
+            BinOp::Mul => f(x * y),
+            BinOp::Div => f(x / y),
+            BinOp::Eq => Value::Bool(x == y),
+            BinOp::Ne => Value::Bool(x != y),
+            BinOp::Lt => Value::Bool(x < y),
+            BinOp::Le => Value::Bool(x <= y),
+            BinOp::Gt => Value::Bool(x > y),
+            BinOp::Ge => Value::Bool(x >= y),
+            _ => unreachable!("checked: `{sym}` on f32"),
+        });
+    }
+    let (x, y) = (k.decode(a), k.decode(b));
+    let result = match op {
+        BinOp::Add => x + y,
+        BinOp::Sub => x - y,
+        BinOp::Mul => x.checked_mul(y).unwrap_or(i128::MAX), // only u64 x u64 can exceed 128 bits
+        BinOp::Div | BinOp::Rem => {
+            if y == 0 {
+                return trap("expr.arith.3", pos, format!("division by zero in `{x} {sym} 0`"));
+            }
+            if op == BinOp::Div { x / y } else { x % y }
+        }
+        BinOp::Eq => return Ok(Value::Bool(x == y)),
+        BinOp::Ne => return Ok(Value::Bool(x != y)),
+        BinOp::Lt => return Ok(Value::Bool(x < y)),
+        BinOp::Le => return Ok(Value::Bool(x <= y)),
+        BinOp::Gt => return Ok(Value::Bool(x > y)),
+        BinOp::Ge => return Ok(Value::Bool(x >= y)),
+        _ => unreachable!("checked: `{sym}` on {}", k.name()),
+    };
+    if !k.fits(result) {
+        let rule = if op == BinOp::Div { "expr.arith.3" } else { "expr.arith.1" };
+        return trap(rule, pos, format!("`{x} {sym} {y}` overflows `{}`", k.name()));
+    }
+    Ok(Value::Num(k, k.encode(result)))
 }
 
 /// The type or trait an expression names, when it isn't a value: `Shape`
@@ -518,8 +661,11 @@ fn key_text(k: &Value) -> String {
         Value::Str(s) => quoted(s, '"'),
         Value::Char(c) => quoted(&c.to_string(), '\''),
         Value::Int(n) => n.to_string(),
+        Value::Num(k, bits) if k.is_float() => float_text32(Num::f32_of(*bits)),
+        Value::Num(k, bits) => k.decode(*bits).to_string(),
         Value::Bool(b) => b.to_string(),
         Value::None => "none".into(),
+        Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
         Value::List(items) => format!("[{}]", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
         Value::Struct(s, values) => NAMES.with(|n| {
             let (name, names) = &n.borrow().structs[*s];
@@ -733,6 +879,10 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         env.extend(f.params.iter().map(|p| p.name.as_str()).zip(args));
         let n = env.len();
+        let checked = contracts::active(f);
+        if checked {
+            self.check_requires(f, &mut env, pos)?;
+        }
         let body = f.body.as_ref().expect("checked: the function has a body");
         let end = body.last().map_or(f.pos, Stmt::pos);
         let mut outcome = self.block(body, &mut env);
@@ -753,6 +903,9 @@ impl<'a, W: Write> Interp<'a, W> {
         // err.decl.3: an error value leaving a fallible function is its failure.
         if matches!(f.ret.as_ref().map(|t| &t.kind), Some(TypeKind::Fallible { .. })) && self.is_error(&result) {
             result = Value::Fail(Rc::new(Failure { error: result, context: Vec::new(), trace: vec![at] }));
+        }
+        if checked {
+            self.check_ensures(f, &mut env, &result, at)?;
         }
         self.depth -= 1;
         env.truncate(n);
@@ -776,6 +929,14 @@ impl<'a, W: Write> Interp<'a, W> {
             if result.is_err() {
                 break;
             }
+        }
+        // conc.task.4: the block's tasks and groups finish before it ends.
+        if self.conc.is_some()
+            && !matches!(result, Err(Exit::Trap(_)))
+            && let Some(last) = stmts.last()
+            && let Err(t) = self.end_tasks(&env[mark..], last.pos())
+        {
+            result = Err(t.into());
         }
         env.truncate(mark);
         result
@@ -884,6 +1045,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = self.eval(value, env)?;
                 let v = match (otherwise, v) {
                     (Some(o), v @ (Value::None | Value::Fail(_))) => self.otherwise(o, v, env)?,
+                    (Some(_), v) => Value::unwrap_present(v),
                     (_, v) => v,
                 };
                 env.push((name.as_str(), v));
@@ -999,6 +1161,64 @@ impl<'a, W: Write> Interp<'a, W> {
             }
         }
         Ok(())
+    }
+
+    /// Run a comprehension's clauses from the first, collecting each element
+    /// into the list or table (expr.comp.3). `continue` skips an element and
+    /// `break` ends the comprehension (expr.comp.4); false if it ended.
+    fn comp(
+        &mut self,
+        clauses: &'a [CompFor],
+        elem: &'a Expr,
+        value: Option<&'a Expr>,
+        set: bool,
+        env: &mut Env<'a>,
+        acc: &mut (Vec<Value>, Table),
+    ) -> Flow<bool> {
+        let Some((c, rest)) = clauses.split_first() else {
+            let k = self.eval(elem, env)?;
+            match value {
+                Some(v) => {
+                    let v = self.eval(v, env)?;
+                    acc.1.insert(k, Some(v));
+                }
+                None if set => {
+                    acc.1.insert(k, None);
+                }
+                None => acc.0.push(k),
+            }
+            return Ok(true);
+        };
+        let items: Rc<Vec<Value>> = match &c.iter {
+            Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } => {
+                let (lo, hi) = (self.eval(lo, env)?.int(), self.eval(hi, env)?.int());
+                let hi = if *inclusive { hi } else { hi.saturating_sub(1) };
+                Rc::new(if lo > hi { Vec::new() } else { (lo..=hi).map(Value::Int).collect() })
+            }
+            iter => match self.eval(iter, env)? {
+                Value::List(items) => items,
+                Value::Set(t) => Rc::new(t.key_list()),
+                other => unreachable!("checked: iterable, found {other:?}"),
+            },
+        };
+        for item in items.iter() {
+            env.push((&c.var, item.clone()));
+            let r = match &c.cond {
+                Some(cond) => match self.eval(cond, env) {
+                    Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
+                    Ok(_) => Ok(true),
+                    Err(e) => Err(e),
+                },
+                None => self.comp(rest, elem, value, set, env, acc),
+            };
+            env.pop();
+            match r {
+                Ok(true) | Err(Exit::Continue) => {}
+                Ok(false) | Err(Exit::Break) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
     }
 
     /// Run one iteration; false if the loop should stop.
@@ -1151,6 +1371,13 @@ impl<'a, W: Write> Interp<'a, W> {
     fn eval_general(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         Ok(match e {
             Expr::Str(s, _) => Value::Str(Rc::from(s.as_str())),
+            // type.num.13: a literal typed by context as a sized number.
+            Expr::Int(v, pos) if self.resolved.sized_literals.contains_key(pos) => {
+                sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
+            }
+            Expr::Float(v, pos) if self.resolved.sized_literals.contains_key(pos) => {
+                sized_literal(self.resolved.sized_literals[pos], *v, 0)
+            }
             // type.num.10
             Expr::Int(v, pos) if self.resolved.float_literals.contains(pos) => Value::Float(*v as f64),
             Expr::Int(v, _) => Value::Int(*v),
@@ -1168,7 +1395,7 @@ impl<'a, W: Write> Interp<'a, W> {
             // err.else.6: the fallback runs only when the value is absent or failed.
             Expr::Else { value, otherwise, .. } => match self.eval(value, env)? {
                 v @ (Value::None | Value::Fail(_)) => self.otherwise(otherwise, v, env)?,
-                v => v,
+                v => Value::unwrap_present(v),
             },
             Expr::Try { expr, context, pos } => {
                 let v = self.eval(expr, env)?;
@@ -1187,6 +1414,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         let failure = Failure { error: f.error.clone(), context: context_list, trace };
                         return Err(Exit::Return(Value::Fail(Rc::new(failure)), *pos));
                     }
+                    v if self.resolved.optional_try.contains(pos) => Value::unwrap_present(v),
                     v => v,
                 }
             }
@@ -1265,6 +1493,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Unary { op: UnOp::Neg, operand, pos } => {
                 let v = match self.eval(operand, env)? {
                     Value::Float(x) => return Ok(Value::Float(-x)),
+                    Value::Num(k, bits) => return negate(k, bits, *pos),
                     v => v.int(),
                 };
                 match v.checked_neg() {
@@ -1276,6 +1505,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             Expr::Unary { op: UnOp::Not, operand, .. } => Value::Bool(!self.eval(operand, env)?.bool()),
+            Expr::Unary { op: UnOp::Spawn, operand, pos } => self.spawn(operand, *pos, env)?,
             Expr::Binary { op: BinOp::And, lhs, rhs, .. } => {
                 Value::Bool(self.eval(lhs, env)?.bool() && self.eval(rhs, env)?.bool())
             }
@@ -1302,6 +1532,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     Value::Map(Rc::new(t))
                 }
             }
+            Expr::Comp { kind, elem, value, clauses, .. } => {
+                let mut acc = (Vec::new(), Table::default());
+                self.comp(clauses, elem, value.as_deref(), *kind == CompKind::Set, env, &mut acc)?;
+                match kind {
+                    CompKind::List => Value::List(Rc::new(acc.0)),
+                    CompKind::Set => Value::Set(Rc::new(acc.1)),
+                    CompKind::Map => Value::Map(Rc::new(acc.1)),
+                }
+            }
             Expr::Set(items, _) => {
                 let mut t = Table::default();
                 for x in items {
@@ -1325,7 +1564,7 @@ impl<'a, W: Write> Interp<'a, W> {
                             Value::Fail(f) => failure = Some(f),
                             v => {
                                 let mark = env.len();
-                                env.push((name.as_str(), v));
+                                env.push((name.as_str(), Value::unwrap_present(v)));
                                 let mut r = self.block(body, env);
                                 if self.has_unique {
                                     let v = std::mem::replace(&mut env[mark].1, Value::Unit);
@@ -1394,6 +1633,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => self.prog.enums[*e].variants[*i].name == *name,
             (Pattern::Literal(lit, _), v) => match (lit, v) {
                 (Literal::Int(a), Value::Int(b)) => a == b,
+                (Literal::Int(a), Value::Num(k, b)) => i128::from(*a) == k.decode(*b),
                 (Literal::Char(a), Value::Char(b)) => a == b,
                 (Literal::Str(a), Value::Str(b)) => a.as_str() == &**b,
                 (Literal::Bool(a), Value::Bool(b)) => a == b,
@@ -1449,6 +1689,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 BinOp::Ge => Value::Bool(a >= b),
                 _ => unreachable!("checked: `{sym}` on floats"),
             },
+            (Value::Num(k, a), Value::Num(_, b)) => num_binop(op, k, a, b, pos)?,
             (Value::Int(a), Value::Int(b)) => Value::Bool(match op {
                 BinOp::Eq => a == b,
                 BinOp::Ne => a != b,
@@ -1509,12 +1750,16 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         Ok(match (a, b) {
             (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Num(k, x), Value::Num(_, y)) if k.is_float() => Num::f32_of(*x) == Num::f32_of(*y),
+            (Value::Num(_, x), Value::Num(_, y)) => x == y,
             (Value::Float(x), Value::Float(y)) => x == y,
             (Value::Char(x), Value::Char(y)) => x == y,
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
             (Value::None, Value::None) => true,
             (Value::None, _) | (_, Value::None) => false,
+            (Value::Nested(m), Value::Nested(n)) => m == n,
+            (Value::Nested(_), _) | (_, Value::Nested(_)) => false,
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
                 self.all_equal(x, y, pos)?
             }
@@ -1561,13 +1806,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         Ok(match (a, b) {
             (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Num(k, x), Value::Num(_, y)) if k.is_float() => {
+                float_order(f64::from(Num::f32_of(*x)), f64::from(Num::f32_of(*y)))
+            }
+            (Value::Num(k, x), Value::Num(_, y)) => k.decode(*x).cmp(&k.decode(*y)),
             // type.num.7: a total order for sorting, with NaN after every number.
-            (Value::Float(x), Value::Float(y)) => match (x.is_nan(), y.is_nan()) {
-                (true, true) => Ordering::Equal,
-                (true, false) => Ordering::Greater,
-                (false, true) => Ordering::Less,
-                _ => x.partial_cmp(y).expect("not NaN"),
-            },
+            (Value::Float(x), Value::Float(y)) => float_order(*x, *y),
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
@@ -1625,6 +1869,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => {}
             }
         }
+        if matches!(n.as_str(), "TaskGroup" | "Channel" | "Mutex") {
+            return self.conc_constructor(n, args, pos, env);
+        }
         if let Some(&s) = self.structs.get(n.as_str()) {
             let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
             return Ok(Value::Struct(s, Rc::new(fields)));
@@ -1663,8 +1910,15 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `{x:spec}` (type.str.11): the text form of `v` shaped by `spec`.
     /// Numbers align right by default, everything else left.
     fn formatted(&mut self, v: &Value, spec: &crate::lexer::FormatSpec, pos: Pos) -> Result<String, Trap> {
-        let numeric = matches!(v, Value::Int(_) | Value::Float(_));
+        let numeric = matches!(v, Value::Int(_) | Value::Float(_) | Value::Num(..));
         let body = match v {
+            Value::Num(k, bits) if k.is_float() && spec.precision.is_some() && Num::f32_of(*bits).is_finite() => {
+                format!("{:.*}", spec.precision.unwrap_or(0), Num::f32_of(*bits))
+            }
+            Value::Num(k, bits) if spec.hex && !k.is_float() => {
+                let n = k.decode(*bits);
+                if n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }
+            }
             Value::Float(x) if spec.precision.is_some() && x.is_finite() => {
                 format!("{x:.*}", spec.precision.unwrap_or(0))
             }
@@ -1710,10 +1964,13 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Unit => "()".into(),
             Value::Int(n) => n.to_string(),
             Value::Float(x) => float_text(*x),
+            Value::Num(k, bits) if k.is_float() => float_text32(Num::f32_of(*bits)),
+            Value::Num(k, bits) => k.decode(*bits).to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => quoted(s, '"'),
             Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
+            Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
                 for x in items.iter() {
@@ -1733,6 +1990,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 format!("{}.{}{}", decl.name, variant.name, self.fields_text(names, values, pos)?)
             }
             Value::Fail(f) => self.describe(&f.error, pos)?,
+            Value::Handle(h) => h.text(),
             Value::Map(t) => {
                 let mut parts = Vec::with_capacity(t.len());
                 for (k, v) in t.entries() {
@@ -1816,6 +2074,9 @@ impl<'a, W: Write> Interp<'a, W> {
             let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
         }
+        if let Some(&crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(&pos) {
+            return self.ui_method(m, recv, args, pos, env);
+        }
         let mut recv = self.operand(recv, env)?;
         let (mut type_name, cell) = match &recv {
             Operand::Place(p) => view(env, p, |v| self.type_name_or_cell(v))?,
@@ -1830,22 +2091,27 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(Call::Trait(tr)) = call {
             return self.trait_method(tr, name, recv, args, pos, env);
         }
-        let Some(type_name) = type_name else { return self.builtin(recv, name, args, pos, env) };
+        let type_name = match type_name {
+            Some(TypeOf::Named(t)) => t,
+            Some(TypeOf::Handle(h)) => return self.handle_method(h, name, args, pos, env),
+            None => return self.builtin(recv, name, args, pos, env),
+        };
         let f = self.methods[type_name][name];
         self.invoke(f, Some(recv), args, pos, env)
     }
 
-    fn type_name_or_cell(&self, v: &Value) -> (Option<&'a str>, Option<Rc<RefCell<Value>>>) {
+    fn type_name_or_cell(&self, v: &Value) -> (Option<TypeOf<'a>>, Option<Rc<RefCell<Value>>>) {
         match v {
             Value::Ref(c) => (None, Some(c.clone())),
             v => (self.type_name_of(v), None),
         }
     }
 
-    fn type_name_of(&self, v: &Value) -> Option<&'a str> {
+    fn type_name_of(&self, v: &Value) -> Option<TypeOf<'a>> {
         match v {
-            Value::Struct(s, _) => Some(self.prog.structs[*s].name.as_str()),
-            Value::Enum(e, _, _) => Some(self.prog.enums[*e].name.as_str()),
+            Value::Struct(s, _) => Some(TypeOf::Named(self.prog.structs[*s].name.as_str())),
+            Value::Enum(e, _, _) => Some(TypeOf::Named(self.prog.enums[*e].name.as_str())),
+            &Value::Handle(h) => Some(TypeOf::Handle(h)),
             _ => None,
         }
     }
@@ -1937,6 +2203,9 @@ impl<'a, W: Write> Interp<'a, W> {
 
     fn print(&mut self, v: &Value, pos: Pos) -> Result<(), Trap> {
         let text = self.text(v, pos)?;
+        if self.conc.is_some() && self.task_print(&text) {
+            return Ok(());
+        }
         if self.closed {
             return Ok(());
         }
@@ -1951,6 +2220,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn flush(&mut self, pos: Pos) -> Result<(), Trap> {
+        if self.conc.is_some() {
+            self.task_print("");
+        }
         match self.out.flush() {
             Err(e) if e.kind() != io::ErrorKind::BrokenPipe => {
                 trap("mod.main.3", pos, format!("writing to standard output failed: {e}"))

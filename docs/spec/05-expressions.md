@@ -54,7 +54,7 @@ the entries below. A declared name is never overridden by the table.
 
 | Habit | Help names |
 |---|---|
-| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()`; for a `str`, `s.chars().len()` |
+| `len(x)`, `x.length`, `x.size`, `x.count` | `x.len()` (a `str` counts characters; `s.byte_len()` counts bytes) |
 | `str(x)` | `"{x}"` |
 | `int(s)` | `s.to_int()` |
 | `float(x)` | `s.to_float()` for text, `n.to_float()` for an `int` |
@@ -250,7 +250,8 @@ and name those variants, unless the warning is suppressed for that match.
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
 (`expr.match.8`). A variant with data is followed by a parenthesised pattern
-for each of its fields (`expr.match.6`). *(ADR 0117, ADR 0123, ADR 0138)*
+for each of its fields (`expr.match.6`), or written bare to match any fields
+(`expr.match.10`). *(ADR 0117, ADR 0123, ADR 0138, ADR 0183)*
 
 **expr.match.5** — An arm whose pattern is already covered by earlier arms is
 a compile-time error. Literals are compared by value (`0x41` after `65` is
@@ -296,11 +297,70 @@ fn kind(t Token) str
         Plus => "op"
 ```
 
+**expr.match.10** — A variant with data written without parentheses, bare or
+qualified, matches that variant whatever its fields hold and binds no names.
+`Circle | Rect => 0` is the same as `Circle(_) | Rect(_, _) => 0`.
+*(ADR 0183)*
+
+```ail
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn has_area(s Shape) bool
+    match s
+        Circle | Rect => true
+        Dot => false
+
+fn main()
+    print(has_area(Shape.Circle(r: 1)))
+```
+
 > **Note:** not yet designed: range patterns (`'0'..='9'`), guards
 > (`x if x > 0`), or-patterns that bind names, patterns nested inside a
 > variant's fields (`expr.match.6`), and warning-suppression syntax. The
 > diagnostics for range patterns and guards suggest an `if` chain.
 > *(ADR 0138)*
+
+## Comprehensions
+
+**expr.comp.1** — A comprehension builds a list, set or map from one or more
+`for` clauses. `[e for x in xs]` is a `List[T]`, `{e for x in xs}` a `Set[T]`
+and `{k: v for x in xs}` a `Map[K, V]`, where `T`, `K` and `V` are the types of
+`e`, `k` and `v`. A set's elements and a map's keys MUST be `Hash`
+(`type.map.2`). A comprehension may span lines inside its brackets.
+*(ADR 0182)*
+
+**expr.comp.2** — Each clause is `for name in iterable`, optionally followed
+by `if condition`. The iterable is anything a `for` loop accepts
+(`expr.loop.3`). The name is a new immutable binding (`expr.bind.4`: it MUST
+NOT repeat a name already declared), visible in the condition, in later
+clauses and in the element; it ends with the comprehension. `for mut` is a
+compile-time error. *(ADR 0182)*
+
+**expr.comp.3** — The clauses run like nested `for` loops, outermost first.
+For each combination whose conditions are all `true`, the element (and, in a
+map, the value) is evaluated and added: in order for a list, and as by `add`
+and `m[k] = v` for a set or map, so a later equal key replaces an earlier
+one's value. The element MUST be a value, and when the context expects a
+collection of a known element type, it MUST fit that type. *(ADR 0182)*
+
+**expr.comp.4** — The element and conditions are ordinary expressions:
+`?`, `return` and `else return` leave the enclosing function. `continue`
+skips the current element and `break` ends the comprehension, which then
+holds the elements added so far. *(ADR 0182)*
+
+```ail
+fn main()
+    xs := [3, 1, 4, 1, 5]
+    print([x * x for x in xs if x > 1])          # [9, 16, 25]
+    print({x for x in xs}.len())                 # 4
+    sizes := {w: w.chars().len() for w in ["a", "bcd"]}
+    print(sizes["bcd"])                          # 3
+    print([r * 10 + c for r in 1..3 for c in 0..2])   # [10, 11, 20, 21]
+    print([t.to_int() else continue for t in ["1", "x", "3"]])  # [1, 3]
+```
 
 ## Integer arithmetic
 

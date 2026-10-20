@@ -1,0 +1,2 @@
+fn main()
+    print("abc".slice(2, 5))

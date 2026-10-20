@@ -5,6 +5,7 @@
 use super::{Checker, Sig, Ty};
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
+use crate::num::Num;
 
 /// What a built-in method's element type must support.
 #[derive(Clone, Copy, PartialEq)]
@@ -30,6 +31,12 @@ pub(super) const STR_METHODS: &[&str] = &[
     "to_float",
     "chars",
     "trim",
+    "slice",
+    "to_lower",
+    "to_upper",
+    "find",
+    "replace",
+    "char_at",
     "starts_with",
     "ends_with",
     "strip_prefix",
@@ -39,6 +46,8 @@ pub(super) const STR_METHODS: &[&str] = &[
     "pad_left",
     "pad_right",
     "lines",
+    "len",
+    "byte_len",
 ];
 pub(super) const CHAR_METHODS: &[&str] = &[
     "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower", "to_upper", "to_lower", "code", "to_digit",
@@ -60,12 +69,34 @@ pub(super) const INT_METHODS: &[&str] = &[
     "abs",
     "to_float",
     "to_hex",
+    "to_i8",
+    "to_i16",
+    "to_i32",
+    "to_u8",
+    "to_u16",
+    "to_u32",
+    "to_u64",
+    "to_f32",
 ];
-pub(super) const FLOAT_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt", "to_int"];
+pub(super) const FLOAT_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_f32"];
+pub(super) const SIZED_INT_METHODS: &[&str] = &[
+    "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem", "checked_neg", "wrapping_add",
+    "wrapping_sub", "wrapping_mul", "wrapping_neg", "saturating_add", "saturating_sub", "saturating_mul", "abs",
+    "to_int", "to_float", "to_hex", "to_i8", "to_i16", "to_i32", "to_u8", "to_u16", "to_u32", "to_u64", "to_f32",
+];
+pub(super) const F32_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_float"];
 pub(super) const LIST_METHODS: &[&str] =
-    &["len", "push", "swap", "pop", "last", "contains", "index_of", "join", "sum", "min", "max", "sorted", "sort"];
+    &[
+        "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
+        "index_of", "join", "sum", "min", "max", "sorted", "sort",
+    ];
 pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
 pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset"];
+
+/// `to_i8` ... `to_f32`: the sized type a conversion method names (type.num.15).
+fn convert(name: &str) -> Option<Num> {
+    crate::num::CONVERSIONS.iter().find(|(n, _)| *n == name).map(|(_, k)| *k)
+}
 
 /// The built-in method `name` of type `t`, if there is one.
 pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
@@ -80,12 +111,17 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "to_int" => read(vec![], opt(Int)),
             "to_float" => read(vec![], opt(Float)),
             "chars" => read(vec![], list(Char)),
-            "trim" => read(vec![], Str),
+            "trim" | "to_lower" | "to_upper" => read(vec![], Str),
+            "slice" => read(vec![Int, Int], Str),
+            "find" => read(vec![Str], opt(Int)),
+            "replace" => read(vec![Str, Str], Str),
+            "char_at" => read(vec![Int], opt(Char)),
             "starts_with" | "ends_with" | "contains" => read(vec![Str], Bool),
             "strip_prefix" | "strip_suffix" => read(vec![Str], opt(Str)),
             "repeat" => read(vec![Int], Str),
             "pad_left" | "pad_right" => read(vec![Int, Char], Str),
             "lines" => read(vec![], list(Str)),
+            "len" | "byte_len" => read(vec![], Int),
             _ => None,
         },
         Ty::Char => match name {
@@ -104,13 +140,45 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "abs" => read(vec![], Int),
             "to_float" => read(vec![], Float),
             "to_hex" => read(vec![], Str),
-            _ => None,
+            _ => convert(name).map(|k| Builtin { mutates: false, params: vec![], ret: Ty::Num(k), need: Need::Nothing }),
         },
         Ty::Float => match name {
             "abs" | "floor" | "ceil" | "round" | "sqrt" => read(vec![], Float),
             "to_int" => read(vec![], Int),
+            "to_f32" => read(vec![], Ty::Num(Num::F32)),
             _ => None,
         },
+        // type.num.14-15: the sized integers' methods, and `f32`'s.
+        Ty::Num(k) if k.is_float() => {
+            let f32 = Ty::Num(Num::F32);
+            match name {
+                "abs" | "floor" | "ceil" | "round" | "sqrt" => read(vec![], f32),
+                "to_int" => read(vec![], Int),
+                "to_float" => read(vec![], Float),
+                _ => None,
+            }
+        }
+        Ty::Num(k) => {
+            let me = Ty::Num(*k);
+            match name {
+                "checked_add" | "checked_sub" | "checked_mul" | "checked_div" | "checked_rem" => {
+                    read(vec![me.clone()], opt(me))
+                }
+                "checked_neg" if k.is_signed() => read(vec![], opt(me)),
+                "wrapping_neg" | "abs" if k.is_signed() => read(vec![], me),
+                "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub"
+                | "saturating_mul" => read(vec![me.clone()], me),
+                "to_int" => read(vec![], Int),
+                "to_float" => read(vec![], Float),
+                "to_hex" => read(vec![], Str),
+                _ => convert(name).filter(|c| c != k).map(|c| Builtin {
+                    mutates: false,
+                    params: vec![],
+                    ret: Ty::Num(c),
+                    need: Need::Nothing,
+                }),
+            }
+        }
         Ty::List(e) => {
             let e = (**e).clone();
             match name {
@@ -118,7 +186,11 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "push" => make(true, vec![e], Unit, Need::Nothing),
                 "swap" => make(true, vec![Int, Int], Unit, Need::Nothing),
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
-                "last" => read(vec![], opt(e)),
+                "last" | "first" => read(vec![], opt(e)),
+                "insert" => make(true, vec![Int, e], Unit, Need::Nothing),
+                "remove_at" => make(true, vec![Int], e, Need::Nothing),
+                "extend" => make(true, vec![list(e)], Unit, Need::Nothing),
+                "clear" | "reverse" => make(true, vec![], Unit, Need::Nothing),
                 "contains" => make(false, vec![e], Bool, Need::Eq),
                 "index_of" => make(false, vec![e], opt(Int), Need::Eq),
                 "join" => read(vec![Str], Str),
@@ -164,6 +236,8 @@ pub(super) fn builtin_names(t: &Ty) -> &'static [&'static str] {
         Ty::Char => CHAR_METHODS,
         Ty::Int => INT_METHODS,
         Ty::Float => FLOAT_METHODS,
+        Ty::Num(k) if k.is_float() => F32_METHODS,
+        Ty::Num(_) => SIZED_INT_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(..) => MAP_METHODS,
         Ty::Set(_) => SET_METHODS,
@@ -206,7 +280,7 @@ impl<'p> Checker<'p> {
             Need::Nothing => true,
             Need::Eq => self.implements(&elem, self.std.eq),
             Need::Ord => self.implements(&elem, self.std.ord),
-            Need::Number => matches!(elem, Ty::Int | Ty::Float | Ty::Err),
+            Need::Number => matches!(elem, Ty::Int | Ty::Float | Ty::Num(_) | Ty::Err),
         };
         if !ok {
             let what = match b.need {
@@ -260,9 +334,7 @@ pub(super) fn function_help(name: &str) -> Option<&'static str> {
 /// Help for a method name that other languages give the built-in types (expr.name.2).
 pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
     Some(match (t, name) {
-        (Ty::Str, "len" | "length" | "size" | "count") => {
-            "`str` has no `len()`; count its characters with `s.chars().len()`"
-        }
+        (Ty::Str, "length" | "size" | "count") => "write `s.len()` for characters, or `s.byte_len()` for UTF-8 bytes",
         (Ty::Str, "strip" | "lstrip" | "rstrip" | "trim_start" | "trim_end") => "write `s.trim()`",
         (Ty::Str, "startswith") => "write `s.starts_with(prefix)`",
         (Ty::Str, "endswith") => "write `s.ends_with(suffix)`",

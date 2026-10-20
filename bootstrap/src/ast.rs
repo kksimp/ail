@@ -1,5 +1,7 @@
 //! Syntax tree for the subset the bootstrap supports.
 
+use std::collections::HashSet;
+
 use crate::diag::Pos;
 
 #[derive(Debug, Default)]
@@ -12,12 +14,34 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub consts: Vec<ConstDecl>,
-    /// `use a.b.c` and `use a.b.c as d` at the top level (mod.use.1).
+    /// `use` declarations of every file (mod.use.1).
     pub uses: Vec<Use>,
+    /// The lines that start with `pub`: a declaration or struct field on one
+    /// of them is public (mod.vis.1). Every declaration starts its own line.
+    pub public: HashSet<usize>,
+    /// The source files of a package, in line order (`modules.rs`). Empty
+    /// for a single-file program without imports.
+    pub files: Vec<SourceFile>,
+    /// The capabilities each package manifest grants (eff.cap.4-5,
+    /// `packages.rs`). Empty without an `ail.pkg`.
+    pub grants: Vec<Grant>,
+}
+
+/// `caps LIST` on a manifest line: the code of `package` (empty for the
+/// root package) may reach only `caps` (eff.cap.4-5).
+#[derive(Debug, Clone)]
+pub struct Grant {
+    pub package: String,
+    pub caps: Vec<&'static str>,
+    /// The manifest line's name.
+    pub pos: Pos,
+    /// From the package's own `package` line (eff.cap.5), not from a `dep`
+    /// line (eff.cap.4).
+    pub own: bool,
 }
 
 /// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Use {
     pub path: Vec<(String, Pos)>,
     pub alias: Option<(String, Pos)>,
@@ -28,6 +52,52 @@ impl Use {
     /// The name the module is available under: the alias, or the last segment.
     pub fn name(&self) -> &(String, Pos) {
         self.alias.as_ref().unwrap_or_else(|| self.path.last().expect("a use path has a segment"))
+    }
+
+    /// `a.b.c`
+    pub fn dotted(&self) -> String {
+        self.path.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(".")
+    }
+}
+
+/// One source file of a package: its lines are numbered from `base + 1`.
+#[derive(Debug, Clone)]
+pub struct SourceFile {
+    pub path: String,
+    pub src: String,
+    /// The module's import path, `a.b` (mod.unit.2); empty for the root module.
+    pub module: String,
+    pub base: usize,
+}
+
+/// Each file of a package is numbered from a multiple of this, so a
+/// position tells its file (the first file starts at 0).
+pub const FILE_LINES: usize = 1 << 20;
+
+impl Program {
+    /// The file a position is in, if the program has more than one.
+    pub fn file_at(&self, pos: Pos) -> Option<&SourceFile> {
+        if is_prelude(pos) {
+            return None;
+        }
+        self.files.iter().rev().find(|f| f.base < pos.line)
+    }
+
+    /// The import path of the module a position is in (mod.unit.2); empty
+    /// for the root module and the prelude.
+    pub fn module_at(&self, pos: Pos) -> &str {
+        self.file_at(pos).map_or("", |f| f.module.as_str())
+    }
+
+    /// Whether the declaration at `pos` is marked `pub`, or is in the prelude.
+    pub fn is_pub(&self, pos: Pos) -> bool {
+        is_prelude(pos) || self.public.contains(&pos.line)
+    }
+
+    /// Whether the declaration at `decl` is hidden from code at `at`: it is
+    /// private and in another module (mod.vis.1).
+    pub fn hidden(&self, decl: Pos, at: Pos) -> bool {
+        !self.is_pub(decl) && self.module_at(decl) != self.module_at(at)
     }
 }
 
@@ -158,6 +228,19 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+    /// `requires` and `ensures` lines before the body (contract.decl.1).
+    pub contracts: Vec<Contract>,
+}
+
+/// `requires COND` or `ensures COND` (contract.decl.1-2).
+#[derive(Debug)]
+pub struct Contract {
+    /// `true` for `ensures`, `false` for `requires`.
+    pub ensures: bool,
+    pub cond: Expr,
+    /// The condition as written, for traps and `ail api` (contract.req.1).
+    pub text: String,
+    pub pos: Pos,
 }
 
 /// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
@@ -165,6 +248,8 @@ pub struct FnDecl {
 pub struct Attr {
     pub name: String,
     pub pos: Pos,
+    /// The string argument, as in `@deprecated("why")` (gram.attr.3).
+    pub arg: Option<String>,
 }
 
 /// Where a function is declared.
@@ -360,6 +445,8 @@ impl BinOp {
 pub enum UnOp {
     Neg,
     Not,
+    /// `spawn f(args)`: start a task (conc.task.1, ADR 0186).
+    Spawn,
 }
 
 #[derive(Debug)]
@@ -457,6 +544,16 @@ pub enum Expr {
         context: Option<Box<Expr>>,
         pos: Pos,
     },
+    /// `[e for x in xs if c]`, `{e for ...}` or `{k: v for ...}`, a
+    /// comprehension (expr.comp.1); `pos` is the opening bracket's.
+    Comp {
+        kind: CompKind,
+        elem: Box<Expr>,
+        /// The value of a map comprehension, `{k: v for ...}`.
+        value: Option<Box<Expr>>,
+        clauses: Vec<CompFor>,
+        pos: Pos,
+    },
     /// `e else d` or `e else return ...` as an expression (err.else.6): the
     /// value of `e`, or the fallback when it is absent or failed. `pos` is
     /// the `else`'s.
@@ -493,6 +590,7 @@ impl Expr {
             | Expr::Map(_, p)
             | Expr::Set(_, p)
             | Expr::Ref { pos: p, .. }
+            | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
             Expr::Range { lo: Some(e), .. } => e.pos(),
             Expr::Call { callee: e, .. }
@@ -504,6 +602,24 @@ impl Expr {
             | Expr::Else { value: e, .. } => e.pos(),
         }
     }
+}
+
+/// What a comprehension builds (expr.comp.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompKind {
+    List,
+    Set,
+    Map,
+}
+
+/// One `for x in xs` clause of a comprehension, with its optional `if`
+/// filter (expr.comp.2).
+#[derive(Debug)]
+pub struct CompFor {
+    pub var: String,
+    pub var_pos: Pos,
+    pub iter: Expr,
+    pub cond: Option<Expr>,
 }
 
 /// A condition of `if` or `elif`: a `bool` expression, or a binding
