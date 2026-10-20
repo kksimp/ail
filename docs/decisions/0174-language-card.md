@@ -1,6 +1,6 @@
 # 0174. A language card for AI agents, under 4,000 tokens
 
-- **Status:** Accepted
+- **Status:** Accepted; budget amended to 8,000 by [ADR 0276](0276-language-card-budget-8000.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** AI-first tooling

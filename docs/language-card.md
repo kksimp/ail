@@ -1,7 +1,7 @@
 # AIL language card
 
 > v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
-> [quick reference](quick-reference.md) has the long form. Budget 4,000 tokens
+> [quick reference](quick-reference.md) has the long form. Budget 8,000 tokens
 > on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs

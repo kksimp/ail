@@ -35,7 +35,7 @@ interpreter performance: `tools/perfbench/run.sh`, about 20-35% faster, see
 Overnight 2026-10-20 (lane 9, ADRs 0172–0174): the spec conformance harness
 (`bootstrap/tests/spec.rs`) checks every `ail` block in `docs/spec/`; format
 specifications in interpolation (`{x:>8}`, `{r:.2}`, `{n:0>4x}`, resolves OQ-041)
-are implemented; `docs/language-card.md` is the whole language in under 4,000
+are implemented; `docs/language-card.md` is the whole language in under 8,000
 tokens. Linux selftest passes; macOS verification is pending.
 Lane 25 added property tests (`@test` with parameters, `--cases`, `--seed`, shrinking) and doc examples as tests (ADRs 0198–0201; spec `test.prop.*`, `test.doc.*`).
 Lane 27 (ADRs 0206–0209, resolves OQ-043, OQ-044, OQ-046): `std.random` (`int`, `float`, `seed`, `shuffle`; capability `random`), `ail run --deterministic` and `--seed`, `str.len()` counting characters with `byte_len()`, and nested optionals (`T??`).
