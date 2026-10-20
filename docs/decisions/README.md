@@ -353,6 +353,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0360](0360-in-house-tls-for-std-net.md) | `https` in `std.net` through an in-house TLS implementation, not a crate (designer) | Accepted | 2026-10-20 |
 | [0361](0361-bytecode-tier-design.md) | The bytecode tier: register code over the tree walker's environment, with hand-offs *(delegated)* | Accepted | 2026-10-20 |
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
+| [0367](0367-tls13-client-handshake.md) | The TLS 1.3 client handshake and record layer, tested on a recorded trace and live OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0371](0371-self-hosted-front-end-compared-by-dumps.md) | Compare the self-hosted lexer and parser with the bootstrap through text dumps *(delegated)* | Accepted | 2026-10-20 |
 | [0372](0372-identifier-characters.md) | A name is letters, ASCII digits and `_` *(delegated)* | Accepted | 2026-10-20 |
 | [0376](0376-syntax-tree-in-ail-and-its-json.md) | The syntax tree in AIL, `compiler/ast/`, and its JSON is the derived shape *(delegated)* | Accepted | 2026-10-20 |

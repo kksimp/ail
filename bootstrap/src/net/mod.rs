@@ -3,3 +3,4 @@
 //! in-house TLS 1.3 client it will use for `https` (ADR 0360).
 
 pub mod crypto;
+pub mod tls;

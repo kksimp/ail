@@ -10,7 +10,7 @@ been verified to do. Update it in the same change as the code.
 | Slice | ADR | State |
 |---|---|---|
 | 1. Primitives | [0366](../decisions/0366-tls-crypto-primitives.md) | Done, tested |
-| 2. Record layer and handshake | 0367 | Not started |
+| 2. Record layer and handshake | [0367](../decisions/0367-tls13-client-handshake.md) | Done, tested |
 | 3. Certificates | 0368 | Not started |
 | 4. `net.get`/`net.post` over TLS | 0369 | Not started |
 
@@ -29,6 +29,23 @@ been verified to do. Update it in the same change as the code.
   lengths 0–1000 around every block edge, for every primitive
   (`bootstrap/src/net/crypto/testdata/crosscheck.txt`).
 - **Tamper:** a flipped bit in ciphertext, tag, AAD or nonce fails `open`.
+- **Handshake, recorded:** a real TLS_AES_256_GCM_SHA384 handshake (The
+  Illustrated TLS 1.3 Connection) replays with every client byte equal to
+  the recording: key schedule, both directions' record protection, both
+  Finished messages, tickets and application data. Every 7th byte of the
+  server's flight corrupted, and truncation at each record, fails cleanly.
+- **Handshake, live:** `openssl s_server` (OpenSSL 3.0) for each of the
+  three suites, a server that prefers P-256, a server-requested KeyUpdate
+  with data both ways afterwards, and refusals from a TLS 1.2-only and a
+  P-256-only server with messages naming the cause. Skipped with a note
+  where `openssl` isn't OpenSSL 1.1.1 or 3 (macOS ships LibreSSL), so on
+  macOS only the recorded and RFC tests run unless OpenSSL is installed.
+- **RFC 8448:** handshake and application secrets, `finished` key, traffic
+  key and IV, and the first application-data record (values as transcribed
+  by Mbed TLS's test suite).
+- **Mutation:** 3,000 mutated ServerHello and Certificate bodies and 300
+  mutated server flights per selftest (100,000 and 10,000 run once with
+  `AIL_FUZZ_N=100000`) without a panic.
 
 ## Not verified
 
@@ -37,13 +54,17 @@ been verified to do. Update it in the same change as the code.
   principle reintroduce a branch; no tool checks the machine code yet.
 - **Zeroising:** keys aren't wiped from memory after use.
 - **Side channels beyond timing** (power, faults): out of scope.
-- Everything in slices 2–4: the handshake, certificate checks and the
-  wiring are not written yet, so `https` stays off.
+- **HelloRetryRequest with a cookie:** implemented per RFC 8446 §4.1.4
+  and unit-tested, but no available test server sends one.
+- **Certificates:** slice 2 hands the chain and the CertificateVerify
+  signature to a `Verifier`; only tests have one (it accepts anything).
+  Until slice 3, nothing outside tests can make a TLS connection, and
+  `https` stays off.
 
 ## Limits
 
 - AES-GCM runs about 10 MB/s in software (ChaCha20-Poly1305 about
   290 MB/s; Linux x86-64, release build). Hardware AES and carry-less
   multiply are a follow-up.
-- TLS 1.2, client certificates, 0-RTT and session resumption are not
-  implemented (ADR 0360).
+- TLS 1.2, client certificates, 0-RTT, session resumption and key shares
+  other than X25519 are not implemented (ADRs 0360, 0367).
