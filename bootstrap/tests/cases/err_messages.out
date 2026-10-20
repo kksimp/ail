@@ -1,0 +1,5 @@
+missing '='
+bad pair 1
+got: parse error at 1:2: oops
+failed: bad cell name 'zz'
+0

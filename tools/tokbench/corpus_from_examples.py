@@ -2,7 +2,8 @@
 
 Measurement only (ADR 0070). Comments, blank lines and `@test` functions are
 removed, as in the hand-made copies of earlier rounds, so the AIL file holds
-the same program as its Python twin.
+the same program as its Python twin. The agent-tool programs (ADR 0217) keep
+their tests and blank lines, as their twins do; only comment lines go.
 
 Usage (from the repository root): python3 tools/tokbench/corpus_from_examples.py [SRC_DIR]
 SRC_DIR defaults to examples/; a program is copied only if its corpus directory exists.
@@ -13,6 +14,7 @@ import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
+AGENT = {"logscan", "tasks", "build", "snapdiff", "csvreport"}
 
 
 def strip(src):
@@ -36,7 +38,12 @@ def main():
     for d in sorted((HERE / "corpus" / "programs").iterdir()):
         f = src_dir / f"{d.name}.ail"
         if d.is_dir() and f.exists():
-            (d / f"{d.name}.ail").write_text(strip(f.read_text()))
+            src = f.read_text()
+            if d.name in AGENT:
+                text = "".join(l for l in src.splitlines(keepends=True) if not l.lstrip().startswith("#"))
+            else:
+                text = strip(src)
+            (d / f"{d.name}.ail").write_text(text)
             print(f"{f} -> {d / (d.name + '.ail')}")
 
 

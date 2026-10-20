@@ -31,7 +31,12 @@ pub fn by_line(src: &str) -> HashMap<usize, String> {
 /// Fill the `doc` of every declaration in the program (not the prelude)
 /// from the source text it was parsed from (api.doc.2).
 pub fn attach(prog: &mut Program, src: &str) {
-    let docs = by_line(src);
+    attach_lines(prog, &by_line(src));
+}
+
+/// Like `attach` for docs already keyed by program line, as in a package of
+/// several files (api.card.1).
+pub fn attach_lines(prog: &mut Program, docs: &HashMap<usize, String>) {
     let doc = |pos: Pos| if is_prelude(pos) { None } else { docs.get(&pos.line).cloned() };
     for f in &mut prog.fns {
         f.doc = doc(f.pos);
