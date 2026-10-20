@@ -1,0 +1,14 @@
+# std.json: parse then to_text, escapes, unicode, nesting (json.parse.1, json.print.1)
+fn show(text str)
+    if v := parse_json(text)
+        print(v.to_text())
+    else err
+        print("{err.at}: {err.message}")
+
+fn main()
+    show("  \{\"a\": [1, 2.5, -3e2, true, false, null], \"b\": \{\"c\": \"x\"}}  ")
+    show("\"line\\nbreak \\u00e9 \\u2603 \\/ \\\\ \\\"q\\\" \\b\\f\\t\"")
+    show("\"\\ud83d\\ude00\"")
+    show("[]")
+    show("\{}")
+    show("\{\"k\": 1, \"a\": 2, \"k\": 3}")

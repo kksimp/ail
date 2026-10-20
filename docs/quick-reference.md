@@ -396,6 +396,21 @@ Also `m.contains(k)`, `m.remove(k)` (gives `V?`), `m.len()`, `s.remove(x)`,
 `==` is automatic (ints, strings, chars, structs and enums of them), but not
 floats.
 
+## JSON
+
+`Json` is built in, with no import (`json.type.1`). It is read only when the
+program uses it.
+
+```ail
+doc := parse_json("\{\"a\": [1, \"x\"]}")?   # Json ! JsonError; err.at is the char offset
+doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/as_bool/as_arr/as_obj)
+doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
+```
+
+Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
+`Obj(members)` (`JsonMember` has `key`, `value`). Write `Json.Num(1.0)` when
+the type isn't known. A program that declares its own `Json` keeps it.
+
 ## Values and `mut`
 
 Assigning or passing a value copies it (cheaply): changing `b` after

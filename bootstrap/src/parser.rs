@@ -48,10 +48,28 @@ const COMPARISONS: &[(&str, BinOp)] =
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
 const PRELUDE: &str = include_str!("prelude.ail");
 
+/// Names of the optional `std.json` prelude module (ADR 0161).
+const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
+
+/// The always-read prelude, plus the `json` module (after its `## @module`
+/// marker) when the program names one of its items and declares none of them.
+fn prelude_text(tokens: &[Token]) -> &'static str {
+    let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
+    let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
+    let declared = tokens.windows(2).any(|w| {
+        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
+    });
+    if tokens.iter().any(named) && !declared {
+        PRELUDE
+    } else {
+        core
+    }
+}
+
 /// Parse a program after the prelude, whose lines are numbered from
 /// `ast::PRELUDE_LINE`.
 pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let (mut all, diags) = lex(PRELUDE);
+    let (mut all, diags) = lex(prelude_text(&tokens));
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
     fn shift(tokens: &mut [Token]) {
