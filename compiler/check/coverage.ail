@@ -4,13 +4,13 @@
 use ast
 
 ## The rules the declaration passes (slice 1), the bodies (slice 2) and the
-## flow passes ported so far (slice 3) report.
-## Left out until slice 3 checks them too: the rules the flow passes also
-## report, conc.par.12.
+## flow passes (slice 3) report.
 pub COVERED_RULES := [
     "bootstrap.unsupported",
     "conc.atomic.3",
     "conc.atomic.7",
+    "conc.par.12",
+    "conc.par.5",
     "conc.share.1",
     "conc.share.4",
     "conc.share.6",

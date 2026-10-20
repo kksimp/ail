@@ -52,6 +52,8 @@ pub fn check_program(p ast.Program) Report
     c.diags.extend(check_handles(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
+    c.diags.extend(c.check_par())
+    c.diags.extend(c.check_par_comps())
     c.remap_generated()
     Report(
         diags: c.diags,
@@ -311,8 +313,8 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             loop_depth -= 1
             end_scope(mark)
             Ty.Unit
-        With(mutex, var, var_pos, body, _) =>
-            with_stmt(mutex, var, var_pos, body)
+        With(mutex, var, var_pos, body, at) =>
+            with_stmt(mutex, var, var_pos, body, at)
             Ty.Unit
         Break(at) =>
             if loop_depth == 0
@@ -708,6 +710,8 @@ fn Checker.condition(mut self, cond ast.Expr)
         SetOf(e) => e
         Conc(k, e) =>
             if k == "Channel"
+                # conc.share.7: the loop synchronises with other tasks (conc.par.2).
+                handle_calls.add(pos_key(at))
                 return e
             iterate_error(t, at)
         Unknown => Ty.Unknown

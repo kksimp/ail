@@ -752,12 +752,18 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         args_only(args)
         return Ty.Unknown
     match rt
-        Conc(k, inner) => return conc_method(k, inner, n, at, args)
+        Conc(k, inner) =>
+            if k == "Atomic"
+                atomic_calls.add(pos_key(at))
+            else
+                handle_calls.add(pos_key(at))
+            return conc_method(k, inner, n, at, args)
         Struct(s, _) =>
             sn := prog.structs[s].name
             if sn == "ui.Window" or sn == "tensor.Tensor"
                 if sn == "ui.Window"
                     std_methods.add(pos_key(at))
+                std_any.add(pos_key(at))
                 args_only(args)
                 return gap("std.ui or std.tensor method")
         _ => rt = rt

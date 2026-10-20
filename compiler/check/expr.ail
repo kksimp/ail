@@ -11,6 +11,7 @@ use ast
         Int(v, at) =>
             # type.num.10: an integer literal where a float is expected is a float.
             if expect == Ty.Float
+                float_literals.add(pos_key(at))
                 return Ty.Float
             # type.num.13: a literal is typed by the sized type the context expects.
             if k := num_name(expect else Ty.Unknown)
@@ -97,6 +98,7 @@ use ast
 @allow("expr.match.3")
 fn Checker.unary_expr(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos, expect Ty?) Ty
     if op == ast.UnOp.Neg and expect == Ty.Float and is_int_literal(operand)
+        float_literal(operand)
         return Ty.Float
     if op == ast.UnOp.Neg and is_number_literal(operand)
         if k := num_name(expect else Ty.Unknown)
@@ -514,6 +516,8 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
 ## An integer literal `v` (negated when `neg`) typed as `k` by context
 ## (type.num.13): it must fit.
 fn Checker.sized_literal(mut self, v str, neg bool, at ast.Pos, k str)
+    # The interpreter's fast path treats every such literal as special.
+    float_literals.add(pos_key(at))
     if k == "f32"
         return
     n := v.to_int() else return
@@ -560,10 +564,13 @@ fn Checker.sized_literal(mut self, v str, neg bool, at ast.Pos, k str)
             false
         _ => false
 
-## Whether `e` is an integer literal or its negation (type.num.10).
-@allow("expr.match.3") fn float_literal(e ast.Expr) bool
+## Whether `e` is an integer literal or its negation, which can be a float
+## where one is expected; if so, it is recorded as one (type.num.10).
+@allow("expr.match.3") fn Checker.float_literal(mut self, e ast.Expr) bool
     match e
-        Int => true
+        Int(_, at) =>
+            float_literals.add(pos_key(at))
+            true
         Unary(op, operand, _) => op == ast.UnOp.Neg and float_literal(operand)
         _ => false
 

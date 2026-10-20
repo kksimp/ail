@@ -183,8 +183,17 @@ fn conc_methods(kind str, t Ty) str
 ## `with m as mut x` (conc.share.6): `m` is a `Mutex[T]` and `x` a `mut`
 ## local of type `T` for the body, which can't name `m` again.
 @allow("expr.match.3")
-fn Checker.with_stmt(mut self, mutex ast.Expr, var str, var_pos ast.Pos, body List[ast.Stmt])
+fn Checker.with_stmt(
+    mut self,
+    mutex ast.Expr,
+    var str,
+    var_pos ast.Pos,
+    body List[ast.Stmt],
+    stmt_at ast.Pos,
+)
     t := expr(mutex, none, true)
+    # Holding a mutex synchronises with other tasks (conc.par.2).
+    handle_calls.add(pos_key(stmt_at))
     mut inner := Ty.Unknown
     match t
         Conc(k, x) =>

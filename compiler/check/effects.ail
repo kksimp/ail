@@ -43,9 +43,14 @@ struct Walked
 struct Facts
     targets Map[int, int]
     trait_calls Map[int, int]
+    assoc_calls Map[int, int]
     std_fns Map[int, str]
     std_methods Set[int]
     ref_writes Set[int]
+    handle_calls Set[int]
+    atomic_calls Set[int]
+    std_any Set[int]
+    float_literals Set[int]
     ## Free functions by name.
     free Map[str, int]
     ## The implementations of the standard traits (eff.infer.5).
@@ -79,9 +84,14 @@ fn Checker.facts(self) Facts
     Facts(
         targets: targets,
         trait_calls: trait_calls,
+        assoc_calls: assoc_calls,
         std_fns: std_fns,
         std_methods: std_methods,
         ref_writes: ref_writes,
+        handle_calls: handle_calls,
+        atomic_calls: atomic_calls,
+        std_any: std_any,
+        float_literals: float_literals,
         free: free,
         std_impls: impls.sorted(),
     )
@@ -135,6 +145,17 @@ fn infer_effects(prog ast.Program, fx Facts) Effects
                 sets[i] = grown.sorted()
                 changed = true
     Effects(direct: direct, calls: calls, sets: sets)
+
+## The effects that running what `w` walked has, each with its source: its
+## own operations (`print`), or a chain of calls such as `log -> print`
+## (conc.par.2, conc.par.12).
+fn Effects.of_walk(self, prog ast.Program, w Walked) Map[str, str]
+    mut out := w.direct
+    for j in w.calls
+        for e in sets[j]
+            if impure(e) and not out.contains(e)
+                out[e] = chain(prog, j, e)
+    out
 
 ## `name` or `Type.name`; a function of an `impl` block is named after the
 ## implementing type, one of a `trait` block after the trait.
@@ -438,8 +459,11 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
             key := pos_key(name_pos)
             if i := fx.targets.get(key)
                 call(i)
-            elif tr := fx.trait_calls.get(key)
+            elif tr := fx.assoc_calls.get(key)
                 # `T.zero()` may run any implementation (trait.assoc.3, eff.infer.3).
+                for i in implementations(prog, tr, n)
+                    call(i)
+            elif tr := fx.trait_calls.get(key)
                 for i in implementations(prog, tr, n)
                     call(i)
             elif std_head(fx, key, recv) != none

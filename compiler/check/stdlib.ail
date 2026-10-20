@@ -59,6 +59,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         args_only(args)
         return gap("a std.tensor function")
     if s := struct_named("{module}.{n}")
+        std_any.add(pos_key(at))
         return struct_literal(s, none, args, at, expect)
     fns_of := std_functions(module)
     if not fns_of.contains(n)
@@ -71,6 +72,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         diags.push(d)
         return Ty.Unknown
     std_fns[pos_key(at)] = module
+    std_any.add(pos_key(at))
     if module == "io" and n == "eprint"
         return eprint_call(args, at)
     if module == "random" and n == "shuffle"
