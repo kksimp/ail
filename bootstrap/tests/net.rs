@@ -80,3 +80,68 @@ fn net_is_a_capability() {
     let out = ail(&["effects", "bootstrap/tests/net/client.ail"]);
     assert!(String::from_utf8_lossy(&out.stdout).contains("net"));
 }
+
+/// std.net.5: `https` end to end. `openssl s_server` serves the test
+/// chain for `localhost` (bootstrap/src/net/x509/testdata) and the test
+/// root is the only trusted one (SSL_CERT_FILE). Skips without OpenSSL
+/// 1.1.1 or 3 (macOS's `openssl` is LibreSSL).
+#[test]
+fn https_against_a_local_tls_server() {
+    let version = Command::new("openssl").arg("version").output();
+    let Ok(version) = version else {
+        eprintln!("note: no `openssl`; skipping the https test");
+        return;
+    };
+    let text = String::from_utf8_lossy(&version.stdout);
+    if !(text.starts_with("OpenSSL 3") || text.starts_with("OpenSSL 1.1.1")) {
+        eprintln!("note: `openssl` is `{}`; skipping the https test", text.trim());
+        return;
+    }
+    let data = concat!(env!("CARGO_MANIFEST_DIR"), "/src/net/x509/testdata");
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let mut server = Command::new("openssl")
+        .args(["s_server", "-quiet", "-www", "-tls1_3", "-accept", &port.to_string()])
+        .args(["-key", "localhost_leaf.key.pem", "-cert", "localhost_leaf.pem", "-cert_chain", "inter.pem"])
+        .current_dir(data)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = std::time::Instant::now();
+    while TcpStream::connect(("127.0.0.1", port)).is_err() {
+        assert!(start.elapsed().as_secs() < 30, "openssl s_server didn't start");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let run = |roots: &str, urls: &[String]| {
+        let mut args = vec!["run".to_string(), "bootstrap/tests/net/https.ail".to_string()];
+        args.extend_from_slice(urls);
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .args(&args)
+            .env("SSL_CERT_FILE", format!("{data}/{roots}"))
+            .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    // Each request is its own connection; s_server -www serves them in turn.
+    let ok = format!("https://localhost:{port}/");
+    let by_ip = format!("https://127.0.0.1:{port}/");
+    let out = run("root.pem", &[ok.clone(), by_ip]);
+    assert_eq!(
+        out,
+        format!(
+            "200 <HTML><BODY BGCOLOR=\"#ffffff\">\n\
+             tls: the server's certificate isn't valid for `127.0.0.1`; it covers localhost\n"
+        )
+    );
+    // A root store that doesn't hold the test root.
+    let out = run("rsa_leaf.pem", &[ok]);
+    assert_eq!(
+        out,
+        "tls: the certificate for `localhost` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store\n"
+    );
+    let _ = server.kill();
+    let _ = server.wait();
+}

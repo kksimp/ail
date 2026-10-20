@@ -13,8 +13,7 @@ mod codec;
 mod record;
 mod schedule;
 
-#[allow(unused_imports)] // used from slice 4 (ADR 0369)
-pub use client::{Config, TlsStream, connect};
+pub use client::{Config, connect};
 
 /// What went wrong, for `std.net`'s `tls` failure (std.net.4).
 #[derive(Debug, Clone, PartialEq, Eq)]

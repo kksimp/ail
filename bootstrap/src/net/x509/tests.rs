@@ -195,3 +195,43 @@ fn live_handshake_with_certificate_checks() {
         assert!(e.message.contains("isn't valid for `wrong.test`"), "{}", e.message);
     }
 }
+
+/// Real servers on the public internet, opt in: `AIL_TLS_PUBLIC=1 ./ail
+/// selftest public_sites -- --nocapture`. A table of suite and result per
+/// site; it fails if any site fails. Not part of the gate, which must not
+/// need the network.
+#[test]
+fn public_sites() {
+    use crate::net::tls::{Config, connect};
+    if std::env::var("AIL_TLS_PUBLIC").as_deref() != Ok("1") {
+        return;
+    }
+    let roots = roots::system().expect("system roots");
+    let sites = [
+        "example.com", "www.google.com", "github.com", "api.github.com", "www.cloudflare.com",
+        "letsencrypt.org", "en.wikipedia.org", "www.apple.com", "www.microsoft.com", "pypi.org",
+        "crates.io", "www.amazon.com", "news.ycombinator.com", "www.rust-lang.org",
+    ];
+    let mut failed = Vec::new();
+    for host in sites {
+        let result = (|| -> Result<String, String> {
+            let addr = std::net::ToSocketAddrs::to_socket_addrs(&(host, 443)).map_err(|e| e.to_string())?.next().ok_or("no address")?;
+            let s = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)).map_err(|e| e.to_string())?;
+            s.set_read_timeout(Some(std::time::Duration::from_secs(20))).unwrap();
+            let verifier = WebVerifier { roots: &roots.certs, now: None };
+            let mut tls = connect(s, &Config { host, verifier: &verifier }).map_err(|e| e.message)?;
+            write!(tls, "HEAD / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nUser-Agent: ail\r\n\r\n").map_err(|e| e.to_string())?;
+            let mut head = [0u8; 12];
+            tls.read_exact(&mut head).map_err(|e| e.to_string())?;
+            Ok(format!("{} {}", tls.suite(), String::from_utf8_lossy(&head)))
+        })();
+        match result {
+            Ok(r) => eprintln!("ok    {host:24} {r}"),
+            Err(e) => {
+                eprintln!("FAIL  {host:24} {e}");
+                failed.push(host);
+            }
+        }
+    }
+    assert!(failed.is_empty(), "failed: {failed:?}");
+}

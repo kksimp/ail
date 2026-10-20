@@ -50,8 +50,8 @@ proposal, not a decision.
    (`tools/perfbench/run.sh`); meanwhile a bytecode tier in the bootstrap
    (ADR 0359, in progress; slice 1 of 4 is ADR 0361).
 3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
-   in-house TLS for `std.net`
-   (ADR 0360, in progress).
+   in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); follow-ups:
+   hardware AES-GCM and proxy support.
 4. **Rust-free check (designer, 2026-10-20):** when the shipped toolchain
    no longer needs Rust (end of Stage 4), rebuild `tools/edit` with the
    self-hosted toolchain and compare it with the Rust-bootstrap baseline in

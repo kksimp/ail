@@ -1,8 +1,8 @@
 //! `std.net` (spec 17-std, ADR 0283): a minimal HTTP/1.1 client on the
-//! standard library's TCP. No TLS yet, so `https` URLs fail with the kind
-//! `tls` and say so (std.net.4).
+//! standard library's TCP, with `https` over the in-house TLS 1.3 client
+//! (std.net.5, ADRs 0360, 0369).
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
@@ -51,28 +51,25 @@ pub fn post(url: &str, body: &str, content_type: &str) -> Result<Response, NetFa
     request("POST", url, Some((body, content_type)))
 }
 
-/// An `http` URL's host, port and request target.
+/// A URL's host, port, request target, and whether it's `https`.
 struct Target {
     host: String,
     port: u16,
     path: String,
+    tls: bool,
 }
 
 fn parse_url(url: &str) -> Result<Target, NetFail> {
     let Some((scheme, rest)) = url.split_once("://") else {
-        return Err(fail(url, "bad_url", "a URL starts with `http://`"));
+        return Err(fail(url, "bad_url", "a URL starts with `http://` or `https://`"));
     };
-    match scheme.to_ascii_lowercase().as_str() {
-        "http" => {}
-        "https" => {
-            return Err(fail(
-                url,
-                "tls",
-                "`https` needs TLS, which the bootstrap doesn't have yet (ADR 0283); use an `http://` URL",
-            ));
+    let tls = match scheme.to_ascii_lowercase().as_str() {
+        "http" => false,
+        "https" => true,
+        other => {
+            return Err(fail(url, "bad_url", format!("`{other}` URLs aren't supported; use `http://` or `https://`")));
         }
-        other => return Err(fail(url, "bad_url", format!("`{other}` URLs aren't supported; use `http://`"))),
-    }
+    };
     let (authority, path) = match rest.find(['/', '?', '#']) {
         Some(i) if rest.as_bytes()[i] == b'/' => (&rest[..i], &rest[i..]),
         Some(i) => (&rest[..i], &rest[i..]),
@@ -87,12 +84,12 @@ fn parse_url(url: &str) -> Result<Target, NetFail> {
             let port = p.parse::<u16>().map_err(|_| fail(url, "bad_url", format!("`{p}` is not a port")))?;
             (h, port)
         }
-        _ => (authority, 80),
+        _ => (authority, if tls { 443 } else { 80 }),
     };
     if host.is_empty() {
         return Err(fail(url, "bad_url", "the URL has no host"));
     }
-    Ok(Target { host: host.to_string(), port, path })
+    Ok(Target { host: host.to_string(), port, path, tls })
 }
 
 /// A redirect's `Location`, made absolute against the URL that gave it.
@@ -130,7 +127,7 @@ fn request(method: &str, url: &str, body: Option<(&str, &str)>) -> Result<Respon
             Err(e) => last = Some(e),
         }
     }
-    let Some(mut stream) = stream else {
+    let Some(stream) = stream else {
         return Err(match last {
             Some(e) => fail(url, connect_kind(&e), format!("can't connect to {}:{}: {e}", t.host, t.port)),
             None => fail(url, "not_found", format!("host `{}` has no address", t.host)),
@@ -138,7 +135,8 @@ fn request(method: &str, url: &str, body: Option<(&str, &str)>) -> Result<Respon
     };
     stream.set_read_timeout(Some(TIMEOUT)).map_err(|e| io("other", e))?;
     stream.set_write_timeout(Some(TIMEOUT)).map_err(|e| io("other", e))?;
-    let host_header = if t.port == 80 { t.host.clone() } else { format!("{}:{}", t.host, t.port) };
+    let default_port = if t.tls { 443 } else { 80 };
+    let host_header = if t.port == default_port { t.host.clone() } else { format!("{}:{}", t.host, t.port) };
     let mut head = format!(
         "{method} {} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: ail\r\nAccept: */*\r\nConnection: close\r\n",
         t.path
@@ -151,8 +149,32 @@ fn request(method: &str, url: &str, body: Option<(&str, &str)>) -> Result<Respon
     if let Some((text, _)) = body {
         bytes.extend_from_slice(text.as_bytes());
     }
-    stream.write_all(&bytes).map_err(|e| io(connect_kind(&e), e))?;
+    if !t.tls {
+        return exchange(stream, &bytes, method, url);
+    }
+    // std.net.5: TLS 1.3, the certificate checked against the platform's
+    // roots (or SSL_CERT_FILE) for this host.
+    let roots = crate::net::x509::roots::system().map_err(|e| fail(url, "tls", e))?;
+    let verifier = crate::net::x509::verify::WebVerifier { roots: &roots.certs, now: None };
+    let config = crate::net::tls::Config { host, verifier: &verifier };
+    let tls = crate::net::tls::connect(stream, &config).map_err(|e| tls_fail(url, e))?;
+    exchange(tls, &bytes, method, url)
+}
+
+/// Sends the request and reads the response over a plain or TLS stream.
+fn exchange<S: Read + Write>(mut stream: S, request: &[u8], method: &str, url: &str) -> Result<Response, NetFail> {
+    stream.write_all(request).map_err(|e| fail(url, connect_kind(&e), e.to_string()))?;
     read_response(BufReader::new(stream), method).map_err(|(kind, message)| fail(url, kind, message))
+}
+
+/// std.net.4: a TLS failure is kind `tls` with its cause; a transport
+/// failure during the handshake keeps its usual kind.
+fn tls_fail(url: &str, e: crate::net::tls::TlsError) -> NetFail {
+    use crate::net::tls::Kind;
+    match e.kind {
+        Kind::Io(k) => fail(url, connect_kind(&std::io::Error::from(k)), e.message),
+        Kind::Protocol | Kind::Certificate => fail(url, "tls", e.message),
+    }
 }
 
 fn connect_kind(e: &std::io::Error) -> &'static str {
@@ -160,6 +182,9 @@ fn connect_kind(e: &std::io::Error) -> &'static str {
     match e.kind() {
         K::ConnectionRefused => "refused",
         K::TimedOut | K::WouldBlock => "timed_out",
+        // Only the TLS stream reports InvalidData: a protocol failure after
+        // the handshake (std.net.4).
+        K::InvalidData => "tls",
         _ => "other",
     }
 }
@@ -248,7 +273,9 @@ mod tests {
         assert_eq!((t.host.as_str(), t.port, t.path.as_str()), ("example.com", 8080, "/a/b?q=1"));
         let t = parse_url("http://localhost").ok().unwrap();
         assert_eq!((t.port, t.path.as_str()), (80, "/"));
-        assert_eq!(parse_url("https://example.com/").err().unwrap().kind, "tls");
+        let t = parse_url("https://example.com/x").ok().unwrap();
+        assert_eq!((t.port, t.tls, t.path.as_str()), (443, true, "/x"));
+        assert_eq!(parse_url("HTTPS://example.com:8443").ok().unwrap().port, 8443);
         assert_eq!(parse_url("ftp://example.com/").err().unwrap().kind, "bad_url");
         assert_eq!(parse_url("example.com").err().unwrap().kind, "bad_url");
         assert_eq!(resolve("http://h:1/a/b", "/c"), "http://h:1/c");

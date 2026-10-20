@@ -253,6 +253,7 @@ fn main() !
 `--deterministic` (`eff.det.1`) cover it. *(ADR 0283)*
 
 **std.net.2** — `get(url str) Response ! NetError` sends an HTTP/1.1 `GET`
+to an `http://` or `https://` URL (`std.net.5`)
 and returns `struct Response { status int, headers Map[str, str], body str }`:
 the status code, the headers with names in lowercase in the order they
 arrived (a repeated header's values joined with `, `), and the body as
@@ -268,16 +269,27 @@ the response as `get` does, without following redirects. *(ADR 0283)*
 
 **std.net.4** — A failure is `error struct NetError { url str, kind str,
 message str }`: the URL given, a short kind, and a sentence for people.
-`kind` is `bad_url` (not `http://HOST[:PORT][/PATH]`), `tls` (an `https`
-URL: the bootstrap has no TLS yet), `not_found` (the host has no address),
-`refused`, `timed_out`, `protocol` (a malformed response, or too many
-redirects) or `other`. *(ADR 0283)*
+`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`), `tls`
+(the TLS handshake or connection failed, `std.net.5`), `not_found` (the
+host has no address), `refused`, `timed_out`, `protocol` (a malformed
+response, or too many redirects) or `other`. *(ADR 0283, ADR 0369)*
+
+**std.net.5** — An `https` URL (default port 443) is fetched over TLS 1.3.
+The server's certificate chain **MUST** lead to a trusted root, be within
+its validity dates and allow server authentication, and its names
+(subjectAltName) **MUST** include the URL's host; otherwise the request
+fails with kind `tls` and a message naming the cause (for example, an
+expired certificate, the names it does cover, or an untrusted issuer). The
+trusted roots are the platform's, or the PEM file named by the environment
+variable `SSL_CERT_FILE` when it is set. A server that doesn't speak TLS
+1.3 fails with kind `tls`. Redirects may move between `http` and `https`.
+*(ADR 0360, ADR 0366–0369)*
 
 ```ail
 use std.net
 
 fn main() !
-    r := net.get("http://127.0.0.1:8080/health") else err
+    r := net.get("https://example.com/health") else err
         print("{err.kind}: {err.message}")
         return
     print("{r.status} {r.headers["content-type"]}")

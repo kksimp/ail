@@ -355,6 +355,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0367](0367-tls13-client-handshake.md) | The TLS 1.3 client handshake and record layer, tested on a recorded trace and live OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0368](0368-tls-certificate-verification.md) | TLS certificate verification: X.509 chains to the platform's roots *(delegated)* | Accepted | 2026-10-20 |
+| [0369](0369-https-in-std-net.md) | `https` in `std.net` over the in-house TLS 1.3 client, always verified *(delegated)* | Accepted | 2026-10-20 |
 | [0371](0371-self-hosted-front-end-compared-by-dumps.md) | Compare the self-hosted lexer and parser with the bootstrap through text dumps *(delegated)* | Accepted | 2026-10-20 |
 | [0372](0372-identifier-characters.md) | A name is letters, ASCII digits and `_` *(delegated)* | Accepted | 2026-10-20 |
 | [0373](0373-self-hosted-diagnostics-are-rule-and-position.md) | The self-hosted front end reports a rule and a position, and runs the corpus in one process *(delegated)* | Accepted | 2026-10-20 |
