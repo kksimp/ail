@@ -232,3 +232,15 @@ lines, a few tokens and an O(n) copy each. Options: (a) character slicing
 `chars()` and add `str.to_lower`/`to_upper` only. Recommendation: (a) now,
 since it doesn't prejudge OQ-043, plus `str.to_lower`. *Owner: AI under ADR
 0076.*
+
+## OQ-060 — May accelerator drivers compile AIL-generated code?
+ADR 0010 forbids external backends. GPUs and NPUs can't be reached without
+the OS driver compiling what AIL hands it: SPIR-V (Vulkan), MSL (Metal), a
+Core ML model, an ONNX graph. Options: (a) AIL generates the SPIR-V, MSL or
+graph with its own code generator, and the driver's compiler counts as part
+of the platform, like CPU microcode (recommended: it is the only way to
+reach these devices at all, and nothing of LLVM's ships with AIL);
+(b) CPU only, no GPU or NPU ever; (c) allow vendor libraries (cuDNN, MPS) as
+opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
+section 6 and [ADR 0241](decisions/0241-std-tensor-and-accel-capability.md).
+*Owner: designer (it reads ADR 0010, a designer decision).*
