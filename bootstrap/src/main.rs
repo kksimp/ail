@@ -54,6 +54,9 @@ commands:
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
                 rounds); --dry-run: print the diff instead of writing
+  pkg update [NAME...]
+                in a package root: fetch the named git dependencies (all if
+                none) again, ignoring `ail.lock`, and rewrite it (mod.pkg.9)
   version       print the version
 
 options:
@@ -160,6 +163,14 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // mod.pkg.7-8: `run` and `test` write `ail.lock`; `--deterministic`
+    // refuses a stale one; `--deny net` fetches nothing.
+    packages::git::configure(packages::git::Options {
+        write_lock: matches!(rest.first(), Some(&"run" | &"test")),
+        frozen: args.iter().any(|a| a == "--deterministic"),
+        offline: deny.contains(&"net"),
+        refresh: None,
+    });
     // ADR 0332: `check`, `api` and `effects` make one pass over the program
     // and exit, so they use the front-end allocator.
     // `AIL_SYSTEM_ALLOC=1` keeps the system allocator, to compare the two.
@@ -182,6 +193,7 @@ fn main() -> ExitCode {
         },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
+        ["pkg", "update", names @ ..] => packages::update_command(names, json),
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
