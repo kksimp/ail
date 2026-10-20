@@ -17,16 +17,28 @@ use crate::{docs, lexer, parser};
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api FILE [--text] [--symbols] [--json]\n";
+pub const USAGE: &str = "usage: ail api FILE [--text | --pretty] [--symbols] [--json]\n";
+
+/// How the outline is written (api.out.2, api.text.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Form {
+    /// JSON on one line, the default: the fewest tokens for a reader.
+    Json,
+    /// JSON with a two-space indent, for a human (`--pretty`).
+    Pretty,
+    /// The compact outline (`--text`).
+    Text,
+}
 
 /// `ail api ...`; `json` asks for diagnostics as JSON lines.
 pub fn command(args: &[&str], json: bool) -> ExitCode {
-    let mut text = false;
+    let mut form = Form::Json;
     let mut symbols = false;
     let mut file = None;
     for a in args {
         match *a {
-            "--text" => text = true,
+            "--text" if form == Form::Json => form = Form::Text,
+            "--pretty" if form == Form::Json => form = Form::Pretty,
             "--symbols" => symbols = true,
             f if !f.starts_with("--") && file.is_none() => file = Some(f),
             _ => {
@@ -46,7 +58,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match outline(path, &src, symbols, text) {
+    match outline(path, &src, symbols, form) {
         Ok(out) => {
             print!("{out}");
             ExitCode::SUCCESS
@@ -60,7 +72,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
 
 /// The outline of `src` as JSON (or text), or the diagnostics that stopped
 /// it: a rejected program has no reliable outline (api.out.5).
-pub fn outline(path: &str, src: &str, symbols: bool, text: bool) -> Result<String, Vec<diag::Diagnostic>> {
+pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<String, Vec<diag::Diagnostic>> {
     let (tokens, mut diags) = lexer::lex(src);
     let (mut prog, parse_diags) = parser::parse_with_prelude(tokens);
     diags.extend(parse_diags);
@@ -75,7 +87,7 @@ pub fn outline(path: &str, src: &str, symbols: bool, text: bool) -> Result<Strin
     }
     docs::attach(&mut prog, src);
     let api = Api::new(&prog);
-    if text {
+    if form == Form::Text {
         return Ok(api.text());
     }
     let mut top = vec![("api", Json::Int(API_VERSION)), ("file", Json::Str(path.to_string())), ("items", api.items())];
@@ -83,7 +95,7 @@ pub fn outline(path: &str, src: &str, symbols: bool, text: bool) -> Result<Strin
         top.push(("references", api.references(&resolved)));
     }
     let mut out = String::new();
-    Json::Obj(top).write(&mut out, 0);
+    Json::Obj(top).write(&mut out, (form == Form::Pretty).then_some(0));
     out.push('\n');
     Ok(out)
 }
@@ -103,9 +115,17 @@ impl Json {
         s.map_or(Json::Null, Json::Str)
     }
 
-    /// Pretty-printed with a two-space indent; empty arrays stay `[]`.
-    fn write(&self, out: &mut String, depth: usize) {
-        let pad = |out: &mut String, d: usize| out.extend(std::iter::repeat_n("  ", d));
+    /// With `depth`, pretty-printed with a two-space indent; without, on
+    /// one line with no spaces. An empty array is `[]` either way.
+    fn write(&self, out: &mut String, depth: Option<usize>) {
+        let newline = |out: &mut String, d: usize| {
+            if depth.is_some() {
+                out.push('\n');
+                out.extend(std::iter::repeat_n("  ", d));
+            }
+        };
+        let inner = depth.map(|d| d + 1);
+        let d = depth.unwrap_or(0);
         match self {
             Json::Null => out.push_str("null"),
             Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -113,24 +133,28 @@ impl Json {
             Json::Str(s) => out.push_str(&diag::json_str(s)),
             Json::Arr(xs) if xs.is_empty() => out.push_str("[]"),
             Json::Arr(xs) => {
-                out.push_str("[\n");
+                out.push('[');
                 for (i, x) in xs.iter().enumerate() {
-                    pad(out, depth + 1);
-                    x.write(out, depth + 1);
-                    out.push_str(if i + 1 < xs.len() { ",\n" } else { "\n" });
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    newline(out, d + 1);
+                    x.write(out, inner);
                 }
-                pad(out, depth);
+                newline(out, d);
                 out.push(']');
             }
             Json::Obj(kvs) => {
-                out.push_str("{\n");
+                out.push('{');
                 for (i, (k, v)) in kvs.iter().enumerate() {
-                    pad(out, depth + 1);
-                    write!(out, "\"{k}\": ").unwrap();
-                    v.write(out, depth + 1);
-                    out.push_str(if i + 1 < kvs.len() { ",\n" } else { "\n" });
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    newline(out, d + 1);
+                    write!(out, "\"{k}\":{}", if depth.is_some() { " " } else { "" }).unwrap();
+                    v.write(out, inner);
                 }
-                pad(out, depth);
+                newline(out, d);
                 out.push('}');
             }
         }
@@ -891,13 +915,13 @@ mod tests {
     }
 
     fn api_of(src: &str, symbols: bool) -> String {
-        outline("t.ail", src, symbols, false).unwrap_or_else(|d| panic!("{d:?}"))
+        outline("t.ail", src, symbols, Form::Pretty).unwrap_or_else(|d| panic!("{d:?}"))
     }
 
     #[test]
     fn shapes_outline_has_key_items() {
         let (path, src) = example("shapes.ail");
-        let out = outline(&path, &src, false, false).unwrap();
+        let out = outline(&path, &src, false, Form::Pretty).unwrap();
         assert!(out.starts_with("{\n  \"api\": 1,\n"), "{out}");
         for want in [
             "\"id\": \"trait:Shape\"",
@@ -926,7 +950,7 @@ mod tests {
     #[test]
     fn shapes_symbols_resolve_uses() {
         let (path, src) = example("shapes.ail");
-        let out = outline(&path, &src, true, false).unwrap();
+        let out = outline(&path, &src, true, Form::Pretty).unwrap();
         let refs = &out[out.find("\"references\"").unwrap()..];
         for want in [
             // `s.area()` in `Drawing.biggest` goes through the trait.
@@ -1009,15 +1033,24 @@ fn main()
     }
 
     #[test]
+    fn default_json_is_one_line() {
+        let out = outline("t.ail", "## Adds.\nfn add(a int, b int) int\n    a + b\n", false, Form::Json).unwrap();
+        assert_eq!(
+            out,
+            "{\"api\":1,\"file\":\"t.ail\",\"items\":[{\"kind\":\"fn\",\"name\":\"add\",\"id\":\"fn:add\",\"line\":2,\"col\":4,\"doc\":\"Adds.\",\"signature\":\"fn add(a int, b int) int\",\"params\":[{\"name\":\"a\",\"type\":\"int\",\"mut\":false},{\"name\":\"b\",\"type\":\"int\",\"mut\":false}],\"returns\":\"int\",\"effects\":[]}]}\n"
+        );
+    }
+
+    #[test]
     fn text_outline() {
         let src = "## Adds.\nfn add(a int, b int) int\n    a + b\n\nstruct P\n    x int\n";
-        let out = outline("t.ail", src, false, true).unwrap();
+        let out = outline("t.ail", src, false, Form::Text).unwrap();
         assert_eq!(out, "    2  fn add(a int, b int) int\n           ## Adds.\n    5  struct P\n    6      x int\n");
     }
 
     #[test]
     fn rejected_program_has_no_outline() {
-        let diags = outline("t.ail", "fn main()\n    x\n", false, false).unwrap_err();
+        let diags = outline("t.ail", "fn main()\n    x\n", false, Form::Json).unwrap_err();
         assert!(diags.iter().any(|d| !d.warning));
     }
 
@@ -1029,8 +1062,8 @@ fn main()
             if path.extension().is_some_and(|x| x == "ail") {
                 let src = std::fs::read_to_string(&path).unwrap();
                 let p = path.display().to_string();
-                for (symbols, text) in [(false, false), (true, false), (false, true)] {
-                    if let Err(d) = outline(&p, &src, symbols, text) {
+                for (symbols, form) in [(false, Form::Json), (true, Form::Pretty), (true, Form::Text)] {
+                    if let Err(d) = outline(&p, &src, symbols, form) {
                         panic!("{p}: {d:?}");
                     }
                 }

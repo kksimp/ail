@@ -17,7 +17,8 @@ so both sections can merge.)*
 agent can understand a file or a dependency from a few hundred tokens
 ([ADR 0150](../decisions/0150-ail-api-outline.md)). `--symbols` adds every
 reference ([ADR 0151](../decisions/0151-stable-symbol-ids-and-references.md)).
-`--text` prints a compact outline instead of JSON.
+`--pretty` indents the JSON for a human, and `--text` prints a compact
+outline instead.
 
 ### Output
 
@@ -25,9 +26,10 @@ reference ([ADR 0151](../decisions/0151-stable-symbol-ids-and-references.md)).
 shape's version, `1`), `file` (the path as given) and `items`, then
 `references` with `--symbols`.
 
-**api.out.2** — The object is pretty-printed with a two-space indent, every
-object's keys in the order this section lists them, an empty array as `[]`,
-and nothing but a newline after the closing `}`.
+**api.out.2** — By default the object is written on one line with no
+spaces outside strings. `--pretty` writes it with a two-space indent and a
+space after each `:`. Either way every object's keys are in the order this
+section lists them, an empty array is `[]`, and a newline ends the output.
 
 **api.out.3** — `items` holds every declaration of the file, sorted by
 position. Each item has `kind`, `name`, `id`, `line`, `col`, `doc` (the doc
@@ -137,7 +139,7 @@ fn Point.shift(mut self, dx int)
     self.x += dx
 ```
 
-`ail api` prints (abridged):
+`ail api --pretty` prints (abridged):
 
 ```json
 {

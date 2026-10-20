@@ -126,7 +126,7 @@ fn api_outlines_every_accepted_program() {
     let mut files = ail_files(&root.join("../examples"));
     files.extend(ail_files(&root.join("tests/cases")).into_iter().filter(|p| p.with_extension("out").exists()));
     for path in files {
-        for extra in [None, Some("--symbols"), Some("--text")] {
+        for extra in [None, Some("--symbols"), Some("--pretty"), Some("--text")] {
             let out = ail().arg("api").args(extra).arg(&path).output().unwrap();
             assert_eq!(out.status.code(), Some(0), "{} {extra:?}: {}", path.display(), String::from_utf8_lossy(&out.stderr));
         }

@@ -21,8 +21,8 @@ usage: ail <command> [--json] [args]
 commands:
   run FILE      check and run an AIL program
   check FILE    check a program without running it
-  api FILE      print the program's declarations as JSON (--text: an
-                outline; --symbols: also every reference)
+  api FILE      print the program's declarations as JSON (--pretty:
+                indented; --text: an outline; --symbols: every reference)
   version       print the version
 
 options:
