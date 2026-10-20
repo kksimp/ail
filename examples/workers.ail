@@ -1,0 +1,47 @@
+# Fan-out, fan-in (spec 11): four workers take jobs from one channel and
+# send results to another. The last worker to finish closes the results
+# channel inside `with` (conc.share.6), so `main` collects results with a
+# comprehension over the channel until it closes (conc.share.7).
+
+struct Done
+    job int
+    worker int
+    steps int
+
+fn steps(n int) int
+    mut x := n
+    mut count := 0
+    while x != 1
+        x = if x % 2 == 0
+            x / 2
+        else
+            3 * x + 1
+        count += 1
+    count
+
+fn feed(jobs Channel[int], n int)
+    for i in 1..=n
+        jobs.send(i)
+    jobs.close()
+
+fn work(id int, jobs Channel[int], results Channel[Done], active Mutex[int])
+    for n in jobs
+        results.send(Done(job: n, worker: id, steps: steps(n)))
+    with active as mut left
+        left -= 1
+        if left == 0
+            results.close()
+
+fn main() !
+    jobs := Channel[int](4)
+    results := Channel[Done](4)
+    active := Mutex(4)
+    g := TaskGroup()
+    g.add(spawn feed(jobs, 12))
+    for id in 1..=4
+        g.add(spawn work(id, jobs, results, active))
+    all := [d for d in results]
+    g.wait_all()?
+    for d in all.sorted(by: |d| d.job)
+        print("job {d.job}: {d.steps} steps")
+    print("longest {all.max(by: |d| d.steps)?.job else 0}")

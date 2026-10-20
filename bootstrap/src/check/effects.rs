@@ -141,6 +141,19 @@ impl<'p> Effects<'p> {
         out
     }
 
+    /// The effects of expression `e`, like `of_block` (conc.par.12).
+    pub fn of_expr(&self, resolved: &Resolved, e: &Expr) -> BTreeMap<&'static str, String> {
+        let mut w = Walker::new(self.prog, resolved);
+        w.expr(e);
+        let mut out = w.direct;
+        for &j in &w.calls {
+            for &e in self.sets[j].iter().filter(|e| propagates(e)) {
+                out.entry(e).or_insert_with(|| self.chain(j, e));
+            }
+        }
+        out
+    }
+
     /// The functions that function `i` may call (eff.infer.3).
     pub fn calls_of(&self, i: usize) -> &[usize] {
         &self.calls[i]
@@ -519,7 +532,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.expr(cond);
                 self.block(body);
             }
-            Stmt::For { iter, body, .. } => {
+            Stmt::For { iter, body, .. } | Stmt::With { mutex: iter, body, .. } => {
                 self.expr(iter);
                 self.block(body);
             }

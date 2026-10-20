@@ -13,7 +13,7 @@ pub const UNSUPPORTED: &str = "bootstrap.unsupported";
 pub const KEYWORDS: &[&str] = &[
     "and", "any", "as", "break", "continue", "defer", "elif", "else", "ensures", "enum", "error", "extern", "false",
     "fn", "for", "if", "impl", "in", "match", "move", "mut", "none", "not", "or", "par", "pub", "ref", "requires",
-    "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe", "use", "while",
+    "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe", "use", "while", "with",
 ];
 
 /// Symbols, longest first so that `..=` wins over `..` and `.`.

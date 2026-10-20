@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use super::Resolved;
 use super::effects::{CAPABILITIES, Effects, fn_id};
 use crate::ast::{
-    BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, PathStep, Pattern, Program, Stmt, TypeKind, UnOp, is_prelude,
+    BinOp, Block, CompFor, Cond, Else, Expr, FnDecl, InterpPart, PathStep, Pattern, Program, Stmt, TypeKind, UnOp, is_prelude,
     place_path,
 };
 use crate::diag::{Diagnostic, Pos, json_str};
@@ -269,6 +269,7 @@ impl<'a> Scan<'a> {
                     self.write(iter, None, iter.pos());
                 } else {
                     self.expr(iter);
+                    self.channel_loop(iter);
                 }
                 self.depth += 1;
                 self.scoped(vec![var.as_str()], body);
@@ -289,6 +290,12 @@ impl<'a> Scan<'a> {
             }
             // `defer` runs at block exit; its statement is part of the body (own.defer.1).
             Stmt::Defer(inner, _) => self.stmt(inner),
+            // conc.share.6: holding a mutex synchronises with other tasks.
+            Stmt::With { mutex, var, body, pos, .. } => {
+                self.expr(mutex);
+                self.sync_problem(*pos, "holds a mutex with `with`".into());
+                self.scoped(vec![var.as_str()], body);
+            }
         }
     }
 
@@ -349,6 +356,28 @@ impl<'a> Scan<'a> {
             self.reads.push(Read { root, steps, len_only, pos: e.pos() });
         }
         true
+    }
+
+    /// A problem that orders the iterations because they synchronise
+    /// through a handle (conc.par.2).
+    fn sync_problem(&mut self, at: Pos, reason: String) {
+        self.problem(
+            "conc.par.2",
+            at,
+            true,
+            reason,
+            "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
+        );
+        if let Some(p) = self.problems.last_mut() {
+            p.handle = true;
+        }
+    }
+
+    /// `for v in ch` receives from a channel (conc.share.7), which synchronises.
+    fn channel_loop(&mut self, iter: &Expr) {
+        if self.resolved.handle_calls.contains(&iter.pos()) {
+            self.sync_problem(iter.pos(), "receives from a channel with `for ... in`".into());
+        }
     }
 
     /// A call of function `i`, which may synchronise through a handle.
@@ -506,6 +535,7 @@ impl<'a> Scan<'a> {
                 self.scopes.push(Vec::new());
                 for c in clauses {
                     self.expr(&c.iter);
+                    self.channel_loop(&c.iter);
                     self.bind(&c.var);
                     if let Some(cond) = &c.cond {
                         self.expr(cond);
@@ -590,7 +620,7 @@ pub(crate) fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
             expr_blocks(target, f);
             expr_blocks(value, f);
         }
-        Stmt::While { cond: e, body, .. } | Stmt::For { iter: e, body, .. } => {
+        Stmt::While { cond: e, body, .. } | Stmt::For { iter: e, body, .. } | Stmt::With { mutex: e, body, .. } => {
             expr_blocks(e, f);
             f(body);
         }
@@ -688,6 +718,9 @@ fn judge(cx: &Context, f: &FnDecl, s: &Stmt) -> Verdict {
         fns: &cx.fns,
     };
     scan.block(body);
+    if !mutable {
+        scan.channel_loop(iter);
+    }
     if let Some((e, source)) = fx.of_block(resolved, body).into_iter().find(|(e, _)| ordering(e)) {
         let help = if e == "io" {
             "collect each iteration's result in a list (`out[i] = ...`) and print after the loop"
@@ -1019,6 +1052,198 @@ pub fn render(verdicts: &[Verdict], json: bool, at: &dyn Fn(Pos) -> String) -> S
             })
             .collect()
     }
+}
+
+/// Calls `f` with every `[e par for x in xs]` comprehension in `b`, in
+/// source order (conc.par.12).
+fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
+    fn walk<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
+        match e {
+            Expr::Comp { elem, value, clauses, .. } => {
+                if let [c] = clauses.as_slice()
+                    && c.par
+                {
+                    f(elem, c);
+                }
+                for c in clauses {
+                    walk(&c.iter, f);
+                    c.cond.iter().for_each(|x| walk(x, f));
+                }
+                walk(elem, f);
+                value.iter().for_each(|v| walk(v, f));
+            }
+            Expr::Interp(parts, _) => parts.iter().for_each(|p| {
+                if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
+                    walk(x, f);
+                }
+            }),
+            Expr::List(xs, _) | Expr::Set(xs, _) => xs.iter().for_each(|x| walk(x, f)),
+            Expr::Map(kvs, _) => kvs.iter().for_each(|(k, v)| {
+                walk(k, f);
+                walk(v, f);
+            }),
+            Expr::Call { callee, args, .. } => {
+                walk(callee, f);
+                args.iter().for_each(|a| walk(&a.value, f));
+            }
+            Expr::Method { recv, args, .. } => {
+                walk(recv, f);
+                args.iter().for_each(|a| walk(&a.value, f));
+            }
+            Expr::Field { recv: x, .. }
+            | Expr::Unary { operand: x, .. }
+            | Expr::Try { expr: x, .. }
+            | Expr::Ref { value: x, .. } => walk(x, f),
+            Expr::Index { recv: a, index: b, .. } | Expr::Binary { lhs: a, rhs: b, .. } => {
+                walk(a, f);
+                walk(b, f);
+            }
+            Expr::Range { lo, hi, .. } => [lo, hi].into_iter().flatten().for_each(|x| walk(x, f)),
+            Expr::If { branches, els, .. } => {
+                for (cond, body) in branches {
+                    let (Cond::Expr(x) | Cond::Bind { value: x, .. }) = cond;
+                    walk(x, f);
+                    block(body, f);
+                }
+                els.iter().for_each(|b| block(b, f));
+            }
+            Expr::Match { scrutinee, arms, .. } => {
+                walk(scrutinee, f);
+                arms.iter().for_each(|a| block(&a.body, f));
+            }
+            Expr::Else { value, otherwise, .. } => {
+                walk(value, f);
+                other(otherwise, f);
+            }
+            _ => {}
+        }
+    }
+    fn other<'a>(o: &'a Else, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
+        match o {
+            Else::Value(x) => walk(x, f),
+            Else::Leave(s) => stmt(s, f),
+            Else::Block { body, .. } => block(body, f),
+        }
+    }
+    fn stmt<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
+        match s {
+            Stmt::Let { value, otherwise, .. } => {
+                walk(value, f);
+                otherwise.iter().for_each(|o| other(o, f));
+            }
+            Stmt::Assign { target, value, .. } => {
+                walk(target, f);
+                walk(value, f);
+            }
+            Stmt::While { cond: e, body, .. } | Stmt::For { iter: e, body, .. } | Stmt::With { mutex: e, body, .. } => {
+                walk(e, f);
+                block(body, f);
+            }
+            Stmt::Return(Some(e), _) | Stmt::Expr(e) => walk(e, f),
+            Stmt::Handle { value, otherwise } => {
+                walk(value, f);
+                other(otherwise, f);
+            }
+            Stmt::Defer(inner, _) => stmt(inner, f),
+            Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
+        }
+    }
+    fn block<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
+        b.iter().for_each(|s| stmt(s, f));
+    }
+    block(b, f);
+}
+
+/// The verdict on `[elem par for c.var in c.iter if c.cond]` (conc.par.12):
+/// each element is computed as an iteration of a loop that writes nothing
+/// outside it. Its `pos` is the clause variable's.
+fn judge_comp(cx: &Context, f: &FnDecl, elem: &Expr, c: &CompFor) -> Verdict {
+    let Context { prog, resolved, fx, .. } = *cx;
+    let mut scan = Scan {
+        prog,
+        resolved,
+        var: &c.var,
+        range: false,
+        scopes: vec![Vec::new()],
+        depth: 0,
+        writes: Vec::new(),
+        reads: Vec::new(),
+        problems: Vec::new(),
+        sync: &cx.sync,
+        fns: &cx.fns,
+    };
+    scan.channel_loop(&c.iter);
+    if let Some(cond) = &c.cond {
+        scan.expr(cond);
+    }
+    scan.expr(elem);
+    let mut effects = fx.of_expr(resolved, elem);
+    if let Some(cond) = &c.cond {
+        effects.extend(fx.of_expr(resolved, cond));
+    }
+    if let Some((e, source)) = effects.into_iter().find(|(e, _)| ordering(e)) {
+        let help = if e == "io" { "compute the values with `par for`, then print them after" } else { "move the effect out of the comprehension" };
+        scan.problem("conc.par.2", elem.pos(), true, format!("has effect `{e}` via {source}"), help);
+    }
+    let Scan { writes, reads, mut problems, .. } = scan;
+    for w in &writes {
+        problems.push(Problem {
+            rule: "conc.par.12",
+            reason: format!("writes `{}`, which outlives the element", w.root),
+            help: "an element of a `par for` comprehension only computes a value".into(),
+            at: w.pos,
+            provable: true,
+            handle: false,
+        });
+    }
+    problems.sort_by_key(|p| (!p.provable, p.at.line, p.at.col));
+    let mut captures: Vec<&str> = reads.iter().map(|r| r.root).collect();
+    captures.sort_unstable();
+    captures.dedup();
+    let plan = Plan { captures: captures.into_iter().map(String::from).collect(), ..Plan::default() };
+    let (outcome, rule, reason, at, help) = match problems.into_iter().next() {
+        Some(p) => (if p.provable { Outcome::Sequential } else { Outcome::Asserted }, p.rule, p.reason, p.at, Some(p.help)),
+        None => (Outcome::Parallel, "conc.par.12", "computes each element independently".into(), c.var_pos, None),
+    };
+    Verdict { pos: c.var_pos, func: fn_id(prog, f), var: c.var.clone(), par: true, outcome, rule, reason, at, help, plan: Some(plan) }
+}
+
+/// The verdict on every `par for` comprehension, in source order (conc.par.12).
+pub fn analyze_comps(prog: &Program, resolved: &Resolved) -> Vec<Verdict> {
+    let mut found = Vec::new();
+    for f in prog.fns.iter().filter(|f| !is_prelude(f.pos)) {
+        if let Some(body) = &f.body {
+            par_comps(body, &mut |e, c| found.push((f, e, c)));
+        }
+    }
+    if found.is_empty() {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let cx = context(prog, resolved, &fx);
+    let mut out: Vec<Verdict> = found.into_iter().map(|(f, e, c)| judge_comp(&cx, f, e, c)).collect();
+    out.sort_by_key(|v| (v.pos.line, v.pos.col));
+    out
+}
+
+/// conc.par.12: a `par for` comprehension whose elements provably
+/// interfere, or synchronise, is an error.
+pub fn check_par_comps(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    analyze_comps(prog, resolved)
+        .into_iter()
+        .filter(|v| v.outcome == Outcome::Sequential)
+        .map(|v| {
+            let d = Diagnostic::new(
+                "conc.par.12",
+                v.at,
+                format!("`par for {}` elements aren't independent: the element {} ({})", v.var, v.reason, v.rule),
+            );
+            match v.help {
+                Some(h) => d.help(h),
+                None => d,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

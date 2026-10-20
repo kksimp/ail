@@ -26,6 +26,17 @@ impl<'p> Checker<'p> {
             (CompKind::Map, Some(Ty::Map(k, v))) => (Some((**k).clone()), Some((**v).clone())),
             _ => (None, None),
         };
+        // conc.par.12: `par for` is the only clause of a list comprehension.
+        if let Some(c) = clauses.iter().find(|c| c.par)
+            && (kind != CompKind::List || clauses.len() > 1)
+        {
+            self.error_help(
+                "conc.par.12",
+                c.var_pos,
+                "`par for` computes the elements of a list comprehension with one `for`",
+                "use one `par for` clause in a `[...]` comprehension, or drop `par`",
+            );
+        }
         let mark = self.locals.len();
         // expr.comp.4: `continue` skips an element and `break` ends the comprehension.
         self.loops += 1;

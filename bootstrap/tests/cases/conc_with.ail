@@ -1,0 +1,36 @@
+# `with m as mut x` holds the mutex for the block and stores `x` back
+# however the block ends; a trap keeps the old value (conc.share.6).
+
+fn add(m Mutex[int], n int)
+    with m as mut x
+        x += n
+
+fn bump_then_fail(m Mutex[int])
+    with m as mut x
+        x += 100
+        xs := [1]
+        print(xs[x])
+
+fn first_over(m Mutex[List[int]], limit int) int
+    with m as mut xs
+        for i in 0..xs.len()
+            if xs[i] > limit
+                xs[i] = 0
+                return i
+    -1
+
+fn main()
+    m := Mutex(0)
+    g := TaskGroup()
+    for i in 1..=4
+        g.add(spawn add(m, i))
+    g.wait_all() else
+        print("a task trapped")
+    print(m.get())
+    t := spawn bump_then_fail(m)
+    t.wait() else
+        print("trapped; value kept")
+    print(m.get())
+    l := Mutex([1, 5, 9])
+    print(first_over(l, 4))
+    print(l.get())

@@ -312,6 +312,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
     c.diags.extend(effects::check_contracts(prog, &c.resolved));
     c.diags.extend(effects::check_constants(prog, &c.resolved));
     c.diags.extend(parallel::check_par(prog, &c.resolved));
+    c.diags.extend(parallel::check_par_comps(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 
@@ -1709,6 +1710,10 @@ impl<'p> Checker<'p> {
                 self.end_scope(mark);
                 Ty::Unit
             }
+            Stmt::With { mutex, var, var_pos, body, pos } => {
+                self.with_stmt(mutex, var, *var_pos, body, *pos);
+                Ty::Unit
+            }
             Stmt::Break(pos) | Stmt::Continue(pos) => {
                 if self.loops == 0 {
                     let word = if matches!(s, Stmt::Break(_)) { "break" } else { "continue" };
@@ -2114,6 +2119,12 @@ impl<'p> Checker<'p> {
         }
         match self.expr(iter, None, true) {
             Ty::List(t) | Ty::Set(t) => *t,
+            // conc.share.7: each value received until the channel closes; the
+            // loop synchronises with other tasks (conc.par.2).
+            Ty::Conc(conc::Conc::Channel, t) => {
+                self.resolved.handle_calls.insert(iter.pos());
+                *t
+            }
             Ty::Err => Ty::Err,
             t if self.reject_unhandled(&t, iter.pos()) => Ty::Err,
             Ty::Map(..) => {
@@ -2366,7 +2377,9 @@ impl<'p> Checker<'p> {
             }),
             Stmt::Assign { target: t, value, .. } => e(t).or_else(|| e(value)),
             Stmt::While { cond, body, .. } => e(cond).or_else(|| self.overlapping_use(target, body)),
-            Stmt::For { iter, body, .. } => e(iter).or_else(|| self.overlapping_use(target, body)),
+            Stmt::For { iter, body, .. } | Stmt::With { mutex: iter, body, .. } => {
+                e(iter).or_else(|| self.overlapping_use(target, body))
+            }
             Stmt::Return(Some(v), _) | Stmt::Expr(v) => e(v),
             Stmt::Handle { value, otherwise } => e(value).or_else(|| match otherwise {
                 Else::Value(d) => e(d),
