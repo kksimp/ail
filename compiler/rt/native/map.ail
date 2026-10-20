@@ -15,9 +15,10 @@
 ##   +48 index  (mask + 1) * 8 bytes: 0 empty, else entry number + 1
 ##   +56 vmode  0 plain values, 1 lists (copied on copy), 2 maps and sets
 ##   +64 vinfo  vmode 1: nesting depth * 256 + element bytes
+##   +72 lastkey, +80 laste: the last key found or added and its entry (0: none)
 ## The index has twice the array's capacity, so it is at most half full.
 
-MAP_BYTES := 72
+MAP_BYTES := 88
 
 fn map_alloc(n int) int
     alloc(n)
@@ -88,6 +89,7 @@ fn map_new(kind int, vmode int, vinfo int) int
     store64(m + 32, kind)
     store64(m + 56, vmode)
     store64(m + 64, vinfo)
+    store64(m + 80, 0)
     map_tables(m, 8)
     m
 
@@ -107,8 +109,17 @@ fn map_find_h(m int, k int, h int) int
         s = load64(idx + 8 * i)
     0
 
+## `get` then assignment on one key is the common pattern: the entry of the
+## last key found or added is remembered, so the second lookup skips the
+## hash and the probe. A rebuild or a removal forgets it.
 fn map_find(m int, k int) int
-    map_find_h(m, k, map_hash(load64(m + 32), k))
+    if load64(m + 80) != 0 and load64(m + 72) == k
+        return load64(m + 80)
+    e := map_find_h(m, k, map_hash(load64(m + 32), k))
+    if e != 0
+        store64(m + 72, k)
+        store64(m + 80, e)
+    e
 
 fn map_index_put(m int, h int, number int)
     mask := load64(m + 24)
@@ -125,6 +136,7 @@ fn map_rebuild(m int)
     ecap := load64(m + 16)
     ncap := if load64(m) * 2 >= ecap then ecap * 2 else ecap
     old := load64(m + 40)
+    store64(m + 80, 0)
     map_tables(m, ncap)
     ents := load64(m + 40)
     mut j := 0
@@ -152,23 +164,23 @@ fn map_append(m int, h int, k int, v int) int
     store64(m + 8, used + 1)
     store64(m, load64(m) + 1)
     map_index_put(m, h, used + 1)
+    store64(m + 72, k)
+    store64(m + 80, e)
     e
 
 ## `m[k] = v`: replace in place, or insert last (type.map.1, type.map.3).
 fn map_set(m int, k int, v int)
-    h := map_hash(load64(m + 32), k)
-    e := map_find_h(m, k, h)
+    e := map_find(m, k)
     if e != 0
         store64(e + 16, v)
         return
-    map_append(m, h, k, v)
+    map_append(m, map_hash(load64(m + 32), k), k, v)
 
 ## `s.add(x)`: whether `x` was new.
 fn map_add(m int, k int) bool
-    h := map_hash(load64(m + 32), k)
-    if map_find_h(m, k, h) != 0
+    if map_find(m, k) != 0
         return false
-    map_append(m, h, k, 0)
+    map_append(m, map_hash(load64(m + 32), k), k, 0)
     true
 
 fn map_has(m int, k int) bool
@@ -179,6 +191,7 @@ fn map_remove(m int, k int) bool
     e := map_find(m, k)
     if e == 0
         return false
+    store64(m + 80, 0)
     store64(e, -1)
     store64(e + 8, 0)
     store64(e + 16, 0)
@@ -229,6 +242,7 @@ fn map_values_bool(m int) List[int]
 fn map_copy(m int) int
     n := map_alloc(MAP_BYTES)
     copy_bytes(n, m, MAP_BYTES)
+    store64(n + 80, 0)
     used := load64(m + 8)
     ents := map_alloc(load64(m + 16) * 24)
     copy_bytes(ents, load64(m + 40), 24 * used)
