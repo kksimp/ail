@@ -245,5 +245,5 @@ fn exit_status(status: &std::process::ExitStatus) -> i64 {
 }
 
 fn stop<T>(rule: &'static str, pos: Pos, message: String) -> Flow<T> {
-    Err(Exit::Trap(Trap { rule, pos, message }))
+    Err(Exit::Trap(Box::new(Trap { rule, pos, message })))
 }
