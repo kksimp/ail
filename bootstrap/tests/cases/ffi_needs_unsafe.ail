@@ -1,0 +1,10 @@
+# ffi.call.1, unsafe.op.1: a C call and `std.mem` are unsafe operations.
+use std.mem
+
+extern c fn abs(x i32) i32
+
+fn main()
+    print(abs(-1))
+    p := mem.cstr("x")
+    unsafe
+        mem.free(p)

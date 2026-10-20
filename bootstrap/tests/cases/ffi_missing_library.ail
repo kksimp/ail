@@ -1,0 +1,6 @@
+# ffi.load.1: a library that can't be loaded traps at the call.
+extern c "definitely_not_a_library" fn f(x int) int
+
+fn main()
+    unsafe
+        print(f(1))

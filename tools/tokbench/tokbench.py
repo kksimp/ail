@@ -109,8 +109,11 @@ def main():
     args = ap.parse_args()
 
     if not args.files:
+        # Program folders also hold the inputs their programs read (data/, configs/):
+        # only the program and its twin are measured there.
         args.files = sorted(p.relative_to(HERE) for p in (HERE / "corpus").rglob("*")
-                            if p.is_file() and not p.name.startswith("."))
+                            if p.is_file() and not p.name.startswith(".")
+                            and (p.suffix in (".ail", ".py") or "programs" not in p.parts))
         os.chdir(HERE)
 
     counters = offline_tokenizers()

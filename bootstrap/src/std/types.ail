@@ -24,6 +24,12 @@ struct Output
     out str
     err str
 
+## std.proc.8 (ADR 0417): the output of `run_bytes`.
+struct RawOutput
+    status int
+    out bytes
+    err bytes
+
 error struct ProcError
     cmd str
     kind str
@@ -40,6 +46,14 @@ struct Response
     status int
     headers Map[str, str]
     body str
+    all_headers Map[str, List[str]]
+
+## std.net.16 (ADR 0416): a response with its body undecoded.
+struct RawResponse
+    status int
+    headers Map[str, str]
+    data bytes
+    all_headers Map[str, List[str]]
 
 error struct NetError
     url str
@@ -53,6 +67,7 @@ struct Options
     body str
     timeout_ms int
     max_redirects int
+    data bytes
 
 ## std.net.9-11: a request the server received, and the server.
 struct Request
@@ -62,6 +77,7 @@ struct Request
     headers Map[str, str]
     body str
     peer str
+    data bytes
 
 struct Server
     handle int

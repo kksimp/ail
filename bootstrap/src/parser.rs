@@ -12,7 +12,7 @@ use crate::fasthash::FastSet as HashSet;
 
 use crate::ast::{
     Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
-    GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
+    Extern, GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
     StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Edit, Pos};
@@ -27,7 +27,6 @@ mod mistakes;
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
-    ("extern", "ffi.decl.2"),
     ("as", "ffi.decl.1"),
 ];
 
@@ -173,7 +172,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 }
             }
             // `unsafe fn` (unsafe.block.2) and `extern c fn` (ffi.decl.2).
-            Tok::Kw("unsafe") if p.at_fn_start() => {
+            Tok::Kw("unsafe" | "extern") if p.at_fn_start() => {
                 if let Some(f) = p.function(Within::TopLevel) {
                     prog.fns.push(f);
                 }
@@ -609,7 +608,7 @@ impl Parser {
             attrs.push(Attr { name, pos, arg });
             // gram.attr.2: an attribute may sit on its own line above its function.
             while matches!(self.peek(), Tok::Newline)
-                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn" | "unsafe")))
+                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn" | "unsafe" | "extern")))
             {
                 self.i += 1;
             }
@@ -635,15 +634,39 @@ impl Parser {
         match self.peek() {
             Tok::Kw("fn") => true,
             Tok::Kw("unsafe") => matches!(self.peek_at(1), Tok::Kw("fn")),
+            Tok::Kw("extern") => {
+                matches!(self.peek_at(1), Tok::Ident(_))
+                    && (matches!(self.peek_at(2), Tok::Kw("fn"))
+                        || (matches!(self.peek_at(2), Tok::Str(_)) && matches!(self.peek_at(3), Tok::Kw("fn"))))
+            }
             _ => false,
         }
     }
 
     fn function_inner(&mut self, within: Within) -> Option<FnDecl> {
         let mut unsafe_fn = false;
-        let ext = None;
+        let mut ext = None;
         if self.eat_kw("unsafe") {
             unsafe_fn = true;
+        } else if self.at_kw("extern") {
+            let at = self.bump().pos;
+            let lang = self.name("`c` after `extern`", "ffi.decl.2")?;
+            if lang.0 != "c" {
+                self.error_help("ffi.decl.2", lang.1, format!("`extern {}` is not supported", lang.0), "write `extern c fn name(params) Result`");
+                return None;
+            }
+            let lib = match self.peek().clone() {
+                Tok::Str(text) => {
+                    self.i += 1;
+                    Some(text)
+                }
+                _ => None,
+            };
+            if within != Within::TopLevel {
+                self.error_help("ffi.decl.2", at, "an `extern c fn` is declared at the top level", "move it out of the `trait` or `impl` block");
+                return None;
+            }
+            ext = Some(Extern { lib });
         }
         self.bump(); // fn
         let (first, first_pos) = self.name("a function name after `fn`", "gram.fn.1")?;
@@ -749,7 +772,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any" | "ref") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!" | "*") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
@@ -757,6 +780,15 @@ impl Parser {
             None => format!("`{name}`"),
         };
         // A trait method without a default ends with its signature (trait.decl.2).
+        if ext.is_some() && (owner.is_some() || receiver.is_some() || !generics.is_empty()) {
+            self.error_help(
+                "ffi.decl.2",
+                pos,
+                "an `extern c fn` is a plain function: no type, `self` or type parameters",
+                "declare it as `extern c fn name(params) Result`, and wrap it in an AIL method",
+            );
+            return None;
+        }
         let (body, contracts) = if ext.is_some() {
             // ffi.decl.2: a C function has a signature and no body.
             if !self.eat(&Tok::Newline) {
@@ -992,6 +1024,31 @@ impl Parser {
             let pos = self.bump().pos;
             let inner = self.named_type("a type after `ref`", "own.ref.1")?;
             return Some(TypeRef { kind: TypeKind::Ref(Box::new(inner)), pos });
+        }
+        // `*T`, a raw pointer (unsafe.ptr.1).
+        if self.at_sym("*") {
+            let pos = self.bump().pos;
+            let inner = self.named_type("a type after `*`", "unsafe.ptr.1")?;
+            return Some(TypeRef { kind: TypeKind::Ptr(Box::new(inner)), pos });
+        }
+        // `fn(A, B) R`: a function value's type (type.fn.1).
+        if self.at_kw("fn") {
+            let pos = self.bump().pos;
+            self.expect_sym("(", "`(` after `fn` in a type", "type.fn.1")?;
+            let mut params = Vec::new();
+            while !self.at_sym(")") {
+                params.push(self.type_ref("a parameter type", "type.fn.1")?);
+                if !self.eat_sym(",") {
+                    break;
+                }
+            }
+            self.expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?;
+            let ret = if matches!(self.peek(), Tok::Ident(_)) || self.at_kw("any") || self.at_kw("ref") {
+                Some(Box::new(self.optional_type("the result type", "type.fn.1")?))
+            } else {
+                None
+            };
+            return Some(TypeRef { kind: TypeKind::Fn { params, ret }, pos });
         }
         let (name, pos) = self.dotted_name(expected, rule)?;
         let mut args = Vec::new();
@@ -2330,7 +2387,7 @@ mod tests {
 
     #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    extern x\n");
+        let (_, rules) = parse_src("fn main()\n    as x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 
