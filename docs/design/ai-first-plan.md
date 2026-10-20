@@ -8,9 +8,9 @@
 > implementation lanes (§6), each landing on the branch that holds this note,
 > and integrated into one pull request.
 >
-> Decisions this plan needs that are serious under [ADR 0076](../decisions/0076-delegated-decisions.md)
-> are written as **Proposed** ADRs for the designer to accept or reject.
-> Routine ones are delegated ADRs as usual.
+> The designer delegated tonight's decisions, serious ones included, under
+> [ADR 0076](../decisions/0076-delegated-decisions.md); every one is an
+> Accepted ADR that the designer can override.
 
 ## 1. The idea: the computer as the AI sees it
 
@@ -84,7 +84,7 @@ can write a program top-down and let the compiler say what each gap needs.
 
 ## 3. Effects and capabilities: what a call does to the machine
 
-### 3.1 Inferred effects, shown everywhere (Proposed ADR)
+### 3.1 Inferred effects, shown everywhere (ADR)
 
 Every function has an inferred **effect set**, a subset of
 `{io, fail, mutates, unsafe, spawn}` for now (`alloc` arrives with the
@@ -100,7 +100,7 @@ don't rise, but it is:
 This gives the AI local reasoning about a callee without reading its body
 (wishlist 1.1), at zero syntax cost, and is the foundation for sandboxing.
 
-### 3.2 Capabilities for ambient resources (Proposed ADR)
+### 3.2 Capabilities for ambient resources (ADR)
 
 Ambient things (filesystem, environment, processes, clock, network,
 randomness) are reached through standard modules (§4). The proposal: each
@@ -202,7 +202,7 @@ final pull request against `main`.
 | 3 | User modules: directories, `pub`, `use a.b`, qualified access (ADRs 0097–0099) | Opus | `main.rs`, `parser.rs`, `check.rs`, `interp.rs`, tests with module directories | none; shares `use` with 4 |
 | 4 | Standard modules `std.fs`, `std.env`, `std.io`, `std.proc`, `std.time` behind `use std.*` | Opus | `parser.rs` (`use std.x` only), `check.rs`, `interp.rs`, builtins, ADR | none; shares `use` with 3 |
 | 5 | `std.json` in the prelude: `Json`, `parse`, `to_text`, accessors | Sonnet | `prelude.ail`, builtins | none (prelude-level until 4 lands) |
-| 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | Opus | new `check/effects.rs`, `main.rs`, Proposed ADRs | none; capability names come from the §4 table; 2 integrates the display |
+| 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | Opus | new `check/effects.rs`, `main.rs`, ADRs | none; capability names come from the §4 table; 2 integrates the display |
 | 7 | `ail test`, `@test`, `assert`, `assert_eq` | Sonnet | `parser.rs` (attributes), `main.rs`, `prelude.ail`, `interp.rs` | none |
 | 8 | Formatter `ail fmt` (roadmap refinement 4) | Opus | new `fmt.rs`, `lexer.rs` (comment tokens), `main.rs`, ADR | none |
 | 9 | Spec conformance harness; OQ-041 format specs by measurement; language card | Sonnet | `bootstrap/tests/spec.rs`, `docs/spec/*`, `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
@@ -221,6 +221,9 @@ Design-only items (no lane, written by the integrator): deterministic mode
   and standard modules **equally**, so each has implementation lanes tonight.
   Capabilities therefore get a first implementation (`ail run --deny`) in
   lane 6, keyed to the module table in §4, and packages stay design-only.
-- Serious decisions are Proposed ADRs; implementation proceeds; the designer
-  accepts or rejects them in the morning.
+- The designer asked that all decisions tonight be made and recorded as
+  Accepted (delegated, ADR 0076), with the designer overriding later if
+  needed. ADRs written tonight therefore say
+  `Decided by: AI (delegated, ADR 0076; the designer delegated tonight's
+  serious decisions on 2026-10-20)`.
 - Nothing lands on `main` without the designer's `tools/verify.sh` run.
