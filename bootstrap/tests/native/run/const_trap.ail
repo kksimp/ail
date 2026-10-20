@@ -1,0 +1,10 @@
+# A computed constant that traps (ADR 0604) stops the program where the
+# interpreter does when `main` uses the constant first.
+RATIO := part(10, 0)
+
+fn part(a int, b int) int
+    a / b
+
+fn main()
+    print(RATIO)
+    print("unreached")

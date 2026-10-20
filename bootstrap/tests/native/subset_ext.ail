@@ -1,7 +1,7 @@
 # The edges of the subset's newer pieces: `else` on a binding only after
 # `s.to_int()`, `s.to_float()` and the OS calls, format specifications only
-# on numbers, `bool` and `str`, constants only of constant expressions
-# (native.subset.1).
+# on numbers, `bool` and `str` (native.subset.1). A computed constant is fine
+# (ADR 0604).
 LIMIT := 2 * 8
 SCALE := LIMIT.abs()
 

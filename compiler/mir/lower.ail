@@ -97,6 +97,15 @@ struct Lower
     const_home Map[str, int]
     ## The file of each problem, filled in by `stamp_problems`.
     problem_files List[int]
+    ## The enums' variants (ADR 0602), the `eq.E` functions asked for, and
+    ## the variants without fields that have a shared object.
+    enums Map[str, List[Case]]
+    eq_tys Map[str, Ty]
+    singletons List[VariantRef]
+    ## Program globals by key (ADR 0604), and the constants computed into
+    ## them at start-up.
+    globals Map[str, Global]
+    global_consts List[GlobalConst]
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -176,6 +185,11 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         file_prefix: [],
         const_home: {},
         problem_files: [],
+        enums: {},
+        eq_tys: {},
+        singletons: [],
+        globals: {},
+        global_consts: [],
     )
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
@@ -186,13 +200,16 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_struct_names(srcs[k].prog)
+        l.declare_enum_names(srcs[k].prog)
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_struct_fields(srcs[k].prog)
+        l.declare_enums(srcs[k].prog)
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_all(srcs[k].prog, l.prefix)
     l.stamp_problems()
+    l.gen_const_init()
     for k in 0..srcs.len()
         l.enter_file(k)
         for f in srcs[k].prog.fns
@@ -200,6 +217,9 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         l.stamp_problems()
     l.enter_file(0)
     l.gen_copies()
+    l.gen_enum_eqs()
+    l.gen_init_enums()
+    l.call_inits()
     l.stamp_problems()
     if r := rt
         l.lower_rt(r)
@@ -269,19 +289,16 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
-    for e in prog.enums
-        problem(e.pos, "enum `{e.name}` isn't in the native subset yet")
     for t in prog.traits
         problem(t.pos, "trait `{t.name}` isn't in the native subset yet")
     for c in prog.consts
         if is_const_expr(c.value)
             consts["{pre}{c.name}"] = c.value
             const_home["{pre}{c.name}"] = file
+        elif pre != "rt."
+            global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
-            problem(
-                c.pos,
-                "constant `{c.name}`: only literals, other constants and arithmetic on them are in the native subset yet",
-            )
+            problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
     for f in prog.fns
         before := problems.len()
         declare_fn(f, pre)
@@ -302,14 +319,15 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         return
     mut params := List[Ty]()
     if o := f.owner
-        if o.params != none or not structs.contains("{pre}{o.name}")
+        owner := "{pre}{o.name}"
+        if o.params != none or not (structs.contains(owner) or enums.contains(owner))
             problem(
                 f.pos,
                 "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
             )
             return
         if f.receiver != none
-            params.push(Ty.Struct("{pre}{o.name}"))
+            params.push(owner_ty(owner))
     elif f.receiver != none
         problem(
             f.pos,
@@ -367,13 +385,15 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                     if args.len() != 1
                         return none
                     e := type_of(args[0])?
-                    if is_number(e) or e == Ty.Str or needs_copy(e)
+                    if is_number(e) or e == Ty.Str or needs_copy(e) or is_enum(e)
                         return Ty.List(e)
                     none
                 _ =>
                     if args.len() == 0
                         if k := type_key(name)
                             return Ty.Struct(k)
+                        if k := enum_key(name)
+                            return Ty.Enum(k)
                     none
         _ => none
 
@@ -1051,6 +1071,10 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 if k >= 0
                     t := structs[self_ty][k].ty
                     return Val(id: load(self_value(), k, t), ty: t)
+                if globals.contains("{prefix}{name}")
+                    return global_const("{prefix}{name}")
+                if v := bare_variant(name, want)
+                    return new_variant(v, none, pos)
                 problem(
                     pos,
                     "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
@@ -1074,7 +1098,10 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                     a := lower_value(lhs, operand_want(o, want))?
                     b := lower_value(rhs, a.ty)?
                     binary(o, a, b, pos)
-        Call(callee, args, pos) => lower_call(callee, args, pos)
+        Call(callee, args, pos) =>
+            if v := call_variant(callee, want)
+                return new_variant(v, args, pos)
+            lower_call(callee, args, pos)
         Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
         Index(recv, index, pos) =>
             l := lower_value(recv, none)?
@@ -1091,15 +1118,19 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Hole(pos) => unsupported(pos, "`todo`")
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
         Member(recv, name, pos) =>
+            if en := enum_ref(recv)
+                return variant_member(en, name, pos)
             if key := qualified(e)
                 if consts.contains(key)
                     return lower_const(key, want)
+                if globals.contains(key)
+                    return global_const(key)
                 return unsupported(pos, "`{key}` as a value")
             lower_member(recv, name, pos)
         Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
         MapLit(_, pos) => unsupported(pos, "maps")
         SetLit(_, pos) => unsupported(pos, "sets")
-        Match(_, _, pos) => unsupported(pos, "`match`")
+        Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
         Try(_, _, pos) => unsupported(pos, "`?`")
         Comp(_, _, _, _, pos) => unsupported(pos, "comprehensions")
         OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
@@ -1198,6 +1229,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     if not same_ty(a.ty, b.ty)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
         return a
+    if is_enum(a.ty)
+        return enum_compare(o, a, b, pos)
     cmp := is_comparison(o)
     match a.ty
         Int =>
@@ -1317,7 +1350,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         v := lower_value(x, if elem.is_unknown() then none else elem)?
         if elem.is_unknown()
             elem = v.ty
-        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem)
+        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem) and not is_enum(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
@@ -1344,7 +1377,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if self_ty != "" and sigs.contains("{self_ty}.{name}")
                 return struct_call(
                     "{self_ty}.{name}",
-                    Val(id: self_value(), ty: Ty.Struct(self_ty)),
+                    Val(id: self_value(), ty: owner_ty(self_ty)),
                     args,
                     pos,
                 )
@@ -1470,6 +1503,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             message: "`mem.{name}`: `ail build` can't link the C allocator yet (`ail run` can)",
         ))
         return none
+    if en := enum_ref(recv)
+        if case_index(en, name) >= 0
+            return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
+        return struct_call("{en}.{name}", none, args, npos)
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, npos)
     if m := module_name(recv)
@@ -1478,6 +1515,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
     if s := struct_name(r.ty)
+        return struct_call("{s}.{name}", r, args, npos)
+    if s := enum_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     mut vs := List[Val]()
     for a in args

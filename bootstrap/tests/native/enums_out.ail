@@ -1,0 +1,27 @@
+# Enums and `match` at the edges of the native subset (native.subset.1):
+# generic enums, `==` on an enum holding a struct, printing an enum, and a
+# computed constant of a type outside the subset (its uses stay quiet).
+enum Maybe[T]
+    Some(v T)
+    Nothing
+
+struct Pt
+    x int
+
+enum Bag
+    Items(xs List[Pt])
+    Empty
+
+TABLE := {"a": 1}
+
+fn same(a Bag, b Bag) bool
+    a == b
+
+fn main()
+    print(same(Bag.Empty, Bag.Empty))
+    print(Bag.Empty)
+    x := 2.5
+    match x < 3.0
+        true => print(1)
+        false => print(2)
+    print(TABLE.len())

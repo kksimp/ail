@@ -18,36 +18,34 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
-function is a free function or a method of a struct (no generics or
-contracts), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
-invariants, and lists of those and of lists, using
-locals, constants whose values are literals, other constants and operators
-on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
-value), `while`, `for` over a range or a list, `break`, `continue`,
-`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
-field names in a method), method calls, `print` of numbers, strings and
-lists of them or an interpolation of them (with
-`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
+function is a free function or a method of a struct or enum (no generics or
+contracts), in the root module or a module it imports (mod.unit.1-5), over
+`int`, `float`, `bool`, `str`, structs and enums without generics or
+invariants, and lists of those and of lists, using locals, module constants
+of any expression in the subset (computed once before `main` runs),
+arithmetic, comparisons (`==` on enums, structs and lists compares their
+values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
+range or a list, `break`, `continue`, `return`, calls, struct construction,
+enum variants (bare or qualified), fields (`x.f`, `x.f = v`, and bare field
+names in a method), method calls, `match` as a statement or a value (variant
+patterns and bindings, `_`, `|`, guards, ranges, and `int`, `bool` and `str`
+literals), `print` of numbers, strings and lists of them or an
+interpolation of them, `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
+`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
-construct is reported at its position under this rule, all of them at once,
-and nothing is built. *(ADRs 0384, 0390, 0591)*
-and the bit operations of expr.bit.1. Any other construct is reported at its
-position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393)*
-and the bit operations of expr.bit.1. Also: format specifications on numbers,
-`bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
-`.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
-`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`,
-`fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
-`env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
-`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
-call that can fail is in the subset only as the value of `else` with a
-fallback value, a statement that leaves, or a block without a binding
-(err.else.1-2); `else err` and `?` are not yet. Any other construct is
-reported at its position under this rule, all of them at once, and nothing
-is built. *(ADRs 0384, 0390, 0392, 0393, 0580, 0582)*
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Also:
+format specifications on numbers, `bool` and `str` in `print` (lex.str.7,
+type.str.11: width, fill, alignment, `.N`, `x`); `s.to_float()` in the
+`else` forms; and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
+`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`,
+`env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line`,
+`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
+(std.fs, std.env, std.io, std.time). A call that can fail is in the subset
+only as the value of `else` with a fallback value, a statement that leaves,
+or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
+Any other construct is reported at its position under this rule, all of them
+at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0580, 0582,
+0591, 0602–0604)*
 
 ```ail
 fn steps(n int) int

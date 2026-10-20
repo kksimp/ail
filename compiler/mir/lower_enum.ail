@@ -1,0 +1,380 @@
+## Enums in the native subset (ADR 0602). An enum whose variants carry no
+## fields is an `int`, the variant's index in declaration order. Any other
+## enum value is a pointer to a kind-5 object (native-abi.md §3): slot 0
+## holds the variant's index and slots 1.. its fields. A variant without
+## fields of such an enum is one shared object, built at start-up into a
+## global. Enum values are immutable (no assignment reaches into a
+## variant), so they are shared and never copied; a list or struct put into
+## a variant is copied when the variant is built (own.val.1).
+
+use ast
+
+## A variant: its name and its fields' slots (slot `k` of the object is
+## field `k - 1`).
+struct Case
+    name str
+    fields List[Slot]
+
+## A variant of enum `en`, by index.
+struct VariantRef
+    en str
+    k int
+
+OBJ_ENUM := 5
+
+## Record the enums' names, before the structs' and enums' fields are typed.
+fn Lower.declare_enum_names(mut self, prog ast.Program)
+    for e in prog.enums
+        if e.generics.len() > 0
+            problem(e.pos, "generic enum `{e.name}` isn't in the native subset yet")
+        elif e.is_error
+            problem(e.pos, "error enum `{e.name}` isn't in the native subset yet")
+        else
+            enums["{prefix}{e.name}"] = []
+
+## Type the variants' fields of each enum `declare_enum_names` recorded.
+fn Lower.declare_enums(mut self, prog ast.Program)
+    for e in prog.enums
+        key := "{prefix}{e.name}"
+        if not enums.contains(key)
+            continue
+        mut cases := List[Case]()
+        for v in e.variants
+            mut slots := List[Slot]()
+            for fd in v.fields
+                t := type_of(fd.ty) else
+                    problem(fd.pos, "field `{fd.name}`: its type isn't in the native subset yet")
+                    Ty.Unknown
+                slots.push(Slot(name: fd.name, ty: t))
+            cases.push(Case(name: v.name, fields: slots))
+        enums[key] = cases
+
+## The key of the enum a written name means here: `E` in this module or
+## `m.E` through an import (mod.use.2), as `type_key` for structs.
+fn Lower.enum_key(self, name str) str?
+    parts := name.split(".")
+    if parts.len() > 1
+        m := aliases.get(parts[0])?
+        key := "{m}.{parts[1..].join(".")}"
+        return if enums.contains(key) then key else none
+    key := "{prefix}{name}"
+    if enums.contains(key) then key else none
+
+fn enum_name(t Ty) str?
+    match t
+        Enum(n) => n
+        _ => none
+
+fn is_enum(t Ty) bool
+    enum_name(t) != none
+
+## Whether every variant of `n` is without fields: its values are `int`s.
+fn Lower.is_flat(self, n str) bool
+    for c in enums[n]
+        if c.fields.len() > 0
+            return false
+    true
+
+fn Lower.case_index(self, n str, name str) int
+    cases := enums.get(n) else return -1
+    for k in 0..cases.len()
+        if cases[k].name == name
+            return k
+    -1
+
+## The type a method's `self` has: a struct or an enum.
+fn Lower.owner_ty(self, n str) Ty
+    if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
+
+## The enum `e` names, when it names one and no local: `E` or `m.E`, as
+## in `E.V` or `m.E.V(...)`.
+fn Lower.enum_ref(self, e ast.Expr) str?
+    p := path_of(e)?
+    if lookup(p.split(".")[0]) != none
+        return none
+    enum_key(p)
+
+## A bare variant name (type.enum.3): of the expected enum when there is
+## one, else of the only enum of this module, or else of the program, that
+## has a variant of that name.
+fn Lower.bare_variant(self, name str, want Ty?) VariantRef?
+    if w := want
+        if n := enum_name(w)
+            k := case_index(n, name)
+            if k >= 0
+                return VariantRef(en: n, k: k)
+    mut here := List[VariantRef]()
+    mut found := List[VariantRef]()
+    for n in enums.keys()
+        k := case_index(n, name)
+        if k >= 0
+            found.push(VariantRef(en: n, k: k))
+            if n == "{prefix}{n.split(".").last() else ""}"
+                here.push(VariantRef(en: n, k: k))
+    if here.len() == 1
+        return here[0]
+    if found.len() == 1 then found[0] else none
+
+## A call `V(...)` that builds a variant: of the expected enum, or, when no
+## local, struct or function has the name, of the only enum with it.
+fn Lower.call_variant(self, callee ast.Expr, want Ty?) VariantRef?
+    name := match callee
+        Name(n, _) => n
+        _ => return none
+    if lookup(name) != none
+        return none
+    if w := want
+        if n := enum_name(w)
+            k := case_index(n, name)
+            if k >= 0
+                return VariantRef(en: n, k: k)
+    if type_key(name) != none or sigs.contains("{prefix}{name}") or bad.contains("{prefix}{name}")
+        return none
+    bare_variant(name, none)
+
+## `E.V` without arguments.
+fn Lower.variant_member(mut self, en str, name str, pos ast.Pos) Val?
+    k := case_index(en, name)
+    if k < 0
+        return unsupported(pos, "`{en}` has no variant `{name}`")
+    new_variant(VariantRef(en: en, k: k), none, pos)
+
+## Build variant `v`; `args` is `none` for a bare `V` or `E.V`.
+fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) Val?
+    t := Ty.Enum(v.en)
+    c := enums[v.en][v.k]
+    if is_flat(v.en)
+        if a := args
+            if a.len() > 0
+                return unsupported(pos, "arguments to variant `{c.name}`")
+        return Val(id: konst(v.k, t), ty: t)
+    if c.fields.len() == 0
+        if a := args
+            if a.len() > 0
+                return unsupported(pos, "arguments to variant `{c.name}`")
+        return Val(id: load(global_addr(singleton(v)), 0, t), ty: t)
+    a := args else return unsupported(pos, "variant `{c.name}` without its fields")
+    if a.len() != c.fields.len()
+        return unsupported(pos, "`{c.name}(...)` without every field")
+    mut vs := [-1 for _ in c.fields]
+    for k in 0..a.len()
+        mut at := k
+        if l := a[k].label
+            at = -1
+            for j in 0..c.fields.len()
+                if c.fields[j].name == l.name
+                    at = j
+            if at < 0
+                return unsupported(l.pos, "field `{l.name}` of `{c.name}`")
+        ft := c.fields[at].ty
+        x := lower_value(a[k].value, ft)?
+        vs[at] = copy_if_place(a[k].value, Val(id: convert(x, ft, expr_pos(a[k].value)), ty: ft))
+    obj := call("rt.obj_new", [konst(8 * (vs.len() + 1), Ty.Int), konst(OBJ_ENUM, Ty.Int)], t)
+    store(obj, 0, konst(v.k, Ty.Int))
+    for k in 0..vs.len()
+        store(obj, k + 1, vs[k])
+    Val(id: obj, ty: t)
+
+## The global slot of the shared object of a variant without fields.
+fn Lower.singleton(mut self, v VariantRef) int
+    key := "enum:{v.en}.{enums[v.en][v.k].name}"
+    if g := globals.get(key)
+        return g.slot
+    slot := new_global(key, Ty.Enum(v.en))
+    singletons.push(v)
+    slot
+
+## The variant index of enum value `x`.
+fn Lower.tag_of(mut self, n str, x int) int
+    if is_flat(n)
+        return x
+    load(x, 0, Ty.Int)
+
+## `a == b` or `a != b` on enums: the indexes for an enum without fields
+## or when one side is a variant without fields (`tok == Newline`), else
+## the generated `eq.E` (the same variant with equal fields).
+fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    # After a problem, a `bool` keeps the uses quiet.
+    quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
+    n := enum_name(a.ty) else return quiet
+    name := op_name(o)
+    if name != "eq" and name != "ne"
+        problem(pos, "`{op_symbol(o)}` on `{n}` isn't in the native subset yet")
+        return quiet
+    if is_flat(n)
+        return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+    if k := singleton_tag(b.id)
+        return Val(id: op(name, [tag_of(n, a.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    if k := singleton_tag(a.id)
+        return Val(id: op(name, [tag_of(n, b.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    mut seen := Set[str]()
+    if not comparable(a.ty, pos, n, mut seen)
+        return quiet
+    eq := call(eq_fn(a.ty), [a.id, b.id], Ty.Bool)
+    if name == "ne"
+        return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
+    Val(id: eq, ty: Ty.Bool)
+
+## The variant index of value `v` of the current function when it is the
+## shared object of a variant without fields (a load of its global).
+fn Lower.singleton_tag(self, v int) int?
+    mut def := Map[int, Inst]()
+    for blk in blocks
+        for i in blk.insts
+            if i.dst >= 0
+                def[i.dst] = i
+    ld := def.get(v)?
+    if ld.op != "load" or ld.imm != 0
+        return none
+    g := def.get(ld.args[0])?
+    if g.op != "prim" or g.name != "global"
+        return none
+    c := def.get(g.args[0])?
+    if c.op != "const"
+        return none
+    for sv in singletons
+        if globals["enum:{sv.en}.{enums[sv.en][sv.k].name}"].slot == c.imm
+            return sv.k
+    none
+
+fn Lower.eq_fn(mut self, t Ty) str
+    name := "eq.{t.name()}"
+    if not sigs.contains(name)
+        sigs[name] = Sig(params: [t, t], ret: Ty.Bool)
+        eq_tys[name] = t
+    name
+
+## Whether `==` on `t` is in the subset: numbers, strings, enums and lists
+## of those (reported at `pos`, naming enum `top`, otherwise).
+fn Lower.comparable(mut self, t Ty, pos ast.Pos, top str, mut seen Set[str]) bool
+    if is_number(t) or t == Ty.Str
+        return true
+    if e := t.elem()
+        return comparable(e, pos, top, mut seen)
+    n := enum_name(t) else
+        problem(pos, "`==` on `{top}`, which holds a `{t.name()}`, isn't in the native subset yet")
+        return false
+    if seen.contains(n)
+        return true
+    seen.add(n)
+    for c in enums[n]
+        for fd in c.fields
+            if not comparable(fd.ty, pos, top, mut seen)
+                return false
+    true
+
+## Generate each `eq.T` asked for, including those they ask for.
+fn Lower.gen_enum_eqs(mut self)
+    mut done := Set[str]()
+    mut more := true
+    while more
+        more = false
+        for name in eq_tys.keys()
+            if done.contains(name)
+                continue
+            done.add(name)
+            more = true
+            t := eq_tys[name]
+            if e := t.elem()
+                gen_list_eq(name, t, e)
+            else
+                gen_eq(name, enum_name(t) else "")
+
+## `eq.E(a, b)`: the same object, or the same variant with equal fields.
+fn Lower.gen_eq(mut self, fkey str, n str)
+    t := Ty.Enum(n)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    yes := new_block()
+    no := new_block()
+    diff := new_block()
+    branch(op("eq", [a, b], Ty.Bool), yes, [], diff, [])
+    cur = diff
+    ta := load(a, 0, Ty.Int)
+    tb := load(b, 0, Ty.Int)
+    same := new_block()
+    branch(op("eq", [ta, tb], Ty.Bool), same, [], no, [])
+    cur = same
+    cases := enums[n]
+    for k in 0..cases.len()
+        c := cases[k]
+        if c.fields.len() == 0
+            continue
+        this := new_block()
+        other := new_block()
+        branch(op("eq", [ta, konst(k, Ty.Int)], Ty.Bool), this, [], other, [])
+        cur = this
+        for j in 0..c.fields.len()
+            ft := c.fields[j].ty
+            x := load(a, j + 1, ft)
+            y := load(b, j + 1, ft)
+            e := field_eq(ft, x, y)
+            next := new_block()
+            branch(e, next, [], no, [])
+            cur = next
+        jump(yes, [])
+        cur = other
+    # A variant without fields: the same index is enough.
+    jump(yes, [])
+    end_eq(fkey, yes, no)
+
+## `eq.List[T](a, b)`: the same length and equal elements.
+fn Lower.gen_list_eq(mut self, fkey str, t Ty, e Ty)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    yes := new_block()
+    no := new_block()
+    n := op("len", [a], Ty.Int)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    branch(op("eq", [n, op("len", [b], Ty.Int)], Ty.Bool), head, [konst(0, Ty.Int)], no, [])
+    cur = head
+    body := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], yes, [])
+    cur = body
+    same := field_eq(e, op("get", [a, i], e), op("get", [b, i], e))
+    step := new_block()
+    branch(same, step, [], no, [])
+    cur = step
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    end_eq(fkey, yes, no)
+
+fn Lower.end_eq(mut self, fkey str, yes int, no int)
+    cur = yes
+    finish(return_of(konst(1, Ty.Bool)))
+    cur = no
+    finish(return_of(konst(0, Ty.Bool)))
+    for blk in 0..blocks.len()
+        sealed[blk] = true
+    end_fn(fkey, ast.Pos(line: 1, col: 1))
+
+fn Lower.field_eq(mut self, t Ty, x int, y int) int
+    if t.is_float()
+        return op("feq", [x, y], Ty.Bool)
+    if t == Ty.Str
+        return call("rt.str_eq", [x, y], Ty.Bool)
+    if t.elem() != none
+        return call(eq_fn(t), [x, y], Ty.Bool)
+    if m := enum_name(t)
+        if not is_flat(m)
+            return call(eq_fn(t), [x, y], Ty.Bool)
+    op("eq", [x, y], Ty.Bool)
+
+## Build the shared objects of the variants without fields: `init.enums`,
+## which `main` calls first.
+fn Lower.gen_init_enums(mut self)
+    if singletons.len() == 0
+        return
+    sigs["init.enums"] = Sig(params: [], ret: Ty.Unit)
+    begin_fn("init.enums", Ty.Unit, [])
+    for v in singletons
+        t := Ty.Enum(v.en)
+        obj := call("rt.obj_new", [konst(8, Ty.Int), konst(OBJ_ENUM, Ty.Int)], t)
+        store(obj, 0, konst(v.k, Ty.Int))
+        slot := globals["enum:{v.en}.{enums[v.en][v.k].name}"].slot
+        store(global_addr(slot), 0, obj)
+    finish(return_of(-1))
+    end_fn("init.enums", ast.Pos(line: 1, col: 1))
