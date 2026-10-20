@@ -5,6 +5,7 @@
 
 mod api;
 mod ast;
+mod bump;
 mod check;
 mod derive;
 mod diag;
@@ -23,6 +24,7 @@ mod num;
 mod packages;
 mod parser;
 mod stdlib;
+mod tensor;
 mod ui;
 
 use std::process::ExitCode;
@@ -63,6 +65,11 @@ options:
   --parallel    with run: run every loop proven independent on the thread
                 pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
+  --schedule=random[:SEED]
+                with test or run: switch tasks at random points picked from
+                SEED (a new one if left off), so a test that fails on one
+                interleaving can be replayed; a failing test prints the
+                seed (conc.sched.1-2)
   --deny LIST   with run or check: reject a program whose `main` reaches a
                 denied capability (fs, env, proc, clock, random, net, ui,
                 or all) (eff.cap.1)
@@ -78,6 +85,10 @@ options:
   --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
 
+// ADR 0332: commands that only read a program use the front-end allocator.
+#[global_allocator]
+static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
+
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
 const STACK_BYTES: usize = 256 * 1024 * 1024;
 
@@ -91,6 +102,7 @@ fn main() -> ExitCode {
         match args[i].as_str() {
             "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
+            a if a.starts_with("--schedule") => {}
             "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" => i += 1,
             a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
@@ -115,6 +127,11 @@ fn main() -> ExitCode {
                 flags.extend(rest.drain(at..(at + 2).min(rest.len())));
             }
         }
+    }
+    // conc.sched.1: `--schedule=random[:SEED]` for `ail run` and `ail test`.
+    if let Err(msg) = take_schedule(&mut rest) {
+        eprintln!("error: {msg}");
+        return ExitCode::from(2);
     }
     // run.limit.1-4, test.cover.1-3: limits for `ail run` and `ail test`, coverage for `ail test`.
     let coverage = match take_limit_options(&mut rest) {
@@ -143,6 +160,12 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // ADR 0332: `check`, `api` and `effects` make one pass over the program
+    // and exit, so they use the front-end allocator.
+    // `AIL_SYSTEM_ALLOC=1` keeps the system allocator, to compare the two.
+    if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
+        ALLOC.enable();
+    }
     match rest.as_slice() {
         ["run", file] => {
             interp::set_program(file, program_args);
@@ -223,6 +246,35 @@ fn take_limit_options(rest: &mut Vec<&str>) -> Result<Option<bool>, String> {
     config.coverage = coverage.is_some();
     interp::limits::configure(config);
     Ok(coverage)
+}
+
+/// Remove `--schedule=random[:SEED]` and set the random schedule
+/// (conc.sched.1). Without a seed, one is made from the clock, and a
+/// failing test prints it (conc.sched.2). Pooled loops and tasks run on
+/// the scheduler instead, so the seed decides every interleaving.
+fn take_schedule(args: &mut Vec<&str>) -> Result<(), String> {
+    let Some(at) = args.iter().position(|a| a.starts_with("--schedule")) else { return Ok(()) };
+    let word = args.remove(at);
+    if !matches!(args.first(), Some(&"run" | &"test")) {
+        return Err("`--schedule` works with `ail run` and `ail test` (conc.sched.1)".into());
+    }
+    let seed = match word {
+        "--schedule=random" => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| d.as_nanos() as u64 % 1_000_000_000),
+        "--schedule=fixed" => return Ok(()),
+        w => match w.strip_prefix("--schedule=random:").map(str::parse::<u64>) {
+            Some(Ok(n)) => n,
+            _ => {
+                return Err(format!(
+                    "`{w}` isn't a schedule; use `--schedule=random` or `--schedule=random:SEED` with a non-negative SEED (conc.sched.1)"
+                ));
+            }
+        },
+    };
+    interp::set_schedule(Some(seed));
+    interp::parallel::set_mode(interp::parallel::Mode::Off);
+    Ok(())
 }
 
 /// `--cases N` and `--seed S` for `ail test` (test.prop.3).
@@ -514,10 +566,16 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
             }
         }
     }
+    // conc.sched.2: a failure under a random schedule names its seed.
+    let schedule = interp::schedule_seed().filter(|_| failed > 0);
     if json {
-        println!("{{\"summary\":true,\"passed\":{passed},\"failed\":{failed}}}");
+        let seed = schedule.map_or(String::new(), |s| format!(",\"schedule_seed\":{s}"));
+        println!("{{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{seed}}}");
     } else {
         println!("{passed} passed, {failed} failed");
+        if let Some(s) = schedule {
+            println!("schedule seed {s}: replay with `ail test --schedule=random:{s} {path}`");
+        }
     }
     // test.cover.2-3: the table, or per-file JSON lines; `=lines` lists the unexecuted ranges.
     for c in cover.iter().flatten() {

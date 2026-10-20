@@ -1,0 +1,30 @@
+## An agent-style repo scanner: glob a tree, count lines per extension and
+## fingerprint each file with `git hash-object`, reporting duplicate content.
+
+struct Found
+    name str
+    lines int
+    hash str
+
+fn scan(root str) !List[Found]
+    mut out := []
+    for file in fs.glob("{root}/**/*")
+        name := file.strip_prefix("{root}/") else file
+        text := fs.read_text(file) else continue
+        r := proc.run("git", ["hash-object", "--stdin"], text)? "hashing {name}"
+        out.push(Found(name: name, lines: text.lines().len(), hash: r.out.trim().slice(0, 8)))
+    out
+
+fn main() !
+    found := scan("{path.dir(env.program())}/data")?
+    mut by_ext := {}
+    mut shown := Set[str]()
+    for f in found
+        by_ext[path.ext(f.name)] += f.lines
+    for ext in by_ext.keys().sorted()
+        print("{ext:<5}{by_ext[ext]:>5} lines")
+    for f in found
+        same := [g.name for g in found if g.hash == f.hash]
+        if same.len() > 1 and shown.add(f.hash)
+            print("duplicate {f.hash}: {same.join(", ")}")
+    print("{found.len()} files, {[f.lines for f in found].sum()} lines")

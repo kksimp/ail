@@ -1,0 +1,11 @@
+# conc.cancel.1: cancelling doesn't consume a task handle (conc.task.5),
+# and only tasks and groups can be cancelled.
+
+fn work()
+    print("w")
+
+fn main()
+    t := spawn work()
+    t.cancel()
+    ch := Channel[int](1)
+    ch.cancel()

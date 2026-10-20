@@ -308,6 +308,11 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
 | [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |
 | [0331](0331-editor-program-card-view.md) | Editor program card view (Ctrl-Shift-I) from `ail api --card --json` *(delegated)* | Accepted | 2026-10-20 |
+| [0332](0332-front-end-allocator.md) | `check`, `api` and `effects` use a front-end allocator (size-class free lists, huge pages) *(delegated)* | Accepted | 2026-10-20 |
+| [0333](0333-no-front-end-disk-cache-yet.md) | No on-disk prelude or check-result cache yet; the saving is under 0.5 ms *(delegated)* | Accepted | 2026-10-20 |
+| [0334](0334-fast-hashing-and-lexing-in-the-front-end.md) | Fast hasher in the checker, resolver and parser; keywords lexed without allocating *(delegated)* | Accepted | 2026-10-20 |
+| [0338](0338-card-json-positions.md) | `ail api --card --json` gives each declaration's file, line and col *(delegated)* | Accepted | 2026-10-20 |
+| [0339](0339-editor-problems-and-sessions.md) | Editor problems pane (Ctrl-Shift-M), replace in files with preview (Ctrl-Shift-H), and tabs remembered per directory *(delegated)* | Accepted | 2026-10-20 |
 | [0323](0323-chained-call-lines.md) | A line starting with `.name` continues the statement; the formatter splits chains one call per line *(delegated)* | Accepted | 2026-10-20 |
 | [0324](0324-attributes-on-their-own-line.md) | Attributes may sit on their own lines above a function, in name order *(delegated)* | Accepted | 2026-10-20 |
 | [0314](0314-standard-modules-in-ail.md) | Standard modules written in AIL, starting with `std.ui.widgets` *(delegated)* | Accepted | 2026-10-20 |
@@ -318,3 +323,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0319](0319-copying-methods-on-unique-collections.md) | Methods that copy elements are errors on unique collections; task handles stay out of lists *(delegated)* | Accepted | 2026-10-20 |
 | [0335](0335-explain-and-fix-coverage.md) | Every emitted rule has an explain entry, and ten more mistakes have fixes *(delegated)* | Accepted | 2026-10-20 |
 | [0336](0336-explain-listing-and-length.md) | `ail explain` lists every rule with its fix, and entries average under 120 tokens *(delegated)* | Accepted | 2026-10-20 |
+| [0328](0328-std-tensor-cpu-api.md) | `std.tensor`: an eager, value-typed `Tensor[T]` of `int` or `float` *(delegated)* | Accepted | 2026-10-20 |
+| [0329](0329-std-tensor-kernels-and-dispatch.md) | Tensor kernels: AVX2, NEON or scalar at run time, one specified summation order *(delegated)* | Accepted | 2026-10-20 |
+| [0330](0330-tensor-accelerator-backends-plug-in.md) | How an NPU or GPU backend plugs into `std.tensor` (design) *(delegated)* | Accepted | 2026-10-20 |
+| [0337](0337-agent-corpus-round-two.md) | The agent corpus grows to ten programs with Python twins; the five new ones use the round 5–7 features *(delegated)* | Accepted | 2026-10-20 |
+| [0320](0320-atomic-int-and-bool.md) | `Atomic[int]` and `Atomic[bool]`: shared cells for tasks and `par for` *(delegated)* | Accepted | 2026-10-20 |
+| [0321](0321-task-cancellation.md) | Cancellation: `cancel`, `task.cancelled()`, `task.check()` *(delegated)* | Accepted | 2026-10-20 |
+| [0322](0322-random-schedule-testing.md) | `--schedule=random[:SEED]`: replayable random interleavings *(delegated)* | Accepted | 2026-10-20 |

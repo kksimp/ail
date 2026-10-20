@@ -18,6 +18,7 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod absent;
+mod atomic;
 mod builtins;
 mod keyfn;
 pub mod limits;
@@ -28,11 +29,13 @@ mod osext;
 mod random;
 mod stdlib;
 mod tasks;
+mod tensor;
 mod trace;
 
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
 pub use stdlib::set_program;
+pub use tasks::{schedule_seed, set_schedule};
 mod prop;
 mod testing;
 mod generate;
@@ -83,6 +86,11 @@ enum Value {
     Ref(Rc<RefCell<Value>>),
     /// A task, task group, channel or mutex (conc.task.1, conc.share.2-3).
     Handle(Handle),
+    /// A `tensor.Tensor[T]` (std.tensor.1): copies share the buffer until
+    /// one is rebuilt, as lists do.
+    Tensor(Rc<crate::tensor::Tensor>),
+    /// An `Atomic[int]` or `Atomic[bool]` (conc.atomic.3): copies share it.
+    Atomic(std::sync::Arc<atomic::Cell>),
 }
 
 impl Clone for Value {
@@ -108,6 +116,8 @@ impl Clone for Value {
             Value::Fail(f) => Value::Fail(Rc::clone(f)),
             Value::Ref(c) => Value::Ref(Rc::clone(c)),
             Value::Handle(h) => Value::Handle(*h),
+            Value::Tensor(t) => Value::Tensor(Rc::clone(t)),
+            Value::Atomic(c) => Value::Atomic(std::sync::Arc::clone(c)),
         }
     }
 }
@@ -277,6 +287,7 @@ enum Target<'a> {
 enum MethodKind {
     Type(bool, usize),
     Handle(Handle),
+    Atomic,
 }
 
 /// The kind of a method receiver, and the cell when it is a `ref` (own.ref.3).
@@ -292,6 +303,7 @@ fn method_kind(v: &Value) -> Option<MethodKind> {
         Value::Struct(s, _) => Some(MethodKind::Type(false, *s)),
         Value::Enum(e, _, _) => Some(MethodKind::Type(true, *e)),
         &Value::Handle(h) => Some(MethodKind::Handle(h)),
+        Value::Atomic(_) => Some(MethodKind::Atomic),
         _ => None,
     }
 }
@@ -2375,6 +2387,8 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Set(x), Value::Set(y)) => x.len() == y.len() && x.keys().all(|k| y.get(k).is_some()),
             // own.ref.6: references are equal when they share a cell.
             (Value::Ref(x), Value::Ref(y)) => Rc::ptr_eq(x, y),
+            // std.tensor.9: equal shapes and equal elements.
+            (Value::Tensor(x), Value::Tensor(y)) => x == y,
             (x, y) => unreachable!("checked: comparing {x:?} and {y:?}"),
         })
     }
@@ -2465,6 +2479,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 "Set" => return Ok(Value::Set(Rc::new(Table::default()))),
                 _ => {}
             }
+        }
+        if n == "Atomic" {
+            let v = self.eval(&args[0].value, env)?;
+            return Ok(atomic::new(v));
         }
         if matches!(n.as_str(), "TaskGroup" | "Channel" | "Mutex") {
             return self.conc_constructor(n, args, pos, env);
@@ -2629,6 +2647,8 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Value::Fail(f) => self.describe(&f.error, pos)?,
             Value::Handle(h) => h.text(),
+            Value::Tensor(t) => self.tensor_text(t, pos)?,
+            Value::Atomic(c) => c.text(),
             Value::Map(t) => {
                 let mut parts = Vec::with_capacity(t.len());
                 for (k, v) in t.entries() {
@@ -2692,7 +2712,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ crate::stdlib::StdCall::Method(_)) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),
@@ -2733,6 +2753,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Method(m)) = site.std {
             return self.ui_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
+            return self.tensor_method(m, recv, args, pos, env);
+        }
         let mut recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
         let (mut kind, cell) = match &recv {
             Operand::Place(p) => view(env, p, |v| kind_or_cell(v))?,
@@ -2751,6 +2774,17 @@ impl<'a, W: Write> Interp<'a, W> {
         let (is_enum, index) = match kind {
             Some(MethodKind::Type(is_enum, index)) => (is_enum, index),
             Some(MethodKind::Handle(h)) => return self.handle_method(h, name, args, pos, env),
+            Some(MethodKind::Atomic) => {
+                let cell = match &recv {
+                    Operand::Value(Value::Atomic(c)) => c.clone(),
+                    Operand::Place(p) => view(env, p, |v| match v {
+                        Value::Atomic(c) => c.clone(),
+                        _ => unreachable!("an atomic"),
+                    })?,
+                    Operand::Value(_) => unreachable!("an atomic"),
+                };
+                return self.atomic_method(cell, name, args, pos, env);
+            }
             None => return self.builtin(recv, name, args, pos, env),
         };
         let f = match site.last {

@@ -689,6 +689,7 @@ fn main() !
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?` |
 | `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` only (no TLS yet: kind `tls`) |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
+| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; methods `add(b)`, `mul(b)` (elementwise), `dot(b)`, `sum()`, `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(col, row, text, fg, bg, ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar|Block|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`, `ORANGE`, `RED`, `WHITE`, `YELLOW` |
 | `std.ui.widgets` | `TextField`, `ListView` (fuzzy `filter`), `Button`, `Dialog`, `Pane`, `Tree`: `render(rect, theme) List[widgets.Run]`, `draw(mut w, rect, theme)`, `on_event(ev[, rect]) widgets.Action` (`Ignored`, `Changed`, `Submit`, `Cancel`); `widgets.Rect(col, row, cols, rows)`; `text_rows(runs, cols, rows)` prints a screen headless |
@@ -764,7 +765,17 @@ ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
 with m as mut x               # read-modify-write: holds m, stores x back
     x += 1                    # on any exit; a trap keeps the old value
+n := Atomic(0)                # int or bool, shared by tasks and par for
+n.add(1)                      # returns the old value; also load, store, cas
+g.cancel()                    # or t.cancel(): ask tasks to stop
+task.cancelled()              # in the task: was it cancelled?
+task.check()?                 # fails with Cancelled once cancelled
 ```
+
+A cancelled task's `recv` gives `none` (and `for v in ch` ends),
+`time.sleep_ms` returns at once and `proc.run` fails; the scope still waits
+for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
+`SEED` and prints the seed when a test fails, so the interleaving replays.
 
 Each task handle must be waited or added to a group exactly once, on every
 path. A handle can't be stored or passed; channels and mutexes can, and

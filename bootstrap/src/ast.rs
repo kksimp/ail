@@ -1,6 +1,5 @@
 //! Syntax tree for the subset the bootstrap supports.
 
-use std::collections::HashSet;
 
 use crate::diag::Pos;
 
@@ -18,7 +17,7 @@ pub struct Program {
     pub uses: Vec<Use>,
     /// The lines that start with `pub`: a declaration or struct field on one
     /// of them is public (mod.vis.1). Every declaration starts its own line.
-    pub public: HashSet<usize>,
+    pub public: crate::fasthash::FastSet<usize>,
     /// The source files of a package, in line order (`modules.rs`). Empty
     /// for a single-file program without imports.
     pub files: Vec<SourceFile>,

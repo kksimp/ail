@@ -68,6 +68,10 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.tensor.1: values only, so no effects.
+        "tensor" => (&["from", "zeros"], &[]),
+        // conc.cancel.2: reads the running task's flag; no capability.
+        "task" => (&["cancelled", "check"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.
         "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,

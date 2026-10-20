@@ -1,0 +1,13 @@
+# conc.sched.1-2: a lost update that only some interleavings show.
+
+fn inc(c Atomic[int])
+    v := c.load()
+    c.store(v + 1)
+
+@test fn no_lost_update() !
+    c := Atomic(0)
+    g := TaskGroup()
+    g.add(spawn inc(c))
+    g.add(spawn inc(c))
+    g.wait_all()?
+    assert_eq(c.load(), 2)

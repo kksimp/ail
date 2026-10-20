@@ -1,0 +1,7 @@
+batch 1: 10 lines, 3 warn, 1 error
+batch 2: 10 lines, 5 warn, 2 error
+batch 3: 10 lines, 3 warn, 4 error
+batch 4: 10 lines, 1 warn, 4 error
+batch 5: 10 lines, 2 warn, 0 error
+batch 6: 6 lines, 0 warn, 1 error
+total 56 lines, 12 errors

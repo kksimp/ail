@@ -166,6 +166,14 @@ pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment
     }
 }
 
+/// The keyword spelled by `word`, if any (lex.kw.1), without building a `String`.
+fn keyword(word: &[char]) -> Option<&'static str> {
+    if word.len() > 9 || !word[0].is_ascii_lowercase() {
+        return None;
+    }
+    KEYWORDS.iter().copied().find(|k| k.len() == word.len() && k.chars().zip(word).all(|(a, b)| a == *b))
+}
+
 fn gcd(a: usize, b: usize) -> usize {
     if b == 0 { a } else { gcd(b, a % b) }
 }
@@ -537,6 +545,12 @@ impl Lexer {
                 c if c.is_ascii_digit() => i = self.number(line, i, line_no),
                 c if c.is_alphabetic() || c == '_' => {
                     let end = i + line[i..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').count();
+                    // A keyword is matched on the characters, so only a name allocates.
+                    if let Some(k) = keyword(&line[i..end]) {
+                        self.push(Tok::Kw(k), pos);
+                        i = end;
+                        continue;
+                    }
                     let word: String = line[i..end].iter().collect();
                     if matches!(word.as_str(), "f" | "u") && line.get(end) == Some(&'"') {
                         self.diags.push(
@@ -547,16 +561,12 @@ impl Lexer {
                         i = end;
                         continue;
                     }
-                    let tok = match KEYWORDS.iter().find(|k| **k == word) {
-                        Some(k) => Tok::Kw(k),
-                        None => Tok::Ident(word),
-                    };
-                    self.push(tok, pos);
+                    self.push(Tok::Ident(word), pos);
                     i = end;
                 }
                 _ => {
-                    let rest: String = line[i..line.len().min(i + 3)].iter().collect();
-                    match SYMBOLS.iter().find(|s| rest.starts_with(**s)) {
+                    let rest = &line[i..line.len().min(i + 3)];
+                    match SYMBOLS.iter().find(|s| s.len() <= rest.len() && s.chars().zip(rest).all(|(a, b)| a == *b)) {
                         Some(sym) => {
                             self.symbol(sym, pos);
                             i += sym.len();

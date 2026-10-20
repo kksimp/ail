@@ -1,0 +1,39 @@
+## An agent-style config merger: a base config, a local override, one typed
+## result. Missing members keep the base value; unknown members are reported.
+
+struct Limits
+    memory_mb int
+    timeout_ms int
+
+struct Config
+    name str
+    port int
+    debug bool
+    tags List[str]
+    limits Limits
+
+impl FromJson for Limits
+impl FromJson for Config
+
+fn overlay(base Json, over Json) Json
+    mut out := base
+    for m in over.as_obj() else []
+        nested := m.value.as_obj() != none
+        out.set(m.key, if nested then overlay(base.get(m.key) else m.value, m.value) else m.value)
+    out
+
+fn main() !
+    dir := "{path.dir(env.program())}/configs"
+    base := parse_json(fs.read_text("{dir}/base.json")?)? "base"
+    local := parse_json(fs.read_text("{dir}/local.json")?)? "local"
+    cfg := Config.from_json(overlay(base, local))? "merged"
+    print("{cfg.name}:{cfg.port} debug={cfg.debug} tags={cfg.tags.join("+")}")
+    print("limits {cfg.limits.memory_mb}MB {cfg.limits.timeout_ms}ms")
+    for m in local.as_obj() else []
+        if base.get(m.key) == none
+            print("ignored {m.key}")
+
+@test fn overlays_nested_members()
+    base := parse_json("\{\"a\":\{\"x\":1,\"y\":2}}")?
+    over := parse_json("\{\"a\":\{\"y\":3}}")?
+    assert_eq(overlay(base, over).to_text(), "\{\"a\":\{\"x\":1.0,\"y\":3.0}}")

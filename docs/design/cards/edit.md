@@ -1,6 +1,6 @@
 # edit
 entry: main in edit.ail
-tests: 51 (`ail test` lists them)
+tests: 53 (`ail test` lists them)
 
 ## (root)
 ```
@@ -103,6 +103,9 @@ fn setting(str, str) str?
 fn with_setting(str, str, str) str
 fn saved_theme() str [env fs io]
 fn save_theme(str) str [env fs io]
+fn session_key(str) str
+fn session_value(List[Editor], int) str
+fn session_places(str) List[Loc]
 enum Extra
 fn extra_key(str, bool, bool, bool) Extra?
 struct Loc
@@ -133,6 +136,7 @@ struct Source
 fn declared_at(List[Source], str) Loc?
 fn card_hits(Json, List[Source]) List[Hit]
 fn card_item(mut List[Hit], Json, List[Source], int, Loc) [mutates]
+fn problem_hits(str, mut Set[str]) List[Hit] [mutates]
 fn list_files(str, int, int) List[str] [fs io]
 fn fuzzy(str, str) bool
 fn picker_list() std.ui.widgets.ListView
@@ -168,4 +172,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3339); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3397); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names

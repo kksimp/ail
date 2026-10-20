@@ -1,0 +1,1 @@
+{"name": "ail-agent", "port": 8000, "debug": false, "tags": ["core"], "limits": {"memory_mb": 512, "timeout_ms": 3000}}
