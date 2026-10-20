@@ -1031,8 +1031,10 @@ impl Parser {
             let pos = self.bump().pos;
             let inner = self.named_type("a type after `*`", "unsafe.ptr.1")?;
             return Some(TypeRef { kind: TypeKind::Ptr(Box::new(inner)), pos });
+        }
         // `fn(A, B) R`: a function value's type (type.fn.1).
         if self.at_kw("fn") {
+            let pos = self.bump().pos;
             self.expect_sym("(", "`(` after `fn` in a type", "type.fn.1")?;
             let mut params = Vec::new();
             while !self.at_sym(")") {

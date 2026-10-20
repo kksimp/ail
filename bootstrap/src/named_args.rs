@@ -171,6 +171,7 @@ impl Cx<'_> {
                 }
             }
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)
