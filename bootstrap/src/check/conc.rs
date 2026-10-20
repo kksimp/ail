@@ -156,7 +156,20 @@ impl<'p> Checker<'p> {
                 }
                 ("conc.task.6", vec![], Ty::Res(Box::new(ok), Errs::Set(errs)))
             }
-            (Conc::Group, "add") => ("conc.task.8", vec![Ty::Conc(Conc::Task, Box::new(Ty::Unit))], Ty::Unit),
+            (Conc::Group, "add") if args.len() == 1 => {
+                let t = self.expr(&args[0].value, None, true);
+                match &t {
+                    Ty::Conc(Conc::Task, r) if **r != Ty::Unit && **r != Ty::Err => self.error_help(
+                        "conc.task.8",
+                        args[0].value.pos(),
+                        format!("a `TaskGroup` holds tasks that return nothing; this one returns {}", self.show(r)),
+                        "wait it with `t.wait()?` to use its result, or spawn a function that returns nothing",
+                    ),
+                    Ty::Conc(Conc::Task, _) | Ty::Err => {}
+                    _ => self.mismatch("expr.call.2", args[0].value.pos(), &Ty::Conc(Conc::Task, Box::new(Ty::Unit)), &t),
+                }
+                return Ty::Unit;
+            }
             (Conc::Group, "wait_all") => ("conc.task.8", vec![], Ty::Res(Box::new(Ty::Unit), Errs::Set(vec![trapped]))),
             (Conc::Channel, "send") => ("conc.share.4", vec![t], Ty::Unit),
             (Conc::Channel, "recv") => ("conc.share.4", vec![], Ty::Opt(Box::new(t))),
@@ -173,7 +186,7 @@ impl<'p> Checker<'p> {
                     Conc::Mutex => "`get`, `set`, `swap`, `lock` and `unlock`",
                 };
                 self.error_help(
-                    "expr.method.1",
+                    "expr.name.1",
                     pos,
                     format!("`{}` has no method `{name}`", kind.name()),
                     format!("its methods are {names}"),

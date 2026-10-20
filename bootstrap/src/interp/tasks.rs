@@ -331,7 +331,22 @@ impl<'a, W: Write> Interp<'a, W> {
             drop(st);
             let mut it = build(prog, resolved, io::sink());
             it.conc = Some(Ctx { sched: Arc::clone(&sched), me: id });
-            let result = it.call(f, None, args, pos).map(|(v, _)| v);
+            let mut result = it.call(f, None, args, pos).map(|(v, _)| v);
+            drop(it);
+            // conc.share.5: a task that ends holding a lock releases it, and traps.
+            let mut st = sched.lock();
+            for cell in st.cells.iter_mut().filter(|c| c.holder == Some(id)) {
+                cell.holder = None;
+                if result.is_ok() {
+                    let message = "the task ended while holding a mutex from `lock`; call `unlock`".into();
+                    result = Err(Trap { rule: "conc.share.5", pos: f.pos, message });
+                }
+            }
+            let waiters: Vec<usize> = st.cells.iter_mut().flat_map(|c| std::mem::take(&mut c.waiters)).collect();
+            for w in waiters {
+                Sched::wake(&mut st, w);
+            }
+            drop(st);
             sched.finish(id, result);
         });
         match thread {

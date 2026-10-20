@@ -252,7 +252,11 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let stdout = io::stdout();
     let mut it = build(prog, resolved, stdout.lock());
     let result = run_main(&mut it, prog);
-    tasks::shutdown(it.conc.take());
+    if it.conc.is_some() {
+        // What tasks printed before a trap still reaches standard output.
+        it.task_print("");
+        tasks::shutdown(it.conc.take());
+    }
     result
 }
 
