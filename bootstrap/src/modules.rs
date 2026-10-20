@@ -59,6 +59,10 @@ pub fn load(arg: &str) -> Result<(Program, Vec<Diagnostic>), String> {
     let mut queue: Vec<(String, Vec<PathBuf>)> = vec![(String::new(), root_files)];
     while let Some((module, paths)) = queue.pop() {
         for p in paths {
+            // Positions from PRELUDE_LINE up belong to the prelude (ADR 0156).
+            if (files.len() + 1) * FILE_LINES >= crate::ast::PRELUDE_LINE {
+                return Err(format!("the program has more than {} files", files.len()));
+            }
             let src = std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?;
             let base = files.len() * FILE_LINES;
             let (mut toks, lex_diags) = lex(&src);
