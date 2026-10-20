@@ -7,6 +7,8 @@
 //!   fuzz.prop.3  `run` never panics and repeats under `--deterministic`;
 //!   fuzz.prop.4  `api` (every form) is valid JSON, and a clean program raises
 //!                no `bootstrap.*` diagnostic;
+//!   fuzz.prop.5  `run` prints the same bytes and exits the same with and
+//!                without the bytecode tier (ADR 0361);
 //!   fuzz.mut.1   after one token-level mutation, `check` still diagnoses
 //!                without panicking and `fix` leaves a parsable file.
 //!
@@ -190,6 +192,15 @@ fn generated(r: &Runner, src: &str) -> Result<bool, String> {
         let r4 = r.exec(&["run", "--deterministic", "--no-contracts"], &p);
         if r4.code != r1.code || r4.stdout != r1.stdout {
             return Err("fuzz.prop.3 --no-contracts changed what the program prints".into());
+        }
+        // fuzz.prop.5: the bytecode tier against the walker. `--deterministic` and checked contracts
+        // keep a run on the walker, so the tier's run denies the same capabilities instead.
+        let r5 = r.exec(&["run", "--deny", "clock,random,proc,net", "--no-contracts"], &p);
+        if !same(&r4, &r5) {
+            return Err(format!(
+                "fuzz.prop.5 the bytecode tier changed the run\n--- walker (exit {:?})\n{}{}--- tier (exit {:?})\n{}{}",
+                r4.code, r4.stdout, r4.stderr, r5.code, r5.stdout, r5.stderr
+            ));
         }
         if !smoke() && !same(&r1, &r.exec(&["run", "--deterministic"], &p)) {
             return Err("fuzz.prop.3 run is not deterministic".into());
