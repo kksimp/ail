@@ -103,9 +103,10 @@ error it declared) and 115.4 tokens on the examples, almost all of it in
 
 The changes are in the parser and checker; the interpreter only gained a check
 on the `none` path of `?`. Best of 7 wall times on Linux x86-64, the binary run
-directly, two alternating rounds, base branch against this branch, on the base
-branch's programs: `loops` 0.669/0.679 s against 0.647/0.648 s, `parsum`
-0.652/0.694 against 0.649/0.640, `interp` 0.195/0.183 against 0.199/0.188,
-`json` 0.010/0.011 against 0.010/0.011, `sheet` 0.022/0.020 against
-0.022/0.020, `logscan` 0.006/0.005 against 0.005/0.005, `tasks` 0.013/0.013
-against 0.012/0.013. Unchanged within noise.
+directly, two alternating rounds, against the plan branch after lane 36's
+speed work, on that branch's programs (base, then this branch): `loops`
+0.270/0.276 s against 0.234/0.244 s, `parsum` 0.271/0.251 against
+0.249/0.255, `interp` 0.096/0.092 against 0.094/0.093, `json` 0.008/0.009
+against 0.009/0.009, `sheet` 0.017/0.015 against 0.015/0.014, `logscan`
+0.005/0.005 against 0.005/0.005, `tasks` 0.012/0.011 against 0.012/0.011.
+Unchanged within noise.
