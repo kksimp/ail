@@ -1,0 +1,5 @@
+echo              ok
+sh                exit 3: oops
+sleep             timed out after 200 ms
+no-such-tool-xyz  could not start
+3 of 4 jobs failed

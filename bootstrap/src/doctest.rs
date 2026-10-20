@@ -1,6 +1,6 @@
 //! Doc examples as tests: each ```` ```ail ```` block in a `##` doc comment is
 //! compiled by `ail test` as a test of its own, in the scope of the file
-//! (test.doc.1-4).
+//! (test.doc.1-3).
 //!
 //! The blocks become `@test` functions appended to the source, so the
 //! checker and interpreter treat them like any other test. Their positions
