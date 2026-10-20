@@ -445,3 +445,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
 | [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
 | [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0571](0571-key-functions-inline.md) | Key functions are lowered inline in native code, with no closure object *(delegated)* | Accepted | 2026-10-20 |
+| [0572](0572-native-stable-sort.md) | Native stable sort: a merge sort over a list of indices *(delegated)* | Accepted | 2026-10-20 |
+| [0573](0573-native-function-values-deferred.md) | Function values in native code wait for the language (`call_indirect` design) *(delegated)* | Accepted | 2026-10-20 |

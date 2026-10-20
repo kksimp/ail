@@ -1246,6 +1246,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         ))
         return none
     r := lower_value(recv, none)?
+    if is_sorting(name, args) and r.ty.elem() != none
+        return lower_sorted(r, name, args, npos)
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable
