@@ -39,6 +39,8 @@ pub(super) const STR_METHODS: &[&str] = &[
     "pad_left",
     "pad_right",
     "lines",
+    "len",
+    "byte_len",
 ];
 pub(super) const CHAR_METHODS: &[&str] = &[
     "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower", "to_upper", "to_lower", "code", "to_digit",
@@ -86,6 +88,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "repeat" => read(vec![Int], Str),
             "pad_left" | "pad_right" => read(vec![Int, Char], Str),
             "lines" => read(vec![], list(Str)),
+            "len" | "byte_len" => read(vec![], Int),
             _ => None,
         },
         Ty::Char => match name {
@@ -260,9 +263,7 @@ pub(super) fn function_help(name: &str) -> Option<&'static str> {
 /// Help for a method name that other languages give the built-in types (expr.name.2).
 pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
     Some(match (t, name) {
-        (Ty::Str, "len" | "length" | "size" | "count") => {
-            "`str` has no `len()`; count its characters with `s.chars().len()`"
-        }
+        (Ty::Str, "length" | "size" | "count") => "write `s.len()` for characters, or `s.byte_len()` for UTF-8 bytes",
         (Ty::Str, "strip" | "lstrip" | "rstrip" | "trim_start" | "trim_end") => "write `s.trim()`",
         (Ty::Str, "startswith") => "write `s.starts_with(prefix)`",
         (Ty::Str, "endswith") => "write `s.ends_with(suffix)`",

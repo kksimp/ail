@@ -190,21 +190,10 @@ programs, so output never depends on the hash function. *Owner: AI under
 ADR 0076; decide when a real program needs it.*
 
 ## OQ-043 — `s.len()`: bytes or characters
-`str` has no `len()` yet; `s.chars().len()` counts characters
-([ADR 0135](decisions/0135-string-literals-and-methods.md)). Python counts
-code points, Rust and Go count bytes, Swift counts grapheme clusters. Options:
-`len()` in bytes plus `chars().len()` (fast and honest about cost, but
-surprising to Python users), `len()` in characters (O(n) unless cached), or
-no `len()` at all with named views (`bytes().len()`, `chars().len()`).
-Decide with `s.bytes()` and string slicing. *Owner: AI under ADR 0076.*
+**Resolved** by [ADR 0208](decisions/0208-str-len-counts-characters.md) (`len()` counts characters, `byte_len()` bytes).
 
 ## OQ-044 — Nested optionals
-`m.get(k)` on a `Map[K, V?]` has type `V??`, and `none` could mean either
-level. Options: nested optionals are distinct types and `none` is the outer
-one (Swift); optionals flatten (TypeScript's `undefined`; loses
-information); or `Map` values can't be optional (restrictive). Recommendation:
-the first, with a diagnostic when `none` is ambiguous. *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0209](decisions/0209-nested-optionals.md) (distinct nested types, `none` is the outermost).
 
 ## OQ-045 — Capability manifests for packages
 [ai-first-plan.md §3.2](design/ai-first-plan.md) gives every function an
@@ -220,14 +209,4 @@ on every call chain); (c) nothing at the package level. Waits on Topic 13
 (packages). *Owner: designer.*
 
 ## OQ-046 — Deterministic execution mode
-[ai-first-plan.md §3.3](design/ai-first-plan.md) proposes
-`ail run --deterministic`: deny `clock` and `random`, and make every
-remaining source of nondeterminism (map iteration order, task scheduling)
-fixed, so two runs give byte-identical output. Options: a flag only (cheap;
-programs opt in), or a language guarantee that safe code without `clock`,
-`random`, `proc` and `spawn` is deterministic by construction (stronger; it
-constrains the standard library's map order and the runtime forever).
-Recommendation: specify the guarantee for single-task programs now, since
-the bootstrap already iterates maps in insertion order, and keep the flag for
-the rest. *Owner: AI under ADR 0076, after the effects lane lands.*
-
+**Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).

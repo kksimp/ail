@@ -38,8 +38,12 @@ commands:
 
 options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
+  --deterministic
+                with run or check: same as `--deny clock,random,proc,net`, so
+                the same inputs always give the same output (std.random.5)
+  --seed N      with run: seed `std.random` so a run repeats (std.random.3)
   --deny LIST   with run or check: reject a program whose `main` reaches a
-                denied capability (fs, env, proc, clock, net, or all) (eff.cap.1)
+                denied capability (fs, env, proc, clock, random, net, or all) (eff.cap.1)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -53,8 +57,8 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" => {}
-            "--deny" => i += 1,
+            "--json" | "--deterministic" => {}
+            "--deny" | "--seed" => i += 1,
             _ => words.push(i),
         }
         i += 1;
@@ -65,7 +69,7 @@ fn main() -> ExitCode {
     };
     let json = args.iter().any(|a| a == "--json");
     let mut rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
-    let deny = match take_deny(&mut rest) {
+    let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
         Ok(d) => d,
         Err(msg) => {
             eprintln!("error: {msg}");
@@ -103,6 +107,25 @@ fn take_deny(args: &mut Vec<&str>) -> Result<Vec<&'static str>, String> {
     };
     args.drain(at..at + 2);
     check::effects::parse_deny(list)
+}
+
+/// Remove `--deterministic` and `--seed S`, and return the denied
+/// capabilities including those `--deterministic` adds (std.random.3,
+/// std.random.5).
+fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result<Vec<&'static str>, String> {
+    if let Some(at) = args.iter().position(|a| *a == "--seed") {
+        let seed = args.get(at + 1).and_then(|s| s.parse::<i64>().ok());
+        let Some(seed) = seed else { return Err("`--seed` needs an integer, e.g. `--seed 42` (std.random.3)".into()) };
+        args.drain(at..at + 2);
+        interp::set_seed(seed);
+    }
+    if let Some(at) = args.iter().position(|a| *a == "--deterministic") {
+        args.remove(at);
+        deny.extend(check::effects::DETERMINISTIC_DENY);
+        deny.sort_unstable();
+        deny.dedup();
+    }
+    Ok(deny)
 }
 
 /// `ail effects FILE [--json]`: each function's effect set (eff.infer.6).

@@ -755,21 +755,13 @@ impl Parser {
 
     /// `T` or `T?` (type.opt.2).
     fn optional_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
-        let t = self.named_type(expected, rule)?;
-        if !self.eat_sym("?") {
-            return Some(t);
+        let mut t = self.named_type(expected, rule)?;
+        // type.opt.6: `T??` is an optional of an optional.
+        while self.eat_sym("?") {
+            let pos = t.pos;
+            t = TypeRef { kind: TypeKind::Optional(Box::new(t)), pos };
         }
-        if self.at_sym("?") {
-            let at = self.pos();
-            self.error(
-                UNSUPPORTED,
-                at,
-                "nested optional types are not supported by the bootstrap yet (spec type.opt.2)",
-            );
-            return None;
-        }
-        let pos = t.pos;
-        Some(TypeRef { kind: TypeKind::Optional(Box::new(t)), pos })
+        Some(t)
     }
 
     /// `Name` or `Name[Arg, ...]` (gram.generic.1), or a module's type

@@ -19,6 +19,7 @@ pub(super) enum Key {
     Str(Rc<str>),
     Char(char),
     None,
+    Nested(u32),
     Seq(Vec<Key>),
     Struct(usize, Vec<Key>),
     Variant(usize, usize, Vec<Key>),
@@ -33,6 +34,7 @@ impl Key {
             Value::Str(s) => Key::Str(s.clone()),
             Value::Char(c) => Key::Char(*c),
             Value::None => Key::None,
+            Value::Nested(n) => Key::Nested(*n),
             Value::List(xs) => Key::Seq(all(xs)),
             Value::Struct(s, fields) => Key::Struct(*s, all(fields)),
             Value::Enum(e, i, fields) => Key::Variant(*e, *i, all(fields)),
@@ -132,7 +134,7 @@ impl Table {
 }
 
 fn opt(v: Option<Value>) -> Value {
-    v.unwrap_or(Value::None)
+    v.map_or(Value::None, Value::present)
 }
 
 fn s(text: impl AsRef<str>) -> Value {
@@ -364,6 +366,8 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             "to_float" => opt(parse_float(text).map(Value::Float)),
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
+            "len" => Value::Int(text.chars().count() as i64),
+            "byte_len" => Value::Int(text.len() as i64),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
             "starts_with" => Value::Bool(text.starts_with(&*arg_str(0))),

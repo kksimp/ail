@@ -12,6 +12,8 @@
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output
+./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
@@ -479,6 +481,7 @@ fn main() !
 | `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
+| `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 
 ## Tests and assertions
@@ -496,7 +499,7 @@ A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
-`fs`, `env`, `proc`, `clock`, `net`. A call through `any Trait` counts every
+`fs`, `env`, `proc`, `clock`, `random`, `net`. A call through `any Trait` counts every
 implementation.
 
 ```ail

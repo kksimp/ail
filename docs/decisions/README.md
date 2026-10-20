@@ -174,3 +174,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0206](0206-std-random.md) | Add `std.random` with a process-wide seedable generator *(delegated)* | Accepted | 2026-10-20 |
+| [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
+| [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
+| [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |

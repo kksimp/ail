@@ -44,8 +44,9 @@ reported but don't stop a program from running.
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
 | `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError` | `std.use.1`, `std.err.1` |
-| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2` |
-| `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2` |
+| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2` |
+| `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2` |
+| `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
@@ -103,8 +104,8 @@ All errors in a file are reported in one pass, sorted by position.
   `type.char.*`, `type.num.*`, `type.coll.*`, `type.map.*`); the standard
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
-- **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc` and
-  `std.time` (and `use std.NAME as d`), their functions called as
+- **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc`,
+  `std.random` and `std.time` (and `use std.NAME as d`), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
 - **Methods:** inside a method, the receiver's fields and methods by bare
   name (`pos += 1`, `peek()`); `[]` and `{}` declared with `:=` are typed by

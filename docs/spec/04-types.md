@@ -254,6 +254,39 @@ fn find(id i64) User?
 **type.opt.5** — Where a value of type `T?` is expected, a value of type `T`
 converts implicitly to a present optional. *(ADR 0093)*
 
+**type.opt.6** — `T??` is an optional whose content is an optional `T?`; it
+is a different type from `T?`. Any number of `?` may follow a type. A value
+of type `T??` arises from collection methods on optional elements, for
+example `m.get(k)` on a `Map[K, V?]` and `xs.last()` on a `List[T?]`.
+*(ADR 0209)*
+
+**type.opt.7** — `none` is the absent value of the outermost level. `e else
+d`, `e?` and `if v := e` act on that level only and give an optional of the
+inner type: `m.get(k) else none` flattens a `V??` to a `V?`. A present value
+whose content is `none` is not `none`: `==` compares every level, and the
+text form of the present-but-empty value of a `T??` is `some(none)`. A `T`
+converts to a `T??` (`type.opt.5`, twice). *(ADR 0209)*
+
+**type.opt.8** — A `T?` does not convert to a `T??`, because its `none` would
+be ambiguous between the two levels. The error is the ordinary mismatch with
+a help that says so. *(ADR 0209)*
+
+```ail fragment
+fn lookup(m Map[str, int?], k str) int??
+    m.get(k)
+
+fn flat(m Map[str, int?], k str) int?
+    lookup(m, k) else none
+```
+
+```ail error=expr.block.2
+fn lift(v int?) int??
+    v
+
+fn main()
+    print(lift(none))
+```
+
 ## Booleans
 
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
@@ -264,11 +297,11 @@ Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 **type.str.1** — `str` is the type of immutable UTF-8 text. `char` is the type
 of a single Unicode scalar value. *(ADR 0089)*
 
-**type.str.2** — `str` doesn't support the indexing operator, `for` iteration
-or a `len()` method. Byte and character access go through explicit views:
-`s.bytes()` (not implemented yet) and `s.chars()` (`type.str.7`). The
-diagnostic for `s[i]` or `for c in s` suggests `s.chars()`, and for `s.len()`
-suggests `s.chars().len()`. *(ADR 0089, ADR 0135)*
+**type.str.2** — `str` doesn't support the indexing operator or `for`
+iteration. Character access goes through the explicit view `s.chars()`
+(`type.str.7`); `s.bytes()` is not implemented yet. The diagnostic for `s[i]`
+or `for c in s` suggests `s.chars()`. Length is `s.len()` (`type.str.12`).
+*(ADR 0089, ADR 0135, ADR 0208)*
 
 **type.str.3** — The text form of an `int` is its decimal representation,
 with a leading `-` when negative. The text form of a `bool` is `true` or
@@ -329,6 +362,17 @@ arguments. *(ADR 0135)*
 
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
+
+**type.str.12** — `s.len()` returns the number of characters (Unicode scalar
+values) of `s`, the same as `s.chars().len()` without building the list; it
+takes time proportional to the length. `s.byte_len()` returns the number of
+UTF-8 bytes. Grapheme clusters are not counted: `"e\u{301}".len()` is 2.
+*(ADR 0208)*
+
+```ail fragment
+n := "héllo".len()        # 5
+b := "héllo".byte_len()   # 6
+```
 
 **type.str.11** — In `{x:spec}` (`lex.str.7`), `.N` formats a `float` with
 exactly `N` decimal places, rounding the exact value half to even (`{2.5:.0}`
