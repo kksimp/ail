@@ -231,3 +231,25 @@ Recommendation: specify the guarantee for single-task programs now, since
 the bootstrap already iterates maps in insertion order, and keep the flag for
 the rest. *Owner: AI under ADR 0076, after the effects lane lands.*
 
+
+## OQ-071 — Standard modules without `use` lines
+[ADR 0184](decisions/0184-round-3-syntax-measurements.md) measured the
+`use std.env` / `use std.fs` / `use std.proc` lines of `examples/tool.ail` at
+4.3% of that 34-line tool, though only 0.1% of the corpus. Since standard
+modules are always reached qualified (`fs.read_text`), the line repeats what
+each use already says. Options: (a) standard modules are in scope without
+`use`, unless a local or user module has the name (recommended: small agent
+tools are the use case AIL targets, and `ail effects` already lists what a
+program touches); (b) one-line `use std.env, fs, proc` (−1.6% of `tool`);
+(c) keep one line per module. Decide with the user-modules work (lane 3),
+which owns module name resolution. *Owner: AI under ADR 0076.*
+
+## OQ-072 — Display text written on error variants
+`sheet` spends about 57 tokens, and `json` about 12, on `impl ToStr` blocks
+whose only job is one message per error variant (`BadName(text) => "bad cell
+name '{text}'"`). Options: (a) a message after each variant of an `error`
+type, `BadName(text str) "bad cell name '{text}'"`, interpolating its fields
+(about −0.5% of the corpus; the message sits next to the variant, as in
+Rust's `thiserror`); (b) keep `impl ToStr` (recommended for now: the saving
+is a tie under ADR 0076, and it adds a declaration form). Revisit if
+error-heavy programs join the corpus. *Owner: AI under ADR 0076.*

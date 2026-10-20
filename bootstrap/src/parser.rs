@@ -11,9 +11,9 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
-    InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
-    TypeRef, UnOp, Use, Variant, Within, is_prelude,
+    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
+    GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
+    StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Use, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};

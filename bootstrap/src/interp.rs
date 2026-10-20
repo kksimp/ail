@@ -26,8 +26,8 @@ pub use testing::run_tests;
 use builtins::{Key, Table, map_value};
 
 use crate::ast::{
-    Arg, BinOp, Block, CompFor, CompKind, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt, TypeKind, UnOp,
-    place_path,
+    Arg, BinOp, Block, CompFor, CompKind, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt,
+    TypeKind, UnOp, place_path,
 };
 use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;

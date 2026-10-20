@@ -46,6 +46,8 @@ Design notes:
   write AIL from the quick reference.
 - [design/program-measurements-r2.md](design/program-measurements-r2.md):
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
+- [design/program-measurements-r3.md](design/program-measurements-r3.md):
+  where AIL's tokens go per construct against Python, and the round-3 changes.
 
 Tools:
 - [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run

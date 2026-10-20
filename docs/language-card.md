@@ -1,7 +1,7 @@
 # AIL language card
 
-> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,480 tokens
-> (3,915 on the costliest tokenizer; measure with
+> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,550 tokens
+> (3,996 on the costliest tokenizer; measure with
 > `tools/tokbench/run.sh docs/language-card.md`). Non-normative: the
 > [spec](spec/) is authoritative and the [quick reference](quick-reference.md)
 > has the long form. Everything here runs on the bootstrap interpreter.
@@ -101,7 +101,7 @@ enum Shape
 fn area(s Shape) int
     match s
         Circle(r) => 3 * r * r
-        Rect(w, _) => w * w       # `_` skips a field
+        Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
 ```
 
 ## Absence and errors
@@ -307,6 +307,9 @@ empty := List[int]()   # an empty list of a given type, anywhere
 Also `pop()`/`last()` (give `T?`), `contains`, `index_of` (gives `int?`),
 `sorted()`/`sort()`, `min()`/`max()` (give `T?`), `sum()`. Slices don't clamp
 and negative indexes are errors.
+
+Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
+`{k: v for ...}`.
 
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:

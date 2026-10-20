@@ -174,3 +174,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |
+| [0183](0183-bare-variant-patterns.md) | A bare variant pattern matches any fields: `Rect =>` for `Rect(_, _)` *(delegated)* | Accepted | 2026-10-20 |
+| [0184](0184-round-3-syntax-measurements.md) | Keep `:=`, `fn`, explicit `self`, return types and `use` lines after round-3 measurement *(delegated)* | Accepted | 2026-10-20 |
