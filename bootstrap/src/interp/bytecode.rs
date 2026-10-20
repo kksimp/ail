@@ -514,7 +514,7 @@ fn writes(e: &Expr, t: Option<&str>, moves: &crate::fasthash::FastMap<Pos, &'sta
     };
     let arg = |a: &Arg| ((a.mutable || a.moved) && hits(&a.value)) || (t.is_none() && a.param.is_some()) || w(&a.value);
     match e {
-        Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => false,
+        Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => false,
         Expr::Name(n, pos) => moves.contains_key(pos) && t.is_none_or(|t| t == n),
         Expr::Binary { lhs, rhs, .. } => w(lhs) || w(rhs),
         Expr::Unary { op: UnOp::Neg | UnOp::Not, operand, .. } => w(operand),
@@ -642,6 +642,7 @@ fn has_try(e: &Expr) -> bool {
         Expr::Int(..)
         | Expr::Float(..)
         | Expr::Str(..)
+        | Expr::Bytes(..)
         | Expr::Char(..)
         | Expr::Bool(..)
         | Expr::None(_)
@@ -743,7 +744,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// The constant an expression always has, as the walker computes it.
     fn literal(&mut self, e: &'a Expr) -> Option<Opnd> {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
+            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
                 let v = self.it.eval(e, &mut Vec::new()).ok()?;
                 Some(self.konst(v))
             }
@@ -807,7 +808,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// Code that leaves the value of `e` in `dst`.
     fn expr_to(&mut self, e: &'a Expr, dst: Opnd) {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
+            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
                 match self.literal(e) {
                     Some(k) => {
                         self.emit(Ins::Move { dst, src: k });
@@ -1556,7 +1557,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     fn effect_free(&self, e: &Expr) -> bool {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => true,
+            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => true,
             Expr::Name(n, pos) => self.local(n).is_some() && !self.it.resolved.moves.contains_key(pos),
             _ => false,
         }
@@ -1931,7 +1932,11 @@ impl<'a, W: Write> Interp<'a, W> {
                             let k = get!(*idx);
                             map_value(t, k, || key_text(k), *pos)?.clone()
                         }
-                        other => unreachable!("checked: list or map, found {other:?}"),
+                        Value::Bytes(b) => {
+                            let i = get!(*idx).int();
+                            bytes::at(b, i, *pos)?
+                        }
+                        other => unreachable!("checked: list, map or bytes, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
@@ -2355,6 +2360,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     let r = (*it & !KIND) as usize;
                     if let Value::Set(t) = &regs[r] {
                         regs[r] = Value::List(Rc::new(t.key_list()));
+                    } else if let Value::Bytes(b) = &regs[r] {
+                        regs[r] = Value::List(Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()));
                     }
                     regs[(*idx & !KIND) as usize] = Value::Int(0);
                 }

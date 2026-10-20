@@ -22,6 +22,7 @@ enum G {
     Bool,
     Char,
     Str,
+    Bytes,
     List(Box<G>),
     Set(Box<G>),
     Map(Box<G>, Box<G>),
@@ -72,6 +73,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 "bool" => G::Bool,
                 "char" => G::Char,
                 "str" => G::Str,
+                "bytes" => G::Bytes,
                 "List" => G::List(Box::new(self.gen_of(&args[0]))),
                 "Set" => G::Set(Box::new(self.gen_of(&args[0]))),
                 "Map" => G::Map(Box::new(self.gen_of(&args[0])), Box::new(self.gen_of(&args[1]))),
@@ -114,6 +116,16 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Str => {
                 let n = rng.below((size / 4) as u64 + 2);
                 Value::Str((0..n).map(|_| self.gen_char(rng)).collect::<String>().into())
+            }
+            G::Bytes => {
+                let n = rng.below((size / 4) as u64 + 2);
+                // Mostly any byte, sometimes the edges, so UTF-8 and text paths both get exercised.
+                super::bytes::bytes_value((0..n).map(|_| match rng.below(8) {
+                    0 => 0,
+                    1 => 255,
+                    2 => b'a' + rng.below(26) as u8,
+                    _ => rng.below(256) as u8,
+                }).collect())
             }
             G::List(inner) => {
                 let n = items(rng);
@@ -168,6 +180,7 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Bool => Value::Bool(false),
             G::Char => Value::Char('a'),
             G::Str => Value::Str("".into()),
+            G::Bytes => super::bytes::bytes_value(Vec::new()),
             G::List(_) => Value::List(Rc::new(Vec::new())),
             G::Set(_) => Value::Set(Rc::new(Table::default())),
             G::Map(..) => Value::Map(Rc::new(Table::default())),
@@ -220,6 +233,28 @@ impl<'a, W: Write> Interp<'a, W> {
                             let mut d = cs.clone();
                             d[i] = 'a';
                             out.push(text(&d));
+                        }
+                    }
+                }
+            }
+            (G::Bytes, Value::Bytes(b)) => {
+                let make = |xs: &[u8]| super::bytes::bytes_value(xs.to_vec());
+                if !b.is_empty() {
+                    out.push(make(&[]));
+                    if b.len() > 1 {
+                        out.push(make(&b[..b.len() / 2]));
+                        out.push(make(&b[b.len() / 2..]));
+                    }
+                    for i in 0..b.len().min(8) {
+                        let mut d = (**b).clone();
+                        d.remove(i);
+                        out.push(super::bytes::bytes_value(d));
+                    }
+                    for (i, x) in b.iter().enumerate().take(8) {
+                        if *x != 0 {
+                            let mut d = (**b).clone();
+                            d[i] = 0;
+                            out.push(super::bytes::bytes_value(d));
                         }
                     }
                 }

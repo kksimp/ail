@@ -1,0 +1,9 @@
+{"test":"epoch_is_a_thursday","status":"pass","line":8,"col":10,"message":""}
+{"test":"y2k_vector","status":"pass","line":13,"col":10,"message":""}
+{"test":"leap_day_rolls_over","status":"pass","line":16,"col":10,"message":""}
+{"test":"invalid_leap_day_is_absent","status":"pass","line":22,"col":10,"message":""}
+{"test":"year_lengths_sum_correctly","status":"pass","line":27,"col":10,"message":"","cases":100,"seed":5034648353351507904}
+{"test":"weekday_advances_by_one","status":"pass","line":34,"col":10,"message":"","cases":100,"seed":13496724519872624544}
+{"test":"yday_counts_from_january_first","status":"pass","line":38,"col":10,"message":"","cases":100,"seed":8486036174982213128}
+{"test":"month_shift_undoes_when_day_fits","status":"pass","line":45,"col":10,"message":"","cases":100,"seed":6554521462568127224}
+{"summary":true,"passed":8,"failed":0}
