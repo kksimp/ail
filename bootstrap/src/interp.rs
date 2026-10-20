@@ -17,6 +17,9 @@ use std::rc::Rc;
 use std::cmp::Ordering;
 
 mod builtins;
+mod stdlib;
+
+pub use stdlib::set_program_args;
 
 use builtins::{Key, Table, map_value};
 
@@ -1297,6 +1300,9 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
+        if let Some(&c) = self.resolved.std_calls.get(&pos) {
+            return self.std_call(c, args, pos, env);
+        }
         let call = self.resolved.calls.get(&pos).copied();
         // `Trait.name(x, ...)` (trait.res.1).
         if let Some(Call::Qualified(tr)) = call {

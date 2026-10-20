@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod stdlib;
 mod traits;
 
 use std::collections::HashMap;
@@ -140,6 +141,8 @@ pub struct Resolved {
     /// Integer literals that are floats because a float is expected (type.num.10).
     pub float_literals: std::collections::HashSet<Pos>,
     pub std: Std,
+    /// Calls to the standard modules, by the position of the name (std.use.2).
+    pub std_calls: HashMap<Pos, crate::stdlib::StdCall>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -191,6 +194,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolve_fields();
     c.collect_fns();
     c.collect_consts();
+    c.check_uses();
     c.check_deferred_bounds();
     c.check_main();
     c.check_impls();
@@ -945,6 +949,9 @@ impl<'p> Checker<'p> {
             }
             return Ty::Param(id);
         }
+        if let Some(t) = self.std_type(name, args, t.pos) {
+            return t;
+        }
         let ty = match name.as_str() {
             "int" | "i64" => Ty::Int,
             "float" | "f64" => Ty::Float,
@@ -1601,6 +1608,8 @@ impl<'p> Checker<'p> {
             "a type"
         } else if self.consts.contains_key(name) {
             "a constant"
+        } else if self.std_module(name).is_some() {
+            "an imported module"
         } else {
             return true;
         };
@@ -2132,6 +2141,9 @@ impl<'p> Checker<'p> {
             return self.enum_value(e, None, expect, pos, n);
         }
         if !self.variant_owners(n).is_empty() {
+            return Ty::Err;
+        }
+        if self.module_as_value(n, pos) {
             return Ty::Err;
         }
         if self.fns.contains_key(n) || PRELUDE.contains(&n) {
@@ -3013,6 +3025,11 @@ impl<'p> Checker<'p> {
             _ => None,
         };
         if let Some((tn, targs)) = head {
+            if targs.is_none()
+                && let Some(t) = self.std_call(tn, name, pos, args, expect)
+            {
+                return t;
+            }
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }

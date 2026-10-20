@@ -10,6 +10,7 @@ mod implicit_self;
 mod interp;
 mod lexer;
 mod parser;
+mod stdlib;
 
 use std::process::ExitCode;
 
@@ -17,7 +18,9 @@ const USAGE: &str = "\
 usage: ail <command> [--json] [args]
 
 commands:
-  run FILE      check and run an AIL program
+  run FILE [ARGS...]
+                check and run an AIL program; ARGS are the program's
+                (std.env.1: `env.args()`)
   check FILE    check a program without running it
   version       print the version
 
@@ -30,10 +33,19 @@ const STACK_BYTES: usize = 256 * 1024 * 1024;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // std.env.1: the words after `run FILE` belong to the program.
+    let words: Vec<usize> = (0..args.len()).filter(|&i| args[i] != "--json").collect();
+    let (args, program_args) = match words.as_slice() {
+        [cmd, file, ..] if args[*cmd] == "run" => (args[..=*file].to_vec(), args[*file + 1..].to_vec()),
+        _ => (args, Vec::new()),
+    };
     let json = args.iter().any(|a| a == "--json");
     let rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
     match rest.as_slice() {
-        ["run", file] => run_file(file, json, true),
+        ["run", file] => {
+            interp::set_program_args(program_args);
+            run_file(file, json, true)
+        }
         ["check", file] => run_file(file, json, false),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
