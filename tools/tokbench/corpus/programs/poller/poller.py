@@ -12,7 +12,7 @@ def load(url):
     except urllib.error.URLError as err:
         kind = "refused" if isinstance(err.reason, ConnectionRefusedError) else "other"
         print(f"offline ({kind}), using the local copy")
-        return (Path(__file__).resolve().parents[5] / "examples/data/status.json").read_text()
+        return (Path(__file__).resolve().parents[5] / "examples/agent-data/status.json").read_text()
 
 
 def main():

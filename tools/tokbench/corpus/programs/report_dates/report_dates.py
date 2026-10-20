@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def main():
-    lines = (Path(__file__).resolve().parents[5] / "examples/data/events.csv").read_text().splitlines()
+    lines = (Path(__file__).resolve().parents[5] / "examples/agent-data/events.csv").read_text().splitlines()
     per_day = Counter()
     kinds = Counter()
     for line in lines[1:]:

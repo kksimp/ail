@@ -20,17 +20,17 @@ same bytes.
 
 | Program | Features exercised | AIL | Python | AIL − Python |
 |---|---|---|---|---|
-| `logwatch` | `lines`, `strip_prefix`, `Map` counts, `sorted(by:)` | 219.2 | 233.4 | −14.2 (−6.1%) |
+| `logwatch` | `lines`, `strip_prefix`, `Map` counts, `sorted(by:)` | 220.6 | 235.4 | −14.8 (−6.3%) |
 | `backup` | `proc.run` (system `tar`), `fs.remove`, `env.get` | 178.4 | 175.6 | +2.8 (+1.6%) |
-| `poller` | `net.get` with fallback, `parse_json`, `doc.arr`, `doc.bool` | 233.8 | 265.8 | −32.0 (−12.0%) |
+| `poller` | `net.get` with fallback, `parse_json`, `doc.arr`, `doc.bool` | 235.2 | 267.8 | −32.6 (−12.2%) |
 | `supervise` | `proc.run` time limit, `kind` on error, struct list | 266.8 | 267.8 | −1.0 (−0.4%) |
-| `report_dates` | integer date arithmetic (no date module yet) | 409.0 | 179.6 | +229.4 (+127.7%) |
-| `hexdump` | `proc.run` (system `od`), offset rows | 146.8 | 115.6 | +31.2 (+27.0%) |
+| `report_dates` | integer date arithmetic (no date module yet) | 410.4 | 181.6 | +228.8 (+126.0%) |
+| `hexdump` | `proc.run` (system `od`), offset rows | 148.2 | 117.6 | +30.6 (+26.0%) |
 | `route` | one GET route, `match`, request and response structs | 314.6 | 256.8 | +57.8 (+22.5%) |
 | `perms` | permission bits by division (no bit operators yet) | 376.8 | 267.8 | +109.0 (+40.7%) |
 | `csv2json` | `Json.Obj` / `JsonMember` built by hand | 189.0 | 164.8 | +24.2 (+14.7%) |
 | `matrix` | `std.tensor` `matmul`, `transpose`, `sum(axis)` | 121.6 | 213.4 | −91.8 (−43.0%) |
-| **Total** | | **2,456.0** | **2,140.6** | **+315.4 (+14.7%)** |
+| **Total** | | **2,461.6** | **2,148.6** | **+313.0 (+14.6%)** |
 
 The ten programs cost more than Python in total: six cost more and four cost
 less. `matrix` wins because `std.tensor` replaces a hand-written matrix product;

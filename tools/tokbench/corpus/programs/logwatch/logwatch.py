@@ -10,7 +10,7 @@ def field(line, key):
 
 
 def main():
-    text = (Path(__file__).resolve().parents[5] / "examples/data/app.log").read_text()
+    text = (Path(__file__).resolve().parents[5] / "examples/agent-data/app.log").read_text()
     codes = Counter()
     users = Counter()
     errors = 0

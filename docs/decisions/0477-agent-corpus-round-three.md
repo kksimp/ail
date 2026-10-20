@@ -39,7 +39,7 @@ hand-made disadvantage.
 ## Measurement
 
 Mean of the five offline tokenizers, comments removed, both sides keep blank
-lines. Total: 2,456.0 AIL against 2,140.6 Python (+14.7%). Four programs are
+lines. Total: 2,461.6 AIL against 2,148.6 Python (+14.6%). Four programs are
 under Python (`matrix` −43%, `poller` −12%, `logwatch` −6%, `supervise` −0.4%);
 six are above it, and four of those trace to missing library items. The
 table and the causes are in [program-measurements-agent-r3.md](../design/program-measurements-agent-r3.md).
@@ -70,4 +70,7 @@ name the four gaps.
   generator's agent set keeps the new ten's blank lines and tests.
 - Programs that need a missing library are re-measured when that library
   lands; the twin stays the same.
+- The new programs' data files live in `examples/agent-data/`, not
+  `examples/data/`: `scan` and `dashboard` read `examples/data/` and their
+  output would change.
 - ADR numbers 0478 and 0479 in this batch's block are unused.

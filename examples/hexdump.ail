@@ -4,7 +4,7 @@
 ##   ./ail run examples/hexdump.ail
 
 fn main() !
-    file := "{path.dir(env.program())}/data/status.json"
+    file := "{path.dir(env.program())}/agent-data/status.json"
     dump := proc.run("od", ["-An", "-tx1", "-v", "-w16", file])?
     if dump.status != 0
         print("od failed: {dump.err.trim()}")
