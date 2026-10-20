@@ -1,4 +1,4 @@
-# own.ref.1, own.ref.6, mod.const.2: what a `ref` can't do.
+# own.ref.5, own.ref.6, mod.const.2: what a `ref` can't do.
 struct Node
     value int
 

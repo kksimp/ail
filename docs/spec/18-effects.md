@@ -16,7 +16,9 @@ source. *(ADR 0163)*
 
 **eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
 `!T` or `!`, and `mutates` if it has a `mut` parameter or `mut self`. Both
-come from its own signature only. *(ADR 0163)*
+come from its own signature only. *(ADR 0163)* A function also has `mutates`
+if its body writes through a `ref` (`own.ref.4`): assigns to a place in a
+cell, passes one `mut`, or calls a `mut self` method on a `ref`. *(ADR 0192)*
 
 **eff.infer.3** — A function has every effect other than `fail` and
 `mutates` that any function it may call has. The effect sets of a program

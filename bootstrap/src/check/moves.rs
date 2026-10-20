@@ -192,7 +192,7 @@ impl<'p> Walker<'p> {
             again.sort_by_key(|(_, m)| (m.at.line, m.at.col));
             for (n, m) in again {
                 self.diags.push(
-                    Diagnostic::new(m.rule, m.at, format!("`{n}` is moved inside a loop, so the next iteration would use it after the move"))
+                    Diagnostic::new("own.move.4", m.at, format!("`{n}` is moved inside a loop, so the next iteration would use it after the move"))
                         .help(format!("give `{n}` a new value before the loop repeats, or `break` after the move")),
                 );
             }
@@ -235,7 +235,14 @@ impl<'p> Walker<'p> {
             } else {
                 (format!("`{n}` may have been moved on some paths to here"), "moved here on some paths")
             };
-            let rule = if self.deferred { "own.defer.3" } else { m.rule };
+            // own.move.4: a move on only some paths still ends the binding.
+            let rule = if self.deferred {
+                "own.defer.3"
+            } else if m.certain {
+                m.rule
+            } else {
+                "own.move.4"
+            };
             self.diags.push(
                 Diagnostic::new(rule, pos, msg)
                     .note(m.at, note)

@@ -1,4 +1,4 @@
-# own.ref.5: a cell can't be used through another copy while a `mut`
+# own.ref.7: a cell can't be used through another copy while a `mut`
 # access to its contents is in progress.
 struct Counter
     n int

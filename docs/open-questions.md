@@ -231,3 +231,16 @@ Recommendation: specify the guarantee for single-task programs now, since
 the bootstrap already iterates maps in insertion order, and keep the flag for
 the rest. *Owner: AI under ADR 0076, after the effects lane lands.*
 
+## OQ-050 — Unique values in collections, generic code, and `move self`
+[ADR 0191](decisions/0191-cleanup-with-drop.md) keeps unique values out of
+lists, maps, `ref` cells and type arguments, because generic code and the
+collections copy their values. Options: (a) a `Copy`-like bound that every
+generic parameter has unless it opts out (`[T unique]`), with collection
+methods that move (`xs.push(move f)`, `xs.take(i)`); (b) collections of
+unique values only through a dedicated `UniqueList[T]`; (c) keep the
+restriction. Related: `fn File.close(move self)` receivers and moving out of
+a field (destructuring), both rejected by the bootstrap today
+([ADR 0190](decisions/0190-moves-and-use-after-move.md)). Recommendation:
+(a), designed with the standard library's resource types (files, sockets,
+task groups, conc.task.5), since a server holding many connections needs it.
+*Owner: AI under ADR 0076, with the standard-library resource types.*

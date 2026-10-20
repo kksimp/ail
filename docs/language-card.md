@@ -346,3 +346,5 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+`ref Node(v: 1)` makes a cell that copies share. `unique struct` values move,
+never copy; pass one as `f(move x)`. `impl Drop` and `defer S` run at block end.

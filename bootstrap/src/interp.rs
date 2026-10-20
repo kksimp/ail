@@ -526,11 +526,11 @@ fn load(env: &Env<'_>, p: &Place) -> Result<Value, Trap> {
     view(env, p, Value::clone)
 }
 
-/// own.ref.5: a cell whose contents are out for a `mut` access (a `mut self`
+/// own.ref.7: a cell whose contents are out for a `mut` access (a `mut self`
 /// method, a `mut` argument, `for mut`) can't be used through another copy.
 fn busy<T>(pos: Pos) -> Result<T, Trap> {
     trap(
-        "own.ref.5",
+        "own.ref.7",
         pos,
         "this `ref` cell is used while a `mut` access to it is in progress (another copy of the reference is being changed)"
             .into(),
@@ -585,7 +585,7 @@ fn put(env: &mut Env<'_>, p: &Place, insert: bool, v: Value) -> Result<(), Trap>
     with_slot(env, p, insert, |slot| *slot = v)
 }
 
-/// own.ref.5: for a call, the contents of each `ref` cell that a `mut`
+/// own.ref.7: for a call, the contents of each `ref` cell that a `mut`
 /// operand reaches are moved to a hidden local, so that another copy of the
 /// reference can't see them half-changed: it finds the cell empty and traps.
 fn hoist(env: &mut Env<'_>, ops: &mut [Prepared], pos: Pos) -> Result<Vec<(usize, Rc<RefCell<Value>>)>, Trap> {
@@ -682,7 +682,7 @@ fn check_overlap(ops: &[Prepared], pos: Pos) -> Result<(), Trap> {
 }
 
 /// Two places overlap when one is the other or contains it (own.excl.1);
-/// places in the same `ref` cell have the same root (own.ref.5).
+/// places in the same `ref` cell have the same root (own.ref.7).
 fn overlaps(a: &Place, b: &Place) -> bool {
     let same_root = match (&a.cell, &b.cell) {
         (None, None) => a.slot == b.slot,
@@ -929,7 +929,7 @@ impl<'a, W: Write> Interp<'a, W> {
     /// written back afterwards, however the iteration ends (expr.loop.6).
     fn for_mut(&mut self, var: &'a str, iter: &'a Expr, body: &'a Block, env: &mut Env<'a>) -> Flow<()> {
         let list = self.place(iter, env)?;
-        // own.ref.5: a list in a `ref` cell is out of the cell during the loop.
+        // own.ref.7: a list in a `ref` cell is out of the cell during the loop.
         let mut ops = [(Some(list), None, true)];
         let hoisted = hoist(env, &mut ops, iter.pos())?;
         let [(Some(list), _, _)] = ops else { unreachable!("the list's place") };

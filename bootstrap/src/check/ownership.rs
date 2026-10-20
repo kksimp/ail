@@ -1,6 +1,6 @@
 //! Ownership checks made while typing (ADRs 0063, 0066-0069, 0190-0193):
 //! unique types (own.uniq.1-6), `move` parameters and arguments
-//! (own.move.1-4), `ref T` (own.ref.1-5) and `defer` (own.defer.1-3).
+//! (own.move.1-5), `ref T` (own.ref.1-7) and `defer` (own.defer.1-3).
 //!
 //! The checker records each name whose use moves its binding's value in
 //! `Resolved::moves`; `moves.rs` then follows control flow to report uses
@@ -196,7 +196,7 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         }
         if t == Ty::Unit {
-            self.error("own.ref.1", value.pos(), "`ref` needs a value, and this expression produces none");
+            self.error("own.ref.5", value.pos(), "`ref` needs a value, and this expression produces none");
             return Ty::Err;
         }
         self.no_unique(&t, pos, "the contents of a `ref`");
