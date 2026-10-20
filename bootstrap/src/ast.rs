@@ -350,6 +350,8 @@ impl BinOp {
 pub enum UnOp {
     Neg,
     Not,
+    /// `spawn f(args)`: start a task (conc.task.1, ADR 0186).
+    Spawn,
 }
 
 #[derive(Debug)]

@@ -57,6 +57,11 @@ pub fn run_tests(prog: &Program, resolved: &Resolved) -> Vec<Outcome> {
                 Err(t) => (t.pos, Some(format!("trap[{}]: {}", t.rule, t.message))),
             },
         };
+        // conc.task.4: a test's tasks end with it; copy what they printed.
+        if it.conc.is_some() {
+            it.task_print("");
+            super::tasks::shutdown(it.conc.take());
+        }
         let _ = it.out.flush();
         let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
         it.out.get_mut().clear();

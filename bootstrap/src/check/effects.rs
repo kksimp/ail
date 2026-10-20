@@ -11,8 +11,8 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` or
-/// `spawn` yet, so nothing gives those two.
+/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` yet, so
+/// nothing gives it; `spawn` gives `spawn`.
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
@@ -453,6 +453,11 @@ impl Walker<'_, '_> {
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
+            }
+            // eff.infer.1: `spawn` starts a task (conc.task.1).
+            Expr::Unary { op: crate::ast::UnOp::Spawn, operand, .. } => {
+                self.add("spawn", "spawn");
+                self.expr(operand);
             }
             Expr::Unary { operand, .. } => self.expr(operand),
             Expr::Binary { op, lhs, rhs, .. } => {
