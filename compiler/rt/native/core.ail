@@ -228,10 +228,89 @@ fn out_list_float(xs List[int])
         out_float(loadf(data + 8 * i))
     out_byte(93)
 
+## A string inside a printed value, in quotes, with `\\`, `"` and control
+## characters escaped (trait.auto.2).
+fn out_quoted(s str)
+    p := str_addr(s)
+    n := load64(p)
+    data := p + 16
+    out_byte(34)
+    mut i := 0
+    while i < n
+        b := load8(data + i)
+        if b == 92 or b == 34
+            out_byte(92)
+            out_byte(b)
+        elif b == 10
+            out_escape(110)
+        elif b == 9
+            out_escape(116)
+        elif b == 13
+            out_escape(114)
+        elif b == 0
+            out_escape(48)
+        elif b < 32 or b == 127
+            out_code(b)
+        elif b == 194 and i + 1 < n and load8(data + i + 1) >= 128 and load8(data + i + 1) < 160
+            # U+0080 to U+009F, the C1 controls.
+            out_code(load8(data + i + 1))
+            i += 1
+        else
+            out_byte(b)
+        i += 1
+    out_byte(34)
+
+fn out_escape(c int)
+    out_byte(92)
+    out_byte(c)
+
+## `\u{H}`, lowercase hex without leading zeros.
+fn out_code(c int)
+    out_byte(92)
+    out_byte(117)
+    out_byte(123)
+    if c >= 16
+        out_byte(hex_digit(c / 16))
+    out_byte(hex_digit(c % 16))
+    out_byte(125)
+
+fn hex_digit(d int) int
+    if d < 10 then 48 + d else 87 + d
+
+## A list of lists or strings: `depth` levels of lists around elements of
+## kind `leaf` (0 int, 1 float, 2 bool, 3 str).
+fn out_list_deep(xs List[int], depth int, leaf int)
+    if depth == 0
+        if leaf == 0
+            out_list_int(xs)
+        elif leaf == 1
+            out_list_float(xs)
+        elif leaf == 2
+            out_list_bool(xs)
+        else
+            p := list_addr(xs)
+            data := load64(p + 16)
+            out_byte(91)
+            for i in 0..load64(p)
+                out_sep(i)
+                out_quoted(str_at(load64(data + 8 * i)))
+            out_byte(93)
+        return
+    p := list_addr(xs)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..load64(p)
+        out_sep(i)
+        out_list_deep(list_at(load64(data + 8 * i)), depth - 1, leaf)
+    out_byte(93)
+
+## A heap object of `size` bytes with its header word (native-abi.md §2);
+## the pointer is to the first byte after the header.
+fn obj_new(size int, kind int) int
+    alloc(size, kind)
+
 # ---- lists (native-abi.md §2) ----
 
-## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
-## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
 ## The kind of a list's element block: a `List[bool]`'s holds no pointers.
 fn data_kind(size int) int
     if size == 1
@@ -239,6 +318,8 @@ fn data_kind(size int) int
     else
         KIND_LDATA
 
+## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
+## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
 fn list_alloc(cap int, size int) List[int]
     p := alloc(24, KIND_LIST)
     c := if cap < 4 then 4 else cap

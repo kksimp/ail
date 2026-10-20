@@ -84,7 +84,9 @@ precise compiler error, saves more tokens than shorter syntax does.
 ## 7. Agent corpus round three (2026-10-20)
 
 From the ten programs in [program-measurements-agent-r3.md](program-measurements-agent-r3.md).
-Only the four that cost more tokens than their Python twins are listed.
+Only the four that cost more tokens than their Python twins are listed
+(7.1–7.4). Proposals 7.5–7.7 come from lane 121's tools work and are
+not started.
 
 | Proposal | Why it helps | Possible cost |
 |---|---|---|
@@ -92,6 +94,9 @@ Only the four that cost more tokens than their Python twins are listed.
 | **7.2 Bit operators** (`&`, `\|`, `^`, `<<`, `>>`, `~`) | `perms` spends 109 tokens (+41%) on `(mode / bit) % 2 == 1`. `mode & bit != 0` is the form an author and a reviewer both read at a glance. Covered by lane 140. | Operator precedence must match what authors expect; a new rule ID. |
 | **7.3 Tuples as values** (`(a, b)`, `.0`, `s, b := f()`) | `route` and `perms` need a struct for every pair of results. Tuples give a short two-value return and an iterable list of pairs (`perms`' file table is an error today: `gram.syntax.1`). | Grammar and a type form; struct-like naming stays the choice for named fields. |
 | **7.4 Bytes as a value** (`bytes(path) ! fs.IoError`, `b.len()`, `b[i]`, `b.hex()`) | `hexdump` shells out to `od` (+26%) because there is no bytes type. A byte-level inspector should not need a process. Covered by lane 123. | A new value type next to `str`; the UTF-8 rule stays on `str`. |
+| **7.5 Probes on a replay** (`ail run --replay r.json --at FILE:LINE --show a,b`): print chosen values each time a line runs, without editing the program | Agents debug by adding `print` lines, rerunning and removing them: two edits and a full run's output per question. A probe is one command, prints only what was asked, and on a replay asks the exact failing run. Proposed by lane 121; builds on ADR 0398 and the trace snapshots. | A line hook in the tree walker (the bytecode tier steps aside, as `--trace` does) and value printing from `trace.snap`. About one slice. |
+| **7.6 Affected tests** (`ail test --affected [--rev REV]`): run only the tests that reach a declaration changed since REV | After a small edit an agent reruns whole suites and reads their reports. The call graph `ail api` already has, plus `ail diff`'s body hashes, names the tests a change can reach. Proposed by lane 121. | Reachability over calls, methods and trait implementations; a test that reads files outside the program still needs a full run (documented, with `--all`). About one slice. |
+| **7.7 Shrinking a recording** (`ail replay --shrink r.json`): cut a failing recording's inputs (lines of a file, items of a list, characters of stdin) while the same trap repeats | A failure on a 5 MB log costs a reviewer the whole input; the shrunk recording is often a few lines that explain the bug. Property tests shrink already (ADR 0199); this does it for real runs. Proposed by lane 121. | Delta debugging over recorded strings and lists, replaying each try (fast: no I/O). Must stop at a time budget. About two slices. |
 
 Rejected for this round: named arguments for `proc.run` (measured by round 9 at
 +1.4 tokens, [ADR 0342](../decisions/0342-named-arguments-for-std-optionals-rejected.md));

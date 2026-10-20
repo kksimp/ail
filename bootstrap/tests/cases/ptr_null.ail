@@ -1,0 +1,9 @@
+# unsafe.ptr.4: using a null pointer traps.
+# bytecode.skip: the trap snapshot shows a pointer's address, which differs per run.
+use std.mem
+
+fn main()
+    unsafe
+        p := mem.null()
+        print(p.is_null())
+        print(p.read())

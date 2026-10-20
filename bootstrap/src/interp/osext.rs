@@ -202,7 +202,7 @@ pub type Ran = (std::process::ExitStatus, Vec<u8>, Vec<u8>);
 /// std.proc.1-2: run `cmd` with `args`, writing `input` (if any) to its
 /// standard input, and killing it after `timeout_ms` (if any), which is
 /// then the failure `timed_out`.
-pub fn run(cmd: &str, args: &[String], input: Option<&str>, timeout_ms: Option<u64>) -> Result<Ran, &'static str> {
+pub fn run(cmd: &str, args: &[String], input: Option<&[u8]>, timeout_ms: Option<u64>) -> Result<Ran, &'static str> {
     // std.proc.1: on Windows a bare name is found with the extensions in
     // PATHEXT first, so `npm` starts `npm.cmd`, which Rust's own lookup
     // doesn't try. A name that isn't found is started as given and fails.
@@ -222,10 +222,10 @@ pub fn run(cmd: &str, args: &[String], input: Option<&str>, timeout_ms: Option<u
     // wait on another can't deadlock.
     let feeder = input.map(|text| {
         let mut stdin = child.stdin.take().expect("piped");
-        let text = text.to_string();
+        let text = text.to_vec();
         std::thread::spawn(move || {
             // A process that exits without reading all its input is not a failure.
-            let _ = stdin.write_all(text.as_bytes());
+            let _ = stdin.write_all(&text);
         })
     });
     let drain = |mut r: Box<dyn Read + Send>| {
