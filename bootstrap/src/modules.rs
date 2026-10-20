@@ -705,6 +705,19 @@ impl Cx<'_> {
                 self.expr(k);
                 self.expr(v);
             }),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses.iter_mut() {
+                    self.expr(&mut c.iter);
+                    self.local(&c.var, c.var_pos);
+                    if let Some(cond) = &mut c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);

@@ -1,0 +1,25 @@
+## A bare variant pattern matches any fields and binds none (expr.match.10, ADR 0183).
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn kind(s Shape) str
+    match s
+        Circle | Rect => "area"
+        Dot => "point"
+
+fn width(s Shape) int
+    match s
+        Rect(w, _) => w
+        Circle(r) => 2 * r
+        Dot => 0
+
+fn main()
+    for s in [Shape.Circle(1), Shape.Rect(w: 2, h: 3), Shape.Dot]
+        print("{kind(s)} {width(s)}")
+    t := Shape.Rect(w: 4, h: 5)
+    m := match t
+        Shape.Rect => "a rect"
+        Circle | Dot => "other"
+    print(m)

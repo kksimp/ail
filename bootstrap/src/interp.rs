@@ -33,8 +33,8 @@ pub use testing::run_tests;
 use builtins::{Key, Table, map_value};
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt, TypeKind, UnOp,
-    place_path,
+    Arg, BinOp, Block, CompFor, CompKind, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt,
+    TypeKind, UnOp, place_path,
 };
 use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
@@ -797,6 +797,64 @@ impl<'a, W: Write> Interp<'a, W> {
         Ok(())
     }
 
+    /// Run a comprehension's clauses from the first, collecting each element
+    /// into the list or table (expr.comp.3). `continue` skips an element and
+    /// `break` ends the comprehension (expr.comp.4); false if it ended.
+    fn comp(
+        &mut self,
+        clauses: &'a [CompFor],
+        elem: &'a Expr,
+        value: Option<&'a Expr>,
+        set: bool,
+        env: &mut Env<'a>,
+        acc: &mut (Vec<Value>, Table),
+    ) -> Flow<bool> {
+        let Some((c, rest)) = clauses.split_first() else {
+            let k = self.eval(elem, env)?;
+            match value {
+                Some(v) => {
+                    let v = self.eval(v, env)?;
+                    acc.1.insert(k, Some(v));
+                }
+                None if set => {
+                    acc.1.insert(k, None);
+                }
+                None => acc.0.push(k),
+            }
+            return Ok(true);
+        };
+        let items: Rc<Vec<Value>> = match &c.iter {
+            Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } => {
+                let (lo, hi) = (self.eval(lo, env)?.int(), self.eval(hi, env)?.int());
+                let hi = if *inclusive { hi } else { hi.saturating_sub(1) };
+                Rc::new(if lo > hi { Vec::new() } else { (lo..=hi).map(Value::Int).collect() })
+            }
+            iter => match self.eval(iter, env)? {
+                Value::List(items) => items,
+                Value::Set(t) => Rc::new(t.key_list()),
+                other => unreachable!("checked: iterable, found {other:?}"),
+            },
+        };
+        for item in items.iter() {
+            env.push((&c.var, item.clone()));
+            let r = match &c.cond {
+                Some(cond) => match self.eval(cond, env) {
+                    Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
+                    Ok(_) => Ok(true),
+                    Err(e) => Err(e),
+                },
+                None => self.comp(rest, elem, value, set, env, acc),
+            };
+            env.pop();
+            match r {
+                Ok(true) | Err(Exit::Continue) => {}
+                Ok(false) | Err(Exit::Break) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
+    }
+
     /// Run one iteration; false if the loop should stop.
     fn loop_body(&mut self, var: &'a str, v: Value, body: &'a Block, env: &mut Env<'a>) -> Flow<bool> {
         env.push((var, v));
@@ -1079,6 +1137,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     Value::Set(Rc::new(t))
                 } else {
                     Value::Map(Rc::new(t))
+                }
+            }
+            Expr::Comp { kind, elem, value, clauses, .. } => {
+                let mut acc = (Vec::new(), Table::default());
+                self.comp(clauses, elem, value.as_deref(), *kind == CompKind::Set, env, &mut acc)?;
+                match kind {
+                    CompKind::List => Value::List(Rc::new(acc.0)),
+                    CompKind::Set => Value::Set(Rc::new(acc.1)),
+                    CompKind::Map => Value::Map(Rc::new(acc.1)),
                 }
             }
             Expr::Set(items, _) => {

@@ -11,9 +11,9 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
-    InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
-    TypeRef, UnOp, Variant, Within, is_prelude,
+    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
+    GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
+    StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
@@ -1119,6 +1119,33 @@ impl Parser {
         }
     }
 
+    /// The `for x in xs [if c]` clauses of a comprehension, at the first
+    /// `for` (expr.comp.2).
+    fn comp_clauses(&mut self) -> Option<Vec<CompFor>> {
+        let mut clauses = Vec::new();
+        while self.eat_kw("for") {
+            if self.at_kw("mut") {
+                let pos = self.pos();
+                self.error_help(
+                    "expr.comp.2",
+                    pos,
+                    "a comprehension's variable can't be `mut`",
+                    "use a `for mut` loop to change elements in place",
+                );
+                return None;
+            }
+            let (var, var_pos) = self.name("a variable after `for`", "expr.comp.2")?;
+            if !self.eat_kw("in") {
+                self.unexpected("`in` after the comprehension's variable", "expr.comp.2");
+                return None;
+            }
+            let iter = self.range()?;
+            let cond = if self.eat_kw("if") { Some(self.expression()?) } else { None };
+            clauses.push(CompFor { var, var_pos, iter, cond });
+        }
+        Some(clauses)
+    }
+
     /// `value else d` or `value else return ...` (err.else.6), the loosest
     /// operator. An `else` that starts a block belongs to a statement.
     fn else_expr(&mut self, value: Expr) -> Option<Expr> {
@@ -1415,6 +1442,12 @@ impl Parser {
                 let mut elems = Vec::new();
                 while !self.at_sym("]") {
                     elems.push(self.expression()?);
+                    if elems.len() == 1 && self.at_kw("for") {
+                        let elem = Box::new(elems.pop()?);
+                        let clauses = self.comp_clauses()?;
+                        self.expect_sym("]", "`]` after the comprehension", "expr.comp.1")?;
+                        return Some(Expr::Comp { kind: CompKind::List, elem, value: None, clauses, pos });
+                    }
                     if !self.eat_sym(",") {
                         break;
                     }
@@ -1430,7 +1463,14 @@ impl Parser {
                 }
                 let first = self.expression()?;
                 if self.eat_sym(":") {
-                    let mut pairs = vec![(first, self.expression()?)];
+                    let value = self.expression()?;
+                    if self.at_kw("for") {
+                        let clauses = self.comp_clauses()?;
+                        self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
+                        let (elem, value) = (Box::new(first), Some(Box::new(value)));
+                        return Some(Expr::Comp { kind: CompKind::Map, elem, value, clauses, pos });
+                    }
+                    let mut pairs = vec![(first, value)];
                     while self.eat_sym(",") && !self.at_sym("}") {
                         let k = self.expression()?;
                         self.expect_sym(":", "`:` after the key", "type.coll.2")?;
@@ -1438,6 +1478,11 @@ impl Parser {
                     }
                     self.expect_sym("}", "`}` or `,` in the map", "type.coll.2")?;
                     return Some(Expr::Map(pairs, pos));
+                }
+                if self.at_kw("for") {
+                    let clauses = self.comp_clauses()?;
+                    self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
+                    return Some(Expr::Comp { kind: CompKind::Set, elem: Box::new(first), value: None, clauses, pos });
                 }
                 let mut elems = vec![first];
                 while self.eat_sym(",") && !self.at_sym("}") {

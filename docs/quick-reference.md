@@ -146,6 +146,11 @@ fn area(s Shape) int
     match s
         Circle(r) => 3 * r * r
         Rect(w, _) => w * w       # `_` skips a field
+
+fn round(s Shape) bool
+    match s
+        Circle => true            # bare: any fields, binds none
+        Rect => false
 ```
 
 ## Absence and errors
@@ -416,6 +421,21 @@ for mut item in items      # `items` must be `mut`
 ```
 
 Inside a `for mut` loop, the body can't use the list itself (`items`).
+
+A comprehension builds a list, set or map in one expression:
+
+```ail fragment
+xs := [3, 1, 4]
+squares := [x * x for x in xs]             # [9, 1, 16]
+big := [x for x in xs if x > 2]            # [3, 4]
+pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # clauses nest, outermost first
+seen := {x % 2 for x in xs}                # a Set[int]
+sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
+nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
+```
+
+The loop variables are new names that end with the comprehension. `?` and
+`return` leave the function; `break` ends the comprehension.
 
 ## Maps and sets
 

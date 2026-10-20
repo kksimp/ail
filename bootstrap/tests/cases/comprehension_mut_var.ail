@@ -1,0 +1,4 @@
+## A comprehension's variable can't be `mut` (expr.comp.2, ADR 0182).
+fn main()
+    xs := [1, 2]
+    print([x for mut x in xs])
