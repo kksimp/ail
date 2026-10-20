@@ -32,7 +32,9 @@ rule, and checks that only diagnose never run.
   package, and `ail test --json` on cases with a `.test` file, once with
   `--no-bytecode` and once without, and fails on any difference in stdout,
   stderr or exit code. `tests/deterministic/` (clock and unseeded random) is
-  left out.
+  left out, and so are programs that open a window (`ui.open(`), which wait
+  for it to close. A run still going after 60 s is killed and fails the test,
+  so a hang can't stall the selftest or pass because both sides hang alike.
 - The fuzz harness adds `fuzz.prop.5`: each generated program that checks
   clean runs with `--deterministic --no-contracts` (walker) and with `--deny
   clock,random,proc,net --no-contracts` (tier), and the two must match.
