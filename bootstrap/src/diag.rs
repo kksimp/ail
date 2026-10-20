@@ -5,6 +5,8 @@
 
 use std::fmt::Write as _;
 
+mod rewrite;
+
 /// A source position, 1-based.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Pos {
@@ -61,7 +63,8 @@ pub enum Anchor {
     /// is a template: `$1` `$2` are the arguments as written, `$r1` the first
     /// as a method receiver (parenthesised if it isn't a plain postfix
     /// expression), `$*` all of them as `{...}` pieces of one string
-    /// (ADR 0264). Dropped when the call isn't on one line or the argument
+    /// (ADR 0264); `$%` a `printf` call's arguments as one interpolated string
+    /// (ADR 0335). Dropped when the call isn't on one line or the argument
     /// count doesn't fit.
     Call,
     /// Rewrite a bracketed form `old[args]` like `Call` rewrites `old(args)`.
@@ -75,6 +78,12 @@ pub enum Anchor {
     Chain,
     /// Delete the character at `pos` and the blanks before it.
     TrimBefore,
+    /// Rewrite `l op r` around the operator at `pos` by a template (ADR 0335).
+    Operands,
+    /// A C-style `for (i := a; i < b; i += 1)` header as `for i in a..b`.
+    CFor,
+    /// `xs: List[int] = []` as `xs := List[int]()`.
+    EmptyDecl,
 }
 
 /// Replace the text from `pos` to `end` (exclusive) with `text`.
@@ -219,6 +228,9 @@ impl Edit {
             a @ (Anchor::Call | Anchor::CallNamed | Anchor::Brackets) => return self.resolve_call(lines, a),
             Anchor::Chain => return self.resolve_chain(lines),
             Anchor::TrimBefore => return self.resolve_trim(lines),
+            Anchor::Operands => return self.resolve_operands(lines),
+            Anchor::CFor => return self.resolve_c_for(lines),
+            Anchor::EmptyDecl => return self.resolve_empty_decl(lines),
             Anchor::Exact => {}
         }
         let Some(old) = self.old.take() else { return true };
@@ -315,6 +327,10 @@ impl Edit {
                 let recv = it.next_if_eq(&'r').is_some();
                 match it.next() {
                     Some('a') => out.push_str(&args.join(", ")),
+                    Some('%') => match rewrite::printf_text(&args) {
+                        Some(text) => out.push_str(&text),
+                        None => return false,
+                    },
                     Some('*') => {
                         let mut s = String::new();
                         for (k, a) in args.iter().enumerate() {

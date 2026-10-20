@@ -74,7 +74,7 @@ pub fn stmt_word(word: &str) -> Option<Word> {
         "pass" => w(
             "AIL has no `pass`",
             "a block needs a statement; write `todo` for code you haven't written yet",
-            Fix::None,
+            Fix::Replace("todo"),
         ),
         "await" => w(
             "AIL has no `await`",
@@ -123,6 +123,15 @@ pub fn call_hint(name: &str, args: usize) -> Option<CallHint> {
         ("str" | "string" | "toString", 1) => {
             h("\"{$1}\"", "\"{n}\"", "interpolate to get text: `\"{n}\"`, or write `n.to_str()`")
         }
+        ("printf", n) if n >= 1 => h(
+            "print($%)",
+            "print(\"n is {n}\")",
+            "build the text with interpolation, `print(\"n is {n}\")`; a width or precision goes after a colon: `{n:>6}`, `{x:.2}`",
+        ),
+        ("sqrt", 1) => h("$r1.sqrt()", "x.sqrt()", "`sqrt` is a method: write `x.sqrt()`"),
+        ("floor", 1) => h("$r1.floor()", "x.floor()", "`floor` is a method: write `x.floor()`"),
+        ("ceil", 1) => h("$r1.ceil()", "x.ceil()", "`ceil` is a method: write `x.ceil()`"),
+        ("round", 1) => h("$r1.round()", "x.round()", "`round` is a method: write `x.round()`"),
         ("abs", 1) => h("$r1.abs()", "n.abs()", "`abs` is a method: write `n.abs()`"),
         ("max", 2) => h("$r1.max($2)", "a.max(b)", "`max` is a method: write `a.max(b)`"),
         ("min", 2) => h("$r1.min($2)", "a.min(b)", "`min` is a method: write `a.min(b)`"),

@@ -5,6 +5,7 @@
 
 mod api;
 mod ast;
+mod bump;
 mod check;
 mod derive;
 mod diag;
@@ -44,6 +45,7 @@ commands:
   effects FILE  print each function's inferred effects (eff.infer.6);
                 --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
+  explain       list every rule with its chapter and whether `ail fix` repairs it (--json)
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
   api --card [--budget N] DIR|FILE
@@ -82,6 +84,10 @@ options:
                 through `mut` arguments and methods too (trace.watch.1, trace.watch.3)
   --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
+
+// ADR 0332: commands that only read a program use the front-end allocator.
+#[global_allocator]
+static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
 const STACK_BYTES: usize = 256 * 1024 * 1024;
@@ -154,6 +160,12 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // ADR 0332: `check`, `api` and `effects` make one pass over the program
+    // and exit, so they use the front-end allocator.
+    // `AIL_SYSTEM_ALLOC=1` keeps the system allocator, to compare the two.
+    if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
+        ALLOC.enable();
+    }
     match rest.as_slice() {
         ["run", file] => {
             interp::set_program(file, program_args);
@@ -171,6 +183,7 @@ fn main() -> ExitCode {
         ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
         ["fix", rest @ ..] => fix::command(rest, json),
+        ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
