@@ -1,0 +1,7 @@
+1e999: number out of range at 0
+-1e999: number out of range at 0
+9e991: number out of range at 0
+1e308: ok
+123456789012345678901234567890: ok
+null
+[null,null,1.5]

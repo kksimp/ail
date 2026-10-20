@@ -376,6 +376,11 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0409](0409-float-text-by-exact-digit-generation.md) | Float text by exact digit generation, written from the textbook *(delegated)* | Accepted | 2026-10-20 |
 | [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
 | [0430](0430-unsafe-blocks-and-functions-built.md) | `unsafe` blocks and `unsafe fn`, with a manifest opt-in, are built *(delegated)* | Accepted | 2026-10-20 |
+| [0460](0460-drag-race-harness.md) | The drag race is one Python harness that times AIL, native AIL, C and Python from twins *(delegated)* | Accepted | 2026-10-20 |
+| [0461](0461-module-fuzzers.md) | Module fuzzers are templates plus seeded input generators *(delegated)* | Accepted | 2026-10-20 |
+| [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
+| [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
+| [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
