@@ -2,6 +2,7 @@
 
 Chapter keys: `api`, `explain`, `fix`, `budget`
 Chapter keys: `api`, `explain`, `fix`, `snap`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `diff`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -341,3 +342,42 @@ what `ail run FILE` writes to standard output.
 (`would update ...`). With `--json` each change is a line
 `{"snapshot":"assert_eq"|"doc"|"out","file","line","col","old","new"}` and
 the summary is `{"snapshots":true,"dry_run","updated","files","skipped"}`.
+
+## Semantic diff
+
+**diff.out.1** — `ail diff OLD NEW` compares two versions of a program: two
+files, or two package directories. Each is loaded and checked as
+`ail check` would; for files, the tests of each are run as `ail test` would
+(a 10-second limit per test run), unless `--no-tests` is given. Packages'
+tests are not run
+([ADR 0396](../decisions/0396-ail-diff-semantic-diff.md)).
+
+**diff.out.2** — Declarations are matched by id (`api.id.1`). An id only in
+`NEW` is added, only in `OLD` removed. A matched declaration is changed when
+any of these differ: its signature, whether it is `pub`, its effects, its
+error types, its `requires`/`ensures`, the trait method it implements,
+whether a trait method has a default, its doc comment, or, for functions and
+methods, the text of its body (the lines after its first, to the next
+declaration, without trailing blank and comment lines). Members (fields,
+variants, methods) are declarations of their own. When either side is
+rejected, declarations are not compared.
+
+**diff.out.3** — Diagnostics are matched by rule, file (relative to the
+compared path) and message, counting repeats; line numbers are shown but not
+compared.
+
+**diff.out.4** — A test is reported when its outcome differs, or when it
+exists on one side only (`absent`).
+
+**diff.out.5** — `ail diff --rev REV PATH` compares `PATH` as git has it at
+revision `REV` (with the directory around a file, so its modules load)
+against `PATH` now. An unknown revision or path is an error (exit 2).
+
+**diff.out.6** — The text form has one line per added (`+`) or removed
+(`-`) declaration, a `~ ID` line per changed one with `(doc, body changed)`
+and an indented `KEY: OLD -> NEW` line for each other changed key, one
+`+`/`-` line per diagnostic, one `test NAME: OLD -> NEW` line per test, and
+a summary line. With `--json` each is a JSON line, a test that now fails
+carries `"status":"fail"`, and the last line is
+`{"summary":true,...}`. The exit status is 0 when nothing changed, 1 when
+something did, 2 for an error.
