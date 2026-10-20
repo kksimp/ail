@@ -1,0 +1,25 @@
+# contract.ens.3, contract.inv.1, contract.decl.3: `old` takes one expression and
+# only means something in `ensures`; invariants are pure `bool` expressions.
+fn f(x int) int
+    ensures result == old(x)
+    x
+
+fn g(x int) int
+    requires old(x) > 0
+    x
+
+fn h(x int) int
+    ensures old(x) + 1
+    x
+
+struct Bad
+    n int
+    invariant n + 1
+    invariant noisy(n)
+
+fn noisy(x int) bool
+    print("checking {x}")
+    x > 0
+
+fn main()
+    print(f(1))

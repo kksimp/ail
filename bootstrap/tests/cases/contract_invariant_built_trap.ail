@@ -1,0 +1,9 @@
+# contract.inv.2: building a value that breaks an invariant traps.
+struct Range
+    lo int
+    hi int
+    invariant lo <= hi
+
+fn main()
+    print(Range(lo: 1, hi: 2).hi)
+    print(Range(lo: 3, hi: 2).hi)

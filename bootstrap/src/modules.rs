@@ -418,6 +418,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             for f in s.fields.iter_mut() {
                 cx.type_ref(&mut f.ty);
             }
+            for c in s.invariants.iter_mut() {
+                cx.expr(&mut c.cond);
+            }
             diags.extend(cx.diags);
         }
     }
@@ -461,6 +464,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         // contract.decl.2: conditions name the module's items as the body does.
         for c in f.contracts.iter_mut() {
             cx.expr(&mut c.cond);
+            for (_, e) in c.olds.iter_mut() {
+                cx.expr(e);
+            }
         }
         if let Some(b) = &mut f.body {
             cx.block(b);
@@ -475,6 +481,7 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             diags.extend(cx.diags);
         }
     }
+    crate::parser::link_inherited_contracts(prog);
 }
 
 /// mod.use.5: imports must not form a cycle. Each cycle is reported once,

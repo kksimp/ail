@@ -1,0 +1,24 @@
+# contract.ens.3: `old(e)` is the value `e` had when the function was called.
+struct Counter
+    n int
+    log List[int]
+
+fn Counter.add(mut self, k int)
+    ensures n == old(n) + k
+    ensures log.len() == old(log.len()) + 1
+    n += k
+    log.push(k)
+
+fn bump(mut xs List[int])
+    ensures xs.len() == old(xs.len()) + 1
+    ensures xs[0] == old(xs[0])
+    xs.push(7)
+
+fn main()
+    mut c := Counter(n: 1, log: [])
+    c.add(4)
+    c.add(5)
+    print(c.n)
+    mut xs := [3]
+    bump(mut xs)
+    print(xs.len())
