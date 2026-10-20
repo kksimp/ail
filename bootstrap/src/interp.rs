@@ -35,9 +35,11 @@ pub use random::seed as set_seed;
 pub use stdlib::set_program;
 mod prop;
 mod testing;
+mod generate;
 mod ui;
 pub use prop::PropInfo;
 pub use testing::run_tests;
+pub use generate::generate;
 pub use trace::{render_trap, take_options as take_trace_options, option_words as trace_option_words, take_snapshot};
 
 use builtins::{Key, Table, map_value};

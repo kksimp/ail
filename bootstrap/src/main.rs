@@ -6,6 +6,7 @@
 mod api;
 mod ast;
 mod check;
+mod derive;
 mod diag;
 mod explain;
 mod fasthash;

@@ -1,0 +1,65 @@
+## ToJson and FromJson derived for structs, enums, lists and optionals (json.derive.1-2).
+struct Item
+    id str
+    hours float
+    count int
+    done bool
+    tags List[str]
+    note str?
+    level Level
+    owner Owner
+
+struct Owner
+    name str
+
+enum Level
+    Low
+    High
+
+enum Shape
+    Dot
+    Circle(r float, label str?)
+
+impl ToJson for Item
+impl FromJson for Item
+impl ToJson for Owner
+impl FromJson for Owner
+impl ToJson for Level
+impl FromJson for Level
+impl ToJson for Shape
+
+fn main()
+    t := Item(
+        id: "t1",
+        hours: 1.5,
+        count: 3,
+        done: false,
+        tags: ["ops", "db"],
+        note: none,
+        level: High,
+        owner: Owner(name: "ann"),
+    )
+    text := t.to_json().to_text()
+    print(text)
+    doc := parse_json(text) else return
+    back := Item.from_json(doc) else err
+        print("failed: {err.message}")
+        return
+    print(back == t)
+    print(Shape.Circle(2.0, "a").to_json().to_text())
+    print(Shape.Dot.to_json().to_text())
+    for bad in [
+        "\{\"id\": 7}",
+        "\{\"id\": \"a\"}",
+        "\{\"id\": \"a\", \"hours\": 1, \"count\": 1.5}",
+        "[1]",
+    ]
+        j := parse_json(bad) else return
+        x := Item.from_json(j) else err
+            print(err.message)
+            continue
+        print(x)
+    lv := Level.from_json(Json.Str("Mid")) else err
+        print(err.message)
+        return
+    print(lv)

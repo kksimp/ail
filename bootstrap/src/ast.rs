@@ -25,6 +25,22 @@ pub struct Program {
     /// The capabilities each package manifest grants (eff.cap.4-5,
     /// `packages.rs`). Empty without an `ail.pkg`.
     pub grants: Vec<Grant>,
+    /// The code derive generators wrote, one per deriving `impl`; each is
+    /// a file of `files` (ct.gen.1-4, `derive.rs`).
+    pub generated: Vec<Generated>,
+}
+
+/// The methods a derive generator wrote for one `impl` (ct.gen.1-4).
+#[derive(Debug, Clone)]
+pub struct Generated {
+    /// Index into `Program::files`: its path is `gen:impl:TYPE.TRAIT`.
+    pub file: usize,
+    /// The deriving `impl`'s position.
+    pub impl_pos: Pos,
+    /// `Version.ToJson`
+    pub label: String,
+    /// The generator's name, `derive_to_json`.
+    pub generator: String,
 }
 
 /// `caps LIST` on a manifest line: the code of `package` (empty for the
@@ -139,6 +155,9 @@ pub struct TraitDecl {
     pub doc: Option<String>,
     /// Indexes into `Program::fns`.
     pub methods: Vec<usize>,
+    /// `@derive(f)` before `trait`: the derive generator's name and where it
+    /// is written (ct.derive.1).
+    pub derive: Option<(String, Pos)>,
 }
 
 /// `impl Trait for Type`, optionally with an indented block of functions

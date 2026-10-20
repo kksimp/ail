@@ -19,6 +19,7 @@ use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 mod contracts;
+mod derive;
 pub use contracts::link as link_inherited_contracts;
 mod messages;
 mod mistakes;
@@ -49,19 +50,41 @@ const PRELUDE: &str = include_str!("prelude.ail");
 /// Names of the optional `std.json` prelude module (ADR 0161).
 const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
 
+/// Names of its derivable traits, read with it only when named (ADR 0308).
+const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson"];
+
+/// Names of the optional `derive` prelude module: what a derive generator
+/// receives (refl.info.1, ADR 0306).
+const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveError"];
+
 /// The always-read prelude, plus the `json` module (after its `## @module`
-/// marker) when the program names one of its items and declares none of them.
-fn prelude_text(tokens: &[Token]) -> &'static str {
-    let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
-    let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
-    let declared = tokens.windows(2).any(|w| {
-        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
-    });
-    if tokens.iter().any(named) && !declared {
-        PRELUDE
-    } else {
-        core
+/// marker) when the program names one of its items and declares none of
+/// them; its `jsonderive` part when the program names `ToJson` or
+/// `FromJson`; and the `derive` module when `jsonderive` is read or the
+/// program names one of its items or writes `@derive`.
+fn prelude_text(tokens: &[Token]) -> String {
+    let (core, rest) = PRELUDE.split_once("## @module json\n").expect("prelude has a json module");
+    let (json, rest) = rest.split_once("## @module jsonderive\n").expect("prelude has a jsonderive module");
+    let (json_derive, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
+    let wants = |names: &[&str]| {
+        let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
+        let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
+        tokens.iter().any(named) && !declared
+    };
+    let want_json_derive = wants(JSON_DERIVE_NAMES);
+    let want_json = want_json_derive || wants(JSON_NAMES);
+    let at_derive = tokens.windows(2).any(|w| matches!((&w[0].tok, &w[1].tok), (Tok::Sym("@"), Tok::Ident(n)) if n == "derive"));
+    let mut text = core.to_string();
+    if want_json {
+        text.push_str(json);
     }
+    if want_json_derive {
+        text.push_str(json_derive);
+    }
+    if want_json_derive || at_derive || wants(DERIVE_NAMES) {
+        text.push_str(derive);
+    }
+    text
 }
 
 /// Parse a program after the prelude, whose lines are numbered from
@@ -77,7 +100,7 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// `parse_with_prelude` without the implicit-`self` pass, which a package
 /// runs after naming its modules' items (`modules.rs`).
 pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let (mut all, diags) = lex(prelude_text(&tokens));
+    let (mut all, diags) = lex(&prelude_text(&tokens));
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
     fn shift(tokens: &mut [Token]) {
@@ -146,6 +169,8 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             Tok::Kw("use") => p.use_decl(&mut prog),
             Tok::Kw("pub") => p.pub_marker(),
             // `@name fn ...` (gram.attr.1-2)
+            // `@derive(f) trait Name` (ct.derive.1)
+            Tok::Sym("@") if p.derive_trait(&mut prog) => {}
             Tok::Sym("@") => {
                 if let Some(f) = p.attributed_function() {
                     prog.fns.push(f);
@@ -761,7 +786,7 @@ impl Parser {
             return;
         }
         let index = prog.traits.len();
-        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new() });
+        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new(), derive: None });
         if !self.eat(&Tok::Newline) {
             self.unexpected(&format!("end of line after `trait {name}`"), "trait.decl.1");
             self.skip_statement();

@@ -48,8 +48,9 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Deadlock** | Every unfinished task is blocked, so none can continue. The program traps with `conc.task.7` instead of hanging (ADR 0186). |
 | **`defer`** | `defer S` runs statement `S` when the enclosing block exits by any path, including a trap; with the block's cleanups, last first (ADR 0066, ADR 0191). |
 | **Delegated decision** | A routine design decision made by the AI using the designer's priority order (ADR 0076). |
-| **Derive generator** | A compile-time function `fn(TypeInfo) str ! DeriveError` that a trait names with `@derive(f)`; an empty `impl` of the trait runs it and checks the AIL text it returns as the impl's body (`ct.derive.*`, ADR 0227). |
-| **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). |
+| **Derive generator** | A compile-time function `fn(TypeInfo) str ! DeriveError` that a trait names with `@derive(f)`; an empty `impl` of the trait runs it and checks the AIL text it returns as the impl's body, plus associated functions of the type (`ct.derive.*`, ADRs 0227, 0306, 0307). `ToJson` and `FromJson` are prelude examples (ADR 0308). |
+| **Generated code** | The text a derive generator returned, checked as if written in its `impl`; addressed `gen:impl:TYPE.TRAIT:LINE:COL` and shown by `ail api --expanded` (`ct.gen.*`, ADRs 0228, 0309). |
+| **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). An empty `impl` of a trait with a derive generator is derived by the generator instead. |
 | **Diagnostics schema** | The versioned JSON form of `ail check --json`: one object per line, tagged `"api":1`, with span, notes and fixes; see [semantic-api.md](design/semantic-api.md) (ADR 0145). |
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
 | **Doc comment** | A run of `##` lines directly above a declaration, with no blank line between; it documents that declaration (lex.comment.2, ADR 0152). |
