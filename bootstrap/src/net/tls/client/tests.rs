@@ -195,7 +195,7 @@ fn client_hello_shape() {
 #[test]
 fn live_openssl_server() {
     let Some(server) = openssl::Server::cert_dir() else {
-        eprintln!("note: `openssl` not found; skipping the live TLS handshake test");
+        eprintln!("note: no OpenSSL 1.1.1+ `openssl`; skipping the live TLS handshake test");
         return;
     };
     for (suite, extra) in [
@@ -238,7 +238,7 @@ fn live_openssl_server() {
 #[test]
 fn live_openssl_key_update() {
     let Some(server) = openssl::Server::cert_dir() else {
-        eprintln!("note: `openssl` not found; skipping the live KeyUpdate test");
+        eprintln!("note: no OpenSSL 1.1.1+ `openssl`; skipping the live KeyUpdate test");
         return;
     };
     let mut running = server.start_echo(&["-tls1_3"]);
@@ -275,8 +275,12 @@ mod openssl {
 
     impl Server {
         pub fn cert_dir() -> Option<Server> {
-            let found = Command::new("openssl").arg("version").stdout(Stdio::null()).stderr(Stdio::null()).status();
-            if !found.is_ok_and(|s| s.success()) {
+            // OpenSSL 1.1.1 or 3.x: LibreSSL (macOS's `openssl`) lacks some of
+            // the s_server options used here.
+            let version = Command::new("openssl").arg("version").stderr(Stdio::null()).output().ok()?;
+            let text = String::from_utf8_lossy(&version.stdout);
+            if !(text.starts_with("OpenSSL 3") || text.starts_with("OpenSSL 1.1.1")) {
+                eprintln!("note: `openssl` is `{}`, not OpenSSL 1.1.1 or 3", text.trim());
                 return None;
             }
             let dir = std::env::temp_dir().join(format!("ail-tls-test-{}", std::process::id()));

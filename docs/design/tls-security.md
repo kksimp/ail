@@ -38,7 +38,8 @@ been verified to do. Update it in the same change as the code.
   three suites, a server that prefers P-256, a server-requested KeyUpdate
   with data both ways afterwards, and refusals from a TLS 1.2-only and a
   P-256-only server with messages naming the cause. Skipped with a note
-  where `openssl` is missing.
+  where `openssl` isn't OpenSSL 1.1.1 or 3 (macOS ships LibreSSL), so on
+  macOS only the recorded and RFC tests run unless OpenSSL is installed.
 - **RFC 8448:** handshake and application secrets, `finished` key, traffic
   key and IV, and the first application-data record (values as transcribed
   by Mbed TLS's test suite).
