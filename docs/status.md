@@ -25,6 +25,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 ### Stage 3: self-hosting (started 2026-10-20)
 
+- `ail api --tokens` and `ail api --ast [--program]` print the Rust lexer's tokens and parser's tree, the targets the AIL front end is compared with (ADR 0371); a name is letters, ASCII digits and `_` (ADR 0372).
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376). Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 
 ### Language (2026-10-20 batch)

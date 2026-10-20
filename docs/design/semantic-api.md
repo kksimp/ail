@@ -429,6 +429,38 @@ use of the name within its scope (api.loc.2). Locals can't be shadowed
 (expr.bind.4), so the name identifies the binding. Only locals of the file
 asked about are supported.
 
+### Syntax dumps: `--tokens` and `--ast`
+
+`ail api --tokens FILE` and `ail api --ast FILE` print what the lexer and the
+parser make of one file, the targets the self-hosted front end is compared
+with ([ADR 0371](../decisions/0371-self-hosted-front-end-compared-by-dumps.md);
+rules `api.tok.1–3`, `api.ast.1–3` in [chapter 22](../spec/22-tools.md)).
+
+```text
+$ ail api --tokens examples/hello.ail
+1:1 kw fn
+1:4 id main
+1:8 sym (
+1:9 sym )
+1:10 nl
+2:1 indent
+2:5 id print
+2:10 sym (
+2:11 str "Hello, world!"
+2:26 sym )
+2:27 nl
+3:1 dedent
+3:1 eof
+```
+
+`--ast` prints one line of JSON, the derived `ToJson` of `ast.Program`
+([ADR 0376](../decisions/0376-syntax-tree-in-ail-and-its-json.md)): numbers
+print as AIL prints a `float` (`{"line":2.0,"col":5.0}`), a variant with
+fields is `{"kind":"Call",...}`, one without is its name, and `none` is
+`null`. Diagnostics follow, one `LINE:COL diag RULE` line each.
+`--ast --program` prints the assembled program instead: prelude, imports,
+derive output.
+
 ### Package directories
 
 **api.pkg.1** — `ail api [--outline] [--symbols] [--text|--pretty] DIR` outlines

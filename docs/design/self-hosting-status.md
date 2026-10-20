@@ -33,3 +33,4 @@ corpus mistake: same rule, line and column, in order. Filled per slice.
 | `unique`, `par`, `ensures` can't be field names, though a field name is never ambiguous with them | Open; renamed `is_*` for now |
 | A variant can't have a field `kind` when its enum derives JSON | By design (json.derive.2); renamed `shape`, `form` |
 | Derived JSON writes integers as floats (`1.0`), exact only below 2^53 | Worked around: integer literals as text |
+| The Rust lexer continued names with any Unicode numeric (`x٣`); AIL's `is_alnum` takes ASCII digits only | Fixed: names are letters, ASCII digits, `_` (ADR 0372) |

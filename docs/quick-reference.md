@@ -27,6 +27,7 @@
 ./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
 ./ail api --type FILE.ail L C   # type at a position (also --locals, --refs; `ail api DIR` and `--refs DIR FILE L C` cover a whole package)
 ./ail api --expanded --text FILE.ail # also the code derives generated (ToJson, FromJson, @derive traits)
+./ail api --tokens FILE.ail  # the lexer's tokens, one per line; --ast: the parse as JSON (--program: with prelude and imports)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)

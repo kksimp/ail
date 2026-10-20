@@ -19,6 +19,7 @@ pub mod card;
 pub mod errors;
 mod expanded;
 mod query;
+pub mod syntax;
 
 /// Whether `pos` is outside the file being outlined: in the prelude or in
 /// an imported module (`modules.rs`).
@@ -29,7 +30,7 @@ fn is_prelude(pos: Pos) -> bool {
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api [--outline] DIR|FILE [--text | --pretty] [--symbols] [--expanded] [--json]\n       ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]\n";
+pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api (--tokens | --ast) FILE\n       ail api --ast --program DIR|FILE\n       ail api [--outline] DIR|FILE [--text | --pretty] [--symbols] [--expanded] [--json]\n       ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]\n";
 
 /// How the outline is written (api.out.2, api.text.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +47,10 @@ pub enum Form {
 pub fn command(args: &[&str], json: bool) -> ExitCode {
     if args.contains(&"--card") {
         return card::command(args, json);
+    }
+    // api.tok.1, api.ast.1: the lexer's tokens and the parser's tree of one file.
+    if args.contains(&"--tokens") || args.contains(&"--ast") {
+        return syntax::command(args);
     }
     if let Some(q) = args.iter().find_map(|a| query::Query::from_flag(a)) {
         return query::command(q, args, json);
