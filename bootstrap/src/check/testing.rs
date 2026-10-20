@@ -92,6 +92,7 @@ impl<'p> Checker<'p> {
     fn ungeneratable(&self, t: &crate::ast::TypeRef, seen: &mut Vec<String>) -> Option<String> {
         match &t.kind {
             TypeKind::Optional(inner) => self.ungeneratable(inner, seen),
+            TypeKind::Ref(_) => Some("ref".to_string()),
             TypeKind::Named { name, args } => match name.as_str() {
                 "int" | "i64" | "float" | "f64" | "str" | "char" | "bool" if args.is_empty() => None,
                 "List" | "Set" | "Map" => args.iter().find_map(|a| self.ungeneratable(a, seen)),

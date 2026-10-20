@@ -22,6 +22,22 @@ pub struct Program {
     /// The source files of a package, in line order (`modules.rs`). Empty
     /// for a single-file program without imports.
     pub files: Vec<SourceFile>,
+    /// The capabilities each package manifest grants (eff.cap.4-5,
+    /// `packages.rs`). Empty without an `ail.pkg`.
+    pub grants: Vec<Grant>,
+}
+
+/// `caps LIST` on a manifest line: the code of `package` (empty for the
+/// root package) may reach only `caps` (eff.cap.4-5).
+#[derive(Debug, Clone)]
+pub struct Grant {
+    pub package: String,
+    pub caps: Vec<&'static str>,
+    /// The manifest line's name.
+    pub pos: Pos,
+    /// From the package's own `package` line (eff.cap.5), not from a `dep`
+    /// line (eff.cap.4).
+    pub own: bool,
 }
 
 /// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
@@ -148,6 +164,8 @@ pub struct StructDecl {
     /// by `docs::attach`.
     pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique struct` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
 }
@@ -172,6 +190,8 @@ pub struct EnumDecl {
     /// by `docs::attach`.
     pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique enum` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
 }
@@ -208,6 +228,19 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+    /// `requires` and `ensures` lines before the body (contract.decl.1).
+    pub contracts: Vec<Contract>,
+}
+
+/// `requires COND` or `ensures COND` (contract.decl.1-2).
+#[derive(Debug)]
+pub struct Contract {
+    /// `true` for `ensures`, `false` for `requires`.
+    pub ensures: bool,
+    pub cond: Expr,
+    /// The condition as written, for traps and `ail api` (contract.req.1).
+    pub text: String,
+    pub pos: Pos,
 }
 
 /// `@name` or `@name(arguments)` (gram.attr.1); the arguments aren't kept yet.
@@ -264,12 +297,14 @@ pub struct Receiver {
     pub mutable: bool,
 }
 
-/// `name Type` or `mut name Type` (gram.fn.2, own.param.1-2).
+/// `name Type`, `mut name Type` or `move name Type` (gram.fn.2,
+/// own.param.1-2, own.move.1).
 #[derive(Debug)]
 pub struct Param {
     pub name: String,
     pub pos: Pos,
     pub mutable: bool,
+    pub moved: bool,
     pub ty: TypeRef,
 }
 
@@ -291,6 +326,8 @@ pub enum TypeKind {
     Fallible { ok: Option<Box<TypeRef>>, errors: Option<Vec<TypeRef>> },
     /// `any Trait` (trait.any.1)
     Any(String),
+    /// `ref T` (own.ref.1)
+    Ref(Box<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;
@@ -318,8 +355,10 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
-    /// `for x in e`, or `for mut x in e` (expr.loop.6).
+    /// `for x in e`, or `for mut x in e` (expr.loop.6); `par` when written
+    /// `par for` (conc.par.5).
     For {
+        par: bool,
         var: String,
         var_pos: Pos,
         mutable: bool,
@@ -337,6 +376,8 @@ pub enum Stmt {
         value: Expr,
         otherwise: Else,
     },
+    /// `defer S` (own.defer.1); `pos` is the `defer`'s.
+    Defer(Box<Stmt>, Pos),
 }
 
 impl Stmt {
@@ -344,7 +385,7 @@ impl Stmt {
         match self {
             Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
-            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) => *p,
+            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
         }
     }
@@ -406,6 +447,8 @@ impl BinOp {
 pub enum UnOp {
     Neg,
     Not,
+    /// `spawn f(args)`: start a task (conc.task.1, ADR 0186).
+    Spawn,
 }
 
 #[derive(Debug)]
@@ -503,12 +546,27 @@ pub enum Expr {
         context: Option<Box<Expr>>,
         pos: Pos,
     },
+    /// `[e for x in xs if c]`, `{e for ...}` or `{k: v for ...}`, a
+    /// comprehension (expr.comp.1); `pos` is the opening bracket's.
+    Comp {
+        kind: CompKind,
+        elem: Box<Expr>,
+        /// The value of a map comprehension, `{k: v for ...}`.
+        value: Option<Box<Expr>>,
+        clauses: Vec<CompFor>,
+        pos: Pos,
+    },
     /// `e else d` or `e else return ...` as an expression (err.else.6): the
     /// value of `e`, or the fallback when it is absent or failed. `pos` is
     /// the `else`'s.
     Else {
         value: Box<Expr>,
         otherwise: Box<Else>,
+        pos: Pos,
+    },
+    /// `ref e`: a new shared cell holding the value of `e` (own.ref.1, ADR 0067).
+    Ref {
+        value: Box<Expr>,
         pos: Pos,
     },
 }
@@ -533,6 +591,8 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Ref { pos: p, .. }
+            | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
             Expr::Range { lo: Some(e), .. } => e.pos(),
             Expr::Call { callee: e, .. }
@@ -544,6 +604,24 @@ impl Expr {
             | Expr::Else { value: e, .. } => e.pos(),
         }
     }
+}
+
+/// What a comprehension builds (expr.comp.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompKind {
+    List,
+    Set,
+    Map,
+}
+
+/// One `for x in xs` clause of a comprehension, with its optional `if`
+/// filter (expr.comp.2).
+#[derive(Debug)]
+pub struct CompFor {
+    pub var: String,
+    pub var_pos: Pos,
+    pub iter: Expr,
+    pub cond: Option<Expr>,
 }
 
 /// A condition of `if` or `elif`: a `bool` expression, or a binding
@@ -562,12 +640,17 @@ pub enum InterpPart {
     Fmt(Expr, crate::lexer::FormatSpec),
 }
 
-/// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).
+/// A call argument: `value`, `mut place` (own.param.2), `move name`
+/// (own.move.2) or `label: value` (type.struct.3).
 #[derive(Debug)]
 pub struct Arg {
     pub label: Option<(String, Pos)>,
     pub mutable: bool,
+    pub moved: bool,
     pub value: Expr,
+    /// `|x|` before the value: a key function, whose value is evaluated
+    /// once per element with `x` bound to it (expr.key.1, ADR 0250).
+    pub param: Option<(String, Pos)>,
 }
 
 #[derive(Debug)]

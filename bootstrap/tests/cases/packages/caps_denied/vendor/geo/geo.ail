@@ -1,0 +1,7 @@
+use std.fs
+use clockwork
+
+pub fn size(path str) int
+    if fs.exists(path) and clockwork.home() != ""
+        return 1
+    0

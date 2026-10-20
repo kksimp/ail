@@ -1,0 +1,12 @@
+# conc.par.4: an `int` sum on the pool traps exactly where the sequential
+# running total overflows, even when the final total would fit.
+fn main()
+    mut steps := List[int]()
+    for _ in 0..900
+        steps.push(1)
+    for _ in 0..900
+        steps.push(-1)
+    mut total := 9223372036854775000
+    par for s in steps
+        total += s
+    print(total)

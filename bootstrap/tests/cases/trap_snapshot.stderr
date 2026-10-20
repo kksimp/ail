@@ -1,0 +1,5 @@
+$FILE:9:11: trap[expr.arith.3]: division by zero in `0 / 0`
+  9 |     total / count
+    |           ^
+  at 9:11 in average(xs = []); total = 0, count = 0
+  at 14:11 in main(); scores = [3, 4]

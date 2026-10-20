@@ -3,8 +3,10 @@
 Chapter key: `mod`
 
 > **Status:** Drafted (partial). Specified: modules, visibility, imports,
-> constants, single-file programs, the package root, and the entry point.
-> Not yet designed: manifests and dependency resolution (build-system topic).
+> constants, single-file programs, the package root, manifests and path
+> dependencies, and the entry point. Designed but not yet specified: the
+> lockfile ([packages.md](../design/packages.md)). Not yet designed: a
+> registry and version ranges.
 
 ## Modules
 
@@ -118,15 +120,15 @@ that there are no mutable globals. *(ADR 0132)*
 `float`, `str`, `char`, `bool`); other constants (a cycle is a compile-time
 error that names it); list, map and set literals; `List[T]()`, `Map[K, V]()`
 and `Set[T]()`; struct literals and variants with constant arguments;
-`none`, `[]` and `{}` where a field or element gives the expected type; and
-built-in operators and interpolation on built-in types only (`int`, `float`,
-`bool`, `str`, `char`, and lists, maps, sets and optionals of them). Calls,
-method calls, `?`, `ref`, indexing, field access, ranges, `if`, `match`, and
-anything that would run a user `impl` are compile-time errors. A bare `none`, `[]` or `{}` can't be a constant, since it
-has no expected type. *(ADR 0132)*
+`none`, `[]` and `{}` where a field or element gives the expected type;
+built-in operators and interpolation; and calls, method calls, field access,
+indexing and ranges of compile-time-safe code (`ct.const.1–4`). A bare
+`none`, `[]` or `{}` can't be a constant, since it has no expected type.
+*(ADR 0132, amended by ADR 0225)*
 
 **mod.const.3** — Constants have no order and no side effects. They are
-computed before `main` runs. A failure while computing one (overflow, division
+computed at compile time (`ct.eval.*`); the bootstrap computes them before
+`main` runs. A failure while computing one (overflow, division
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*
 
@@ -137,6 +139,51 @@ SCRIPTS := [["a", "b"], ["c"]]
 LIMIT := MAX_DEPTH * 2
 EMPTY := Map[str, int]()
 ```
+
+## Packages
+
+**mod.pkg.1** — A package root (`mod.unit.5`) may hold a manifest named
+`ail.pkg`. Every command that loads a program reads it, and the manifest of
+each path dependency, before any source file. Only the root's own directory
+is searched, not its parents. Without a manifest a package has no
+dependencies and no capability limit. *(ADR 0230)*
+
+**mod.pkg.2** — A manifest is lines of words separated by spaces; `#` starts
+a comment and `"..."` quotes a word. Its first line is `package NAME`,
+optionally followed by `caps LIST` (`eff.cap.5`), and appears once. Every
+other line is `dep NAME` followed by key-value pairs: `path`, `git`, `rev`,
+`tag` and `caps` (`eff.cap.4`). A `NAME` is lowercase letters, digits and `_`.
+An unknown line or key, a repeated key, or a key without a value is a
+compile-time error at its position in the manifest. *(ADR 0230)*
+
+```
+package notes caps fs
+dep geo path ../geo caps fs
+dep textkit path vendor/textkit
+```
+
+**mod.pkg.3** — `dep NAME path DIR` makes the package rooted at `DIR`
+(relative to the manifest's directory) a dependency: `use NAME` imports its
+root module and `use NAME.a.b` its module `DIR/a/b`. A dependency has exactly
+one of `path` and `git`, and `DIR` must exist. Inside each package, `use`
+resolves against that package's root and its own manifest: importing a
+package that the importing package doesn't declare is a compile-time error.
+*(ADR 0231)*
+
+**mod.pkg.4** — Package names are unique in a program: two packages with
+one name must be the same directory, and a dependency with its own manifest
+must be declared by its `package` name. A manifest can't declare a name
+twice or declare `std`, and the root package can't have a module directory
+with a package's name. *(ADR 0231)*
+
+**mod.pkg.5** — Package dependencies must not form a cycle; the error names
+the cycle at the `dep` line that closes it. *(ADR 0231)*
+
+**mod.pkg.6** — `dep NAME git URL` names a repository and needs exactly one of
+`rev COMMIT` and `tag TAG`; `rev` and `tag` are errors on a `path`
+dependency. The bootstrap doesn't fetch repositories: a `git` dependency is a
+compile-time error whose help is to clone it and use `path`. *(ADR 0231,
+ADR 0233)*
 
 ## Program entry point
 

@@ -1,4 +1,4 @@
-# `m[k] op= e` on a missing key traps, while `m[k] = e` adds it (type.map.3).
+# `m[k] op= e` on a missing key starts from zero and `m[k] = e` adds it; reading one traps (type.map.3, type.map.7).
 fn main()
     mut m := {"a": 1}
     m["b"] = 2
@@ -6,3 +6,4 @@ fn main()
     print(m)
     m["z"] += 1
     print(m)
+    print(m["q"])

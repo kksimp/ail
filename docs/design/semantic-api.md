@@ -128,6 +128,90 @@ An unknown rule exits 2 with, on stderr, `error: unknown rule ...` and a
 `help:` listing known rules nearby; with `--json`, one object
 `{"api":1,"severity":"error","message":...,"help":...}`.
 
+## Runtime traces: `ail run --trace` (ADR 0265)
+
+Spec chapter [21-trace](../spec/21-trace.md) (`trace.*`) says what is traced;
+this section is the format. `--trace` (or `--trace=all`), `--trace=calls` or
+`--trace=effects` writes one event per line to **stderr**; standard output
+stays the program's. Human lines:
+
+```
+trace: call main() at 9:4
+trace:   call fact(n = 3) at 10:11
+trace:   contract fact requires `n >= 0`: held
+trace:   fact returned 6
+trace: effect fs.exists("data.txt") at 9:11
+trace: spawn square(7) at 11:10
+trace: wait Task#1 at 12:13
+watch: total = 3 at 12:9
+trace: summary: 11 events shown, 0 dropped (call 4, return 4, contract 3)
+```
+
+Calls indent two spaces per depth. Positions in the program's first file are
+`LINE:COL`; other files are `FILE:LINE:COL`. With `--json`, one object per
+event, keys in this order:
+
+| `trace` | Other keys |
+|---|---|
+| `call` | `fn`, `depth` (`main` is 1), `args` (object: name to value text), position |
+| `return` | `fn`, `depth`, `value` |
+| `contract` | `fn`, `kind` (`requires`/`ensures`), `cond`, `held` (bool), position of the contract |
+| `effect` | `call` (`fs.read_text`), `args` (array of value texts), position |
+| `spawn` | `task` (`f(args)`), position |
+| `wait` | `task` (`Task#N`), position |
+| `watch` | `name`, `value`, position |
+| `summary` | `shown`, `dropped`, then one count per kind that occurred |
+
+Every object starts `"api":1,"trace":KIND`. A position is `"line","col"`,
+preceded by `"file"` outside the first file. Values are text forms built
+without user code (`trace.val.1`), cut at 60 characters (1,000 for `watch`)
+with `…` (`trace.val.2`). `--trace-limit N` (default 1,000) caps the events
+shown; the summary counts the rest.
+
+```json
+{"api":1,"trace":"call","fn":"fact","depth":2,"args":{"n":"3"},"line":10,"col":11}
+{"api":1,"trace":"summary","shown":11,"dropped":0,"call":4,"return":4,"contract":3}
+```
+
+`--watch NAME` adds a `watch` event after each assignment rooted in a variable
+`NAME` and each `mut NAME := e` (ADR 0268). It works with or without `--trace`.
+
+## Trap snapshots (ADR 0267)
+
+A trap that ends `ail run` keeps its first line and adds a snapshot, at most
+ten lines (`trace.snap.3`):
+
+```
+x.ail:9:11: trap[expr.arith.3]: division by zero in `0 / 0`
+  9 |     total / count
+    |           ^
+  values: amount = 25, balance = 10        (failed contracts only)
+  at 9:11 in average(xs = []); total = 0, count = 0
+  at 14:11 in main(); scores = [3, 4]
+  … 16 more frames (--verbose shows every frame and value)
+```
+
+Each frame line is `at POSITION in FUNCTION(PARAMETERS); OTHER LOCALS`,
+innermost first. `--verbose` prints every kept frame (up to 64) and each local
+on its own line at the 1,000-character budget. With `--json`, the trap is one
+object on stderr:
+
+```json
+{"api":1,"severity":"trap","rule":"expr.arith.3","file":"x.ail","line":9,"col":11,"message":"division by zero in `0 / 0`","source":"    total / count","stack":[{"fn":"average","file":"x.ail","line":9,"col":11,"args":{"xs":"[]"},"locals":{"total":"0","count":"0"}},{"fn":"main","file":"x.ail","line":14,"col":11,"args":{},"locals":{"scores":"[3, 4]"}}],"omitted_frames":0}
+```
+
+| Key | Always | Meaning |
+|---|---|---|
+| `severity` | yes | `"trap"` |
+| `rule`, `file`, `line`, `col`, `message` | yes | As in the human first line |
+| `source` | no | The text of the trap's line (absent in the prelude) |
+| `condition` | no | A failed contract's names and values |
+| `stack` | yes | Frames innermost first: `fn`, position, `args`, `locals` (objects: name to value text) |
+| `omitted_frames` | yes | Frames past the 64 kept |
+
+The editor (ADR 0241) can run `ail run --json --trace` and show these
+objects in its run panel.
+
 ## Typed holes (ADR 0147)
 
 `todo` in an expression is reported as a warning `expr.hole.1` whose message
@@ -252,6 +336,64 @@ signature shows them.
     9      r int
    40      fn Drawing.add(mut self, s any Shape)
 ```
+
+### Position queries: `--locals`, `--type`, `--refs`
+
+`ail api --locals FILE LINE COL`, `ail api --type FILE LINE COL` and
+`ail api --refs FILE LINE COL` answer a question about one position of the
+file ([ADRs 0258–0261](../decisions/0258-api-locals-query.md)). They take
+`--pretty` and `--json` as above, and the same program-with-errors rule
+(api.out.5). Every answer starts `{"api":1,"file":F,"line":L,"col":C`.
+
+**api.query.1** — A position with nothing to answer (`--type` or `--refs` off
+a name, or a name with no recorded type or symbol) exits 1 and prints on
+stderr one object `{"api":1,"severity":"error","message":...}`. A missing or
+non-numeric `LINE COL` is a usage error, exit 2.
+
+**api.loc.1** — `--locals` adds `locals`: every name in scope at the
+position, as `{name, type, mut, kind, line, col}`. `kind` is `self`, `param`,
+`loop` or `binding`; `line` and `col` are where the name is written (`null`
+for `self`). The order is `self`, then by where each name is written. `type`
+is the checker's, as in a diagnostic, or `"?"` where it is not known.
+
+**api.loc.2** — A `:=` binding is in scope from the line after it. A
+parameter, loop variable or pattern name is in scope from the first
+statement of the block it scopes. A name stays in scope until a line indented
+less than the line it started on; blank and comment lines never end a scope.
+On an empty line the cursor's column gives the indent.
+
+**api.type.1** — `--type` finds the name or number under (or just before) the
+cursor and adds `text`, `start_col`, `end_col` (exclusive), `type` (the
+innermost expression that starts there, or the type of a binding site) and
+`symbol` (the id of the declaration it refers to, as `--symbols`, or `null`).
+A qualified use of a module item (`geo.origin`) is one token at `geo`.
+
+**api.type.2** — `callee` is the declaration's outline item when `symbol` is
+a function or method (`signature`, `params`, `returns`, `effects`,
+`requires`, `ensures`, `doc`; api.out.3), else `null`.
+
+**api.refs.1** — `--refs` adds `symbol` and `refs`, a list of
+`{file, line, col, def}` sorted by file order, line and column. `symbol` is
+the id of the declaration the cursor is on or in a use of (api.ref.1) or
+`local:NAME`. The definition has `def:true`; `file` is the source file of the
+module the position is in, so a reference in an imported user module names
+that module's file.
+
+**api.refs.2** — A use of a module item is reported at the start of its
+qualified name (`geo.origin` at the `g`). A method call through a trait refers to the trait's
+method (api.ref.2).
+
+**api.refs.3** — For a local, `refs` is its binding (`def:true`) and every
+use of the name within its scope (api.loc.2). Locals can't be shadowed
+(expr.bind.4), so the name identifies the binding. Only locals of the file
+asked about are supported.
+
+```json
+{"api":1,"file":"t.ail","line":14,"col":9,"locals":[{"name":"items","type":"List[Point]","mut":false,"kind":"param","line":10,"col":10},{"name":"sum","type":"int","mut":true,"kind":"binding","line":11,"col":9}]}
+```
+
+`--symbols` also lists fields and variant fields with their `type`
+(api.out.3), so an editor can complete members without a position query.
 
 ### Example
 

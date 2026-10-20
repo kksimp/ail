@@ -1,0 +1,26 @@
+# conc.task.4: a group waits for its tasks when the block that owns it
+# ends; conc.task.8: `add` and `wait_all`.
+
+fn work(id int, out Channel[str])
+    out.send("work {id}")
+
+fn start(out Channel[str])
+    g := TaskGroup()
+    for i in 1..=3
+        g.add(spawn work(i, out))
+    print("start returns")
+
+fn main() !
+    out := Channel[str](10)
+    start(out)
+    out.close()
+    while true
+        s := out.recv() else break
+        print(s)
+    g := TaskGroup()
+    g.add(spawn work(4, out2()))
+    g.wait_all()?
+    print("done")
+
+fn out2() Channel[str]
+    Channel[str](1)

@@ -396,6 +396,26 @@ arguments. *(ADR 0135)*
 "ab".pad_right(4, ' ')      # "ab  "
 ```
 
+**type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
+`a` up to but excluding `b` (indexes count characters, as `len()` does:
+`type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
+clamped. `s.char_at(i)` returns the character at `i` as a `char?`, `none` if
+`i` is out of range or negative. *(ADR 0215)*
+
+**type.str.14** — `s.find(sub)` returns the character index of the first
+occurrence of `sub` as an `int?`, or `none`. `s.replace(from, to)` returns a
+copy with every non-overlapping occurrence of `from` replaced by `to`, left
+to right; it traps if `from` is empty. `s.to_lower()` and `s.to_upper()`
+return the Unicode lower- and upper-case forms. `sub`, `from` and `to` are
+`str`s. *(ADR 0215)*
+
+```ail fragment
+s := "Héllo"
+a := s.slice(1, 3)       # "él"
+i := s.find("llo")       # 2
+t := s.replace("l", "L") # "HéLLo"
+```
+
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
 
@@ -533,6 +553,28 @@ xs.join(", ")           # a, b
 xs.index_of("b")        # 1
 ```
 
+**type.coll.14** — A list has these further methods. *(ADR 0214)*
+- `xs.insert(i, x)` puts `x` at index `i`, moving later elements up. `i` MAY
+  equal `xs.len()` (append). Receiver `mut self`.
+- `xs.remove_at(i)` removes and returns the element at `i` as a `T`.
+  Receiver `mut self`.
+- `xs.extend(ys)` appends the elements of the `List[T]` `ys`. Receiver
+  `mut self`.
+- `xs.clear()` removes every element and `xs.reverse()` reverses in place.
+  Receivers are `mut self`.
+- `xs.first()` returns the first element as a `T?`, or `none` if empty.
+
+`insert` traps unless `0 <= i <= xs.len()` and `remove_at` traps unless
+`0 <= i < xs.len()`, both under rule `type.coll.4`. There is no `xs[a..b]`
+method: slicing is `type.coll.4`.
+
+```ail fragment
+mut xs := [1, 2, 3]
+xs.insert(1, 9)       # [1, 9, 2, 3]
+n := xs.remove_at(0)  # 1
+xs.extend([4, 5])     # [9, 2, 3, 4, 5]
+```
+
 **type.coll.10** — Open-ended slices `xs[a..]`, `xs[..b]` and `xs[..=b]` follow
 the bounds rule of `type.coll.4`. Open ranges exist only inside `[]`;
 `xs[..]` is a compile-time error (write `xs`). *(ADR 0136)*
@@ -543,14 +585,25 @@ the bounds rule of `type.coll.4`. Open ranges exist only inside `[]`;
 `T?`: the first least (greatest) element, or `none` if the list is empty. An
 inherent method takes precedence over a method of the same name from `Ord`
 (`trait.res.2`), so `xs.min()` isn't `Ord`'s `min(other)`. A binding of
-`xs.sort()`'s result gets a help suggesting `sorted()`. *(ADR 0136, ADR 0137)*
+`xs.sort()`'s result gets a help suggesting `sorted()`. Each also takes a key
+function, `by: |x| key` (`expr.key.1`); `s.sorted(by: ...)` works on a set.
+*(ADR 0136, ADR 0137, ADR 0250)*
+
+**type.coll.15** — `xs.take(n)` returns a new list of the first `n`
+elements, or all of them when the list is shorter. A negative `n` traps.
+*(ADR 0250)*
 
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
 and `List[float]`, returning a `float`. It is a built-in special case that user
-code can't declare (ADR 0128 is unchanged for user code). It starts at `0` or
-`0.0` and adds left to right with `+`: an `int` overflow traps, and an empty
-list gives `0` or `0.0`. For `float` it matches a Python loop, not Python
-3.12's compensated `sum()`. *(ADR 0136)*
+code can't declare (ADR 0128 is unchanged for user code). An empty list
+gives `0` or `0.0`. For `int` it adds left to right from `0`, and an overflow
+of any partial sum traps. For `float` the sum `S(xs)` is a fixed tree that
+depends only on the length: if it has at most 32 elements, four partial sums
+`p0`–`p3`, where `pk` adds the elements whose index is `k` modulo 4 left to
+right from `0.0`, and `S = (p0 + p1) + (p2 + p3)`; otherwise
+`S(xs[..m]) + S(xs[m..])` with `m = 32 × ⌈len / 64⌉`. Vector and parallel
+implementations compute the same tree (`conc.par.1`). *(ADR 0136,
+ADR 0239)*
 
 **type.coll.13** — A local declared with `:=` from `[]` or `{}` with no
 expected type takes its type from the first statement that determines it:
@@ -582,25 +635,37 @@ compile-time error that names the cause. *(ADR 0131, ADR 0133)*
 **type.map.3** — `m[k]` reads the value for `k` and traps if `k` is missing;
 the message shows the key's text form. An entry `m[k]` of a map place is a
 place (`own.place.1` amended), but only when `m[k]` is the whole target of `=`
-does it insert or replace. Every other use traps if `k` is missing:
-- the target of `op=` (`m[k] += 1`);
+does it insert or replace, and when it is the whole target of `op=` a missing
+`k` starts from zero (`type.map.7`). Every other use traps if `k` is missing:
 - a step before the last one in a longer place (`m[k].f = v`, `m[k][j] = v`);
   `m[a][b] = v` needs `m[a]` to exist and inserts `b`;
 - the receiver of a `mut self` method (`m[k].push(x)`);
 - a `mut` argument, and `for mut x in m[k]`.
 
-`k` is evaluated once, before the right-hand side. *(ADR 0131)*
+`k` is evaluated once, before the right-hand side. *(ADR 0131, ADR 0251)*
 
 ```ail fragment
 mut m := Map[str, int]()
 m["a"] = 1              # inserts
 m["a"] = 2              # replaces; "a" keeps its position
 m["a"] += 1             # 3
-m["z"] += 1             # traps: key "z" is missing
+x := m["z"]             # traps: key "z" is missing
 mut g := Map[int, Map[int, str]]()
 g[1] = Map[int, str]()
 g[1][2] = "x"           # inserts key 2 into g[1]
 g[3][4] = "y"           # traps: g has no key 3
+```
+
+**type.map.7** — When `m[k]` is the whole target of an arithmetic `op=`
+(`expr.op.2`) and `k` is missing, the operation starts from zero (`0`, `0.0`,
+or the sized type's zero) and inserts `k` at the end. Only the last step
+defaults: `m[a][b] += 1` still needs `m[a]`. `V` is numeric, since `op=` needs
+an arithmetic type. *(ADR 0251)*
+
+```ail fragment
+mut counts := Map[str, int]()
+for w in ["a", "b", "a"]
+    counts[w] += 1      # {"a": 2, "b": 1}
 ```
 
 **type.map.4** — Two maps are `==` when they have the same keys with equal

@@ -66,6 +66,8 @@ fn load_package(
     let mut diags = Vec::new();
     let mut seen: HashSet<String> = HashSet::from([String::new()]);
     let mut queue: Vec<(String, Vec<PathBuf>)> = vec![(String::new(), root_files)];
+    // The manifests come first: they say where each package is (mod.pkg.1-3).
+    let packages = crate::packages::Packages::read(&root);
     while let Some((module, paths)) = queue.pop() {
         for p in paths {
             // Positions from PRELUDE_LINE up belong to the prelude (ADR 0156).
@@ -88,12 +90,11 @@ fn load_package(
                 if import.first().is_some_and(|s| s == "std") {
                     continue;
                 }
-                let dotted = import.join(".");
-                if seen.insert(dotted.clone()) {
-                    let dir = import.iter().fold(root.clone(), |d, s| d.join(s));
-                    let found = if dir.is_dir() { ail_files(&dir) } else { Vec::new() };
+                let target = packages.target(&module, &import);
+                if !target.undeclared && seen.insert(target.module.clone()) {
+                    let found = if target.dir.is_dir() { ail_files(&target.dir) } else { Vec::new() };
                     if !found.is_empty() {
-                        queue.push((dotted, found));
+                        queue.push((target.module, found));
                     }
                 }
             }
@@ -107,7 +108,8 @@ fn load_package(
     let (mut prog, parse_diags) = crate::parser::parse_after_prelude(tokens);
     diags.extend(parse_diags);
     prog.files = files;
-    resolve(&mut prog, &mut diags, &root);
+    resolve(&mut prog, &mut diags, &packages);
+    packages.finish(&mut prog, &mut diags);
     Ok((prog, diags))
 }
 
@@ -180,7 +182,7 @@ fn file_index(prog: &Program, pos: Pos) -> Option<usize> {
     prog.files.iter().rposition(|f| f.base < pos.line)
 }
 
-fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
+fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::packages::Packages) {
     let modules: Vec<String> = {
         let mut m: Vec<String> = prog.files.iter().map(|f| f.module.clone()).collect();
         m.dedup();
@@ -250,22 +252,30 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
         }
         // The standard modules, and their errors (std.use.1-3), are the
         // checker's (`check/stdlib.rs`); their uses are left as written.
+        let path: Vec<String> = u.path.iter().map(|(s, _)| s.clone()).collect();
+        let found = packages.target(&module, &path);
         let target = if u.path[0].0 == "std" {
             Some(Target::Std)
-        } else if dotted == module {
+        } else if found.module == module {
             diags.push(
                 Diagnostic::new("mod.use.5", u.path[0].1, format!("module `{dotted}` imports itself"))
                     .help("remove the import; a module's own items are used without one"),
             );
             None
-        } else if items.contains_key(&dotted) && !dotted.is_empty() {
-            edges.push((module.clone(), dotted.clone(), u.path[0].1));
-            Some(Target::Module(dotted.clone()))
+        } else if found.undeclared {
+            let head = &u.path[0].0;
+            diags.push(
+                Diagnostic::new("mod.pkg.3", u.path[0].1, format!("package `{head}` is not a dependency of this package"))
+                    .help(format!("add `dep {head} path DIR` to this package's `ail.pkg`")),
+            );
+            None
+        } else if items.contains_key(&found.module) && !found.module.is_empty() {
+            edges.push((module.clone(), found.module.clone(), u.path[0].1));
+            Some(Target::Module(found.module))
         } else {
-            let dir = u.path.iter().fold(root.to_path_buf(), |d, (s, _)| d.join(s));
             diags.push(
                 Diagnostic::new("mod.use.4", u.path[0].1, format!("there is no module `{dotted}`"))
-                    .help(format!("a module is a directory of `.ail` files; expected `{}`", dir.display())),
+                    .help(format!("a module is a directory of `.ail` files; expected `{}`", found.dir.display())),
             );
             None
         };
@@ -402,6 +412,10 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
         }
         if let Some(r) = &mut f.ret {
             cx.type_ref(r);
+        }
+        // contract.decl.2: conditions name the module's items as the body does.
+        for c in f.contracts.iter_mut() {
+            cx.expr(&mut c.cond);
         }
         if let Some(b) = &mut f.body {
             cx.block(b);
@@ -541,7 +555,7 @@ impl Cx<'_> {
                 *name = self.type_name(name, t.pos);
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
-            TypeKind::Optional(inner) => self.type_ref(inner),
+            TypeKind::Optional(inner) | TypeKind::Ref(inner) => self.type_ref(inner),
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {
                     self.type_ref(ok);
@@ -608,6 +622,7 @@ impl Cx<'_> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Stmt::Defer(inner, _) => self.stmt(inner),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
         }
     }
@@ -701,11 +716,24 @@ impl Cx<'_> {
                 self.expr(k);
                 self.expr(v);
             }),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses.iter_mut() {
+                    self.expr(&mut c.iter);
+                    self.local(&c.var, c.var_pos);
+                    if let Some(cond) = &mut c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);

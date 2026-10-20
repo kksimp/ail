@@ -1,0 +1,74 @@
+## An agent-style task runner: load JSON tasks, run the small ones, write back.
+use std.env
+use std.fs
+use std.path
+use std.proc
+
+MAX_HOURS := 3.0
+
+error struct TaskError
+    id str
+    field str
+
+struct Todo
+    id str
+    title str
+    status str
+    hours float
+
+fn load_task(j Json) Todo ! TaskError
+    id := j.str("id") else return TaskError(id: "?", field: "id")
+    title := j.str("title") else return TaskError(id: id, field: "title")
+    status := j.str("status") else return TaskError(id: id, field: "status")
+    Todo(id: id, title: title, status: status, hours: j.num("hours") else 0.0)
+
+fn with_status(j Json, status str) Json
+    mut out := j
+    out.set("status", Json.Str(status))
+    out
+
+fn main() !
+    dir := "{path.dir(env.program())}/data"
+    doc := parse_json(fs.read_text("{dir}/tasks.json")? "reading tasks")? "parsing tasks"
+    mut updated := []
+    mut ran := 0
+    mut failed := 0
+    for item in doc.arr("tasks") else []
+        task := load_task(item) else err
+            print("skip {err.id}: missing {err.field}")
+            updated.push(item)
+            continue
+        if task.status != "todo" or task.hours > MAX_HOURS
+            print("keep {task.id}: {task.title} ({task.status}, {task.hours}h)")
+            updated.push(item)
+            continue
+        r := proc.run("echo", ["running", task.title])? "running {task.id}"
+        ran += 1
+        if r.status != 0
+            failed += 1
+        print("{task.id}: {r.out.trim()}")
+        if r.status == 0
+            updated.push(with_status(item, "done"))
+        else
+            updated.push(with_status(item, "failed"))
+    out := Json.Obj([JsonMember(key: "tasks", value: Json.Arr(updated))]).to_text()
+    fs.write_text("{dir}/tasks.out.json", out)?
+    back := parse_json(fs.read_text("{dir}/tasks.out.json")?)?
+    fs.remove("{dir}/tasks.out.json")?
+    count := back.arr("tasks") else []
+    print("ran {ran}, failed {failed}, wrote {count.len()} tasks ({out.chars().len()} chars)")
+
+@test fn loads_a_task()
+    doc := parse_json("\{\"id\":\"a\",\"title\":\"t\",\"status\":\"todo\",\"hours\":2.0}") else return
+    t := load_task(doc) else return
+    assert_eq(t.title, "t")
+    assert_eq(t.hours, 2.0)
+    bad := parse_json("\{\"id\":\"a\",\"status\":\"todo\"}") else return
+    missing := load_task(bad) else err
+        assert_eq(err.field, "title")
+        return
+    assert_eq(missing.id, "rejected")
+
+@test fn sets_status()
+    doc := parse_json("\{\"status\":\"todo\",\"n\":1}") else return
+    assert_eq(with_status(doc, "done").to_text(), "\{\"status\":\"done\",\"n\":1.0}")

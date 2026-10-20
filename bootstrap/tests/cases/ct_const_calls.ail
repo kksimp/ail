@@ -1,0 +1,40 @@
+# ct.const.1: a constant may call functions, methods and built-ins; they
+# run before `main` with the run-time semantics (ct.eval.2).
+SQUARES := squares(6)
+WORDS := "fn if else for".split(" ")
+FIRST := WORDS[1]
+COUNT := WORDS.len()
+ORIGIN := Point(x: 0, y: 0).moved(3, 4)
+DIST := ORIGIN.x * ORIGIN.x + ORIGIN.y * ORIGIN.y
+LIMIT := parse_limit("4096") else 64
+FALLBACK := parse_limit("lots") else 64
+LABEL := "{ORIGIN}"
+
+struct Point
+    x int
+    y int
+
+fn Point.moved(self, dx int, dy int) Point
+    Point(x: self.x + dx, y: self.y + dy)
+
+error enum LimitError
+    Bad(text str)
+
+fn parse_limit(text str) int ! LimitError
+    n := text.to_int() else return LimitError.Bad(text)
+    n
+
+fn squares(n int) List[int]
+    mut out := List[int]()
+    for i in 0..n
+        out.push(i * i)
+    out
+
+fn main()
+    print(SQUARES)
+    print(FIRST)
+    print(COUNT)
+    print(DIST)
+    print(LIMIT)
+    print(FALLBACK)
+    print(LABEL)

@@ -1,0 +1,12 @@
+# trace.run.3: `--trace=effects` shows each effect a standard module call
+# reaches, and each task spawned and waited, but no plain calls.
+use std.fs
+
+fn square(n int) int
+    n * n
+
+fn main()
+    if fs.exists("no/such/file.txt")
+        print("found")
+    t := spawn square(7)
+    print(t.wait() else 0)

@@ -417,6 +417,10 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
     if a.is("..") || a.is("..=") || b.is("..") || b.is("..=") {
         return false;
     }
+    // `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.
+    if a.is("|") && before.is_some_and(opens_key) {
+        return false;
+    }
     if prefix(before, a) {
         return false;
     }
@@ -424,6 +428,11 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
         return !a.ends_operand();
     }
     true
+}
+
+/// A `|` after this token opens a key function's parameter (expr.key.1).
+fn opens_key(t: &FTok) -> bool {
+    t.is("(") || t.is(",") || t.is(":")
 }
 
 /// `a` is a prefix operator: `-x`, `!T`.
@@ -441,14 +450,21 @@ fn flat(toks: &[FTok]) -> String {
     let mut out = String::new();
     let mut prev: Option<&FTok> = None;
     let mut before: Option<&FTok> = None;
+    // The opening `|` of a key function `|x|` (expr.key.1), whose closing `|` is unspaced.
+    let mut open_bar = None;
     for (i, t) in toks.iter().enumerate() {
         if t.is(",") && toks.get(i + 1).is_some_and(FTok::closes) {
             continue;
         }
+        let closing_bar = t.is("|") && i >= 2 && open_bar == Some(i - 2);
         if let Some(p) = prev
+            && !closing_bar
             && spaced(before, p, t)
         {
             out.push(' ');
+        }
+        if t.is("|") && prev.is_some_and(opens_key) {
+            open_bar = Some(i);
         }
         out.push_str(&t.text);
         before = prev;
@@ -473,10 +489,18 @@ fn list_bracket(toks: &[FTok], i: usize) -> bool {
 /// Insert `,` before each closing list bracket that starts a line (fmt.comma).
 fn with_trailing_commas(toks: &[FTok]) -> Vec<FTok> {
     let mut out: Vec<FTok> = Vec::new();
-    let mut stack: Vec<bool> = Vec::new();
+    // Per open bracket: whether it holds a list, and whether a comprehension
+    // (no trailing comma, fmt.comp).
+    let mut stack: Vec<(bool, bool)> = Vec::new();
     for (i, t) in toks.iter().enumerate() {
+        if t.kind == Kind::Kw("for") {
+            if let Some(top) = stack.last_mut() {
+                top.1 = true;
+            }
+        }
         if t.closes() {
-            let list = stack.pop().unwrap_or(false);
+            let (list, comp) = stack.pop().unwrap_or((false, false));
+            let list = list && !comp;
             let starts_line = i > 0 && toks[i - 1].end_line < t.line;
             let prev = out.last();
             if list && starts_line && prev.is_some_and(|p| !p.is(",") && !p.opens()) {
@@ -487,7 +511,7 @@ fn with_trailing_commas(toks: &[FTok]) -> Vec<FTok> {
             }
         }
         if t.opens() {
-            stack.push(list_bracket(toks, i));
+            stack.push((list_bracket(toks, i), false));
         }
         out.push(t.clone());
     }
@@ -519,9 +543,12 @@ fn layout(toks: &[FTok], depth: usize) -> Vec<String> {
         group = inner;
     }
     let mut lines = vec![format!("{}{}", indent(depth), flat(&toks[..=group.open]))];
+    let comp = comprehension(toks, group.open, group.close);
     for (from, to) in elements(toks, group.open, group.close) {
         let mut rendered = layout(&toks[from..to], depth + 1);
-        rendered.last_mut().unwrap().push(',');
+        if !comp {
+            rendered.last_mut().unwrap().push(',');
+        }
         lines.extend(rendered);
     }
     lines.push(format!("{}{}", indent(depth), flat(&toks[group.close..])));
@@ -564,8 +591,27 @@ fn groups(toks: &[FTok], from: usize, to: usize) -> Vec<Group> {
     out
 }
 
-/// The comma-separated elements between `toks[open]` and `toks[close]`, as ranges.
+/// Whether the brackets `toks[open]` and `toks[close]` hold a comprehension:
+/// a `for` at their top level (expr.comp.1).
+fn comprehension(toks: &[FTok], open: usize, close: usize) -> bool {
+    let mut level = 0;
+    for t in &toks[open + 1..close] {
+        if t.opens() {
+            level += 1;
+        } else if t.closes() {
+            level -= 1;
+        } else if level == 0 && t.kind == Kind::Kw("for") {
+            return true;
+        }
+    }
+    false
+}
+
+/// The comma-separated elements between `toks[open]` and `toks[close]`, as
+/// ranges. A comprehension's parts are its element and each `for` clause
+/// (fmt.comp).
 fn elements(toks: &[FTok], open: usize, close: usize) -> Vec<(usize, usize)> {
+    let split_at_for = comprehension(toks, open, close);
     let mut out = Vec::new();
     let mut level = 0;
     let mut start = open + 1;
@@ -574,7 +620,10 @@ fn elements(toks: &[FTok], open: usize, close: usize) -> Vec<(usize, usize)> {
             level += 1;
         } else if t.closes() {
             level -= 1;
-        } else if level == 0 && t.is(",") {
+        } else if level == 0 && split_at_for && t.kind == Kind::Kw("for") {
+            out.push((start, i));
+            start = i;
+        } else if level == 0 && !split_at_for && t.is(",") {
             out.push((start, i));
             start = i + 1;
         }
@@ -789,6 +838,7 @@ mod tests {
         );
         assert_eq!(fmt("fn f(a int,b int) !int\n    a\n"), "fn f(a int, b int) !int\n    a\n");
         assert_eq!(fmt("fn f() int ! E\n    1\n"), "fn f() int ! E\n    1\n");
+        assert_eq!(fmt("fn f()\n    xs.sorted(by:| x |-x)\n"), "fn f()\n    xs.sorted(by: |x| -x)\n");
         assert_eq!(fmt("x := xs[1 ..]\ny := a [0]\n"), "x := xs[1..]\ny := a[0]\n");
     }
 
@@ -811,6 +861,17 @@ mod tests {
         let out = fmt(&format!("X := [{}]\n", long.join(", ")));
         assert!(out.starts_with("X := [\n    \"item0\",\n"), "{out}");
         assert!(out.ends_with("    \"item29\",\n]\n"), "{out}");
+    }
+
+    #[test]
+    fn comprehensions_split_at_for_without_commas() {
+        assert_eq!(fmt("X := [\n    x\n    for x in xs\n]\n"), "X := [x for x in xs]\n");
+        let long = "a_rather_long_name_for_the_list";
+        let out = fmt(&format!("X := [Pos(c, r) for r in {long}.rows() if r > 0 for c in {long}.columns()]\n"));
+        assert_eq!(
+            out,
+            format!("X := [\n    Pos(c, r)\n    for r in {long}.rows() if r > 0\n    for c in {long}.columns()\n]\n")
+        );
     }
 
     #[test]

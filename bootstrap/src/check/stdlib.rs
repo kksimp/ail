@@ -144,6 +144,8 @@ impl<'p> Checker<'p> {
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
+            ("path", "dir" | "base" | "ext") => (vec![Str], Str),
+            ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
             // std.io.4: `exit` never returns (ADR 0139).
@@ -157,6 +159,12 @@ impl<'p> Checker<'p> {
             ("random", "seed") => (vec![Int], Unit),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
+            ("ui", "clipboard_get") => (vec![], opt(Str)),
+            ("ui", "clipboard_set") => (vec![Str], Unit),
+            ("ui", "open") => (
+                vec![Str, Int, Int],
+                Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
+            ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
         }
     }

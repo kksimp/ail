@@ -1,0 +1,16 @@
+# own.move.1-2: a `move` parameter owns its argument; for a copyable value
+# the move still ends the caller's binding.
+struct Buffer
+    items List[int]
+
+fn consume(move b Buffer) int
+    mut own := b
+    own.items.push(4)
+    own.items.len()
+
+fn main()
+    buf := Buffer(items: [1, 2, 3])
+    print(consume(move buf))
+    fresh := Buffer(items: [])
+    print(consume(move fresh))
+    print(consume(move Buffer(items: [9])))

@@ -11,13 +11,13 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` or
-/// `spawn` yet, so nothing gives those two.
+/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` yet, so
+/// nothing gives it; `spawn` gives `spawn`.
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -49,8 +49,12 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "env" => (&["args", "get", "cwd", "program"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
+        // std.path.1: text only, so no effects.
+        "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.ui.9: opening a window and every `ui.Window` method.
+        "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,
     };
     names.contains(&name).then_some(effects)
@@ -71,29 +75,7 @@ pub struct Effects<'p> {
 impl<'p> Effects<'p> {
     pub fn infer(prog: &'p Program, resolved: &Resolved) -> Self {
         let nodes = prog.fns.len();
-        let mut w = Walker {
-            prog,
-            resolved,
-            fns: HashMap::new(),
-            std_impls: Vec::new(),
-            direct: BTreeMap::new(),
-            calls: Vec::new(),
-        };
-        for (i, f) in prog.fns.iter().enumerate() {
-            if f.owner.is_none() && f.within == Within::TopLevel {
-                w.fns.insert(f.name.as_str(), i);
-            }
-        }
-        // eff.infer.5: operators, interpolation, `print` and the built-in
-        // collection methods call the standard traits' implementations.
-        let std = resolved.std;
-        if !prog.traits.is_empty() {
-            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
-                w.std_impls.extend(implementations(prog, tr, name));
-            }
-            w.std_impls.sort_unstable();
-            w.std_impls.dedup();
-        }
+        let mut w = Walker::new(prog, resolved);
         let mut direct = Vec::with_capacity(nodes);
         let mut calls = Vec::with_capacity(nodes);
         for f in &prog.fns {
@@ -105,8 +87,8 @@ impl<'p> Effects<'p> {
             direct.push(std::mem::take(&mut w.direct));
             calls.push(std::mem::take(&mut w.calls));
         }
-        // Constants need no walk: a constant expression calls no function
-        // and runs no user code (mod.const.2-3, ADR 0132).
+        // Constants add nothing: they are computed at compile time, and
+        // `check_constants` keeps what they call free of effects (ct.const.2).
         // eff.infer.3: the least fixed point.
         let mut sets: Vec<BTreeSet<&'static str>> = direct.iter().map(|d| d.keys().copied().collect()).collect();
         loop {
@@ -127,6 +109,26 @@ impl<'p> Effects<'p> {
             }
         }
         Effects { prog, direct, calls, sets }
+    }
+
+    /// The effects that running `body` has, each with its source: the
+    /// block's own operations (`print`), or a chain of calls such as
+    /// `log -> print` (conc.par.2, ADR 0237).
+    pub fn of_block(&self, resolved: &Resolved, body: &Block) -> BTreeMap<&'static str, String> {
+        let mut w = Walker::new(self.prog, resolved);
+        w.block(body);
+        let mut out = w.direct;
+        for &j in &w.calls {
+            for &e in self.sets[j].iter().filter(|e| propagates(e)) {
+                out.entry(e).or_insert_with(|| self.chain(j, e));
+            }
+        }
+        out
+    }
+
+    /// The functions that function `i` may call (eff.infer.3).
+    pub fn calls_of(&self, i: usize) -> &[usize] {
+        &self.calls[i]
     }
 
     /// The effect set of function `i`, sorted (eff.infer.6).
@@ -227,6 +229,120 @@ pub fn check_pure(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     diags
 }
 
+/// contract.decl.3: a contract's condition has no effect but `fail`. It
+/// must not print, reach a capability or change a `mut` argument, so that
+/// turning checks off (contract.run.3) can't change what a program does.
+pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.fns.iter().all(|f| f.contracts.is_empty()) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut w = Walker::new(prog, resolved);
+    let mut diags = Vec::new();
+    for f in &prog.fns {
+        for c in &f.contracts {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.cond);
+            let mut bad: BTreeMap<&str, String> = BTreeMap::new();
+            for (e, source) in &w.direct {
+                bad.insert(e, source.clone());
+            }
+            for &j in &w.calls {
+                for &e in fx.of(j) {
+                    bad.entry(e).or_insert_with(|| fx.chain(j, e));
+                }
+            }
+            bad.remove("fail");
+            if bad.is_empty() {
+                continue;
+            }
+            let word = if c.ensures { "ensures" } else { "requires" };
+            let what: Vec<String> = bad.iter().map(|(e, chain)| format!("`{e}` via {chain}")).collect();
+            diags.push(
+                Diagnostic::new(
+                    "contract.decl.3",
+                    c.pos,
+                    format!(
+                        "the `{word}` condition of `{}` must be pure, but it has {}",
+                        f.full_name(),
+                        what.join(", ")
+                    ),
+                )
+                .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
+            );
+        }
+    }
+    diags
+}
+
+/// ct.const.2 (ADR 0225): a constant is computed at compile time, so
+/// everything its value may call must be compile-time-safe: no `io`,
+/// `unsafe`, `spawn` or capability. One diagnostic per constant, naming each
+/// chain of calls.
+pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.consts.is_empty() {
+        return Vec::new();
+    }
+    let mut w = Walker::new(prog, resolved);
+    let walked: Vec<_> = prog
+        .consts
+        .iter()
+        .map(|c| {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.value);
+            (std::mem::take(&mut w.direct), std::mem::take(&mut w.calls))
+        })
+        .collect();
+    // Most constants call nothing; infer effects only when one does.
+    if walked.iter().all(|(direct, calls)| calls.is_empty() && !direct.keys().any(|e| impure(e))) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut diags = Vec::new();
+    for (c, (direct, calls)) in prog.consts.iter().zip(&walked) {
+        // Each forbidden effect with the chain that gives it, grouped by chain.
+        let mut groups: Vec<(Vec<&str>, String)> = Vec::new();
+        let mut note = |e: &'static str, chain: String| match groups.iter_mut().find(|(_, ch)| *ch == chain) {
+            Some((es, _)) => {
+                if !es.contains(&e) {
+                    es.push(e)
+                }
+            }
+            None => groups.push((vec![e], chain)),
+        };
+        for (&e, source) in direct.iter().filter(|(e, _)| impure(e)) {
+            note(e, format!("{} -> {source}", c.name));
+        }
+        let mut bad: BTreeSet<&'static str> = BTreeSet::new();
+        for &j in calls {
+            bad.extend(fx.of(j).iter().copied().filter(|e| impure(e) && !direct.contains_key(e)));
+        }
+        for e in bad {
+            let j = calls.iter().copied().find(|&j| fx.of(j).contains(e)).expect("an effect comes from a callee");
+            note(e, format!("{} -> {}", c.name, fx.chain(j, e)));
+        }
+        if groups.is_empty() {
+            continue;
+        }
+        let parts: Vec<String> = groups
+            .iter()
+            .map(|(es, chain)| {
+                let es: Vec<String> = es.iter().map(|e| format!("`{e}`")).collect();
+                let noun = if es.len() == 1 { "effect" } else { "effects" };
+                format!("has {noun} {} via {chain}", es.join(" and "))
+            })
+            .collect();
+        let msg = format!("`{}` is computed at compile time but {}", c.name, parts.join("; "));
+        diags.push(
+            Diagnostic::new("ct.const.2", c.pos, msg)
+                .help("constants may call only functions without I/O or capabilities; compute this value in `main`"),
+        );
+    }
+    diags
+}
+
 /// eff.cap.1: `main` must not reach a denied capability. One diagnostic
 /// per capability, at `main`.
 pub fn check_denied(prog: &Program, resolved: &Resolved, denied: &[&str]) -> Vec<Diagnostic> {
@@ -321,7 +437,34 @@ struct Walker<'p, 'r> {
     calls: Vec<usize>,
 }
 
-impl Walker<'_, '_> {
+impl<'p, 'r> Walker<'p, 'r> {
+    fn new(prog: &'p Program, resolved: &'r Resolved) -> Self {
+        let mut w = Walker {
+            prog,
+            resolved,
+            fns: HashMap::new(),
+            std_impls: Vec::new(),
+            direct: BTreeMap::new(),
+            calls: Vec::new(),
+        };
+        for (i, f) in prog.fns.iter().enumerate() {
+            if f.owner.is_none() && f.within == Within::TopLevel {
+                w.fns.insert(f.name.as_str(), i);
+            }
+        }
+        // eff.infer.5: operators, interpolation, `print` and the built-in
+        // collection methods call the standard traits' implementations.
+        let std = resolved.std;
+        if !prog.traits.is_empty() {
+            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
+                w.std_impls.extend(implementations(prog, tr, name));
+            }
+            w.std_impls.sort_unstable();
+            w.std_impls.dedup();
+        }
+        w
+    }
+
     fn add(&mut self, e: &'static str, source: impl Into<String>) {
         self.direct.entry(e).or_insert_with(|| source.into());
     }
@@ -353,6 +496,7 @@ impl Walker<'_, '_> {
                 }
             }
             Stmt::Assign { target, value, .. } => {
+                self.ref_write(target);
                 self.expr(target);
                 self.expr(value);
             }
@@ -370,6 +514,15 @@ impl Walker<'_, '_> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Stmt::Defer(s, _) => self.stmt(s),
+        }
+    }
+
+    /// eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`; the
+    /// checker records the root position of each such write.
+    fn ref_write(&mut self, place: &Expr) {
+        if self.resolved.ref_writes.contains(&place.pos()) {
+            self.direct.entry("mutates").or_insert_with(|| "a write through a `ref`".to_string());
         }
     }
 
@@ -401,6 +554,18 @@ impl Walker<'_, '_> {
                 }
             }
             Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&c.iter);
+                    if let Some(cond) = &c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(pairs, _) => {
                 for (k, v) in pairs {
                     self.expr(k);
@@ -425,6 +590,9 @@ impl Walker<'_, '_> {
                     }
                     None => self.expr(callee),
                 }
+                for a in args.iter().filter(|a| a.mutable) {
+                    self.ref_write(&a.value);
+                }
                 args.iter().for_each(|a| self.expr(&a.value));
             }
             Expr::Method { recv, name, name_pos, args } => {
@@ -442,6 +610,12 @@ impl Walker<'_, '_> {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
                     }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && let Some(effects) = std_effects("ui", "Window")
+                {
+                    for &e in effects {
+                        self.add(e, format!("ui.Window.{m}"));
+                    }
                 } else if let Expr::Name(m, _) = &**recv
                     && self.prog.enums.iter().any(|d| d.name == *m)
                 {
@@ -451,6 +625,10 @@ impl Walker<'_, '_> {
                     // hash or show its elements.
                     self.std_traits();
                 }
+                self.ref_write(recv);
+                for a in args.iter().filter(|a| a.mutable) {
+                    self.ref_write(&a.value);
+                }
                 self.expr(recv);
                 args.iter().for_each(|a| self.expr(&a.value));
             }
@@ -459,7 +637,12 @@ impl Walker<'_, '_> {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            // eff.infer.1: `spawn` starts a task (conc.task.1).
+            Expr::Unary { op: crate::ast::UnOp::Spawn, operand, .. } => {
+                self.add("spawn", "spawn");
+                self.expr(operand);
+            }
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { op, lhs, rhs, .. } => {
                 if !op.is_arithmetic() && !matches!(op, BinOp::And | BinOp::Or) {
                     self.std_traits();
@@ -610,7 +793,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

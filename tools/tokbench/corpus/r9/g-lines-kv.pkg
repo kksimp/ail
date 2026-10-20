@@ -1,0 +1,10 @@
+package = notes
+dep.geo.path = ../geo
+dep.geo.caps = fs
+dep.textkit.path = vendor/textkit
+dep.json.git = https://github.com/example/ail-json
+dep.json.rev = 4f2a9c1e
+dep.json.caps = fs,env
+dep.http.git = https://github.com/example/ail-http
+dep.http.tag = v1.4.0
+dep.http.caps = net,clock

@@ -1,0 +1,7 @@
+# contract.decl.1: contract lines come directly under the signature.
+fn h(x int)
+    print(x)
+    ensures x > 0
+
+fn main()
+    h(2)

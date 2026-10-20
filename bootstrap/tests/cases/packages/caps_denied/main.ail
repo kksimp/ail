@@ -1,0 +1,6 @@
+use std.time
+use geo
+
+fn main()
+    print(geo.size("data.txt"))
+    print(time.now_ms() > 0)

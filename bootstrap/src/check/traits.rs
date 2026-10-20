@@ -43,6 +43,7 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
         Ty::Set(x) => Ty::Set(Box::new(map_params(x, f))),
         Ty::Map(k, v) => Ty::Map(Box::new(map_params(k, f)), Box::new(map_params(v, f))),
         Ty::Opt(x) => Ty::Opt(Box::new(map_params(x, f))),
+        Ty::Conc(k, x) => Ty::Conc(*k, Box::new(map_params(x, f))),
         Ty::Res(x, Errs::Set(set)) => Ty::Res(Box::new(map_params(x, f)), Errs::Set(all(set))),
         Ty::Res(x, errs) => Ty::Res(Box::new(map_params(x, f)), errs.clone()),
         Ty::Union(m) => Ty::Union(all(m)),
@@ -62,6 +63,7 @@ pub(super) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(u
             }
         }
         (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => bind(x, y, vars, binds),
+        (Ty::Conc(a, x), Ty::Conc(b, y)) if a == b => bind(x, y, vars, binds),
         (Ty::Map(k, v), Ty::Map(l, w)) => {
             bind(k, l, vars, binds);
             bind(v, w, vars, binds);
@@ -89,7 +91,7 @@ fn mentions(t: &Ty, p: usize) -> bool {
     match t {
         Ty::Param(q) => *q == p,
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(|x| mentions(x, p)),
-        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) => mentions(x, p),
+        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) | Ty::Conc(_, x) => mentions(x, p),
         Ty::Map(k, v) => mentions(k, p) || mentions(v, p),
         Ty::Res(x, Errs::Set(set)) => mentions(x, p) || set.iter().any(|e| mentions(e, p)),
         Ty::Res(x, _) => mentions(x, p),
@@ -136,6 +138,7 @@ impl<'p> Checker<'p> {
                     "Ord" => self.std.ord = i,
                     "ToStr" => self.std.to_str = i,
                     "Hash" => self.std.hash = i,
+                    "Drop" => self.std.drop = Some(i),
                     _ => {}
                 }
             }
@@ -259,6 +262,8 @@ impl<'p> Checker<'p> {
                 .iter()
                 .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
+            // own.ref.6: references compare by identity, and aren't keys or ordered.
+            Ty::Ref(_) => tr == eq,
             // type.num.14: sized numbers are `Eq` and `Ord`; every one but `f32` is `Hash`.
             Ty::Num(k) => tr == eq || tr == self.std.ord || (tr == self.std.hash && !k.is_float()),
             Ty::Union(_) => tr == eq || tr == self.std.hash,

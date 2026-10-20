@@ -1,0 +1,13 @@
+# trace.snap.4: with `--json`, a trap is one object with its stack.
+
+fn average(xs List[int]) int
+    mut total := 0
+    for x in xs
+        total += x
+    count := xs.len()
+    total / count
+
+fn main()
+    scores := [3, 4]
+    print(average(scores))
+    print(average(List[int]()))

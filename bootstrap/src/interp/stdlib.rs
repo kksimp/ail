@@ -22,6 +22,11 @@ pub fn set_program(path: &str, args: Vec<String>) {
     let _ = PROGRAM.set((path.to_string(), args));
 }
 
+/// The program's path as given to `ail run`, for positions (trace.run.2).
+pub(super) fn program_path() -> String {
+    PROGRAM.get().map_or_else(String::new, |(p, _)| p.clone())
+}
+
 fn text(s: impl Into<Rc<str>>) -> Value {
     Value::Str(s.into())
 }
@@ -35,6 +40,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 return Ok(Value::Struct(s, Rc::new(fields)));
             }
             StdCall::Fn(module, f) => (module, f),
+            StdCall::Method(_) => unreachable!("interp::method_call runs `ui.Window` methods"),
         };
         if (module, f) == ("random", "shuffle") {
             let p = self.place(&args[0].value, env)?;
@@ -49,6 +55,9 @@ impl<'a, W: Write> Interp<'a, W> {
         let mut values = Vec::with_capacity(args.len());
         for a in args {
             values.push(self.eval(&a.value, env)?);
+        }
+        if self.tracing & super::trace::EFFECTS != 0 {
+            self.trace_effect(module, f, &values, pos);
         }
         let str_arg = |i: usize| match &values[i] {
             Value::Str(s) => s.clone(),
@@ -105,6 +114,10 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(e) => self.io_error(&path, error_kind(&e), pos),
                 }
             }
+            ("path", "dir") => text(crate::stdlib::path_dir(&str_arg(0))),
+            ("path", "base") => text(crate::stdlib::path_split(&str_arg(0)).1),
+            ("path", "ext") => text(crate::stdlib::path_ext(&str_arg(0))),
+            ("path", "join") => text(crate::stdlib::path_join(&str_arg(0), &str_arg(1))),
             ("env", "args") => {
                 let args = PROGRAM.get().map(|(_, a)| a.as_slice()).unwrap_or_default();
                 Value::List(Rc::new(args.iter().map(|a| text(a.as_str())).collect()))
@@ -208,6 +221,15 @@ impl<'a, W: Write> Interp<'a, W> {
                 std::thread::sleep(std::time::Duration::from_millis(ms as u64));
                 Value::Unit
             }
+            ("ui", "clipboard_get") => crate::ui::clipboard_get().map_or(Value::None, text),
+            ("ui", "clipboard_set") => {
+                crate::ui::clipboard_set(&str_arg(0));
+                Value::Unit
+            }
+            ("ui", "open") => {
+                let (title, cols, rows) = (str_arg(0), values[1].int(), values[2].int());
+                self.ui_open(&title, cols, rows, pos)
+            }
             _ => unreachable!("checked: `{module}.{f}` is a standard function"),
         })
     }
@@ -221,7 +243,7 @@ impl<'a, W: Write> Interp<'a, W> {
 
 /// An error value leaving a standard function: its failure, with the call
 /// as the first entry of the return trace (err.ctx.1).
-fn fail(error: Value, pos: Pos) -> Value {
+pub(super) fn fail(error: Value, pos: Pos) -> Value {
     Value::Fail(Rc::new(Failure { error, context: Vec::new(), trace: vec![pos] }))
 }
 

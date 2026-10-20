@@ -178,8 +178,27 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0190](0190-moves-and-use-after-move.md) | Check moves on every path; only owned values move; `move` moves any type *(delegated)* | Accepted | 2026-10-20 |
+| [0191](0191-cleanup-with-drop.md) | Clean up unique types with the prelude trait `Drop`; limit where unique values live *(delegated)* | Accepted | 2026-10-20 |
+| [0192](0192-ref-equality-and-text.md) | Compare `ref` values by identity and show their contents *(delegated)* | Accepted | 2026-10-20 |
+| [0193](0193-ref-cell-exclusivity.md) | Trap when a `ref` cell is used through another copy during a `mut` access *(delegated)* | Accepted | 2026-10-20 |
+| [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
+| [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
+| [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
+| [0240](0240-std-ui-mouse-scroll-clipboard-title.md) | `std.ui` adds mouse, scroll, clipboard and title *(delegated)* | Accepted | 2026-10-20 |
+| [0241](0241-editor-tabs-and-running.md) | The editor gets tabs, a file picker, mouse input and F5/F6 runs in its window front end *(delegated)* | Accepted | 2026-10-20 |
+| [0242](0242-std-ui-modifiers-method.md) | `Window.modifiers()` reports the modifiers of the last event *(delegated)* | Accepted | 2026-10-20 |
+| [0243](0243-std-ui-font-size.md) | `Window.set_font_size` picks from fixed bitmap sizes and keeps the window's pixels *(delegated)* | Accepted | 2026-10-20 |
+| [0244](0244-editor-rename-symbol.md) | Editor F2 renames through `ail api` references, else by whole word, after a confirming prompt *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
+| [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |
+| [0183](0183-bare-variant-patterns.md) | A bare variant pattern matches any fields: `Rect =>` for `Rect(_, _)` *(delegated)* | Accepted | 2026-10-20 |
+| [0184](0184-round-3-syntax-measurements.md) | Keep `:=`, `fn`, explicit `self`, return types and `use` lines after round-3 measurement *(delegated)* | Accepted | 2026-10-20 |
+| [0186](0186-deterministic-task-scheduler.md) | Run tasks in the interpreter on a deterministic, one-at-a-time scheduler; deadlocks trap *(delegated)* | Accepted | 2026-10-20 |
+| [0187](0187-trapped-and-task-groups.md) | `wait()` fails with `Trapped`; groups hold tasks that return nothing *(delegated)* | Accepted | 2026-10-20 |
+| [0188](0188-channel-api.md) | Channels: `Channel[T](capacity)`, `send`, `recv() T?`, `close` *(delegated)* | Accepted | 2026-10-20 |
+| [0189](0189-mutex-access-form.md) | Mutex access: `get`, `set`, `swap`, and `lock`/`unlock` pairs *(delegated)* | Accepted | 2026-10-20 |
 | [0194](0194-sized-numeric-types.md) | Sized numeric types: contextual literals, same-type arithmetic, trapping overflow *(delegated)* | Accepted | 2026-10-20 |
 | [0195](0195-sized-numeric-conversions.md) | Sized numbers convert with `to_<type>()` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0196](0196-inline-attribute.md) | `@inline` is accepted and recorded as a hint *(delegated)* | Accepted | 2026-10-20 |
@@ -199,3 +218,48 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0219](0219-interpreter-speed-round-two.md) | Speed up the interpreter again with int fast paths, pooled allocations and in-place updates *(delegated)* | Accepted | 2026-10-20 |
 | [0220](0220-interpreter-site-caches.md) | Cache what a call site names, by the address of its expression *(delegated)* | Accepted | 2026-10-20 |
 | [0221](0221-ail-skips-toolchain-probe.md) | `./ail` runs the built binary directly when it is up to date *(delegated)* | Accepted | 2026-10-20 |
+| [0210](0210-contract-syntax.md) | Contracts are `requires` and `ensures` lines under the signature; `result` names the value *(delegated)* | Accepted | 2026-10-20 |
+| [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
+| [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
+| [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |
+| [0214](0214-list-editing-methods.md) | List `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first` (resolves OQ-047) *(delegated)* | Accepted | 2026-10-20 |
+| [0215](0215-str-slice-and-search-methods.md) | `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper` (resolves OQ-048) *(delegated)* | Accepted | 2026-10-20 |
+| [0217](0217-agent-corpus-standing-benchmark.md) | Keep an agent-tool corpus as the standing token and speed benchmark; amends 0029 layer 1 *(delegated)* | Accepted | 2026-10-20 |
+| [0218](0218-agent-corpus-conventions.md) | Conventions for the agent-tool corpus programs *(delegated)* | Accepted | 2026-10-20 |
+| [0230](0230-package-manifest-ail-pkg.md) | A package's manifest is `ail.pkg`, one line per dependency *(delegated)* | Accepted | 2026-10-20 |
+| [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
+| [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
+| [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
+| [0222](0222-four-compiler-representations.md) | The compiler has four representations: AST, HIR, MIR and machine IR *(delegated)* | Accepted | 2026-10-20 |
+| [0223](0223-hir-is-the-versioned-api-shape.md) | The HIR's printed shape is the versioned API; MIR stays internal *(delegated)* | Accepted | 2026-10-20 |
+| [0224](0224-incremental-cache-keys.md) | Incremental queries are keyed by stable ids and fingerprinted without spans *(delegated)* | Accepted | 2026-10-20 |
+| [0225](0225-constants-call-compile-time-safe-functions.md) | Constants may call compile-time-safe functions, computed with the interpreter's semantics (amends 0132) *(delegated)* | Accepted | 2026-10-20 |
+| [0226](0226-compile-time-limits-determinism-and-caching.md) | Compile-time evaluation has step and memory limits, is deterministic, and is cached by what it ran *(delegated)* | Accepted | 2026-10-20 |
+| [0227](0227-derive-generators.md) | A trait may name a derive generator: a compile-time function from `TypeInfo` to AIL source *(delegated)* | Accepted | 2026-10-20 |
+| [0228](0228-generated-code-is-visible-hir.md) | Generated code is ordinary HIR with a provenance link, shown by `ail api --expanded` *(delegated)* | Accepted | 2026-10-20 |
+| [0229](0229-compile-time-reflection-only.md) | Reflection is compile-time only: generators receive a `TypeInfo` value *(delegated)* | Accepted | 2026-10-20 |
+| [0236](0236-automatic-parallel-loops.md) | Run provably independent loops in parallel, with results identical to sequential *(delegated)* | Accepted | 2026-10-20 |
+| [0237](0237-par-for.md) | `par for` asserts independence; provable conflicts are errors *(delegated)* | Accepted | 2026-10-20 |
+| [0238](0238-parallel-runtime-model.md) | One work-stealing pool for tasks and parallel loops, with a minimum-work threshold *(delegated)* | Accepted | 2026-10-20 |
+| [0239](0239-float-sum-fixed-tree.md) | Float `sum()` adds in a fixed four-lane tree (amends 0136) *(delegated)* | Accepted | 2026-10-20 |
+| [0246](0246-simd-vectorisation.md) | Vectorise independent loops on both baselines; never contract to FMA implicitly *(delegated)* | Accepted | 2026-10-20 |
+| [0276](0276-language-card-budget-8000.md) | The language card budget is 8,000 tokens on every tokenizer (amends 0174) | Accepted | 2026-10-20 |
+| [0247](0247-std-tensor-and-accel-capability.md) | NPUs and GPUs through a `std.tensor` module and an `accel` capability (design) *(delegated)* | Accepted | 2026-10-20 |
+| [0258](0258-api-locals-query.md) | `ail api --locals` lists the names in scope at a position, from facts the checker records *(delegated)* | Accepted | 2026-10-20 |
+| [0259](0259-api-type-query.md) | `ail api --type` gives the type of the expression at a position, and the callee for a call *(delegated)* | Accepted | 2026-10-20 |
+| [0260](0260-api-refs-query.md) | `ail api --refs` lists a symbol's definition and uses across user modules, and a local's uses in its scope *(delegated)* | Accepted | 2026-10-20 |
+| [0261](0261-checker-recording-hooks.md) | The checker records locals and expression types only when `ail api` asks *(delegated)* | Accepted | 2026-10-20 |
+| [0265](0265-runtime-trace-mode.md) | `ail run --trace` writes one event per line to standard error *(delegated)* | Accepted | 2026-10-20 |
+| [0266](0266-trace-budget-and-value-form.md) | Traces are budgeted, and show values structurally without user code *(delegated)* | Accepted | 2026-10-20 |
+| [0267](0267-trap-snapshots.md) | A trap carries a snapshot of the stack and its values *(delegated)* | Accepted | 2026-10-20 |
+| [0268](0268-watch-and-no-debugger-protocol.md) | `--watch NAME` shows a variable's assignments; no debugger protocol for now *(delegated)* | Accepted | 2026-10-20 |
+| [0272](0272-interpreter-thread-pool.md) | The interpreter runs `par for` on a pool of copied values *(delegated)* | Accepted | 2026-10-20 |
+| [0273](0273-pure-tasks-off-the-scheduler.md) | Pure tasks run on their own threads; tasks with handles keep the scheduler *(delegated)* | Accepted | 2026-10-20 |
+| [0274](0274-pool-fallback-runs-in-order.md) | When the pool can't give the sequential result, the loop reruns in order *(delegated)* | Accepted | 2026-10-20 |
+| [0275](0275-run-parallel-flag-and-pool-log.md) | `ail run --parallel`, `AIL_THREADS` and `AIL_PAR_LOG` *(delegated)* | Accepted | 2026-10-20 |
+| [0250](0250-key-functions-and-take.md) | Sort and pick by key with `by: \|x\| key`, and `xs.take(n)` *(delegated)* | Accepted | 2026-10-20 |
+| [0251](0251-map-op-assign-starts-from-zero.md) | `m[k] += v` on a missing key starts from zero *(delegated)* | Accepted | 2026-10-20 |
+| [0252](0252-question-mark-goes-to-else.md) | A `?` on an optional inside an `else` value goes to that `else` *(delegated)* | Accepted | 2026-10-20 |
+| [0253](0253-std-path.md) | `std.path`: `dir`, `base`, `ext` and `join` on path text *(delegated)* | Accepted | 2026-10-20 |
+| [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
+| [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |

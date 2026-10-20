@@ -1,0 +1,34 @@
+# own.uniq.1, own.uniq.5-6, own.move.2-3: unique values have one owner.
+unique struct File
+    fd int
+
+struct Holder
+    f File
+
+unique struct Box
+    f File
+
+struct Plain
+    n int
+
+impl Drop for Plain
+    fn drop(mut self)
+        print(n)
+
+fn close(move f File)
+    print(f.fd)
+
+fn keep(f File) File
+    f
+
+fn main()
+    b := Box(f: File(fd: 1))
+    g := b.f
+    xs := [File(fd: 2)]
+    r := ref File(fd: 3)
+    h := File(fd: 4)
+    close(h)
+    print(h.fd + 1)
+    h.drop()
+    p := Plain(n: 1)
+    close(move p.n)

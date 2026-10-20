@@ -1,0 +1,8 @@
+pub UNIT := "grid"
+
+pub struct Rect
+    pub w int
+    pub h int
+
+pub fn area(r Rect) int
+    r.w * r.h

@@ -11,21 +11,18 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
-    InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
-    TypeRef, UnOp, Variant, Within, is_prelude,
+    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
+    GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
+    StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
+mod contracts;
+
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
-    ("unique", "own.uniq.1"),
-    ("move", "own.move.1"),
-    ("ref", "own.ref.1"),
-    ("defer", "own.defer.1"),
-    ("spawn", "conc.task.1"),
     ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
     ("as", "ffi.decl.1"),
@@ -102,7 +99,7 @@ pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// these, `[` starts type arguments rather than an index (gen.infer.2).
 fn generic_names(tokens: &[Token]) -> HashSet<String> {
     // The built-in collections: `List[int]()` (type.coll.8).
-    let mut names: HashSet<String> = ["List", "Map", "Set"].iter().map(|n| n.to_string()).collect();
+    let mut names: HashSet<String> = ["List", "Map", "Set", "Channel", "Mutex"].iter().map(|n| n.to_string()).collect();
     for w in tokens.windows(3) {
         if let [
             Token { tok: Tok::Kw("fn" | "struct" | "enum"), .. },
@@ -169,6 +166,28 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                     prog.structs.push(s);
                 }
             }
+            // `unique struct` and `unique enum` (own.uniq.1).
+            Tok::Kw("unique") => match p.peek_at(1) {
+                Tok::Kw("struct") => {
+                    p.i += 1;
+                    if let Some(mut s) = p.struct_decl(false) {
+                        s.unique = true;
+                        prog.structs.push(s);
+                    }
+                }
+                Tok::Kw("enum") => {
+                    p.i += 1;
+                    if let Some(mut e) = p.enum_decl(false) {
+                        e.unique = true;
+                        prog.enums.push(e);
+                    }
+                }
+                _ => {
+                    p.i += 1;
+                    p.unexpected("`struct` or `enum` after `unique`", "own.uniq.1");
+                    p.skip_statement();
+                }
+            },
             Tok::Kw("enum") => {
                 if let Some(e) = p.enum_decl(false) {
                     prog.enums.push(e);
@@ -216,7 +235,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             }
             _ => {
                 p.unexpected(
-                    "a declaration (`fn`, `struct`, `enum`, `error`, `trait`, `impl` or a constant)",
+                    "a declaration (`fn`, `struct`, `enum`, `error`, `unique`, `trait`, `impl` or a constant)",
                     "gram.syntax.1",
                 );
                 p.skip_statement();
@@ -335,6 +354,23 @@ impl Parser {
 
     /// Report an unexpected token, preferring a precise "not supported yet"
     /// message for spec keywords the bootstrap doesn't implement.
+    /// `for x in e` or `for mut x in e` (expr.loop.1, expr.loop.6), the
+    /// current token being `for`; `par` after `par` (conc.par.5).
+    fn for_loop(&mut self, par: bool, pos: Pos) -> Option<Stmt> {
+        self.bump();
+        let mutable = self.eat_kw("mut");
+        let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
+        if !self.eat_kw("in") {
+            self.unexpected("`in` after the loop variable", "expr.loop.1");
+            return None;
+        }
+        let iter = self.range()?;
+        // err.else.6: `for x in xs else []` (ADR 0252).
+        let iter = self.else_expr(iter)?;
+        let body = self.block("the `for` header", "expr.loop.1")?;
+        Some(Stmt::For { par, var, var_pos, mutable, iter, body, pos })
+    }
+
     fn unexpected(&mut self, expected: &str, rule: &'static str) {
         let pos = self.pos();
         if let Tok::Kw(k) = self.peek()
@@ -431,6 +467,11 @@ impl Parser {
             );
             return Some(Vec::new());
         }
+        Some(self.block_rest())
+    }
+
+    /// The statements of a block after its INDENT, through its DEDENT.
+    fn block_rest(&mut self) -> Block {
         let mut body = Vec::new();
         while !matches!(self.peek(), Tok::Dedent | Tok::Eof) {
             if self.eat(&Tok::Newline) {
@@ -441,7 +482,7 @@ impl Parser {
             }
         }
         self.eat(&Tok::Dedent);
-        Some(body)
+        body
     }
 
     // ---- Declarations ----
@@ -556,8 +597,18 @@ impl Parser {
                 } else {
                     receiver = Some(Receiver { mutable });
                 }
+            } else if self.at_kw("move") && matches!(self.peek_at(1), Tok::Kw("self")) {
+                let pos = self.pos();
+                self.error_help(
+                    UNSUPPORTED,
+                    pos,
+                    "`move self` receivers are not supported by the bootstrap yet (spec own.move.1)",
+                    "take the value as a parameter instead: `fn close(move f File)`",
+                );
+                return None;
             } else {
                 let mutable = self.eat_kw("mut");
+                let moved = !mutable && self.eat_kw("move");
                 let (pname, ppos) = self.name("a parameter name", "gram.fn.2")?;
                 if self.at_sym(":") {
                     let pos = self.pos();
@@ -570,7 +621,7 @@ impl Parser {
                     self.i += 1;
                 }
                 let ty = self.type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?;
-                params.push(Param { name: pname, pos: ppos, mutable, ty });
+                params.push(Param { name: pname, pos: ppos, mutable, moved, ty });
             }
             if !self.eat_sym(",") {
                 break;
@@ -588,7 +639,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any" | "ref") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
@@ -596,16 +647,30 @@ impl Parser {
             None => format!("`{name}`"),
         };
         // A trait method without a default ends with its signature (trait.decl.2).
-        let body = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
+        let (body, contracts) = if matches!(within, Within::Trait(_)) && !matches!(self.peek_at(1), Tok::Indent) {
             if !self.eat(&Tok::Newline) {
                 self.unexpected("end of line after the signature", "trait.decl.1");
                 return None;
             }
-            None
+            (None, Vec::new())
         } else {
-            Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
+            let (body, contracts) = self.fn_body(&format!("the signature of {full}"))?;
+            (Some(body), contracts)
         };
-        Some(FnDecl { attrs: Vec::new(), owner, name, pos, doc: None, generics, receiver, params, ret, body, within })
+        Some(FnDecl {
+            attrs: Vec::new(),
+            owner,
+            name,
+            pos,
+            doc: None,
+            generics,
+            receiver,
+            params,
+            ret,
+            body,
+            within,
+            contracts,
+        })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -776,6 +841,12 @@ impl Parser {
     /// `Name` or `Name[Arg, ...]` (gram.generic.1), or a module's type
     /// `m.Name`, kept as the dotted name (mod.use.2, std.use.2).
     fn named_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
+        // `ref T` (own.ref.1); `ref T?` is an optional reference.
+        if self.at_kw("ref") {
+            let pos = self.bump().pos;
+            let inner = self.named_type("a type after `ref`", "own.ref.1")?;
+            return Some(TypeRef { kind: TypeKind::Ref(Box::new(inner)), pos });
+        }
         let (name, pos) = self.dotted_name(expected, rule)?;
         let mut args = Vec::new();
         if self.at_sym("<") {
@@ -841,7 +912,7 @@ impl Parser {
             fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
-        Some(StructDecl { name, pos, doc: None, is_error, generics, fields })
+        Some(StructDecl { name, pos, doc: None, is_error, unique: false, generics, fields })
     }
 
     /// `enum Name` followed by one variant per line (type.enum.1-2).
@@ -879,7 +950,7 @@ impl Parser {
             variants.push(Variant { name: vname, pos: vpos, doc: None, fields });
             Some(())
         });
-        Some(EnumDecl { name, pos, doc: None, is_error, generics, variants })
+        Some(EnumDecl { name, pos, doc: None, is_error, unique: false, generics, variants })
     }
 
     /// An indented block of one-line members, each parsed by `member`.
@@ -929,6 +1000,9 @@ impl Parser {
             self.skip_block();
             return None;
         }
+        if self.misplaced_contract() {
+            return None;
+        }
         let errors_before = self.diags.len();
         match self.statement_inner() {
             Some(stmt) if self.after_block() || self.eat(&Tok::Newline) => Some(stmt),
@@ -950,6 +1024,12 @@ impl Parser {
     fn statement_inner(&mut self) -> Option<Stmt> {
         let pos = self.pos();
         match self.peek().clone() {
+            // `defer S` (own.defer.1).
+            Tok::Kw("defer") => {
+                self.bump();
+                let inner = self.statement_inner()?;
+                Some(Stmt::Defer(Box::new(inner), pos))
+            }
             Tok::Kw("mut") => {
                 self.bump();
                 let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
@@ -981,17 +1061,15 @@ impl Parser {
                 let body = self.block("the `while` condition", "expr.loop.1")?;
                 Some(Stmt::While { cond, body, pos })
             }
-            Tok::Kw("for") => {
+            Tok::Kw("for") => self.for_loop(false, pos),
+            // conc.par.5: `par for` asserts that the iterations are independent.
+            Tok::Kw("par") => {
                 self.bump();
-                let mutable = self.eat_kw("mut");
-                let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
-                if !self.eat_kw("in") {
-                    self.unexpected("`in` after the loop variable", "expr.loop.1");
+                if !matches!(self.peek(), Tok::Kw("for")) {
+                    self.unexpected("`for` after `par`", "conc.par.5");
                     return None;
                 }
-                let iter = self.range()?;
-                let body = self.block("the `for` header", "expr.loop.1")?;
-                Some(Stmt::For { var, var_pos, mutable, iter, body, pos })
+                self.for_loop(true, pos)
             }
             Tok::Kw("break") => {
                 self.bump();
@@ -1093,6 +1171,33 @@ impl Parser {
             Tok::Kw("match") => self.match_expr(),
             _ => self.range(),
         }
+    }
+
+    /// The `for x in xs [if c]` clauses of a comprehension, at the first
+    /// `for` (expr.comp.2).
+    fn comp_clauses(&mut self) -> Option<Vec<CompFor>> {
+        let mut clauses = Vec::new();
+        while self.eat_kw("for") {
+            if self.at_kw("mut") {
+                let pos = self.pos();
+                self.error_help(
+                    "expr.comp.2",
+                    pos,
+                    "a comprehension's variable can't be `mut`",
+                    "use a `for mut` loop to change elements in place",
+                );
+                return None;
+            }
+            let (var, var_pos) = self.name("a variable after `for`", "expr.comp.2")?;
+            if !self.eat_kw("in") {
+                self.unexpected("`in` after the comprehension's variable", "expr.comp.2");
+                return None;
+            }
+            let iter = self.range()?;
+            let cond = if self.eat_kw("if") { Some(self.expression()?) } else { None };
+            clauses.push(CompFor { var, var_pos, iter, cond });
+        }
+        Some(clauses)
     }
 
     /// `value else d` or `value else return ...` (err.else.6), the loosest
@@ -1248,6 +1353,18 @@ impl Parser {
             let operand = self.unary()?;
             return Some(Expr::Unary { op: UnOp::Neg, operand: Box::new(operand), pos });
         }
+        // `ref e` (own.ref.1, ADR 0067).
+        if self.at_kw("ref") {
+            let pos = self.bump().pos;
+            let value = self.unary()?;
+            return Some(Expr::Ref { value: Box::new(value), pos });
+        }
+        // conc.task.1: `spawn f(args)`; the checker requires the call form.
+        if self.at_kw("spawn") {
+            let pos = self.bump().pos;
+            let operand = self.postfix()?;
+            return Some(Expr::Unary { op: UnOp::Spawn, operand: Box::new(operand), pos });
+        }
         self.postfix()
     }
 
@@ -1317,8 +1434,17 @@ impl Parser {
                 None
             };
             let mutable = self.eat_kw("mut");
+            let moved = !mutable && self.eat_kw("move");
+            // expr.key.1: `by: |x| e`, a key function.
+            let param = if self.eat_sym("|") {
+                let p = self.name("a parameter name after `|`", "expr.key.1")?;
+                self.expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?;
+                Some(p)
+            } else {
+                None
+            };
             let value = self.expression()?;
-            args.push(Arg { label, mutable, value });
+            args.push(Arg { label, mutable, moved, value, param });
             if !self.eat_sym(",") {
                 break;
             }
@@ -1391,6 +1517,12 @@ impl Parser {
                 let mut elems = Vec::new();
                 while !self.at_sym("]") {
                     elems.push(self.expression()?);
+                    if elems.len() == 1 && self.at_kw("for") {
+                        let elem = Box::new(elems.pop()?);
+                        let clauses = self.comp_clauses()?;
+                        self.expect_sym("]", "`]` after the comprehension", "expr.comp.1")?;
+                        return Some(Expr::Comp { kind: CompKind::List, elem, value: None, clauses, pos });
+                    }
                     if !self.eat_sym(",") {
                         break;
                     }
@@ -1406,7 +1538,14 @@ impl Parser {
                 }
                 let first = self.expression()?;
                 if self.eat_sym(":") {
-                    let mut pairs = vec![(first, self.expression()?)];
+                    let value = self.expression()?;
+                    if self.at_kw("for") {
+                        let clauses = self.comp_clauses()?;
+                        self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
+                        let (elem, value) = (Box::new(first), Some(Box::new(value)));
+                        return Some(Expr::Comp { kind: CompKind::Map, elem, value, clauses, pos });
+                    }
+                    let mut pairs = vec![(first, value)];
                     while self.eat_sym(",") && !self.at_sym("}") {
                         let k = self.expression()?;
                         self.expect_sym(":", "`:` after the key", "type.coll.2")?;
@@ -1414,6 +1553,11 @@ impl Parser {
                     }
                     self.expect_sym("}", "`}` or `,` in the map", "type.coll.2")?;
                     return Some(Expr::Map(pairs, pos));
+                }
+                if self.at_kw("for") {
+                    let clauses = self.comp_clauses()?;
+                    self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
+                    return Some(Expr::Comp { kind: CompKind::Set, elem: Box::new(first), value: None, clauses, pos });
                 }
                 let mut elems = vec![first];
                 while self.eat_sym(",") && !self.at_sym("}") {
@@ -1783,7 +1927,7 @@ mod tests {
 
     #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    defer x\n");
+        let (_, rules) = parse_src("fn main()\n    unsafe x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 

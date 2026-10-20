@@ -18,8 +18,10 @@ mod interp;
 mod lexer;
 mod modules;
 mod num;
+mod packages;
 mod parser;
 mod stdlib;
+mod ui;
 
 use std::process::ExitCode;
 
@@ -35,7 +37,8 @@ commands:
   check FILE    check a program (or a package DIR) without running it
   test FILE     run the program's `@test` functions, properties and doc examples;
                 --cases N (default 100) and --seed S set a property's inputs
-  effects FILE  print each function's inferred effects (eff.infer.6)
+  effects FILE  print each function's inferred effects (eff.infer.6);
+                --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
@@ -49,10 +52,22 @@ options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deterministic
                 with run or check: same as `--deny clock,random,proc,net`, so
-                the same inputs always give the same output (std.random.5)
+                the same inputs always give the same output (std.random.5),
+                and runs every loop on one thread (conc.par.9)
+  --parallel    with run: run every loop proven independent on the thread
+                pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
   --deny LIST   with run or check: reject a program whose `main` reaches a
-                denied capability (fs, env, proc, clock, random, net, or all) (eff.cap.1)
+                denied capability (fs, env, proc, clock, random, net, ui,
+                or all) (eff.cap.1)
+  --no-contracts
+                with run or test: skip `requires`/`ensures` checks (contract.run.3)
+  --trace[=calls|effects|all]
+                with run: write each call, return, effect, task and contract
+                check to standard error (trace.run.1); --trace-limit N caps
+                the events shown (default 1000) before a summary line
+  --watch NAME  with run: show each assignment to a `mut` variable NAME (trace.watch.1)
+  --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -66,8 +81,9 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" | "--deterministic" => {}
+            "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
             "--deny" | "--seed" => i += 1,
+            a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
         }
         i += 1;
@@ -77,7 +93,10 @@ fn main() -> ExitCode {
         _ => (args, Vec::new()),
     };
     let json = args.iter().any(|a| a == "--json");
-    let mut rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
+    // contract.run.3: `--no-contracts` skips the runtime contract checks.
+    interp::set_contracts(!args.iter().any(|a| a == "--no-contracts"));
+    let mut rest: Vec<&str> =
+        args.iter().map(String::as_str).filter(|a| *a != "--json" && *a != "--no-contracts").collect();
     // `ail test` owns `--cases` and `--seed` (test.prop.3); `ail run` owns
     // `--seed` and `--deterministic` (std.random.3, eff.det.1).
     let mut flags: Vec<&str> = Vec::new();
@@ -86,6 +105,18 @@ fn main() -> ExitCode {
             if let Some(at) = rest.iter().position(|a| *a == name) {
                 flags.extend(rest.drain(at..(at + 2).min(rest.len())));
             }
+        }
+    }
+    // trace.run.1, trace.watch.1, trace.snap.3: `ail run`'s tracing options.
+    match interp::take_trace_options(&mut rest, json) {
+        Ok(true) if rest.first() != Some(&"run") => {
+            eprintln!("error: `--trace`, `--watch` and `--verbose` work with `ail run` (trace.run.1)");
+            return ExitCode::from(2);
+        }
+        Ok(_) => {}
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
         }
     }
     let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
@@ -109,6 +140,7 @@ fn main() -> ExitCode {
             }
         },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
+        ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
@@ -160,8 +192,17 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
         args.drain(at..at + 2);
         interp::set_seed(seed);
     }
+    // conc.par.8: `run --parallel` puts every proven loop on the pool.
+    if args.first() == Some(&"run")
+        && let Some(at) = args.iter().position(|a| *a == "--parallel")
+    {
+        args.remove(at);
+        interp::parallel::set_mode(interp::parallel::Mode::Proven);
+    }
     if let Some(at) = args.iter().position(|a| *a == "--deterministic") {
         args.remove(at);
+        // conc.par.9: deterministic runs keep every loop on one thread.
+        interp::parallel::set_mode(interp::parallel::Mode::Off);
         deny.extend(check::effects::DETERMINISTIC_DENY);
         deny.sort_unstable();
         deny.dedup();
@@ -173,6 +214,18 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
 fn effects_file(path: &str, json: bool) -> ExitCode {
     let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
     print!("{}", check::effects::render(&check::effects::effects_of(&program, &resolved), json));
+    ExitCode::SUCCESS
+}
+
+/// `ail effects --parallel FILE [--json]`: each loop's verdict (conc.par.6).
+fn parallel_file(path: &str, json: bool) -> ExitCode {
+    let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
+    let at = |pos| {
+        let (file, p) = modules::locate(&program.files, pos);
+        let file = if file.is_empty() { path } else { file };
+        format!("{file}:{}:{}", p.line, p.col)
+    };
+    print!("{}", check::parallel::render(&check::parallel::analyze(&program, &resolved), json, &at));
     ExitCode::SUCCESS
 }
 
@@ -216,6 +269,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         if !deny.is_empty() {
             diags.extend(check::effects::check_denied(&program, &resolved, deny));
         }
+        diags.extend(packages::check_grants(&program, &resolved));
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
@@ -228,20 +282,18 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let result = std::thread::Builder::new()
-        .stack_size(STACK_BYTES)
-        .spawn(move || {
-            let at = |pos| {
-                let (file, p) = modules::locate(&program.files, pos);
-                format!("{file}:{}:{}", p.line, p.col)
-            };
-            interp::run(&program, &resolved).map_err(|stop| match stop {
-                interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
-                interp::Stop::Failed(report) => report.render_with(at),
-            })
+    // std.ui: this thread hosts any window the program opens (ADR 0178).
+    let result = ui::run_hosted(STACK_BYTES, move || {
+        let at = |pos| {
+            let (file, p) = modules::locate(&program.files, pos);
+            format!("{file}:{}:{}", p.line, p.col)
+        };
+        interp::run(&program, &resolved).map_err(|stop| match stop {
+            // trace.snap.1-4: the trap with its snapshot.
+            interp::Stop::Trap(t) => interp::render_trap(&program, &t, interp::take_snapshot(), json),
+            interp::Stop::Failed(report) => report.render_with(at),
         })
-        .expect("spawn interpreter thread")
-        .join();
+    });
     match result {
         Ok(Ok(())) => ExitCode::SUCCESS,
         Ok(Err(message)) => {
@@ -287,6 +339,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
+        diags.extend(packages::check_grants(&program, &resolved));
     }
     // test.run.1: a file of tests needs no `main`.
     if !program.fns.iter().any(|f| f.name == "main" && f.owner.is_none() && f.top_level()) {

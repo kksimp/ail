@@ -31,6 +31,12 @@ pub fn rewrite(prog: &mut Program, diags: &mut Vec<Diagnostic>) {
         for p in &prog.fns[i].params {
             cx.declare(&p.name, p.pos);
         }
+        // contract.decl.2: a method's contracts see its members too.
+        let mut contracts = std::mem::take(&mut prog.fns[i].contracts);
+        for c in &mut contracts {
+            cx.expr(&mut c.cond);
+        }
+        prog.fns[i].contracts = contracts;
         let mut body = prog.fns[i].body.take().expect("a body");
         cx.block(&mut body);
         prog.fns[i].body = Some(body);
@@ -137,6 +143,7 @@ impl Cx<'_> {
                 self.otherwise(otherwise);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
+            Stmt::Defer(s, _) => self.stmt(s),
         }
     }
 
@@ -200,20 +207,40 @@ impl Cx<'_> {
                 }
             }
             Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&mut c.iter);
+                    let (var, pos) = (c.var.clone(), c.var_pos);
+                    self.declare(&var, pos);
+                    if let Some(cond) = &mut c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(pairs, _) => pairs.iter_mut().for_each(|(k, v)| {
                 self.expr(k);
                 self.expr(v);
             }),
             Expr::Method { recv, args, .. } => {
                 self.expr(recv);
-                args.iter_mut().for_each(|a| self.expr(&mut a.value));
+                for a in args.iter_mut() {
+                    // expr.key.2: a key function's parameter is a new local.
+                    if let Some((name, pos)) = a.param.clone() {
+                        self.declare(&name, pos);
+                    }
+                    self.expr(&mut a.value);
+                }
             }
             Expr::Field { recv, .. } => self.expr(recv),
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);
