@@ -22,6 +22,8 @@ Design notes:
   on matching or beating C for systems and allocation-heavy code.
 - [design/automatic-parallelism.md](design/automatic-parallelism.md): using
   every core, SIMD and NPUs automatically without changing results.
+- [design/editor-baseline.md](design/editor-baseline.md): editor numbers on
+  the Rust bootstrap, for the Rust-free rebuild check (roadmap milestone 8).
 - [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
