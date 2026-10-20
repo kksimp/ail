@@ -46,7 +46,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             &["read_text", "write_text", "append_text", "exists", "list_dir", "remove", "make_dir"],
             &["fs", "io"],
         ),
-        "env" => (&["args", "get", "cwd", "program"], &["env"]),
+        "env" => (&["args", "get", "cwd", "home", "program"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
         // std.path.1: text only, so no effects.

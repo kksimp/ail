@@ -67,7 +67,8 @@ clipboard and F5/F6 runs (ADR 0241). Shift-click (ADR 0242,
 `std.ui.14`) and font sizes (ADR 0243, `std.ui.15`: `--font N`, Ctrl-+,
 Ctrl--) came next, then F2 rename through `ail api` references (ADR
 0244), then text styles, named colors and caret shapes (ADR 0294,
-`std.ui.16–18`).
+`std.ui.16–18`), and editor themes remembered in `~/.ail-edit` (ADRs
+0295–0296, `std.env.5`).
 
 Lane 37 (ADRs 0222–0229) designed topics 16–19: four compiler tiers (AST, HIR, MIR, machine IR), constants computed at compile time by calling compile-time-safe functions (implemented: `ct.const.1–3`), derive generators whose output `ail api --expanded` shows, and compile-time-only reflection.
 

@@ -90,6 +90,10 @@ read, the program traps. *(ADR 0157)*
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
 
+**std.env.5** — `home() str?` returns the user's home directory: `HOME`,
+else `USERPROFILE` (Windows), or `none` when neither is set or one is
+empty. *(ADR 0296)*
+
 ## Paths: `std.path`
 
 **std.path.1** — `std.path` works on path text only: it never touches the

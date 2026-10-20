@@ -261,3 +261,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0254](0254-json-typed-fields-and-set.md) | `Json` gets typed field getters and `set` *(delegated)* | Accepted | 2026-10-20 |
 | [0255](0255-round-4-token-measurements.md) | Round-4 token measurements on the agent-tool corpus *(delegated)* | Accepted | 2026-10-20 |
 | [0294](0294-std-ui-styles-colors-caret.md) | `std.ui` text styles, named colors and caret shapes *(delegated)* | Accepted | 2026-10-20 |
+| [0295](0295-editor-themes.md) | Editor themes recolor the default colors by kind, from an AIL module *(delegated)* | Accepted | 2026-10-20 |
+| [0296](0296-env-home-and-editor-settings.md) | `env.home()`, and editor settings in `~/.ail-edit` *(delegated)* | Accepted | 2026-10-20 |

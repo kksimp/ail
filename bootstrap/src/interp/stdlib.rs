@@ -127,6 +127,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 Ok(v) => text(v),
                 Err(_) => Value::None,
             },
+            // std.env.5: HOME, else USERPROFILE (Windows).
+            ("env", "home") => match std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+                Ok(v) if !v.is_empty() => text(v),
+                _ => Value::None,
+            },
             ("env", "program") => text(PROGRAM.get().map_or("", |(p, _)| p.as_str())),
             ("env", "cwd") => match std::env::current_dir() {
                 Ok(d) => text(d.to_string_lossy().into_owned()),

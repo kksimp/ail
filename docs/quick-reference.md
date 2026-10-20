@@ -629,7 +629,7 @@ fn main() !
 | Module | Functions |
 |---|---|
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents); all but `exists` are `! fs.IoError` |
-| `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
+| `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |

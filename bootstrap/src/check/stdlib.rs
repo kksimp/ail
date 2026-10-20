@@ -143,6 +143,7 @@ impl<'p> Checker<'p> {
             ("fs", "remove" | "make_dir") => (vec![Str], io(Unit)),
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
+            ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
