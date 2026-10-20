@@ -27,6 +27,7 @@ legitimately hang and is ignored). A trap (exit 1) is never a crash.
 | `fuzz.prop.2` | `ail fmt` output re-formats to itself, keeps `ail api` identical apart from positions (the parse is preserved), and a run prints the same |
 | `fuzz.prop.3` | `ail run --deterministic` never crashes and repeats exactly; `--no-contracts` prints the same for a program whose contracts hold |
 | `fuzz.prop.4` | every `ail api` form (`--pretty`, `--symbols`) is valid JSON; a program that checks clean raises no `bootstrap.*` error while running |
+| `fuzz.prop.5` | `run` prints the same stdout and stderr and exits the same with and without the bytecode tier (added by [ADR 0362](0362-differential-harness-for-the-bytecode-tier.md)) |
 | `fuzz.mut.1` | on a mutant, `check` diagnoses without crashing, repeats, and an exit-2 result carries an error diagnostic; a mutant that checks clean runs without a panic; `ail fix` doesn't crash, and if the mutant parsed (`fmt` accepts it) the fixed file still parses |
 
 "Parses" means `ail fmt --stdout` exits 0, since `fmt` refuses unparsable

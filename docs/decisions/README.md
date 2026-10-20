@@ -352,6 +352,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0359](0359-bytecode-tier-in-the-bootstrap.md) | Add a bytecode tier to the bootstrap interpreter (designer) | Accepted | 2026-10-20 |
 | [0360](0360-in-house-tls-for-std-net.md) | `https` in `std.net` through an in-house TLS implementation, not a crate (designer) | Accepted | 2026-10-20 |
 | [0361](0361-bytecode-tier-design.md) | The bytecode tier: register code over the tree walker's environment, with hand-offs *(delegated)* | Accepted | 2026-10-20 |
+| [0362](0362-differential-harness-for-the-bytecode-tier.md) | `./ail selftest` runs every program on both tiers; `fuzz.prop.5` compares them *(delegated)* | Accepted | 2026-10-20 |
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0367](0367-tls13-client-handshake.md) | The TLS 1.3 client handshake and record layer, tested on a recorded trace and live OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0371](0371-self-hosted-front-end-compared-by-dumps.md) | Compare the self-hosted lexer and parser with the bootstrap through text dumps *(delegated)* | Accepted | 2026-10-20 |
