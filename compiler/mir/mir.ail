@@ -77,7 +77,7 @@ pub fn Ty.name(self) str
 ## | `sqrt abs floor ceil` | a | on `float` |
 ## | `call` | arguments | function `name`; `dst` -1 when it returns nothing |
 ## | `fnaddr` | | the address of function `name` (a function value) |
-## | `trap` | message | `unreachable(message)` (err.model.2): flushes output, prints the trap at `site` and exits 1 |
+## | `utrap` | message | `unreachable(message)` (err.model.2): flushes output, prints the trap at `site` and exits 1 |
 ## | `icall` | callee, arguments | call through a function value; `dst` -1 when it returns nothing |
 ## | `prim` | arguments | runtime primitive `name` (native-abi.md §6) |
 ## | `get` | list, index | `xs[i]`, bounds-checked at `site` (type.coll.4); `site` -1: known in bounds |
