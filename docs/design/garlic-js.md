@@ -21,11 +21,12 @@ did.
    (`Object`, `Function`, `Array`, `String`, `Number`, `Boolean`, `Math`,
    `JSON`, the `Error` types, `Map`, `Set`, `Date`, `RegExp`, `console`).
    It has a step limit like `ail run --max-steps`.
-3. **DOM bindings** to Garlic's document tree: `getElementById`,
-   `querySelector` with simple selectors, `textContent`, `createElement`,
-   `appendChild`, `setAttribute`, the `click` and `DOMContentLoaded` events,
-   and `setTimeout` on a deterministic event loop. Each script mutation is
-   recorded against the node it changed.
+3. **DOM bindings** (done): a copy of Garlic's tree with the same node ids,
+   nodes, elements, text, selectors, events (capture, bubble, `on...`
+   handlers), timers on a virtual clock, forms, `location`, cookies,
+   storage, `URL` and `URLSearchParams`. Every change a script makes is
+   logged in order, and Garlic replays the log into its own tree
+   (`tools/garlic/jsdom`).
 4. **Later**: generators, async functions and promises, modules, BigInt, and
    a bytecode compiler.
 
@@ -55,13 +56,19 @@ tools/garlic/js/
     regexp.ail      RegExp on std.regex
     date.ail        Date, in UTC
     inspect.ail     console.log's layout, as Node's util.inspect
+    dom.ail         the DOM: nodes, the change log, selectors, events, timers, forms, location
+    markup.ail      innerHTML: an HTML fragment parser and serialiser
+    url.ail         URL and URLSearchParams
   testdata/
     syntax/         NAME.js with NAME.ast (tree) or NAME.err (SyntaxError)
     tokens/         a lexer sample and its tokens
     test262-parser/ the tc39 parser tests, packed, with their licences
+    run/            NAME.js with NAME.out, what Node printed
+    page/           NAME.html with NAME.out, what Chromium printed
 ```
 
-Garlic itself imports the parser as `use js.syntax` from `tools/garlic/`.
+`tools/garlic/js` is the package `garlicjs` (`ail.pkg`): Garlic declares it as a
+dependency and imports `garlicjs.vm` from `tools/garlic/jsdom`.
 
 ```sh
 ./ail run tools/garlic/js --ast page.js          # ESTree JSON, one line
@@ -69,6 +76,7 @@ Garlic itself imports the parser as `use js.syntax` from `tools/garlic/`.
 ./ail run tools/garlic/js --check a.js b.js      # "ok" or the SyntaxError, per file
 ./ail run tools/garlic/js --tokens page.js       # LINE:COL KIND TEXT per token
 ./ail run tools/garlic/js --run [--max-steps N] page.js   # run it; console.log to stdout
+./ail run tools/garlic/js --page page.html       # load a page: console, the body's HTML, navigations
 ```
 
 ## Design choices
@@ -166,6 +174,41 @@ series; they are within an ulp or two of V8, not always the same last bit.
 groups. Backreferences and lookaround are a SyntaxError until a JavaScript
 regex engine is written.
 
+## The DOM
+
+- **One tree, two copies.** Garlic parses the page into `html.Doc`; the
+  engine copies it into `Vm.dom` with the same ids. Scripts change the
+  copy, and each change is appended to `Vm.mutations` as one of `create`,
+  `create_text`, `create_comment`, `append`, `insert_before`, `detach`,
+  `set_text`, `set_attr`, `remove_attr` and `set_value`. Garlic applies
+  them in order with the matching `Doc` call, which gives new nodes the same
+  ids, because both allocate at the end of the node list. Setting an
+  element's `textContent` is logged as its parts (detaches, one new text
+  node, an append), exactly as `Doc.set_text` does them. Rejected: sharing
+  `html.Doc` itself, which would tie the engine to Garlic's parser module
+  and make the engine's per-node script objects live in Garlic's types;
+  and diffing the trees after scripts ran, which loses order and node
+  identity.
+- **The browser decides.** Navigations (with method and body, so a script
+  form submission can POST), external script fetches, `window.open`,
+  cookies and dialogs are requests in `Vm.host_requests`; the engine does
+  no I/O.
+- **Virtual time.** Timers run on the fixed clock in order of due time,
+  then of creation, until the page's time budget (a second by default) or
+  a task cap; `performance.now()` counts from the page's start. A page with
+  an endless interval can't hang the browser, and runs repeat exactly.
+- **Wrappers.** Each node has one script object (class `Node`, the id in
+  its primitive slot), made on first use. Properties such as `id`,
+  `className`, `href` and `value` are accessors on the prototypes that read
+  and write the copy. `href`, `src` and `action` resolve against the
+  page's address. `on...` handlers listen from where they were first set,
+  as in HTML.
+- Form controls' current values (`value`, `checked`) are kept apart from
+  their attributes, as in HTML, and logged as `set_value`; Garlic stores
+  them as the `value` and `checked` attributes, as its own form input does.
+- Layout isn't known to scripts: sizes and rectangles are 0, and
+  `getComputedStyle` reads only the `style` attribute.
+
 ## Not yet
 
 - Generators, `async` functions and `await`, `for await`: a clear
@@ -205,6 +248,11 @@ regex engine is written.
   built-ins, numbers, JSON, collections, errors, strings, console layout),
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
+- `testdata/page`: 7 pages (tree, events, timers, forms, URL, a
+  Google-style script redirect), each with `NAME.out`: the console, the
+  body's `innerHTML` at the end, and the navigations asked for, as Chromium
+  (Playwright's build 1194) gave them with the page at
+  `https://example.test/dir/page.html`. `--test-page DIR` compares them.
 - `vm/jsmath.ail` has `@test`s for the math functions.
 - `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
   all of these in `./ail selftest`.
@@ -240,7 +288,7 @@ bytecode compiler (slice 4) and AIL's native backend.
 
 ## Notes on writing it in AIL
 
-What a 9,900-line AIL program ran into, for the language's designers:
+What a 12,700-line AIL program ran into, for the language's designers:
 
 - A variant whose fields share a type can't be built by position
   (`Binary(op, l, r, p)`), so tree constructors are written with names.
@@ -256,5 +304,10 @@ What a 9,900-line AIL program ran into, for the language's designers:
   parentheses or use `match`.
 - A `match` arm can't do nothing (`{}` has no type), so "do nothing for these
   variants" is written with a helper that returns an optional.
+- There are no tuples, so a list of pairs is a list of a small struct, and
+  `for (k, v) in pairs` reads as the C-style `for` that AIL rejects.
+- A program rooted at `tools/garlic` can't load `tools/garlic/js/vm`, whose
+  files `use syntax` relative to their own root; `tools/garlic/js` is a
+  package (`ail.pkg`) that Garlic declares as a dependency instead.
 - The rest was direct: `T ! E` with `?` makes "first error stops the parse"
   a one-character cost per call.
