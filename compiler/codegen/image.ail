@@ -25,7 +25,7 @@ pub struct Image
     pub entry int
 
 pub fn new_image() Image
-    Image(code: [], funcs: {}, relocs: [], data: [], data_syms: {}, globals: 8, entry: 0)
+    Image(code: [], funcs: {}, relocs: [], data: [], data_syms: {}, globals: 64, entry: 0)
 
 ## A string object (native-abi.md §2) in the read-only data, once per symbol.
 pub fn add_str(mut img Image, sym str, s str)
