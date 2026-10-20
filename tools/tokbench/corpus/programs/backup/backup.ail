@@ -1,6 +1,6 @@
 
 fn main() !
-    src := "{path.dir(env.program())}/../../../../../examples/configs"
+    src := "{path.dir(env.program())}/configs"
     tmp := env.get("TMPDIR") else "/tmp"
     out := path.join(tmp, "ail-backup-check.tar.gz")
     made := proc.run("tar", ["-czf", out, "-C", src, "."])? "starting tar"

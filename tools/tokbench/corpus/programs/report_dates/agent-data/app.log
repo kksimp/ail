@@ -1,0 +1,8 @@
+2026-10-20 09:00:01 INFO user=ada started
+2026-10-20 09:00:05 ERROR code=503 user=ada upstream timeout
+2026-10-20 09:01:12 WARN code=429 user=bo slow down
+2026-10-20 09:02:44 ERROR code=500 user=cy crash in parser
+2026-10-20 09:03:10 ERROR code=503 user=bo upstream timeout
+2026-10-20 09:04:00 INFO user=cy done
+2026-10-20 09:05:31 ERROR code=503 user=ada upstream timeout
+2026-10-20 09:06:02 ERROR user=dee missing field

@@ -34,25 +34,6 @@ def strip(src):
     return "\n".join(out) + "\n"
 
 
-# Corpus copies sit five levels below the repository root, so their data
-# and helper paths go up to the root and into examples/. The programs then run
-# from any working directory, as the bench requires. Python twins find the same
-# files with parents[5] of their own path.
-UP = "../../../../../"
-REWRITE = [
-    ("path.dir(env.program())}/data", "path.dir(env.program())}/" + UP + "examples/data"),
-    ("path.dir(env.program())}/agent-data", "path.dir(env.program())}/" + UP + "examples/agent-data"),
-    ("path.dir(env.program())}/configs", "path.dir(env.program())}/" + UP + "examples/configs"),
-    ("{here}/../ail", "{here}/" + UP + "ail"),
-]
-
-
-def rewrite(text):
-    for old, new in REWRITE:
-        text = text.replace(old, new)
-    return text
-
-
 def main():
     src_dir = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "examples")
     for d in sorted((HERE / "corpus" / "programs").iterdir()):
@@ -63,7 +44,7 @@ def main():
                 text = "".join(l for l in src.splitlines(keepends=True) if not l.lstrip().startswith("#"))
             else:
                 text = strip(src)
-            (d / f"{d.name}.ail").write_text(rewrite(text))
+            (d / f"{d.name}.ail").write_text(text)
             print(f"{f} -> {d / (d.name + '.ail')}")
 
 

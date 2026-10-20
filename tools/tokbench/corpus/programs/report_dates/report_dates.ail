@@ -24,7 +24,7 @@ fn parse(text str) List[Event]
     events
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/../../../../../examples/agent-data/events.csv")? "reading events"
+    text := fs.read_text("{path.dir(env.program())}/agent-data/events.csv")? "reading events"
     mut per_day := {}
     mut kinds := {}
     for e in parse(text)

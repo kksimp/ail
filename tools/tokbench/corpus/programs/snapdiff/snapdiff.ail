@@ -8,7 +8,7 @@ fn diff(before List[str], after List[str]) List[str]
     out
 
 fn main() !
-    data := "{path.dir(env.program())}/../../../../../examples/data"
+    data := "{path.dir(env.program())}/data"
     old := snapshot("{data}/snap_old")?
     new := snapshot("{data}/snap_new")?
     mut changed := 0

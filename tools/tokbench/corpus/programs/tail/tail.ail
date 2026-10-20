@@ -20,7 +20,7 @@ fn tally(batch List[str]) Tally
 
 fn main() !
     ch := Channel[str](8)
-    feed := spawn stream(fs.read_text("{path.dir(env.program())}/../../../../../examples/data/logscan.log")?.lines(), ch)
+    feed := spawn stream(fs.read_text("{path.dir(env.program())}/data/logscan.log")?.lines(), ch)
     mut batches := []
     mut cur := List[str]()
     for line in ch

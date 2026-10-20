@@ -6,7 +6,7 @@ fn field(line str, key str) str?
     none
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/../../../../../examples/agent-data/app.log")? "reading the app log"
+    text := fs.read_text("{path.dir(env.program())}/agent-data/app.log")? "reading the app log"
     mut codes := {}
     mut users := {}
     mut errors := 0

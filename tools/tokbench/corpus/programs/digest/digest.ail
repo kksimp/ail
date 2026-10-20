@@ -2,7 +2,7 @@
 fn load(url str) !str
     r := net.get(url) else err
         print("offline ({err.kind}), using the local copy")
-        return fs.read_text("{path.dir(env.program())}/../../../../../examples/data/{path.base(url)}")?
+        return fs.read_text("{path.dir(env.program())}/data/{path.base(url)}")?
     if r.status != 200
         return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
     r.body

@@ -10,7 +10,7 @@ fn row_json(header List[str], cells List[str]) Json
     Json.Obj(members)
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/../../../../../examples/data/sales.csv")? "reading sales"
+    text := fs.read_text("{path.dir(env.program())}/data/sales.csv")? "reading sales"
     lines := text.lines()
     header := lines[0].split(",")
     mut rows := []
