@@ -497,3 +497,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
 | [0612](0612-native-contracts.md) | Contracts in native code: `requires` at the call, `ensures` at each return, unchecked `.nc` copies for conditions *(delegated)* | Accepted | 2026-10-20 |
 | [0613](0613-native-unsafe-and-attributes.md) | `unsafe` blocks, `@test` and `@deprecated` in native code *(delegated)* | Accepted | 2026-10-20 |
+| [0614](0614-native-std-in-the-runtime.md) | `std.path`, `std.hash` and `std.random` as native runtime functions *(delegated)* | Accepted | 2026-10-20 |
