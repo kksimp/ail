@@ -840,9 +840,6 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
         Bytes(_, pos) => unsupported(pos, "`bytes` literals")
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
-        Bytes(_, pos) =>
-            problem(pos, "`bytes` literals aren't in the native subset yet")
-            none
         Name(name, pos) =>
             key := lookup(name) else
                 if c := consts.get("{prefix}{name}")
