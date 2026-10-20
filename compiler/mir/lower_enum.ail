@@ -330,29 +330,29 @@ fn Lower.eq_fn(mut self, t Ty) str
     name
 
 ## Whether `==` on `t` is in the subset: numbers, strings, enums, structs
-## and lists of those (reported at `pos`, naming enum `top`, otherwise).
-fn Lower.comparable(mut self, t Ty, pos ast.Pos, top str, mut seen Set[str]) bool
+## and lists of those (reported at `pos`, naming enum `outer`, otherwise).
+fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
     if is_number(t) or t == Ty.Str
         return true
     if e := t.elem()
-        return comparable(e, pos, top, mut seen)
+        return comparable(e, pos, outer, mut seen)
     if s := struct_name(t)
         if seen.contains(s)
             return true
         seen.add(s)
         for sl in structs[s]
-            if not comparable(sl.ty, pos, top, mut seen)
+            if not comparable(sl.ty, pos, outer, mut seen)
                 return false
         return true
     n := enum_name(t) else
-        problem(pos, "`==` on `{top}`, which holds a `{t.name()}`, isn't in the native subset yet")
+        problem(pos, "`==` on `{outer}`, which holds a `{t.name()}`, isn't in the native subset yet")
         return false
     if seen.contains(n)
         return true
     seen.add(n)
     for c in enums[n]
         for fd in c.fields
-            if not comparable(fd.ty, pos, top, mut seen)
+            if not comparable(fd.ty, pos, outer, mut seen)
                 return false
     true
 
