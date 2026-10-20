@@ -396,6 +396,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0399](0399-compact-edits-and-diff-hunks.md) | Compact `ail edit` hunks by declaration name, `--test`, and changed lines in `ail diff` *(delegated)* | Accepted | 2026-10-20 |
 | [0583](0583-native-coverage-tracker.md) | A native coverage tracker: which programs `ail build` handles, and why the rest fail *(delegated)* | Accepted | 2026-10-20 |
 | [0584](0584-native-coverage-classification.md) | Native coverage: status rules, construct keys and counting *(delegated)* | Accepted | 2026-10-20 |
+| [0616](0616-native-any-trait-dispatch.md) | Native `any Trait`: a tagged box and a generated dispatcher per method *(delegated)* | Accepted | 2026-10-20 |
 | [0577](0577-bounds-checks-in-counted-loops.md) | Bounds checks in counted loops: versioning with guards, hoisted loads, two-pointer loops *(delegated)* | Accepted | 2026-10-20 |
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |

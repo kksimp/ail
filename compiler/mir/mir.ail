@@ -18,6 +18,8 @@ pub enum Ty
     ## An enum (ADR 0602): an `int` when no variant has fields, else a
     ## pointer to a kind-5 object.
     Enum(name str)
+    ## `any T`: a box with a tag and a value (ADR 0616).
+    Any(trait_name str)
     Unknown
     Unit
 
@@ -51,6 +53,7 @@ pub fn Ty.name(self) str
         List(e) => "List[{e.name()}]"
         Struct(n) => n
         Enum(n) => n
+        Any(t) => "any {t}"
         Unknown => "?"
         Unit => "unit"
 

@@ -63,6 +63,15 @@ fn main()
     print("27 takes {steps(27)} steps")
 ```
 
+**native.subset.2** — `any Trait` is in the native subset for traits whose
+implementations are structs: a struct converts to `any Trait` where one is
+expected (trait.any.3), and a method call on an `any Trait` value runs the
+method of the value's type (trait.any.1). In an `impl` method or an
+inherited default, `Self` stands for the implementing struct
+(trait.self.1). Impls for other types, generic impls in an `any`, and
+printing an `any` value are reported under native.subset.1. *(ADRs 0536,
+0616)*
+
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:

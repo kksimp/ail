@@ -165,13 +165,13 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
 ## independent (own.val.1).
 fn needs_copy(t Ty) bool
     match t
-        List(_) | Struct(_) => true
+        List(_) | Struct(_) | Any(_) => true
         _ => false
 
 ## Whether copying `t` needs a generated function: it holds a struct.
 fn holds_struct(t Ty) bool
     match t
-        Struct(_) => true
+        Struct(_) | Any(_) => true
         List(e) => holds_struct(e)
         _ => false
 
@@ -232,6 +232,7 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
             finish(return_of(out))
+        Any(tr) => gen_any_copy(x, tr)
         _ => finish(return_of(x))
     for b in 0..blocks.len()
         sealed[b] = true

@@ -99,6 +99,7 @@ pointer is to the first field:
 | 8 | set |
 | 9 | bytes |
 | 10 | boxed optional or result |
+| 11 | `any Trait` box: slot 0 the tag (the type's index among the trait's impls), slot 1 the value (ADR 0616) |
 
 Strings and lists don't carry the header yet; lane 171 moves every
 allocation to `rt.obj_new` with the collector.

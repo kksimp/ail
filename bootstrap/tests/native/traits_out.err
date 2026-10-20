@@ -1,0 +1,3 @@
+bootstrap/tests/native/traits_out.ail:14:8: error[native.subset.1]: `int.name`: methods of `int` aren't in the native subset yet
+bootstrap/tests/native/traits_out.ail:25:16: error[native.subset.1]: not in the native subset yet: converting a `int` to `any Named`
+bootstrap/tests/native/traits_out.ail:26:10: error[native.subset.1]: not in the native subset yet: printing a `any Named`

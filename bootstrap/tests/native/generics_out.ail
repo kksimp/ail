@@ -1,6 +1,6 @@
 # Generics and traits at the edges of the native subset (native.subset.1):
-# generic methods, `any Trait` values, and a generic over a type outside
-# the subset.
+# generic methods and a generic over a type outside the subset; `any
+# Trait` (ADR 0616) lowers.
 trait Named
     fn name(self) str
 

@@ -44,7 +44,7 @@ treats generics dynamically, which a native backend can't.
    operators on a bound type (`x > best` under `Ord`) are those of the
    concrete type. The checker has already proved the bounds.
 6. **Not yet in the subset:** generic methods (`fn T.m[U]`), `any Trait`
-   values (dynamic dispatch), derived trait methods (`impl Ord for S` with
+   values (dynamic dispatch, since added by ADR 0616), derived trait methods (`impl Ord for S` with
    no body), and optionals of a type parameter (`T?`, with lane 175's
    optionals).
 

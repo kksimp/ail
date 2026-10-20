@@ -1,0 +1,145 @@
+## `any Trait` in the native subset (ADR 0616). An `impl` block's methods
+## and inherited defaults are already methods of the type (`program_fns`,
+## ADR 0536); here `T`'s implementations get tags and dispatchers.
+
+use ast
+
+# ---- `any Trait` (ADR 0616) ----
+#
+# A value of `any T` is a box (heap kind 11): slot 0 the tag, the index of
+# its type among `T`'s implementations, slot 1 the value, a copy of what was
+# converted (own.val.1). A method call on it calls `any.T.m`, a generated
+# function that branches on the tag to `S.m` (trait.any.1). Copying the
+# value copies the box and what it holds, through `copy.any T`.
+
+OBJ_ANY := 11
+
+## Record the traits of a file and the structs implementing them, in order;
+## a struct's tag is its index.
+fn Lower.declare_traits(mut self, prog ast.Program)
+    for t in prog.traits
+        key := "{prefix}{t.name}"
+        if not trait_impls.contains(key)
+            trait_impls[key] = []
+    for imp in prog.impls
+        key := trait_key(imp.trait_name)
+        if imp.target.params != none
+            continue
+        s := type_key(imp.target.name) else continue
+        mut impls := trait_impls.get(key) else []
+        impls.push(s)
+        trait_impls[key] = impls
+
+## The key of a trait named here, as in `type_key`.
+fn Lower.trait_key(self, name str) str
+    parts := name.split(".")
+    if parts.len() > 1
+        if m := aliases.get(parts[0])
+            return "{m}.{parts[1..].join(".")}"
+    "{prefix}{name}"
+
+## The trait of an `any T` type.
+fn any_of(t Ty?) str?
+    match t?
+        Any(n) => n
+        _ => none
+
+## `any T` of a trait in the program, as a MIR type.
+fn Lower.any_type(self, name str) Ty?
+    key := trait_key(name)
+    if trait_impls.contains(key) then Ty.Any(key) else none
+
+## `v` converted to `any T` (trait.any.3): boxed with its type's tag.
+fn Lower.box_any(mut self, v Val, t str, pos ast.Pos) Val?
+    s := struct_name(v.ty) else return unsupported(pos, "converting a `{v.ty.name()}` to `any {t}`")
+    impls := trait_impls.get(t) else []
+    mut tag := -1
+    for k in 0..impls.len()
+        if impls[k] == s
+            tag = k
+    if tag < 0
+        return unsupported(pos, "converting a `{s}` to `any {t}`")
+    payload := copy_value(v)
+    ty := Ty.Any(t)
+    b := call("rt.obj_new", [konst(16, Ty.Int), konst(OBJ_ANY, Ty.Int)], ty)
+    store(b, 0, konst(tag, Ty.Int))
+    store(b, 1, payload)
+    Val(id: b, ty: ty)
+
+## `x.m(args)` on an `any T`: a call of the dispatcher `any.T.m`, which has
+## the signature of the implementations' `S.m`.
+fn Lower.any_call(mut self, t str, r Val, name str, args List[ast.Arg], pos ast.Pos) Val?
+    impls := trait_impls.get(t) else []
+    if impls.len() == 0
+        return unsupported(pos, "`.{name}()` on `any {t}`, which nothing implements")
+    sig := sigs.get("{impls[0]}.{name}") else return unsupported(pos, "`.{name}()` on `any {t}`")
+    key := "any.{t}.{name}"
+    if not sigs.contains(key)
+        mut ps := [Ty.Any(t)]
+        for k in 1..sig.params.len()
+            ps.push(sig.params[k])
+        sigs[key] = Sig(params: ps, ret: sig.ret)
+        dispatch[key] = [t, name]
+    struct_call(key, r, args, pos)
+
+## Generate each dispatcher asked for.
+fn Lower.gen_dispatch(mut self)
+    for key in dispatch.keys()
+        t := dispatch[key][0]
+        name := dispatch[key][1]
+        sig := sigs[key]
+        ps := begin_fn(key, sig.ret, sig.params)
+        tag := load(ps[0], 0, Ty.Int)
+        impls := trait_impls[t]
+        for k in 0..impls.len()
+            s := impls[k]
+            m := "{s}.{name}"
+            target := sigs.get(m) else
+                fn_failed = true
+                continue
+            if k + 1 < impls.len()
+                yes := new_block()
+                no := new_block()
+                branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+                sealed[yes] = true
+                sealed[no] = true
+                cur = yes
+                any_tail(m, target, ps)
+                cur = no
+            else
+                any_tail(m, target, ps)
+        for b in 0..blocks.len()
+            sealed[b] = true
+        end_fn(key, ast.Pos(line: 1, col: 1))
+
+## Call `m` on the box's value and return its result.
+fn Lower.any_tail(mut self, m str, target Sig, ps List[int])
+    mut vs := [load(ps[0], 1, target.params[0])]
+    for k in 1..ps.len()
+        vs.push(ps[k])
+    r := call(m, vs, target.ret)
+    finish(return_of(r))
+
+## The body of `copy.any T`: a new box with the same tag and a copy of the
+## value, by the value's type.
+fn Lower.gen_any_copy(mut self, x int, t str)
+    tag := load(x, 0, Ty.Int)
+    ty := Ty.Any(t)
+    b := call("rt.obj_new", [konst(16, Ty.Int), konst(OBJ_ANY, Ty.Int)], ty)
+    store(b, 0, tag)
+    impls := trait_impls[t]
+    for k in 0..impls.len()
+        st := Ty.Struct(impls[k])
+        if k + 1 < impls.len()
+            yes := new_block()
+            no := new_block()
+            branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+            sealed[yes] = true
+            sealed[no] = true
+            cur = yes
+            store(b, 1, copy_value(Val(id: load(x, 1, st), ty: st)))
+            finish(return_of(b))
+            cur = no
+        else
+            store(b, 1, copy_value(Val(id: load(x, 1, st), ty: st)))
+            finish(return_of(b))
