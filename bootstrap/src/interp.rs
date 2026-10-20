@@ -1240,11 +1240,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 format!("{x:.*}", spec.precision.unwrap_or(0))
             }
             Value::Int(n) if spec.hex => {
-                if *n < 0 {
-                    format!("-{:x}", n.unsigned_abs())
-                } else {
-                    format!("{n:x}")
-                }
+                if *n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }
             }
             other => self.text(other, pos)?,
         };

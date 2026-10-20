@@ -54,8 +54,14 @@ const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
 fn prelude_text(tokens: &[Token]) -> &'static str {
     let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
     let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
-    let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1]));
-    if tokens.iter().any(named) && !declared { PRELUDE } else { core }
+    let declared = tokens.windows(2).any(|w| {
+        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
+    });
+    if tokens.iter().any(named) && !declared {
+        PRELUDE
+    } else {
+        core
+    }
 }
 
 /// Parse a program after the prelude, whose lines are numbered from
