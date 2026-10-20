@@ -87,3 +87,20 @@ $ ail build examples/hello.ail
 $ ./hello
 Hello, world!
 ```
+
+## Optimisation
+
+**native.bce.1** — An optimisation that removes a list bounds check
+(type.coll.4) from a loop keeps native.build.1: when the lengths the check
+would have tested are not known to be enough, the loop runs with the check,
+and traps on the same iteration with the same message. A list that a call in
+the loop receives, or a `push` in the loop grows, is never assumed to keep
+its length. *(ADR 0577)*
+
+**native.bce.2** — An access `xs[i]` has no bounds check when `i` was
+already used to index `xs` on every path to it, or is `xs.len()` taken
+before a `push` to `xs` that is on every path to it. This holds while no
+operation in the program shortens a list. *(ADR 0578)*
+
+**native.bce.3** — A list's capacity is not observable: a native executable
+may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
