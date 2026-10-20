@@ -62,6 +62,8 @@ struct Gen
     saved_floats List[int]
     slot_base int
     frame int
+    ## The first spill slot past the allocator's: frame cells follow it.
+    cell_base int
     ## Caller-saved registers in use, which a `push`'s slow path saves.
     caller_used List[int]
 
@@ -117,6 +119,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
         saved_floats: [],
         slot_base: 0,
         frame: 0,
+        cell_base: al.slots,
         caller_used: codegen.caller_used(al, registers()),
     )
     for r in al.saved
@@ -125,7 +128,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
         else
             g.saved_ints.push(r)
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
-    g.prologue(al.slots)
+    g.prologue(al.slots + codegen.cells(f))
     # The entry block's parameters arrive in the argument registers.
     g.entry_moves()
     for k in 0..al.order.len()
@@ -582,6 +585,10 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.mov_rm(d, at(r, 0))
             put_gpr(i.dst, d)
         "trap" => a.jmp(stub(i.imm, i.args[0], i.args[1], i.site, i.name))
+        "cell" =>
+            d := out_gpr(i.dst, S1)
+            a.lea(d, slot(codegen.SLOT_BASE + cell_base + i.imm))
+            put_gpr(i.dst, d)
         "load" =>
             r := gpr(i.args[0], S0)
             if f.vals[i.dst].is_float()

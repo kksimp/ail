@@ -149,13 +149,20 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         vs.push(r.id)
     if args.len() + vs.len() != sig.params.len()
         return unsupported(pos, "this call")
+    mine := cells.get(key) else []
+    mark := back_keys.len()
     for a in args
         if a.label != none
             return unsupported(pos, "labelled arguments")
         t := sig.params[vs.len()]
+        if mine.contains(vs.len())
+            vs.push(cell_arg(a, t)?)
+            continue
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
-    Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    r := user_call(key, vs, sig.ret, pos, key)
+    cells_back(mark)
+    Val(id: r, ty: sig.ret)
 
 ## Whether a value of type `t` read from a place must be copied to stay
 ## independent (own.val.1).

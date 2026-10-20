@@ -87,6 +87,8 @@ struct Gen
     saved List[int]
     slots int
     frame int
+    ## The first spill slot past the allocator's: frame cells follow it.
+    cell_base int
     ## Bytes the stack pointer is below the frame for outgoing stack
     ## arguments; spill slots are addressed from the stack pointer.
     sp_shift int
@@ -151,7 +153,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         stubs: [],
         saved: al.saved,
         caller_used: codegen.caller_used(al, registers()),
-        slots: al.slots,
+        slots: al.slots + codegen.cells(f),
+        cell_base: al.slots,
         frame: 0,
         sp_shift: 0,
     )
@@ -572,6 +575,13 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.ldr(d, gpr(i.args[0], S0), 0)
             put_gpr(i.dst, d)
         "trap" => a.b(stub(i.imm, i.args[0], i.args[1], i.site, i.name))
+        "cell" =>
+            d := out_gpr(i.dst, S1)
+            off := slot(codegen.SLOT_BASE + cell_base + i.imm)
+            if off > 4095
+                unreachable("a64: frame cell at {off} bytes is out of `add` range")
+            a.alu_ri("add", d, SP, off)
+            put_gpr(i.dst, d)
         "load" =>
             r := gpr(i.args[0], S0)
             if f.vals[i.dst].is_float()

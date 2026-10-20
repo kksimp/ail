@@ -82,6 +82,18 @@ struct Lower
     borrowed Set[str]
     ## The generated `copy.T` functions asked for, by name.
     copy_tys Map[str, Ty]
+    ## Each function's `mut` parameters of a number type, `bool` or `str`,
+    ## by index: they arrive as the address of the caller's cell (ADR 0537).
+    cells Map[str, List[int]]
+    ## The current function's own such parameters: variable keys and the
+    ## addresses their values go back to on return.
+    out_keys List[str]
+    out_addrs List[int]
+    ## The current function's cells for `mut` arguments, so far.
+    ncells int
+    ## `mut` arguments whose cells are read back after their call.
+    back_keys List[str]
+    back_cells List[int]
     ## `problems.len()` when the current function began.
     fn_problems int
     ## Set when the function used something already reported elsewhere (a
@@ -168,6 +180,12 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
+        cells: {},
+        out_keys: [],
+        out_addrs: [],
+        ncells: 0,
+        back_keys: [],
+        back_cells: [],
         fn_problems: 0,
         fn_failed: false,
         file: 0,
@@ -322,16 +340,14 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         if a.name != "inline" and a.name != "pure"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
+    mut cell_params := List[int]()
     for p in f.params
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
         if p.mutable and not needs_copy(t) and not t.is_unknown()
-            problem(
-                p.pos,
-                "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
-            )
-        if t.is_float()
+            cell_params.push(params.len())
+        elif t.is_float()
             floats += 1
         params.push(t)
     # Primitives are not called through the ABI. Integer arguments past the
@@ -345,6 +361,8 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             Ty.Unknown
         rty = t
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty)
+    if cell_params.len() > 0
+        cells[fn_key(f, pre)] = cell_params
 
 ## A function's name in MIR: `T.m` for a method of `T`.
 fn fn_key(f ast.FnDecl, pre str) str
@@ -578,7 +596,11 @@ fn Lower.str_lit(mut self, s str) int
 fn Lower.lower_fn(mut self, f ast.FnDecl)
     key := fn_key(f, prefix)
     sig := sigs.get(key) else return
-    params := begin_fn(key, sig.ret, sig.params)
+    mine := cells.get(key) else []
+    params := begin_fn(key, sig.ret, [
+        if mine.contains(k) then Ty.Int else sig.params[k]
+        for k in 0..sig.params.len()
+    ])
     self_ty = ""
     mut k := 0
     if o := f.owner
@@ -589,6 +611,12 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
             k = 1
     for i in 0..f.params.len()
         p := f.params[i]
+        if mine.contains(k + i)
+            # Copy in; `cells_out` copies out at each return.
+            declare(p.name, sig.params[k + i], load(params[k + i], 0, sig.params[k + i]))
+            out_keys.push(lookup(p.name) else "")
+            out_addrs.push(params[k + i])
+            continue
         declare(p.name, sig.params[k + i], params[k + i])
         borrowed.add(lookup(p.name) else "")
     body := f.body else return
@@ -599,10 +627,13 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
             if r := result
                 v := Val(id: convert(r, ret, f.pos), ty: r.ty)
                 e := final_expr(body[body.len() - 1]) else ast.Expr.NoneLit(f.pos)
-                finish(return_of(copy_if_borrowed(e, v)))
+                out := copy_if_borrowed(e, v)
+                cells_out()
+                finish(return_of(out))
             elif not failing()
                 problem(f.pos, "`{f.name}` must end with its result")
         else
+            cells_out()
             finish(return_of(-1))
     end_fn(key, f.pos)
 
@@ -627,6 +658,11 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
     nvars = 0
     loops = []
     borrowed = Set[str]()
+    out_keys = []
+    out_addrs = []
+    ncells = 0
+    back_keys = []
+    back_cells = []
     cur = new_block()
     sealed[cur] = true
     for t in ptys
@@ -777,8 +813,11 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Return(value, pos) =>
             if e := value
                 v := lower_value(e, ret) else return
-                finish(return_of(copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))))
+                r := copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))
+                cells_out()
+                finish(return_of(r))
             else
+                cells_out()
                 finish(return_of(-1))
         Eval(e) =>
             lower_expr(e, Ty.Unit)
@@ -1378,14 +1417,21 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")
+            mine := cells.get(key) else []
+            mark := back_keys.len()
             mut vs := List[int]()
             for i in 0..args.len()
                 a := args[i]
                 if a.label != none
                     return unsupported(pos, "labelled arguments")
+                if mine.contains(i)
+                    vs.push(cell_arg(a, sig.params[i])?)
+                    continue
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
-            Val(id: user_call(key, vs, sig.ret, npos, name), ty: sig.ret)
+            r := user_call(key, vs, sig.ret, npos, name)
+            cells_back(mark)
+            Val(id: r, ty: sig.ret)
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)

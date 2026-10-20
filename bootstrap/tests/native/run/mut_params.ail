@@ -1,0 +1,70 @@
+# `mut` parameters of a number type, `bool` and `str` (ADR 0537): the
+# callee's changes reach the caller's variable, through methods, recursion,
+# nested calls, early returns and loops.
+
+struct Acc
+    scale int
+
+fn bump(mut n int)
+    n += 1
+
+fn swap(mut a int, mut b int)
+    t := a
+    a = b
+    b = t
+
+fn halve(mut x float) bool
+    if x < 1.0
+        return false
+    x = x / 2.0
+    true
+
+fn flip(mut b bool, mut s str)
+    b = not b
+    s = if b then "on" else "off"
+
+fn count_down(mut n int, mut steps int)
+    if n == 0
+        return
+    n -= 1
+    steps += 1
+    count_down(mut n, mut steps)
+
+fn Acc.add(self, mut total int, k int) int
+    total += scale * k
+    total
+
+fn twice(mut n int) int
+    bump(mut n)
+    bump(mut n)
+    n
+
+fn main()
+    mut n := 1
+    bump(mut n)
+    print(n)
+    mut a := 3
+    mut b := 4
+    swap(mut a, mut b)
+    print("{a} {b}")
+    mut x := 10.0
+    mut halvings := 0
+    while halve(mut x)
+        halvings += 1
+    print("{x} {halvings}")
+    mut on := false
+    mut s := "hi"
+    flip(mut on, mut s)
+    print("{on} {s}")
+    mut left := 5
+    mut steps := 0
+    count_down(mut left, mut steps)
+    print("{left} {steps}")
+    acc := Acc(scale: 3)
+    mut total := 0
+    for k in 1..4
+        r := acc.add(mut total, k)
+        print("{r} {total}")
+    mut m := 0
+    print(twice(mut m) + twice(mut m))
+    print(m)

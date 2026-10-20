@@ -24,7 +24,8 @@ contracts), in the root module or a module it imports (mod.unit.1-5), over
 lists of those and of lists, using locals, constants whose values are
 literals, other constants and operators on them, arithmetic, comparisons,
 `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a range or
-a list, `break`, `continue`, `return`, calls, list comprehensions, slices
+a list, `break`, `continue`, `return`, calls (with `mut` arguments of locals, own.param.2), list
+comprehensions, slices
 `xs[a..b]`, struct construction, fields (`x.f`, `x.f = v`, and bare field
 names in a method), method calls, `print` of numbers, strings and lists of
 them or an interpolation of them, `xs[i]`, `xs[i] = v`, `len`, `push`,
@@ -42,7 +43,7 @@ std.io, std.time). A call that can fail is in the subset only as the value
 of `else` with a fallback value, a statement that leaves, or a block without
 a binding (err.else.1-2); `else err` and `?` are not yet. Any other
 construct is reported at its position under this rule, all of them at once,
-and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533, 0580, 0582, 0591)*
+and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533, 0537, 0580, 0582, 0591)*
 
 ```ail
 fn steps(n int) int

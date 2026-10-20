@@ -25,7 +25,10 @@ AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 registers go on the stack, 8 bytes each, in order, the first lowest; the
 caller reserves a 16-byte-aligned area below its frame for them and frees it
 after the call, and the callee reads them above its frame record (ADR 0533).
-Float arguments beyond the eighth aren't supported yet. Callee-saved registers are
+Float arguments beyond the eighth aren't supported yet. A `mut` parameter of
+a number type, `bool` or `str` is passed as the address of an 8-byte cell in
+the caller's frame, after its spill slots (MIR `cell`); the callee loads it
+on entry and stores it back before returning (ADR 0537). Callee-saved registers are
 the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
 an `extern` call treats them as clobbered). No variadics. Structs are passed
 by pointer.

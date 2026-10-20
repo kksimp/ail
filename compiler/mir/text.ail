@@ -46,6 +46,7 @@ fn inst_text(f Func, i Inst) str
         "call" | "prim" => "{i.op} {i.name}({vals_text(f, i.args)})"
         "ldx" | "stx" => "{i.op} {vals_text(f, i.args)} *{i.imm}"
         "load" | "store" => "{i.op} {vals_text(f, i.args)} +{i.imm}"
+        "cell" => "cell {i.imm}"
         _ => "{i.op} {vals_text(f, i.args)}{site}"
 
 fn term_text(f Func, t Term) str

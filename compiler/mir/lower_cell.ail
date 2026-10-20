@@ -1,0 +1,46 @@
+## `mut` parameters of a number type, `bool` or `str` in the native subset
+## (ADR 0537): copy in, copy out. The caller stores the variable in a frame
+## cell (MIR `cell`), passes the cell's address, and reads the cell back
+## after the call; the callee loads the value on entry and stores it back
+## before each return. With exclusive `mut` access (own.excl.1) this is the
+## interpreter's in-place update (own.param.2).
+
+use ast
+
+## The cell for `mut x` passed to such a parameter of type `t`, holding the
+## variable's value; `cells_back` reads it back after the call.
+fn Lower.cell_arg(mut self, a ast.Arg, t Ty) int?
+    match a.value
+        Name(n, npos) =>
+            key := lookup(n) else
+                unsupported(npos, "`mut` with `{n}`")
+                return none
+            if var_ty[key].name() != t.name()
+                unsupported(npos, "`mut {n}` of type `{var_ty[key].name()}` for `{t.name()}`")
+                return none
+            mut i := inst(-1, "cell", [])
+            i.imm = ncells
+            ncells += 1
+            c := emit(i, Ty.Int)
+            store(c, 0, read_var(key, cur))
+            back_keys.push(key)
+            back_cells.push(c)
+            c
+        _ =>
+            unsupported(expr_pos(a.value), "a `mut` argument other than a local")
+            none
+
+## Read back the cells of the `mut` arguments since `mark`, after their call.
+fn Lower.cells_back(mut self, mark int)
+    while back_keys.len() > mark
+        k := back_keys.len() - 1
+        key := back_keys[k]
+        write_var(key, cur, load(back_cells[k], 0, var_ty[key]))
+        back_keys.remove_at(k)
+        back_cells.remove_at(k)
+
+## Store the current function's `mut` parameters back to their callers'
+## cells, before a return.
+fn Lower.cells_out(mut self)
+    for k in 0..out_keys.len()
+        store(out_addrs[k], 0, read_var(out_keys[k], cur))

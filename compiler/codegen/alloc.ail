@@ -39,6 +39,15 @@ pub struct Alloc
     pub saved List[int]
 
 ## Whether an instruction's value is rebuilt at each use instead of held.
+## How many frame cells `f`'s `cell` instructions use (ADR 0537).
+pub fn cells(f mir.Func) int
+    mut n := 0
+    for b in f.blocks
+        for i in b.insts
+            if i.op == "cell"
+                n = n.max(i.imm + 1)
+    n
+
 pub fn is_remat(i mir.Inst) bool
     i.op == "const" or i.op == "fconst" or i.op == "str"
 
