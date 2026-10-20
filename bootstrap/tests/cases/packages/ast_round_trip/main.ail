@@ -1,0 +1,52 @@
+# A tree of every node family goes through derived JSON and back unchanged
+# (ADR 0376, json.derive.1-2).
+use ast
+
+fn main() !
+    p := ast.Pos(line: 3, col: 5)
+    int_ty := ast.TypeRef(shape: ast.TypeShape.Named("int", []), pos: p)
+    opt_ty := ast.TypeRef(shape: ast.TypeShape.Optional(int_ty), pos: p)
+    x := ast.Expr.Name("x", p)
+    sum := ast.Expr.Binary(
+        op: ast.BinOp.Add,
+        lhs: x,
+        rhs: ast.Expr.Int("9007199254740993", p),
+        pos: p,
+    )
+    arm := ast.Arm(
+        pat: ast.Pattern.Alt(
+            [ast.Pattern.Literal(ast.Literal.CharLit("a"), p), ast.Pattern.Wildcard(p)],
+            p,
+        ),
+        body: [ast.Stmt.Eval(sum)],
+    )
+    body := [
+        ast.Stmt.Let(
+            name: "y",
+            pos: p,
+            mutable: true,
+            value: x,
+            otherwise: ast.Else.Fallback(ast.Expr.NoneLit(p)),
+        ),
+        ast.Stmt.Eval(ast.Expr.Match(x, [arm], p)),
+        ast.Stmt.Return(value: ast.Expr.Member(recv: x, name: "f", name_pos: p), pos: p),
+    ]
+    f := ast.FnDecl(
+        attrs: [],
+        owner: none,
+        name: "f",
+        pos: p,
+        doc: "## doc",
+        generics: [ast.GenericParam(name: "T", pos: p, bounds: [ast.Ident("Ord", p)])],
+        receiver: none,
+        params: [ast.Param(name: "x", pos: p, mutable: false, moved: false, ty: opt_ty)],
+        ret: int_ty,
+        body: body,
+        within: ast.Within.TopLevel,
+        contracts: [],
+        inherits: none,
+    )
+    t := f.to_json().to_text()
+    print(t)
+    back := ast.FnDecl.from_json(parse_json(t)?)?
+    print(back == f)

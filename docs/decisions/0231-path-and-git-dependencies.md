@@ -1,6 +1,6 @@
 # 0231. Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer
 
-- **Status:** Accepted; git fetching implemented by [0355](0355-fetch-git-dependencies-with-system-git.md)
+- **Status:** Accepted; git fetching implemented by [0355](0355-fetch-git-dependencies-with-system-git.md); the registry question closed by [0383](0383-no-package-registry.md) (no registry)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** 13 — Package management; 12 — Modules

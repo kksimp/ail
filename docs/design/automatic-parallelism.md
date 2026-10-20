@@ -256,7 +256,8 @@ the OS driver compiling *something*: Vulkan drivers compile SPIR-V, Metal
 compiles MSL, Core ML compiles its model, ONNX Runtime compiles ONNX. AIL
 would generate SPIR-V/MSL/graphs itself (its own code generator), and the
 driver's compiler is part of the platform, like the CPU's microcode. This
-reading is recorded as OQ-090 for the designer.
+reading was recorded as OQ-090 and the designer accepted it in
+[ADR 0381](../decisions/0381-driver-compilers-are-platform.md).
 
 ### 6.4 First prototype and cost
 

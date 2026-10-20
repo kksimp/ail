@@ -195,15 +195,7 @@ ADR 0076; decide when a real program needs it.*
 **Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
 
 ## OQ-049 — A package registry and version ranges
-Dependencies come from a path or a pinned git commit
-([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
-central registry with names and semver ranges (`dep json 1.4`), resolved
-into `ail.lock` (recommended eventually: short `dep` lines and discovery for
-agents, but it needs hosting, accounts, a naming policy and a solver);
-(b) git URLs only, with tags as versions (no service to run; long URLs in
-every manifest); (c) a registry that only maps names to git URLs and commits
-(no solver; small service). Involves hosting and publishing, so it is the
-designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
+**Resolved** by [ADR 0383](decisions/0383-no-package-registry.md) (no registry; git URLs with tags as versions).
 
 ## OQ-050 — Unique values in generic code, sets and traits
 **Partly resolved:** `move self` receivers by
@@ -243,21 +235,7 @@ methods (recommended: revisit with (b), since both need a prover to be cheap).
 a message after each variant or the struct's name).
 
 ## OQ-090 — May accelerator drivers compile AIL-generated code?
-ADR 0010 forbids external backends. GPUs and NPUs can't be reached without
-the OS driver compiling what AIL hands it: SPIR-V (Vulkan), MSL (Metal), a
-Core ML model, an ONNX graph. Options: (a) AIL generates the SPIR-V, MSL or
-graph with its own code generator, and the driver's compiler counts as part
-of the platform, like CPU microcode (recommended: it is the only way to
-reach these devices at all, and nothing of LLVM's ships with AIL);
-(b) CPU only, no GPU or NPU ever; (c) allow vendor libraries (cuDNN, MPS) as
-opaque kernels. See [automatic-parallelism.md](design/automatic-parallelism.md)
-section 6 and [ADR 0247](decisions/0247-std-tensor-and-accel-capability.md).
-The CPU slice exists (`std.tensor`, ADRs 0328–0329); [ADR 0330](decisions/0330-tensor-accelerator-backends-plug-in.md)
-lists what a device backend needs decided here. Still missing from the CPU
-slice: `conv2d`, activations, `f32`, indexing, `/` and unary `-`, broadcasting
-beyond a scalar, and fusing chains of elementwise calls (axis reductions,
-`transpose` and `+ - *` landed in ADRs 0344–0345).
-*Owner: designer (it reads ADR 0010, a designer decision).*
+**Resolved** by [ADR 0381](decisions/0381-driver-compilers-are-platform.md) (yes: the driver's compiler is platform; AIL generates the device program itself).
 
 ## OQ-091 — Field attributes for derive generators
 A `ToJson` derive (ADR 0227) wants per-field options (`@json("user_id")`,
@@ -327,10 +305,4 @@ template (recommended: one rule for every derive, and an agent sees what
 tree; the value is dropped and `send` returns).
 
 ## OQ-113 — A matrix product operator
-`a.matmul(b)` is the only spelling of the matrix product (ADR 0344). Options:
-(a) keep the method (recommended: `matmul` is rare in agent code, so the
-token gain is under the 2% tie, and the operator set is fixed by ADR 0077);
-(b) `a @ b` as in Python, which needs a new operator against `trait.op.2`,
-and `@` already starts attributes (`@inline`), so a line that starts with an
-operand-less `@` reads two ways; (c) a named operator such as `a matmul b`,
-which no other part of AIL has. *Owner: designer (amends ADR 0077).*
+**Resolved** by [ADR 0382](decisions/0382-no-matrix-product-operator.md) (keep `a.matmul(b)`).

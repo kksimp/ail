@@ -525,7 +525,8 @@ opens, Left closes, Enter opens or closes a parent and submits a leaf.
 
 Dense arrays of numbers whose operations run as whole-array kernels: on the
 CPU's vector unit and, for large products, on several cores. This is the
-CPU slice of ADR 0247; accelerator backends wait on OQ-090. *(ADR 0328)*
+CPU slice of ADR 0247; device backends are allowed by ADR 0381 and not
+yet implemented. *(ADR 0328)*
 
 **std.tensor.1** — `tensor.Tensor[T]` is a value (ADRs 0060–0063) holding
 a shape and `int` or `float` elements, row-major. It has no fields and no
