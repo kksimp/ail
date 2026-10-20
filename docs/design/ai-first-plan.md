@@ -122,10 +122,11 @@ diagnostics and API already sort.
 
 ## 4. Standard modules: the machine through typed primitives
 
-`use` imports are specified (`mod.use.1–2`) but not implemented. The smallest
-step that doesn't prejudge user modules is **built-in standard modules**:
-`use std.fs` makes `fs` available, and `fs.read_text(path)` calls it. The
-user-module half (directories, `pub`, packages) stays design-only.
+`use` imports are specified (`mod.use.1–2`) but not implemented. Standard
+modules are **built in**: `use std.fs` makes `fs` available, and
+`fs.read_text(path)` calls it. User modules (directories, `pub`, qualified
+access, ADRs 0097–0099) are implemented by their own lane; packages and
+manifests stay design-only.
 
 | Module | Functions (first cut) | Effect |
 |---|---|---|
@@ -196,20 +197,22 @@ final pull request against `main`.
 
 | # | Lane | Model | Touches | Depends on |
 |---|---|---|---|---|
-| 1 | Diagnostics schema v1, `ail explain` | Opus | `diag.rs`, `main.rs`, new `explain.rs`, `docs/design/semantic-api.md` | none |
+| 1 | Diagnostics schema v1, `ail explain`, typed holes | Opus | `diag.rs`, `main.rs`, new `explain.rs`, `lexer.rs`, `parser.rs`, `check.rs`, `docs/design/semantic-api.md`, ADRs | none |
 | 2 | `ail api`: outline, symbols, references, doc comments | Opus | new `api.rs`, `lexer.rs` (doc comments), `main.rs` | none |
-| 3 | Typed holes | Opus | `lexer.rs`, `parser.rs`, `check.rs`, `interp.rs`, ADR | none |
-| 4 | `use std.*` and `std.fs`, `std.env`, `std.io`, `std.proc`, `std.time` | Opus | `parser.rs`, `check.rs`, `interp.rs`, builtins, ADR | none |
-| 5 | `std.json` in the prelude plus `parse` and `to_text` | Sonnet | `prelude.ail`, builtins | 4 (for `use`); can start with a prelude-level `Json` |
-| 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | Opus | `check.rs` (new `effects.rs`), `main.rs`, Proposed ADRs | none; capability names come from the §4 table; 2 integrates the display |
-| 7 | `ail test`, `@test`, `assert` | Sonnet | `parser.rs` (attributes), `main.rs`, `prelude.ail`, `interp.rs` | none |
-| 8 | Spec conformance harness | Sonnet | `bootstrap/tests/spec.rs`, `docs/spec/*` annotations | none |
-| 9 | Token-measured resolutions: OQ-041 format specs, OQ-043, OQ-044; language card | Sonnet | `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
+| 3 | User modules: directories, `pub`, `use a.b`, qualified access (ADRs 0097–0099) | Opus | `main.rs`, `parser.rs`, `check.rs`, `interp.rs`, tests with module directories | none; shares `use` with 4 |
+| 4 | Standard modules `std.fs`, `std.env`, `std.io`, `std.proc`, `std.time` behind `use std.*` | Opus | `parser.rs` (`use std.x` only), `check.rs`, `interp.rs`, builtins, ADR | none; shares `use` with 3 |
+| 5 | `std.json` in the prelude: `Json`, `parse`, `to_text`, accessors | Sonnet | `prelude.ail`, builtins | none (prelude-level until 4 lands) |
+| 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | Opus | new `check/effects.rs`, `main.rs`, Proposed ADRs | none; capability names come from the §4 table; 2 integrates the display |
+| 7 | `ail test`, `@test`, `assert`, `assert_eq` | Sonnet | `parser.rs` (attributes), `main.rs`, `prelude.ail`, `interp.rs` | none |
+| 8 | Formatter `ail fmt` (roadmap refinement 4) | Opus | new `fmt.rs`, `lexer.rs` (comment tokens), `main.rs`, ADR | none |
+| 9 | Spec conformance harness; OQ-041 format specs by measurement; language card | Sonnet | `bootstrap/tests/spec.rs`, `docs/spec/*`, `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
 | 10 | Interpreter performance: perfbench and slot-resolved locals | Sonnet | `tools/perfbench/`, `interp.rs` | none |
 
+The designer chose "modules and formatter too" for the buildout, so lanes 3
+and 8 exist. OQ-043 and OQ-044 are left for a later batch.
+
 Design-only items (no lane, written by the integrator): deterministic mode
-(§3.3), capability manifests, user modules and packages (unchanged, awaiting
-the designer).
+(§3.3), capability manifests, and packages (awaiting the designer).
 
 ## 8. Assumptions recorded tonight
 
