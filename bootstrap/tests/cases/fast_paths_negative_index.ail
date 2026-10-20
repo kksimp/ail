@@ -1,0 +1,10 @@
+# An index read in place still traps out of bounds (type.coll.4).
+struct Bag
+    items List[int]
+
+fn main()
+    b := Bag(items: [1, 2, 3])
+    i := 1
+    print(b.items[i])
+    j := i - 5
+    print(b.items[j])
