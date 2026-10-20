@@ -15,7 +15,7 @@ refresh entries on purpose, one dependency at a time when needed.
 
 ### Option A — `ail pkg update [NAME...]` in the package root (chosen)
 - **Pros:** names the action; per-dependency; leaves room for other `pkg`
-  subcommands (a registry's, OQ-049).
+  subcommands (OQ-049 later closed with no registry, ADR 0383).
 - **Cons:** works on the current directory only.
 
 ### Option B — delete `ail.lock` (or its line) and run again

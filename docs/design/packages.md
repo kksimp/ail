@@ -5,7 +5,7 @@ Status: design for Topic 13 (package management), 2026-10-20. Decided in
 [12-modules.md](../spec/12-modules.md#packages) (`mod.pkg.*`) and
 [18-effects.md](../spec/18-effects.md#denying-capabilities) (`eff.cap.4–5`).
 The bootstrap implements path and git dependencies, capability grants and
-the lockfile (ADRs 0355–0357); a registry is designed here only.
+the lockfile (ADRs 0355–0357). There is no registry (ADR 0383).
 
 ## Goals
 
@@ -167,10 +167,9 @@ timestamps or absolute paths.
 
 ## What is deferred, and why
 
-- **A registry** (`dep json 1.4` without a URL) is a **serious decision** for
-  the designer: it involves hosting, accounts, naming policy and publishing
-  (AGENTS.md escalation criterion 4), plus version ranges and a solver. The
-  line format leaves room for it: a `version` key on a `dep` line.
+- **A registry** (`dep json 1.4` without a URL): rejected by the designer in
+  [ADR 0383](../decisions/0383-no-package-registry.md). Dependencies are git
+  URLs with a `tag` as the version; nothing to host, no solver.
 - **Features, build scripts, per-target dependencies**: not planned. Build
   scripts would run arbitrary code at build time, which a capability grant
   can't see.
@@ -193,7 +192,7 @@ timestamps or absolute paths.
   the point of wishlist 5.1; granting is one word.
 - **Per-package namespaces (two versions of one package in one program):**
   needs a mangling scheme the bootstrap doesn't have, and makes a name in a
-  diagnostic ambiguous. Revisit with the registry.
+  diagnostic ambiguous. Not planned.
 
 ## Open items
 
