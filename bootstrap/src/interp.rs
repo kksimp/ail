@@ -329,6 +329,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         env_pool: Vec::new(),
         returned: None,
         ops_pool: Vec::new(),
+        arg_pool: Vec::new(),
         no_fields: Rc::new(Vec::new()),
         method_sites: HashMap::default(),
         call_targets: HashMap::default(),
@@ -382,6 +383,7 @@ struct Interp<'a, W: Write> {
     /// The value of the `return` being carried out, and where it was returned.
     returned: Option<(Value, Pos)>,
     ops_pool: Vec<Vec<Prepared>>,
+    arg_pool: Vec<Vec<Value>>,
     /// The shared field list of every variant without fields.
     no_fields: Rc<Vec<Value>>,
     /// What each method-call site resolves to, by the address of its receiver expression.

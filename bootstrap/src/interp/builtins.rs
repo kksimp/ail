@@ -2,7 +2,7 @@
 //! insertion-ordered table behind `Map` and `Set` (type.map.1).
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 use std::io::Write;
 use std::rc::Rc;
 
@@ -196,7 +196,7 @@ impl<'a, W: Write> Interp<'a, W> {
         env: &mut Env<'a>,
     ) -> Flow<Value> {
         // Arguments are read before the receiver changes, so they are copies (own.excl.4).
-        let mut a = Vec::with_capacity(args.len());
+        let mut a = self.arg_pool.pop().unwrap_or_default();
         for arg in args {
             a.push(self.eval(&arg.value, env)?);
         }
@@ -212,7 +212,10 @@ impl<'a, W: Write> Interp<'a, W> {
         };
         if !mutating {
             let v = current.clone();
-            return Ok(self.read_only(v, name, a, pos)?);
+            let r = self.read_only(v, name, &mut a, pos)?;
+            a.clear();
+            self.arg_pool.push(a);
+            return Ok(r);
         }
         let Operand::Place(p) = recv else { unreachable!("checked: `{name}` needs a mutable place") };
         if name == "sort" {
@@ -255,13 +258,13 @@ impl<'a, W: Write> Interp<'a, W> {
         })
     }
 
-    fn read_only(&mut self, v: Value, name: &str, mut a: Vec<Value>, pos: Pos) -> Result<Value, Trap> {
+    fn read_only(&mut self, v: Value, name: &str, a: &mut Vec<Value>, pos: Pos) -> Result<Value, Trap> {
         Ok(match v {
             Value::Str(text) => self.str_method(&text, name, a, pos)?,
-            Value::Char(c) => char_method(c, name, &a, pos)?,
-            Value::Int(n) => int_method(n, name, &a, pos)?,
+            Value::Char(c) => char_method(c, name, a, pos)?,
+            Value::Int(n) => int_method(n, name, a, pos)?,
             Value::Num(k, bits) if k.is_float() => f32_method(bits, name, pos)?,
-            Value::Num(k, bits) => sized_method(k, bits, name, &a, pos)?,
+            Value::Num(k, bits) => sized_method(k, bits, name, a, pos)?,
             Value::Float(x) => float_method(x, name, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
@@ -365,7 +368,7 @@ impl<'a, W: Write> Interp<'a, W> {
         })
     }
 
-    fn str_method(&mut self, text: &str, name: &str, a: Vec<Value>, pos: Pos) -> Result<Value, Trap> {
+    fn str_method(&mut self, text: &str, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> {
         // type.str.6: a `char` argument works like a one-character string.
         let arg_str = |i: usize| match &a[i] {
             Value::Str(t) => t.clone(),
