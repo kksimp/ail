@@ -81,6 +81,22 @@ fn parse_qty(s str) int ! ParseError
     n
 ```
 
+```ail error=err.decl.3
+error enum Oops
+    Bad
+
+fn f() Oops ! Oops
+    Oops.Bad
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn f() int ! Oops
+    return Oops.Bad
+```
+
 **err.type.1** — `T ! E` is the type of a value that is either a success value
 of type `T` or an error of type `E`. *(ADR 0046)*
 
@@ -191,12 +207,201 @@ fn main()
     print(port("http") else -1)  # -1
 ```
 
+A `?` that has nowhere to go is rejected with the signature change that would
+make it legal, as a fix (`err.fix.1`):
+
+```ail error=err.prop.1
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    n := risky()?
+    print(n)
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main() ! Oops
+    n := risky()?
+    print(n)
+```
+
+```ail error=err.prop.2
+fn first(xs List[int]) int
+    xs.max()?
+```
+
+```ail fragment
+fn first(xs List[int]) int
+    xs.max() else 0
+```
+
+```ail error=err.prop.3
+error enum A
+    X
+error enum B
+    Y
+
+fn a() int ! A
+    return A.X
+
+fn b() int ! B
+    return B.Y
+
+fn both() int ! A
+    return a()? + b()?
+```
+
+```ail fragment
+error enum A
+    X
+error enum B
+    Y
+
+fn a() int ! A
+    return A.X
+
+fn b() int ! B
+    return B.Y
+
+fn both() int ! A | B
+    return a()? + b()?
+```
+
 **err.use.1** — A value of type `T ! E` MUST be handled with `?` or `else`,
 or returned from a function whose result can hold it. Discarding it, or
 using it where a `T` is expected, is a compile-time error. *(ADR 0122)*
 
+```ail error=err.use.1
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    n := risky()
+    print(n)
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+n := risky() else 0
+print(n)
+```
+
 **err.use.2** — An `if` whose condition binds a value of type `T ! E`
 (`expr.if.5`) MUST have an `else`. *(ADR 0125)*
+
+```ail error=err.use.2
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    if n := risky()
+        print(n)
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+if n := risky()
+    print(n)
+else err
+    print("failed: {err}")
+```
+
+**err.ret.1** — `return e`, with `e` of an error type, is a compile-time error
+in a function whose return type can't fail. The help names the return type
+that would allow it. *(ADR 0285)*
+
+**err.ret.2** — `return e`, with `e` of type `T?`, is a compile-time error in
+a function that returns `T ! E`: absence has no error to report. *(ADR 0285)*
+
+**err.ret.3** — `return e`, with `e` of an error type that isn't in the
+function's stated error type, is a compile-time error. The help gives the
+return type with it added. *(ADR 0285)*
+
+```ail error=err.ret.1
+error enum Oops
+    Bad
+
+fn check(n int) int
+    if n < 0
+        return Oops.Bad
+    n
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn check(n int) int ! Oops
+    if n < 0
+        return Oops.Bad
+    n
+```
+
+```ail error=err.ret.2
+error enum Oops
+    Bad
+
+fn first(xs List[int]) int ! Oops
+    return xs.max()
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn first(xs List[int]) int ! Oops
+    m := xs.max() else return Oops.Bad
+    m
+```
+
+```ail error=err.ret.3
+error enum A
+    X
+error enum B
+    Y
+
+fn f(n int) int ! A
+    if n < 0
+        return B.Y
+    n
+```
+
+```ail fragment
+error enum A
+    X
+error enum B
+    Y
+
+fn f(n int) int ! A | B
+    if n < 0
+        return B.Y
+    n
+```
 
 ## Handling with `else`
 
@@ -232,6 +437,44 @@ produce a `T` doesn't apply, and execution continues after the statement. A
 value fallback (`save() else 0`) is a compile-time error. On a `T?`, or on a
 `T ! E` with a success value, statement `else` is a compile-time error whose
 help says to bind the value: `x := ... else ...`. *(ADR 0139)*
+
+```ail error=err.else.3
+fn main()
+    n := [1, 2].max() else err
+        0
+    print(n)
+```
+
+```ail fragment
+n := [1, 2].max() else
+    0
+print(n)
+```
+
+```ail error=err.else.4
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+fn main()
+    risky() else err
+        print("failed: {err}")
+```
+
+```ail fragment
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+n := risky() else err
+    print("failed: {err}")
+    0
+print(n)
+```
 
 ```ail skip=context
 port := env("PORT") else 8080
@@ -297,3 +540,26 @@ source location, a stack trace and, where applicable, the spec rule ID.
 **err.trap.3** — A trap in the program's main task, or one that nothing
 observes up to the main task, terminates the program with the diagnostic and
 a non-zero exit status. *(ADR 0047)*
+
+## Tooling
+
+**err.fix.1** — A diagnostic about error handling carries a machine-applicable
+fix (`fix.edit.1`) where one is mechanical: `?` for an unhandled failure the
+function can pass on (`err.use.1`); the signature change `! E` for a function
+that can't yet fail (`err.use.1` with `?`, `err.prop.1`, `err.ret.1`); and
+removing the name of an `else` on an optional (`err.else.3`). A fix never
+changes an explicit error type. *(ADR 0285)*
+
+**err.api.1** — `ail api` gives every function with a failing return type a
+`fails_with` list: the names of the error types it can fail with, sorted and
+without duplicates. For an inferred set (`err.type.2`) it is the inferred set,
+and `ail api --text` spells it out as `fails with A | B`. *(ADR 0287)*
+
+**err.paths.1** — `ail check --errors FILE` prints, as JSON, every function in
+the file that can fail or touches a failure, with its `fails_with` list and its
+failure paths in source order. A path has `line`, `col`, `kind` and `errors`,
+and where they apply `how`, `call` and `context`. `kind` is `propagate` (`?`
+on a result), `handle` (`else` on a result), `return` (of an error value, or
+of a result), or `absent` (`?` or `else` on an optional, which has no error).
+`how` is `default`, `leave` or `block`. A trap isn't a failure path
+(`err.trap.1`). *(ADR 0286)*

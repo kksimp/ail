@@ -10,6 +10,7 @@ use std.env
 use std.proc
 use std.time
 use std.ui
+use themes
 
 # Colors, 0xRRGGBB.
 BG := 0x1e1e1e
@@ -21,6 +22,8 @@ STATUS_FG := 0xffffff
 ## The font sizes Ctrl-+ and Ctrl-- step through: those std.ui has (std.ui.15).
 FONT_SIZES := [10, 12, 13, 14, 15, 18, 20, 24, 26, 28, 30, 36, 40]
 PANE_BG := 0x252526
+## The file tree's width in columns (Ctrl-B).
+TREE_W := 28
 KEYWORD_FG := 0x569cd6
 TYPE_FG := 0x4ec9b0
 STRING_FG := 0xce9178
@@ -35,6 +38,34 @@ BRACKET_BG := 0x3b514d
 OCCUR_BG := 0x343a40
 ERROR_FG := 0xf48771
 WARN_FG := 0xcca700
+
+## The color kinds a theme can change (tools/edit/themes, ADR 0295). OP_FG
+## is FG, so it follows "fg".
+FG_KINDS := {
+    "fg": FG,
+    "gutter_fg": GUTTER_FG,
+    "status_fg": STATUS_FG,
+    "keyword": KEYWORD_FG,
+    "type": TYPE_FG,
+    "string": STRING_FG,
+    "number": NUMBER_FG,
+    "comment": COMMENT_FG,
+    "attr": ATTR_FG,
+    "error_fg": ERROR_FG,
+    "warn_fg": WARN_FG,
+}
+
+BG_KINDS := {
+    "bg": BG,
+    "line_bg": LINE_BG,
+    "status_bg": STATUS_BG,
+    "pane_bg": PANE_BG,
+    "error_bg": ERROR_BG,
+    "warn_bg": WARN_BG,
+    "select_bg": SELECT_BG,
+    "bracket_bg": BRACKET_BG,
+    "occur_bg": OCCUR_BG,
+}
 
 UNDO_LIMIT := 200
 INDENT := 4
@@ -149,6 +180,8 @@ struct Editor
     locals List[Completion]
     member_of str
     rename RenamePlan
+    ## Successful saves, so the workspace can check the other tabs.
+    saves int
     comp_sel int
 
 fn Editor.new(path str, text str, cols int, rows int) Editor
@@ -189,6 +222,7 @@ fn Editor.new(path str, text str, cols int, rows int) Editor
         locals: [],
         member_of: "",
         rename: RenamePlan(name: "", at: [], semantic: false),
+        saves: 0,
         comp_sel: 0,
         selecting: false,
         anchor_line: 0,
@@ -1802,7 +1836,7 @@ fn go_or_select(d Dir, shift bool) Command
 
 ## The command for a key from `std.ui` (`Event.Key`), or `none`.
 fn key_command(key str, ctrl bool, alt bool, shift bool) Command?
-    if ctrl and shift and (key == "f" or key == "F")
+    if alt and shift and (key == "f" or key == "F")
         return Format
     if ctrl
         return match key
@@ -1961,6 +1995,7 @@ fn Editor.save(mut self)
         message = "can't save {err.path}: {err.kind}"
         return
     dirty = false
+    saves += 1
     check()
     message = "saved; {message}"
 
@@ -2479,7 +2514,7 @@ ADD_REFS_JSON := "\{\"api\":1,\"symbol\":\"fn:add\",\"refs\":[\{\"file\":\"t.ail
     ed.apply(Newline)
     assert_eq(ed.line, 1)
     assert_eq(key_command("g", true, false, false), GoToLine)
-    assert_eq(key_command("f", true, false, true), Format)
+    assert_eq(key_command("f", false, true, true), Format)
 
 ## The color of the last run drawn over a cell.
 fn fg_at(s Screen, row int, col int) int
@@ -2712,12 +2747,159 @@ TYPE_JSON := "\{\"api\":1,\"file\":\"t.ail\",\"line\":10,\"col\":11,\"text\":\"a
     ws.on_event(Key(key: "w", ctrl: true, alt: false, shift: false))
     assert(ws.quit)
 
+@test fn every_palette_row_names_a_key_that_does_something()
+    mut names := Set[str]()
+    for r in key_rows()
+        if r.spec == ""
+            continue
+        assert(not names.contains(r.name))
+        names.add(r.name)
+        match key_event(r.spec)
+            Key(k, ctrl, alt, shift) =>
+                assert(
+                    key_command(
+                        k,
+                        ctrl,
+                        alt,
+                        shift,
+                    ) != none or extra_key(k, ctrl, alt, shift) != none or workspace_key(k, ctrl, shift) != none,
+                )
+            Resize(_, _) | Close | Mouse(_, _, _, _) | Scroll(_) => assert(false)
+    assert_eq(key_table()[0], "| Key | Does |")
+
+@test fn the_palette_filters_and_runs_a_command()
+    mut ws := Workspace.new(typed("x := 1", []))
+    ws.on_event(key_event("ctrl+shift+p"))
+    assert(ws.picking and ws.commanding)
+    for k in ["t", "o", "g", "c"]
+        ws.on_event(press(k))
+    assert_eq(ws.choices().len(), 1)
+    assert(ws.render().text[1].contains("command: togc"))
+    ws.on_event(press("enter"))
+    assert(not ws.picking)
+    assert_eq(ws.eds[0].lines[0], "# x := 1")
+    # Escape closes it; Ctrl-P is the file picker again.
+    ws.on_event(key_event("ctrl+shift+p"))
+    ws.on_event(press("escape"))
+    assert(not ws.picking and not ws.commanding)
+    ws.on_event(key_event("ctrl+p"))
+    assert(ws.picking and not ws.commanding)
+
+@test fn project_search_fills_the_pane_and_jumps()
+    hits := search_text("a.ail", "fn main()\n    total := 1\n    print(total)", "total")
+    assert_eq(hits.len(), 2)
+    assert_eq(hits[1].loc, Loc(path: "a.ail", line: 3, col: 11))
+    assert_eq(hits[1].text, "print(total)")
+    mut ws := Workspace.new(typed("fn main()\n    total := 1\n    print(total)", []))
+    ws.eds[0].path = "a.ail"
+    ws.rows = 24
+    ws.on_event(Resize(cols: 60, rows: 24))
+    ws.on_event(key_event("ctrl+shift+f"))
+    assert(ws.searching)
+    assert_eq(ws.search, "fn")
+    assert(ws.render().text[0].starts_with(" search the project: fn"))
+    ws.on_event(press("escape"))
+    assert(not ws.searching)
+    ws.search = "total"
+    ws.show_hits(hits)
+    assert(ws.browsing)
+    ed := ws.eds[0]
+    assert_eq(ed.pane, Text)
+    assert_eq(ed.pane_text[2], "a.ail:3:11: print(total)")
+    ws.on_event(press("down"))
+    ws.on_event(press("enter"))
+    assert(not ws.browsing)
+    assert_eq(ws.eds[0].line, 2)
+    assert_eq(ws.eds[0].col, 10)
+    # F4 wraps to the first hit; typing goes to the editor again.
+    ws.on_event(press("f4"))
+    assert_eq(ws.eds[0].line, 1)
+    ws.on_event(press("x"))
+    assert(ws.eds[0].lines[1].contains("x"))
+
+@test fn the_file_tree_lists_ail_files_first_and_opens_them()
+    d := "edit-tree-test.tmp"
+    fs.make_dir("{d}/sub") else err
+        assert(false)
+    for f in ["b.ail", "a.txt", ".hidden", "sub/c.ail"]
+        fs.write_text("{d}/{f}", "fn main()\n") else err
+            assert(false)
+    mut ws := Workspace.new(typed("x", []))
+    ws.on_event(Resize(cols: 80, rows: 20))
+    ws.tree_root = d
+    ws.on_event(key_event("ctrl+b"))
+    assert(ws.tree_open and ws.tree_focus)
+    assert_eq(ws.eds[0].cols, 80 - TREE_W - 1)
+    mut names := List[str]()
+    for t in ws.tree
+        names.push(t.name)
+    assert_eq(names, ["b.ail", "sub/", "a.txt"])
+    assert(ws.render().text[1].starts_with(" b.ail"))
+    ws.on_event(press("down"))
+    ws.on_event(press("enter"))
+    assert_eq(ws.tree.len(), 4)
+    assert_eq(ws.tree[2].path, "{d}/sub/c.ail")
+    ws.on_event(press("down"))
+    ws.on_event(press("left"))
+    assert_eq(ws.tree_sel, 1)
+    ws.on_event(press("down"))
+    ws.on_event(press("enter"))
+    assert_eq(ws.eds.len(), 2)
+    assert_eq(ws.eds[1].path, "{d}/sub/c.ail")
+    assert(not ws.tree_focus)
+    assert_eq(ws.eds[1].cols, 80 - TREE_W - 1)
+    # Typing goes to the editor; Ctrl-B focuses the tree, then hides it.
+    ws.on_event(press("x"))
+    assert_eq(ws.eds[1].lines[0], "xfn main()")
+    ws.on_event(key_event("ctrl+b"))
+    assert(ws.tree_focus)
+    ws.on_event(key_event("ctrl+b"))
+    assert(not ws.tree_open)
+    assert_eq(ws.eds[0].cols, 80)
+    for f in ["b.ail", "a.txt", ".hidden", "sub/c.ail", "sub", ""]
+        fs.remove("{d}/{f}") else err
+            assert(false)
+
+@test fn tab_labels_count_diagnostics()
+    mut ws := Workspace.new(typed("x", []))
+    ws.eds[0].path = "a.ail"
+    ws.eds[0].diags = parse_diags(DIAG_JSON)
+    assert_eq(ws.tab_labels(), [" a.ail E1 "])
+
 @test fn quitting_asks_once_for_unsaved_tabs()
     mut ws := Workspace.new(typed("", keys("x")))
     ws.on_event(Close)
     assert(not ws.quit)
     ws.on_event(Close)
     assert(ws.quit)
+
+@test fn themes_recolor_and_cycle()
+    mut ws := Workspace.new(typed("", []))
+    assert_eq(ws.pal.bg_of(BG), BG)
+    assert(ws.set_theme("light"))
+    assert_eq(ws.pal.bg_of(BG), 0xffffff)
+    assert_eq(ws.pal.fg_of(KEYWORD_FG), 0x0000ff)
+    assert_eq(ws.pal.fg_of(OP_FG), ws.pal.fg_of(FG))
+    # A background color used as text follows its background kind.
+    assert_eq(ws.pal.fg_of(BG), 0xffffff)
+    assert(not ws.set_theme("neon"))
+    assert_eq(ws.theme, "light")
+    ws.on_event(Key(key: "T", ctrl: true, alt: false, shift: true))
+    assert_eq(ws.theme, "solarized")
+    assert_eq(ws.message, "theme solarized")
+    ws.on_event(Key(key: "T", ctrl: true, alt: false, shift: true))
+    ws.on_event(Key(key: "T", ctrl: true, alt: false, shift: true))
+    assert_eq(ws.theme, "dark")
+    for name in themes.NAMES
+        t := themes.named(name) else unreachable("listed")
+        for k in t.keys()
+            assert(FG_KINDS.contains(k) or BG_KINDS.contains(k))
+
+@test fn settings_keep_other_lines()
+    text := with_setting("font 15\ntheme dark\n", "theme", "light")
+    assert_eq(text, "font 15\ntheme light\n")
+    assert_eq(setting(text, "theme") else "", "light")
+    assert_eq(setting("", "theme") else "none", "none")
 
 @test fn ctrl_plus_and_minus_step_the_font_size()
     mut ws := Workspace.new(typed("", []))
@@ -2738,11 +2920,98 @@ TYPE_JSON := "\{\"api\":1,\"file\":\"t.ail\",\"line\":10,\"col\":11,\"text\":\"a
 
 ## Draws a screen: the runs in order, then the caret.
 fn draw(mut w ui.Window, s Screen)
-    w.clear(BG)
+    draw_themed(mut w, s, palette(Map[str, int]()))
+
+## Draws a screen in a theme's colors.
+fn draw_themed(mut w ui.Window, s Screen, pal Palette)
+    w.clear(pal.bg_of(BG))
     for sp in s.spans
-        w.put(sp.col, sp.row, sp.text, sp.fg, sp.bg)
+        w.put(sp.col, sp.row, sp.text, pal.fg_of(sp.fg), pal.bg_of(sp.bg))
     w.cursor(s.cursor_col, s.cursor_row)
     w.present()
+
+# ---- Themes (ADR 0295) -----------------------------------------------------
+
+## A theme as a recoloring of the default (dark) colors, by role.
+struct Palette
+    fg Map[int, int]
+    bg Map[int, int]
+
+## The recoloring for a theme from `themes.named`.
+fn palette(t Map[str, int]) Palette
+    mut fg := Map[int, int]()
+    for k in FG_KINDS.keys()
+        if c := t.get(k)
+            fg[FG_KINDS[k]] = c
+    mut bg := Map[int, int]()
+    for k in BG_KINDS.keys()
+        if c := t.get(k)
+            bg[BG_KINDS[k]] = c
+    Palette(fg: fg, bg: bg)
+
+## A text color in the theme; a background color used as text follows its
+## background kind.
+fn Palette.fg_of(self, c int) int
+    fg.get(c) else (bg.get(c) else c)
+
+fn Palette.bg_of(self, c int) int
+    bg.get(c) else (fg.get(c) else c)
+
+## The editor's settings file, `~/.ail-edit`: lines of `KEY VALUE`.
+fn settings_path() str?
+    home := env.home() else return none
+    "{home}/.ail-edit"
+
+## The value of `key` in settings text.
+fn setting(text str, key str) str?
+    for line in text.split("\n")
+        if line.starts_with("{key} ")
+            return line.chars()[key.chars().len() + 1..].join("").trim()
+    none
+
+## Settings text with `key` set to `value`, other lines kept.
+fn with_setting(text str, key str, value str) str
+    mut out := List[str]()
+    for line in text.split("\n")
+        if line != "" and not line.starts_with("{key} ")
+            out.push(line)
+    out.push("{key} {value}")
+    "{out.join("\n")}\n"
+
+## The theme remembered in `~/.ail-edit`, or "dark".
+fn saved_theme() str
+    path := settings_path() else return "dark"
+    if not fs.exists(path)
+        return "dark"
+    text := fs.read_text(path) else return "dark"
+    setting(text, "theme") else "dark"
+
+## Remembers `name` in `~/.ail-edit`; a failure only shows a message.
+fn save_theme(name str) str
+    path := settings_path() else return "no home directory: the theme isn't remembered"
+    mut text := ""
+    if fs.exists(path)
+        text = fs.read_text(path) else ""
+    fs.write_text(path, with_setting(text, "theme", name)) else err
+        return "can't write {err.path}: {err.kind}"
+    ""
+
+## Uses the theme called `name`; false, changing nothing, if there is none.
+fn Workspace.set_theme(mut self, name str) bool
+    t := themes.named(name) else return false
+    theme = name
+    pal = palette(t)
+    true
+
+## Ctrl-Shift-T: the next theme, remembered for the next start.
+fn Workspace.next_theme(mut self)
+    at := themes.NAMES.index_of(theme) else -1
+    set_theme(themes.NAMES[(at + 1) % themes.NAMES.len()])
+    message = "theme {theme}"
+    if remember
+        failed := save_theme(theme)
+        if failed != ""
+            message = "theme {theme} ({failed})"
 
 ## Applies one window event. Closing the window is Ctrl-Q: with unsaved
 ## changes the first close asks and the second quits.
@@ -2933,6 +3202,310 @@ fn Editor.pane_location(self, i int) Loc?
         return none
     output_location(pane_text[i], path)
 
+# ---- Keys and the command palette (Ctrl-Shift-P) ------------------------
+
+## One row of the key table: the keys as the README shows them, the
+## command's name in the palette, the key it presses (`ctrl+shift+f`
+## form; empty for rows that aren't one command), and what it does. The
+## README's table is `--keys` output and the palette is this list, so the
+## two can't drift (ADR 0291).
+struct KeyRow
+    keys str
+    name str
+    spec str
+    does str
+
+fn key_row(shown str, name str, spec str, does str) KeyRow
+    KeyRow(keys: shown, name: name, spec: spec, does: does)
+
+## Every key, in the README's order.
+fn key_rows() List[KeyRow]
+    [
+        key_row(
+            "Arrows, Home, End, PageUp, PageDown",
+            "",
+            "",
+            "Move. Home goes to the indentation, then column 1",
+        ),
+        key_row("Ctrl-Left, Ctrl-Right", "", "", "Move by word"),
+        key_row(
+            "Shift with any move",
+            "",
+            "",
+            "Select; typing, Backspace or Delete replaces the selection",
+        ),
+        key_row("Ctrl-Home", "Go to the start of the file", "ctrl+home", "Start of the file"),
+        key_row("Ctrl-End", "Go to the end of the file", "ctrl+end", "End of the file"),
+        key_row("Ctrl-A", "Select all", "ctrl+a", "Select all"),
+        key_row("Ctrl-C", "Copy", "ctrl+c", "Copy (in the window, also to the system clipboard)"),
+        key_row("Ctrl-X", "Cut", "ctrl+x", "Cut (in the window, also to the system clipboard)"),
+        key_row("Ctrl-V", "Paste", "ctrl+v", "Paste (in the window, from the system clipboard)"),
+        key_row(
+            "Enter",
+            "",
+            "",
+            "New line, indented like this one, one level deeper after a block opener (`fn`, `if`, `match`, `x => `, `else err`, ...)",
+        ),
+        key_row("Tab", "", "", "Spaces to the next multiple of 4 (AIL has no tabs, lex.block.1)"),
+        key_row("Backspace", "", "", "In indentation, removes one level"),
+        key_row(
+            "`(` `[` `\{` `\"`",
+            "",
+            "",
+            "Insert the closing pair; typing the closer steps over it; Backspace in an empty pair deletes both",
+        ),
+        key_row(
+            "Ctrl-Space",
+            "Complete",
+            "ctrl+space",
+            "Complete the word: after `.`, fields, variants and methods; otherwise locals, the file's declarations (with signatures), keywords and words in the buffer. Up/Down choose, Enter or Tab accepts, Escape closes",
+        ),
+        key_row(
+            "F12",
+            "Go to definition",
+            "f12",
+            "Go to the definition of the name under the cursor, locals included (`ail api --refs`, else the `--symbols` index)",
+        ),
+        key_row(
+            "Ctrl-I",
+            "Show type",
+            "ctrl+i",
+            "Show the type of the expression under the cursor, and the signature and doc comment of what it names (`ail api --type`)",
+        ),
+        key_row(
+            "F2",
+            "Rename",
+            "f2",
+            "Rename the name under the cursor: through `ail api --refs` (declarations and locals), else every whole word; the prompt shows the count and how they were found, Enter applies, Ctrl-Z undoes (ADR 0244)",
+        ),
+        key_row(
+            "Alt-Shift-F",
+            "Format",
+            "alt+shift+f",
+            "Format with `ail fmt` (also on save, when the program has no errors)",
+        ),
+        key_row(
+            "Ctrl-/",
+            "Toggle comment",
+            "ctrl+/",
+            "Comment or uncomment the line or selected lines",
+        ),
+        key_row("Ctrl-D", "Duplicate line", "ctrl+d", "Duplicate the line or selected lines"),
+        key_row("Alt-Up", "Move line up", "alt+up", "Move the line or selected lines up"),
+        key_row("Alt-Down", "Move line down", "alt+down", "Move the line or selected lines down"),
+        key_row("Ctrl-G", "Go to line", "ctrl+g", "Go to a line number"),
+        key_row("Ctrl-Z", "Undo", "ctrl+z", "Undo"),
+        key_row("Ctrl-Y", "Redo", "ctrl+y", "Redo"),
+        key_row(
+            "Ctrl-F",
+            "Find",
+            "ctrl+f",
+            "Find as you type; Enter or F3 finds the next match, Escape stops",
+        ),
+        key_row("F3", "Find next", "f3", "Find the next match"),
+        key_row(
+            "Ctrl-R",
+            "Replace",
+            "ctrl+r",
+            "Replace: after Ctrl-F, type the replacement; Enter replaces this match and finds the next, Ctrl-Enter replaces all (one undo step)",
+        ),
+        key_row("Ctrl-S", "Save", "ctrl+s", "Format, save, then check"),
+        key_row(
+            "Ctrl-K",
+            "Check",
+            "ctrl+k",
+            "Check: `ail check --json`; spans are marked, the pane lists them",
+        ),
+        key_row(
+            "Ctrl-.",
+            "Apply fix",
+            "ctrl+.",
+            "Apply the first fix of the diagnostic under the cursor",
+        ),
+        key_row(
+            "F1",
+            "Explain diagnostic",
+            "f1",
+            "Explain the diagnostic under the cursor (`ail explain RULE`)",
+        ),
+        key_row(
+            "Ctrl-O",
+            "Outline",
+            "ctrl+o",
+            "Outline (`ail api --text`); Up/Down select, Enter jumps",
+        ),
+        key_row("Escape", "", "", "Close the pane; stop selecting or finding"),
+        key_row(
+            "F5",
+            "Run file",
+            "f5",
+            "Run the buffer (`ail run`); the output fills the pane (its end, when long), Esc closes it, and a click on a `FILE:LINE:COL` or `at LINE:COL` jumps there, opening the file in a tab if needed",
+        ),
+        key_row("F6", "Test file", "f6", "Run the buffer's tests (`ail test`), shown like F5"),
+        key_row(
+            "Ctrl-Shift-P",
+            "",
+            "",
+            "Command palette: every command here with its key; type part of its name, Up/Down, Enter runs it",
+        ),
+        key_row(
+            "Ctrl-B",
+            "File tree",
+            "ctrl+b",
+            "Show the file tree (`.ail` files first) and focus it; again hides it. Up/Down select, Enter or Right opens a file or expands a directory, Left collapses, Esc returns to the editor; a click opens (ADR 0293)",
+        ),
+        key_row(
+            "Ctrl-Shift-F",
+            "Search the project",
+            "ctrl+shift+f",
+            "Search every `.ail` file under the directory (open tabs as edited); the matches fill the pane, Up/Down select, Enter jumps, Esc closes (ADR 0292)",
+        ),
+        key_row(
+            "F4",
+            "Next search result",
+            "f4",
+            "Jump to the next match of the last project search",
+        ),
+        key_row(
+            "Ctrl-P",
+            "Open file",
+            "ctrl+p",
+            "Open a file: type part of its path (letters in order), Up/Down, Enter",
+        ),
+        key_row("Ctrl-Tab", "Next tab", "ctrl+tab", "Next tab; a click on a tab selects it"),
+        key_row("Ctrl-Shift-Tab", "Previous tab", "ctrl+shift+tab", "Previous tab"),
+        key_row(
+            "Ctrl-W",
+            "Close tab",
+            "ctrl+w",
+            "Close the tab; with unsaved changes, press it twice",
+        ),
+        key_row("Ctrl-+ (or Ctrl-=)", "Larger font", "ctrl+=", "Larger font (ADR 0243)"),
+        key_row("Ctrl--", "Smaller font", "ctrl+-", "Smaller font"),
+        key_row("Ctrl-0", "Default font size", "ctrl+0", "Default font size"),
+        key_row(
+            "Ctrl-Shift-T",
+            "Next theme",
+            "ctrl+shift+t",
+            "Next theme: dark, light, solarized, high-contrast; remembered for the next start",
+        ),
+        key_row(
+            "Ctrl-Q",
+            "Quit",
+            "ctrl+q",
+            "Quit; with unsaved changes in any tab, press it twice. Closing the window counts as Ctrl-Q",
+        ),
+        key_row(
+            "Mouse",
+            "",
+            "",
+            "Click places the caret, drag or Shift-click selects, the wheel scrolls, a click on a diagnostic or an output location jumps to it",
+        ),
+    ]
+
+## The README's key table (`--keys`).
+fn key_table() List[str]
+    mut out := ["| Key | Does |", "|---|---|"]
+    for r in key_rows()
+        out.push("| {r.keys} | {r.does} |")
+    out
+
+## The key event a spec such as `ctrl+shift+f`, `f2` or `ctrl+space` names.
+fn key_event(spec str) ui.Event
+    mut parts := spec.split("+")
+    mut key := parts.pop() else ""
+    if key == "space"
+        key = " "
+    Key(
+        key: key,
+        ctrl: parts.contains("ctrl"),
+        alt: parts.contains("alt"),
+        shift: parts.contains("shift"),
+    )
+
+## The key of a key event without Ctrl or Alt.
+fn pressed(ev ui.Event) str?
+    match ev
+        Key(k, ctrl, alt, _) =>
+            if ctrl or alt
+                return none
+            k
+        Resize(_, _) | Close | Mouse(_, _, _, _) | Scroll(_) => none
+
+## Keys the workspace handles itself, before the active tab sees them.
+enum WsKey
+    NextTab
+    PreviousTab
+    CloseTab
+    QuitAll
+    OpenFile
+    Palette
+    Search
+    NextHit
+    Tree
+    Theme
+    Zoom(key str)
+
+fn workspace_key(k str, ctrl bool, shift bool) WsKey?
+    if not ctrl
+        if k == "f4" and not shift
+            return NextHit
+        return none
+    if k == "tab"
+        if shift
+            return PreviousTab
+        return NextTab
+    if k == "=" or k == "+" or k == "-" or k == "0"
+        return Zoom(k)
+    if shift
+        return match k
+            "p" | "P" => Palette
+            "f" | "F" => Search
+            "t" | "T" => Theme
+            _ => none
+    match k
+        "b" | "B" => Tree
+        "w" | "W" => CloseTab
+        "q" | "Q" => QuitAll
+        "p" | "P" => OpenFile
+        _ => none
+
+## The palette's rows matching what is typed: those that run a command.
+fn Workspace.commands(self) List[KeyRow]
+    mut out := List[KeyRow]()
+    for r in key_rows()
+        if r.spec != "" and fuzzy(r.name, query)
+            out.push(r)
+    out
+
+fn Workspace.start_palette(mut self)
+    picking = true
+    commanding = true
+    query = ""
+    pick_sel = 0
+
+## What the open list shows: commands with their keys, or file paths.
+fn Workspace.choices(self) List[str]
+    if not commanding
+        return matches()
+    mut out := List[str]()
+    for r in commands()
+        out.push("{r.name.pad_right(28, ' ')} {r.keys}")
+    out
+
+## Enter in the open list: runs the command, or opens the file.
+fn Workspace.choose(mut self)
+    picking = false
+    if commanding
+        found := commands()
+        commanding = false
+        if pick_sel < found.len()
+            on_event(key_event(found[pick_sel].spec))
+        return
+    found := matches()
+    if pick_sel < found.len()
+        open(found[pick_sel])
+
 # ---- Tabs ---------------------------------------------------------------
 
 ## Several files, one tab each, and the Ctrl-P file picker. The editor in
@@ -2943,14 +3516,38 @@ struct Workspace
     cols int
     rows int
     picking bool
+    ## The open list is the command palette, not the file picker.
+    commanding bool
     query str
     files List[str]
+    ## Ctrl-Shift-F: the query being typed, the hits, and whether Up/Down
+    ## and Enter go to them.
+    searching bool
+    search str
+    hits List[Hit]
+    hit_sel int
+    hit_top int
+    browsing bool
+    ## Ctrl-B: the file tree, whether it has the keys, and which directories
+    ## are expanded.
+    ## The directory the tree shows: the working directory.
+    tree_root str
+    tree_open bool
+    tree_focus bool
+    tree List[TreeRow]
+    tree_sel int
+    expanded Set[str]
     pick_sel int
     quit_armed bool
     quit bool
     message str
     ## The font size, as a cell height in pixels (std.ui.15).
     font int
+    ## The theme's name and colors (ADR 0295); `remember` saves changes to
+    ## `~/.ail-edit` (off in tests).
+    theme str
+    pal Palette
+    remember bool
 
 fn Workspace.new(ed Editor) Workspace
     Workspace(
@@ -2959,13 +3556,29 @@ fn Workspace.new(ed Editor) Workspace
         cols: ed.cols,
         rows: ed.rows + 1,
         picking: false,
+        commanding: false,
         query: "",
         files: [],
+        searching: false,
+        search: "",
+        hits: [],
+        hit_sel: 0,
+        hit_top: 0,
+        browsing: false,
+        tree_root: ".",
+        tree_open: false,
+        tree_focus: false,
+        tree: [],
+        tree_sel: 0,
+        expanded: Set[str](),
         pick_sel: 0,
         quit_armed: false,
         quit: false,
         message: "",
         font: 20,
+        theme: "dark",
+        pal: palette(Map[str, int]()),
+        remember: false,
     )
 
 ## The file name a tab shows: the path after its last `/`.
@@ -2985,7 +3598,7 @@ fn Workspace.open(mut self, path str)
             message = "can't open {err.path}: {err.kind}"
             return
         text = got
-    mut ed := Editor.new(path, text, cols, (rows - 1).max(1))
+    mut ed := Editor.new(path, text, (cols - left()).max(10), (rows - 1).max(1))
     ed.index()
     eds.push(ed)
     active = eds.len() - 1
@@ -3022,6 +3635,17 @@ fn Workspace.on_event(mut self, ev ui.Event)
     if picking
         pick_event(ev)
         return
+    if searching
+        search_event(ev)
+        return
+    if browsing
+        if k := pressed(ev)
+            if hits_key(k)
+                return
+    if tree_focus
+        if k := pressed(ev)
+            if tree_key(k)
+                return
     # A message stays up through a resize, which a font change causes.
     resize := match ev
         Resize(_, _) => true
@@ -3031,26 +3655,25 @@ fn Workspace.on_event(mut self, ev ui.Event)
         message = ""
     match ev
         Key(k, ctrl, _, shift) =>
-            if ctrl and k == "tab"
+            if wk := workspace_key(k, ctrl, shift)
                 n := eds.len()
-                if shift
-                    active = (active + n - 1) % n
-                else
-                    active = (active + 1) % n
+                match wk
+                    NextTab => active = (active + 1) % n
+                    PreviousTab => active = (active + n - 1) % n
+                    CloseTab => close_tab()
+                    QuitAll => quit_all()
+                    OpenFile => start_picking()
+                    Palette => start_palette()
+                    Zoom(z) => zoom(z)
+                    Search => start_search()
+                    NextHit => next_hit()
+                    Tree => toggle_tree()
+                    Theme => next_theme()
                 return
-            if ctrl and (k == "w" or k == "W")
-                close_tab()
-                return
-            if ctrl and (k == "q" or k == "Q")
-                quit_all()
-                return
-            if ctrl and (k == "p" or k == "P")
-                start_picking()
-                return
-            if ctrl and (k == "=" or k == "+" or k == "-" or k == "0")
-                zoom(k)
-                return
+            saves := eds[active].saves
             eds[active].on_event(ev)
+            if eds[active].saves != saves
+                check_other_tabs()
         Resize(_, _) => on_resize(ev)
         Close => quit_all()
         Mouse(c, r, button, kind) =>
@@ -3058,6 +3681,11 @@ fn Workspace.on_event(mut self, ev ui.Event)
                 if kind == "down"
                     click_tab(c)
                 return
+            if c < left()
+                if kind == "down" and button == "left"
+                    click_tree(r)
+                return
+            tree_focus = false
             if kind == "down" and button == "left"
                 ed := eds[active]
                 if loc := ed.pane_location(r - 1 - ed.text_rows() - 1)
@@ -3065,10 +3693,17 @@ fn Workspace.on_event(mut self, ev ui.Event)
                         open(loc.path)
                         eds[active].jump_to(loc)
                         return
-            eds[active].on_event(Mouse(col: c, row: r - 1, button: button, kind: kind))
+            eds[active].on_event(Mouse(col: c - left(), row: r - 1, button: button, kind: kind))
         Scroll(_) => eds[active].on_event(ev)
     if eds[active].quit
         close_tab()
+
+## After a save, checks every other open tab too, since a change can break
+## a file that uses it; each tab's label shows its counts (ADR 0293).
+fn Workspace.check_other_tabs(mut self)
+    for i in 0..eds.len()
+        if i != active
+            eds[i].run(Check)
 
 ## Ctrl-+ (or Ctrl-=) and Ctrl-- step the font size; Ctrl-0 resets it.
 fn Workspace.zoom(mut self, k str)
@@ -3094,6 +3729,12 @@ fn Workspace.tab_labels(self) List[str]
         mut flag := ""
         if ed.dirty
             flag = " *"
+        e := ed.diag_count("error")
+        w := ed.diag_count("warning")
+        if e > 0
+            flag = "{flag} E{e}"
+        if w > 0
+            flag = "{flag} W{w}"
         out.push(" {base_name(ed.path)}{flag} ")
     out
 
@@ -3183,9 +3824,305 @@ fn Workspace.on_resize(mut self, ev ui.Event)
         Resize(c, r) =>
             cols = c
             rows = r
-            for mut ed in eds
-                ed.apply(Command.Resize(cols: c, rows: (r - 1).max(1)))
+            resize_tabs()
         Key(_, _, _, _) | Close | Mouse(_, _, _, _) | Scroll(_) => return
+
+# ---- The file tree (Ctrl-B) -----------------------------------------------
+
+## A row of the file tree: a file or directory under the working directory.
+struct TreeRow
+    path str
+    name str
+    depth int
+    dir bool
+
+## The tree's width in columns, the separator included; 0 when closed.
+fn Workspace.left(self) int
+    if not tree_open
+        return 0
+    TREE_W + 1
+
+## The entries of `dir` as rows: `.ail` files first, then directories, then
+## other files, each group by name; hidden and build directories skipped.
+## Expanded directories list their entries below them.
+fn Workspace.tree_rows(self, dir str, depth int) List[TreeRow]
+    names := fs.list_dir(dir) else return List[TreeRow]()
+    mut ail := List[TreeRow]()
+    mut dirs := List[TreeRow]()
+    mut rest := List[TreeRow]()
+    for n in names.sorted()
+        if n.starts_with(".") or n == "target"
+            continue
+        mut path := n
+        if dir != "."
+            path = "{dir}/{n}"
+        if sub := fs.list_dir(path)
+            if sub.len() >= 0
+                dirs.push(TreeRow(path: path, name: "{n}/", depth: depth, dir: true))
+        elif n.ends_with(".ail")
+            ail.push(TreeRow(path: path, name: n, depth: depth, dir: false))
+        else
+            rest.push(TreeRow(path: path, name: n, depth: depth, dir: false))
+    mut out := ail
+    for d in dirs
+        out.push(d)
+        if expanded.contains(d.path)
+            out.extend(tree_rows(d.path, depth + 1))
+    out.extend(rest)
+    out
+
+## Ctrl-B: opens the tree and focuses it; focused, closes it; open but not
+## focused, focuses it.
+fn Workspace.toggle_tree(mut self)
+    if tree_open and tree_focus
+        tree_open = false
+        tree_focus = false
+    else
+        if not tree_open
+            tree = tree_rows(tree_root, 0)
+            tree_sel = 0
+        tree_open = true
+        tree_focus = true
+    resize_tabs()
+
+## Gives every tab the columns the tree leaves.
+fn Workspace.resize_tabs(mut self)
+    c := (cols - left()).max(10)
+    r := (rows - 1).max(1)
+    for mut ed in eds
+        ed.apply(Command.Resize(cols: c, rows: r))
+
+## Enter or a click on a row: a directory expands or collapses, a file
+## opens in a tab and takes the focus.
+fn Workspace.activate_tree_row(mut self)
+    if tree_sel >= tree.len()
+        return
+    t := tree[tree_sel]
+    if t.dir
+        if expanded.contains(t.path)
+            expanded.remove(t.path)
+        else
+            expanded.add(t.path)
+        tree = tree_rows(tree_root, 0)
+        return
+    open(t.path)
+    tree_focus = false
+
+## Keys while the tree has the focus: Up/Down select, Enter or Right opens,
+## Left collapses (or goes to the parent), Escape gives the focus back.
+## Other keys go to the editor. True if `k` was used here.
+fn Workspace.tree_key(mut self, k str) bool
+    if k == "up"
+        tree_sel = (tree_sel - 1).max(0)
+    elif k == "down"
+        tree_sel = (tree_sel + 1).min((tree.len() - 1).max(0))
+    elif k == "enter" or k == "right"
+        activate_tree_row()
+    elif k == "left"
+        if tree_sel < tree.len()
+            t := tree[tree_sel]
+            if t.dir and expanded.contains(t.path)
+                activate_tree_row()
+            else
+                mut i := tree_sel
+                while i > 0 and tree[i].depth >= t.depth
+                    i -= 1
+                if tree[i].depth < t.depth
+                    tree_sel = i
+    elif k == "escape"
+        tree_focus = false
+    else
+        tree_focus = false
+        return false
+    true
+
+## Draws the tree down the left side, the selection kept in view.
+fn Workspace.render_tree(self, mut s Screen)
+    n := rows - 1
+    top := (tree_sel - n + 1).max(0)
+    for r in 1..rows
+        s.put(r, 0, " ".repeat(TREE_W), FG, PANE_BG)
+        s.put(r, TREE_W, " ", FG, BG)
+        i := top + r - 1
+        mut text := ""
+        if i < tree.len()
+            t := tree[i]
+            mut bg := PANE_BG
+            if i == tree_sel
+                bg = LINE_BG
+                if tree_focus
+                    bg = SELECT_BG
+            mut fg := FG
+            if t.dir
+                fg = KEYWORD_FG
+            elif not t.name.ends_with(".ail")
+                fg = GUTTER_FG
+            indent := "  ".repeat(t.depth)
+            cs := "{indent}{t.name}".chars()
+            text = cs[..cs.len().min(TREE_W - 1)].join("")
+            s.put(r, 0, " {text}".pad_right(TREE_W, ' '), fg, bg)
+        shown := " {text}".pad_right(TREE_W + 1, ' ')
+        s.text[r] = "{shown}{s.text[r]}"
+    if tree_focus
+        s.cursor_row = 1 + tree_sel - top
+        s.cursor_col = 1
+
+## A click in the tree selects that row and activates it.
+fn Workspace.click_tree(mut self, r int)
+    top := (tree_sel - (rows - 1) + 1).max(0)
+    i := top + r - 1
+    if i >= 0 and i < tree.len()
+        tree_sel = i
+        tree_focus = true
+        activate_tree_row()
+
+# ---- Project search (Ctrl-Shift-F) ----------------------------------------
+
+## A match of a project search: where, and its line's text.
+struct Hit
+    loc Loc
+    text str
+
+## Every line of `text` containing `query`, as hits in `path` (1-based).
+fn search_text(path str, text str, query str) List[Hit]
+    mut out := List[Hit]()
+    if query == ""
+        return out
+    ls := text.lines()
+    for l in 0..ls.len()
+        if c := ls[l].find(query)
+            out.push(Hit(loc: Loc(path: path, line: l + 1, col: c + 1), text: ls[l].trim()))
+    out
+
+## Searches every `.ail` file under the directory, open tabs as they are in
+## the editor (unsaved changes included), at most `limit` hits.
+fn Workspace.search_project(self, q str, limit int) List[Hit]
+    mut out := List[Hit]()
+    for f in list_files(".", 8, 5000)
+        if not f.ends_with(".ail") or f.ends_with(".edit-check.ail") or f.ends_with(".edit-query.ail")
+            continue
+        mut text := ""
+        mut open := false
+        for ed in eds
+            if ed.path == f or ed.path == "./{f}"
+                text = ed.text()
+                open = true
+        if not open
+            got := fs.read_text(f) else continue
+            text = got
+        for h in search_text(f, text, q)
+            if out.len() >= limit
+                return out
+            out.push(h)
+    out
+
+fn Workspace.start_search(mut self)
+    searching = true
+    search = ""
+    ed := eds[active]
+    if w := ed.word_at()
+        search = ed.lines[ed.line].slice(w.col, w.end_col)
+
+## Typing the query: Enter searches, Escape cancels.
+fn Workspace.search_event(mut self, ev ui.Event)
+    match ev
+        Key(k, ctrl, _, _) =>
+            if ctrl
+                return
+            if k == "escape"
+                searching = false
+            elif k == "enter"
+                searching = false
+                show_hits(search_project(search, 1000))
+            elif k == "backspace"
+                search = drop_last(search)
+            elif k.chars().len() == 1
+                search = "{search}{k}"
+        Close => quit_all()
+        Resize(_, _) => on_resize(ev)
+        Mouse(_, _, _, _) | Scroll(_) => return
+
+## Puts the hits in the active tab's pane and focuses them: Up/Down
+## select, Enter (or F4, the next one) jumps, Escape closes.
+fn Workspace.show_hits(mut self, found List[Hit])
+    hits = found
+    hit_sel = 0
+    if hits.len() == 0
+        message = "no match for `{search}`"
+        return
+    browsing = true
+    fill_hits()
+
+## Writes the visible part of the hits into the active tab's pane, keeping
+## the selection in view.
+fn Workspace.fill_hits(mut self)
+    mut ed := eds[active]
+    ed.pane = Text
+    room := (ed.pane_rows() - 1).max(1)
+    hit_top = hit_top.min(hit_sel).max(hit_sel - room + 1).max(0)
+    mut more := ""
+    if hits.len() >= 1000
+        more = " (first 1000)"
+    ed.pane_text = ["search `{search}`: {hits.len()} matches{more}; Up/Down, Enter jumps, F4 next, Esc closes"]
+    for i in hit_top..(hit_top + room).min(hits.len())
+        h := hits[i]
+        ed.pane_text.push("{h.loc.path}:{h.loc.line}:{h.loc.col}: {h.text}")
+    eds[active] = ed
+
+## Opens the selected hit's file in a tab, moves there, and shows the hits
+## in that tab's pane.
+fn Workspace.jump_to_hit(mut self)
+    if hit_sel >= hits.len()
+        return
+    loc := hits[hit_sel].loc
+    open(loc.path)
+    eds[active].jump_to(loc)
+    fill_hits()
+
+## Keys while the hits are focused; others go to the editor.
+fn Workspace.hits_key(mut self, k str) bool
+    if k == "up"
+        hit_sel = (hit_sel - 1).max(0)
+    elif k == "down"
+        hit_sel = (hit_sel + 1).min(hits.len() - 1)
+    elif k == "enter"
+        jump_to_hit()
+        browsing = false
+        return true
+    elif k == "escape"
+        browsing = false
+        return false
+    else
+        browsing = false
+        return false
+    fill_hits()
+    true
+
+## F4: the next hit, from anywhere, wrapping to the first.
+fn Workspace.next_hit(mut self)
+    if hits.len() == 0
+        message = "no search results: Ctrl-Shift-F searches the project"
+        return
+    if not browsing
+        hit_sel = (hit_sel + 1) % hits.len()
+    jump_to_hit()
+    browsing = false
+
+## The search prompt on the tab bar, or the selected hit's pane row.
+fn Workspace.render_search(self, mut s Screen)
+    if searching
+        head := " search the project: "
+        s.put(0, 0, "{head}{search} ".pad_right(cols, ' '), STATUS_FG, SELECT_BG)
+        s.text[0] = "{head}{search}"
+        s.cursor_row = 0
+        s.cursor_col = head.chars().len() + search.chars().len()
+    elif browsing
+        ed := eds[active]
+        r := 1 + ed.text_rows() + 2 + hit_sel - hit_top
+        if r < rows and ed.pane == Text
+            x := left()
+            s.put(r, x, " ".repeat(cols - x), FG, SELECT_BG)
+            s.put(r, x + 1, ed.pane_text[1 + hit_sel - hit_top], FG, SELECT_BG)
 
 # ---- The file picker (Ctrl-P) ---------------------------------------------
 
@@ -3231,6 +4168,7 @@ fn Workspace.matches(self) List[str]
 
 fn Workspace.start_picking(mut self)
     picking = true
+    commanding = false
     query = ""
     pick_sel = 0
     files = list_files(".", 4, 2000)
@@ -3242,11 +4180,10 @@ fn Workspace.pick_event(mut self, ev ui.Event)
                 return
             if k == "escape"
                 picking = false
+                commanding = false
             elif k == "enter"
-                found := matches()
-                if pick_sel < found.len()
-                    open(found[pick_sel])
-                picking = false
+                choose()
+                return
             elif k == "up"
                 pick_sel = (pick_sel - 1).max(0)
             elif k == "down"
@@ -3264,7 +4201,7 @@ fn Workspace.pick_event(mut self, ev ui.Event)
             picking = false
             on_event(ev)
         Mouse(_, _, _, _) | Scroll(_) => return
-    pick_sel = pick_sel.min((matches().len() - 1).max(0))
+    pick_sel = pick_sel.min((choices().len() - 1).max(0))
 
 ## The screen: the tab bar, the active editor below it, and the picker over
 ## it when open.
@@ -3282,17 +4219,21 @@ fn Workspace.render(self) Screen
         s.put(0, x, labels[i], fg, bg)
         x += labels[i].chars().len() + 1
     if message != ""
-        s.put(0, x + 1, message, STATUS_FG, PANE_BG)
+        s.put(0, x + 1, message, FG, PANE_BG)
     inner := eds[active].render()
+    x0 := left()
     for sp in inner.spans
-        s.spans.push(Span(row: sp.row + 1, col: sp.col, text: sp.text, fg: sp.fg, bg: sp.bg))
+        s.spans.push(Span(row: sp.row + 1, col: sp.col + x0, text: sp.text, fg: sp.fg, bg: sp.bg))
     for r in 0..inner.text.len()
         if r + 1 < rows
             s.text[r + 1] = inner.text[r]
     s.text[0] = labels.join(" ")
     if inner.cursor_row >= 0
         s.cursor_row = inner.cursor_row + 1
-        s.cursor_col = inner.cursor_col
+        s.cursor_col = inner.cursor_col + x0
+    if tree_open
+        render_tree(mut s)
+    render_search(mut s)
     if picking
         render_picker(mut s)
     s
@@ -3300,10 +4241,13 @@ fn Workspace.render(self) Screen
 fn Workspace.render_picker(self, mut s Screen)
     w := (cols - 4).min(70).max(10)
     x := (cols - w) / 2
-    found := matches()
+    found := choices()
     shown := found.len().min(12)
+    mut head := " open: "
+    if commanding
+        head = " command: "
     s.put(1, x, " ".repeat(w), FG, SELECT_BG)
-    s.put(1, x, " open: {query}", STATUS_FG, SELECT_BG)
+    s.put(1, x, "{head}{query}", STATUS_FG, SELECT_BG)
     for i in 0..shown
         mut bg := PANE_BG
         if i == pick_sel
@@ -3311,9 +4255,9 @@ fn Workspace.render_picker(self, mut s Screen)
         s.put(2 + i, x, " ".repeat(w), FG, bg)
         s.put(2 + i, x + 1, found[i], FG, bg)
     if found.len() == 0
-        s.put(2, x, " no file matches".pad_right(w, ' '), GUTTER_FG, PANE_BG)
+        s.put(2, x, " nothing matches".pad_right(w, ' '), GUTTER_FG, PANE_BG)
     s.cursor_row = 1
-    s.cursor_col = x + 7 + query.chars().len()
+    s.cursor_col = x + head.chars().len() + query.chars().len()
 
 ## The event loop: wait for an event, apply it and any others already
 ## pending, then draw once. The title shows the file and its unsaved mark.
@@ -3333,7 +4277,7 @@ fn Workspace.window(mut self) ! ui.UiError
         if font != w.font_size()
             w.set_font_size(font)
             font = w.font_size()
-        draw(mut w, render())
+        draw_themed(mut w, render(), pal)
         on_window_event(w.next_event(), w.modifiers())
         while not quit
             ev := w.poll_event() else break
@@ -3346,7 +4290,7 @@ fn Workspace.on_window_event(mut self, ev ui.Event, m ui.Modifiers)
     shift_click := match ev
         Mouse(c, r, button, kind) =>
             if m.shift and not picking and button == "left" and kind == "down" and r > 0
-                eds[active].extend_to(c, r - 1)
+                eds[active].extend_to(c - left(), r - 1)
                 true
             else
                 false
@@ -3359,6 +4303,13 @@ fn window_main(mut ed Editor, flags List[str])
     ed.index()
     mut ws := Workspace.new(ed)
     ws.font = font_flag(flags)
+    ws.remember = true
+    mut name := saved_theme()
+    at := flags.index_of("--theme") else -1
+    if at >= 0 and at + 1 < flags.len()
+        name = flags[at + 1]
+    if not ws.set_theme(name)
+        ws.message = "no theme `{name}`: try {themes.NAMES.join(", ")}"
     ws.window() else err
         print("edit: no window ({err.kind}: {err.message}); printing the screen instead")
         print_screen(mut ed, flags)
@@ -3427,7 +4378,11 @@ fn bench(mut ed Editor)
 fn main() !
     args := env.args()
     if args.len() == 0
-        print("usage: ail run tools/edit/edit.ail [--font N] [--print [--check] [--outline] [--explain] [--at=L:C] [--type=TEXT] [--key=KEY]...] FILE")
+        print("usage: ail run tools/edit/edit.ail [--font N] [--keys] [--print [--check] [--outline] [--explain] [--at=L:C] [--type=TEXT] [--key=KEY]...] FILE")
+        return
+    if args.contains("--keys")
+        for l in key_table()
+            print(l)
         return
     path := args[args.len() - 1]
     mut text := ""

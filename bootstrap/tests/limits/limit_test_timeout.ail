@@ -1,0 +1,7 @@
+@test fn slow()
+    mut i := 0
+    while true
+        i += 1
+
+@test fn quick()
+    assert(true)

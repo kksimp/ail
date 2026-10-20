@@ -19,6 +19,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/commands.ail
 ./ail run examples/shapes.ail
 ./ail run examples/tool.ail        # files and processes (std modules)
+./ail run examples/fetch.ail URL   # an HTTP GET (std.net); offline, falls back to a file
 ./ail run examples/logscan.ail     # agent-tool corpus: also tasks.ail, build.ail (ADR 0217)
 ./ail run examples/pipeline.ail    # tasks and channels
 ./ail run examples/ui_hello.ail    # a window (std.ui); needs a display
@@ -31,11 +32,13 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
-./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols)
+./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols); `fails_with` per fallible fn
+./ail check --errors FILE          # each function's error types and failure paths, JSON
 ./ail api --locals|--type|--refs FILE LINE COL   # names in scope, type at a position, references
 ./ail fix FILE [--dry-run]         # apply the fixes diagnostics carry, re-check, repeat (ADR 0203)
 ./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
-./ail selftest                     # the bootstrap's own tests
+./ail selftest                     # the bootstrap's own tests, incl. a 200-program fuzz smoke
+tools/fuzz/run.sh [N [SEED]]       # fuzz and differential run, 10,000 programs by default (ADRs 0269–0271)
 ```
 
 Exit status: `0` success, `1` the program failed or trapped, `2` the program
@@ -56,6 +59,7 @@ reported but don't stop a program from running.
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel` | `conc.par.2–6` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–5` |
+| `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
 | `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires` and `ensures`: parsing, typing and `result`, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–2`, `contract.run.1–3`, `contract.api.1` |
@@ -65,19 +69,23 @@ reported but don't stop a program from running.
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
-| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
+| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `fs.Metadata`, `proc.Output`, `proc.ProcError`, `net.Response`, `net.NetError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
 | `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8`, `std.ui.13` |
 | `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8`, `std.ui.10–13` |
 | `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics`, mouse, scroll and the clipboard (ADRs 0177–0179, 0240) | `std.ui.1–8`, `std.ui.10–13` |
-| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–4`, `std.fs.1–7`, `std.env.1–4`, `std.path.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
+| `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–4`, `std.fs.1–12`, `std.env.1–5`, `std.path.1–4`, `std.io.1–4`, `std.proc.1–3`, `std.net.2–3`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
 | `src/interp/stdlib.rs` | Runs the standard modules (`std.path` text in `src/stdlib.rs`) | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.path.2–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2`, `std.ui.1` |
+| `src/interp/osext.rs` | Walking, globbing, metadata, rename and copy; processes with input and a time limit; `which`; `env.vars` | `std.fs.8–12`, `std.env.5`, `std.proc.2–3` |
+| `src/interp/net.rs` | The HTTP/1.1 client of `std.net` (no TLS) | `std.net.2–4` |
 | `src/interp/keyfn.rs` | Key functions: `sorted`, `sort`, `min`, `max` with `by: \|x\| key` | `expr.key.3–4` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
+| `src/foreign.rs`, `src/parser/mistakes.rs` | Words and calls from other languages, and the parser's recovery for them: one report, the AIL spelling, a fix | `gram.foreign.1`, `gram.rec.1–3`, `gram.help.1`, ADRs 0262–0264 |
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
+| `src/check/errpaths.rs`, `src/api/errors.rs` | failure paths and error sets the checker records; `ail check --errors`, `fails_with` in `ail api`; the `err.ret.*` diagnostics and error fixes | `err.ret.1–3`, `err.fix.1`, `err.api.1`, `err.paths.1` |
 | `src/api/query.rs`, `src/check/facts.rs` | `ail api --locals/--type/--refs`: position queries from facts the checker records | `api.query.1`, `api.loc.1–2`, `api.type.1–2`, `api.refs.1–3` |
 
 All errors in a file are reported in one pass, sorted by position; a
@@ -153,9 +161,10 @@ package's are reported file by file.
   `type.char.*`, `type.num.*`, `type.coll.*`, `type.map.*`); the standard
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
-- **Standard modules:** `fs`, `env`, `io`, `proc`, `path`, `random`, `time`
-  and `ui` (a window of text cells; ADR 0177), in scope without `use` unless
-  something else has the name (ADR 0277; `use std.NAME as d` also works), their functions called as
+- **Standard modules:** `fs`, `env`, `io`, `proc`, `net` (HTTP/1.1 `get` and
+  `post`, no TLS; ADR 0283), `path`, `random`, `time` and `ui` (a window of
+  text cells; ADR 0177), in scope without `use` unless something else has the
+  name (ADR 0277; `use std.NAME as d` also works), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
 - **Methods:** inside a method, the receiver's fields and methods by bare
   name (`pos += 1`, `peek()`); `[]` and `{}` declared with `:=` are typed by
@@ -259,6 +268,10 @@ implement correctly.
    - `NAME.ail` + `NAME.err` (+ optional `NAME.out`) for programs whose `main`
      must fail with exactly the report in `NAME.err`, with `$FILE` standing
      for the program's path.
+   A mistake an AI might plausibly make (syntax from another language, a
+   habit from Python or Rust) also goes in `tests/mistakes/` as `NAME.ail` +
+   `NAME.rules` (+ `NAME.fixed` when `ail fix` should resolve it); the first
+   diagnostic must name the mistake and carry a `help` (ADR 0262).
 4. Keep the code formatted with `rustfmt` (settings in `rustfmt.toml`) and free
    of `clippy` warnings. Neither is in the minimal toolchain the designer
    uses, so agents add them locally (`rustup component add rustfmt clippy`).

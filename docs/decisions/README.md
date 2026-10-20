@@ -190,6 +190,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0242](0242-std-ui-modifiers-method.md) | `Window.modifiers()` reports the modifiers of the last event *(delegated)* | Accepted | 2026-10-20 |
 | [0243](0243-std-ui-font-size.md) | `Window.set_font_size` picks from fixed bitmap sizes and keeps the window's pixels *(delegated)* | Accepted | 2026-10-20 |
 | [0244](0244-editor-rename-symbol.md) | Editor F2 renames through `ail api` references, else by whole word, after a confirming prompt *(delegated)* | Accepted | 2026-10-20 |
+| [0262](0262-report-foreign-syntax-once-with-help.md) | Report foreign syntax once, give every error a help, measure with a mistakes corpus *(delegated)* | Accepted | 2026-10-20 |
+| [0263](0263-one-diagnostic-per-mistake-recovery.md) | One diagnostic per mistake: line-level recovery and whole-file re-indentation *(delegated)* | Accepted | 2026-10-20 |
+| [0264](0264-anchored-call-rewrite-fixes.md) | Fixes that rewrite a call, a bracket form or a chained comparison are anchored to the source line *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
 | [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |
@@ -215,6 +218,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
 | [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
 | [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0219](0219-interpreter-speed-round-two.md) | Speed up the interpreter again with int fast paths, pooled allocations and in-place updates *(delegated)* | Accepted | 2026-10-20 |
+| [0220](0220-interpreter-site-caches.md) | Cache what a call site names, by the address of its expression *(delegated)* | Accepted | 2026-10-20 |
+| [0221](0221-ail-skips-toolchain-probe.md) | `./ail` runs the built binary directly when it is up to date *(delegated)* | Accepted | 2026-10-20 |
 | [0210](0210-contract-syntax.md) | Contracts are `requires` and `ensures` lines under the signature; `result` names the value *(delegated)* | Accepted | 2026-10-20 |
 | [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
 | [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
@@ -264,3 +270,22 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0278](0278-messages-on-error-types.md) | Error types carry their messages *(delegated)* | Accepted | 2026-10-20 |
 | [0279](0279-question-mark-on-optionals-fails-with-absent.md) | `?` on an optional fails with `Absent` where errors are inferred, and tests can fail *(delegated)* | Accepted | 2026-10-20 |
 | [0280](0280-one-line-if-and-round-5-measurements.md) | One-line `if c then a else b`, `{}` typed by `m[k] op= n`, and the round-5 measurements *(delegated)* | Accepted | 2026-10-20 |
+| [0288](0288-run-limits-timeout-memory-steps.md) | `ail run` takes `--timeout`, `--max-memory` and `--max-steps` *(delegated)* | Accepted | 2026-10-20 |
+| [0289](0289-test-coverage.md) | `ail test --coverage` reports lines and functions run *(delegated)* | Accepted | 2026-10-20 |
+| [0290](0290-test-failure-shows-trap-snapshot.md) | `ail test` prints the trap snapshot under a failure *(delegated)* | Accepted | 2026-10-20 |
+| [0269](0269-fuzz-generator-design.md) | The fuzz harness generates typed programs, edge-value probes and token-level mutants from a seed *(delegated)* | Accepted | 2026-10-20 |
+| [0270](0270-fuzz-properties.md) | The fuzz harness checks crash-freedom, determinism, fmt idempotence, api validity and a contracts differential *(delegated)* | Accepted | 2026-10-20 |
+| [0271](0271-every-crash-becomes-a-case.md) | Every fuzz crash becomes a regression case; `repeat` and `pad_*` trap above 2^30 bytes *(delegated)* | Accepted | 2026-10-20 |
+| [0281](0281-std-fs-walk-glob-metadata.md) | `std.fs` gets `walk`, `glob`, `metadata`, `rename` and `copy` *(delegated)* | Accepted | 2026-10-20 |
+| [0282](0282-std-proc-input-timeout-which.md) | `proc.run` takes input and a time limit; `proc.which` and `env.vars` *(delegated)* | Accepted | 2026-10-20 |
+| [0283](0283-std-net-http-client.md) | `std.net`: a minimal HTTP/1.1 client, without TLS for now *(delegated)* | Accepted | 2026-10-20 |
+| [0284](0284-trailing-optional-std-parameters.md) | A standard function's trailing optional parameters may be left off *(delegated)* | Accepted | 2026-10-20 |
+| [0285](0285-error-flow-diagnostics-and-fixes.md) | Error-flow diagnostics carry applicable helps and fixes *(delegated)* | Accepted | 2026-10-20 |
+| [0286](0286-failure-paths-check-errors.md) | `ail check --errors`: every failure path of a function as JSON *(delegated)* | Accepted | 2026-10-20 |
+| [0287](0287-inferred-error-sets-in-api-and-worked-explain.md) | Inferred error sets in `ail api`, worked examples in `ail explain` *(delegated)* | Accepted | 2026-10-20 |
+| [0291](0291-editor-command-palette-one-key-list.md) | The editor's command palette and README key table come from one list; format moves to Alt-Shift-F *(delegated)* | Accepted | 2026-10-20 |
+| [0292](0292-editor-project-search.md) | Editor project search: Ctrl-Shift-F, matches in the pane, F4 for the next *(delegated)* | Accepted | 2026-10-20 |
+| [0293](0293-editor-file-tree-and-check-all-tabs.md) | Editor file tree (Ctrl-B) and checking every tab on save, counts on tab labels *(delegated)* | Accepted | 2026-10-20 |
+| [0294](0294-std-ui-styles-colors-caret.md) | `std.ui` text styles, named colors and caret shapes *(delegated)* | Accepted | 2026-10-20 |
+| [0295](0295-editor-themes.md) | Editor themes recolor the default colors by kind, from an AIL module *(delegated)* | Accepted | 2026-10-20 |
+| [0296](0296-env-home-and-editor-settings.md) | `env.home()`, and editor settings in `~/.ail-edit` *(delegated)* | Accepted | 2026-10-20 |

@@ -1,0 +1,149 @@
+# Interpreter fast paths keep the general semantics: int updates in place, `mut` locals moved
+# into calls, field assignment, per-site caches, and the cases that must not take a shortcut.
+
+struct Counter
+    n int
+    label str
+
+fn Counter.bump(mut self, by int)
+    n += by
+
+fn Counter.peek(self) int
+    n
+
+struct Pair
+    a int
+    b int
+
+fn Pair.push(mut self, x int)
+    a = b
+    b = x
+
+fn Pair.len(self) int
+    a + b
+
+trait Named
+    fn name(self) str
+
+impl Named for Counter
+    fn name(self) str
+        "counter {label}"
+
+impl Named for Pair
+    fn name(self) str
+        "pair {a}/{b}"
+
+fn describe(x any Named) str
+    x.name()
+
+fn swap(mut x int, mut y int)
+    t := x
+    x = y
+    y = t
+
+fn add_into(mut total int, step int, mut seen List[int])
+    total += step
+    seen.push(total)
+
+fn many(mut a int, mut b int, mut c int, mut d int, mut e int, mut f int, mut g int)
+    a += 1
+    b += 2
+    c += 3
+    d += 4
+    e += 5
+    f += 6
+    g += 7
+
+fn ints()
+    mut n := 7
+    n = n / 2
+    n += 10
+    n %= 4
+    n = 3 * n + 1
+    print("{n} {-7 / 2} {-7 % 3} {7 % -3}")
+    mut x := 1
+    x = x + 1
+    print(x)
+
+fn main()
+    ints()
+
+    # Compound assignment of an int local from an int local, and from a non-int.
+    mut total := 0
+    step := 5
+    total += step
+    total -= 2
+    total *= step
+    print(total)
+    mut f := 1.5
+    f += 2.25
+    f = f * 2.0
+    print(f)
+
+    # Methods: read-only receivers by value, `mut` receivers moved in and out.
+    mut c := Counter(n: 1, label: "c")
+    c.bump(4)
+    c.bump(5)
+    print("{c.peek()} {c.n}")
+    copy := c
+    c.n = 100
+    c.n += 1
+    print("{copy.n} {c.n}")
+    mut p := Pair(a: 1, b: 2)
+    p.push(9)
+    print("{p.len()} {p}")
+
+    # One call site, two receiver types.
+    for item in [1, 2, 3]
+        print(describe(Counter(n: item, label: "x")))
+        print(describe(Pair(a: item, b: item * 2)))
+
+    # `mut` locals in arguments, in any order, with read-only ones between.
+    mut a := 1
+    mut b := 2
+    swap(mut a, mut b)
+    print("{a} {b}")
+    mut seen := []
+    mut sum := 0
+    add_into(mut sum, 3, mut seen)
+    add_into(mut sum, 4, mut seen)
+    print("{sum} {seen}")
+    mut i1 := 0
+    mut i2 := 0
+    mut i3 := 0
+    mut i4 := 0
+    mut i5 := 0
+    mut i6 := 0
+    mut i7 := 0
+    many(mut i1, mut i2, mut i3, mut i4, mut i5, mut i6, mut i7)
+    print("{i1 + i2 + i3 + i4 + i5 + i6 + i7}")
+
+    # `mut` arguments that are not plain locals.
+    mut xs := [1, 2, 3]
+    swap(mut xs[0], mut xs[2])
+    print(xs)
+    mut pr := Pair(a: 5, b: 6)
+    swap(mut pr.a, mut pr.b)
+    print(pr)
+
+    # Lists and maps: reads in place, writes through places.
+    mut counts := {"a": 1}
+    counts["a"] = (counts.get("a") else 0) + 1
+    counts["b"] = (counts.get("b") else 0) + 1
+    counts["a"] += 5
+    print(counts)
+    mut flags := {1: true}
+    flags[2] = false
+    flags[1] = not flags[1]
+    print(flags)
+    mut grid := [[1, 2], [3, 4]]
+    grid[1][0] = grid[0][1] + 10
+    print(grid)
+    idx := 1
+    xs[idx] += 10
+    xs[0] = xs[0] * 2
+    print(xs[idx] + xs[idx - 1])
+    s := "ab"
+    t := s
+    print("{s}{t}" == "abab")
+    print('a' < 'b' and 'a' != 'b' and true == true)

@@ -713,6 +713,17 @@ pub fn place_path(e: &Expr) -> Option<(&str, Vec<PathStep<'_>>)> {
     }
 }
 
+/// The root name of a place expression, as `place_path(e).map(|(root, _)| root)`
+/// but without building the path (ADR 0219).
+pub fn place_root(e: &Expr) -> Option<&str> {
+    match e {
+        Expr::Name(n, _) => Some(n.as_str()),
+        Expr::Field { recv, .. } => place_root(recv),
+        Expr::Index { recv, index, .. } if !matches!(**index, Expr::Range { .. }) => place_root(recv),
+        _ => None,
+    }
+}
+
 #[derive(Debug)]
 pub enum PathStep<'a> {
     Field(&'a str),

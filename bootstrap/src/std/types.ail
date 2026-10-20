@@ -7,6 +7,12 @@ error struct IoError
     path str
     kind str
 
+## std.fs.10 (ADR 0281)
+struct Metadata
+    size int
+    modified_ms int
+    is_dir bool
+
 ## std.proc
 struct Output
     status int
@@ -16,6 +22,17 @@ struct Output
 error struct ProcError
     cmd str
     kind str
+
+## std.net (ADR 0283)
+struct Response
+    status int
+    headers Map[str, str]
+    body str
+
+error struct NetError
+    url str
+    kind str
+    message str
 
 ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
 struct Window
@@ -36,6 +53,18 @@ enum Event
     Close
     Mouse(col int, row int, button str, kind str)
     Scroll(lines int)
+
+## std.ui.16: how `put_styled` draws text.
+struct Style
+    bold bool
+    italic bool
+    underline bool
+
+## std.ui.18: the caret's shape.
+enum Cursor
+    Bar
+    Block
+    Underline
 
 error struct UiError
     kind str

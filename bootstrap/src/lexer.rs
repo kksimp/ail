@@ -5,7 +5,7 @@
 //! implement yet produce a `bootstrap.unsupported` diagnostic instead of a
 //! wrong answer.
 
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 
 pub const UNSUPPORTED: &str = "bootstrap.unsupported";
 
@@ -154,7 +154,35 @@ pub struct Comment {
 /// `lex`, plus a side table of every comment in source order. The token
 /// stream is exactly the one `lex` returns.
 pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
-    let mut lx = Lexer { tokens: Vec::new(), diags: Vec::new(), open: Vec::new(), in_interp: 0, comments: Vec::new() };
+    let (tokens, diags, comments, unit) = lex_scaled(src, 1);
+    match unit {
+        // The file indents by 2 or 3 spaces (lex.block.2, ADR 0263): lex it
+        // again at that unit, so one diagnostic covers the whole file.
+        Some(g) => {
+            let (tokens, diags, comments, _) = lex_scaled(src, g);
+            (tokens, diags, comments)
+        }
+        None => (tokens, diags, comments),
+    }
+}
+
+fn gcd(a: usize, b: usize) -> usize {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// Lex with one indentation unit of `scale` spaces; the last result is the
+/// unit to retry with when the file doesn't indent by 4.
+fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>, Option<usize>) {
+    let mut lx = Lexer {
+        tokens: Vec::new(),
+        diags: Vec::new(),
+        open: Vec::new(),
+        in_interp: 0,
+        comments: Vec::new(),
+        scale,
+        logical: Vec::new(),
+        tabs: Vec::new(),
+    };
     let mut indents = vec![0usize];
     let mut continuing = false; // previous line ended in a way that continues the statement
     let lines: Vec<Vec<char>> =
@@ -242,7 +270,26 @@ pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment
 
     let end = Pos { line: last_line, col: 1 };
     if let Some((c, pos)) = lx.open.last().copied() {
-        lx.diags.push(Diagnostic::new("lex.stmt.2", pos, format!("this `{c}` is never closed")));
+        let mut d = Diagnostic::new("lex.stmt.2", pos, format!("this `{c}` is never closed"));
+        // Close the brackets where the line ends, when they all opened on it.
+        if lx.open.iter().all(|(_, p)| p.line == pos.line) {
+            let closers: String = lx.open.iter().rev().map(|(c, _)| match c {
+                '(' => ')',
+                '[' => ']',
+                _ => '}',
+            }).collect();
+            d = d.fix("close the brackets at the end of the line", vec![Edit::at_line_end(pos, closers)]);
+        }
+        lx.diags.push(d);
+        // Close them for the parser too, so one report isn't followed by another.
+        for (c, _) in lx.open.clone().into_iter().rev() {
+            let sym = match c {
+                '(' => ")",
+                '[' => "]",
+                _ => "}",
+            };
+            lx.tokens.push(Token { tok: Tok::Sym(sym), pos: end });
+        }
         lx.push(Tok::Newline, end);
     }
     while indents.len() > 1 {
@@ -250,7 +297,8 @@ pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment
         lx.push(Tok::Dedent, end);
     }
     lx.push(Tok::Eof, end);
-    (lx.tokens, lx.diags, lx.comments)
+    let unit = lx.indent_diags();
+    (lx.tokens, lx.diags, lx.comments, unit)
 }
 
 struct Lexer {
@@ -262,6 +310,13 @@ struct Lexer {
     in_interp: usize,
     /// Comments, for the formatter (`lex_with_comments`).
     comments: Vec<Comment>,
+    /// Spaces per indentation level in this run (1 = the standard 4).
+    scale: usize,
+    /// Every statement-starting line: its number, the characters of leading
+    /// whitespace and their width (a tab counts as one unit).
+    logical: Vec<(usize, usize, usize)>,
+    /// The part of `logical` indented with a tab.
+    tabs: Vec<(usize, usize, usize)>,
 }
 
 impl Lexer {
@@ -291,16 +346,18 @@ impl Lexer {
         ));
     }
 
-    /// Width of leading whitespace, reporting tabs and partial units.
+    /// Width of leading whitespace in indentation units of four. Tabs and
+    /// other units are collected and reported once per file (`indent_diags`).
     fn indent_width(&mut self, lead: &[char], line_no: usize) -> usize {
-        if let Some(i) = lead.iter().position(|c| *c == '\t') {
-            self.diags.push(
-                Diagnostic::new("lex.block.4", Pos { line: line_no, col: i + 1 }, "tab character in indentation")
-                    .help("indent with 4 spaces per level"),
-            );
-        }
+        let tabbed = lead.contains(&'\t');
         let width: usize = lead.iter().map(|c| if *c == '\t' { UNIT } else { 1 }).sum();
-        if !width.is_multiple_of(UNIT) {
+        self.logical.push((line_no, lead.len(), width));
+        if tabbed {
+            self.tabs.push((line_no, lead.len(), width));
+        } else if self.scale > 1 {
+            return width / self.scale * UNIT;
+        }
+        if !tabbed && !width.is_multiple_of(UNIT) && self.scale == 1 {
             self.diags.push(
                 Diagnostic::new(
                     "lex.block.2",
@@ -311,6 +368,55 @@ impl Lexer {
             );
         }
         width / UNIT * UNIT
+    }
+
+    /// The indentation unit of a file that doesn't use 4: the common divisor
+    /// of its statements' indentation, when that is 2 or 3 spaces.
+    fn unit_guess(&self) -> Option<usize> {
+        let g = self.logical.iter().map(|x| x.2).filter(|w| *w > 0).fold(0, gcd);
+        let odd = self.logical.iter().any(|x| !x.2.is_multiple_of(UNIT));
+        // The first level is the unit itself: a 4-space file with one odd
+        // line has 4 there.
+        let first = self.logical.iter().map(|x| x.2).filter(|w| *w > 0).min();
+        (matches!(g, 2 | 3) && odd && first == Some(g) && self.tabs.is_empty()).then_some(g)
+    }
+
+    /// The file-level indentation diagnostics (lex.block.2, lex.block.4):
+    /// one per file, each with a fix that rewrites every statement's
+    /// indentation. Returns the unit to re-lex with when the file doesn't
+    /// indent by 4.
+    fn indent_diags(&mut self) -> Option<usize> {
+        if let Some(&(line, _, _)) = self.tabs.first() {
+            let edits: Vec<Edit> = self
+                .tabs
+                .iter()
+                .map(|&(l, n, w)| Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / UNIT * UNIT)))
+                .collect();
+            self.diags.push(
+                Diagnostic::new("lex.block.4", Pos { line, col: 1 }, "tab character in indentation")
+                    .help("indent with 4 spaces per level")
+                    .fix("replace the tabs with 4 spaces per level", edits),
+            );
+        }
+        if self.scale == 1 {
+            // The standard unit: an odd line was reported on its own, unless
+            // the whole file turned out to use 2 or 3 spaces.
+            return self.unit_guess();
+        }
+        let g = self.scale;
+        let first = self.logical.iter().find(|x| x.2 > 0)?.0;
+        let edits: Vec<Edit> = self
+            .logical
+            .iter()
+            .filter(|x| x.2 > 0)
+            .map(|&(l, n, w)| Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / g * UNIT)))
+            .collect();
+        self.diags.push(
+            Diagnostic::new("lex.block.2", Pos { line: first, col: 1 }, format!("this file indents by {g} spaces; a block is indented by exactly 4"))
+                .help("use 4 spaces per level")
+                .fix(format!("re-indent the file from {g} to 4 spaces per level"), edits),
+        );
+        None
     }
 
     /// Lex `line[start..]`. Stops at a multi-line string's opening `"""`
@@ -357,9 +463,19 @@ impl Lexer {
                 }
                 '\'' => i = self.char_literal(line, i, line_no),
                 ';' => {
+                    let rest = line[i + 1..].iter().position(|c| *c != ' ' && *c != '\t');
+                    let edit = match rest {
+                        None => Edit::trim_before(pos),
+                        Some(k) if line[i + 1 + k] != '#' => {
+                            let indent: String = line.iter().take_while(|c| **c == ' ').collect();
+                            Edit::span(pos, Pos { line: line_no, col: i + 2 + k }, format!("\n{indent}"))
+                        }
+                        Some(_) => Edit::trim_before(pos),
+                    };
                     self.diags.push(
                         Diagnostic::new("lex.stmt.3", pos, "AIL has no `;`; a statement ends at the end of its line")
-                            .help("remove the `;` and put the next statement on its own line"),
+                            .help("remove the `;` and put the next statement on its own line")
+                            .fix("end the statement here, without the `;`", vec![edit]),
                     );
                     // Recover as if the line ended here, so the parser doesn't report it again.
                     if self.open.is_empty() && self.in_interp == 0 {
@@ -367,10 +483,56 @@ impl Lexer {
                     }
                     i += 1;
                 }
+                '/' if line.get(i + 1) == Some(&'/') => {
+                    let first = line[..i].iter().all(|c| *c == ' ' || *c == '\t');
+                    let mut d = Diagnostic::new(
+                        "gram.foreign.1",
+                        pos,
+                        "`//` isn't a comment or an operator in AIL",
+                    );
+                    d = if first {
+                        d.help("comments start with `#`").fix("write `#`", vec![Edit::span(pos, Pos { line: line_no, col: i + 3 }, "#")])
+                    } else {
+                        d.help("write `#` for a comment; `/` is integer division and rounds toward zero")
+                    };
+                    self.diags.push(d);
+                    break;
+                }
+                '/' if line.get(i + 1) == Some(&'*') => {
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, "`/*` doesn't start a comment in AIL")
+                            .help("comments start with `#` and run to the end of the line"),
+                    );
+                    break;
+                }
+                '\\' if line[i + 1..].iter().all(|c| c.is_whitespace()) => {
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, "AIL doesn't use `\\` to continue a line")
+                            .help("end the line with an operator or a comma, or wrap the expression in parentheses")
+                            .fix("remove the `\\`", vec![Edit::trim_before(pos)]),
+                    );
+                    i += 1;
+                }
+                '&' if line.get(i + 1) != Some(&'&') => {
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, "AIL has no `&`")
+                            .help("write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes"),
+                    );
+                    i += 1;
+                }
                 c if c.is_ascii_digit() => i = self.number(line, i, line_no),
                 c if c.is_alphabetic() || c == '_' => {
                     let end = i + line[i..].iter().take_while(|c| c.is_alphanumeric() || **c == '_').count();
                     let word: String = line[i..end].iter().collect();
+                    if matches!(word.as_str(), "f" | "u") && line.get(end) == Some(&'"') {
+                        self.diags.push(
+                            Diagnostic::new("gram.foreign.1", pos, format!("`{word}\"...\"` isn't a string prefix in AIL"))
+                                .help("every string interpolates `{expression}`; write the string without the prefix")
+                                .fix(format!("remove the `{word}`"), vec![Edit::span(pos, Pos { line: line_no, col: i + 2 }, "")]),
+                        );
+                        i = end;
+                        continue;
+                    }
                     let tok = match KEYWORDS.iter().find(|k| **k == word) {
                         Some(k) => Tok::Kw(k),
                         None => Tok::Ident(word),
@@ -656,10 +818,17 @@ impl Lexer {
             return start + 3;
         }
         let end = line[start + 1..].iter().position(|c| *c == '\'').map_or(line.len(), |p| start + p + 2);
-        self.diags.push(
-            Diagnostic::new("lex.str.4", pos, "a character literal holds exactly one character")
-                .help("write a string in double quotes: \"...\""),
-        );
+        let mut d = Diagnostic::new("lex.str.4", pos, "a character literal holds exactly one character")
+            .help("write a string in double quotes: \"...\"");
+        let body = &line[start + 1..end.saturating_sub(1).max(start + 1)];
+        if end <= line.len() && line.get(end - 1) == Some(&'\'') && !body.iter().any(|c| matches!(c, '"' | '\\' | '{')) {
+            let close = Pos { line: line_no, col: end };
+            d = d.fix(
+                "write it as a string",
+                vec![Edit::span(pos, Pos { line: line_no, col: start + 2 }, "\""), Edit::span(close, Pos { line: line_no, col: end + 1 }, "\"")],
+            );
+        }
+        self.diags.push(d);
         self.placeholder(pos);
         end
     }

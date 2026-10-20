@@ -1,0 +1,46 @@
+## std.fs.8-12: walk, glob, metadata, rename and copy, in a scratch directory of its own.
+use std.fs
+
+fn main() !
+    dir := "std_fs_walk_case.tmp"
+    fs.make_dir("{dir}/src/deep")?
+    fs.make_dir("{dir}/.git")?
+    fs.write_text("{dir}/src/main.ail", "fn main()\n")?
+    fs.write_text("{dir}/src/deep/util.ail", "x")?
+    fs.write_text("{dir}/src/notes.txt", "hello")?
+    fs.write_text("{dir}/.git/HEAD", "ref")?
+    fs.write_text("{dir}/README", "readme")?
+    for p in fs.walk(dir)?
+        print(p)
+    print(fs.glob("{dir}/src/*.ail"))
+    print(fs.glob("{dir}/**/*.ail"))
+    print(fs.glob("{dir}/*"))
+    print(fs.glob("{dir}/src/?ain.*"))
+    print(fs.glob("{dir}/nothing/*"))
+    m := fs.metadata("{dir}/src/notes.txt")?
+    print(m.size)
+    print(m.is_dir)
+    print(m.modified_ms > 0)
+    print(fs.metadata("{dir}/src")?.is_dir)
+    fs.copy("{dir}/src/notes.txt", "{dir}/copy.txt")?
+    print(fs.read_text("{dir}/copy.txt")?)
+    fs.rename("{dir}/copy.txt", "{dir}/moved.txt")?
+    print(fs.exists("{dir}/copy.txt"))
+    print(fs.read_text("{dir}/moved.txt")?)
+    fs.copy("{dir}/src", "{dir}/x") else err
+        print(err)
+    fs.rename("{dir}/none", "{dir}/y") else err
+        print(err)
+    gone := fs.metadata("{dir}/none") else err
+        print(err)
+        m
+    print(gone.size)
+    files := fs.walk("{dir}/none") else err
+        print(err)
+        []
+    print(files)
+    for p in fs.walk(dir)?
+        fs.remove(p)?
+    for d in ["src/deep", "src", ".git", ""]
+        fs.remove("{dir}/{d}")?
+    print(fs.exists(dir))

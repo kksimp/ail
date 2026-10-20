@@ -1,0 +1,7 @@
+struct Point
+    x int
+
+fn main()
+    mut p := Point(x: 1)
+    p.x = 2
+    print(p)

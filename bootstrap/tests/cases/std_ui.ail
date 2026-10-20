@@ -34,6 +34,17 @@ fn main()
     w.set_title("ignored")
     m := w.modifiers()
     print("{m.ctrl} {m.alt} {m.shift}")
+    # std.ui.16-18: styles, named colors and caret shapes.
+    w.put_styled(
+        0,
+        0,
+        "ignored",
+        ui.YELLOW,
+        ui.BLACK,
+        ui.Style(bold: true, italic: false, underline: true),
+    )
+    w.set_cursor(0, 0, Block)
+    print("{ui.RED} {ui.WHITE} {ui.BLACK}")
     # std.ui.15: a window that is not open keeps the default font size.
     w.set_font_size(13)
     print(w.font_size())

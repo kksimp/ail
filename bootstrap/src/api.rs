@@ -14,6 +14,7 @@ use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
 use crate::docs;
 
+pub mod errors;
 mod query;
 
 /// Whether `pos` is outside the file being outlined: in the prelude or in
@@ -98,7 +99,8 @@ pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<Strin
     }
     docs::attach(&mut prog, src);
     let effects = check::effects::effects_of(&prog, &resolved);
-    let api = Api::new(&prog, effects);
+    let mut api = Api::new(&prog, effects);
+    api.errors = std::mem::take(&mut resolved.fn_errors);
     if form == Form::Text {
         return Ok(api.text());
     }
@@ -218,6 +220,13 @@ impl Item {
                 }
             }
         }
+        // err.api.1: an inferred error set is spelled out.
+        if self.signature.contains(") !")
+            && let Some((_, Json::Arr(errs))) = self.extra.iter().find(|(k, _)| *k == "fails_with")
+        {
+            let names: Vec<&str> = errs.iter().filter_map(|e| if let Json::Str(s) = e { Some(s.as_str()) } else { None }).collect();
+            writeln!(out, "       {indent}    fails with {}", names.join(" | ")).unwrap();
+        }
         if let Some(doc) = &self.doc {
             for line in doc.lines() {
                 writeln!(out, "       {indent}    ## {line}").unwrap();
@@ -238,6 +247,8 @@ struct Api<'p> {
     fn_ids: Vec<String>,
     /// Each function's checked effect set, by the effects lane's id (api.out.4).
     effects: std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>,
+    /// The error types of each fallible function, by function index (err.api.1).
+    errors: std::collections::BTreeMap<usize, Vec<String>>,
     /// Also describe the modules the file imports (`--refs`).
     whole: bool,
 }
@@ -255,7 +266,7 @@ impl<'p> Api<'p> {
                 fn_ids[i] = fn_id(prog, f, true);
             }
         }
-        Api { prog, fn_ids, effects, whole: false }
+        Api { prog, fn_ids, effects, errors: std::collections::BTreeMap::new(), whole: false }
     }
 
     /// Whether `pos` is a declaration the outline leaves out.
@@ -412,6 +423,10 @@ impl<'p> Api<'p> {
         }
         extra.push(("params", Json::Arr(params)));
         extra.push(("returns", Json::opt(f.ret.as_ref().map(type_text))));
+        // err.api.1: the error types a fallible function can fail with.
+        if let Some(errors) = self.errors.get(&i) {
+            extra.push(("fails_with", Json::Arr(errors.iter().cloned().map(Json::Str).collect())));
+        }
         extra.push(("effects", Json::Arr(self.effects(f))));
         // contract.api.1: the conditions as written, when there are any.
         for (key, ensures) in [("requires", false), ("ensures", true)] {

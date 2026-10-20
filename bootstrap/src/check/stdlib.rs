@@ -1,8 +1,8 @@
-//! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc` and
-//! `std.time` (spec 17-std): their imports (std.use.1-3), the types of
-//! their functions (std.fs.1-7, std.env.1-4, std.io.1-4, std.proc.1,
-//! std.time.1-2), and their types `fs.IoError`, `proc.Output` and
-//! `proc.ProcError` (std.err.1).
+//! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
+//! `std.net` and `std.time` (spec 17-std): their imports (std.use.1-3), the
+//! types of their functions (std.fs.1-12, std.env.1-5, std.io.1-4,
+//! std.proc.1-3, std.net.1-4, std.time.1-2), and their types `fs.IoError`,
+//! `proc.Output`, `proc.ProcError` and `net.NetError` (std.err.1).
 
 use std::collections::HashMap;
 
@@ -147,7 +147,12 @@ impl<'p> Checker<'p> {
         if (module, f) == ("random", "shuffle") {
             return Some(self.shuffle_call(args, pos));
         }
-        let (params, ret) = self.std_signature(module, f);
+        let (mut params, ret) = self.std_signature(module, f);
+        if (module, f) == ("proc", "run") {
+            // std.proc.2: `input str?` and `timeout_ms int?` may be left off
+            // from the end.
+            params.truncate(args.len().clamp(2, 4));
+        }
         let sig = Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
         Some(self.check_call(&what, &sig, Vec::new(), args, None, pos, expect))
     }
@@ -168,9 +173,15 @@ impl<'p> Checker<'p> {
             ("fs", "exists") => (vec![Str], Bool),
             ("fs", "list_dir") => (vec![Str], io(list(Str))),
             ("fs", "remove" | "make_dir") => (vec![Str], io(Unit)),
+            ("fs", "walk") => (vec![Str], io(list(Str))),
+            ("fs", "glob") => (vec![Str], list(Str)),
+            ("fs", "metadata") => (vec![Str], io(std_ty("fs.Metadata"))),
+            ("fs", "rename" | "copy") => (vec![Str, Str], io(Unit)),
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
+            ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
+            ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
             ("path", "dir" | "base" | "ext") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
@@ -178,8 +189,13 @@ impl<'p> Checker<'p> {
             // std.io.4: `exit` never returns (ADR 0139).
             ("io", "exit") => (vec![Int], Ty::Never),
             ("proc", "run") => (
-                vec![Str, list(Str)],
+                vec![Str, list(Str), opt(Str), opt(Int)],
                 Ty::Res(Box::new(std_ty("proc.Output")), Errs::Set(vec![std_ty("proc.ProcError")])),
+            ),
+            ("proc", "which") => (vec![Str], opt(Str)),
+            ("net", "get" | "post") => (
+                if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
+                Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
             ),
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
@@ -295,6 +311,34 @@ impl<'p> Checker<'p> {
             Some(def) => Some(self.generic_type(def, args, pos)),
             None => {
                 self.error("std.use.2", pos, format!("module `{head}` has no type `{item}`"));
+                Some(Ty::Err)
+            }
+        }
+    }
+
+    /// `ui.NAME`, a named color (std.ui.17); `None` when `recv` isn't an
+    /// imported standard module.
+    pub(super) fn std_constant(&mut self, recv: &Expr, name: &str, pos: Pos) -> Option<Ty> {
+        let Expr::Name(n, _) = recv else { return None };
+        if self.local(n).is_some() {
+            return None;
+        }
+        let module = self.std_module(n)?;
+        let consts: &[(&str, i64)] = if module == "ui" { crate::ui::COLORS } else { &[] };
+        match consts.iter().find(|(c, _)| *c == name) {
+            Some(&(_, v)) => {
+                self.resolved.std_calls.insert(pos, StdCall::Const(v));
+                Some(Ty::Int)
+            }
+            None if consts.is_empty() => None,
+            None => {
+                let names: Vec<&str> = consts.iter().map(|(c, _)| *c).collect();
+                self.error_help(
+                    "std.ui.17",
+                    pos,
+                    format!("module `{n}` has no color `{name}`"),
+                    format!("the colors are {}", list_names(&names)),
+                );
                 Some(Ty::Err)
             }
         }

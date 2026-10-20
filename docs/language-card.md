@@ -12,7 +12,7 @@
 ```
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
-standard modules (`fs`, `env`, `io`, `path`, `proc`, `random`, `time`, `ui`)
+standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `time`, `ui`)
 need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -60,6 +60,10 @@ update a `mut` variable in a loop, use `=`.
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
+
+`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://` only).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 

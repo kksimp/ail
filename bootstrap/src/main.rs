@@ -12,6 +12,7 @@ mod fasthash;
 mod doctest;
 mod docs;
 mod fix;
+mod foreign;
 mod fmt;
 mod implicit_self;
 mod interp;
@@ -34,7 +35,8 @@ commands:
                 ARGS are the program's (std.env.1: `env.args()`)
   run DIR [ARGS...]
                 check and run the package whose root module is DIR
-  check FILE    check a program (or a package DIR) without running it
+  check FILE    check a program (or a package DIR) without running it;
+                --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;
                 --cases N (default 100) and --seed S set a property's inputs
   effects FILE  print each function's inferred effects (eff.infer.6);
@@ -82,7 +84,8 @@ fn main() -> ExitCode {
     while i < args.len() {
         match args[i].as_str() {
             "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
-            "--deny" | "--seed" => i += 1,
+            a if a == "--coverage" || a.starts_with("--coverage=") => {}
+            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" => i += 1,
             a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
         }
@@ -107,6 +110,14 @@ fn main() -> ExitCode {
             }
         }
     }
+    // run.limit.1-4, test.cover.1-3: limits for `ail run` and `ail test`, coverage for `ail test`.
+    let coverage = match take_limit_options(&mut rest) {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    };
     // trace.run.1, trace.watch.1, trace.snap.3: `ail run`'s tracing options.
     match interp::take_trace_options(&mut rest, json) {
         Ok(true) if rest.first() != Some(&"run") => {
@@ -131,9 +142,10 @@ fn main() -> ExitCode {
             interp::set_program(file, program_args);
             run_file(file, json, true, &deny)
         }
+        ["check", "--errors", file] | ["check", file, "--errors"] => api::errors::command(file, json),
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => match take_test_options(&mut flags) {
-            Ok((cases, seed)) => run_tests(file, json, cases, seed),
+            Ok((cases, seed)) => run_tests(file, json, cases, seed, coverage),
             Err(msg) => {
                 eprintln!("error: {msg}");
                 ExitCode::from(2)
@@ -154,6 +166,56 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+/// Remove `--timeout MS`, `--max-memory MB`, `--max-steps N` and `--coverage[=lines]`,
+/// and set them. Returns whether coverage was asked for, and whether with `=lines`.
+fn take_limit_options(rest: &mut Vec<&str>) -> Result<Option<bool>, String> {
+    let cmd = rest.first().copied().unwrap_or("");
+    let mut config = interp::limits::Config::default();
+    let mut coverage = None;
+    let mut i = 0;
+    while i < rest.len() {
+        let name = rest[i];
+        let number = |rest: &Vec<&str>, unit: &str| -> Result<u64, String> {
+            rest.get(i + 1)
+                .and_then(|v| v.parse::<u64>().ok())
+                .filter(|n| *n > 0)
+                .ok_or_else(|| format!("`{name}` needs a positive number of {unit}, e.g. `{name} 100` (run.limit.4)"))
+        };
+        match name {
+            "--timeout" | "--max-memory" | "--max-steps" => {
+                if cmd != "run" && cmd != "test" {
+                    return Err(format!("`{name}` works with `ail run` and `ail test` (run.limit.4)"));
+                }
+                match name {
+                    "--timeout" => config.timeout_ms = Some(number(rest, "milliseconds")?),
+                    "--max-memory" => {
+                        if !interp::limits::memory_supported() {
+                            return Err("`--max-memory` is not available on Windows yet (run.limit.2)".into());
+                        }
+                        config.memory_mb = Some(number(rest, "megabytes")?)
+                    }
+                    _ => config.steps = Some(number(rest, "steps")?),
+                }
+                rest.drain(i..i + 2);
+            }
+            "--coverage" | "--coverage=lines" => {
+                if cmd != "test" {
+                    return Err("`--coverage` works with `ail test` (test.cover.1)".into());
+                }
+                coverage = Some(name.ends_with("lines"));
+                rest.remove(i);
+            }
+            a if a.starts_with("--coverage=") => {
+                return Err(format!("`{a}` isn't a coverage mode; use `--coverage` or `--coverage=lines` (test.cover.2)"));
+            }
+            _ => i += 1,
+        }
+    }
+    config.coverage = coverage.is_some();
+    interp::limits::configure(config);
+    Ok(coverage)
 }
 
 /// `--cases N` and `--seed S` for `ail test` (test.prop.3).
@@ -311,7 +373,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
 /// own, report in source order. Exit 0 if all pass, 1 if any fails, 2 if
 /// the program is rejected. Doc examples run after the file's own tests
 /// (test.doc.1), and properties run `cases` inputs (test.prop.3).
-fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode {
+fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Option<bool>) -> ExitCode {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -358,17 +420,21 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
     if rejected {
         return ExitCode::from(2);
     }
+    let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
         .spawn(move || {
-            interp::run_tests(&program, &resolved, cases, seed)
+            let outcomes = interp::run_tests(&program, &resolved, cases, seed)
                 .into_iter()
-                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop))
-                .collect::<Vec<_>>()
+                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop, o.snapshot))
+                .collect::<Vec<_>>();
+            // test.cover.1: what the tests ran, read once they are all done.
+            let cover = coverage.map(|_| interp::limits::report(&program, &cover_map));
+            (outcomes, cover)
         })
         .expect("spawn interpreter thread")
         .join();
-    let Ok(mut outcomes) = outcomes else {
+    let Ok((mut outcomes, cover)) = outcomes else {
         eprintln!("{path}: internal error in the bootstrap interpreter");
         return ExitCode::from(1);
     };
@@ -376,6 +442,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
         let Some(t) = doc_tests.iter().find(|t| t.fn_name == o.0) else { continue };
         // test.doc.2-3: report under the example's name, at its own line.
         o.0 = t.name.clone();
+        o.5 = None; // the example is generated code; its frame would name `doc_example_N`
         if o.2.is_none() {
             o.2 = doctest::check_output(t, &o.3);
             o.1 = diag::Pos { line: t.line(), col: 1 };
@@ -385,7 +452,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
     }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;
-    for (name, pos, failure, output, prop) in &outcomes {
+    for (name, pos, failure, output, prop, snapshot) in &outcomes {
         if json {
             let (status, message) = match failure {
                 Some(m) => ("fail", m.as_str()),
@@ -404,6 +471,9 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
                     line.push_str(&format!(",\"input\":{}", diag::json_str(input)));
                 }
             }
+            if let Some(snap) = snapshot {
+                line.push_str(&format!(",\"snapshot\":{}", diag::json_str(snap)));
+            }
             println!("{line}}}");
         } else {
             let tail = match prop {
@@ -417,6 +487,11 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
                     if let Some(input) = prop.as_ref().and_then(|p| p.input.as_ref()) {
                         println!("  input: {input}");
                     }
+                    if let Some(snap) = snapshot {
+                        for line in snap.lines() {
+                            println!("  {line}");
+                        }
+                    }
                     for line in output.lines() {
                         println!("  | {line}");
                     }
@@ -428,6 +503,29 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode 
         println!("{{\"summary\":true,\"passed\":{passed},\"failed\":{failed}}}");
     } else {
         println!("{passed} passed, {failed} failed");
+    }
+    // test.cover.2-3: the table, or per-file JSON lines; `=lines` lists the unexecuted ranges.
+    for c in cover.iter().flatten() {
+        let pct = if c.lines == 0 { 100 } else { c.lines_hit * 100 / c.lines };
+        let ranges: Vec<String> =
+            c.missed.iter().map(|&(a, b)| if a == b { a.to_string() } else { format!("{a}-{b}") }).collect();
+        if json {
+            let missed: Vec<String> = c.missed.iter().map(|(a, b)| format!("[{a},{b}]")).collect();
+            println!(
+                "{{\"coverage\":true,\"file\":{},\"lines\":{},\"lines_hit\":{},\"functions\":{},\"functions_hit\":{},\"missed\":[{}]}}",
+                diag::json_str(&c.file),
+                c.lines,
+                c.lines_hit,
+                c.fns,
+                c.fns_hit,
+                missed.join(",")
+            );
+        } else {
+            println!("coverage {}: lines {}/{} ({pct}%), functions {}/{}", c.file, c.lines_hit, c.lines, c.fns_hit, c.fns);
+            if coverage == Some(true) && !ranges.is_empty() {
+                println!("  not run: {}", ranges.join(", "));
+            }
+        }
     }
     if failed == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }

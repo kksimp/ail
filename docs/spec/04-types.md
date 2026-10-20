@@ -419,6 +419,9 @@ t := s.replace("l", "L") # "HéLLo"
 **type.str.10** — `s.repeat(n)` returns `n` copies of `s` joined together.
 It traps if `n < 0`; AIL doesn't clamp. *(ADR 0135)*
 
+**type.str.15** — `repeat` and `pad_left`/`pad_right` MUST trap, rather than
+exhaust memory, when the text they would build is over 2^30 bytes. *(ADR 0271)*
+
 **type.str.12** — `s.len()` returns the number of characters (Unicode scalar
 values) of `s`, the same as `s.chars().len()` without building the list; it
 takes time proportional to the length. `s.byte_len()` returns the number of

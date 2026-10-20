@@ -1,0 +1,7 @@
+enum Color
+    Red
+    Green
+
+fn main()
+    c := Color.Red
+    print(c)
