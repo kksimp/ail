@@ -245,7 +245,8 @@ pub fn close(id: i64) {
 
 // ---------------------------------------------------------------------------
 // The clipboard (std.ui.12): the system's, through its command-line tools,
-// or this program's own when none of them works.
+// or this program's own when none of them works or the program runs without
+// a window host (`ail test`), so tests never touch the user's clipboard.
 
 thread_local! {
     static CLIPBOARD: RefCell<Option<String>> = const { RefCell::new(None) };
@@ -282,6 +283,9 @@ pub fn clipboard_set(text: &str) {
     use std::io::Write as _;
     use std::process::{Command, Stdio};
     CLIPBOARD.set(Some(text.to_string()));
+    if HOST.get().is_none() {
+        return;
+    }
     for (cmd, args) in clipboard_tools().0 {
         let child = Command::new(cmd)
             .args(&args)
@@ -300,7 +304,8 @@ pub fn clipboard_set(text: &str) {
 /// std.ui.12: the clipboard's text; `None` when it holds none.
 pub fn clipboard_get() -> Option<String> {
     use std::process::{Command, Stdio};
-    for (cmd, args) in clipboard_tools().1 {
+    let tools = if HOST.get().is_some() { clipboard_tools().1 } else { Vec::new() };
+    for (cmd, args) in tools {
         let out = Command::new(cmd).args(&args).stdin(Stdio::null()).stderr(Stdio::null()).output();
         if let Ok(out) = out
             && out.status.success()
@@ -856,5 +861,14 @@ mod tests {
         assert_eq!(open("t", 0, 5).unwrap_err().0, "other");
         assert_eq!(size(1), (0, 0));
         assert_eq!(next_event(1, true), Some(Event::Close));
+    }
+
+    #[test]
+    fn without_a_host_the_clipboard_is_the_programs_own() {
+        assert_eq!(clipboard_get(), None);
+        clipboard_set("");
+        assert_eq!(clipboard_get(), None);
+        clipboard_set("a\nb");
+        assert_eq!(clipboard_get().as_deref(), Some("a\nb"));
     }
 }
