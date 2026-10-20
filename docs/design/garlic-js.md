@@ -27,8 +27,12 @@ did.
    storage, `URL` and `URLSearchParams`. Every change a script makes is
    logged in order, and Garlic replays the log into its own tree
    (`tools/garlic/jsdom`).
-4. **Later**: generators, async functions and promises, modules, BigInt, and
-   a bytecode compiler.
+4. **Generators, async functions and promises** (in progress): symbols,
+   iterators, `Promise` with a microtask queue, generators (`yield`,
+   `yield*`, `return`, `throw`), `async` functions and arrows, `await`, and
+   `for-of` that steps its iterator. Still to come: async generators,
+   `for await`, and a bytecode compiler for speed.
+5. **Later**: modules and BigInt.
 
 ## Layout
 
@@ -209,18 +213,48 @@ regex engine is written.
 - Layout isn't known to scripts: sizes and rectangles are 0, and
   `getComputedStyle` reads only the `style` attribute.
 
+## Generators and async functions
+
+The tree-walker keeps its place on AIL's own stack, so it can't stop in the
+middle of a function and go on later. A generator's or async function's
+body is compiled instead (`vm/gen.ail`) to a list of instructions whose
+place is kept in a `Frame`: a program counter, an operand stack, the
+current scope and the scopes outside it, the `try` handlers, and the
+completions of the `finally` blocks being run.
+
+Only the parts that can stop are compiled. A statement or expression with
+no `yield` or `await` in it (most of them) is one instruction that hands it
+to the tree-walker; `break` and `continue` out of such a statement find
+their target in a table made at compile time. A `try` pushes a handler
+that records the scope and stack depth to unwind to, and `return`, `break`
+and `continue` leave through the `finally` blocks in the way, as completion
+records (§6.2.4). Each function object compiles once.
+
+A generator is an object of class `Generator` that holds its frame's id;
+`next`, `return` and `throw` resume the frame. An async function returns a
+promise at once and runs until its first `await`; each `await` resumes it
+from a promise reaction, in the microtask queue. Frames that stop forever
+stay in `Vm.frames`, as an unreachable generator would in an engine without
+a collector of its own.
+
+Rejected: a CPS rewrite of the tree (every expression would carry a
+continuation, so the common code that never stops gets slower), and
+running the whole interpreter on a compiled bytecode now (a larger change;
+it comes later for speed, and these frames will move onto it).
+
 ## Not yet
 
-- Generators, `async` functions and `await`, `for await`: a clear
-  "not supported yet" SyntaxError (slice 4). Symbols and iterators come
-  with them; until then `for-of` and spread work on arrays, strings,
-  `arguments`, `Map`, `Set` and array-likes, and `keys()`, `values()` and
-  `entries()` return arrays.
+- Async generators and `for await`: a clear "not supported yet"
+  SyntaxError. Inside a generator or async function, `yield` and `await`
+  can't yet appear in a destructuring target, a `class` body, a `with`
+  statement, tagged templates, optional chains, `delete`, `++`/`--`
+  operands, logical assignment, or a compound assignment to a computed
+  member; each of these is a clear SyntaxError.
 - Holes in arrays are `undefined`; property attributes on array elements
   only as a whole (`Object.freeze`).
 - Recursion is limited to 350 JavaScript calls: each one takes about 25
-  frames of the bootstrap interpreter, whose limit is 10,000. The bytecode
-  compiler (slice 4) removes this.
+  frames of the bootstrap interpreter, whose limit is 10,000. A bytecode
+  compiler for the whole interpreter will remove this.
 - Modules (`import`, `export`): scripts only, as in a classic `<script>`.
 - BigInt literals (`10n`).
 - Regular expression pattern syntax (§22.2.1): the literal's body and flags
@@ -244,8 +278,9 @@ regex engine is written.
   exception and why: an unsupported feature, a twin that is not the same
   script, a test made stale by a later edition, or a gap. A listed test that
   starts to behave is reported, so the list only shrinks.
-- `testdata/run`: 12 programs (operators, functions, classes, control flow,
-  built-ins, numbers, JSON, collections, errors, strings, console layout),
+- `testdata/run`: 17 programs (operators, functions, classes, control flow,
+  built-ins, numbers, JSON, collections, errors, strings, console layout,
+  promises, symbols, generators, async functions, `await` positions),
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
 - `testdata/page`: 7 pages (tree, events, timers, forms, URL, a
@@ -267,10 +302,10 @@ acorn 8.14 (ECMAScript 2022, script goal), outside the repository. Results on
 
 | Corpus | Result |
 |---|---|
-| test262 `pass` (1,907 scripts) | 1,822 identical trees; 85 use generators or async |
+| test262 `pass` (1,907 scripts) | 1,822 identical trees; 85 use generators or async (all 1,907 identical once the parser took them, 2026-10-20) |
 | test262 `fail` (682) | 623 rejected; 54 use unsupported features; 4 regex patterns accepted; `new super()` rejected where acorn accepts and the suite agrees with us |
 | test262 `early` (605) | 513 rejected; 88 unsupported; 1 regex pattern; 3 rejected where acorn accepts and the suite agrees with us |
-| npm's own modules (1,210 files) | 935 identical trees; 255 use async; 19 rejected by acorn too |
+| npm's own modules (1,210 files) | 935 identical trees; 255 use async; 19 rejected by acorn too. With async: 1,178 identical, 5 use dynamic `import()` |
 
 ## Speed
 
@@ -299,7 +334,7 @@ What a 12,700-line AIL program ran into, for the language's designers:
   it.
 - `x := f() else err`, where `f` gives `T? ! E` and succeeds with `none`,
   panics in the bootstrap interpreter (issue #163). `json.ail` returns a
-  sentinel string instead.
+  sentinel string instead, and `gen.ail` a `Stop` whose kind is empty.
 - `if a then b elif c then d else e` isn't an expression; nest it in
   parentheses or use `match`.
 - A `match` arm can't do nothing (`{}` has no type), so "do nothing for these
