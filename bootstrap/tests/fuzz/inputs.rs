@@ -19,7 +19,7 @@ pub fn generate(kind: &str, seed: u64) -> Input {
     let (text, text2) = match kind {
         "json" => (json_text(&mut r), json_text(&mut r)),
         "bytes" => (bytes_hex(&mut r), bytes_hex(&mut r)),
-        "compress" => (compress_hex(&mut r), compress_hex(&mut r)),
+        "compress" => (plain(&mut r), compress_hex(&mut r)),
         "regex" => {
             let pat = regex(&mut r, 0);
             let hay = haystack(&mut r, &pat);
