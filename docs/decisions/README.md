@@ -178,6 +178,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0190](0190-moves-and-use-after-move.md) | Check moves on every path; only owned values move; `move` moves any type *(delegated)* | Accepted | 2026-10-20 |
+| [0191](0191-cleanup-with-drop.md) | Clean up unique types with the prelude trait `Drop`; limit where unique values live *(delegated)* | Accepted | 2026-10-20 |
+| [0192](0192-ref-equality-and-text.md) | Compare `ref` values by identity and show their contents *(delegated)* | Accepted | 2026-10-20 |
+| [0193](0193-ref-cell-exclusivity.md) | Trap when a `ref` cell is used through another copy during a `mut` access *(delegated)* | Accepted | 2026-10-20 |
 | [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
 | [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
 | [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
@@ -234,4 +238,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0238](0238-parallel-runtime-model.md) | One work-stealing pool for tasks and parallel loops, with a minimum-work threshold *(delegated)* | Accepted | 2026-10-20 |
 | [0239](0239-float-sum-fixed-tree.md) | Float `sum()` adds in a fixed four-lane tree (amends 0136) *(delegated)* | Accepted | 2026-10-20 |
 | [0246](0246-simd-vectorisation.md) | Vectorise independent loops on both baselines; never contract to FMA implicitly *(delegated)* | Accepted | 2026-10-20 |
+| [0276](0276-language-card-budget-8000.md) | The language card budget is 8,000 tokens on every tokenizer (amends 0174) | Accepted | 2026-10-20 |
 | [0247](0247-std-tensor-and-accel-capability.md) | NPUs and GPUs through a `std.tensor` module and an `accel` capability (design) *(delegated)* | Accepted | 2026-10-20 |

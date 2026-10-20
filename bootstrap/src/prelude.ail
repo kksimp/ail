@@ -28,6 +28,11 @@ trait ToStr
 ## Map keys and set elements. Automatic, with no methods (trait.auto.5).
 trait Hash
 
+## The cleanup of a unique type: runs once when the value's owner goes out
+## of scope, unless it was moved away first (own.uniq.3, ADR 0191).
+trait Drop
+    fn drop(mut self)
+
 ## What `Task.wait()` fails with when the task trapped (conc.task.6, ADR 0187):
 ## the trap's rule and its message.
 error struct Trapped

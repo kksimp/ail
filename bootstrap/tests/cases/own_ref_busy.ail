@@ -1,0 +1,14 @@
+# own.ref.7: a cell can't be used through another copy while a `mut`
+# access to its contents is in progress.
+struct Counter
+    n int
+
+fn Counter.steal(mut self, other ref Counter)
+    n += other.n
+
+fn main()
+    c := ref Counter(n: 1)
+    d := c
+    print("before")
+    c.steal(d)
+    print("not reached")
