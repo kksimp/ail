@@ -100,6 +100,11 @@ struct Entry {
     fails: Vec<String>,
     effects: Vec<String>,
     members: Vec<Entry>,
+    /// Where it is declared: the file as loaded and the line and column in
+    /// it (api.card.2); only the JSON form shows it.
+    file: String,
+    line: usize,
+    col: usize,
 }
 
 struct Module {
@@ -230,8 +235,13 @@ fn entry_of(prog: &Program, item: Item) -> Entry {
     };
     let (requires, ensures, fails, effects) = (strings("requires"), strings("ensures"), strings("fails_with"), strings("effects"));
     let public = prog.is_pub(item.pos);
+    let (file, at) = crate::modules::locate(&prog.files, item.pos);
+    let file = file.to_string();
     let members = item.members.into_iter().flat_map(|(_, ms)| ms).map(|m| entry_of(prog, m)).collect();
     Entry {
+        file,
+        line: at.line,
+        col: at.col,
         public,
         kind: item.kind,
         name: item.name,
@@ -410,7 +420,15 @@ fn module_title(m: &Module) -> String {
 }
 
 fn entry_json(e: &Entry, level: usize) -> Json {
-    let mut kvs = vec![("kind", Json::Str(e.kind.into())), ("name", Json::Str(e.name.clone())), ("pub", Json::Bool(e.public))];
+    let mut kvs = vec![
+        ("kind", Json::Str(e.kind.into())),
+        ("name", Json::Str(e.name.clone())),
+        ("pub", Json::Bool(e.public)),
+        // api.card.2: the declaration's position, so a tool can jump to it.
+        ("file", Json::Str(e.file.clone())),
+        ("line", Json::Int(e.line as i64)),
+        ("col", Json::Int(e.col as i64)),
+    ];
     if level < 5 {
         kvs.push(("signature", Json::Str(signature(e, level).to_string())));
         if level < 2 {

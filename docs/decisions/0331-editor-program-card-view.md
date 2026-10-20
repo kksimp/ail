@@ -6,6 +6,7 @@
 - **Topic:** Tooling — the editor ([ADR 0180](0180-editor-written-in-ail.md))
 - **Spec rules:** none (tool behaviour); reads `ail api --card --json` (lane 67)
 - **Extends:** [ADR 0312](0312-editor-agent-panel.md)
+- **Amended by:** [ADR 0338](0338-card-json-positions.md) (rows jump by the card's own positions)
 
 ## Context
 
