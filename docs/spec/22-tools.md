@@ -92,3 +92,94 @@ suite fails when they differ.
 **explain.cover.4** — An entry is short enough to read in one step: the mean
 `ail explain RULE` output stays under 120 tokens
 ([ADR 0336](../decisions/0336-explain-listing-and-length.md)).
+
+## Examples
+
+Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
+example (`FILE` is the example, `DIR` its package directory) and checks that
+its output contains the `expect=` text. The tools' output formats are
+non-normative; these examples check the behaviour the rules describe.
+`explain.cover.*` is also enforced by `bootstrap/tests/explain_coverage.rs`
+in `./ail selftest`.
+
+```ail tool=api,--text,FILE expect=add rules=api.id.1
+fn add(a int, b int) int
+    a + b
+
+fn main()
+    print(add(1, 2))
+```
+
+```ail tool=api,--text,FILE expect=Adds rules=api.doc.1
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+
+# A plain comment ends the doc run above; it is not a doc comment.
+
+fn main()
+    print(add(1, 2))
+```
+
+```ail tool=api,--locals,DIR,FILE,2,5 expect=a rules=api.pkg.2
+fn add(a int, b int) int
+    a + b
+
+fn main()
+    print(add(1, 2))
+```
+
+```ail tool=api,--tokens,FILE expect=1:1 rules=api.tok.2
+fn main()
+    print(1)
+```
+
+```ail tool=api,--tokens,FILE expect=main rules=api.tok.1
+fn main()
+    print(1)
+```
+
+```ail tool=api,--tokens,FILE expect=comment rules=api.tok.3
+# a comment line
+fn main()
+    print(1)
+```
+
+```ail tool=api,--ast,FILE expect="fns" rules=api.ast.1,api.ast.2
+fn main()
+    print(1)
+```
+
+```ail tool=api,--ast,--program,FILE expect=1073741843 rules=api.ast.3
+fn main()
+    print(1)
+```
+
+```ail tool=fix,--dry-run,FILE expect=mut rules=fix.edit.1
+fn main()
+    x := 1
+    x = 2
+    print(x)
+```
+
+```ail tool=fix,--dry-run,FILE expect={name} rules=fix.edit.6
+fn main()
+    name := "bo"
+    print("hi " + name)
+```
+
+```ail tool=explain,expr.bind.4 expect=expr.bind.4 rules=explain.show.1
+fn main()
+    x := 1
+    print(x)
+```
+
+```ail tool=explain,--json expect="count" rules=explain.list.1
+fn main()
+    print(1)
+```
+
+```ail tool=explain,--json expect="fixable" rules=explain.cover.1,explain.cover.2,explain.cover.3,explain.cover.4
+fn main()
+    print(1)
+```

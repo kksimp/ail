@@ -34,7 +34,7 @@ hides the module in its scope: calling one of the module's functions through
 it is a compile-time error that says so. `use std.NAME` stays valid and
 behaves as `std.use.1`. *(ADR 0277)*
 
-```ail
+```ail rules=std.use.4
 fn main()
     print(path.ext("notes.txt"))   # txt
 ```
@@ -51,7 +51,7 @@ fields `cmd str` and `kind str`. `kind` is one of `not_found`,
 and is the same for the same failure on every platform. `std.net` fails
 with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282, ADR 0321)*
 
-```ail
+```ail rules=std.err.1
 use std.fs
 
 fn load(path str) str ! fs.IoError
@@ -121,7 +121,7 @@ nothing copies a tree. For `rename` and `copy`, a failure's `path` is
 `from` when `from` is missing (or, for `copy`, a directory), else `to`.
 *(ADR 0281)*
 
-```ail
+```ail norun rules=std.fs.9
 use std.fs
 
 fn main() !
@@ -171,7 +171,7 @@ first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
 separator or `a` is empty; otherwise `a` and `b` with one `/` between.
 *(ADR 0253)*
 
-```ail
+```ail rules=std.path.1,std.path.2,std.path.3,std.path.4
 use std.path
 
 fn main()
@@ -212,7 +212,7 @@ report it) and the captured text, with bytes that aren't UTF-8 as U+FFFD. A
 process that runs and fails is a successful `run` with a nonzero
 `status`; only a process that can't start is a `ProcError`. *(ADR 0160)*
 
-```ail
+```ail norun rules=std.proc.1
 use std.proc
 
 fn main() !
@@ -236,7 +236,7 @@ itself when it contains a separator and is an executable file, otherwise
 the first executable `DIR/name` for the directories of `PATH` in order
 (on Windows, also with each extension of `PATHEXT`). *(ADR 0282)*
 
-```ail
+```ail rules=std.proc.2,std.proc.3
 use std.proc
 
 fn main() !
@@ -285,7 +285,7 @@ variable `SSL_CERT_FILE` when it is set. A server that doesn't speak TLS
 1.3 fails with kind `tls`. Redirects may move between `http` and `https`.
 *(ADR 0360, ADR 0366–0369)*
 
-```ail
+```ail norun rules=std.net.2,std.net.5
 use std.net
 
 fn main() !
@@ -327,7 +327,7 @@ every order is equally likely (Fisher-Yates). The argument is marked `mut`
 **std.random.5** — `ail run --deterministic` rejects every program that
 reaches `random` (`eff.det.2`). *(ADR 0207)*
 
-```ail
+```ail rules=std.random.1,std.random.3,std.random.4
 use std.random
 
 fn main()
@@ -418,7 +418,7 @@ ends closes its window. *(ADR 0177)*
 and the effect `io` (`eff.infer.4`), so `ail run --deny ui` refuses a program
 that can open a window (`eff.cap.1`). *(ADR 0177)*
 
-```ail
+```ail norun rules=std.ui.1,std.ui.2,std.ui.5,std.ui.6,std.ui.7,std.ui.8
 use std.ui
 
 fn main()
@@ -622,7 +622,7 @@ one that is `>` it: a NaN never replaces it, and ties keep the earlier one.
 `m` tensor whose element `(j, i)` is `t`'s `(i, j)`. A tensor that isn't
 2-D traps. *(ADR 0345)*
 
-```ail
+```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
     print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
@@ -631,4 +631,281 @@ fn main()
     print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
     print(a.map(|x| x * 2.0).sum())   # 20.0
     print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32
+```
+
+## Examples
+
+Conformance examples (ADR 0002) for the rules above. File examples run in a
+scratch directory and remove what they make. `norun` examples are checked
+but not run: they need a window, a network, or a clipboard the harness
+doesn't have.
+
+```ail rules=std.use.1,std.use.2
+use std.path as pth
+use std.env
+
+fn main()
+    print(pth.ext("notes.txt"))       # txt: `as` names the module
+    print(env.args().len())           # qualified function access
+```
+
+```ail error=std.use.3
+use std.io
+use std.fs as io                      # error: `io` is already the name of a module
+```
+
+```ail rules=std.use.3
+use std.fs
+use std.path as path_mod
+
+fn main()
+    print(fs.exists("no-such-file-here"))
+    print(path_mod.base("a/b.txt"))   # b.txt
+```
+
+```ail rules=std.fs.1,std.fs.2,std.fs.3,std.fs.4
+use std.fs
+
+fn main() !
+    fs.write_text("fs_a.txt", "one\n")?
+    fs.append_text("fs_a.txt", "two\n")?
+    print(fs.read_text("fs_a.txt")?)  # one, two
+    print(fs.exists("fs_a.txt"))      # true
+    fs.remove("fs_a.txt")?
+    print(fs.exists("fs_a.txt"))      # false
+```
+
+```ail rules=std.fs.1
+use std.fs
+
+fn main()
+    text := fs.read_text(".") else err
+        print("{err.kind}")          # is_dir
+        ""
+    print(text.len())                # 0
+```
+
+```ail rules=std.fs.5,std.fs.6,std.fs.7
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_b/a/b")?         # creates the missing parents
+    fs.make_dir("fs_b/a/b")?         # an existing directory is not a failure
+    fs.write_text("fs_b/z.txt", "")?
+    fs.write_text("fs_b/a.txt", "")?
+    print(fs.list_dir("fs_b")?)      # [a, a.txt, z.txt]: sorted by bytes
+    fs.remove("fs_b") else err
+        print(err.kind)              # not_empty: nothing removes a tree
+    fs.remove("fs_b/a/b")?
+    fs.remove("fs_b/a")?
+    fs.remove("fs_b/a.txt")?
+    fs.remove("fs_b/z.txt")?
+    fs.remove("fs_b")?
+```
+
+```ail rules=std.fs.8,std.fs.9
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_c/sub")?
+    fs.write_text("fs_c/b.ail", "")?
+    fs.write_text("fs_c/sub/a.ail", "")?
+    fs.write_text("fs_c/.hidden", "")?
+    print(fs.walk("fs_c")?)          # the files below fs_c, dot names included
+    print(fs.glob("fs_c/*.ail"))     # [fs_c/b.ail]
+    print(fs.glob("fs_c/**/*.ail"))  # [fs_c/b.ail, fs_c/sub/a.ail]
+    fs.remove("fs_c/sub/a.ail")?
+    fs.remove("fs_c/sub")?
+    fs.remove("fs_c/.hidden")?
+    fs.remove("fs_c/b.ail")?
+    fs.remove("fs_c")?
+```
+
+```ail rules=std.fs.10,std.fs.11,std.fs.12
+use std.fs
+
+fn main() !
+    fs.write_text("fs_d.txt", "hello")?
+    m := fs.metadata("fs_d.txt")?
+    print(m.size)                    # 5
+    print(m.is_dir)                  # false
+    fs.copy("fs_d.txt", "fs_d2.txt")?
+    fs.rename("fs_d2.txt", "fs_d3.txt")?
+    print(fs.read_text("fs_d3.txt")?)  # hello
+    fs.remove("fs_d.txt")?
+    fs.remove("fs_d3.txt")?
+```
+
+```ail rules=std.env.1,std.env.2,std.env.3,std.env.4,std.env.5,std.env.6
+use std.env
+
+fn main()
+    print(env.args().len())                      # 0: the harness passes no words
+    print(env.get("AIL_SPEC_NOT_SET") else "unset")   # unset
+    print(env.cwd().len() > 0)                   # true
+    print(env.program().len() > 0)               # true
+    print(env.vars().len() >= 0)                 # true
+    print(env.home() else "no home")
+```
+
+```ail rules=std.path.2,std.path.4
+use std.path
+
+fn main()
+    print(path.dir("examples/logscan.ail"))      # examples
+    print(path.dir("/x"))                        # /
+    print(path.dir("plain"))                     # .
+    print(path.join("", "data"))                 # data
+    print(path.join("a", "/abs"))                # /abs
+```
+
+```ail rules=std.io.1,std.io.2,std.io.3,std.io.4
+use std.io
+
+fn main()
+    line := io.read_line() else "no input"
+    print(line)                      # no input: the harness gives an empty standard input
+    print(io.read_all().len())       # 0
+    io.eprint("to standard error")
+    io.exit(0)
+```
+
+```ail rules=std.proc.1,std.proc.2
+use std.proc
+
+fn main() !
+    r := proc.run("sh", ["-c", "printf hi"])?
+    print(r.status)                  # 0
+    print(r.out)                     # hi
+    s := proc.run("sh", ["-c", "exit 3"])?
+    print(s.status)                  # 3: a process that fails is still a successful run
+    echoed := proc.run("sh", ["-c", "cat"], "b\na\n", 2000)?
+    print(echoed.out)                # the input is the standard input
+    t := proc.run("sh", ["-c", "sleep 5"], none, 100) else err
+        print(err.kind)              # timed_out
+        return
+    print(t.status)
+    u := proc.run("no-such-program-for-ail", []) else err
+        print(err.kind)              # not_found
+        return
+    print(u.status)
+```
+
+```ail rules=std.proc.3
+use std.proc
+
+fn main()
+    print(proc.which("sh") != none)  # true on Linux and macOS
+    print(proc.which("no-such-program-for-ail"))   # none
+```
+
+```ail norun rules=std.net.1,std.net.3,std.net.4,std.net.5
+use std.net
+
+fn main() !
+    r := net.get("https://example.com/health") else err
+        print("{err.kind}: {err.message}")
+        return
+    print(r.status)
+    p := net.post("https://example.com/api", "[]", "application/json") else err
+        print(err.kind)
+        return
+    print(p.status)
+```
+
+```ail rules=std.net.2,std.net.4
+use std.net
+
+fn main()
+    r := net.get("ftp://example.com/") else err
+        print(err.kind)              # bad_url: the scheme is not http or https
+        return
+    print(r.status)
+```
+
+```ail rules=std.time.1,std.time.2
+use std.time
+
+fn main()
+    start := time.now_ms()
+    time.sleep_ms(1)
+    print(time.now_ms() >= start)    # true
+```
+
+```ail rules=std.random.2,std.random.5
+use std.random
+
+fn main()
+    random.seed(7)
+    print(random.int(3, 3))          # 3: both bounds are inclusive
+    print(random.float() < 1.0)      # true
+```
+
+```ail norun rules=std.random.5
+use std.random
+
+fn main()
+    print(random.int(1, 6))          # ail run --deterministic rejects this program
+```
+
+```ail rules=std.ui.9,std.ui.14,std.ui.15,std.ui.17
+use std.ui
+
+fn main()
+    print(ui.RED)                    # the colors are ints
+    print(ui.BLACK)
+```
+
+```ail norun rules=std.ui.3,std.ui.4,std.ui.10,std.ui.11,std.ui.12,std.ui.13,std.ui.16,std.ui.18
+use std.ui
+
+fn main()
+    mut w := ui.open("Demo", 40, 5) else err
+        print("no window: {err.kind}")
+        return
+    w.clear(0x202020)
+    w.put(1, 1, "Hi", 0xFFFFFF, 0x202020)
+    w.put_styled(1, 2, "bold", 0xFFFFFF, 0x202020, ui.Style(bold: true, italic: false, underline: false))
+    w.set_cursor(3, 1, Block)
+    w.set_title("Demo 2")
+    w.set_font_size(18)
+    print(w.font_size())
+    ui.clipboard_set("copied")
+    print(ui.clipboard_get() else "")
+    w.present()
+    e := w.poll_event() else Close
+    match e
+        Mouse(_, _, _, _) => print("click")
+        Scroll(_) => print("wheel")
+        _ => print("other")
+    print(w.modifiers().shift)
+    w.close()
+```
+
+```ail rules=std.ui.19,std.ui.20,std.ui.21,std.ui.22,std.ui.23,std.ui.24
+use std.ui
+use std.ui.widgets
+
+fn main()
+    theme := {"bg": 0x101010, "fg": 0xEEEEEE}
+    print(widgets.color(theme, "fg"))
+    print(widgets.fuzzy("config.toml", "cfg"))        # true: letters in order
+    print(widgets.fit("abcdef", 3))
+    list := widgets.ListView.new(["alpha", "beta", "gamma"])
+    field := widgets.TextField.new("name", "ann")
+    print(field.caret_col(widgets.Rect(col: 0, row: 0, cols: 20, rows: 1)))
+    print(list.shown())
+    print(list.chosen() else "")
+    button := widgets.Button(label: "OK", focused: true)
+    print(button.render(widgets.Rect(col: 0, row: 0, cols: 6, rows: 1), theme).len())
+    lines := widgets.text_rows(list.render(widgets.Rect(col: 0, row: 0, cols: 12, rows: 3), theme), 12, 3)
+    print(lines.len())
+```
+
+```ail rules=std.tensor.6
+fn main()
+    xs := tensor.from([1, 2, 3], [3])
+    print(xs.sum())                 # 6: int sums add in index order
+    print(xs.dot(xs))               # 14
+    print(xs.add(xs).to_list())     # [2, 4, 6]
 ```
