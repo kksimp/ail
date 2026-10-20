@@ -207,7 +207,7 @@ fn live_openssl_server() {
     ] {
         let mut args = vec!["-tls1_3", "-ciphersuites", suite];
         args.extend_from_slice(extra);
-        let running = server.start(&args);
+        let mut running = server.start(&args);
         let tcp = running.connect();
         let verifier = AcceptAny::default();
         let config = Config { host: "localhost", verifier: &verifier };
@@ -222,12 +222,12 @@ fn live_openssl_server() {
         assert_eq!(*verifier.seen.borrow(), vec![(1, 0x0403)]);
     }
     // Refusals with a reason.
-    let running = server.start(&["-tls1_2"]);
+    let mut running = server.start(&["-tls1_2"]);
     let verifier = AcceptAny::default();
     let config = Config { host: "localhost", verifier: &verifier };
     let err = connect(running.connect(), &config).err().unwrap();
     assert!(err.message.contains("doesn't support TLS 1.3"), "{}", err.message);
-    let running = server.start(&["-tls1_3", "-groups", "P-256"]);
+    let mut running = server.start(&["-tls1_3", "-groups", "P-256"]);
     let err = connect(running.connect(), &config).err().unwrap();
     assert!(err.message.contains("handshake_failure"), "{}", err.message);
 }
@@ -283,7 +283,10 @@ mod openssl {
                 eprintln!("note: `openssl` is `{}`, not OpenSSL 1.1.1 or 3", text.trim());
                 return None;
             }
-            let dir = std::env::temp_dir().join(format!("ail-tls-test-{}", std::process::id()));
+            // One directory per server: tests run in parallel.
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!("ail-tls-test-{}-{n}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let ok = Command::new("openssl")
                 .args(["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes"])
@@ -356,15 +359,19 @@ mod openssl {
     }
 
     impl Running {
-        /// Connects once the server listens (it takes a moment to start).
-        pub fn connect(&self) -> TcpStream {
+        /// Connects once the server listens (it can take a while to start
+        /// on a loaded machine).
+        pub fn connect(&mut self) -> TcpStream {
             let start = Instant::now();
             loop {
                 if let Ok(s) = TcpStream::connect(("127.0.0.1", self.port)) {
-                    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+                    s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
                     return s;
                 }
-                assert!(start.elapsed() < Duration::from_secs(10), "openssl s_server didn't start");
+                if let Ok(Some(status)) = self.child.try_wait() {
+                    panic!("openssl s_server exited before listening ({status}) on port {}", self.port);
+                }
+                assert!(start.elapsed() < Duration::from_secs(30), "openssl s_server didn't start within 30 s");
                 std::thread::sleep(Duration::from_millis(20));
             }
         }
