@@ -50,9 +50,12 @@ impl<'p> Checker<'p> {
             ("Server" | "Listener", "addr") | ("Conn", "peer") => (vec![], Str),
             ("Server" | "Listener" | "Conn", "close") => (vec![], Unit),
             ("Exchange", "respond") => (vec![ty("net.Response")], net(Unit)),
+            ("Exchange", "respond_bytes") => (vec![Int, Ty::Map(Box::new(Str), Box::new(Str)), Ty::Bytes], net(Unit)),
             ("Conn", "read") => (vec![Int], net(Str)),
             ("Conn", "read_line") => (vec![], net(Ty::Opt(Box::new(Str)))),
             ("Conn", "write") => (vec![Str], net(Unit)),
+            ("Conn", "read_bytes") => (vec![Int], net(Ty::Bytes)),
+            ("Conn", "write_bytes") => (vec![Ty::Bytes], net(Unit)),
             ("Conn", "set_timeout") => (vec![Int], Unit),
             _ => unreachable!("NET_METHODS lists `{ty_name}.{m}`"),
         };

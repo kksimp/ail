@@ -1,0 +1,8 @@
+use std.net
+use std.proc
+
+fn main()
+    a := proc.run_bytes("cat", [], "text")
+    b := net.post_bytes("http://x", "text", "text/plain")
+    c := net.get_bytes(5)
+    d := proc.run("cat", [], b"bytes")

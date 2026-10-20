@@ -235,15 +235,69 @@ and is tested under the interpreter. When lane 126 lands raw pointers the same
 modules switch their load/store helpers to `unsafe` pointer operations; the
 algorithms don't change (ADR 0404).
 
-## 9. FFI hook (with lane 126)
+## 9. FFI hook (lane 126, ADRs 0431–0436)
 
-An `extern "c" fn` in a native program resolves in one of two ways: **static**,
-a symbol the runtime itself provides (`rt_*`), or **dynamic**, a symbol from a
-shared library named in the declaration. Dynamic needs an `LC_LOAD_DYLIB` /
-`DT_NEEDED` and an import table; the ELF and Mach-O writers of lane 120 add
-them when the first dynamic `extern` appears. Until then a native program with
-an `extern` is rejected by `ail build` with `ffi.native.1` (to be written by
-lane 126).
+The interpreter already calls C (`extern c fn`, `docs/spec/14-ffi.md`). This
+section is the plan for compiled programs. Nothing here is built yet; until it
+is, `ail build` rejects a program that declares an `extern c fn` or uses
+`std.mem` allocation with `ffi.native.1` (spec `ffi.native.1`).
+
+**Source of truth for the call shape.** The checker already limits a C call to
+six integer-like and eight float arguments (`ffi.decl.3`) and types it with
+`int`/`float`/`bool`/sized numbers/`*T` (`ffi.map.1`). A native call is
+therefore the platform's register convention of §1 with no thunk and no stack
+arguments:
+
+| Step | Rule |
+|---|---|
+| Arguments | integer-like in order into the integer registers, `float` and `f32` in order into the float registers (`f32` in the low half); narrow integers are extended to 64 bits by signedness first (`movsx`/`movzx`, `sxtb`/`uxtb`...), because Apple's ARM64 convention makes the caller extend |
+| Result | integer register or float register; a narrow result is truncated to its declared type and extended again (`ffi.map.2`); `bool` is the low byte `!= 0` |
+| Registers | caller-saved registers are assumed clobbered across the call |
+| Stack | 16-byte aligned at the call (§1) |
+| Not supported | variadic functions, structs by value, stack arguments, callbacks (`ffi.decl.3`, ADR 0432) |
+
+**Resolution: static or dynamic.** A symbol the runtime provides (`rt_*`) is
+a direct call. Any other symbol is **dynamic**, from the library written in the
+declaration (`extern c "libm" fn`) or from libc when none is.
+
+| Target | What the writer emits |
+|---|---|
+| Linux x86-64, ARM64 (ELF) | `PT_INTERP` (the system loader), `DT_NEEDED` for each library, a `.got` slot per symbol bound at load time (`R_X86_64_GLOB_DAT`, `R_AARCH64_GLOB_DAT`; `DT_FLAGS` `BIND_NOW`, so no lazy PLT), calls as `call [rip+slot]` / `ldr x16, slot; blr x16` |
+| macOS ARM64 (Mach-O) | `LC_LOAD_DYLIB` per library (`/usr/lib/libSystem.B.dylib` always), chained fixups for the `__got` slots, same `ldr`/`blr` call; library names resolve as in `ffi.load.1` |
+| Windows x86-64 | stub, `plat.win.1` and `ffi.load.3` |
+
+A program with **no** `extern` links no libc and has no `PT_INTERP`
+(`ffi.link.1`, ADR 0105): the static executable of §3 is unchanged. A program
+with one becomes a dynamic executable; its entry is still `rt_start`, which
+does not go through `__libc_start_main`. That is safe for the pure functions
+the language targets (`strlen`, `sqrt`, `atoi`), because the loader has already
+initialised libc and its thread-local storage. It is not enough for libc's
+buffered stdio, so `rt_exit` calls `fflush(0)` through the dynamic symbol when
+libc is linked, before the `exit` syscall. This is an open risk until a
+differential test with `printf` passes on both Linux ARM64 and macOS.
+
+**Memory.** `mem.alloc`, `mem.cstr` and `mem.free` call libc `malloc` and
+`free` when libc is linked, so a block can cross the boundary in either
+direction (`unsafe.mem.1`); without libc they use `rt_alloc` and `free` is a
+no-op until the collector exists (§5). `read`, `write` and `offset` compile to
+a load, a store and an `add` of `n * size_of(T)`. The interpreter's block table
+(`unsafe.ptr.4–6`) does not exist natively: only a null access is trapped, by
+a guard page and a signal handler the runtime installs, reporting
+`unsafe.ptr.4`; out-of-block and freed accesses are undefined behaviour, as in
+C, and the differential harness runs them under the interpreter only.
+
+**Runtime Code.** The call stubs, the GOT slots and `rt_exit`'s flush belong
+to the executable and fall under the Runtime Exception (ADR 0510); the
+interpreter's `dlopen` glue (`bootstrap/src/interp/ffi.rs`) is toolchain code
+and does not.
+
+**Order of work (lane 120 and lane 122).** (1) `compiler/rt/` switches its
+word-addressed helpers to `unsafe` pointer methods once lane 122 has the
+interpreter-side tests (ADR 0435 is merged); (2) the ELF writer gains
+`PT_INTERP`/`DT_NEEDED`/GOT and the first `extern` call; (3) the Mach-O writer
+follows in lockstep (ADR 0008); (4) `ail build` drops `ffi.native.1` and the
+selftest diffs `examples/ffi_libc.ail` and `examples/ffi_buffers.ail` between
+the interpreter and the native executable on both platforms.
 
 ## Licensing
 

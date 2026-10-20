@@ -1,0 +1,7 @@
+# ffi.load.2: a symbol the library doesn't have traps at the call.
+extern c fn no_such_function_in_libc(x int) int
+
+fn main()
+    print("before")
+    unsafe
+        print(no_such_function_in_libc(1))
