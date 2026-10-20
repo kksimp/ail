@@ -233,7 +233,7 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
     assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0.0,\"page\":2.0}"), "pdf json:\n{out}");
     let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
-    assert!(out.contains("image-only pages (scans; these need OCR): 1"), "pdf info on a scan:\n{out}");
+    assert!(out.contains("image-only pages (scans, read by OCR when shown or searched): 1"), "pdf info on a scan:\n{out}");
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
     assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
     // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
@@ -241,4 +241,15 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     assert!(out.contains("\"pages_read\":1.0") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
     let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
     assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
+    // ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.
+    let scan = tool("tools/pdf/testdata/scan-ocr.pdf");
+    let (code, out, err) = pdf(&["text", &scan]);
+    let want = std::fs::read_to_string(tool("tools/pdf/testdata/scan-ocr.txt")).unwrap();
+    assert!(code == Some(0) && out == want, "pdf text scan-ocr.pdf (OCR):\n{out}{err}");
+    let (code, out, _) = pdf(&["grep", "western library cooperative", &scan]);
+    assert!(code == Some(0) && out.starts_with("1: the growth came"), "pdf grep on a scan:\n{out}");
+    let (code, _, _) = pdf(&["grep", "--no-ocr", "western", &scan]);
+    assert_eq!(code, Some(1), "pdf grep --no-ocr finds nothing on a scan");
+    let (_, out, _) = pdf(&["json", &scan]);
+    assert!(out.contains("\"image_only\":true,\"ocr\":true,\"confidence\":"), "pdf json on a scan:\n{out}");
 }

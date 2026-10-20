@@ -83,7 +83,7 @@ All verified on Linux x86-64 and macOS ARM64.
 
 ### PDF reader
 
-`tools/pdf`, a PDF reader, searcher and viewer written in AIL (ADR 0520, [design note](design/pdf-viewer.md)): the text layer from the fonts' Unicode maps with no OCR; xref tables and streams, object streams, repair of damaged tables, Flate/LZW/ASCII85 with predictors, ToUnicode CMaps and encodings; `pdf text`, `grep` (boxes, across line breaks), `json` (the page model for agents), `info` (flags scans), `outline`, `bench`, and a text-cell viewer with search (`--print`, `--json`). Pages are read on demand (ADR 0511). Stopgap until `std.compress` returns bytes: an inflate in AIL. Not yet: encryption, pixel rendering.
+`tools/pdf`, a PDF reader, searcher and viewer written in AIL (ADR 0520, [design note](design/pdf-viewer.md)): the text layer from the fonts' Unicode maps with no OCR; xref tables and streams, object streams, repair of damaged tables, Flate/LZW/ASCII85 with predictors, ToUnicode CMaps and encodings; `pdf text`, `grep` (boxes, across line breaks), `json` (the page model for agents), `info` (flags scans), `outline`, `bench`, and a text-cell viewer with search (`--print`, `--json`). Pages are read on demand (ADR 0511). Scanned pages are read by OCR in AIL when shown or searched (ADR 0512): CCITT fax, JPEG and raw images decoded in AIL, a TrueType rasterizer for reference shapes (ADR 0513); 0.4-3.3% character errors on unseen fonts at 300 dpi. Stopgap until `std.compress` returns bytes: an inflate in AIL. Not yet: encryption, pixel rendering.
 
 ## Design topics
 
