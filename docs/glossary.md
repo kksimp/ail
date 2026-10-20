@@ -28,6 +28,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed before `main` runs; visible in the whole module (ADR 0132). |
 | **Constant expression** | An expression built only from literals, other constants, collection and struct literals, and built-in operators on built-in types; it can't call functions or run user code (ADR 0132). |
 | **Constraint (bound)** | A trait a generic type parameter must implement, written inline as `[T Trait]` (ADR 0074). |
+| **Contract** | `requires` and `ensures` lines under a function's signature: what callers must satisfy and what the function promises, checked at run time (ADR 0210). |
 | **Copy-on-write (COW)** | Values share storage until one of them is mutated, at which point that one gets its own copy. Unobservable to programs (`own.val.2`). |
 | **Delegated decision** | A routine design decision made by the AI using the designer's priority order (ADR 0076). |
 | **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). |

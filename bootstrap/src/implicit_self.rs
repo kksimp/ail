@@ -31,6 +31,12 @@ pub fn rewrite(prog: &mut Program, diags: &mut Vec<Diagnostic>) {
         for p in &prog.fns[i].params {
             cx.declare(&p.name, p.pos);
         }
+        // contract.decl.2: a method's contracts see its members too.
+        let mut contracts = std::mem::take(&mut prog.fns[i].contracts);
+        for c in &mut contracts {
+            cx.expr(&mut c.cond);
+        }
+        prog.fns[i].contracts = contracts;
         let mut body = prog.fns[i].body.take().expect("a body");
         cx.block(&mut body);
         prog.fns[i].body = Some(body);
