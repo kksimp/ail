@@ -9,7 +9,7 @@ error struct TaskError
     id str
     field str
 
-struct Task
+struct Todo
     id str
     title str
     status str
@@ -21,12 +21,12 @@ fn str_field(j Json, key str) str?
 fn num_field(j Json, key str) float?
     j.get(key)?.as_num()
 
-fn load_task(j Json) Task ! TaskError
+fn load_task(j Json) Todo ! TaskError
     id := str_field(j, "id") else return TaskError(id: "?", field: "id")
     title := str_field(j, "title") else return TaskError(id: id, field: "title")
     status := str_field(j, "status") else return TaskError(id: id, field: "status")
     hours := num_field(j, "hours") else 0.0
-    Task(id: id, title: title, status: status, hours: hours)
+    Todo(id: id, title: title, status: status, hours: hours)
 
 fn with_status(j Json, status str) Json
     members := j.as_obj() else []
