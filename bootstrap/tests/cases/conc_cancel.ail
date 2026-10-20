@@ -1,0 +1,28 @@
+# conc.cancel.1-2: `cancel` asks tasks to stop; a cancelled task's `recv`
+# returns `none` and `for v in ch` ends, `task.cancelled()` is true and `task.check()` fails with
+# `Cancelled` (ADR 0321).
+
+fn worker(id int, jobs Channel[int])
+    for v in jobs
+        print("worker {id} got {v}")
+    print("worker {id} stopped: cancelled {task.cancelled()}")
+
+fn poll(gate Channel[int]) !
+    gate.recv()
+    task.check()?
+    print("not reached")
+
+fn main() !
+    jobs := Channel[int](4)
+    g := TaskGroup()
+    g.add(spawn worker(1, jobs))
+    g.add(spawn worker(2, jobs))
+    jobs.send(10)
+    g.cancel()
+    g.wait_all()?
+    print("main cancelled: {task.cancelled()}")
+    gate := Channel[int](1)
+    t := spawn poll(gate)
+    t.cancel()
+    t.wait() else err
+        print("poll failed: {err}")

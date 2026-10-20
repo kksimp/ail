@@ -8,7 +8,7 @@
 
 ## Context
 
-The agent-tool corpus ([ADR 0217](0217-agent-tool-corpus.md)) was five
+The agent-tool corpus ([ADR 0217](0217-agent-corpus-standing-benchmark.md)) was five
 programs and reached parity with Python in rounds 4–5. Rounds 5–7 added
 implicit std modules, `fs.glob`, `proc.run` with input and limits, `net.get`,
 `for v in ch`, `par` comprehensions and derived JSON, and none of the corpus
@@ -41,7 +41,7 @@ config fixtures for `merge` sit in `examples/configs/`, apart from
 
 Tokens decide first (ADR 0076): the new five are 146.2 tokens (8.6%) under
 Python, so the earlier parity holds on newer code. Where AIL still costs more
-(`snapdiff`, `logscan`, `csvreport`) the cause is recorded as OQ-097 to
+(`snapdiff`, `logscan`, `csvreport`) the cause is recorded as OQ-110 to
 OQ-099 instead of being fixed tonight.
 
 ## Consequences

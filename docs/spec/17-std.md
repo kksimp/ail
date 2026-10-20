@@ -46,9 +46,10 @@ fields `path str` (the path the function was given) and `kind str`. A
 failure to start a process is the error struct `proc.ProcError`, with
 fields `cmd str` and `kind str`. `kind` is one of `not_found`,
 `permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`,
-`timed_out` (a process killed at its time limit, `std.proc.2`) and `other`,
+`timed_out` (a process killed at its time limit, `std.proc.2`),
+`cancelled` (`proc.run` in a cancelled task, `conc.cancel.2`) and `other`,
 and is the same for the same failure on every platform. `std.net` fails
-with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282)*
+with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282, ADR 0321)*
 
 ```ail
 use std.fs

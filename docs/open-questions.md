@@ -332,7 +332,7 @@ template (recommended: one rule for every derive, and an agent sees what
 (cheapest); (c) write the prelude generators in AIL and drop the native code
 (slower in the interpreter). *Owner: AI under ADR 0076.*
 
-## OQ-097 — `Set.union` and friends
+## OQ-110 — `Set.union` and friends
 Round 8 (lane 83, [program-measurements-r8.md](design/program-measurements-r8.md)):
 `snapdiff` costs 14.4 tokens (4.6%) more than its Python twin, and 9.6 of those
 are `{n for keys in [old.keys(), new.keys()] for n in keys}`, where Python
@@ -342,7 +342,7 @@ writes `old.keys() | new.keys()`. `Set` has no `union`, `intersect` or
 operator on sets (similar saving, a new operator); (c) leave it. *Owner: AI
 under ADR 0076.*
 
-## OQ-098 — Appending to a map entry that may be missing
+## OQ-111 — Appending to a map entry that may be missing
 `m[k] += 1` starts from zero (ADR 0251), but a list-valued entry has no
 equivalent, so the shortest form is `m[k] = (m.get(k) else []) + [x]`, which
 also needs `+` on lists (it does not exist), and Python has
@@ -354,7 +354,7 @@ appending to the list at `k` and starting an empty list when absent
 write above still says "a list index must be `int`" when `m` was an untyped
 `{}`, which a better message would improve. *Owner: AI under ADR 0076.*
 
-## OQ-099 — Optional keyword arguments for `proc.run`
+## OQ-112 — Optional keyword arguments for `proc.run`
 `proc.run("git", ["hash-object", "--stdin"], text)` is fine, but a time limit
 without input is `proc.run(cmd, args, none, 200)` (`runner`, `none` costs 1
 token and a surprise). Python's `timeout=0.2` names itself. Estimated
@@ -362,3 +362,16 @@ saving: 1–2 tokens per call, under 0.5% of the corpus. Options: (a) accept
 named arguments for the optional parameters of std functions
 (`proc.run(cmd, args, timeout_ms: 200)`; recommended if other std functions
 grow optionals); (b) leave it. *Owner: AI under ADR 0076.*
+## OQ-097 — Weaker atomic orderings, cancel trees, and send under cancellation
+Lane 72 (ADRs 0320–0322) left three follow-ups. (1) `conc.atomic.2` requires
+acquire, release, acquire-release and relaxed orderings; the bootstrap has
+only SeqCst. Options: (a) a trailing named argument, `a.load(order: Relaxed)`
+(recommended: rare, so the token cost lands only where it's used); (b)
+separate methods (`load_relaxed`); (c) wait for the native backend. (2)
+Cancelling a task doesn't reach tasks it already started (only tasks it
+starts later). Options: (a) cancel the whole tree, as structured concurrency
+suggests (recommended once tasks record their parent); (b) keep it per
+task. (3) A cancelled task blocked in `send` on a full channel still
+waits. Options: (a) `send` returns `! Cancelled` (breaks every existing
+call's type); (b) keep waiting, so a cancelled producer is released by its
+consumer (current); (c) drop the value and return. *Owner: AI under ADR 0076.*

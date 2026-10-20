@@ -143,6 +143,22 @@ pub(super) enum Plain {
     Nested(u32),
     Fail(Box<Plain>, Vec<String>, Vec<Pos>),
     Tensor(crate::tensor::Tensor),
+    /// The same atomic cell, shared with the workers (conc.atomic.6).
+    Atomic(std::sync::Arc<super::atomic::Cell>),
+}
+
+impl Plain {
+    /// Whether an atomic is inside: iterations that ran already changed it,
+    /// so the loop can't be run again in order (conc.atomic.6).
+    fn has_atomic(&self) -> bool {
+        match self {
+            Plain::Atomic(_) => true,
+            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) => ps.iter().any(Plain::has_atomic),
+            Plain::Map(kvs) => kvs.iter().any(|(k, v)| k.has_atomic() || v.has_atomic()),
+            Plain::Fail(e, _, _) => e.has_atomic(),
+            _ => false,
+        }
+    }
 }
 
 /// `v` as a `Plain`; `None` for a task, group, channel or mutex handle,
@@ -168,6 +184,7 @@ fn plain(v: &Value) -> Option<Plain> {
         // A handle or a shared `ref` has identity a copy would lose (conc.par.8).
         Value::Handle(_) | Value::Ref(_) => return None,
         Value::Tensor(t) => Plain::Tensor((**t).clone()),
+        Value::Atomic(c) => Plain::Atomic(std::sync::Arc::clone(c)),
     })
 }
 
@@ -204,6 +221,7 @@ fn value(p: &Plain) -> Value {
         Plain::Fail(e, context, trace) => {
             Value::Fail(Rc::new(Failure { error: value(e), context: context.clone(), trace: trace.clone() }))
         }
+        Plain::Atomic(c) => Value::Atomic(std::sync::Arc::clone(c)),
     }
 }
 
@@ -311,13 +329,17 @@ impl<'a, W: io::Write> Interp<'a, W> {
             })
             .collect::<Option<_>>()?;
         let items: Vec<Plain> = items.iter().map(plain).collect::<Option<_>>()?;
+        // conc.atomic.6: a loop that reaches an atomic can't run again in
+        // order, so it reports its own trap instead.
+        let atomic = captures.iter().any(|(_, p)| p.has_atomic());
         let chunks = (threads * CHUNKS_PER_THREAD).min(items.len());
         let bounds: Vec<(usize, usize)> =
             (0..chunks).map(|c| (c * items.len() / chunks, (c + 1) * items.len() / chunks)).collect();
-        let results: Vec<Option<Chunk>> = {
+        let results: Vec<Option<Result<Chunk, Option<Trap>>>> = {
             let next = AtomicUsize::new(0);
             let failed = AtomicBool::new(false);
-            let out: Vec<std::sync::Mutex<Option<Chunk>>> = (0..chunks).map(|_| std::sync::Mutex::new(None)).collect();
+            let out: Vec<std::sync::Mutex<Option<Result<Chunk, Option<Trap>>>>> =
+                (0..chunks).map(|_| std::sync::Mutex::new(None)).collect();
             let (prog, resolved, depth) = (self.prog, self.resolved, self.depth);
             let shared = Shared { captures: &captures, lists: &lists, sums: &sums, items: &items, bounds: &bounds };
             std::thread::scope(|s| {
@@ -331,12 +353,24 @@ impl<'a, W: io::Write> Interp<'a, W> {
                     }
                 }
             });
+            let results: Vec<_> = out.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner())).collect();
             if failed.load(AtomicOrdering::Relaxed) {
-                return None;
+                if !atomic {
+                    return None;
+                }
+                let trap = results.into_iter().find_map(|r| match r {
+                    Some(Err(Some(t))) => Some(t),
+                    _ => None,
+                });
+                return Some(Err(trap.unwrap_or_else(|| atomic_trap(pos_of(body))).into()));
             }
-            out.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner())).collect()
+            results
         };
-        let results: Vec<Chunk> = results.into_iter().collect::<Option<_>>()?;
+        let results: Vec<Chunk> = match results.into_iter().map(|r| r.and_then(Result::ok)).collect::<Option<_>>() {
+            Some(r) => r,
+            None if atomic => return Some(Err(atomic_trap(pos_of(body)).into())),
+            None => return None,
+        };
         // conc.par.4: the sequential running total overflows exactly when a
         // chunk's offset plus one of its running totals leaves `int`.
         let mut totals = starts;
@@ -344,6 +378,10 @@ impl<'a, W: io::Write> Interp<'a, W> {
             for (k, &(total, lo, hi)) in r.sums.iter().enumerate() {
                 let range = i128::from(i64::MIN)..=i128::from(i64::MAX);
                 if !range.contains(&(totals[k] + lo)) || !range.contains(&(totals[k] + hi)) {
+                    if atomic {
+                        let message = "an accumulator of this loop overflows `int`".to_string();
+                        return Some(Err(Trap { rule: "conc.par.4", pos: pos_of(body), message }.into()));
+                    }
                     return None;
                 }
                 totals[k] += total;
@@ -389,7 +427,7 @@ fn worker<'a>(
     shared: &Shared<'_, 'a>,
     next: &AtomicUsize,
     failed: &AtomicBool,
-    out: &[std::sync::Mutex<Option<Chunk>>],
+    out: &[std::sync::Mutex<Option<Result<Chunk, Option<Trap>>>>],
 ) {
     let mut it = build(prog, resolved, io::sink());
     it.depth = depth;
@@ -399,18 +437,18 @@ fn worker<'a>(
         if c >= shared.bounds.len() || failed.load(AtomicOrdering::Relaxed) {
             return;
         }
-        match chunk(&mut it, var, body, shared, shared.bounds[c], &mut env) {
-            Some(r) => *out[c].lock().unwrap_or_else(|e| e.into_inner()) = Some(r),
-            None => {
-                failed.store(true, AtomicOrdering::Relaxed);
-                return;
-            }
+        let r = chunk(&mut it, var, body, shared, shared.bounds[c], &mut env);
+        let ok = r.is_ok();
+        *out[c].lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+        if !ok {
+            failed.store(true, AtomicOrdering::Relaxed);
+            return;
         }
     }
 }
 
-/// Run iterations `lo..hi`; `None` on a trap or anything the main thread
-/// must redo in order.
+/// Run iterations `lo..hi`; an error, with the trap if one ended it, on a
+/// trap or anything the main thread must redo in order.
 fn chunk<'a>(
     it: &mut Interp<'a, io::Sink>,
     var: &'a str,
@@ -418,7 +456,7 @@ fn chunk<'a>(
     shared: &Shared<'_, 'a>,
     (lo, hi): (usize, usize),
     env: &mut Env<'a>,
-) -> Option<Chunk> {
+) -> Result<Chunk, Option<Trap>> {
     let before: Vec<Value> = shared.lists.iter().map(|&l| env[l].1.clone()).collect();
     let mut sums = vec![(0i128, 0i128, 0i128); shared.sums.len()];
     for &s in shared.sums {
@@ -427,30 +465,43 @@ fn chunk<'a>(
     for item in &shared.items[lo..hi] {
         match it.loop_body(var, value(item), body, env) {
             Ok(true) => {}
-            Ok(false) | Err(_) => return None,
+            Err(super::Exit::Trap(t)) => return Err(Some(*t)),
+            Ok(false) | Err(_) => return Err(None),
         }
         for (k, &s) in shared.sums.iter().enumerate() {
-            let Value::Int(x) = env[s].1 else { return None };
+            let Value::Int(x) = env[s].1 else { return Err(None) };
             let x = i128::from(x);
             sums[k] = (x, sums[k].1.min(x), sums[k].2.max(x));
         }
     }
     let mut elements = Vec::new();
     for (l, old) in before.iter().enumerate() {
-        let (Value::List(old), Value::List(new)) = (old, &env[shared.lists[l]].1) else { return None };
+        let (Value::List(old), Value::List(new)) = (old, &env[shared.lists[l]].1) else { return Err(None) };
         if Rc::ptr_eq(old, new) {
             continue;
         }
         if old.len() != new.len() {
-            return None;
+            return Err(None);
         }
         for (i, (a, b)) in old.iter().zip(new.iter()).enumerate() {
             if !same(a, b) {
-                elements.push((l, i, plain(b)?));
+                elements.push((l, i, plain(b).ok_or(None)?));
             }
         }
     }
-    Some(Chunk { elements, sums })
+    Ok(Chunk { elements, sums })
+}
+
+/// Where a loop body starts, for a trap that belongs to no one iteration.
+fn pos_of(body: &Block) -> Pos {
+    body.first().map_or(Pos { line: 0, col: 0 }, Stmt::pos)
+}
+
+/// conc.atomic.6: a loop that reaches an atomic stopped on the pool for a
+/// reason other than a trap, and can't run again in order.
+fn atomic_trap(pos: Pos) -> Trap {
+    let message = "a parallel loop that updates an atomic couldn't finish on the pool".to_string();
+    Trap { rule: "conc.atomic.6", pos, message }
 }
 
 impl<'a, W: io::Write> Interp<'a, W> {

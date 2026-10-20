@@ -764,7 +764,17 @@ ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
 with m as mut x               # read-modify-write: holds m, stores x back
     x += 1                    # on any exit; a trap keeps the old value
+n := Atomic(0)                # int or bool, shared by tasks and par for
+n.add(1)                      # returns the old value; also load, store, cas
+g.cancel()                    # or t.cancel(): ask tasks to stop
+task.cancelled()              # in the task: was it cancelled?
+task.check()?                 # fails with Cancelled once cancelled
 ```
+
+A cancelled task's `recv` gives `none` (and `for v in ch` ends),
+`time.sleep_ms` returns at once and `proc.run` fails; the scope still waits
+for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
+`SEED` and prints the seed when a test fails, so the interleaving replays.
 
 Each task handle must be waited or added to a group exactly once, on every
 path. A handle can't be stored or passed; channels and mutexes can, and
