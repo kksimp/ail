@@ -61,7 +61,8 @@ implementations and that the tier can be switched off.
   otherwise.
 
 - The tier's design and measurements: [ADR 0361](0361-bytecode-tier-design.md);
-  method calls, data construction, `match` and `?`: [ADR 0363](0363-bytecode-tier-methods-and-data.md).
+  method calls, data construction, `match` and `?`: [ADR 0363](0363-bytecode-tier-methods-and-data.md);
+  run limits, coverage and traces: [ADR 0364](0364-bytecode-tier-limits-coverage-and-traces.md).
 
 ## Rejected alternatives
 

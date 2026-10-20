@@ -8,6 +8,12 @@
 //! numbers live in `tests/deterministic/`, which isn't included; programs
 //! that open a window (`ui.open(`) wait for it to close, so they're skipped.
 //! A run that takes longer than `LIMIT` is killed and fails the test.
+//!
+//! Programs without tasks also run with `--max-steps 300`, which stops most
+//! of them part way with a trap and its snapshot, and with `--trace=all`;
+//! `.test` files also run with `--coverage` (ADR 0364). Programs with tasks
+//! interleave their steps and trace lines differently from run to run, on
+//! either tier, so they're left out of those.
 
 use std::fs;
 use std::io::Read;
@@ -35,8 +41,15 @@ fn ail_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The command lines to compare, without the tier flag: `run [ARGS] FILE`, and `test --json FILE`.
-fn jobs() -> Vec<Vec<String>> {
+/// Words that mark a program whose tasks or threads make its step count and
+/// trace order vary between runs.
+const CONCURRENT: [&str; 6] = ["spawn", "par ", "TaskGroup", "Atomic", "Channel", "Mutex"];
+
+/// The command lines to compare, without the tier flag: `run [ARGS] FILE`,
+/// the same with a step limit and with a trace, and `test --json FILE`.
+/// One job is one program's runs, made in turn, since some programs write
+/// files at fixed paths.
+fn jobs() -> Vec<Vec<Vec<String>>> {
     let r = root();
     let mut files = Vec::new();
     for dir in ["examples", "bootstrap/tests/cases", "tools/perfbench/programs"] {
@@ -50,25 +63,36 @@ fn jobs() -> Vec<Vec<String>> {
     files.sort();
     let mut jobs = Vec::new();
     for f in &files {
+        let mut job = Vec::new();
         let path = f.display().to_string();
         let args = fs::read_to_string(f.with_extension("args")).unwrap_or_default();
-        let mut run: Vec<String> = vec!["run".into()];
-        run.extend(args.split_whitespace().map(String::from));
-        run.push(path.clone());
-        jobs.push(run);
-        if f.with_extension("test").exists() {
-            jobs.push(vec!["test".into(), "--json".into(), path]);
+        let src = fs::read_to_string(f).unwrap_or_default();
+        let steady = !CONCURRENT.iter().any(|w| src.contains(w));
+        let extra: &[&[&str]] = if steady { &[&[], &["--max-steps", "300"], &["--trace=all"]] } else { &[&[]] };
+        for flags in extra {
+            let mut run: Vec<String> = vec!["run".into()];
+            run.extend(flags.iter().map(|x| x.to_string()));
+            run.extend(args.split_whitespace().map(String::from));
+            run.push(path.clone());
+            job.push(run);
         }
+        if f.with_extension("test").exists() {
+            job.push(vec!["test".into(), "--json".into(), path.clone()]);
+            if steady {
+                job.push(vec!["test".into(), "--coverage".into(), path]);
+            }
+        }
+        jobs.push(job);
     }
     let mut pkgs: Vec<PathBuf> = fs::read_dir(r.join("bootstrap/tests/cases/packages"))
         .map(|d| d.map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect())
         .unwrap_or_default();
     pkgs.sort();
-    jobs.extend(pkgs.into_iter().map(|p| vec!["run".into(), p.display().to_string()]));
+    jobs.extend(pkgs.into_iter().map(|p| vec![vec!["run".into(), p.display().to_string()]]));
     jobs
 }
 
-/// Run one side of a job, or say that it ran past `LIMIT`.
+/// Run one side of a command line, or say that it ran past `LIMIT`.
 fn run(job: &[String], walker: bool) -> Result<Output, String> {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ail"));
     cmd.arg(&job[0]);
@@ -79,11 +103,8 @@ fn run(job: &[String], walker: bool) -> Result<Output, String> {
     let mut child = cmd.spawn().unwrap();
     // The pipes are drained while the program runs, so a large output can't block it.
     let drain = |child: &mut Child, out: bool| {
-        let mut pipe: Box<dyn Read + Send> = if out {
-            Box::new(child.stdout.take().unwrap())
-        } else {
-            Box::new(child.stderr.take().unwrap())
-        };
+        let mut pipe: Box<dyn Read + Send> =
+            if out { Box::new(child.stdout.take().unwrap()) } else { Box::new(child.stderr.take().unwrap()) };
         std::thread::spawn(move || {
             let mut buf = Vec::new();
             pipe.read_to_end(&mut buf).unwrap();
@@ -128,25 +149,30 @@ fn differ(job: &[String], w: &Output, t: &Output) -> Option<String> {
 #[test]
 fn tier_matches_the_walker() {
     let jobs = jobs();
-    assert!(jobs.len() > 400, "found only {} programs", jobs.len());
+    let runs: usize = jobs.iter().map(Vec::len).sum();
+    assert!(jobs.len() > 400 && runs > 1200, "found only {} programs, {runs} runs", jobs.len());
     let next = Mutex::new(0usize);
     let failures = Mutex::new(Vec::new());
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
     std::thread::scope(|s| {
         for _ in 0..threads {
-            s.spawn(|| loop {
-                let i = {
-                    let mut n = next.lock().unwrap();
-                    *n += 1;
-                    *n - 1
-                };
-                let Some(job) = jobs.get(i) else { break };
-                let d = match (run(job, true), run(job, false)) {
-                    (Ok(w), Ok(t)) => differ(job, &w, &t),
-                    (Err(e), _) | (_, Err(e)) => Some(e),
-                };
-                if let Some(d) = d {
-                    failures.lock().unwrap().push(d);
+            s.spawn(|| {
+                loop {
+                    let i = {
+                        let mut n = next.lock().unwrap();
+                        *n += 1;
+                        *n - 1
+                    };
+                    let Some(job) = jobs.get(i) else { break };
+                    for cmd in job {
+                        let d = match (run(cmd, true), run(cmd, false)) {
+                            (Ok(w), Ok(t)) => differ(cmd, &w, &t),
+                            (Err(e), _) | (_, Err(e)) => Some(e),
+                        };
+                        if let Some(d) = d {
+                            failures.lock().unwrap().push(d);
+                        }
+                    }
                 }
             });
         }

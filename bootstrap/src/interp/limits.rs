@@ -135,6 +135,14 @@ impl<'a, W: Write> Interp<'a, W> {
         Ok(())
     }
 
+    /// Take back the step a bytecode `Hit` took for a statement it then
+    /// hands to the walker's `stmt`, which takes it again (ADR 0364).
+    pub(super) fn unhit(&mut self) {
+        if config().steps.is_some() {
+            self.steps -= 1;
+        }
+    }
+
     /// Reset the step count for the next test (run.limit.3).
     pub(super) fn reset_limits(&mut self) {
         self.steps = 0;

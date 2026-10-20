@@ -354,6 +354,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0361](0361-bytecode-tier-design.md) | The bytecode tier: register code over the tree walker's environment, with hand-offs *(delegated)* | Accepted | 2026-10-20 |
 | [0362](0362-differential-harness-for-the-bytecode-tier.md) | `./ail selftest` runs every program on both tiers; `fuzz.prop.5` compares them *(delegated)* | Accepted | 2026-10-20 |
 | [0363](0363-bytecode-tier-methods-and-data.md) | The bytecode tier compiles method and trait calls, data construction, `match`, interpolation and `?` *(delegated)* | Accepted | 2026-10-20 |
+| [0364](0364-bytecode-tier-limits-coverage-and-traces.md) | Run limits, coverage and call and effect traces run on the bytecode tier *(delegated)* | Accepted | 2026-10-20 |
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0367](0367-tls13-client-handshake.md) | The TLS 1.3 client handshake and record layer, tested on a recorded trace and live OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0368](0368-tls-certificate-verification.md) | TLS certificate verification: X.509 chains to the platform's roots *(delegated)* | Accepted | 2026-10-20 |

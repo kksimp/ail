@@ -76,7 +76,8 @@ operands and immediates was chosen.
 - The tier is off for a program that uses something it doesn't carry yet:
   `--trace`, `--watch`, run limits and coverage, unique types, `defer`, and
   contracts (while they are checked); and for `--deterministic` and
-  `--schedule`. A function with `spawn`, a task, channel or mutex
+  `--schedule`. (Run limits, coverage and `--trace` run on the tier from
+  [ADR 0364](0364-bytecode-tier-limits-coverage-and-traces.md).) A function with `spawn`, a task, channel or mutex
   constructor, `with`, or a `par for` stays on the walker. `--no-bytecode`
   turns the tier off. `AIL_BYTECODE_STATS=1` prints how many calls ran on it.
 
