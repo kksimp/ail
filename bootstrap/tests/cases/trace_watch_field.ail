@@ -1,0 +1,13 @@
+# trace.watch.1: assigning to a field or element of the watched variable
+# shows the whole variable.
+
+struct Point
+    x int
+    y int
+
+fn main()
+    mut p := Point(x: 1, y: 2)
+    p.x = 10
+    mut xs := [1, 2, 3]
+    xs[1] = 20
+    print(p.x + xs[1])

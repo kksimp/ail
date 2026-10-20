@@ -1,0 +1,10 @@
+$FILE:7:19: trap[expr.arith.3]: division by zero in `10 / 0`
+  7 |         return 10 / n
+    |                   ^
+  at 7:19 in down(n = 0, label = "a label that is longer than sixty characters, so the short report would cut it")
+      doubled = 0
+  at 8:5 in down(n = 1, label = "a label that is longer than sixty characters, so the short report would cut it")
+      doubled = 2
+  at 8:5 in down(n = 2, label = "a label that is longer than sixty characters, so the short report would cut it")
+      doubled = 4
+  at 11:11 in main()

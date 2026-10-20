@@ -1,0 +1,10 @@
+# trace.snap.3: a deep stack keeps the report to ten lines and says how
+# many frames `--verbose` would add.
+
+fn down(n int) int
+    if n == 0
+        return 10 / n
+    down(n - 1) + 1
+
+fn main()
+    print(down(20))

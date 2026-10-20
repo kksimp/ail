@@ -58,6 +58,12 @@ options:
                 or all) (eff.cap.1)
   --no-contracts
                 with run or test: skip `requires`/`ensures` checks (contract.run.3)
+  --trace[=calls|effects|all]
+                with run: write each call, return, effect, task and contract
+                check to standard error (trace.run.1); --trace-limit N caps
+                the events shown (default 1000) before a summary line
+  --watch NAME  with run: show each assignment to a `mut` variable NAME (trace.watch.1)
+  --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -73,6 +79,7 @@ fn main() -> ExitCode {
         match args[i].as_str() {
             "--json" | "--deterministic" | "--no-contracts" => {}
             "--deny" | "--seed" => i += 1,
+            a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
         }
         i += 1;
@@ -94,6 +101,18 @@ fn main() -> ExitCode {
             if let Some(at) = rest.iter().position(|a| *a == name) {
                 flags.extend(rest.drain(at..(at + 2).min(rest.len())));
             }
+        }
+    }
+    // trace.run.1, trace.watch.1, trace.snap.3: `ail run`'s tracing options.
+    match interp::take_trace_options(&mut rest, json) {
+        Ok(true) if rest.first() != Some(&"run") => {
+            eprintln!("error: `--trace`, `--watch` and `--verbose` work with `ail run` (trace.run.1)");
+            return ExitCode::from(2);
+        }
+        Ok(_) => {}
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
         }
     }
     let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
@@ -244,7 +263,8 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
             format!("{file}:{}:{}", p.line, p.col)
         };
         interp::run(&program, &resolved).map_err(|stop| match stop {
-            interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
+            // trace.snap.1-4: the trap with its snapshot.
+            interp::Stop::Trap(t) => interp::render_trap(&program, &t, interp::take_snapshot(), json),
             interp::Stop::Failed(report) => report.render_with(at),
         })
     });

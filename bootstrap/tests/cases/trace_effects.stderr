@@ -1,0 +1,4 @@
+trace: effect fs.exists("no/such/file.txt") at 9:11
+trace: spawn square(7) at 11:10
+trace: wait Task#1 at 12:13
+trace: summary: 3 events shown, 0 dropped (effect 1, spawn 1, wait 1)

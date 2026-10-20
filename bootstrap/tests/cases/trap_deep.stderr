@@ -1,0 +1,10 @@
+$FILE:6:19: trap[expr.arith.3]: division by zero in `10 / 0`
+  6 |         return 10 / n
+    |                   ^
+  at 6:19 in down(n = 0)
+  at 7:5 in down(n = 1)
+  at 7:5 in down(n = 2)
+  at 7:5 in down(n = 3)
+  at 7:5 in down(n = 4)
+  at 7:5 in down(n = 5)
+  … 16 more frames (--verbose shows every frame and value)
