@@ -200,3 +200,63 @@ fn editor_agent_panel_reads_the_real_outputs() {
     assert!(failing.contains("tests 1 FAILED of 1"), "tests after save:\n{failing}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// `tools/pdf` (ADR 0520) checks without diagnostics, passes its `@test`s,
+/// and reads its fixtures' text layers: a classic table, a cross-reference
+/// stream with an object stream, a LibreOffice PDF with subset fonts, and
+/// a damaged table it must rebuild.
+#[test]
+fn pdf_reader_checks_clean_and_reads_its_fixtures() {
+    let path = tool("tools/pdf/pdf.ail");
+    let check = ail().args(["check", &path]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert!(check.status.success() && stderr.is_empty(), "ail check {path}:\n{stderr}");
+    let test = ail().args(["test", &path]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&test.stdout);
+    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
+    let pdf = |args: &[&str]| {
+        let out = ail().arg("run").arg(&path).args(args).output().unwrap();
+        (out.status.code(), String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string())
+    };
+    for (pdf_name, txt) in [("simple", "simple"), ("xrefstream", "xrefstream"), ("report", "report"), ("damaged", "simple")] {
+        let (code, out, err) = pdf(&["text", &tool(&format!("tools/pdf/testdata/{pdf_name}.pdf"))]);
+        let want = std::fs::read_to_string(tool(&format!("tools/pdf/testdata/{txt}.txt"))).unwrap();
+        assert!(code == Some(0) && out == want, "pdf text {pdf_name}.pdf:\n{out}{err}");
+    }
+    let report = tool("tools/pdf/testdata/report.pdf");
+    let (code, out, _) = pdf(&["grep", "LINE BREAK can be tested", &report]);
+    assert!(code == Some(0) && out.starts_with("1: enough to wrap onto more than one line"), "pdf grep across lines:\n{out}");
+    let (code, out, _) = pdf(&["grep", "--json", "résumé", &report]);
+    assert!(code == Some(0) && out.contains("\"boxes\":[{\"x0\":327.56,"), "pdf grep --json:\n{out}");
+    let (code, _, _) = pdf(&["grep", "not in the file", &report]);
+    assert_eq!(code, Some(1), "pdf grep with no hit exits 1");
+    let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
+    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0.0,\"page\":2.0}"), "pdf json:\n{out}");
+    let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
+    assert!(out.contains("image-only pages (scans; these need OCR): 1"), "pdf info on a scan:\n{out}");
+    let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
+    assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
+}
+
+/// Garlic's JavaScript engine (`tools/garlic/js`, docs/design/garlic-js.md)
+/// checks clean, passes its `@test`s, its lexer prints the expected tokens,
+/// its parser matches every hand-written tree and error, and the packed
+/// test262 parser tests hold (their exceptions listed in `known.txt`).
+#[test]
+fn garlic_js_parses_its_suites() {
+    let dir = tool("tools/garlic/js");
+    let check = ail().args(["check", &dir]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert!(check.status.success() && stderr.is_empty(), "ail check {dir}:\n{stderr}");
+    let test = ail().args(["test", &tool("tools/garlic/js/syntax/text.ail")]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&test.stdout);
+    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test text.ail:\n{stdout}");
+    let tokens = ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
+    let expected = std::fs::read_to_string(tool("tools/garlic/js/testdata/tokens/sample.tokens")).unwrap();
+    assert_eq!(String::from_utf8_lossy(&tokens.stdout), expected, "--tokens sample.js");
+    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser")] {
+        let out = ail().args(["run", &dir, flag, &tool(data)]).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
+    }
+}

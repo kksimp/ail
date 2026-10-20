@@ -82,6 +82,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Foreign syntax** | A construct from Python, Rust, Go or TypeScript that AIL doesn't have (`&&`, `def`, `try`, `x++`, `len(xs)`). Reported once with the AIL spelling (`gram.foreign.1`, ADR 0262). |
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
+| **Function value** | A declared function used as a value, of type `fn(A, B) R`, that can be stored, passed and called; no closures (`type.fn.1-3`, ADRs 0455, 0456). |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
 | **Garlic** | The web browser written in AIL (`tools/garlic`): text mode first, with a page model for agents. See [garlic-browser.md](design/garlic-browser.md). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
@@ -146,6 +147,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
 | **`unsafe` block** | `unsafe` and an indented block: the only place an unsafe operation (`unsafe fn` call, later C calls and raw pointers) is allowed. A package may contain one only if its `ail.pkg` says `unsafe allow` (`unsafe.block.1–5`, ADR 0430). |
+| **`extern c fn`** | A C function declared with a signature and no body, optionally with its library: `extern c "libm" fn hypot(a float, b float) float`. Calling it is unsafe; the interpreter loads the library on first call (`ffi.decl.2`, `ffi.load.1–3`, ADR 0431). |
+| **Raw pointer** | `*T`: an address with no ownership, for C interop. Copying one is safe, using one (`read`, `write`, `offset`) is `unsafe` (`unsafe.ptr.1–6`, ADRs 0433, 0435). |
 | **Probe** | A one-to-three statement program that feeds edge values (extremes, zero, empty, non-ASCII) to an operation that may trap; a trap is correct, an interpreter panic is the finding (ADR 0269). |
 | **Property test** | A `@test` with parameters: `ail test` runs it on generated inputs from a replayable seed and shrinks a failure to the smallest failing input (ADR 0198–0199). |
 | **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |
@@ -153,6 +156,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Random schedule** | `--schedule=random:SEED` for `ail test` and `ail run`: the interpreter switches tasks at points picked from `SEED`, so a race shows up under some seeds and replays exactly under the same one (`conc.sched.1–2`, ADR 0322). |
 | **Raw string** | `r"..."` or `r"""..."""`: a string literal with no escapes or interpolation (ADR 0135). |
 | **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
+| **Recording (replay)** | A JSON-lines file of every effect result of one run (files, environment, input, processes, network, clock), written by `--record R`; `--replay R` answers the program's effects from it so the run repeats exactly (ADR 0398). |
 | **Reduction** | Combining every iteration's value into one, like `total += x`. AIL parallelises `int` `+=` reductions and `xs.sum()` without changing the result (`conc.par.4`, ADR 0239). |
 | **`ref` cell** | A GC-managed shared mutable cell (`ref T`). The only way two names can observe each other's mutations (ADR 0063). |
 | **Reference (semantic API)** | A use of a declared name, listed by `ail api --symbols` as the declaration's symbol id and a position (ADR 0151). |
@@ -166,6 +170,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Safepoint** | A point where a thread can pause for the GC. Polls cost a little. Loops that provably don't allocate can omit them. |
 | **Second-class borrow** | Temporary access to an argument that lasts only for a call and can't be stored or returned, so no lifetimes are needed (ADR 0062). |
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
+| **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, run by the bootstrap and compared with the Rust ones on every program (Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
@@ -177,6 +182,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |
 | **String object** | The native layout of a `str`: a byte count, a character count and UTF-8 data, so `len()` is O(1) (ADR 0404). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
+| **Structured edit** | An edit named by declaration id instead of by text: `ail edit` applies a JSON list of them (replace_body, replace, insert, delete, rename, import), then formats and checks (ADR 0397). |
 | **Supertrait** | A trait another trait requires: `trait Ord Eq`. Implementing the subtrait needs the supertrait's `impl`, and a bound on the subtrait provides it (ADR 0348). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
@@ -189,6 +195,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Test** | A function marked `@test`, run by `ail test`: it passes unless an assertion fails, it traps, or it returns an error (ADR 0167). |
 | **Text cell** | One character position in a `std.ui` window, with a foreground and background color; the window is a grid of them, `cols` by `rows` (ADR 0177). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
+| **Text layer** | The text a PDF carries as glyph codes plus its fonts' maps to Unicode, read with positions and no OCR; scans have none (ADR 0520). |
 | **Thread pool** | The interpreter's `min(cores, 8)` worker threads (`AIL_THREADS=N` overrides) that run a `par for` in chunks on copied values, with the sequential result (`conc.par.8`, ADR 0272). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
 | **Token listing** | The output of `ail api --tokens FILE`: one `LINE:COL KIND VALUE` line per token, then comments and diagnostics; the AIL lexer must print it byte for byte (ADR 0371, `api.tok.1–3`). |

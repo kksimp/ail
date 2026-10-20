@@ -6,6 +6,7 @@ use crate::diag::{self, Diagnostic, Pos};
 use std::process::ExitCode;
 
 pub mod bit;
+pub mod string;
 
 /// Rounds of fix-and-recheck before giving up (fix.apply.2).
 const MAX_ROUNDS: usize = 5;

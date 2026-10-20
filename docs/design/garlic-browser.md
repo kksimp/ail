@@ -51,7 +51,7 @@ url ─► fetch (std.net) ─► bytes ─► decode ─► HTML tokenizer ─�
 | Decode | `str` | UTF-8 only (std.net bodies are `str`) | charset sniffing once bodies are bytes |
 | Tokenize | `html` | WHATWG tokenizer: data, tags, attributes (quoted, unquoted, bare), comments, doctype, raw text (`script`, `style`), escapable raw text (`title`, `textarea`), character references (numeric and a named subset) | the full named-reference table, every parse-error state |
 | Tree | `html` | simplified tree construction: implied `html`/`head`/`body`, void elements, implied end tags (`p`, `li`, `dt`, `dd`, `option`, `tr`, `td`, `th`), end tags close up to the matching open element | adoption agency, foster parenting, templates, foreign content (SVG, MathML) |
-| Style | `style` (later) | a fixed user-agent model: block vs inline elements, headings, `pre`, hidden elements (`head`, `script`, `style`, `[hidden]`) | a CSS tokenizer and parser, selectors, cascade, computed values; `display`, `color`, `font-weight`, `margin` first |
+| Style | `css` | a fixed user-agent model (block vs inline elements, headings, `pre`, hidden elements) plus author CSS from `<style>`, linked sheets (8 at most, `screen`/`all` media) and `style=`: type, `#id`, `.class`, `[attr]`, `[attr=v]`, descendant and child selectors, specificity, order, `!important`; `display` (`none`, block or inline), `visibility: hidden`, `font-weight`, `font-style`, `text-transform: uppercase`, `white-space: pre` | pseudo-classes, `+` and `~`, `@media` queries (skipped today), colors and margins on cells, then the box model in pixels |
 | Layout | `page` | text cells: block flow, inline runs, whitespace collapsing, word wrap to the window's width, lists, block quotes, `pre`, simple tables | CSS box model on the cell grid, then pixels (needs a pixel layer) |
 | Paint | `std.ui` | the text-cell window (`put_styled`), colors per run, link highlighting | pixels, images, fonts (see Dependencies) |
 | Script | none | no JavaScript (decision pending with the designer) | see below |
@@ -82,8 +82,14 @@ way the editor's screen does (ADR 0181).
   the page model (below); `--links` lists the links; `--follow N` and
   `--find TEXT` act first; `--width N` and `--height N` set the size. Tests
   run headless.
-- **Speed**: the Go specification (290 KB of HTML) parses and lays out in
-  1.1 s on the bytecode tier (Linux x86-64).
+- **Speed**: the Go specification (290 KB of HTML) parses, cascades and
+  lays out in 1.5 s on the bytecode tier (Linux x86-64; 1.1 s before CSS).
+
+Tested live on 2026-10-20 (macOS ARM64): google.com loads in about
+0.6 s (redirect, TLS 1.3 with Google's ECDSA certificates, the search form
+and every link). A search submits correctly, but Google answers any client
+without JavaScript with its "enable JavaScript" page, so results wait for
+the JS engine (the designer's choice, 2026-10-20; no user-agent spoofing).
 
 Known limits: `std.net` follows redirects itself but doesn't report the
 final URL, so relative links on a redirected page resolve against the URL
@@ -124,25 +130,37 @@ an agent sees is exactly what a person sees. The design follows `ail api`
 An agent drives Garlic headless, with no window:
 
 - `--do ACTION:ARG` (repeatable, in order) before `--json` or `--print`:
-  `follow:3` (link number), `click:12` (node id; follows a link), `open:URL`,
-  `back`, `find:TEXT`, `scroll:ROW`, `reload`.
+  `follow:3` (link number), `click:12` (node id, as Enter: follows a link,
+  presses a button, toggles a box), `type:12=TEXT`, `submit:12` (the form
+  of node 12), `check:12`, `select:12=OPTION`, `open:URL`, `back`,
+  `find:TEXT`, `scroll:ROW`, `reload`.
 - `--session` keeps one browser open: one JSON action per line on stdin
-  (`{"do":"follow","link":3}`, `{"do":"find","text":"price"}`; the argument
-  is `link`, `id` or `row`, or `url` or `text`), answered with the page model
-  on one line. A failed action adds `"message"` to the model.
+  (`{"do":"follow","link":3}`, `{"do":"type","id":12,"text":"garlic"}`; the
+  argument is `link`, `id` or `row`, or `url` or `text`), answered with the
+  page model on one line. A failed action adds `"message"` to the model.
+- Form controls are targets like links: `textbox`, `checkbox`, `radio`,
+  `combobox` and `button` nodes carry `value` or `checked` and their
+  `actions`; names come from `aria-label`, `<label>`, `placeholder` or
+  `name`. Submitting follows HTML's form submission (simplified): GET puts
+  the URL-encoded fields in the query, POST sends them as the body.
+- `"changed"` lists the node ids changed since the page loaded (typing,
+  checking, and later scripts through the `html.Doc` mutation functions),
+  so an agent sees what its action or a script did.
 - `--viewport` lists only the nodes in the viewport. On the Go specification
   at 80 by 24 the model drops from 316 KB to 1.4 KB, which an agent can read
   page by page with `scroll`.
 
-Next for the agent angle, in order:
+- `--diff` (with `--session`): after the first model on a page, each answer
+  lists only the nodes that are new or changed (moved, edited, scrolled in
+  or out of view) and the ids `removed`, with `"diff":true`.
+- `--budget N` keeps the model within about N tokens (4 characters each):
+  the viewport's nodes first, then headings, links and form controls, then
+  the rest, in document order, with `"omitted"` counting what was left out.
+  On the Go specification `--budget 500` gives 2.0 KB instead of 316 KB.
 
-1. **Forms**: `type` and `press` actions on inputs and buttons, GET forms
-   now, POST once `net.request` lands (lane 124).
-2. **Diffs**: after an action, report which nodes appeared, changed or left
-   the viewport, rather than the whole page.
-3. **Token budgets**: `--budget N` trims the model (viewport first, then
-   headings and links, then text) like `ail api --card --budget`.
-4. **Provenance**: each node keeps its source position in the HTML, so an
+Next for the agent angle:
+
+1. **Provenance**: each node keeps its source position in the HTML, so an
    agent can tell markup from rendering problems.
 
 The same idea gives the designer's PDF viewer its "search without OCR": a
@@ -176,9 +194,10 @@ the page show up in the page model so an agent can see what a script did.
 | Need | Where it stands | Blocks |
 |---|---|---|
 | HTTP GET over TLS 1.3 | done (`std.net`, ADR 0360) | nothing |
-| Request headers, methods, cookies | lane 124 | logins, forms with POST, sites that check `User-Agent` |
+| Request headers and methods | done (`net.request`, lane 124): Garlic sends its own `User-Agent` and `Accept`, and POSTs forms | nothing |
+| Cookies | none yet (Garlic can keep a jar once responses expose every `set-cookie`) | logins |
 | Binary bodies | lane 123 | images, non-UTF-8 pages, fonts |
-| gzip/deflate | lane 128 | `Accept-Encoding`, smaller transfers |
+| gzip/deflate | done (`std.compress`, lane 128), but `std.net` bodies are text, so a gzip body can't be decoded yet | `Accept-Encoding`, smaller transfers; needs a bytes body in `std.net` |
 | Regex | lane 127 | nothing essential (CSS and HTML are hand-written state machines) |
 | Pixel drawing, images, fonts | **no lane** | graphical rendering. Needs a `std.ui` pixel surface (blit an RGBA buffer), PNG/JPEG decoders (PNG needs deflate), and text shaping and rasterization (a bitmap font first, then TrueType outlines) |
 | JS engine | parallel lane (lane 160) | dynamic sites |
@@ -187,10 +206,12 @@ the page show up in the page model so an agent can see what a script did.
 ## Milestones
 
 1. **Text mode** (this note): fetch, parse, wrap, links, history, page model.
-2. **Forms and agent actions**: inputs, buttons, GET forms; `--do` and the
-   session mode; needs lane 124 for POST and cookies.
-3. **CSS on cells**: a CSS parser, selectors, cascade; `display`, colors,
-   bold, margins, `display:none`; real tables.
+2. **Forms and agent actions** (done): inputs, buttons, check boxes,
+   selects, GET and POST forms; `--do` and the session mode. Cookies next.
+3. **CSS on cells** (started): parser, selectors, cascade, `display`,
+   visibility, bold, italic, uppercase, `white-space`. Next: `@media`
+   queries for the window width, colors with a contrast floor, margins, and
+   real tables.
 4. **Pixels**: a pixel surface in `std.ui`, a bitmap font, then images (PNG
    after lane 128) and a box-model layout in pixels.
 5. **Scripts**: the JS engine's DOM bindings and event loop.
