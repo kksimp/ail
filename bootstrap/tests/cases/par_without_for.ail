@@ -1,0 +1,4 @@
+# conc.par.5: `par` only comes before `for`.
+fn main()
+    par while true
+        print(1)

@@ -25,10 +25,13 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
     ("clear", true),
     ("close", true),
     ("cursor", true),
+    ("font_size", false),
+    ("modifiers", false),
     ("next_event", true),
     ("poll_event", true),
     ("present", true),
     ("put", true),
+    ("set_font_size", true),
     ("set_title", true),
     ("size", false),
 ];
@@ -53,6 +56,7 @@ const TYPES: &[(&str, &str)] = &[
     ("ProcError", "proc"),
     ("Window", "ui"),
     ("Size", "ui"),
+    ("Modifiers", "ui"),
     ("Event", "ui"),
     ("UiError", "ui"),
 ];

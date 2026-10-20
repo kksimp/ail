@@ -209,10 +209,23 @@ final pull request against `main`.
 | 10 | Interpreter performance: perfbench and slot-resolved locals | Sonnet | `tools/perfbench/`, `interp.rs` | none |
 
 The designer chose "modules and formatter too" for the buildout, so lanes 3
-and 8 exist. OQ-043 and OQ-044 are left for a later batch.
+and 8 exist.
 
-Design-only items (no lane, written by the integrator): deterministic mode
-(§3.3), capability manifests, and packages (awaiting the designer).
+### 7.1 Later rounds (added 2026-10-20 as the night went on)
+
+Each round started once the previous one was mostly merged, with up to ten
+implementation lanes open at a time plus two editor lanes (the designer's
+stretch goal: a windowed code editor written in AIL, ADR 0180).
+
+| Round | Lanes | Outcome |
+|---|---|---|
+| Editor | 11 `std.ui` text-grid windows (ADR 0177), mouse, clipboard, tabs; 12 `tools/edit/edit.ail`: editing, undo, highlighting, diagnostics with fixes, completion, go to definition, hover, find/replace, format on save, run and test keys | merged |
+| 2 | 21 tokens round 3: comprehensions, bare variant patterns (ADRs 0182–0184); 22 tasks, channels, mutexes on a deterministic scheduler (0186–0189); 23 ownership: `unique`, `ref`, moves (0190–0193); 24 sized numerics and attributes (0194–0197); 25 property and doc tests (0198–0201); 26 `ail fix` (0202–0205); 27 `std.random` and `--deterministic` (0206–0209); 28 `requires`/`ensures` contracts (0210–0213) | all merged but 23 (open) |
+| 3 | 31 list and `str` editing methods (0214–0215); 33 agent-tool corpus as the standing benchmark (0217–0218); 36 interpreter speed versus Python (0219–0221); 37 compile-time execution and the four-representation IR design (0222–0229); 38 packages, `ail.pkg`, per-dependency capability grants (0230–0233); 39 automatic parallelism, `par for`, SIMD, `std.tensor` design (0236–0239, 0246–0247) | all merged but 36 (open) |
+| 4 | 41 tokens round 4 on the agent corpus (0250–0255); 43 documentation consistency sweep; 44 semantic API: locals, references, hover (0258–0261); 45 diagnostics audit and `ail fix` coverage (0262–0264); 46 runtime trace and trap snapshots (0265–0268); 47 fuzz and differential harness (0269–0271) | open |
+
+Design-only items without a lane tonight: a package registry (OQ-049, the
+designer's call) and accelerator drivers (OQ-090, reads ADR 0010).
 
 ## 8. Assumptions recorded tonight
 

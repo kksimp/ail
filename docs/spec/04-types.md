@@ -595,10 +595,15 @@ elements, or all of them when the list is shorter. A negative `n` traps.
 
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
 and `List[float]`, returning a `float`. It is a built-in special case that user
-code can't declare (ADR 0128 is unchanged for user code). It starts at `0` or
-`0.0` and adds left to right with `+`: an `int` overflow traps, and an empty
-list gives `0` or `0.0`. For `float` it matches a Python loop, not Python
-3.12's compensated `sum()`. *(ADR 0136)*
+code can't declare (ADR 0128 is unchanged for user code). An empty list
+gives `0` or `0.0`. For `int` it adds left to right from `0`, and an overflow
+of any partial sum traps. For `float` the sum `S(xs)` is a fixed tree that
+depends only on the length: if it has at most 32 elements, four partial sums
+`p0`–`p3`, where `pk` adds the elements whose index is `k` modulo 4 left to
+right from `0.0`, and `S = (p0 + p1) + (p2 + p3)`; otherwise
+`S(xs[..m]) + S(xs[m..])` with `m = 32 × ⌈len / 64⌉`. Vector and parallel
+implementations compute the same tree (`conc.par.1`). *(ADR 0136,
+ADR 0239)*
 
 **type.coll.13** — A local declared with `:=` from `[]` or `{}` with no
 expected type takes its type from the first statement that determines it:

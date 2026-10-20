@@ -296,6 +296,9 @@ impl<'a, W: Write> Interp<'a, W> {
         for a in args {
             values.push(self.eval(&a.value, env)?);
         }
+        if self.tracing & super::trace::EFFECTS != 0 {
+            self.trace_task(true, &f.full_name(), &values, pos);
+        }
         let ctx = self.ctx();
         let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
         let mut st = sched.lock();
@@ -407,6 +410,9 @@ impl<'a, W: Write> Interp<'a, W> {
         let trap = |rule: &'static str, message: String| -> Flow<Value> { Err(Trap { rule, pos, message }.into()) };
         Ok(match (h, name) {
             (Handle::Task(t), "wait") => {
+                if self.tracing & super::trace::EFFECTS != 0 {
+                    self.trace_task(false, &Handle::Task(t).text(), &[], pos);
+                }
                 st.tasks[t].consumed = true;
                 drop(st);
                 return Ok(match self.join(sched, me, t, pos)? {

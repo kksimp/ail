@@ -61,7 +61,7 @@ Results may be off by about one token per file.
 
 ## Corpus
 
-The language card has a budget of 4,000 tokens ([ADR 0174](../../docs/decisions/0174-language-card.md)); check it with `run.sh docs/language-card.md`.
+The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh docs/language-card.md`.
 
 | Directory | Contents |
 |---|---|

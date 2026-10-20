@@ -178,11 +178,18 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0190](0190-moves-and-use-after-move.md) | Check moves on every path; only owned values move; `move` moves any type *(delegated)* | Accepted | 2026-10-20 |
+| [0191](0191-cleanup-with-drop.md) | Clean up unique types with the prelude trait `Drop`; limit where unique values live *(delegated)* | Accepted | 2026-10-20 |
+| [0192](0192-ref-equality-and-text.md) | Compare `ref` values by identity and show their contents *(delegated)* | Accepted | 2026-10-20 |
+| [0193](0193-ref-cell-exclusivity.md) | Trap when a `ref` cell is used through another copy during a `mut` access *(delegated)* | Accepted | 2026-10-20 |
 | [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
 | [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
 | [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
 | [0240](0240-std-ui-mouse-scroll-clipboard-title.md) | `std.ui` adds mouse, scroll, clipboard and title *(delegated)* | Accepted | 2026-10-20 |
 | [0241](0241-editor-tabs-and-running.md) | The editor gets tabs, a file picker, mouse input and F5/F6 runs in its window front end *(delegated)* | Accepted | 2026-10-20 |
+| [0242](0242-std-ui-modifiers-method.md) | `Window.modifiers()` reports the modifiers of the last event *(delegated)* | Accepted | 2026-10-20 |
+| [0243](0243-std-ui-font-size.md) | `Window.set_font_size` picks from fixed bitmap sizes and keeps the window's pixels *(delegated)* | Accepted | 2026-10-20 |
+| [0244](0244-editor-rename-symbol.md) | Editor F2 renames through `ail api` references, else by whole word, after a confirming prompt *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
 | [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |
@@ -220,6 +227,29 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
 | [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
 | [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
+| [0222](0222-four-compiler-representations.md) | The compiler has four representations: AST, HIR, MIR and machine IR *(delegated)* | Accepted | 2026-10-20 |
+| [0223](0223-hir-is-the-versioned-api-shape.md) | The HIR's printed shape is the versioned API; MIR stays internal *(delegated)* | Accepted | 2026-10-20 |
+| [0224](0224-incremental-cache-keys.md) | Incremental queries are keyed by stable ids and fingerprinted without spans *(delegated)* | Accepted | 2026-10-20 |
+| [0225](0225-constants-call-compile-time-safe-functions.md) | Constants may call compile-time-safe functions, computed with the interpreter's semantics (amends 0132) *(delegated)* | Accepted | 2026-10-20 |
+| [0226](0226-compile-time-limits-determinism-and-caching.md) | Compile-time evaluation has step and memory limits, is deterministic, and is cached by what it ran *(delegated)* | Accepted | 2026-10-20 |
+| [0227](0227-derive-generators.md) | A trait may name a derive generator: a compile-time function from `TypeInfo` to AIL source *(delegated)* | Accepted | 2026-10-20 |
+| [0228](0228-generated-code-is-visible-hir.md) | Generated code is ordinary HIR with a provenance link, shown by `ail api --expanded` *(delegated)* | Accepted | 2026-10-20 |
+| [0229](0229-compile-time-reflection-only.md) | Reflection is compile-time only: generators receive a `TypeInfo` value *(delegated)* | Accepted | 2026-10-20 |
+| [0236](0236-automatic-parallel-loops.md) | Run provably independent loops in parallel, with results identical to sequential *(delegated)* | Accepted | 2026-10-20 |
+| [0237](0237-par-for.md) | `par for` asserts independence; provable conflicts are errors *(delegated)* | Accepted | 2026-10-20 |
+| [0238](0238-parallel-runtime-model.md) | One work-stealing pool for tasks and parallel loops, with a minimum-work threshold *(delegated)* | Accepted | 2026-10-20 |
+| [0239](0239-float-sum-fixed-tree.md) | Float `sum()` adds in a fixed four-lane tree (amends 0136) *(delegated)* | Accepted | 2026-10-20 |
+| [0246](0246-simd-vectorisation.md) | Vectorise independent loops on both baselines; never contract to FMA implicitly *(delegated)* | Accepted | 2026-10-20 |
+| [0276](0276-language-card-budget-8000.md) | The language card budget is 8,000 tokens on every tokenizer (amends 0174) | Accepted | 2026-10-20 |
+| [0247](0247-std-tensor-and-accel-capability.md) | NPUs and GPUs through a `std.tensor` module and an `accel` capability (design) *(delegated)* | Accepted | 2026-10-20 |
+| [0258](0258-api-locals-query.md) | `ail api --locals` lists the names in scope at a position, from facts the checker records *(delegated)* | Accepted | 2026-10-20 |
+| [0259](0259-api-type-query.md) | `ail api --type` gives the type of the expression at a position, and the callee for a call *(delegated)* | Accepted | 2026-10-20 |
+| [0260](0260-api-refs-query.md) | `ail api --refs` lists a symbol's definition and uses across user modules, and a local's uses in its scope *(delegated)* | Accepted | 2026-10-20 |
+| [0261](0261-checker-recording-hooks.md) | The checker records locals and expression types only when `ail api` asks *(delegated)* | Accepted | 2026-10-20 |
+| [0265](0265-runtime-trace-mode.md) | `ail run --trace` writes one event per line to standard error *(delegated)* | Accepted | 2026-10-20 |
+| [0266](0266-trace-budget-and-value-form.md) | Traces are budgeted, and show values structurally without user code *(delegated)* | Accepted | 2026-10-20 |
+| [0267](0267-trap-snapshots.md) | A trap carries a snapshot of the stack and its values *(delegated)* | Accepted | 2026-10-20 |
+| [0268](0268-watch-and-no-debugger-protocol.md) | `--watch NAME` shows a variable's assignments; no debugger protocol for now *(delegated)* | Accepted | 2026-10-20 |
 | [0250](0250-key-functions-and-take.md) | Sort and pick by key with `by: \|x\| key`, and `xs.take(n)` *(delegated)* | Accepted | 2026-10-20 |
 | [0251](0251-map-op-assign-starts-from-zero.md) | `m[k] += v` on a missing key starts from zero *(delegated)* | Accepted | 2026-10-20 |
 | [0252](0252-question-mark-goes-to-else.md) | A `?` on an optional inside an `else` value goes to that `else` *(delegated)* | Accepted | 2026-10-20 |

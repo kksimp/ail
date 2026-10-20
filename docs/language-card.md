@@ -1,7 +1,7 @@
 # AIL language card
 
 > v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
-> [quick reference](quick-reference.md) has the long form. Budget 4,000 tokens
+> [quick reference](quick-reference.md) has the long form. Budget 8,000 tokens
 > on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs
@@ -37,7 +37,7 @@ fn half(n int) int
     n / 2
 ```
 
-`return x` (or bare `return`) exits early.
+`return x` or bare `return` exits early.
 
 ## Bindings
 
@@ -48,8 +48,8 @@ n = 5            # `=` changes an existing `mut` name
 n += 1           # also -= *= /= %=
 ```
 
-A name can't be declared twice in one function, even in an inner block. To
-update a `mut` variable in a loop, use `=`, not `:=`.
+A name can't be declared twice in one function, even in an inner block: to
+update a `mut` variable in a loop, use `=`.
 
 ## Types
 
@@ -59,7 +59,7 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 
 `use std.random`: `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
-Constants: top-level `NAME := value` (no calls).
+Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
 ## Structs, enums and methods
 
@@ -298,17 +298,17 @@ Also `contains`, `remove`, `len`, `sorted`. Keys can't be floats.
 
 ## Values and `mut`
 
-Assigning or passing a value copies it (cheaply): changing `b` after
-`b := a` never changes `a`.
+Assigning or passing copies: changing `b` after `b := a` never changes `a`.
 
 ```ail
 fn bump(mut p Point)   # the caller sees the change
     p.x += 1
 
-bump(mut q)            # `mut` again at the call; q must be a `mut` variable
+bump(mut q)            # `mut` again at the call, on a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+`ref x` is a cell copies share. `unique` types move: `f(move x)`.
 
 ## Tasks
 

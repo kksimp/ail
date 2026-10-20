@@ -1,0 +1,5 @@
+watch: total = 0 at 9:9
+watch: total = 1 at 12:9
+watch: total = 3 at 12:9
+watch: total = 6 at 12:9
+trace: summary: 4 events shown, 0 dropped (watch 4)

@@ -46,7 +46,9 @@ impl<'p> Checker<'p> {
         use Ty::{Int, Str, Unit};
         let (params, ret) = match m {
             "size" => (vec![], ty("ui.Size")),
-            "clear" => (vec![Int], Unit),
+            "modifiers" => (vec![], ty("ui.Modifiers")),
+            "font_size" => (vec![], Int),
+            "clear" | "set_font_size" => (vec![Int], Unit),
             "put" => (vec![Int, Int, Str, Int, Int], Unit),
             "cursor" => (vec![Int, Int], Unit),
             "set_title" => (vec![Str], Unit),

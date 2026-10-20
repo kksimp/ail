@@ -1,0 +1,52 @@
+# own.ref.1-6: copies of a `ref` share one cell; fields and methods reach
+# its contents; `==` compares identity; cycles print as `ref ...`.
+struct Counter
+    n int
+    log List[int]
+
+fn Counter.bump(mut self)
+    n += 1
+    log.push(n)
+
+fn Counter.total(self) int
+    n
+
+fn add_to(mut xs List[int], x int)
+    xs.push(x)
+
+fn set(c ref Counter, v int)
+    c.n = v
+
+struct Node
+    value int
+    edges List[ref Node]
+
+struct Graph
+    nodes List[ref Node]
+
+fn main()
+    c := ref Counter(n: 0, log: [])
+    d := c
+    c.bump()
+    d.bump()
+    c.log.push(99)
+    add_to(mut c.log, 7)
+    for mut x in c.log
+        x *= 2
+    print(c)
+    print(d.total())
+    set(d, 10)
+    print(c.n)
+    print(c == d)
+    print(c == ref Counter(n: 10, log: [4, 8, 198, 14]))
+    a := ref Node(value: 1, edges: [])
+    b := ref Node(value: 2, edges: [a])
+    a.edges.push(b)
+    print(a.value + a.edges[0].value + a.edges[0].edges[0].value)
+    print(a)
+    g := Graph(nodes: [a, b])
+    g.nodes[1].value = 20
+    print(b.value)
+    copy := g
+    copy.nodes[0].value = 100
+    print(a.value)

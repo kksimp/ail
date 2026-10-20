@@ -120,15 +120,15 @@ that there are no mutable globals. *(ADR 0132)*
 `float`, `str`, `char`, `bool`); other constants (a cycle is a compile-time
 error that names it); list, map and set literals; `List[T]()`, `Map[K, V]()`
 and `Set[T]()`; struct literals and variants with constant arguments;
-`none`, `[]` and `{}` where a field or element gives the expected type; and
-built-in operators and interpolation on built-in types only (`int`, `float`,
-`bool`, `str`, `char`, and lists, maps, sets and optionals of them). Calls,
-method calls, `?`, `ref`, indexing, field access, ranges, `if`, `match`, and
-anything that would run a user `impl` are compile-time errors. A bare `none`, `[]` or `{}` can't be a constant, since it
-has no expected type. *(ADR 0132)*
+`none`, `[]` and `{}` where a field or element gives the expected type;
+built-in operators and interpolation; and calls, method calls, field access,
+indexing and ranges of compile-time-safe code (`ct.const.1–4`). A bare
+`none`, `[]` or `{}` can't be a constant, since it has no expected type.
+*(ADR 0132, amended by ADR 0225)*
 
 **mod.const.3** — Constants have no order and no side effects. They are
-computed before `main` runs. A failure while computing one (overflow, division
+computed at compile time (`ct.eval.*`); the bootstrap computes them before
+`main` runs. A failure while computing one (overflow, division
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*
 

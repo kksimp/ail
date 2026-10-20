@@ -1,0 +1,114 @@
+# 21. Runtime traces and trap snapshots
+
+Chapter key: `trace`
+
+> **Status:** Drafted (partial). Specified: `ail run --trace`, its event
+> budget and summary, `--watch NAME`, and the snapshot a trap carries.
+> The exact line and JSON formats are non-normative and live in
+> [semantic-api.md](../design/semantic-api.md#runtime-traces-ail-run---trace-adr-0265).
+> Not yet designed: tracing tests (`ail test --trace`), breakpoints, and a
+> trace of one function only.
+
+A trace lets the person or agent who ran a program see what it did without
+adding prints: which functions ran with which values, which effects it
+reached, and, when it traps, the stack and its values at that moment.
+Tracing is a tool option; it changes nothing the program can observe.
+
+## Trace mode
+
+**trace.run.1** — `ail run --trace[=calls|effects|all] FILE` writes one
+event per line to standard error. `calls` traces calls, returns and contract
+checks; `effects` traces effects reached and tasks spawned and waited; `all`
+(the default for a bare `--trace`) traces both. With `--json`, each event is
+one JSON object. The tracing options (`--trace`, `--trace-limit`, `--watch`,
+`--verbose`) belong to `ail run`; with another command, or malformed, they
+are an error before anything runs (exit 2). *(ADR 0265)*
+
+**trace.run.2** — A `call` event names the function, its receiver and
+arguments with their values, its call depth (`main` is 1), and the position
+of the call. A `return` event names the function and the value it returned.
+Calls of the prelude's functions are not traced. A position in the program's
+first file is `LINE:COL`; elsewhere it is `FILE:LINE:COL`. *(ADR 0265)*
+
+**trace.run.3** — An `effect` event is each call of a standard module
+function (`fs.read_text`, `proc.run`, `time.now`, ...) with its argument
+values, before it runs. A `spawn` event is each `spawn` with the function and
+arguments; a `wait` event is each `Task.wait()`. A `contract` event is each
+`requires` or `ensures` check (contract.run.1) with its condition and whether
+it held. *(ADR 0265)*
+
+**trace.run.4** — At most `--trace-limit N` events are shown (default
+1,000); later events are counted, not shown. When the program ends, by
+finishing, failing or trapping, one summary line gives the events shown, the
+events dropped, and the count of each kind. *(ADR 0266)*
+
+**trace.run.5** — Tracing MUST NOT change the program's behaviour: standard
+output, exit status, and the output of a `--deterministic` or `--seed` run
+are the same with and without it. With no tracing option, the interpreter's
+speed is within measurement noise of a build without tracing. *(ADR 0265)*
+
+```ail
+fn fact(n int) int
+    requires n >= 0
+    if n <= 1
+        return 1
+    n * fact(n - 1)
+
+fn main()
+    print(fact(3))
+```
+
+**Note:** `ail run --trace=calls` on this program shows `call fact(n = 3)`,
+the nested calls, a `contract` line for each check, `fact returned 6`, and
+the summary.
+
+## Values
+
+**trace.val.1** — Traces, watches and snapshots show values in their
+structural text form (trait.auto.2, strings and characters quoted), without
+calling any `to_str`: showing a value runs no user code, so it has no effects
+and can't trap. *(ADR 0266)*
+
+**trace.val.2** — A value is cut to a character budget and ends in `…` when
+cut; a list, map or set that is cut says how many elements are left. The
+budget is 60 characters in trace lines and in the default trap report, and
+1,000 in a watch, a JSON snapshot and `--verbose`. *(ADR 0266)*
+
+## Watch
+
+**trace.watch.1** — `ail run --watch NAME FILE` shows, after each
+assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
+`NAME op= e`, `NAME.f = e`, `NAME[i] = e`) and after each `mut NAME := e`,
+the variable's whole new value and the position of the assignment. It counts
+against the event budget (trace.run.4). *(ADR 0268)*
+
+**trace.watch.2** — A change made through a `mut` argument or a mutating
+method (`NAME.push(x)`) is not an assignment and isn't shown; the next
+assignment shows its effect. *(ADR 0268)*
+
+## Trap snapshots
+
+**trace.snap.1** — A trap that ends `ail run` (err.trap.3) is reported with
+a snapshot: the source line of the trap's position, and the call stack at
+the trap. *(ADR 0267)*
+
+**trace.snap.2** — The stack lists frames innermost first. Each frame names
+its function, the position it was executing (the trap for the innermost
+frame, the call of the next frame for the others), its receiver and
+parameters with their values, and its other locals in scope with their
+values. At most 64 frames are kept; the rest are counted. A failed
+`requires` or `ensures` also gives the value of each name its condition
+reads. *(ADR 0267)*
+
+**trace.snap.3** — The human report keeps the trap's first line
+(`FILE:LINE:COL: trap[RULE]: MESSAGE`) and is at most ten lines: the source
+line with a caret at the column, the condition's values, then one line per
+frame until the limit, then how many frames were left out. `--verbose` shows
+every kept frame and each local on its own line, at the long budget. *(ADR 0267)*
+
+**trace.snap.4** — With `--json`, the trap is one JSON object on standard
+error with `"severity":"trap"`, the rule, position and message, the source
+line, the condition's values, and the stack. *(ADR 0267)*
+
+**Note:** a trap inside a task is reported to the task that waits
+for it (conc.task.6), whose own stack is the one a snapshot shows.

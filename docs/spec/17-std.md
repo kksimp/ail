@@ -212,6 +212,10 @@ struct Window              # a handle; at most one window is open
 struct Size
     cols int
     rows int
+struct Modifiers
+    ctrl bool
+    alt bool
+    shift bool
 enum Event
     Key(key str, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
@@ -230,8 +234,9 @@ be shown (no display, or a run without a window host), and `other` when
 `cols` or `rows` is outside 1 to 1000 or a window is already open. *(ADR 0177)*
 
 **std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
-`present`, `next_event`, `poll_event`, `set_title` and `close`; naming another is a
-compile-time error. All but `size(self) Size` take `mut self`. `size` is the
+`present`, `next_event`, `poll_event`, `modifiers`, `set_title` and `close`; naming another is a
+compile-time error. All but `size(self) Size` and `modifiers(self) Modifiers`
+take `mut self`. `size` is the
 grid's size in cells, which follows `Resize` events; it is 0 by 0 for a
 window that was never opened or has been closed with `close`. *(ADR 0177)*
 
@@ -316,3 +321,18 @@ Neither needs an open window. *(ADR 0240)*
 
 **std.ui.13** — `set_title(mut self, text str)` changes the window's title;
 on a closed window it does nothing. *(ADR 0240)*
+
+**std.ui.14** — `modifiers(self) Modifiers` returns which of Ctrl, Alt and
+Shift were held when the last event that `next_event` or `poll_event`
+returned happened (as std.ui.7 reports them, Command counting as Ctrl on
+macOS), so a program can tell a Shift-click from a click. Before any event,
+and on a closed window, all three are false. *(ADR 0242)*
+
+**std.ui.15** — `set_font_size(mut self, px int)` changes the font to the
+available size nearest `px` (the smaller on a tie); `font_size(self) int`
+returns it. A size is a cell height in pixels, one of 10, 12, 13, 14, 15,
+18, 20, 24, 26, 28, 30, 36 and 40; a window opens at 20. The window keeps
+its size in pixels, so when the number of cells that fit changes, a
+`Resize` event follows (std.ui.7) and the grid takes the new size when the
+program receives it. On a window that is not open, `set_font_size` does
+nothing visible. *(ADR 0243)*
