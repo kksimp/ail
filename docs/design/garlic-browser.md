@@ -85,6 +85,12 @@ way the editor's screen does (ADR 0181).
 - **Speed**: the Go specification (290 KB of HTML) parses, cascades and
   lays out in 1.5 s on the bytecode tier (Linux x86-64; 1.1 s before CSS).
 
+Tested live on 2026-10-20 (macOS ARM64): google.com loads in about
+0.6 s (redirect, TLS 1.3 with Google's ECDSA certificates, the search form
+and every link). A search submits correctly, but Google answers any client
+without JavaScript with its "enable JavaScript" page, so results wait for
+the JS engine (the designer's choice, 2026-10-20; no user-agent spoofing).
+
 Known limits: `std.net` follows redirects itself but doesn't report the
 final URL, so relative links on a redirected page resolve against the URL
 asked for; bodies are UTF-8 text; `std.ui` draws Latin-1, so other
