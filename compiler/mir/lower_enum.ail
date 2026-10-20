@@ -345,7 +345,10 @@ fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) b
                 return false
         return true
     n := enum_name(t) else
-        problem(pos, "`==` on `{outer}`, which holds a `{t.name()}`, isn't in the native subset yet")
+        problem(
+            pos,
+            "`==` on `{outer}`, which holds a `{t.name()}`, isn't in the native subset yet",
+        )
         return false
     if seen.contains(n)
         return true
