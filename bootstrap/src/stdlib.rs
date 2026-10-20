@@ -52,7 +52,7 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
     &[
-        "add", "dot", "len", "map", "matmul", "max", "mean", "mul", "relu", "reshape", "shape", "sigmoid", "sum", "tanh",
+        "add", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu", "reshape", "shape", "sigmoid", "sum", "tanh",
         "to_list", "transpose",
     ];
 

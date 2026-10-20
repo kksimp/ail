@@ -1949,6 +1949,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let k = self.eval(index, env)?;
                 return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
             }
+            Value::Tensor(t) => return self.tensor_index(&t, index, pos, env),
             other => unreachable!("checked: list or map, found {other:?}"),
         };
         if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {

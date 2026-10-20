@@ -83,6 +83,25 @@ impl<'a, W: Write> Interp<'a, W> {
         self.resolved.int_tensors.contains(&pos)
     }
 
+    /// std.tensor.15: `t[i]` drops axis 0 and `t[lo..hi]` keeps it.
+    pub(super) fn tensor_index(&mut self, t: &Tensor, index: &'a Expr, pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        let r = if let Expr::Range { lo, hi, inclusive, .. } = index {
+            let lo = match lo {
+                Some(e) => self.eval(e, env)?.int(),
+                None => 0,
+            };
+            let hi = match hi {
+                Some(e) => self.eval(e, env)?.int(),
+                None => t.shape.first().map_or(0, |&n| n as i64),
+            };
+            t.slice_rows(lo, hi, *inclusive)
+        } else {
+            let i = self.eval(index, env)?.int();
+            t.row(i)
+        };
+        Ok(Value::Tensor(Rc::new(r.map_err(|e| trapped(e, pos))?)))
+    }
+
     /// `t.m(args)` (std.tensor.3-8).
     pub(super) fn tensor_method(
         &mut self,
@@ -131,6 +150,10 @@ impl<'a, W: Write> Interp<'a, W> {
             "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
             "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,
             "matmul" => wrap(t.matmul(&tensor_arg()))?,
+            "item" => match t.item().map_err(|e| trapped(e, pos))? {
+                Scalar::F(x) => Value::Float(x),
+                Scalar::I(n) => Value::Int(n),
+            },
             "relu" => wrap(t.activate(Activation::Relu))?,
             "sigmoid" => wrap(t.activate(Activation::Sigmoid))?,
             "tanh" => wrap(t.activate(Activation::Tanh))?,

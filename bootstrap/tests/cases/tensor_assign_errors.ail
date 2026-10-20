@@ -1,0 +1,5 @@
+# std.tensor.15: a tensor element can't be assigned.
+fn main()
+    mut a := tensor.from([1.0, 2.0])
+    a[0] = 5.0
+    print(a)
