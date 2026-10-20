@@ -26,6 +26,10 @@ Compression produces arbitrary bytes. Until `bytes` (lane 123) exists, a program
 
 Option A. No level parameter yet (fixed 6: smallest output within about 2% of level 9 on the measured corpora, ADR 0445); a `level` argument is an additive change. When `bytes` lands, `deflate`/`gzip` return `bytes`, `inflate`/`gunzip` take `bytes`, and `List[int]` callers get a pointed diagnostic or a `bytes.from_list` fix. The deciding criterion was AI understanding (one error type, kinds that name the cause).
 
+## Update (same day, after lane 123 merged `bytes`)
+
+Compressed data is `bytes`: `deflate`, `gzip` and `zlib` take `bytes` or `str` and return `bytes`; `inflate`, `gunzip` and `unzlib` take and return `bytes`, so binary payloads (PDF streams, PNG) round-trip and `invalid_utf8` is gone (`.to_str()` converts). Programs that used `List[int]` change to `bytes.from_list(xs)`; nothing outside this lane's tests used it yet.
+
 ## Consequences
 
 - Effects: byte functions none; file and directory functions `fs`, `io`.

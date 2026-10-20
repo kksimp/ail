@@ -197,8 +197,8 @@ fn main()
 ## Hashing: `std.hash`
 
 **std.hash.1** — `std.hash` works on values only, so its functions have no
-effects (`eff.infer.4`). Each takes `str` and hashes its UTF-8 bytes; when
-the `bytes` type lands the same functions take `bytes` too (ADR 0442).
+effects (`eff.infer.4`). Each data argument is `bytes` or `str`; a `str` is
+hashed as its UTF-8 bytes (`type.bytes.10`). *(ADR 0442)*
 
 **std.hash.2** — `sha256(s str) str`, `sha384(s str) str` and
 `sha512(s str) str` return the digest of FIPS 180-4 as lower-case hex.
@@ -222,19 +222,18 @@ fn main()
 
 ## Compression: `std.compress`
 
-**std.compress.1** — Binary data is a `List[int]` of values 0 to 255 until
-the `bytes` type lands (ADR 0443). `deflate(s str) List[int]` and
-`gzip(s str) List[int]` compress the UTF-8 bytes of `s` at a fixed level (6)
-into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952). They
-never fail, and the same input gives the same output on every platform.
+**std.compress.1** — `deflate(data bytes) bytes` and `gzip(data bytes) bytes`
+compress `data` (a `str` is also accepted, as its UTF-8 bytes) at a fixed
+level (6) into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952).
+They never fail, and the same input gives the same output on every platform.
 They have no effects.
 
-**std.compress.2** — `inflate(data List[int]) str ! compress.CompressError`
-and `gunzip(data List[int]) str ! compress.CompressError` reverse them.
+**std.compress.2** — `inflate(data bytes) bytes ! compress.CompressError`
+and `gunzip(data bytes) bytes ! compress.CompressError` reverse them; use
+`.to_str()` (`type.bytes.8`) when the result is text.
 `CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
 data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
-CRC-32 or size mismatch), `too_big` (std.compress.4), `invalid_utf8` (the
-result is not text), `unsafe_path`, `unsupported`, or an I/O kind of
+CRC-32 or size mismatch), `too_big` (std.compress.4), `unsafe_path`, `unsupported`, or an I/O kind of
 `std.err.1` for file functions. *(ADR 0443)*
 
 **std.compress.3** — `gunzip` accepts the optional header fields of
@@ -258,8 +257,8 @@ with `too_big`. `unzip` creates `dir`, checks every CRC-32, and fails with
 entries and methods other than store and deflate fail with `unsupported`.
 *(ADR 0446)*
 
-**std.compress.7** — `zlib(s str) List[int]` and
-`unzlib(data List[int]) str ! compress.CompressError` use the zlib wrapper of
+**std.compress.7** — `zlib(data bytes) bytes` and
+`unzlib(data bytes) bytes ! compress.CompressError` use the zlib wrapper of
 RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
 streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
 and `unsupported` for a preset dictionary. *(ADR 0443)*
@@ -273,7 +272,7 @@ use std.compress
 
 fn main() !
     z := compress.gzip("abc abc abc abc")
-    print(compress.gunzip(z)?)
+    print(compress.gunzip(z)?.to_str() else "binary")
 ```
 
 ## Standard input and output: `std.io`
@@ -1450,21 +1449,21 @@ use std.compress
 fn main() !
     packed := compress.gzip("hello hello hello")
     print(packed.len() > 0)
-    print(compress.gunzip(packed)?)                    # hello hello hello
+    print(compress.gunzip(packed)?.to_str() else "")        # hello hello hello
     raw := compress.deflate("abc")
-    print(compress.inflate(raw)?)                      # abc
+    print(compress.inflate(raw)?)                      # b"abc"
     z := compress.zlib("abc")
     print(z[0])                                        # 120: the zlib header 78 9c
-    print(compress.unzlib(z)?)                         # abc
+    print(compress.unzlib(z)?)                         # b"abc"
 ```
 
 ```ail rules=std.compress.2
 use std.compress
 
 fn main()
-    text := compress.inflate([1, 2, 3]) else err
+    text := compress.inflate(b"\x01\x02\x03") else err
         print(err.kind)               # corrupt: malformed data
-        ""
+        b""
     print(text.len())
 ```
 
