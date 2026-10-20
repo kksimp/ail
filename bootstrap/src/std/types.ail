@@ -69,3 +69,10 @@ enum Cursor
 error struct UiError
     kind str
     message str
+
+## std.tensor (ADR 0328). A tensor's elements live in the bootstrap
+## (`tensor.rs`); the checker rejects this field (std.tensor.1), which is
+## here only so the struct parses and so a tensor is `Eq` but neither
+## ordered nor a key.
+struct Tensor[T]
+    elements Map[int, T]

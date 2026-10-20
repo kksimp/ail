@@ -44,7 +44,11 @@ impl<'a, W: Write> Interp<'a, W> {
             StdCall::Fn(module, f) => (module, f),
             StdCall::Method(_) => unreachable!("interp::method_call runs `ui.Window` methods"),
             StdCall::Const(_) => unreachable!("interp::eval reads module constants"),
+            StdCall::Tensor(_) => unreachable!("interp::method_call runs tensor methods"),
         };
+        if module == "tensor" {
+            return self.tensor_call(f, args, pos, env);
+        }
         if (module, f) == ("random", "shuffle") {
             let p = self.place(&args[0].value, env)?;
             let Value::List(items) = slot_mut(env, &p, false)? else { unreachable!("checked: a list") };

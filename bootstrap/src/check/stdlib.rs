@@ -123,6 +123,16 @@ impl<'p> Checker<'p> {
             }
             return None;
         };
+        if (module, name) == ("tensor", "Tensor") {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.1",
+                pos,
+                "a tensor isn't built from fields",
+                format!("use `{head}.from(xs, shape)` or `{head}.zeros(shape)`"),
+            );
+            return Some(Ty::Err);
+        }
         let qualified = format!("{module}.{name}");
         if let Some(Def::Struct(s)) = self.types.get(qualified.as_str()).copied() {
             self.resolved.std_calls.insert(pos, StdCall::Type(s));
@@ -141,6 +151,9 @@ impl<'p> Checker<'p> {
         };
         self.resolved.std_calls.insert(pos, StdCall::Fn(module, f));
         let what = format!("{head}.{f}");
+        if module == "tensor" {
+            return Some(self.tensor_call(f, args, pos, expect));
+        }
         if (module, f) == ("io", "eprint") {
             return Some(self.eprint_call(args, pos));
         }
