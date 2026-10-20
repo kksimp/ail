@@ -42,6 +42,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Constant expression** | A constant's value: literals, other constants, collection and struct literals, operators, and calls of compile-time-safe functions; it can't hold a failure (`mod.const.2`, `ct.const.*`, ADR 0132, ADR 0225). |
 | **Constraint (bound)** | A trait a generic type parameter must implement, written inline as `[T Trait]` (ADR 0074). |
 | **Contract** | `requires` and `ensures` lines under a function's signature: what callers must satisfy and what the function promises, checked at run time (ADR 0210). |
+| **Invariant** | An `invariant COND` line in a struct: a pure `bool` over its fields that holds after construction and after every `mut self` method, checked at run time (ADR 0305). |
+| **`old(e)`** | In an `ensures` condition, the value `e` had when the function was called (ADR 0303). |
 | **Copy-on-write (COW)** | Values share storage until one of them is mutated, at which point that one gets its own copy. Unobservable to programs (`own.val.2`). |
 | **Deadlock** | Every unfinished task is blocked, so none can continue. The program traps with `conc.task.7` instead of hanging (ADR 0186). |
 | **`defer`** | `defer S` runs statement `S` when the enclosing block exits by any path, including a trap; with the block's cleanups, last first (ADR 0066, ADR 0191). |

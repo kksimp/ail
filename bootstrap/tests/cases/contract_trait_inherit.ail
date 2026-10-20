@@ -1,0 +1,39 @@
+# contract.inh.1-3: an implementation inherits the trait method's contracts.
+# Its own `requires` lines weaken them and its own `ensures` lines add to them.
+trait Shape
+    fn scale(self, k int) int
+        requires k > 0
+        ensures result >= 0
+    fn name(self) str
+
+struct Sq
+    side int
+
+impl Shape for Sq
+    fn scale(self, k int) int
+        requires k == -1
+        ensures result < 1000
+        self.side * k * k
+    fn name(self) str
+        "sq"
+
+struct Plain
+    side int
+
+impl Shape for Plain
+    fn scale(self, factor int) int
+        self.side * factor
+    fn name(self) str
+        "plain"
+
+fn total(s Shape, k int) int
+    s.scale(k)
+
+fn main()
+    q := Sq(side: 2)
+    print(q.scale(3))
+    print(q.scale(-1))
+    print(total(q, 5))
+    p := Plain(side: 4)
+    print(p.scale(2))
+    print(total(p, 3))

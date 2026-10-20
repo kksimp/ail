@@ -248,45 +248,46 @@ pub fn check_pure(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
 /// must not print, reach a capability or change a `mut` argument, so that
 /// turning checks off (contract.run.3) can't change what a program does.
 pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
-    if prog.fns.iter().all(|f| f.contracts.is_empty()) {
+    if prog.fns.iter().all(|f| f.contracts.is_empty()) && prog.structs.iter().all(|s| s.invariants.is_empty()) {
         return Vec::new();
     }
     let fx = Effects::infer(prog, resolved);
     let mut w = Walker::new(prog, resolved);
     let mut diags = Vec::new();
-    for f in &prog.fns {
-        for c in &f.contracts {
-            w.direct = BTreeMap::new();
-            w.calls = Vec::new();
-            w.expr(&c.cond);
-            let mut bad: BTreeMap<&str, String> = BTreeMap::new();
-            for (e, source) in &w.direct {
-                bad.insert(e, source.clone());
-            }
-            for &j in &w.calls {
-                for &e in fx.of(j) {
-                    bad.entry(e).or_insert_with(|| fx.chain(j, e));
-                }
-            }
-            bad.remove("fail");
-            if bad.is_empty() {
-                continue;
-            }
-            let word = if c.ensures { "ensures" } else { "requires" };
-            let what: Vec<String> = bad.iter().map(|(e, chain)| format!("`{e}` via {chain}")).collect();
-            diags.push(
-                Diagnostic::new(
-                    "contract.decl.3",
-                    c.pos,
-                    format!(
-                        "the `{word}` condition of `{}` must be pure, but it has {}",
-                        f.full_name(),
-                        what.join(", ")
-                    ),
-                )
-                .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
-            );
+    let named = prog
+        .fns
+        .iter()
+        .flat_map(|f| f.contracts.iter().map(move |c| (c, f.full_name(), if c.ensures { "ensures" } else { "requires" })))
+        .chain(prog.structs.iter().flat_map(|s| s.invariants.iter().map(move |c| (c, s.name.clone(), "invariant"))));
+    for (c, owner, word) in named {
+        w.direct = BTreeMap::new();
+        w.calls = Vec::new();
+        w.expr(&c.cond);
+        for (_, e) in &c.olds {
+            w.expr(e);
         }
+        let mut bad: BTreeMap<&str, String> = BTreeMap::new();
+        for (e, source) in &w.direct {
+            bad.insert(e, source.clone());
+        }
+        for &j in &w.calls {
+            for &e in fx.of(j) {
+                bad.entry(e).or_insert_with(|| fx.chain(j, e));
+            }
+        }
+        bad.remove("fail");
+        if bad.is_empty() {
+            continue;
+        }
+        let what: Vec<String> = bad.iter().map(|(e, chain)| format!("`{e}` via {chain}")).collect();
+        diags.push(
+            Diagnostic::new(
+                "contract.decl.3",
+                c.pos,
+                format!("the `{word}` condition of `{owner}` must be pure, but it has {}", what.join(", ")),
+            )
+            .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
+        );
     }
     diags
 }

@@ -1,15 +1,17 @@
 //! `requires` and `ensures` lines (contract.decl.1-3, ADR 0210).
 
 use super::Parser;
-use crate::ast::{Block, Contract};
+use crate::ast::{Arg, Block, Contract, Expr, Program, Within};
+use crate::diag::Pos;
 use crate::lexer::{Part, Tok, Token};
 
 impl Parser {
     /// A function body: an indented block whose first lines may be
-    /// `requires COND` and `ensures COND` (contract.decl.1).
-    pub(super) fn fn_body(&mut self, after: &str) -> Option<(Block, Vec<Contract>)> {
+    /// `requires COND` and `ensures COND` (contract.decl.1). A trait method
+    /// may have contract lines and no body (contract.inh.1): `None`.
+    pub(super) fn fn_body(&mut self, after: &str, bodyless_ok: bool) -> Option<(Option<Block>, Vec<Contract>)> {
         if !matches!(self.peek_at(1), Tok::Indent) {
-            return Some((self.block(after, "gram.fn.1")?, Vec::new()));
+            return Some((Some(self.block(after, "gram.fn.1")?), Vec::new()));
         }
         self.bump(); // Newline
         self.bump(); // Indent
@@ -21,21 +23,80 @@ impl Parser {
                 Tok::Kw("ensures") => true,
                 _ => break,
             };
-            let pos = self.bump().pos;
-            let start = self.i;
-            let Some(cond) = self.expression() else {
-                self.skip_statement();
-                continue;
-            };
-            let text = render(&self.tokens[start..self.i]);
-            if !self.eat(&Tok::Newline) {
-                self.unexpected("end of line after the condition", "contract.decl.1");
-                self.skip_statement();
-                continue;
+            match self.contract_line(ensures) {
+                Some(c) => contracts.push(c),
+                None => self.skip_statement(),
             }
-            contracts.push(Contract { ensures, cond, text, pos });
         }
-        Some((self.block_rest(), contracts))
+        if bodyless_ok && !contracts.is_empty() && self.eat(&Tok::Dedent) {
+            return Some((None, contracts));
+        }
+        Some((Some(self.block_rest()), contracts))
+    }
+
+    /// `requires COND`, `ensures COND` or `invariant COND`, up to the end of
+    /// the line (not consumed, for `invariant`; consumed otherwise).
+    fn contract_line(&mut self, ensures: bool) -> Option<Contract> {
+        let pos = self.bump().pos;
+        let start = self.i;
+        let outer = self.olds.take();
+        self.olds = ensures.then(Vec::new);
+        let cond = self.expression();
+        let olds = std::mem::replace(&mut self.olds, outer).unwrap_or_default();
+        let cond = cond?;
+        let text = render(&self.tokens[start..self.i]);
+        if !matches!(self.peek(), Tok::Newline) {
+            self.unexpected("end of line after the condition", "contract.decl.1");
+            return None;
+        }
+        Some(Contract { ensures, cond, text, pos, olds })
+    }
+
+    /// A struct's `invariant COND` member (contract.inv.1); `members` eats
+    /// the end of the line.
+    pub(super) fn invariant_line(&mut self) -> Option<Contract> {
+        self.contract_line(false)
+    }
+
+    /// contract.ens.3: `old(e)` inside an `ensures` condition names the value
+    /// `e` had on entry. It becomes a hidden name that the interpreter binds
+    /// before the body runs.
+    pub(super) fn old_call(&mut self, callee: &Expr, mut args: Vec<Arg>, pos: Pos) -> Result<Expr, Vec<Arg>> {
+        let Expr::Name(name, _) = callee else { return Err(args) };
+        if name != "old" || self.olds.is_none() {
+            return Err(args);
+        }
+        let plain = |a: &Arg| a.label.is_none() && !a.mutable && !a.moved && a.param.is_none();
+        if args.len() != 1 || !plain(&args[0]) {
+            self.error_help(
+                "contract.ens.3",
+                pos,
+                "`old` takes one expression: the value to remember from when the function was called",
+                "write `old(x)`",
+            );
+            return Ok(Expr::Name("old".into(), pos));
+        }
+        let value = args.remove(0).value;
+        // The hidden name is the call as written, which can't be a user's
+        // name and is what a trap's values list shows.
+        let close = self.i - 1;
+        let mut open = close;
+        let mut depth = 0;
+        while open > 0 {
+            match self.tokens[open].tok {
+                Tok::Sym(")") => depth += 1,
+                Tok::Sym("(") => depth -= 1,
+                _ => {}
+            }
+            if depth == 0 {
+                break;
+            }
+            open -= 1;
+        }
+        let hidden = format!("old({})", render(&self.tokens[open + 1..close]));
+        let olds = self.olds.as_mut().expect("checked above");
+        olds.push((hidden.clone(), value));
+        Ok(Expr::Name(hidden, pos))
     }
 
     /// contract.decl.1: a contract line anywhere but directly under a
@@ -51,6 +112,24 @@ impl Parser {
         );
         self.skip_statement();
         true
+    }
+}
+
+/// contract.inh.1: an implementation's method inherits the contracts of the
+/// trait's method of the same name. Records the trait method's index when it
+/// has any.
+pub fn link(prog: &mut Program) {
+    let mut links = Vec::new();
+    for (i, f) in prog.fns.iter().enumerate() {
+        let Within::Impl(k) = f.within else { continue };
+        let Some(t) = prog.traits.iter().find(|t| t.name == prog.impls[k].trait_name) else { continue };
+        let found = t.methods.iter().copied().find(|&m| prog.fns[m].name == f.name && !prog.fns[m].contracts.is_empty());
+        if let Some(m) = found {
+            links.push((i, m));
+        }
+    }
+    for (i, m) in links {
+        prog.fns[i].inherits = Some(m);
     }
 }
 

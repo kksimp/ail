@@ -289,6 +289,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0294](0294-std-ui-styles-colors-caret.md) | `std.ui` text styles, named colors and caret shapes *(delegated)* | Accepted | 2026-10-20 |
 | [0295](0295-editor-themes.md) | Editor themes recolor the default colors by kind, from an AIL module *(delegated)* | Accepted | 2026-10-20 |
 | [0296](0296-env-home-and-editor-settings.md) | `env.home()`, and editor settings in `~/.ail-edit` *(delegated)* | Accepted | 2026-10-20 |
+| [0303](0303-contract-old.md) | `old(e)` in `ensures`: the value on entry *(delegated)* | Accepted | 2026-10-20 |
+| [0304](0304-trait-contract-inheritance.md) | Implementations inherit trait method contracts: own `requires` weaken, own `ensures` add *(delegated)* | Accepted | 2026-10-20 |
+| [0305](0305-struct-invariants.md) | Struct `invariant` lines, checked at construction and after `mut self` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0312](0312-editor-agent-panel.md) | The editor's agent panel: info (Ctrl-I), trace (Shift-F5) and failure paths (Ctrl-Shift-E) in one pane *(delegated)* | Accepted | 2026-10-20 |
 | [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
 | [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |

@@ -215,11 +215,18 @@ impl Item {
         let indent = "    ".repeat(depth);
         writeln!(out, "{:>5}  {indent}{}", self.pos.line, self.signature).unwrap();
         // Contracts are part of the signature (contract.api.1).
-        for (key, value) in self.extra.iter().filter(|(k, _)| matches!(*k, "requires" | "ensures")) {
+        for (key, value) in self.extra.iter() {
+            let (word, from) = match *key {
+                "requires" | "ensures" => (*key, ""),
+                "inherited_requires" => ("requires", " (inherited)"),
+                "inherited_ensures" => ("ensures", " (inherited)"),
+                "invariants" => ("invariant", ""),
+                _ => continue,
+            };
             if let Json::Arr(conds) = value {
                 for c in conds {
                     if let Json::Str(c) = c {
-                        writeln!(out, "       {indent}    {key} {c}").unwrap();
+                        writeln!(out, "       {indent}    {word} {c}{from}").unwrap();
                     }
                 }
             }
@@ -318,7 +325,14 @@ impl<'p> Api<'p> {
                     s.name,
                     generics_text(&s.generics)
                 ),
-                extra: unique_extra(s.is_error, s.unique),
+                extra: {
+                    let mut extra = unique_extra(s.is_error, s.unique);
+                    // contract.api.2: the invariants as written.
+                    if !s.invariants.is_empty() {
+                        extra.push(("invariants", Json::Arr(s.invariants.iter().map(|c| Json::Str(c.text.clone())).collect())));
+                    }
+                    extra
+                },
                 members: vec![("fields", fields), ("methods", take(&s.name))],
             });
         }
@@ -438,6 +452,19 @@ impl<'p> Api<'p> {
                 f.contracts.iter().filter(|c| c.ensures == ensures).map(|c| Json::Str(c.text.clone())).collect();
             if !conds.is_empty() {
                 extra.push((key, Json::Arr(conds)));
+            }
+        }
+        // contract.api.2: what an implementation inherits from its trait's method.
+        if let Some(t) = f.inherits.map(|m| &self.prog.fns[m]) {
+            if let Within::Trait(k) = t.within {
+                extra.push(("inherits", Json::Str(format!("{}.{}", self.prog.traits[k].name, t.name))));
+            }
+            for (key, ensures) in [("inherited_requires", false), ("inherited_ensures", true)] {
+                let conds: Vec<Json> =
+                    t.contracts.iter().filter(|c| c.ensures == ensures).map(|c| Json::Str(c.text.clone())).collect();
+                if !conds.is_empty() {
+                    extra.push((key, Json::Arr(conds)));
+                }
             }
         }
         if matches!(f.within, Within::Trait(_)) {
@@ -673,6 +700,9 @@ impl<'p> Refs<'p> {
             for f in &s.fields {
                 self.type_ref(&f.ty);
             }
+            for c in &s.invariants {
+                self.expr(&c.cond);
+            }
         }
         for e in &prog.enums {
             self.generics = e.generics.iter().map(|g| g.name.clone()).collect();
@@ -710,6 +740,9 @@ impl<'p> Refs<'p> {
             }
             for c in &f.contracts {
                 self.expr(&c.cond);
+                for (_, e) in &c.olds {
+                    self.expr(e);
+                }
             }
             if let Some(body) = &f.body {
                 self.block(body);

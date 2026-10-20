@@ -750,10 +750,22 @@ Lines directly under the signature; conditions are pure `bool`s. `result` is
 the returned value in `ensures`. A failed `requires` traps at the call
 (`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`), both
 with the arguments' values. `ail run --no-contracts` skips the checks.
+`old(e)` in `ensures` is `e` on entry. A trait method's contracts bind its
+implementations (their own `requires` weaken, their own `ensures` add). A
+struct's `invariant COND` lines hold after construction and after every
+`mut self` method (`contract.inv.2`, `contract.inv.3`).
 
 ```ail
 fn divide(a int, b int) int
     requires b != 0
     ensures result * b + a % b == a
     a / b
+
+struct Account
+    balance int
+    invariant balance >= 0
+
+fn Account.add(mut self, n int)
+    ensures balance == old(balance) + n
+    balance += n
 ```

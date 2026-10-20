@@ -19,6 +19,7 @@ use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 mod contracts;
+pub use contracts::link as link_inherited_contracts;
 mod messages;
 mod mistakes;
 
@@ -69,6 +70,7 @@ fn prelude_text(tokens: &[Token]) -> &'static str {
 pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
     let (mut prog, mut diags) = parse_after_prelude(tokens);
     crate::implicit_self::rewrite(&mut prog, &mut diags);
+    link_inherited_contracts(&mut prog);
     (prog, diags)
 }
 
@@ -123,6 +125,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
         diags: Vec::new(),
         in_interp: false,
         generic_names,
+        olds: None,
         aliases: HashSet::new(),
         public: HashSet::new(),
     };
@@ -274,6 +277,8 @@ struct Parser {
     /// The lines of `pub` markers (`Program::public`).
     public: HashSet<usize>,
     generic_names: HashSet<String>,
+    /// While parsing an `ensures` condition: its `old(e)` calls (contract.ens.3).
+    olds: Option<Vec<(String, Expr)>>,
 }
 
 impl Parser {
@@ -701,8 +706,7 @@ impl Parser {
             }
             (None, Vec::new())
         } else {
-            let (body, contracts) = self.fn_body(&format!("the signature of {full}"))?;
-            (Some(body), contracts)
+            self.fn_body(&format!("the signature of {full}"), matches!(within, Within::Trait(_)))?
         };
         Some(FnDecl {
             attrs: Vec::new(),
@@ -717,6 +721,7 @@ impl Parser {
             body,
             within,
             contracts,
+            inherits: None,
         })
     }
 
@@ -979,20 +984,25 @@ impl Parser {
         };
         let whole = self.error_message(is_error);
         let mut fields = Vec::new();
+        let mut invariants = Vec::new();
         // err.msg.1: an error struct with a message may have no fields.
         let bare = whole.is_some() && matches!(self.peek(), Tok::Newline) && !matches!(self.peek_at(1), Tok::Indent);
         if bare {
             self.bump();
         } else {
             self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
-            fields.push(p.field_decl("type.struct.2")?);
-            Some(())
-        });
+                if p.at_kw("invariant") {
+                    invariants.push(p.invariant_line()?);
+                    return Some(());
+                }
+                fields.push(p.field_decl("type.struct.2")?);
+                Some(())
+            });
         }
         if whole.is_some() {
             self.splice_messages(&name, pos, !generics.is_empty(), Vec::new(), whole);
         }
-        Some(StructDecl { name, pos, doc: None, is_error, unique: false, generics, fields })
+        Some(StructDecl { name, pos, doc: None, is_error, unique: false, generics, fields, invariants })
     }
 
     /// `enum Name` followed by one variant per line (type.enum.1-2).
@@ -1549,7 +1559,10 @@ impl Parser {
             if self.at_sym("(") {
                 let pos = self.bump().pos;
                 let args = self.args()?;
-                expr = Expr::Call { callee: Box::new(expr), args, pos };
+                expr = match self.old_call(&expr, args, pos) {
+                    Ok(old) => old,
+                    Err(args) => Expr::Call { callee: Box::new(expr), args, pos },
+                };
             } else if self.eat_sym(".") {
                 let (name, name_pos) = self.name("a field or method name after `.`", "gram.syntax.1")?;
                 if let Some(qualified) = self.qualified_type_args(&expr, &name)? {
@@ -1783,6 +1796,7 @@ impl Parser {
                         diags: Vec::new(),
                         in_interp: true,
                         generic_names,
+                        olds: None,
                         aliases: self.aliases.clone(),
                         public: HashSet::new(),
                     };
