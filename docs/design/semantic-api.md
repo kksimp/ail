@@ -253,6 +253,64 @@ signature shows them.
    40      fn Drawing.add(mut self, s any Shape)
 ```
 
+### Position queries: `--locals`, `--type`, `--refs`
+
+`ail api --locals FILE LINE COL`, `ail api --type FILE LINE COL` and
+`ail api --refs FILE LINE COL` answer a question about one position of the
+file ([ADRs 0258–0261](../decisions/0258-api-locals-query.md)). They take
+`--pretty` and `--json` as above, and the same program-with-errors rule
+(api.out.5). Every answer starts `{"api":1,"file":F,"line":L,"col":C`.
+
+**api.query.1** — A position with nothing to answer (`--type` or `--refs` off
+a name, or a name with no recorded type or symbol) exits 1 and prints on
+stderr one object `{"api":1,"severity":"error","message":...}`. A missing or
+non-numeric `LINE COL` is a usage error, exit 2.
+
+**api.loc.1** — `--locals` adds `locals`: every name in scope at the
+position, as `{name, type, mut, kind, line, col}`. `kind` is `self`, `param`,
+`loop` or `binding`; `line` and `col` are where the name is written (`null`
+for `self`). The order is `self`, then by where each name is written. `type`
+is the checker's, as in a diagnostic, or `"?"` where it is not known.
+
+**api.loc.2** — A `:=` binding is in scope from the line after it. A
+parameter, loop variable or pattern name is in scope from the first
+statement of the block it scopes. A name stays in scope until a line indented
+less than the line it started on; blank and comment lines never end a scope.
+On an empty line the cursor's column gives the indent.
+
+**api.type.1** — `--type` finds the name or number under (or just before) the
+cursor and adds `text`, `start_col`, `end_col` (exclusive), `type` (the
+innermost expression that starts there, or the type of a binding site) and
+`symbol` (the id of the declaration it refers to, as `--symbols`, or `null`).
+A qualified use of a module item (`geo.origin`) is one token at `geo`.
+
+**api.type.2** — `callee` is the declaration's outline item when `symbol` is
+a function or method (`signature`, `params`, `returns`, `effects`,
+`requires`, `ensures`, `doc`; api.out.3), else `null`.
+
+**api.refs.1** — `--refs` adds `symbol` and `refs`, a list of
+`{file, line, col, def}` sorted by file order, line and column. `symbol` is
+the id of the declaration the cursor is on or in a use of (api.ref.1) or
+`local:NAME`. The definition has `def:true`; `file` is the source file of the
+module the position is in, so a reference in an imported user module names
+that module's file.
+
+**api.refs.2** — A use of a module item is reported at the start of its
+qualified name (`geo.origin` at the `g`). A method call through a trait refers to the trait's
+method (api.ref.2).
+
+**api.refs.3** — For a local, `refs` is its binding (`def:true`) and every
+use of the name within its scope (api.loc.2). Locals can't be shadowed
+(expr.bind.4), so the name identifies the binding. Only locals of the file
+asked about are supported.
+
+```json
+{"api":1,"file":"t.ail","line":14,"col":9,"locals":[{"name":"items","type":"List[Point]","mut":false,"kind":"param","line":10,"col":10},{"name":"sum","type":"int","mut":true,"kind":"binding","line":11,"col":9}]}
+```
+
+`--symbols` also lists fields and variant fields with their `type`
+(api.out.3), so an editor can complete members without a position query.
+
 ### Example
 
 For
