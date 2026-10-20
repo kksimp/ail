@@ -216,8 +216,11 @@ impl<'p> Checker<'p> {
         };
         let t = self.expr(operand, None, false);
         // Only a declared function or associated function runs as a task.
+        // A method call on a value (`p.sum()`) isn't one: the receiver must name a type.
+        let assoc = matches!(operand, Expr::Method { recv, .. }
+            if matches!(&**recv, Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } if self.types.contains_key(n.as_str())));
         let declared = self.resolved.symbols.get(&at).is_some_and(|s| s.starts_with("fn:"))
-            || (matches!(operand, Expr::Method { .. }) && self.resolved.targets.contains_key(&at));
+            || (assoc && self.resolved.targets.contains_key(&at));
         if t == Ty::Err {
             return Ty::Err;
         }

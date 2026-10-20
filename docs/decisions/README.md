@@ -266,3 +266,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0288](0288-run-limits-timeout-memory-steps.md) | `ail run` takes `--timeout`, `--max-memory` and `--max-steps` *(delegated)* | Accepted | 2026-10-20 |
 | [0289](0289-test-coverage.md) | `ail test --coverage` reports lines and functions run *(delegated)* | Accepted | 2026-10-20 |
 | [0290](0290-test-failure-shows-trap-snapshot.md) | `ail test` prints the trap snapshot under a failure *(delegated)* | Accepted | 2026-10-20 |
+| [0269](0269-fuzz-generator-design.md) | The fuzz harness generates typed programs, edge-value probes and token-level mutants from a seed *(delegated)* | Accepted | 2026-10-20 |
+| [0270](0270-fuzz-properties.md) | The fuzz harness checks crash-freedom, determinism, fmt idempotence, api validity and a contracts differential *(delegated)* | Accepted | 2026-10-20 |
+| [0271](0271-every-crash-becomes-a-case.md) | Every fuzz crash becomes a regression case; `repeat` and `pad_*` trap above 2^30 bytes *(delegated)* | Accepted | 2026-10-20 |

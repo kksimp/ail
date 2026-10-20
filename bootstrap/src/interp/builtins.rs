@@ -7,6 +7,9 @@ use std::io::Write;
 use std::rc::Rc;
 
 use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, load, put, take, trap, view, with_slot};
+
+/// type.str.15: the largest text `repeat` or `pad_*` will build, in bytes.
+const MAX_TEXT_BYTES: usize = 1 << 30;
 use crate::ast::Arg;
 use crate::diag::Pos;
 use crate::num::Num;
@@ -480,6 +483,9 @@ impl<'a, W: Write> Interp<'a, W> {
             "strip_prefix" => opt(text.strip_prefix(&*arg_str(0)).map(s)),
             "strip_suffix" => opt(text.strip_suffix(&*arg_str(0)).map(s)),
             "repeat" => match usize::try_from(a[0].int()) {
+                Ok(n) if n.saturating_mul(text.len()) > MAX_TEXT_BYTES => {
+                    return trap("type.str.15", pos, format!("`repeat` would build a text over {MAX_TEXT_BYTES} bytes"));
+                }
                 Ok(n) => s(text.repeat(n)),
                 Err(_) => {
                     return trap(
@@ -492,6 +498,10 @@ impl<'a, W: Write> Interp<'a, W> {
             "pad_left" | "pad_right" => {
                 // type.str.9: up to `width` characters; never shorter.
                 let width = usize::try_from(a[0].int()).unwrap_or(0);
+                let fill_len = a[1].char().len_utf8().saturating_mul(width);
+                if fill_len > MAX_TEXT_BYTES {
+                    return trap("type.str.15", pos, format!("`{name}` would build a text over {MAX_TEXT_BYTES} bytes"));
+                }
                 let fill = a[1].char().to_string().repeat(width.saturating_sub(text.chars().count()));
                 if name == "pad_left" { s(format!("{fill}{text}")) } else { s(format!("{text}{fill}")) }
             }

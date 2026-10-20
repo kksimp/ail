@@ -71,7 +71,9 @@ if [ "$(uname -s)" = Darwin ] && ! xcrun --find cc >/dev/null 2>&1; then
 fi
 
 if [ "${1:-}" = selftest ]; then
-    exec "$cargo" test --quiet --release --manifest-path "$manifest"
+    shift
+    # Extra words go to `cargo test` (fuzz.run.1: `./ail selftest --test fuzz`).
+    exec "$cargo" test --quiet --release --manifest-path "$manifest" "$@"
 fi
 
 [ -x "$binary" ] || echo "ail: building the bootstrap (first run only) ..." >&2
