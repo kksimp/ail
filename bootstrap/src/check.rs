@@ -2010,8 +2010,9 @@ impl<'p> Checker<'p> {
             self.diags.push(d);
             return false;
         }
-        // The prelude's own locals never meet the program's items (expr.bind.5).
-        let what = if is_prelude(pos) {
+        // The prelude's own locals never meet the program's items, and a
+        // module's locals meet only its own (`modules.rs`) (expr.bind.5).
+        let what = if is_prelude(pos) || !self.prog.module_at(pos).is_empty() {
             return true;
         } else if self.fns.contains_key(name) || PRELUDE.contains(&name) {
             "a function"

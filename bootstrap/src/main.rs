@@ -79,6 +79,8 @@ options:
                 or all) (eff.cap.1)
   --no-contracts
                 with run or test: skip `requires`/`ensures` checks (contract.run.3)
+  --no-bytecode with run or test: run every function on the tree walker, not
+                the bytecode tier (ADR 0361)
   --trace[=calls|effects|all]
                 with run: write each call, return, effect, task and contract
                 check to standard error (trace.run.1); --trace-limit N caps
@@ -104,7 +106,7 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
+            "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
             "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" => i += 1,
@@ -120,8 +122,16 @@ fn main() -> ExitCode {
     let json = args.iter().any(|a| a == "--json");
     // contract.run.3: `--no-contracts` skips the runtime contract checks.
     interp::set_contracts(!args.iter().any(|a| a == "--no-contracts"));
-    let mut rest: Vec<&str> =
-        args.iter().map(String::as_str).filter(|a| *a != "--json" && *a != "--no-contracts").collect();
+    // ADR 0361: `--no-bytecode` runs every function on the tree walker, as
+    // do `--deterministic` and `--schedule` for now.
+    interp::set_bytecode(
+        !args.iter().any(|a| a == "--no-bytecode" || a == "--deterministic" || a.starts_with("--schedule")),
+    );
+    let mut rest: Vec<&str> = args
+        .iter()
+        .map(String::as_str)
+        .filter(|a| *a != "--json" && *a != "--no-contracts" && *a != "--no-bytecode")
+        .collect();
     // `ail test` owns `--cases` and `--seed` (test.prop.3); `ail run` owns
     // `--seed` and `--deterministic` (std.random.3, eff.det.1).
     let mut flags: Vec<&str> = Vec::new();

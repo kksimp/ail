@@ -60,6 +60,8 @@ implementations and that the tier can be switched off.
   no tasks, `ref` cells or contracts, falling back to the tree walker
   otherwise.
 
+- The tier's design and measurements: [ADR 0361](0361-bytecode-tier-design.md).
+
 ## Rejected alternatives
 
 - Options A and B above, by the designer's choice.

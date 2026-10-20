@@ -95,7 +95,7 @@ fn ast_dumps_read_back_through_the_ail_syntax_tree() {
     assert!(n > 700, "{n} files");
 }
 
-/// Runs the AIL front end (`compiler/selfhost.ail COMMAND`) once over the
+/// Runs the AIL front end (`ail run compiler COMMAND`) once over the
 /// whole corpus and compares each file's output with `ail api FLAG FILE`.
 fn compare_with_bootstrap(command: &str, flag: &str) {
     let files = corpus();
@@ -104,14 +104,14 @@ fn compare_with_bootstrap(command: &str, flag: &str) {
         expected.push_str(&format!("== {}\n", f.display()));
         expected.push_str(&run(ail().args(["api", flag]).arg(f)));
     }
-    let actual = run(ail().arg("run").arg(root().join("compiler/selfhost.ail")).arg(command).args(&files));
+    let actual = run(ail().arg("run").arg(root().join("compiler")).arg(command).args(&files));
     if actual != expected {
         // Report the first file whose output differs.
         let split = |s: &str| s.split("\n== ").map(str::to_string).collect::<Vec<_>>();
         for (a, e) in split(&actual).iter().zip(split(&expected).iter()) {
-            assert_eq!(a, e, "`ail run compiler/selfhost.ail {command}` differs from `ail api {flag}`");
+            assert_eq!(a, e, "`ail run compiler {command}` differs from `ail api {flag}`");
         }
-        panic!("`ail run compiler/selfhost.ail {command}` gave {} bytes, `ail api {flag}` {}", actual.len(), expected.len());
+        panic!("`ail run compiler {command}` gave {} bytes, `ail api {flag}` {}", actual.len(), expected.len());
     }
     assert!(files.len() > 700, "{} files", files.len());
 }
