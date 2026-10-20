@@ -142,6 +142,7 @@ pub(super) enum Plain {
     None,
     Nested(u32),
     Fail(Box<Plain>, Vec<String>, Vec<Pos>),
+    Tensor(crate::tensor::Tensor),
 }
 
 /// `v` as a `Plain`; `None` for a task, group, channel or mutex handle,
@@ -166,6 +167,7 @@ fn plain(v: &Value) -> Option<Plain> {
         Value::Fail(f) => Plain::Fail(Box::new(plain(&f.error)?), f.context.clone(), f.trace.clone()),
         // A handle or a shared `ref` has identity a copy would lose (conc.par.8).
         Value::Handle(_) | Value::Ref(_) => return None,
+        Value::Tensor(t) => Plain::Tensor((**t).clone()),
     })
 }
 
@@ -198,6 +200,7 @@ fn value(p: &Plain) -> Value {
         }
         Plain::None => Value::None,
         Plain::Nested(n) => Value::Nested(*n),
+        Plain::Tensor(t) => Value::Tensor(Rc::new(t.clone())),
         Plain::Fail(e, context, trace) => {
             Value::Fail(Rc::new(Failure { error: value(e), context: context.clone(), trace: trace.clone() }))
         }

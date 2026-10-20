@@ -28,6 +28,7 @@ mod osext;
 mod random;
 mod stdlib;
 mod tasks;
+mod tensor;
 mod trace;
 
 pub use contracts::set_enabled as set_contracts;
@@ -83,6 +84,9 @@ enum Value {
     Ref(Rc<RefCell<Value>>),
     /// A task, task group, channel or mutex (conc.task.1, conc.share.2-3).
     Handle(Handle),
+    /// A `tensor.Tensor[T]` (std.tensor.1): copies share the buffer until
+    /// one is rebuilt, as lists do.
+    Tensor(Rc<crate::tensor::Tensor>),
 }
 
 impl Clone for Value {
@@ -108,6 +112,7 @@ impl Clone for Value {
             Value::Fail(f) => Value::Fail(Rc::clone(f)),
             Value::Ref(c) => Value::Ref(Rc::clone(c)),
             Value::Handle(h) => Value::Handle(*h),
+            Value::Tensor(t) => Value::Tensor(Rc::clone(t)),
         }
     }
 }
@@ -2375,6 +2380,8 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Set(x), Value::Set(y)) => x.len() == y.len() && x.keys().all(|k| y.get(k).is_some()),
             // own.ref.6: references are equal when they share a cell.
             (Value::Ref(x), Value::Ref(y)) => Rc::ptr_eq(x, y),
+            // std.tensor.9: equal shapes and equal elements.
+            (Value::Tensor(x), Value::Tensor(y)) => x == y,
             (x, y) => unreachable!("checked: comparing {x:?} and {y:?}"),
         })
     }
@@ -2629,6 +2636,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Value::Fail(f) => self.describe(&f.error, pos)?,
             Value::Handle(h) => h.text(),
+            Value::Tensor(t) => self.tensor_text(t, pos)?,
             Value::Map(t) => {
                 let mut parts = Vec::with_capacity(t.len());
                 for (k, v) in t.entries() {
@@ -2692,7 +2700,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ crate::stdlib::StdCall::Method(_)) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),
@@ -2732,6 +2740,9 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         if let Some(crate::stdlib::StdCall::Method(m)) = site.std {
             return self.ui_method(m, recv, args, pos, env);
+        }
+        if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
+            return self.tensor_method(m, recv, args, pos, env);
         }
         let mut recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
         let (mut kind, cell) = match &recv {

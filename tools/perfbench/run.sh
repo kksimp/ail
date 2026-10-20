@@ -14,7 +14,7 @@ root="$(cd "$here/../.." && pwd)"
 runs="${1:-5}"
 "$root/ail" run "$root/examples/hello.ail" >/dev/null   # builds the bootstrap
 
-programs=("$root/examples/interp.ail" "$root/examples/json.ail" "$root/examples/sheet.ail" "$here/programs/loops.ail" "$root/examples/logscan.ail" "$root/examples/tasks.ail" "$root/examples/build.ail" "$here/programs/parsum.ail")
+programs=("$root/examples/interp.ail" "$root/examples/json.ail" "$root/examples/sheet.ail" "$here/programs/loops.ail" "$root/examples/logscan.ail" "$root/examples/tasks.ail" "$root/examples/build.ail" "$here/programs/parsum.ail" "$here/programs/tensor.ail" "$here/programs/tensor_loops.ail")
 corpus="$root/tools/tokbench/corpus/programs"
 
 now() { date +%s.%N; }

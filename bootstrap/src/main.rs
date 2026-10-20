@@ -23,6 +23,7 @@ mod num;
 mod packages;
 mod parser;
 mod stdlib;
+mod tensor;
 mod ui;
 
 use std::process::ExitCode;
