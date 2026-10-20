@@ -1,0 +1,4 @@
+# std.tensor.15: a slice past the last row traps.
+fn main()
+    a := tensor.from([1.0, 2.0])
+    print(a[1..3])

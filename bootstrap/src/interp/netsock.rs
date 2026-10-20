@@ -159,6 +159,16 @@ impl Conn {
         }
     }
 
+    /// Up to `max` bytes, undecoded, waiting for at least one; empty at the
+    /// end of the stream (std.net.16).
+    fn read_raw(&mut self, max: usize) -> io::Result<Vec<u8>> {
+        if self.buf.is_empty() && !self.eof {
+            self.fill()?;
+        }
+        let n = max.min(self.buf.len());
+        Ok(self.buf.drain(..n).collect())
+    }
+
     /// A line without its `\n` or `\r\n`, or `None` at the end of the stream.
     fn read_line(&mut self) -> io::Result<Option<String>> {
         let mut from = 0;
@@ -512,7 +522,7 @@ fn reason(status: i64) -> &'static str {
 
 /// The bytes of a response (std.net.11). `head_only` omits the body of a
 /// reply to `HEAD`. Headers the server owns are not taken from the program.
-fn response_bytes(status: i64, headers: &[(String, String)], body: &str, head_only: bool) -> Result<Vec<u8>, String> {
+fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_only: bool) -> Result<Vec<u8>, String> {
     if !(100..=599).contains(&status) {
         return Err(format!("{status} is not an HTTP status; use 100 to 599"));
     }
@@ -542,7 +552,7 @@ fn response_bytes(status: i64, headers: &[(String, String)], body: &str, head_on
     out.push_str("Connection: close\r\n\r\n");
     let mut bytes = out.into_bytes();
     if !no_body && !head_only {
-        bytes.extend_from_slice(body.as_bytes());
+        bytes.extend_from_slice(body);
     }
     Ok(bytes)
 }
@@ -826,6 +836,7 @@ impl<'a, W: Write> Interp<'a, W> {
                                     map_of(req.headers),
                                     text(String::from_utf8_lossy(&req.body).into_owned()),
                                     text(peer),
+                                    super::bytes::bytes_value(req.body.clone()),
                                 ]),
                             );
                             return Ok(Value::Struct(self.structs["net.Exchange"], Rc::new(vec![request, Value::Int(slot)])));
@@ -868,14 +879,20 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
-            "Exchange.respond" => {
+            "Exchange.respond" | "Exchange.respond_bytes" => {
                 let Some(ex) = take_exchange(id) else {
                     return Ok(self.net_error("", "other", "this exchange has already been answered or is closed", pos));
                 };
-                let Value::Struct(_, r) = &values[0] else { unreachable!("checked: net.Response") };
-                let status = r[0].int();
-                let Value::Str(body) = &r[2] else { unreachable!("checked: str") };
-                let sent = response_bytes(status, &pairs_of(&r[1]), body, ex.method == "HEAD");
+                // std.net.16: `respond_bytes(status, headers, data)` sends bytes as they are.
+                let (status, headers, body): (i64, Vec<(String, String)>, Vec<u8>) = if m == "Exchange.respond_bytes" {
+                    let Value::Bytes(data) = &values[2] else { unreachable!("checked: bytes") };
+                    (values[0].int(), pairs_of(&values[1]), data.to_vec())
+                } else {
+                    let Value::Struct(_, r) = &values[0] else { unreachable!("checked: net.Response") };
+                    let Value::Str(body) = &r[2] else { unreachable!("checked: str") };
+                    (r[0].int(), pairs_of(&r[1]), body.as_bytes().to_vec())
+                };
+                let sent = response_bytes(status, &headers, &body, ex.method == "HEAD");
                 let result = match sent {
                     Err(message) => {
                         // The exchange stays open so the program can answer again.
@@ -914,25 +931,33 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 Value::Unit
             }
-            "Conn.read" | "Conn.read_line" | "Conn.write" => {
+            "Conn.read" | "Conn.read_bytes" | "Conn.read_line" | "Conn.write" | "Conn.write_bytes" => {
                 self.flush(pos)?;
                 let Some(mut c) = take_conn(id) else {
                     return Ok(closed(self, "connection"));
                 };
                 let peer = c.peer.clone();
                 let result = match m {
-                    "Conn.read" => {
+                    "Conn.read" | "Conn.read_bytes" => {
                         let max = values[0].int();
                         if max <= 0 {
                             put_back(id, Slot::Conn(c));
                             return Ok(self.net_error(&peer, "other", format!("`read` needs a size of at least 1, not {max}"), pos));
                         }
-                        c.read_text(max as usize).map(text)
+                        if m == "Conn.read_bytes" {
+                            c.read_raw(max as usize).map(super::bytes::bytes_value)
+                        } else {
+                            c.read_text(max as usize).map(text)
+                        }
                     }
                     "Conn.read_line" => c.read_line().map(|l| l.map_or(Value::None, text)),
                     _ => {
-                        let Value::Str(s) = &values[0] else { unreachable!("checked: str") };
-                        c.io.write_all(s.as_bytes()).map(|()| Value::Unit)
+                        let data: &[u8] = match &values[0] {
+                            Value::Str(s) => s.as_bytes(),
+                            Value::Bytes(b) => b,
+                            other => unreachable!("checked: str or bytes, found {other:?}"),
+                        };
+                        c.io.write_all(data).map(|()| Value::Unit)
                     }
                 };
                 put_back(id, Slot::Conn(c));
@@ -1021,19 +1046,19 @@ mod tests {
 
     #[test]
     fn responses() {
-        let r = response_bytes(200, &[("X-A".into(), "1".into())], "hi", false).unwrap();
+        let r = response_bytes(200, &[("X-A".into(), "1".into())], b"hi", false).unwrap();
         let t = String::from_utf8(r).unwrap();
         assert!(t.starts_with("HTTP/1.1 200 OK\r\nX-A: 1\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 2\r\n"));
         assert!(t.ends_with("\r\n\r\nhi"));
-        let t = String::from_utf8(response_bytes(204, &[], "ignored", false).unwrap()).unwrap();
+        let t = String::from_utf8(response_bytes(204, &[], b"ignored", false).unwrap()).unwrap();
         assert!(!t.contains("Content-Length") && t.ends_with("\r\n\r\n"));
-        let t = String::from_utf8(response_bytes(200, &[], "hi", true).unwrap()).unwrap();
+        let t = String::from_utf8(response_bytes(200, &[], b"hi", true).unwrap()).unwrap();
         assert!(t.contains("Content-Length: 2") && t.ends_with("\r\n\r\n"));
-        assert!(response_bytes(99, &[], "", false).is_err());
-        assert!(response_bytes(200, &[("X".into(), "a\r\nB: c".into())], "", false).is_err());
-        assert!(response_bytes(200, &[("X Y".into(), "a".into())], "", false).is_err());
+        assert!(response_bytes(99, &[], b"", false).is_err());
+        assert!(response_bytes(200, &[("X".into(), "a\r\nB: c".into())], b"", false).is_err());
+        assert!(response_bytes(200, &[("X Y".into(), "a".into())], b"", false).is_err());
         // The server owns the framing headers.
-        let t = String::from_utf8(response_bytes(200, &[("Content-Length".into(), "9".into())], "hi", false).unwrap()).unwrap();
+        let t = String::from_utf8(response_bytes(200, &[("Content-Length".into(), "9".into())], b"hi", false).unwrap()).unwrap();
         assert_eq!(t.matches("Content-Length").count(), 1);
     }
 

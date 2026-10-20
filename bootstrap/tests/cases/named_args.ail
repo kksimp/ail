@@ -1,0 +1,21 @@
+struct Pt
+    x int
+    y int
+
+fn shift(p Pt, dx int, dy int) Pt
+    Pt(x: p.x + dx, y: p.y + dy)
+
+fn Pt.moved(self, dx int, dy int) Pt
+    Pt(x: x + dx, y: y + dy)
+
+fn show(tag str, n int, scale int) str
+    "{tag}:{n * scale}"
+
+fn main()
+    p := Pt(x: 1, y: 1)
+    q := shift(p, dy: 5, dx: 2)
+    print("{q.x},{q.y}")
+    r := q.moved(dy: 1, dx: 10)
+    print("{r.x},{r.y}")
+    print(show("a", scale: 3, n: 4))
+    print(show(scale: 2, tag: "b", n: 5))

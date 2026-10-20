@@ -1,0 +1,56 @@
+## The text form of MIR, for `ail run compiler mir FILE` (unstable, for
+## debugging the backend; ir-architecture.md §4).
+
+pub fn module_text(m Module) str
+    mut out := List[str]()
+    out.push("# MIR (unstable) of {m.path}")
+    for f in m.funcs
+        out.push("")
+        out.push(func_text(f))
+    out.join("\n")
+
+fn val(f Func, v int) str
+    if f.names[v] != ""
+        return "v{v}:{f.names[v]}"
+    "v{v}"
+
+fn vals_text(f Func, vs List[int]) str
+    [val(f, v) for v in vs].join(", ")
+
+pub fn func_text(f Func) str
+    mut out := List[str]()
+    ps := ["{val(f, v)} {f.vals[v].name()}" for v in f.params]
+    out.push("fn {f.name}({ps.join(", ")}) {f.ret.name()}")
+    for b in 0..f.blocks.len()
+        blk := f.blocks[b]
+        if blk.params.len() > 0
+            ps2 := ["{val(f, v)} {f.vals[v].name()}" for v in blk.params]
+            out.push("  b{b}({ps2.join(", ")}):")
+        else
+            out.push("  b{b}:")
+        for i in blk.insts
+            rhs := inst_text(f, i)
+            if i.dst >= 0
+                out.push("    {val(f, i.dst)} {f.vals[i.dst].name()} = {rhs}")
+            else
+                out.push("    {rhs}")
+        out.push("    {term_text(f, blk.term)}")
+    out.join("\n")
+
+fn inst_text(f Func, i Inst) str
+    site := if i.site < 0 then "" else " !s{i.site}"
+    match i.op
+        "const" => "const {i.imm}"
+        "fconst" => "fconst {i.fimm}"
+        "str" => "str #{i.imm}"
+        "call" | "prim" => "{i.op} {i.name}({vals_text(f, i.args)})"
+        _ => "{i.op} {vals_text(f, i.args)}{site}"
+
+fn term_text(f Func, t Term) str
+    match t.kind
+        "jump" => "jump b{t.targets[0]}({vals_text(f, t.args[0])})"
+        "branch" =>
+            yes := "b{t.targets[0]}({vals_text(f, t.args[0])})"
+            "branch {val(f, t.cond)}, {yes}, b{t.targets[1]}({vals_text(f, t.args[1])})"
+        "return" => if t.value < 0 then "return" else "return {val(f, t.value)}"
+        _ => t.kind

@@ -1,0 +1,133 @@
+## Static ELF executables for Linux (ADR 0387): no dynamic linker, no libc.
+## One read-and-execute segment holds the headers, the code and the
+## read-only data; a second, zero-filled read-write segment holds the
+## runtime's globals. After them, outside every segment, a symbol table
+## names each function for profilers and debuggers (ADR 0391).
+use codegen
+
+BASE := 4194304
+## The segment alignment: 64 KiB covers both 4 KiB and 64 KiB page kernels.
+PAGE := 65536
+EHDR := 64
+PHDR := 56
+
+## ELF machine numbers.
+pub X86_64 := 62
+pub AARCH64 := 183
+
+pub fn elf(img codegen.Image, machine int) List[int]
+    code_off := EHDR + 2 * PHDR
+    data_off := align_up(code_off + img.code.len(), 16)
+    size := data_off + img.data.len()
+    bss := align_up(BASE + size, PAGE)
+    code := link(img, BASE + code_off, BASE + data_off, bss)
+    mut out := List[int]()
+    header(mut out, machine, BASE + code_off + img.entry)
+    segment(mut out, 5, 0, BASE, size, size)
+    segment(mut out, 6, 0, bss, 0, 8 * img.globals)
+    out.extend(code)
+    while out.len() < data_off
+        out.push(0)
+    out.extend(img.data)
+    symbols(mut out, img, BASE + code_off, code_off)
+    out
+
+## `.text`, `.symtab`, `.strtab` and `.shstrtab`, then the section headers,
+## which `header` left zero and this fills in.
+fn symbols(mut out List[int], img codegen.Image, text_addr int, text_off int)
+    names := img.funcs.keys().sorted(by: |n| img.funcs[n])
+    mut strtab := [0]
+    mut syms := List[int]()
+    for _ in 0..24
+        syms.push(0)
+    for k in 0..names.len()
+        name := names[k]
+        at := img.funcs[name]
+        size := if k + 1 < names.len() then img.funcs[names[k + 1]] - at else img.code.len() - at
+        put(mut syms, strtab.len(), 4)
+        # STB_GLOBAL, STT_FUNC
+        syms.push(18)
+        syms.push(0)
+        put(mut syms, 1, 2)
+        put(mut syms, text_addr + at, 8)
+        put(mut syms, size, 8)
+        strtab.extend(codegen.utf8(name))
+        strtab.push(0)
+    shstr := codegen.utf8("\0.text\0.symtab\0.strtab\0.shstrtab\0")
+    while out.len() % 8 != 0
+        out.push(0)
+    sym_off := out.len()
+    out.extend(syms)
+    str_off := out.len()
+    out.extend(strtab)
+    sh_off := out.len()
+    out.extend(shstr)
+    while out.len() % 8 != 0
+        out.push(0)
+    headers := out.len()
+    for _ in 0..64
+        out.push(0)
+    elf_section(mut out, 1, 1, 6, text_addr, text_off, img.code.len(), 0, 0, 16, 0)
+    elf_section(mut out, 7, 2, 0, 0, sym_off, syms.len(), 3, 1, 8, 24)
+    elf_section(mut out, 15, 3, 0, 0, str_off, strtab.len(), 0, 0, 1, 0)
+    elf_section(mut out, 23, 3, 0, 0, sh_off, shstr.len(), 0, 0, 1, 0)
+    patch(mut out, 40, headers, 8)
+    patch(mut out, 58, 64, 2)
+    patch(mut out, 60, 5, 2)
+    patch(mut out, 62, 4, 2)
+
+fn elf_section(
+    mut out List[int],
+    name int,
+    kind int,
+    flags int,
+    addr int,
+    offset int,
+    size int,
+    linked int,
+    info int,
+    align int,
+    entsize int,
+)
+    put(mut out, name, 4)
+    put(mut out, kind, 4)
+    put(mut out, flags, 8)
+    put(mut out, addr, 8)
+    put(mut out, offset, 8)
+    put(mut out, size, 8)
+    put(mut out, linked, 4)
+    put(mut out, info, 4)
+    put(mut out, align, 8)
+    put(mut out, entsize, 8)
+
+## Overwrite `n` little-endian bytes at `at`.
+fn patch(mut out List[int], at int, v int, n int)
+    for i in 0..n
+        out[at + i] = v.shr(8 * i).bit_and(255)
+
+fn header(mut out List[int], machine int, entry int)
+    out.extend([127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    put(mut out, 2, 2)
+    put(mut out, machine, 2)
+    put(mut out, 1, 4)
+    put(mut out, entry, 8)
+    put(mut out, EHDR, 8)
+    put(mut out, 0, 8)
+    put(mut out, 0, 4)
+    put(mut out, EHDR, 2)
+    put(mut out, PHDR, 2)
+    put(mut out, 2, 2)
+    put(mut out, 64, 2)
+    put(mut out, 0, 2)
+    put(mut out, 0, 2)
+
+## A `PT_LOAD` program header; `flags` is R 4, W 2, X 1.
+fn segment(mut out List[int], flags int, offset int, vaddr int, filesz int, memsz int)
+    put(mut out, 1, 4)
+    put(mut out, flags, 4)
+    put(mut out, offset, 8)
+    put(mut out, vaddr, 8)
+    put(mut out, vaddr, 8)
+    put(mut out, filesz, 8)
+    put(mut out, memsz, 8)
+    put(mut out, PAGE, 8)

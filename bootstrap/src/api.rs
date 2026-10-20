@@ -16,6 +16,7 @@ use crate::docs;
 use crate::modules;
 
 pub mod card;
+pub mod diff;
 pub mod errors;
 mod expanded;
 mod query;
@@ -157,6 +158,24 @@ pub fn outline_with(
     Json::Obj(top).write(&mut out, (form == Form::Pretty).then_some(0));
     out.push('\n');
     Ok(out)
+}
+
+/// Every reference in the program as (file, line in that file, column, id),
+/// in position order; ids carry their module in a package (api.ref.1, api.pkg.1).
+pub fn references(prog: &Program, resolved: &Resolved, package: bool) -> Vec<(String, usize, usize, String)> {
+    let mut refs = Refs { prog, resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
+    refs.program();
+    let mut found = refs.found;
+    found.retain(|(p, _)| !crate::ast::is_prelude(*p) && (package || !is_prelude(*p)));
+    found.sort_by(|a, b| (a.0.line, a.0.col, &a.1).cmp(&(b.0.line, b.0.col, &b.1)));
+    found.dedup();
+    found
+        .into_iter()
+        .map(|(p, id)| match prog.file_at(p) {
+            Some(f) => (f.path.clone(), p.line - f.base, p.col, id),
+            None => (String::new(), p.line, p.col, id),
+        })
+        .collect()
 }
 
 enum PackageFailure {
@@ -798,6 +817,14 @@ pub(crate) fn type_text(t: &TypeRef) -> String {
         TypeKind::Optional(t) => format!("{}?", type_text(t)),
         TypeKind::Any(name) => format!("any {name}"),
         TypeKind::Ref(t) => format!("ref {}", type_text(t)),
+        TypeKind::Ptr(t) => format!("*{}", type_text(t)),
+        TypeKind::Fn { params, ret } => {
+            let ps: Vec<String> = params.iter().map(type_text).collect();
+            match ret {
+                Some(r) => format!("fn({}) {}", ps.join(", "), type_text(r)),
+                None => format!("fn({})", ps.join(", ")),
+            }
+        }
         TypeKind::Fallible { ok, errors } => {
             let errs = errors.as_ref().map(|es| es.iter().map(type_text).collect::<Vec<_>>().join(" | "));
             match (ok, errs) {
@@ -967,7 +994,13 @@ impl<'p> Refs<'p> {
                     self.type_ref(a);
                 }
             }
-            TypeKind::Optional(t) | TypeKind::Ref(t) => self.type_ref(t),
+            TypeKind::Optional(t) | TypeKind::Ref(t) | TypeKind::Ptr(t) => self.type_ref(t),
+            TypeKind::Fn { params, ret } => {
+                params.iter().for_each(|p| self.type_ref(p));
+                if let Some(r) = ret {
+                    self.type_ref(r);
+                }
+            }
             TypeKind::Any(name) => self.add(t.pos, format!("trait:{name}")),
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {

@@ -73,4 +73,10 @@ name the four gaps.
 - The new programs' data files live in `examples/agent-data/`, not
   `examples/data/`: `scan` and `dashboard` read `examples/data/` and their
   output would change.
+- Corpus folders keep the inputs their programs read (`data/`, `configs/`,
+  `agent-data/`) next to the program, so each runs with its own folder as
+  the working directory. Path literals are the examples' own, unchanged.
+  `tokbench` counts only the `.ail` and `.py` files under `corpus/programs/`.
+- `build` is excluded from runtime ratios: it runs the repository's `ail`
+  binary, which is not in its folder.
 - ADR numbers 0478 and 0479 in this batch's block are unused.
