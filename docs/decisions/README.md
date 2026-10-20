@@ -297,7 +297,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0326](0326-ail-test-trace.md) | `ail test --trace` keeps a failing test's trace *(delegated)* | Accepted | 2026-10-20 |
 | [0327](0327-watch-through-calls.md) | `--watch` follows a variable through `mut` calls *(delegated)* | Accepted | 2026-10-20 |
 | [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
-| [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
+| [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Superseded by 0359 | 2026-10-20 |
 | [0306](0306-derive-generators-run-while-loading.md) | The bootstrap runs derive generators while it loads the program; `TypeInfo.is_error` *(delegated)* | Accepted | 2026-10-20 |
 | [0307](0307-generated-associated-functions.md) | Generated text may add associated functions of the deriving type *(delegated)* | Accepted | 2026-10-20 |
 | [0308](0308-tojson-fromjson-derives.md) | `ToJson` and `FromJson` are prelude derives written in AIL *(delegated)* | Accepted | 2026-10-20 |
@@ -349,3 +349,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0351](0351-cancel-trees-and-cancelled-send.md) | Cancel trees; `send` in a cancelled task drops its value *(delegated)* | Accepted | 2026-10-20 |
 | [0352](0352-weaker-atomic-orderings.md) | Weaker atomic orderings as a trailing `order:` argument *(delegated)* | Accepted | 2026-10-20 |
 | [0358](0358-mistakes-corpus-for-rounds-5-9.md) | The mistakes corpus covers the features of rounds 5 to 9 *(delegated)* | Accepted | 2026-10-20 |
+| [0359](0359-bytecode-tier-in-the-bootstrap.md) | Add a bytecode tier to the bootstrap interpreter (designer) | Accepted | 2026-10-20 |
+| [0360](0360-in-house-tls-for-std-net.md) | `https` in `std.net` through an in-house TLS implementation, not a crate (designer) | Accepted | 2026-10-20 |

@@ -1,6 +1,6 @@
 # 0032. Keep the Rust interpreter permanently as an independent oracle
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by [0359](0359-bytecode-tier-in-the-bootstrap.md): a bytecode tier may sit beside the tree walker, which stays the oracle)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 28 — Testing strategy; 23 — Compiler architecture

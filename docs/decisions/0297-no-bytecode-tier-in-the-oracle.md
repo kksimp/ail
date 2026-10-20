@@ -1,6 +1,6 @@
 # 0297. Keep the interpreter a tree walker; the compiled form belongs to Stage 3
 
-- **Status:** Accepted
+- **Status:** Superseded by [0359](0359-bytecode-tier-in-the-bootstrap.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** interpreter performance

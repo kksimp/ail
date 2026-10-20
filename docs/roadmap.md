@@ -47,9 +47,11 @@ proposal, not a decision.
 2. **Stage 3 and 4 groundwork:** build the tiers designed in
    [ir-architecture.md](design/ir-architecture.md) (AST, HIR, MIR, machine IR)
    and the first native code for the hot loops the interpreter shows
-   (`tools/perfbench/run.sh`).
+   (`tools/perfbench/run.sh`); meanwhile a bytecode tier in the bootstrap
+   (ADR 0359, in progress).
 3. **Registry and lockfile:** git dependencies, `ail.lock`, then a package
-   registry (OQ-049, the designer's call); TLS for `std.net`.
+   registry (OQ-049, the designer's call); in-house TLS for `std.net`
+   (ADR 0360, in progress).
 4. **Hardware:** accelerator backends for `std.tensor` (OQ-090) and weaker
    atomic orderings (OQ-097).
 5. **Open language questions:** safe member access and matching on error sets
