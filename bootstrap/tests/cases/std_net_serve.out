@@ -1,0 +1,8 @@
+200 GET hello ail [] token=none
+200 hello world [data] token=none
+200 PUT hello a b&c [payload] token=abc
+404 no /missing
+followed: 200 hello world [] token=none
+max 0: 302 /hello
+worker stops: closed
+worker stops: closed

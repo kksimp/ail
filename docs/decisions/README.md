@@ -367,3 +367,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
+| [0418](0418-request-options-and-redirect-rules.md) | Request options, redirect rules and streaming deferred for `std.net` *(delegated)* | Accepted | 2026-10-20 |
+| [0419](0419-http-server-as-accept-and-respond.md) | The HTTP server is `net.serve(addr)` with `accept` and `respond`; the handler form waits on function values *(delegated)* | Accepted | 2026-10-20 |
+| [0420](0420-cooperative-socket-waits.md) | Network waits are cooperative: non-blocking sockets, yield, back off *(delegated)* | Accepted | 2026-10-20 |
+| [0421](0421-raw-tcp-and-tls-conn.md) | Raw TCP: `Listener` and `Conn`, text first, TLS over the same `Conn` *(delegated)* | Accepted | 2026-10-20 |
+| [0422](0422-net-serve-capability.md) | `net.serve` is a capability on top of `net` *(delegated)* | Accepted | 2026-10-20 |
+| [0423](0423-net-platforms-and-deferred.md) | `std.net` on Windows and what is deferred *(delegated)* | Accepted | 2026-10-20 |

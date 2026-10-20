@@ -18,7 +18,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
         ],
     ),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
-    ("net", &["get", "post"]),
+    ("net", &["connect", "connect_tls", "get", "listen", "options", "post", "request", "serve"]),
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["run", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
@@ -45,6 +45,24 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
     ("set_font_size", true),
     ("set_title", true),
     ("size", false),
+];
+
+/// The methods of the `std.net` handle types (std.net.9-12): the type, the
+/// method, and the name `StdCall::Method` carries to the interpreter.
+pub const NET_METHODS: &[(&str, &str, &str)] = &[
+    ("Server", "accept", "net.Server.accept"),
+    ("Server", "addr", "net.Server.addr"),
+    ("Server", "close", "net.Server.close"),
+    ("Exchange", "respond", "net.Exchange.respond"),
+    ("Listener", "accept", "net.Listener.accept"),
+    ("Listener", "addr", "net.Listener.addr"),
+    ("Listener", "close", "net.Listener.close"),
+    ("Conn", "close", "net.Conn.close"),
+    ("Conn", "peer", "net.Conn.peer"),
+    ("Conn", "read", "net.Conn.read"),
+    ("Conn", "read_line", "net.Conn.read_line"),
+    ("Conn", "set_timeout", "net.Conn.set_timeout"),
+    ("Conn", "write", "net.Conn.write"),
 ];
 
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
@@ -75,6 +93,12 @@ const TYPES: &[(&str, &str)] = &[
     ("Metadata", "fs"),
     ("Response", "net"),
     ("NetError", "net"),
+    ("Options", "net"),
+    ("Request", "net"),
+    ("Server", "net"),
+    ("Exchange", "net"),
+    ("Listener", "net"),
+    ("Conn", "net"),
     ("Output", "proc"),
     ("ProcError", "proc"),
     ("Window", "ui"),

@@ -17,7 +17,7 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `std.net` gives `net` (std.net.1).
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -63,7 +63,11 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run", "which"], &["proc", "io"]),
         // std.net.1: every request reaches the network.
-        "net" => (&["get", "post"], &["net", "io"]),
+        "net" if matches!(name, "serve" | "listen") => {
+            // std.net.14: a server needs the narrower capability as well.
+            return Some(&["net", "net.serve", "io"]);
+        }
+        "net" => (&["get", "post", "request", "options", "connect", "connect_tls"], &["net", "io"]),
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
@@ -656,6 +660,13 @@ impl<'p, 'r> Walker<'p, 'r> {
                         self.add(e, format!("{m}.{name}"));
                     }
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && m.starts_with("net.")
+                {
+                    // std.net.14: the methods of the handles `net.serve`, `net.listen` and `net.connect` make.
+                    for e in ["net", "io"] {
+                        self.add(e, (*m).to_string());
+                    }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && let Some(effects) = std_effects("ui", "Window")
                 {
                     for &e in effects {
@@ -838,7 +849,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

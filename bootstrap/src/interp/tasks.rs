@@ -321,6 +321,40 @@ pub(super) fn shutdown(ctx: Option<Ctx>) {
     }
 }
 
+/// What a call that waits on the network uses to let other tasks run
+/// meanwhile, so an in-process client and server make progress (std.net.8,
+/// ADR 0420).
+#[derive(Clone)]
+pub struct Yielder {
+    sched: Arc<Sched>,
+    me: usize,
+}
+
+impl Yielder {
+    /// Hand the turn to the next ready task, if there is one, and return when
+    /// it comes back: `Ok(true)` if another task ran, `Ok(false)` if none was
+    /// ready, `Err` if the program is shutting down.
+    pub fn yield_now(&self) -> Result<bool, ()> {
+        let mut st = self.sched.lock();
+        if st.shutdown {
+            return Err(());
+        }
+        let Some(next) = Sched::next_ready(&mut st) else { return Ok(false) };
+        st.tasks[self.me].status = Status::Ready;
+        st.ready.push_back(self.me);
+        self.sched.hand_to(&mut st, next);
+        while st.current != self.me {
+            st = self.sched.turn.wait(st).unwrap_or_else(|e| e.into_inner());
+        }
+        if st.shutdown { Err(()) } else { Ok(true) }
+    }
+
+    /// Whether the running task was cancelled (conc.cancel.1).
+    pub fn cancelled(&self) -> bool {
+        self.sched.lock().tasks[self.me].cancelled
+    }
+}
+
 impl<'a, W: Write> Interp<'a, W> {
     /// The scheduler, created by the first task or handle; the program's
     /// main task is task 0.
@@ -342,6 +376,12 @@ impl<'a, W: Write> Interp<'a, W> {
             };
             Ctx { sched: Arc::new(Sched { state: Mutex::new(state), turn: Condvar::new() }), me: 0 }
         })
+    }
+
+    /// A way to let other tasks run while this one waits on the network;
+    /// `None` in a program that never started a task (std.net.8).
+    pub(super) fn yielder(&self) -> Option<Yielder> {
+        self.conc.as_ref().map(|ctx| Yielder { sched: Arc::clone(&ctx.sched), me: ctx.me })
     }
 
     /// conc.cancel.2: whether the running task was cancelled. The main
@@ -376,6 +416,14 @@ impl<'a, W: Write> Interp<'a, W> {
             let _ = self.out.write_all(&pending);
         }
         false
+    }
+
+    /// Flush before a call that waits: the main task copies what other
+    /// tasks printed to standard output; another task has nothing to flush.
+    pub(super) fn task_flush(&mut self) {
+        if self.conc.as_ref().is_some_and(|ctx| ctx.me == 0) {
+            self.task_print("");
+        }
     }
 
     /// `spawn f(args)` (conc.task.1): copy the arguments (conc.share.1) and

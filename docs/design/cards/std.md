@@ -24,6 +24,28 @@ error struct NetError
     url str
     kind str
     message str
+struct Options  ## std.net.6: what a request can set beyond its method and URL.
+    headers Map[str, str]
+    query Map[str, str]
+    body str
+    timeout_ms int
+    max_redirects int
+struct Request  ## std.net.9-11: a request the server received, and the server.
+    method str
+    path str
+    query Map[str, str]
+    headers Map[str, str]
+    body str
+    peer str
+struct Server
+    handle int
+struct Exchange
+    request net.Request
+    handle int
+struct Listener  ## std.net.12: raw TCP.
+    handle int
+struct Conn
+    handle int
 struct Window  ## std.ui (ADR 0177). A window is a handle; its cells live in the bootstrap.
     handle int
 struct Size
