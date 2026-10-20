@@ -146,6 +146,23 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             "transpose" => wrap(t.transpose())?,
+            "round" => wrap(t.round_int())?,
+            "argmax" | "argmin" => {
+                let r = t.arg_reduce(other.as_ref().map(Value::int), m == "argmax").map_err(|e| trapped(e, pos))?;
+                match (other, r.data) {
+                    (Some(_), data) => Value::Tensor(Rc::new(Tensor { shape: r.shape, data })),
+                    (None, Data::I(v)) => Value::Int(v[0]),
+                    (None, Data::F(_)) => unreachable!("arg_reduce gives `int`"),
+                }
+            }
+            "clamp" => {
+                let hi = match self.eval(&args[1].value, env)? {
+                    Value::Float(x) => x,
+                    other => unreachable!("checked: a float bound, found {other:?}"),
+                };
+                let Some(Value::Float(lo)) = other else { unreachable!("checked: a float bound") };
+                wrap(t.clamp(lo, hi))?
+            }
             "dot" => sum_value(t.dot(&tensor_arg()).map_err(|e| trapped(e, pos))?),
             "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
             "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,

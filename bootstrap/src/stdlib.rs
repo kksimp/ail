@@ -77,8 +77,8 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
     &[
-        "add", "conv2d", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu", "reshape", "shape", "sigmoid", "sum", "tanh",
-        "to_list", "transpose",
+        "add", "argmax", "argmin", "clamp", "conv2d", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu",
+        "reshape", "round", "shape", "sigmoid", "sum", "tanh", "to_list", "transpose",
     ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
