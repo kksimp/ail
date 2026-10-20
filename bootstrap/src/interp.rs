@@ -736,6 +736,13 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Char(c, _) => Value::Char(*c),
             Expr::Bool(b, _) => Value::Bool(*b),
             Expr::None(_) => Value::None,
+            Expr::Hole(pos) => {
+                return Err(Exit::Trap(Trap {
+                    rule: "expr.hole.2",
+                    pos: *pos,
+                    message: "reached a `todo` hole".into(),
+                }));
+            }
             // err.else.6: the fallback runs only when the value is absent or failed.
             Expr::Else { value, otherwise, .. } => match self.eval(value, env)? {
                 v @ (Value::None | Value::Fail(_)) => self.otherwise(otherwise, v, env)?,

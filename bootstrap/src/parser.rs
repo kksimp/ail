@@ -1332,6 +1332,10 @@ impl Parser {
                 self.i += 1;
                 Some(Expr::None(pos))
             }
+            Tok::Kw("todo") => {
+                self.i += 1;
+                Some(Expr::Hole(pos))
+            }
             Tok::Kw("self") => {
                 self.i += 1;
                 Some(Expr::Name("self".into(), pos))

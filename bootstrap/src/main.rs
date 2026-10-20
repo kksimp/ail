@@ -6,6 +6,7 @@
 mod ast;
 mod check;
 mod diag;
+mod explain;
 mod implicit_self;
 mod interp;
 mod lexer;
@@ -21,10 +22,11 @@ commands:
   check FILE    check a program without running it
   test FILE     run the program's `@test` functions
   effects FILE  print each function's inferred effects (eff.infer.6)
+  explain RULE  print a spec rule, its ADRs and an example
   version       print the version
 
 options:
-  --json        report diagnostics as JSON lines (for tools and AI agents)
+  --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deny LIST   with run or check: reject a program whose `main` reaches a
                 denied capability (fs, env, proc, clock, net, or all) (eff.cap.1)
 ";
@@ -48,6 +50,7 @@ fn main() -> ExitCode {
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => run_tests(file, json),
         ["effects", file] if deny.is_empty() => effects_file(file, json),
+        ["explain", rule] => explain::run(rule, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS

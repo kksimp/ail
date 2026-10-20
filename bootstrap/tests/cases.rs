@@ -132,3 +132,57 @@ fn usage_errors_exit_2() {
     let out = ail().arg("nonsense").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// Diagnostics schema v1 (ADR 0145): version, span and machine-applicable fixes.
+#[test]
+fn json_diagnostics_have_spans_and_fixes() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases/diag_fixes.ail");
+    let out = ail().args(["check", "--json"]).arg(&path).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let lines: Vec<&str> = stderr.lines().collect();
+    assert_eq!(lines.len(), 2, "{stderr}");
+    assert!(lines.iter().all(|l| l.starts_with("{\"api\":1,")), "{stderr}");
+    // `mut total := total + i` becomes `total = total + i`.
+    assert!(
+        lines[0].contains(
+            "\"end_line\":4,\"end_col\":18,\"fixes\":[{\"title\":\"assign to `total` with `=`\",\"edits\":[\
+             {\"line\":4,\"col\":9,\"end_line\":4,\"end_col\":13,\"text\":\"\"},\
+             {\"line\":4,\"col\":19,\"end_line\":4,\"end_col\":21,\"text\":\"=\"}]}]"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        lines[1].contains("\"edits\":[{\"line\":5,\"col\":5,\"end_line\":5,\"end_col\":9,\"text\":\"print\"}]"),
+        "{stderr}"
+    );
+    let text = ail().arg("check").arg(&path).output().unwrap();
+    assert!(String::from_utf8_lossy(&text.stderr).contains("\nfix: replace `prnt` with `print`"));
+}
+
+/// `ail explain` (ADR 0146): a known rule, JSON, and an unknown rule.
+#[test]
+fn explain_prints_rules() {
+    let out = ail().args(["explain", "expr.hole.2"]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0));
+    assert!(stdout.starts_with("expr.hole.2 (docs/spec/05-expressions.md:"), "{stdout}");
+    assert!(stdout.contains("Evaluating a hole MUST trap"), "{stdout}");
+    assert!(stdout.contains("ADR 0147: Typed holes"), "{stdout}");
+
+    let out = ail().args(["explain", "--json", "expr.bind.4"]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.starts_with("{\"api\":1,\"rule\":\"expr.bind.4\",\"file\":\"docs/spec/05-expressions.md\""));
+    assert!(stdout.contains("{\"id\":\"0039\",\"title\":"), "{stdout}");
+    assert!(stdout.contains("\"example\":\"fn total("), "{stdout}");
+
+    let out = ail().args(["explain", "expr.bind.99"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        stderr.starts_with("error: unknown rule `expr.bind.99`\nhelp: known rules nearby: expr.bind.1"),
+        "{stderr}"
+    );
+
+    let out = ail().args(["explain", "bootstrap.unsupported"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+}

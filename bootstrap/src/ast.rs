@@ -327,6 +327,8 @@ pub enum Expr {
     Bool(bool, Pos),
     /// `none` (type.opt.4)
     None(Pos),
+    /// `todo`, a typed hole (expr.hole.1-2).
+    Hole(Pos),
     /// A name, including `self` and bare enum variants (type.enum.3).
     Name(String, Pos),
     /// A generic function or type with explicit type arguments, `f[int]` or
@@ -428,6 +430,7 @@ impl Expr {
             | Expr::Char(_, p)
             | Expr::Bool(_, p)
             | Expr::None(p)
+            | Expr::Hole(p)
             | Expr::Name(_, p)
             | Expr::TypeArgs { pos: p, .. }
             | Expr::List(_, p)
