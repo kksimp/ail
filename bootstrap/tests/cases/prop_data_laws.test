@@ -1,0 +1,5 @@
+{"test":"split_join_round_trip","status":"pass","line":4,"col":10,"message":"","cases":100,"seed":9660920566791025643}
+{"test":"slices_partition","status":"pass","line":7,"col":10,"message":"","cases":100,"seed":4452987288093203407}
+{"test":"sorted_keeps_length","status":"pass","line":11,"col":10,"message":"","cases":100,"seed":18276167369488876430}
+{"test":"sorted_is_idempotent","status":"pass","line":14,"col":10,"message":"","cases":100,"seed":1288407693468125465}
+{"summary":true,"passed":4,"failed":0}

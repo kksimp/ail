@@ -1,0 +1,15 @@
+## Property tests over the existing data modules: str and list laws
+## (ADR 0269 generators; ADR 0270 properties). Run with `ail test`.
+
+@test fn split_join_round_trip(s str)
+    assert_eq(s.split(",").join(","), s)
+
+@test fn slices_partition(xs List[int], k int)
+    cut := if k < 0 then 0 else if k > xs.len() then xs.len() else k
+    assert_eq(xs[..cut].len() + xs[cut..].len(), xs.len())
+
+@test fn sorted_keeps_length(xs List[int])
+    assert_eq(xs.sorted().len(), xs.len())
+
+@test fn sorted_is_idempotent(xs List[int])
+    assert_eq(xs.sorted().sorted(), xs.sorted())
