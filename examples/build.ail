@@ -1,9 +1,4 @@
 ## An agent-style build script: check every example and summarize the diagnostics.
-use std.env
-use std.fs
-use std.io
-use std.path
-use std.proc
 
 struct Finding
     severity str

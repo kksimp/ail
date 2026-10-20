@@ -1,8 +1,4 @@
 ## An agent-style task runner: load JSON tasks, run the small ones, write back.
-use std.env
-use std.fs
-use std.path
-use std.proc
 
 MAX_HOURS := 3.0
 

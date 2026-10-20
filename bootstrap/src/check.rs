@@ -2929,7 +2929,12 @@ impl<'p> Checker<'p> {
             self.reject_test_call(i, npos);
             self.note_deprecated(i, npos);
             self.resolved.symbols.insert(npos, format!("fn:{n}"));
-            let sig = self.sigs[i].clone();
+            let mut sig = self.sigs[i].clone();
+            // A test can fail (test.attr.4), but calling it is already an
+            // error (test.attr.3); don't also ask for the failure's handling.
+            if self.prog.fns[i].is_test() && self.prog.fns[i].ret.is_none() {
+                sig.ret = Ty::Unit;
+            }
             let binds = match targs {
                 Some(a) => {
                     let declared = sig.generics[sig.owner..sig.owner + sig.declared].to_vec();

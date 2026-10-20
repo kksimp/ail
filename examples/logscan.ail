@@ -1,7 +1,4 @@
 ## An agent-style log scan: count levels per hour, rank the error messages.
-use std.env
-use std.fs
-use std.path
 
 LEVELS := ["INFO", "WARN", "ERROR"]
 
