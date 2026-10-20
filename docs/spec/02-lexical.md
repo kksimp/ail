@@ -71,7 +71,7 @@ It documents the declaration that immediately follows it. *(ADR 0043)*
 **lex.comment.3** — There are no block (multi-line delimited) comments.
 *(ADR 0043)*
 
-```ail
+```ail skip=context
 ## Returns the area of a circle.
 fn area(r f64) f64
     # pi is a library constant
@@ -91,7 +91,7 @@ form of the expression. `\{` produces a literal `{`. An interpolation MUST NOT
 begin with `{`: `{{` is a compile-time error whose help says a literal brace
 is `\{`. *(ADR 0089, ADR 0135)*
 
-```ail
+```ail error=lex.str.2
 msg := "Hello, {name}! You have {count} new messages."
 a := "\{x}"          # the text {x}
 b := "{{x}}"         # compile-time error: a literal brace is \{
@@ -124,7 +124,7 @@ follows these rules, in this order. *(ADR 0089, ADR 0135)*
    statement (`lex.stmt.2`), and the literal's lines aren't block structure
    (`lex.block.1`).
 
-```ail
+```ail skip=context
 one := """say "hi" to {name}"""     # one line: say "hi" to Ada
 two := """
     a
@@ -165,7 +165,7 @@ escapes and no interpolation: `\` and `{` are literal characters.
 3. `r` MUST be immediately followed by the opening `"`. `r "x"` is the name
    `r` followed by a string, since `r` isn't a keyword (`lex.kw.1`).
 
-```ail
+```ail fragment
 pat := r"\d+\.\d+"                  # the text \d+\.\d+
 src := r"""
     fn main()
@@ -194,7 +194,7 @@ literal first (`-9223372036854775808.abs()` is an error). A floating-point liter
 rounded (`type.num.8`); one whose value overflows to infinity is an error.
 *(ADR 0094, ADR 0130, ADR 0138)*
 
-```ail
+```ail error=lex.num.3
 lo := -9223372036854775808     # valid: the minimum int
 hi := 9223372036854775808      # compile-time error: doesn't fit int
 big := 1e999                   # compile-time error: overflows float

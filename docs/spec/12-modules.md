@@ -36,7 +36,7 @@ their trait's visibility. *(ADR 0098)*
 (`c.item`). Importing individual items, and wildcard imports, are not
 supported. *(ADR 0099)*
 
-```ail
+```ail skip=bootstrap
 use net.http
 
 pub fn fetch(url str) Data ! FetchError
@@ -71,7 +71,7 @@ computed before `main` runs. A failure while computing one (overflow, division
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*
 
-```ail
+```ail skip=bootstrap
 pub MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}
 SCRIPTS := [["a", "b"], ["c"]]

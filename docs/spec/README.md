@@ -42,10 +42,21 @@ Rules for rule IDs:
 
 ### Examples and conformance tests
 
-Examples in fenced blocks tagged `ail` are intended to become **conformance
-tests** once a compiler exists (ADR 0002). An example that is expected to fail
-compilation will be tagged with the expected diagnostic. That syntax will be
-defined when the diagnostic format is designed.
+Every fenced block tagged `ail` in a chapter is a **conformance test**
+(ADR 0002). `bootstrap/tests/spec.rs` runs `ail check --json` on each one
+during `./ail selftest` and reports failures by chapter and line. The fence
+line says what to expect:
+
+| Fence | Expectation |
+|---|---|
+| ```` ```ail ```` | A whole program: must check without errors (warnings are fine). |
+| ```` ```ail fragment ```` | A snippet. Column-0 declarations (`struct`, `enum`, `error`, `unique`, `fn`, `trait`, `impl`, `const`, `use`, `type`, `@attribute`, `pub`, and `#` comments before them) stay top level; every other line goes into a generated `fn main()`. Must then check without errors. |
+| ```` ```ail error=RULE ```` | Must report `RULE` among its errors. Handled as `fragment` when it has no `fn main`. |
+| ```` ```ail skip=bootstrap ```` | Uses a feature the bootstrap doesn't implement yet. Counted, not run. Remove the tag when the feature lands. |
+| ```` ```ail skip=context ```` | An illustration that uses declarations the chapter doesn't show. Counted, not run. Prefer making the example self-contained. |
+
+An unknown tag fails the suite. Blocks in other languages (`text`, `ebnf`)
+aren't run.
 
 ## Chapters
 
