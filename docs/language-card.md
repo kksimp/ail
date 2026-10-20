@@ -346,3 +346,17 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+
+## Tasks
+
+```ail
+t := spawn load(1)          # a task; args are copies
+p := t.wait()?              # result, or fails with Trapped
+g := TaskGroup()            # tasks returning nothing; waited at block end
+g.add(spawn work(2))
+ch := Channel[int](8)       # send waits while full; close() when done
+v := ch.recv() else break   # none once closed and empty
+m := Mutex(0)               # get, set, swap; x := m.lock() then m.unlock(x + 1)
+```
+
+Wait or `add` each task exactly once, on every path. A deadlock traps.

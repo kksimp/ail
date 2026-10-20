@@ -552,6 +552,8 @@ impl<'a, W: Write> Interp<'a, W> {
     /// conc.task.4: when a block ends, wait for the tasks it spawned and
     /// didn't wait (it left early), and for its groups. A trapped task in a
     /// group that nothing waited explicitly traps here (conc.task.8).
+    #[cold]
+    #[inline(never)]
     pub(super) fn end_tasks(&mut self, locals: &[(&'a str, Value)], pos: Pos) -> Result<(), Trap> {
         let handles: Vec<Handle> = locals
             .iter()

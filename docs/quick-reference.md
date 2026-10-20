@@ -492,10 +492,32 @@ fn main() !
 A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 `assert` and `assert_eq` also work in ordinary code (a failure traps).
 
+## Tasks and channels
+
+```ail
+t := spawn load(1)            # runs load(1) as a task; args are copies
+p := t.wait()?                # its result; fails with Trapped if it trapped
+g := TaskGroup()              # tasks that return nothing
+g.add(spawn work(2))          # waited when g's block ends, or:
+g.wait_all()?
+ch := Channel[int](8)         # bounded: send waits while full
+ch.send(1)
+v := ch.recv() else break     # none once closed and empty
+ch.close()
+m := Mutex(0)                 # shared state: get, set, swap
+x := m.lock()                 # read-modify-write:
+m.unlock(x + 1)
+```
+
+Each task handle must be waited or added to a group exactly once, on every
+path. A handle can't be stored or passed; channels and mutexes can, and
+copies are the same channel or mutex. If every task is blocked, the program
+traps (deadlock).
+
 ## Effects
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
-`fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
+`fail` (`T ! E` result), `mutates` (`mut` parameter), `spawn`, and the capabilities
 `fs`, `env`, `proc`, `clock`, `net`. A call through `any Trait` counts every
 implementation.
 
