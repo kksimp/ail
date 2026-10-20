@@ -12,6 +12,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`any Trait`** | A type holding any value whose type implements `Trait`. Calls dispatch dynamically (ADR 0079). |
 | **AoS / SoA** | Array of Structs vs. Struct of Arrays: two memory layouts for collections of records. SoA often vectorises and caches better. |
 | **Arena (scoped allocation)** | A region where many objects with a shared lifetime are allocated, then freed together in one operation. |
+| **Asserted loop** | A `par for` loop that the checker can't prove independent but finds no conflict in; it relies on the programmer's assertion (`conc.par.5`, ADR 0237). |
 | **Associated function** | A function declared `fn Type.name(...)` without `self`, called `Type.name(...)` (ADR 0082). |
 | **Attribute** | `@name` or `@name(args)` metadata placed before a declaration (ADR 0083). |
 | **Automatic implementation** | `Eq`, `ToStr` and `Hash`, which every type implements without an `impl` when its parts do; an explicit `impl Eq` or `impl ToStr` replaces it (ADR 0126, ADR 0133). |
@@ -28,16 +29,18 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
+| **Compile-time-safe** | A function whose effect set has none of `io`, `unsafe`, `spawn` or a capability, so constants and derive generators may call it; the same functions `@pure` accepts (`ct.const.2`, ADR 0225). |
 | **Comprehension** | An expression that builds a list, set or map from `for` clauses: `[f(x) for x in xs if c]`, `{x for ...}`, `{k: v for ...}` (ADR 0182). |
 | **Compressed reference** | A managed reference stored in fewer than 64 bits (e.g. a 32-bit offset into a heap region). See ADR 0014. |
 | **Conformance test** | A test, usually extracted from a spec example, that checks an implementation follows a normative rule. |
-| **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed before `main` runs; visible in the whole module (ADR 0132). |
-| **Constant expression** | An expression built only from literals, other constants, collection and struct literals, and built-in operators on built-in types; it can't call functions or run user code (ADR 0132). |
+| **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed at compile time (before `main` in the bootstrap); visible in the whole module (ADR 0132, ADR 0225). |
+| **Constant expression** | A constant's value: literals, other constants, collection and struct literals, operators, and calls of compile-time-safe functions; it can't hold a failure (`mod.const.2`, `ct.const.*`, ADR 0132, ADR 0225). |
 | **Constraint (bound)** | A trait a generic type parameter must implement, written inline as `[T Trait]` (ADR 0074). |
 | **Contract** | `requires` and `ensures` lines under a function's signature: what callers must satisfy and what the function promises, checked at run time (ADR 0210). |
 | **Copy-on-write (COW)** | Values share storage until one of them is mutated, at which point that one gets its own copy. Unobservable to programs (`own.val.2`). |
 | **Deadlock** | Every unfinished task is blocked, so none can continue. The program traps with `conc.task.7` instead of hanging (ADR 0186). |
 | **Delegated decision** | A routine design decision made by the AI using the designer's priority order (ADR 0076). |
+| **Derive generator** | A compile-time function `fn(TypeInfo) str ! DeriveError` that a trait names with `@derive(f)`; an empty `impl` of the trait runs it and checks the AIL text it returns as the impl's body (`ct.derive.*`, ADR 0227). |
 | **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). |
 | **Diagnostics schema** | The versioned JSON form of `ail check --json`: one object per line, tagged `"api":1`, with span, notes and fixes; see [semantic-api.md](design/semantic-api.md) (ADR 0145). |
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
@@ -51,21 +54,27 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
 | **Fix** | A machine-applicable edit a diagnostic carries (ADR 0145). `ail fix` applies the first fix of each diagnostic and re-checks (ADR 0203). |
 | **Fix (diagnostic)** | A machine-applicable edit attached to a diagnostic: a title and text replacements by line and column, applied all or nothing (ADR 0145). |
+| **Generated origin** | The provenance of generated code: the deriving `impl` and the generator, shown by `ail api --expanded` (`ct.gen.4`, ADR 0228). |
 | **`Hash`** | The standard trait of map keys and set elements. Automatic for every type whose `==` is automatic or derived and whose parts are `Hash`; has no methods (ADR 0133). |
+| **HIR** | High-level IR: the resolved, typed, expanded program, named by stable ids; what `ail api` serves and the interpreter runs ([ir-architecture.md](design/ir-architecture.md), ADR 0222). |
 | **Hot/cold splitting** | Placing rarely used fields (or code) away from frequently used ones to improve cache use. |
 | **Hugging** | In `ail fmt`, splitting a too-long statement inside its last argument's list, so `f(a, [` stays on the first line and `])` closes the last (fmt.wrap, ADR 0169). |
 | **Import name** | The name `use a.b` binds in its file: `b`, or `c` with `use a.b as c`. Items are reached through it as `b.item` (ADR 0099, ADR 0154). |
 | **In-place reuse** | Reusing a uniquely owned value's memory at its last use for a new value, avoiding the allocator (Perceus-style). See ADR 0012. |
+| **Independent iteration** | A `for` loop whose iterations can run in any order or at once with the same result: no ordering effect, no early exit, and writes only to iteration locals, to `r[i]` by the loop variable, or to `int` accumulators (`conc.par.2–4`, ADR 0236). |
 | **INDENT / DEDENT** | Tokens the lexer produces when indentation increases or decreases, giving indentation-based blocks a structure the parser can use (ADR 0033). |
 | **Insertion order** | The iteration order of maps and sets: the order keys were first added. Updating a key keeps its place (ADR 0131). |
 | **ISA** | Instruction Set Architecture, e.g. x86-64 or ARM64 (AArch64). |
 | **JSON value (`Json`)** | The standard `enum Json` (`Null`, `Bool`, `Num`, `Str`, `Arr`, `Obj`) that `parse_json` returns and `Json.to_text` prints. Numbers are `float`; objects keep document order (`json.type.1`, ADR 0161). |
 | **Keyword** | A reserved word with fixed meaning, such as `fn` or `match`. Keywords can never be used as names (`lex.kw.1`, ADR 0114). |
+| **Lazy binary splitting** | Splitting a parallel loop's range in half only when another worker is idle, so small or nested loops cost almost nothing (ADR 0238). |
 | **Literal pattern** | A `match` pattern that is an integer, character, string or `bool` literal (ADR 0138). |
 | **Lockfile** | `ail.lock`: the exact commit and content hash of every git dependency, for reproducible builds (ADR 0233; designed, not implemented). |
 | **LSE** | Large System Extensions (ARMv8.1+): single-instruction atomic operations (CAS, LDADD, SWP…). Guaranteed by AIL's ARMv8.2-A baseline. |
+| **Machine IR** | The per-ISA representation after instruction selection, carrying recovery records into debug info (ADR 0222). |
 | **Managed reference** | A reference to an object whose storage is managed by the compiler or runtime, as opposed to a raw pointer. See spec `plat.ptr.3`. |
 | **Manifest** | A package's `ail.pkg` file: its `package` line and one `dep` line per dependency (ADR 0230). |
+| **MIR** | Mid-level IR: per body instance, a control-flow graph in SSA form with explicit allocations, copies, traps, dispatch and effects; the unit of the query compiler; internal and unversioned (ADR 0222, ADR 0223). |
 | **Module** | A directory of `.ail` files sharing one namespace (ADR 0097). |
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
@@ -76,6 +85,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **PAC** | Pointer Authentication (ARMv8.3+): cryptographic signatures stored in a pointer's unused bits. |
 | **Package** | The code under one package root: its root module and the modules below it, optionally described by an `ail.pkg` manifest (ADRs 0153, 0230). |
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
+| **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
 | **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |
@@ -85,6 +95,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Qualified name** | An item named through its module, `geo.Point`; the bootstrap renames every imported item to its module path plus its name (ADR 0156). |
 | **Raw string** | `r"..."` or `r"""..."""`: a string literal with no escapes or interpolation (ADR 0135). |
 | **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
+| **Reduction** | Combining every iteration's value into one, like `total += x`. AIL parallelises `int` `+=` reductions and `xs.sum()` without changing the result (`conc.par.4`, ADR 0239). |
 | **`ref` cell** | A GC-managed shared mutable cell (`ref T`). The only way two names can observe each other's mutations (ADR 0063). |
 | **Reference (semantic API)** | A use of a declared name, listed by `ail api --symbols` as the declaration's symbol id and a position (ADR 0151). |
 | **Region inference** | Compiler inference of arenas (regions) for groups of allocations with a shared lifetime. See ADR 0012. |
@@ -97,6 +108,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
+| **Span-free fingerprint** | The hash of an item's HIR with spans replaced by offsets relative to the item, so moving code doesn't invalidate cached results (ADR 0224). |
 | **Standard module** | A built-in module imported with `use std.NAME` (`fs`, `env`, `io`, `proc`, `time`) whose functions reach the operating system with typed failures (ADR 0157). |
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
@@ -120,10 +132,12 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |
 | **Type argument inference** | Working out a generic call's type arguments from its arguments and expected type (ADR 0129). |
 | **Typed hole** | `todo` written where code isn't finished: it takes the expected type, the checker warns with what it needs and the names in scope, and running it traps (ADR 0147). |
+| **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |
 | **Whole-program optimisation** | Optimising across all modules at once (specialisation, devirtualisation, cross-module constant propagation). See OQ-017. |
 | **Window host** | In the bootstrap, the main thread that owns `std.ui`'s window and serves the interpreter thread's requests, because macOS allows windows only on the main thread (ADR 0178). |
+| **Work stealing** | A scheduler in which each worker thread has its own queue of work and idle workers take work from the others' queues; the runtime uses one such pool for tasks and parallel loops (ADR 0238). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |

@@ -1,0 +1,16 @@
+# conc.par.5: `par for` asserts what the analysis can't prove; the loop
+# means the same as `for` (conc.par.1).
+fn main()
+    perm := [2, 0, 3, 1]
+    mut out := [0, 0, 0, 0]
+    par for i in 0..4
+        out[perm[i]] = i * 10
+    mut total := 0
+    par for x in out
+        total += x
+    print(out)
+    print(total)
+    mut halves := [0.0, 0.0, 0.0]
+    par for i in 0..3
+        halves[i] = i.to_float() / 2.0
+    print(halves.sum())

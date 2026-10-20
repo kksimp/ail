@@ -336,6 +336,21 @@ impl Parser {
 
     /// Report an unexpected token, preferring a precise "not supported yet"
     /// message for spec keywords the bootstrap doesn't implement.
+    /// `for x in e` or `for mut x in e` (expr.loop.1, expr.loop.6), the
+    /// current token being `for`; `par` after `par` (conc.par.5).
+    fn for_loop(&mut self, par: bool, pos: Pos) -> Option<Stmt> {
+        self.bump();
+        let mutable = self.eat_kw("mut");
+        let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
+        if !self.eat_kw("in") {
+            self.unexpected("`in` after the loop variable", "expr.loop.1");
+            return None;
+        }
+        let iter = self.range()?;
+        let body = self.block("the `for` header", "expr.loop.1")?;
+        Some(Stmt::For { par, var, var_pos, mutable, iter, body, pos })
+    }
+
     fn unexpected(&mut self, expected: &str, rule: &'static str) {
         let pos = self.pos();
         if let Tok::Kw(k) = self.peek()
@@ -1004,17 +1019,15 @@ impl Parser {
                 let body = self.block("the `while` condition", "expr.loop.1")?;
                 Some(Stmt::While { cond, body, pos })
             }
-            Tok::Kw("for") => {
+            Tok::Kw("for") => self.for_loop(false, pos),
+            // conc.par.5: `par for` asserts that the iterations are independent.
+            Tok::Kw("par") => {
                 self.bump();
-                let mutable = self.eat_kw("mut");
-                let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
-                if !self.eat_kw("in") {
-                    self.unexpected("`in` after the loop variable", "expr.loop.1");
+                if !matches!(self.peek(), Tok::Kw("for")) {
+                    self.unexpected("`for` after `par`", "conc.par.5");
                     return None;
                 }
-                let iter = self.range()?;
-                let body = self.block("the `for` header", "expr.loop.1")?;
-                Some(Stmt::For { var, var_pos, mutable, iter, body, pos })
+                self.for_loop(true, pos)
             }
             Tok::Kw("break") => {
                 self.bump();

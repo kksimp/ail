@@ -343,7 +343,10 @@ impl<'a, W: Write> Interp<'a, W> {
                         }
                         Value::Num(*k, k.encode(total))
                     }
-                    Some(Value::Float(_)) => Value::Float(items.iter().map(|x| x.float()).sum()),
+                    Some(Value::Float(_)) => {
+                        let xs: Vec<f64> = items.iter().map(|x| x.float()).collect();
+                        Value::Float(tree_sum(&xs))
+                    }
                     _ => {
                         let mut total: i64 = 0;
                         for x in items.iter() {
@@ -665,4 +668,21 @@ pub(super) fn map_value<'v>(
         Some(i) => Ok(t.val(i)),
         None => trap("type.map.3", pos, format!("the map has no key {}", shown())),
     }
+}
+
+/// A float list's sum in the fixed tree of type.coll.12 (ADR 0239). A
+/// leaf of up to 32 elements keeps four running sums, element `k` going to
+/// sum `k % 4`, and gives `(p0 + p1) + (p2 + p3)`; a longer list splits
+/// after `32 * ceil(n / 64)` elements and adds its halves' sums. The shape
+/// depends only on the length, so a vector or parallel sum gives the same bits.
+pub fn tree_sum(xs: &[f64]) -> f64 {
+    if xs.len() <= 32 {
+        let mut p = [0.0f64; 4];
+        for (k, x) in xs.iter().enumerate() {
+            p[k % 4] += x;
+        }
+        return (p[0] + p[1]) + (p[2] + p[3]);
+    }
+    let m = 32 * xs.len().div_ceil(64);
+    tree_sum(&xs[..m]) + tree_sum(&xs[m..])
 }

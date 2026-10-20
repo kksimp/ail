@@ -1,0 +1,36 @@
+# ct.const.2: everything a constant calls must be compile-time-safe;
+# ct.const.3: a constant can't hold a failure.
+use std.fs
+
+GREETING := greet("ail")
+CONFIG := load()
+PARSED := parse_limit("12")
+TABLE := table(3)
+
+fn greet(name str) str
+    log("greeting {name}")
+    "hello {name}"
+
+fn log(text str)
+    print(text)
+
+fn load() str
+    fs.read_text("config.txt") else ""
+
+error enum LimitError
+    Bad(text str)
+
+fn parse_limit(text str) int ! LimitError
+    n := text.to_int() else return LimitError.Bad(text)
+    n
+
+@pure fn table(n int) List[int]
+    mut out := List[int]()
+    for i in 0..n
+        out.push(i)
+    out
+
+fn main()
+    print(GREETING)
+    print(CONFIG)
+    print(TABLE)

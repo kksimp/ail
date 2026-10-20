@@ -60,7 +60,7 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
 `random.seed(n)`, `random.shuffle(mut xs)`.
 
-Constants: top-level `NAME := value` (no calls).
+Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
 
 ## Structs, enums and methods
 

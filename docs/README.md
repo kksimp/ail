@@ -20,6 +20,8 @@ Design notes:
   token-efficiency and performance levels are realistic?
 - [design/performance-beyond-c.md](design/performance-beyond-c.md): research
   on matching or beating C for systems and allocation-heavy code.
+- [design/automatic-parallelism.md](design/automatic-parallelism.md): using
+  every core, SIMD and NPUs automatically without changing results.
 - [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would

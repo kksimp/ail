@@ -3,8 +3,8 @@
 Chapter key: `conc`
 
 > **Status:** Drafted (partial). Specified: memory-model foundations, the task
-> model, scope-bound tasks, and communication through `Channel[T]` and
-> `Mutex[T]`. Not yet designed: cancellation, `select`, parallel loops,
+> model, scope-bound tasks, communication through `Channel[T]` and
+> `Mutex[T]`, and parallel loops. Not yet designed: cancellation, `select`,
 > `Atomic[T]`, and the formal model.
 
 ## Memory model
@@ -195,3 +195,81 @@ fn main()
         print("a task trapped")
     print(m.get())
 ```
+
+## Parallel execution
+
+**conc.par.1** — An implementation MAY run the iterations of an independent
+loop (`conc.par.2`) concurrently, on any number of cores and vector lanes.
+The observable result MUST be identical to running the iterations in order:
+the same values, bit for bit (floats included), and, if iterations trap,
+the trap of the lowest-index trapping iteration. *(ADR 0236)*
+
+**conc.par.2** — A `for` loop's iterations are *independent* when its body:
+(1) has no `io`, `unsafe` or `spawn` effect and no capability, through every
+call (`eff.infer.3`); (2) doesn't leave the loop early: no `break` of this
+loop, `return`, `?`, or `else return`; (3) calls no method of a task,
+`TaskGroup`, `Channel` or `Mutex` handle, directly or through the functions
+it calls; and
+(4) writes only places that `conc.par.3` or `conc.par.4` allow, or places
+rooted at names declared in the body (including the loop variable). Calls
+with a `mut` argument and methods with `mut self` write their place. *(ADR 0236)*
+
+**conc.par.3** — In a loop over a range, a write to `r[i]` (optionally
+followed by more fields or indexes), where `r` is declared outside the body,
+`i` is the loop variable, and the steps before `[i]` are fields, literals or
+names declared outside the body, is allowed when every write to `r` in the
+body uses the same steps up to `[i]` and every read of `r` either starts with
+those steps or only takes a `len()`. *(ADR 0236)*
+
+**conc.par.4** — A variable declared outside the body as an `int` (a
+parameter of type `int`, or bound to an integer literal) may be written by
+`x += e` when the body neither reads it nor writes it otherwise. Such
+accumulators combine in a fixed order; a sum overflows, and traps, exactly
+where the sequential sum would. A float accumulator is not allowed: float
+`+` isn't associative. *(ADR 0236)*
+
+```ail
+fn main()
+    mut squares := [0, 0, 0, 0]
+    mut total := 0
+    for i in 0..4
+        squares[i] = i * i
+        total += i
+    print("{squares} {total}")
+```
+
+**conc.par.5** — `par for x in e` means `for x in e` and asserts that the
+iterations are independent. The obligations of `conc.par.2–4` that the
+checker can decide still apply, and a `par for` that provably fails one is a
+compile-time error. The assertion covers only what the checker can't
+decide: that writes `r[e]` with another index pick distinct elements, that
+reads of other elements of `r` don't meet those writes, and that an
+accumulator is an `int`. A checked build MAY trap when two iterations write
+the same element. `par` is reserved (`lex.kw.1`) and is followed only by
+`for`. *(ADR 0237)*
+
+```ail error=conc.par.5
+fn main()
+    xs := [1, 2, 3]
+    par for x in xs
+        print(x)
+```
+
+**conc.par.6** — `ail effects --parallel FILE` prints one line per `for`
+loop in source order: `FILE:LINE:COL ID for VAR: VERDICT (RULE: REASON)`,
+with ` at FILE:LINE:COL` after the reason when it points at a write or exit
+inside the body. `ID` is the enclosing function's stable id (`eff.infer.6`),
+`par for` replaces `for` for an annotated loop, and `VERDICT` is
+`parallel`, `asserted` (a `par for` that holds only by its assertion) or
+`sequential`. With `--json` it prints one object
+`{"ail_api":1,"loops":[{"at","fn","var","par","verdict","rule","reason","reason_at"},...]}`. *(ADR 0236)*
+
+**conc.par.7** — Scheduling is the implementation's choice and MUST NOT
+change results (`conc.par.1`). The native runtime uses one work-stealing
+pool for tasks and parallel loops, runs a loop with too little work
+sequentially, and finishes a parallel loop before the statement after it
+starts, so it is scope-bound like `conc.task.4`. *(ADR 0238)*
+
+> **Note:** the bootstrap interpreter runs every loop in order, which
+> satisfies `conc.par.1`. Its analysis is what `conc.par.5–6` report.
+

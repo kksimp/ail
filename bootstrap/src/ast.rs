@@ -347,8 +347,10 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
-    /// `for x in e`, or `for mut x in e` (expr.loop.6).
+    /// `for x in e`, or `for mut x in e` (expr.loop.6); `par` when written
+    /// `par for` (conc.par.5).
     For {
+        par: bool,
         var: String,
         var_pos: Pos,
         mutable: bool,
