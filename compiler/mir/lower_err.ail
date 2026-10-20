@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Str | List => Ty.Opt(t)
+        Int | Float | Bool | Str | List | Struct => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool

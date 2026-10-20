@@ -1,0 +1,48 @@
+struct Node
+    value int
+    next Node?
+    label str?
+
+struct Holder
+    items List[int]?
+    count int?
+
+fn push_front(head Node?, v int) Node
+    Node(value: v, next: head, label: none)
+
+fn total(head Node?) int
+    mut sum := 0
+    mut cur := head
+    while cur != none
+        n := cur else return sum
+        sum += n.value
+        cur = n.next
+    sum
+
+fn describe(n Node) str
+    n.label else "unnamed"
+
+fn second(head Node?) Node?
+    h := head?
+    h.next
+
+fn main()
+    mut list := push_front(none, 1)
+    list = push_front(list, 2)
+    list = push_front(list, 3)
+    print(total(list))
+    print(total(none))
+    print(describe(list))
+    named := Node(value: 9, next: none, label: "nine")
+    print(describe(named))
+    s := second(list)
+    print(total(s))
+    print(total(second(none)))
+    h := Holder(items: [4, 5], count: 2)
+    print(h.items else [])
+    print(h.count else 0)
+    e := Holder(items: none, count: none)
+    print(e.items else [0])
+    print(e.count else -1)
+    if c := h.count
+        print(c * 10)
