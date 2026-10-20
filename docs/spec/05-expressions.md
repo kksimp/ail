@@ -435,6 +435,21 @@ performance report. *(ADR 0035)*
 sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
 `a`, since that result is representable. *(ADR 0115)*
 
+**expr.bit.1** — An `int` has the methods `bit_and(b)`, `bit_or(b)` and
+`bit_xor(b)`, which combine the two 64-bit two's complement values bit by bit,
+and `bit_not()`, which flips every bit. `shl(n)` shifts left and discards the
+bits that leave the top; `shr(n)` shifts right and copies the sign bit into the
+vacated positions, so `(-8).shr(1)` is `-4`. *(ADR 0465)*
+
+**expr.bit.2** — A shift count must be in `0..=63`. A count outside that range
+MUST trap. *(ADR 0465)*
+
+```ail fragment
+flags := 5.bit_or(8)        # 13
+low := flags.bit_and(4)     # 4
+hi := (-8).shr(1)           # -4
+```
+
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is
 > decided in the error-handling chapter.

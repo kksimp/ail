@@ -1621,7 +1621,11 @@ impl<'p> Checker<'p> {
             if matches!(got, Ty::Res(..) | Ty::Union(_)) || self.is_error(&got) {
                 self.mismatch("expr.block.2", at, &sig.ret, &got);
             } else {
-                self.error("expr.block.2", at, msg);
+                let mut d = Diagnostic::new("expr.block.2", at, msg);
+                if f.ret.is_some() {
+                    d = d.note(ret_pos, "the return type is declared here");
+                }
+                self.diags.push(d);
             }
         }
         self.record_locals(0);
@@ -2391,6 +2395,8 @@ impl<'p> Checker<'p> {
         // fix.edit.1: a `:=` binding that is changed later becomes `mut`.
         if let Some(decl) = decl {
             d = d.fix(format!("declare `{root}` with `mut`"), vec![Edit::insert(decl, "mut ")]);
+            // The binding's own position: where an agent changes the declaration.
+            d = d.note(decl, format!("`{root}` is declared here"));
         }
         self.diags.push(d);
     }

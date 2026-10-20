@@ -1,0 +1,650 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native runtime (lane 122, docs/design/native-abi.md), written in AIL
+## and tested under the interpreter on the machine model of the `Mem`
+## section: `ail test compiler/rt/rt.ail`. Sections: number text (ADR 0409),
+## machine model and allocator (ADR 0404, 0407), strings, lists and
+## `print` (ADR 0404), traps (ADR 0405).
+
+# ---- fmt ----
+##
+## Number to text, byte for byte as the interpreter prints it (lane 122,
+## ADR 0409). `int_bytes` and `float_bytes` return ASCII bytes. Floats follow
+## type.num.7: the shortest digits that read back as the same value, closest
+## when several are as short (Steele and White's free-format algorithm, with
+## the exact arithmetic of Burger and Dybvig's variant), in fixed notation for
+## decimal exponents -4 to 15 and `d.ddde+XX` otherwise.
+##
+## Arithmetic uses only `int` and `float` operations, with no bit
+## reinterpretation, so it runs under the interpreter and compiles to the
+## same code later. Big numbers are little-endian base 10^9 limbs.
+
+BASE := 1000000000
+
+## The bytes of `n` in decimal. Works on negative remainders so that the
+## smallest `int` needs no negation.
+pub fn int_bytes(n int) List[int]
+    if n == 0
+        return [48]
+    mut digits := List[int]()
+    mut v := n
+    while v != 0
+        d := v % 10
+        a := if d < 0 then 0 - d else d
+        digits.push(48 + a)
+        v = v / 10
+    mut out := List[int]()
+    if n < 0
+        out.push(45)
+    mut i := digits.len() - 1
+    while i >= 0
+        out.push(digits[i])
+        i -= 1
+    out
+
+fn trim(a List[int]) List[int]
+    mut n := a.len()
+    while n > 0 and a[n - 1] == 0
+        n -= 1
+    a.take(n)
+
+fn big_of(v int) List[int]
+    mut out := List[int]()
+    mut x := v
+    while x > 0
+        out.push(x % BASE)
+        x = x / BASE
+    out
+
+fn big_mul(a List[int], k int) List[int]
+    if k == 0
+        return List[int]()
+    mut out := List[int]()
+    mut carry := 0
+    for limb in a
+        t := limb * k + carry
+        out.push(t % BASE)
+        carry = t / BASE
+    while carry > 0
+        out.push(carry % BASE)
+        carry = carry / BASE
+    out
+
+fn big_add(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut carry := 0
+    mut i := 0
+    n := if a.len() > b.len() then a.len() else b.len()
+    while i < n
+        x := if i < a.len() then a[i] else 0
+        y := if i < b.len() then b[i] else 0
+        t := x + y + carry
+        out.push(t % BASE)
+        carry = t / BASE
+        i += 1
+    if carry > 0
+        out.push(carry)
+    out
+
+## `a - b`, for `a >= b`.
+fn big_sub(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut borrow := 0
+    mut i := 0
+    while i < a.len()
+        y := if i < b.len() then b[i] else 0
+        mut t := a[i] - y - borrow
+        if t < 0
+            t += BASE
+            borrow = 1
+        else
+            borrow = 0
+        out.push(t)
+        i += 1
+    trim(out)
+
+## -1, 0 or 1.
+fn big_cmp(a List[int], b List[int]) int
+    if a.len() != b.len()
+        return if a.len() < b.len() then 0 - 1 else 1
+    mut i := a.len() - 1
+    while i >= 0
+        if a[i] != b[i]
+            return if a[i] < b[i] then 0 - 1 else 1
+        i -= 1
+    0
+
+fn big_pow2(a List[int], k int) List[int]
+    mut out := a
+    mut left := k
+    while left >= 29
+        out = big_mul(out, 536870912)
+        left -= 29
+    if left > 0
+        mut p := 1
+        for _ in 0..left
+            p *= 2
+        out = big_mul(out, p)
+    out
+
+fn big_pow10(a List[int], k int) List[int]
+    mut out := a
+    mut left := k
+    while left >= 9
+        out = big_mul(out, BASE)
+        left -= 9
+    if left > 0
+        mut p := 1
+        for _ in 0..left
+            p *= 10
+        out = big_mul(out, p)
+    out
+
+## Shortest digits of the positive finite `x`: the digit values 0-9 and the
+## decimal point position `k`, so that x = 0.DIGITS * 10^k.
+struct Digits
+    ds List[int]
+    point int
+
+fn digits_of(x float) Digits
+    # x = f * 2^e, f an integer below 2^53
+    mut f := 0
+    mut e := 0
+    if x < 2.2250738585072014e-308
+        mut z := x
+        for _ in 0..33
+            z = z * 4294967296.0
+        for _ in 0..18
+            z = z * 2.0
+        f = z.to_int()
+        e = -1074
+    else
+        mut y := x
+        while y >= 18446744073709551616.0
+            y = y * 2.3283064365386963e-10
+            e += 32
+        while y >= 9007199254740992.0
+            y = y * 0.5
+            e += 1
+        while y < 1048576.0
+            y = y * 4294967296.0
+            e -= 32
+        while y < 4503599627370496.0
+            y = y * 2.0
+            e -= 1
+        f = y.to_int()
+    # r/s = x, mp/s and mm/s: half the gaps above and below x
+    mut r := List[int]()
+    mut s := List[int]()
+    mut mp := List[int]()
+    mut mm := List[int]()
+    wide := f == 4503599627370496 and e > -1074
+    if e >= 0
+        if wide
+            r = big_pow2(big_of(f), e + 2)
+            s = big_of(4)
+            mp = big_pow2(big_of(1), e + 1)
+            mm = big_pow2(big_of(1), e)
+        else
+            r = big_pow2(big_of(f), e + 1)
+            s = big_of(2)
+            mp = big_pow2(big_of(1), e)
+            mm = mp
+    else
+        if wide
+            r = big_of(f * 4)
+            s = big_pow2(big_of(1), 1 - e + 1)
+            mp = big_of(2)
+            mm = big_of(1)
+        else
+            r = big_of(f * 2)
+            s = big_pow2(big_of(1), 1 - e)
+            mp = big_of(1)
+            mm = big_of(1)
+    even := f % 2 == 0
+    # estimate k = ceil(log10 x), then fix it up exactly
+    bits := 53 + e
+    mut k := (bits * 30103) / 100000
+    if k >= 0
+        s = big_pow10(s, k)
+    else
+        r = big_pow10(r, 0 - k)
+        mp = big_pow10(mp, 0 - k)
+        mm = big_pow10(mm, 0 - k)
+    # too small: (r + mp) >= s (> if the high end is excluded)
+    while true
+        c := big_cmp(big_add(r, mp), s)
+        if c > 0 or (c == 0 and even)
+            s = big_mul(s, 10)
+            k += 1
+        else
+            break
+    # too large: (r + mp) * 10 < s
+    while true
+        c := big_cmp(big_mul(big_add(r, mp), 10), s)
+        if c < 0 or (c == 0 and not even)
+            r = big_mul(r, 10)
+            mp = big_mul(mp, 10)
+            mm = big_mul(mm, 10)
+            k -= 1
+        else
+            break
+    mut ds := List[int]()
+    while true
+        r = big_mul(r, 10)
+        mp = big_mul(mp, 10)
+        mm = big_mul(mm, 10)
+        mut d := 0
+        while big_cmp(r, s) >= 0
+            r = big_sub(r, s)
+            d += 1
+        cl := big_cmp(r, mm)
+        low := cl < 0 or (cl == 0 and even)
+        ch := big_cmp(big_add(r, mp), s)
+        high := ch > 0 or (ch == 0 and even)
+        if not low and not high
+            ds.push(d)
+        else
+            if low and not high
+                ds.push(d)
+            elif high and not low
+                ds.push(d + 1)
+            else
+                if big_cmp(big_add(r, r), s) < 0
+                    ds.push(d)
+                else
+                    ds.push(d + 1)
+            break
+    Digits(ds: ds, point: k)
+
+fn text_bytes(s str) List[int]
+    mut out := List[int]()
+    for c in s.chars()
+        out.push(c.code())
+    out
+
+## The bytes of `x` as `"{x}"` prints it (type.num.7).
+pub fn float_bytes(x float) List[int]
+    if x != x
+        return text_bytes("nan")
+    if x > 1.7976931348623157e308
+        return text_bytes("inf")
+    if x < -1.7976931348623157e308
+        return text_bytes("-inf")
+    if x == 0.0
+        return if 1.0 / x < 0.0 then text_bytes("-0.0") else text_bytes("0.0")
+    neg := x < 0.0
+    g := digits_of(if neg then 0.0 - x else x)
+    mut out := List[int]()
+    if neg
+        out.push(45)
+    n := g.ds.len()
+    p := g.point
+    if p >= -3 and p <= 16
+        if p <= 0
+            out.push(48)
+            out.push(46)
+            for _ in 0..(0 - p)
+                out.push(48)
+            for d in g.ds
+                out.push(48 + d)
+        elif p >= n
+            for d in g.ds
+                out.push(48 + d)
+            for _ in 0..(p - n)
+                out.push(48)
+            out.push(46)
+            out.push(48)
+        else
+            for i in 0..n
+                if i == p
+                    out.push(46)
+                out.push(48 + g.ds[i])
+    else
+        out.push(48 + g.ds[0])
+        if n > 1
+            out.push(46)
+            for i in 1..n
+                out.push(48 + g.ds[i])
+        out.push(101)
+        e := p - 1
+        out.push(if e < 0 then 45 else 43)
+        a := if e < 0 then 0 - e else e
+        if a < 10
+            out.push(48)
+        for b in int_bytes(a)
+            out.push(b)
+    out
+
+fn str_of(bs List[int]) str
+    mut s := ""
+    for b in bs
+        s = "{s}{char.from_code(b)}"
+    s
+
+@test fn float_text_matches_the_interpreter()
+    xs := [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        0.1,
+        0.2,
+        0.1 + 0.2,
+        1.5,
+        100.0,
+        1000.0,
+        0.0001,
+        0.00001,
+        123456789.125,
+        1e15,
+        1e16,
+        1e17,
+        1.5e300,
+        5e-324,
+        2.2250738585072014e-308,
+        1.7976931348623157e308,
+        9007199254740993.0,
+        3.14159,
+        2.5e-5,
+        4.35,
+        0.3,
+        1e22,
+        1e23,
+        8.41e21,
+        2.0e-7,
+        123456.789e3,
+        7.0e-10,
+    ]
+    for x in xs
+        assert(str_of(float_bytes(x)) == "{x}")
+    assert(str_of(float_bytes(1.0 / 0.0)) == "inf")
+    assert(str_of(float_bytes(-1.0 / 0.0)) == "-inf")
+    assert(str_of(float_bytes(0.0 / 0.0)) == "nan")
+
+@test fn int_text_matches_the_interpreter()
+    xs := [0, 1, -1, 9, 10, -10, 12345, 9223372036854775807, -9223372036854775807 - 1, 1000000, -42]
+    for x in xs
+        assert(str_of(int_bytes(x)) == "{x}")
+
+## 2^k as a float, for -1074 <= k <= 1023 (exact).
+fn pow2(k int) float
+    mut y := 1.0
+    mut left := k
+    while left >= 32
+        y = y * 4294967296.0
+        left -= 32
+    while left <= -32
+        y = y * 2.3283064365386963e-10
+        left += 32
+    while left > 0
+        y = y * 2.0
+        left -= 1
+    while left < 0
+        y = y * 0.5
+        left += 1
+    y
+
+@test fn random_floats_match_the_interpreter()
+    random.seed(7)
+    for _ in 0..1500
+        m := random.int(1, 9007199254740991)
+        k := random.int(-1074, 970)
+        x := m.to_float() * pow2(k)
+        assert(str_of(float_bytes(x)) == "{x}")
+    for _ in 0..600
+        m := random.int(1, 99999)
+        x := m.to_float() / 1000.0
+        assert(str_of(float_bytes(x)) == "{x}")
+        assert(str_of(float_bytes(0.0 - x)) == "{0.0 - x}")
+    for _ in 0..300
+        x := random.float() * 1000000.0
+        assert(str_of(float_bytes(x)) == "{x}")
+
+@test fn random_ints_match_the_interpreter()
+    random.seed(8)
+    for _ in 0..500
+        n := random.int(-9223372036854775807, 9223372036854775807)
+        assert(str_of(int_bytes(n)) == "{n}")
+
+# ---- mem ----
+##
+## The runtime's machine model (docs/design/native-abi.md §8, ADR 0404): a
+## flat byte-addressed memory, the bump allocator over it, the stdout buffer
+## and the trap record, all as the native runtime lays them out. The native
+## runtime replaces `Mem` with real memory and the four `sys_` calls;
+## `str.ail` and `list.ail` are written against these functions only.
+
+## Address 0 is null; the first chunk starts here (16-byte aligned).
+HEAP_BASE := 16
+FIRST_CHUNK := 1048576
+
+pub struct Mem
+    bytes List[int]
+    brk int
+    out List[int]
+    exit_code int
+    trap_rule str
+    trap_line str
+
+pub fn new_mem() Mem
+    Mem(
+        bytes: List[int](),
+        brk: HEAP_BASE,
+        out: List[int](),
+        exit_code: -1,
+        trap_rule: "",
+        trap_line: "",
+    )
+
+## rt_alloc(n) (ABI §5): `n` zeroed bytes, 16-byte aligned, never freed.
+pub fn alloc(mut m Mem, n int) int
+    at := m.brk
+    size := (n + 15) / 16 * 16
+    m.brk = at + size
+    while m.bytes.len() < m.brk - HEAP_BASE
+        m.bytes.push(0)
+    at
+
+pub fn load8(m Mem, at int) int
+    m.bytes[at - HEAP_BASE]
+
+pub fn store8(mut m Mem, at int, v int)
+    m.bytes[at - HEAP_BASE] = v
+
+## Little-endian i64 (ADR 0007).
+pub fn load64(m Mem, at int) int
+    top := load8(m, at + 7)
+    mut v := if top >= 128 then top - 256 else top
+    mut i := 6
+    while i >= 0
+        v = v * 256 + load8(m, at + i)
+        i -= 1
+    v
+
+pub fn store64(mut m Mem, at int, v int)
+    mut x := v
+    for i in 0..8
+        b := ((x % 256) + 256) % 256
+        store8(mut m, at + i, b)
+        x = (x - b) / 256
+
+## sys_write on standard output (ABI §6), buffered; the model keeps all of it.
+pub fn write_out(mut m Mem, bs List[int])
+    for b in bs
+        m.out.push(b)
+
+## rt_trap (ABI §7): records the rule and the first line, and exits 1.
+pub fn trap(mut m Mem, file str, line int, col int, rule str, message str)
+    m.trap_rule = rule
+    m.trap_line = "{file}:{line}:{col}: trap[{rule}]: {message}"
+    m.exit_code = 1
+
+@test fn words_round_trip()
+    mut m := new_mem()
+    a := alloc(mut m, 24)
+    assert(a == 16)
+    assert(alloc(mut m, 1) == 48)
+    for v in [
+        0,
+        1,
+        -1,
+        255,
+        256,
+        -256,
+        9223372036854775807,
+        -9223372036854775807 - 1,
+        123456789012345,
+    ]
+        store64(mut m, a, v)
+        assert(load64(m, a) == v)
+
+# ---- obj ----
+##
+## String and list objects (docs/design/native-abi.md §2) and `print`, on
+## the machine model of `mem.ail`. Every function here is what a compiled
+## program calls as `rt_str_*`, `rt_list_*` or `rt_print_*`.
+
+## String object: +0 bytes, +8 chars, +16 UTF-8 data (ABI §2).
+pub fn str_new(mut m Mem, data List[int]) int
+    p := alloc(mut m, 16 + data.len())
+    mut chars := 0
+    for i in 0..data.len()
+        store8(mut m, p + 16 + i, data[i])
+        # a byte that isn't a UTF-8 continuation (10xxxxxx) starts a character
+        if data[i] < 128 or data[i] >= 192
+            chars += 1
+    store64(mut m, p, data.len())
+    store64(mut m, p + 8, chars)
+    p
+
+pub fn str_bytes(m Mem, s int) List[int]
+    mut out := List[int]()
+    n := load64(m, s)
+    for i in 0..n
+        out.push(load8(m, s + 16 + i))
+    out
+
+## `s.len()`: characters, O(1) (ADR 0208).
+pub fn str_len(m Mem, s int) int
+    load64(m, s + 8)
+
+pub fn str_cat(mut m Mem, a int, b int) int
+    mut data := str_bytes(m, a)
+    for x in str_bytes(m, b)
+        data.push(x)
+    str_new(mut m, data)
+
+pub fn str_int(mut m Mem, n int) int
+    str_new(mut m, int_bytes(n))
+
+pub fn str_float(mut m Mem, x float) int
+    str_new(mut m, float_bytes(x))
+
+## `print(s)`: the text and a newline into the stdout buffer.
+pub fn print_str(mut m Mem, s int)
+    write_out(mut m, str_bytes(m, s))
+    write_out(mut m, [10])
+
+## List object: +0 len, +8 cap, +16 pointer to cap * 8 bytes (ABI §2).
+pub fn list_new(mut m Mem, cap int) int
+    c := if cap < 4 then 4 else cap
+    l := alloc(mut m, 24)
+    data := alloc(mut m, c * 8)
+    store64(mut m, l, 0)
+    store64(mut m, l + 8, c)
+    store64(mut m, l + 16, data)
+    l
+
+pub fn list_len(m Mem, l int) int
+    load64(m, l)
+
+pub fn list_push(mut m Mem, l int, v int)
+    n := load64(m, l)
+    cap := load64(m, l + 8)
+    mut data := load64(m, l + 16)
+    if n == cap
+        fresh := alloc(mut m, cap * 16)
+        for i in 0..n
+            store64(mut m, fresh + i * 8, load64(m, data + i * 8))
+        data = fresh
+        store64(mut m, l + 8, cap * 2)
+        store64(mut m, l + 16, fresh)
+    store64(mut m, data + n * 8, v)
+    store64(mut m, l, n + 1)
+
+## Bounds check shared by get and set: type.coll.4. Returns false after trapping.
+fn in_range(mut m Mem, l int, i int, site Site) bool
+    n := load64(m, l)
+    if i < 0 or i >= n
+        trap(
+            mut m,
+            site.file,
+            site.line,
+            site.col,
+            "type.coll.4",
+            "index {i} out of range for length {n}",
+        )
+        return false
+    true
+
+## A trap site the compiler would emit as a trap record (ABI §7).
+pub struct Site
+    file str
+    line int
+    col int
+
+pub fn list_get(mut m Mem, l int, i int, site Site) int
+    if not in_range(mut m, l, i, site)
+        return 0
+    load64(m, load64(m, l + 16) + i * 8)
+
+pub fn list_set(mut m Mem, l int, i int, v int, site Site)
+    if in_range(mut m, l, i, site)
+        store64(mut m, load64(m, l + 16) + i * 8, v)
+
+## A copy with its own data (value semantics, ADR 0060).
+pub fn list_copy(mut m Mem, l int) int
+    n := load64(m, l)
+    c := list_new(mut m, n)
+    for i in 0..n
+        list_push(mut m, c, load64(m, load64(m, l + 16) + i * 8))
+    c
+
+fn text(m Mem, s int) str
+    mut out := ""
+    for b in str_bytes(m, s)
+        out = "{out}{char.from_code(b)}"
+    out
+
+@test fn strings_count_characters_and_join()
+    mut m := new_mem()
+    a := str_new(mut m, [104, 195, 169])
+    assert(str_len(m, a) == 2)
+    assert(load64(m, a) == 3)
+    b := str_int(mut m, -42)
+    c := str_cat(mut m, a, b)
+    assert(str_len(m, c) == 5)
+    assert(str_bytes(m, c) == [104, 195, 169, 45, 52, 50])
+    print_str(mut m, str_float(mut m, 0.1 + 0.2))
+    print_str(mut m, str_int(mut m, 7))
+    assert(m.out.len() == 20 + 2)
+
+@test fn lists_grow_copy_and_trap()
+    mut m := new_mem()
+    site := Site(file: "t.ail", line: 3, col: 5)
+    l := list_new(mut m, 0)
+    for i in 0..100
+        list_push(mut m, l, i * i - 50)
+    assert(list_len(m, l) == 100)
+    assert(list_get(mut m, l, 99, site) == 9751)
+    c := list_copy(mut m, l)
+    list_set(mut m, c, 0, 5, site)
+    assert(list_get(mut m, l, 0, site) == -50)
+    assert(list_get(mut m, c, 0, site) == 5)
+    assert(m.exit_code == -1)
+    list_get(mut m, l, 100, site)
+    assert(m.exit_code == 1)
+    assert(m.trap_rule == "type.coll.4")
+    assert(m.trap_line == "t.ail:3:5: trap[type.coll.4]: index 100 out of range for length 100")
