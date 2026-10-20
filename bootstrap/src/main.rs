@@ -14,6 +14,7 @@ mod diag;
 mod explain;
 mod fasthash;
 mod doctest;
+mod edit;
 mod docs;
 mod fix;
 mod foreign;
@@ -66,6 +67,10 @@ commands:
   diff OLD NEW  what changed between two versions of a file or package:
                 declarations (signature, pub, effects, errors, contracts, docs),
                 diagnostics, and test outcomes (--no-tests: skip them) (diff.out.1)
+  edit PATH < EDITS
+                apply a JSON list of edits by declaration id (replace_body, replace,
+                insert, delete, rename, import), format, check, and print the new
+                diagnostics; --dry-run, --diff, --if-clean (edit.op.1)
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
@@ -255,6 +260,7 @@ fn main() -> ExitCode {
         ["api", rest @ ..] => api::command(rest, json),
         ["diff", rest @ ..] => api::diff::command(rest, json),
         ["build", rest @ ..] => build::command(rest),
+        ["edit", rest @ ..] => edit::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));

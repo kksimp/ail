@@ -35,6 +35,7 @@
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail check --budget 500 DIR  # any command: ~500 tokens, errors first, then `[budget ...; continue with --from K]`
 ./ail diff OLD NEW            # what changed by meaning: declarations, diagnostics, tests (--rev HEAD FILE: against git)
+./ail edit FILE.ail < E.json  # edits by id: [{"op":"rename","id":"fn:f","to":"g"}], replace_body, replace, insert, delete, import; then fmt + check
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N; `ail test --trace` keeps a failing test's)
 ./ail run --watch n FILE.ail # each assignment to `mut` variable n (and `push`, `pop`, `xs[i] = e`...), with value and position
