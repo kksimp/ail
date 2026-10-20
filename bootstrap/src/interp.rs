@@ -599,7 +599,7 @@ fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
 /// The text form of a float (type.num.7): the shortest decimal that reads
 /// back as the same value, in fixed notation when the decimal exponent is
 /// from -4 to 15 and in scientific notation otherwise, as Python's `repr`.
-fn float_text(x: f64) -> String {
+pub(crate) fn float_text(x: f64) -> String {
     float_shape(x.is_nan(), x.is_infinite(), x.is_sign_negative(), format!("{:e}", x.abs()))
 }
 
