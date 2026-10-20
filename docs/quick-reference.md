@@ -473,6 +473,25 @@ fn main() !
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`; colors `0xRRGGBB` |
+
+A window is a grid of text cells; draw with `put`, then `present`:
+
+```ail
+use std.ui
+
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless: kind "no_display"
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, ctrl, _, _) =>                # "a", "enter", "f1"; Ctrl-S is ("s", true)
+                if key == "escape"
+                    break
+            Resize(_, _) => w.present()
+            Close => break
+```
 
 ## Tests and assertions
 
@@ -489,7 +508,7 @@ A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
 `fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
-`fs`, `env`, `proc`, `clock`, `net`. A call through `any Trait` counts every
+`fs`, `env`, `proc`, `clock`, `net`, `ui`. A call through `any Trait` counts every
 implementation.
 
 ```ail

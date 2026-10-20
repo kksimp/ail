@@ -39,6 +39,12 @@ are implemented; `docs/language-card.md` is the whole language in under 4,000
 tokens. Linux selftest passes; macOS verification is pending.
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
+Lane 11 added `std.ui` (ADRs 0177–0179, `std.ui.1–9`): a window of
+monospace text cells with key and resize events, through `minifb` and
+`embedded-graphics` in the bootstrap, a new capability `ui`, and
+`examples/ui_hello.ail`. Selftest passes headless on Linux; the window was
+tested under X11 (Xvfb); macOS is pending. The path to a native layer is in
+[gui-path.md](design/gui-path.md).
 
 ## Design topics
 
@@ -69,7 +75,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 18 | Compile-time execution | — | | |
 | 19 | AST/IR architecture | — | | |
 | 20 | AI semantic API | D (timing, diagnostics v1, explain, holes, effects) + Q; I+T (diagnostics v1, `ail explain`, `todo` holes, effects, `@pure`, `--deny`) | [0024](decisions/0024-semantic-api-from-stage-2.md), [0145](decisions/0145-diagnostics-schema-v1.md), [0146](decisions/0146-ail-explain.md), [0147](decisions/0147-typed-holes-todo.md), [0163](decisions/0163-inferred-effect-sets.md), [0164](decisions/0164-pure-functions.md), [0165](decisions/0165-capability-denial.md) | `expr.hole.*`, `eff.*`; [semantic-api.md](design/semantic-api.md) |
-| 21 | Standard library architecture | D (collections, strings, print) + Q | [0088](decisions/0088-entry-point-and-print.md), [0089](decisions/0089-strings.md), [0090](decisions/0090-collections.md), [0116](decisions/0116-core-library-basics.md), [0124](decisions/0124-string-split-and-to-int.md), [0131](decisions/0131-maps-and-sets.md), [0134](decisions/0134-characters.md), [0135](decisions/0135-string-literals-and-methods.md), [0136](decisions/0136-list-methods-and-slices.md), [0137](decisions/0137-integer-methods-and-min-max.md), [0143](decisions/0143-empty-literals-typed-by-use.md), [0157](decisions/0157-standard-os-modules.md), [0158](decisions/0158-standard-io-errors.md), [0159](decisions/0159-program-arguments.md), [0160](decisions/0160-process-runs.md); I+T (standard modules `std.fs`, `env`, `io`, `proc`, `time`) | `type.str.*`, `type.coll.*`, `std.*` |
+| 21 | Standard library architecture | D (collections, strings, print) + Q | [0088](decisions/0088-entry-point-and-print.md), [0089](decisions/0089-strings.md), [0090](decisions/0090-collections.md), [0116](decisions/0116-core-library-basics.md), [0124](decisions/0124-string-split-and-to-int.md), [0131](decisions/0131-maps-and-sets.md), [0134](decisions/0134-characters.md), [0135](decisions/0135-string-literals-and-methods.md), [0136](decisions/0136-list-methods-and-slices.md), [0137](decisions/0137-integer-methods-and-min-max.md), [0143](decisions/0143-empty-literals-typed-by-use.md), [0157](decisions/0157-standard-os-modules.md), [0158](decisions/0158-standard-io-errors.md), [0159](decisions/0159-program-arguments.md), [0160](decisions/0160-process-runs.md); I+T (standard modules `std.fs`, `env`, `io`, `proc`, `time`, `ui` ([0177](decisions/0177-std-ui-text-grid-window.md)–[0179](decisions/0179-key-events-ctrl-chords.md))) | `type.str.*`, `type.coll.*`, `std.*` |
 | 22 | Runtime architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0020](decisions/0020-linux-no-libc.md), [0026](decisions/0026-hardware-feature-acceleration.md) | |
 | 23 | Compiler architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0010](decisions/0010-no-llvm-backend.md), [0015](decisions/0015-always-whole-program-incremental.md), [0017](decisions/0017-no-c-emission.md), [0018](decisions/0018-optimizing-backend-from-start.md), [0022](decisions/0022-staged-self-hosting.md), [0023](decisions/0023-rust-bootstrap.md) | |
 | 24 | Cross-platform ABI strategy | D (partial) + Q | [0004](decisions/0004-macos-arm64-only.md), [0005](decisions/0005-x86-64-baseline-v3.md), [0006](decisions/0006-arm64-baseline-v8-2.md), [0007](decisions/0007-64-bit-little-endian-only.md), [0008](decisions/0008-isa-priority-policy.md), [0027](decisions/0027-ci-gating-all-targets.md) | `plat.*` |
