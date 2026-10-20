@@ -122,6 +122,15 @@ whole binding a new value (`x = e`) makes it usable again. *(ADR 0190)*
 **own.move.5** — A `move` argument of a copyable type moves too: the binding
 can't be used afterwards, and no copy is made. *(ADR 0190)*
 
+**own.move.6** — A method declared `fn T.m(move self, ...)` takes ownership
+of its receiver. The call is written `x.m(...)`, with no mark: calling it on
+a local binding or `move` parameter moves it (`own.move.2`, `own.move.4`),
+and calling it on a part of another value (`w.f.m()`, `xs[i].m()`) is a
+compile-time error (`own.move.3`). Inside the method, `self` is owned like a
+`move` parameter: it can be moved, and it is released when the method
+returns unless it was moved (`own.uniq.7`). `move self` is not allowed in a
+`trait` or `impl` block. *(ADR 0317)*
+
 ```ail fragment
 unique struct File
     fd int
@@ -131,6 +140,44 @@ fn close(move f File)
 
 f := File(fd: 3)
 close(move f)
+```
+
+```ail fragment
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    print("finishing {id}")
+    id
+
+c := Conn(id: 1)
+n := c.finish()
+```
+
+```ail error=own.move.6
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    id
+
+fn main()
+    c := Conn(id: 1)
+    n := c.finish()
+    print(c.id)
+```
+
+```ail
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    id
+
+fn main()
+    c := Conn(id: 1)
+    print(c.id)
+    n := c.finish()
 ```
 
 ```ail error=own.move.2
@@ -236,9 +283,10 @@ reverse order of declaration. *(ADR 0066)*
 
 **own.uniq.5** — A field of a unique type makes its struct or enum unique:
 declaring it in a type that isn't `unique` is a compile-time error. A unique
-type can't be a list element, a map value, a map key or set element, the
-contents of a `ref`, or a type argument of a generic type or function.
-Optionals and results of a unique type are unique. *(ADR 0191)*
+type can't be a map key or set element, the contents of a `ref`, or a type
+argument of a generic type or function. Optionals and results of a unique
+type are unique. *(ADR 0191)* It can be a list element or a map value
+(`own.uniq.8`). *(ADR 0318)*
 
 **own.uniq.6** — A unique type's cleanup is its implementation of the
 prelude trait `Drop`, whose one method is `fn drop(mut self)`. Only a unique
@@ -275,6 +323,66 @@ unique struct File
 
 struct Holder
     f File
+```
+
+## Unique values in lists and maps
+
+**own.uniq.8** — `List[T]` and `Map[K, T]` of a unique `T` are unique: they
+move instead of being copied (`own.uniq.2`), and a struct with such a field
+is unique (`own.uniq.5`). The elements of a list literal, and the values of a
+map literal, move into it. When the collection is released, its elements are
+released, last first; `xs.clear()` releases the elements it removes, and
+assigning to `xs[i]` or `m[k]` releases the value it replaces. *(ADR 0318)*
+
+**own.uniq.9** — For a list or map of a unique type: `xs.push(move x)`,
+`xs.insert(i, move x)` and `xs.extend(move ys)` take ownership of their
+argument, which is marked `move` (`own.move.2`); `xs.pop()`,
+`xs.remove_at(i)` and `m.remove(k)` move an element out to the caller.
+Indexing (`xs[i]`, `m[k]`) and iteration (`for x in xs`) borrow an element in
+place: it can be read, passed to a parameter without `move`, and changed
+through `mut` (`xs[i].f = v`, `for mut x in xs`), but binding, returning or
+moving it is a compile-time error (`own.uniq.1`, `own.move.3`). *(ADR 0318)*
+
+**own.uniq.10** — A built-in method that would copy an element of a list or
+map of a unique type is a compile-time error: `first`, `last`, `min`, `max`,
+`sorted` and `take` of a list, and `get` and `values` of a map.
+*(ADR 0319)* A task handle is not a unique value in this sense: it can't be
+stored in a list (`conc.task.5`); a `TaskGroup` holds many tasks. *(ADR 0319)*
+
+```ail fragment
+unique struct Conn
+    id int
+
+impl Drop for Conn
+    fn drop(mut self)
+        print("close {id}")
+
+mut pool := List[Conn]()
+pool.push(move Conn(id: 1))
+pool.push(move Conn(id: 2))
+for c in pool
+    print("open {c.id}")
+if c := pool.pop()
+    print("took {c.id}")
+# prints "open 1", "open 2", "took 2", "close 2", then "close 1" when the block ends
+```
+
+```ail error=own.uniq.10
+unique struct Conn
+    id int
+
+fn main()
+    pool := [Conn(id: 1)]
+    first := pool.first()
+```
+
+```ail
+unique struct Conn
+    id int
+
+fn main()
+    pool := [Conn(id: 1)]
+    print(pool[0].id)
 ```
 
 **own.defer.1** — `defer S` schedules statement `S` to run when the enclosing

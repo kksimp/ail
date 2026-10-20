@@ -1,0 +1,23 @@
+# own.uniq.1, own.uniq.5, own.uniq.10, own.move.2-3: unique values in lists and maps.
+unique struct Conn
+    id int
+
+struct Pool
+    conns List[Conn]
+
+fn main()
+    mut xs := [Conn(id: 1)]
+    a := xs[0]
+    f := xs.first()
+    s := xs.take(1)
+    xs.push(Conn(id: 2))
+    c := Conn(id: 3)
+    xs.push(move c)
+    print(c.id)
+    ys := xs
+    print(xs.len())
+    m := {"a": Conn(id: 4)}
+    g := m.get("a")
+    v := m.values()
+    b := m["a"]
+    r := ref [Conn(id: 5)]
