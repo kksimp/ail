@@ -31,6 +31,12 @@ pub(super) const STR_METHODS: &[&str] = &[
     "to_float",
     "chars",
     "trim",
+    "slice",
+    "to_lower",
+    "to_upper",
+    "find",
+    "replace",
+    "char_at",
     "starts_with",
     "ends_with",
     "strip_prefix",
@@ -80,7 +86,10 @@ pub(super) const SIZED_INT_METHODS: &[&str] = &[
 ];
 pub(super) const F32_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_float"];
 pub(super) const LIST_METHODS: &[&str] =
-    &["len", "push", "swap", "pop", "last", "contains", "index_of", "join", "sum", "min", "max", "sorted", "sort"];
+    &[
+        "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
+        "index_of", "join", "sum", "min", "max", "sorted", "sort",
+    ];
 pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
 pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset"];
 
@@ -102,7 +111,11 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "to_int" => read(vec![], opt(Int)),
             "to_float" => read(vec![], opt(Float)),
             "chars" => read(vec![], list(Char)),
-            "trim" => read(vec![], Str),
+            "trim" | "to_lower" | "to_upper" => read(vec![], Str),
+            "slice" => read(vec![Int, Int], Str),
+            "find" => read(vec![Str], opt(Int)),
+            "replace" => read(vec![Str, Str], Str),
+            "char_at" => read(vec![Int], opt(Char)),
             "starts_with" | "ends_with" | "contains" => read(vec![Str], Bool),
             "strip_prefix" | "strip_suffix" => read(vec![Str], opt(Str)),
             "repeat" => read(vec![Int], Str),
@@ -173,7 +186,11 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "push" => make(true, vec![e], Unit, Need::Nothing),
                 "swap" => make(true, vec![Int, Int], Unit, Need::Nothing),
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
-                "last" => read(vec![], opt(e)),
+                "last" | "first" => read(vec![], opt(e)),
+                "insert" => make(true, vec![Int, e], Unit, Need::Nothing),
+                "remove_at" => make(true, vec![Int], e, Need::Nothing),
+                "extend" => make(true, vec![list(e)], Unit, Need::Nothing),
+                "clear" | "reverse" => make(true, vec![], Unit, Need::Nothing),
                 "contains" => make(false, vec![e], Bool, Need::Eq),
                 "index_of" => make(false, vec![e], opt(Int), Need::Eq),
                 "join" => read(vec![Str], Str),

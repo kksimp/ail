@@ -20,6 +20,7 @@ mod builtins;
 mod contracts;
 mod random;
 mod stdlib;
+mod tasks;
 
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
@@ -31,10 +32,11 @@ pub use prop::PropInfo;
 pub use testing::run_tests;
 
 use builtins::{Key, Table, map_value};
+use tasks::Handle;
 
 use crate::ast::{
-    Arg, BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt, TypeKind, UnOp,
-    place_path,
+    Arg, BinOp, Block, CompFor, CompKind, Cond, Else, Expr, FnDecl, InterpPart, Literal, Pattern, Program, Stmt,
+    TypeKind, UnOp, place_path,
 };
 use crate::check::{Call, Con, Resolved};
 use crate::diag::Pos;
@@ -66,6 +68,8 @@ enum Value {
     Nested(u32),
     /// The failure of a `T ! E` result (err.model.1).
     Fail(Rc<Failure>),
+    /// A task, task group, channel or mutex (conc.task.1, conc.share.2-3).
+    Handle(Handle),
 }
 
 /// An error value with its context messages and return trace (err.ctx.1-2).
@@ -275,12 +279,23 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         depth: 0,
         closed: false,
         consts: HashMap::default(),
+        conc: None,
     }
 }
 
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
     let stdout = io::stdout();
     let mut it = build(prog, resolved, stdout.lock());
+    let result = run_main(&mut it, prog);
+    if it.conc.is_some() {
+        // What tasks printed before a trap still reaches standard output.
+        it.task_print("");
+        tasks::shutdown(it.conc.take());
+    }
+    result
+}
+
+fn run_main<'a, W: Write>(it: &mut Interp<'a, W>, prog: &'a Program) -> Result<(), Stop> {
     // mod.const.1: constants are computed before the program runs.
     for c in &prog.consts {
         it.constant(&c.name, c.pos).map_err(|e| match e {
@@ -316,6 +331,8 @@ struct Interp<'a, W: Write> {
     closed: bool,
     /// The values of the constants computed so far (mod.const.1).
     consts: HashMap<&'a str, Value>,
+    /// The task scheduler, once the program uses tasks (conc.task.1).
+    conc: Option<tasks::Ctx>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -681,6 +698,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 break;
             }
         }
+        // conc.task.4: the block's tasks and groups finish before it ends.
+        if self.conc.is_some()
+            && !matches!(result, Err(Exit::Trap(_)))
+            && let Some(last) = stmts.last()
+            && let Err(t) = self.end_tasks(&env[mark..], last.pos())
+        {
+            result = Err(t.into());
+        }
         env.truncate(mark);
         result
     }
@@ -795,6 +820,64 @@ impl<'a, W: Write> Interp<'a, W> {
             }
         }
         Ok(())
+    }
+
+    /// Run a comprehension's clauses from the first, collecting each element
+    /// into the list or table (expr.comp.3). `continue` skips an element and
+    /// `break` ends the comprehension (expr.comp.4); false if it ended.
+    fn comp(
+        &mut self,
+        clauses: &'a [CompFor],
+        elem: &'a Expr,
+        value: Option<&'a Expr>,
+        set: bool,
+        env: &mut Env<'a>,
+        acc: &mut (Vec<Value>, Table),
+    ) -> Flow<bool> {
+        let Some((c, rest)) = clauses.split_first() else {
+            let k = self.eval(elem, env)?;
+            match value {
+                Some(v) => {
+                    let v = self.eval(v, env)?;
+                    acc.1.insert(k, Some(v));
+                }
+                None if set => {
+                    acc.1.insert(k, None);
+                }
+                None => acc.0.push(k),
+            }
+            return Ok(true);
+        };
+        let items: Rc<Vec<Value>> = match &c.iter {
+            Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } => {
+                let (lo, hi) = (self.eval(lo, env)?.int(), self.eval(hi, env)?.int());
+                let hi = if *inclusive { hi } else { hi.saturating_sub(1) };
+                Rc::new(if lo > hi { Vec::new() } else { (lo..=hi).map(Value::Int).collect() })
+            }
+            iter => match self.eval(iter, env)? {
+                Value::List(items) => items,
+                Value::Set(t) => Rc::new(t.key_list()),
+                other => unreachable!("checked: iterable, found {other:?}"),
+            },
+        };
+        for item in items.iter() {
+            env.push((&c.var, item.clone()));
+            let r = match &c.cond {
+                Some(cond) => match self.eval(cond, env) {
+                    Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
+                    Ok(_) => Ok(true),
+                    Err(e) => Err(e),
+                },
+                None => self.comp(rest, elem, value, set, env, acc),
+            };
+            env.pop();
+            match r {
+                Ok(true) | Err(Exit::Continue) => {}
+                Ok(false) | Err(Exit::Break) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(true)
     }
 
     /// Run one iteration; false if the loop should stop.
@@ -1056,6 +1139,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             Expr::Unary { op: UnOp::Not, operand, .. } => Value::Bool(!self.eval(operand, env)?.bool()),
+            Expr::Unary { op: UnOp::Spawn, operand, pos } => self.spawn(operand, *pos, env)?,
             Expr::Binary { op: BinOp::And, lhs, rhs, .. } => {
                 Value::Bool(self.eval(lhs, env)?.bool() && self.eval(rhs, env)?.bool())
             }
@@ -1079,6 +1163,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     Value::Set(Rc::new(t))
                 } else {
                     Value::Map(Rc::new(t))
+                }
+            }
+            Expr::Comp { kind, elem, value, clauses, .. } => {
+                let mut acc = (Vec::new(), Table::default());
+                self.comp(clauses, elem, value.as_deref(), *kind == CompKind::Set, env, &mut acc)?;
+                match kind {
+                    CompKind::List => Value::List(Rc::new(acc.0)),
+                    CompKind::Set => Value::Set(Rc::new(acc.1)),
+                    CompKind::Map => Value::Map(Rc::new(acc.1)),
                 }
             }
             Expr::Set(items, _) => {
@@ -1403,6 +1496,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => {}
             }
         }
+        if matches!(n.as_str(), "TaskGroup" | "Channel" | "Mutex") {
+            return self.conc_constructor(n, args, pos, env);
+        }
         if let Some(&s) = self.structs.get(n.as_str()) {
             let fields = self.labelled(&self.prog.structs[s].fields, args, env)?;
             return Ok(Value::Struct(s, Rc::new(fields)));
@@ -1521,6 +1617,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 format!("{}.{}{}", decl.name, variant.name, self.fields_text(names, values, pos)?)
             }
             Value::Fail(f) => self.describe(&f.error, pos)?,
+            Value::Handle(h) => h.text(),
             Value::Map(t) => {
                 let mut parts = Vec::with_capacity(t.len());
                 for (k, v) in t.entries() {
@@ -1605,6 +1702,7 @@ impl<'a, W: Write> Interp<'a, W> {
         let type_name = match value {
             Value::Struct(s, _) => self.prog.structs[*s].name.as_str(),
             Value::Enum(e, _, _) => self.prog.enums[*e].name.as_str(),
+            &Value::Handle(h) => return self.handle_method(h, name, args, pos, env),
             _ => return self.builtin(recv, name, args, pos, env),
         };
         let f = self.methods[type_name][name];
@@ -1688,6 +1786,9 @@ impl<'a, W: Write> Interp<'a, W> {
 
     fn print(&mut self, v: &Value, pos: Pos) -> Result<(), Trap> {
         let text = self.text(v, pos)?;
+        if self.conc.is_some() && self.task_print(&text) {
+            return Ok(());
+        }
         if self.closed {
             return Ok(());
         }
@@ -1702,6 +1803,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn flush(&mut self, pos: Pos) -> Result<(), Trap> {
+        if self.conc.is_some() {
+            self.task_print("");
+        }
         match self.out.flush() {
             Err(e) if e.kind() != io::ErrorKind::BrokenPipe => {
                 trap("mod.main.3", pos, format!("writing to standard output failed: {e}"))

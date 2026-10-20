@@ -1,0 +1,30 @@
+## Comprehensions (expr.comp.1-4, ADR 0182).
+error enum BadNumber
+    NotANumber(text str)
+
+fn parse_all(texts List[str]) !List[int]
+    [t.to_int() else return NotANumber(t) for t in texts]
+
+fn doubled(texts List[str]) !List[int]
+    [n * 2 for n in parse_all(texts)?]
+
+fn main()
+    xs := [3, 1, 4, 1, 5, 9, 2, 6]
+    print([x * x for x in xs])
+    print([x for x in xs if x % 2 == 0])
+    print({x for x in xs}.sorted())
+    names := ["ann", "bob", "cy"]
+    lengths := {n: n.chars().len() for n in names}
+    for n in lengths.keys()
+        print("{n} {lengths[n]}")
+    print([(r * 10 + c) for r in 1..=2 for c in 0..3 if c != 1])
+    print([[c for c in 0..r] for r in 0..3])
+    print(["{n}!" for n in names if n != "bob"].join(" "))
+    print([t.to_int() else continue for t in ["1", "x", "3"]])
+    print([t.to_int() else break for t in ["1", "x", "3"]])
+    empty := [x for x in xs if x > 100]
+    print(empty.len())
+    words := {"a": 1, "b": 2}
+    print([k for k in words.keys() if words[k] > 1])
+    print(doubled(["4", "5"]) else [-1])
+    print(doubled(["4", "z"]) else [-1])

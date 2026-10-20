@@ -7,5 +7,5 @@ fn main()
     b := Shape.Empty(r: 1)
     c := Shape.Circle(r: 1)
     match c
-        Circle => print("c")
+        Circle(r, extra) => print("c")
         Empty(x) => print("e")

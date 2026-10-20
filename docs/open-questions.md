@@ -212,26 +212,10 @@ on every call chain); (c) nothing at the package level. Waits on Topic 13
 **Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).
 
 ## OQ-047 — Inserting into and removing from lists
-`List` has `push`, `pop` and `swap` but no `insert(i, x)`, `remove(i)`,
-`extend(xs)` or concatenation, so the editor in `tools/edit/edit.ail`
-([ADR 0180](decisions/0180-editor-written-in-ail.md)) rebuilds its line list
-with a hand-written `splice` for every line edit. Options: (a) `insert`,
-`remove_at` and `extend` methods (recommended: one token each, the common
-names an agent reaches for, and the interpreter can do them in place);
-(b) `+` on lists (concise, but hides an O(n) copy); (c) a general
-`splice(from, to, items)` (one method, less obvious). *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0214](decisions/0214-list-editing-methods.md) (`insert`, `remove_at`, `extend`, `clear`, `reverse`, `first`).
 
 ## OQ-048 — Editing text without string indexing
-`str` has no indexing, slicing or `len()` (OQ-043), and `to_lower` exists
-only on `char`. The editor goes through `s.chars()`, slices the list, and
-joins it back with `join("")`: 19 `chars()` and 10 `join("")` in about 1,000
-lines, a few tokens and an O(n) copy each. Options: (a) character slicing
-`s.slice(a, b)` and `s.char_count()` (explicit about counting characters);
-(b) decide OQ-043 and add `s[a..b]` in the unit it picks; (c) keep
-`chars()` and add `str.to_lower`/`to_upper` only. Recommendation: (a) now,
-since it doesn't prejudge OQ-043, plus `str.to_lower`. *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
 
 ## OQ-060 — Contracts beyond runtime checks
 [ADRs 0210–0213](decisions/0210-contract-syntax.md) add `requires` and
@@ -243,3 +227,25 @@ contracts (recommended: yes, with Liskov rules: an implementation may weaken
 invariants; (4) static proof, and whether an optimising build keeps the
 checks it can't prove (recommended: keep them, so `--no-contracts` stays an
 explicit choice). *Owner: AI under ADR 0076.*
+
+## OQ-071 — Standard modules without `use` lines
+[ADR 0184](decisions/0184-round-3-syntax-measurements.md) measured the
+`use std.env` / `use std.fs` / `use std.proc` lines of `examples/tool.ail` at
+4.3% of that 34-line tool, though only 0.1% of the corpus. Since standard
+modules are always reached qualified (`fs.read_text`), the line repeats what
+each use already says. Options: (a) standard modules are in scope without
+`use`, unless a local or user module has the name (recommended: small agent
+tools are the use case AIL targets, and `ail effects` already lists what a
+program touches); (b) one-line `use std.env, fs, proc` (−1.6% of `tool`);
+(c) keep one line per module. Decide with the user-modules work (lane 3),
+which owns module name resolution. *Owner: AI under ADR 0076.*
+
+## OQ-072 — Display text written on error variants
+`sheet` spends about 57 tokens, and `json` about 12, on `impl ToStr` blocks
+whose only job is one message per error variant (`BadName(text) => "bad cell
+name '{text}'"`). Options: (a) a message after each variant of an `error`
+type, `BadName(text str) "bad cell name '{text}'"`, interpolating its fields
+(about −0.5% of the corpus; the message sits next to the variant, as in
+Rust's `thiserror`); (b) keep `impl ToStr` (recommended for now: the saving
+is a tie under ADR 0076, and it adds a declaration form). Revisit if
+error-heavy programs join the corpus. *Owner: AI under ADR 0076.*

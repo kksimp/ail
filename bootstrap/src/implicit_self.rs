@@ -206,6 +206,20 @@ impl Cx<'_> {
                 }
             }
             Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&mut c.iter);
+                    let (var, pos) = (c.var.clone(), c.var_pos);
+                    self.declare(&var, pos);
+                    if let Some(cond) = &mut c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(pairs, _) => pairs.iter_mut().for_each(|(k, v)| {
                 self.expr(k);
                 self.expr(v);

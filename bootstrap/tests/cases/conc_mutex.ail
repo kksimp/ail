@@ -1,0 +1,29 @@
+# conc.share.2, conc.share.5: tasks share state through a `Mutex`; `lock`
+# and `unlock` make a read-modify-write that no other task interrupts.
+
+fn add(m Mutex[int], n int, ch Channel[int])
+    for i in 1..=n
+        x := m.lock()
+        # Waiting for room here while holding the lock is fine: no one else
+        # needs the lock to make room.
+        ch.send(i)
+        m.unlock(x + i)
+
+fn drain(ch Channel[int], n int)
+    for _ in 0..n
+        if ch.recv() == none
+            return
+
+fn main()
+    m := Mutex(0)
+    ch := Channel[int](1)
+    g := TaskGroup()
+    g.add(spawn add(m, 3, ch))
+    g.add(spawn add(m, 4, ch))
+    g.add(spawn drain(ch, 7))
+    g.wait_all() else
+        print("a task trapped")
+    print(m.get())
+    m.set(100)
+    print(m.swap(7))
+    print(m.get())

@@ -832,6 +832,18 @@ impl<'p> Refs<'p> {
                     self.expr(x);
                 }
             }
+            Expr::Comp { elem, value, clauses, .. } => {
+                for c in clauses {
+                    self.expr(&c.iter);
+                    if let Some(cond) = &c.cond {
+                        self.expr(cond);
+                    }
+                }
+                self.expr(elem);
+                if let Some(v) = value {
+                    self.expr(v);
+                }
+            }
             Expr::Map(kvs, _) => {
                 for (k, v) in kvs {
                     self.expr(k);
