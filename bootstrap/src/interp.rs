@@ -315,8 +315,17 @@ struct Interp<'a, W: Write> {
     consts: HashMap<&'a str, Value>,
 }
 
+/// Name equality without a `memcmp` call: names are short, and `lookup` is
+/// the hottest function in the interpreter (ADR 0219).
+#[inline(always)]
+fn name_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x == y)
+}
+
+#[inline(always)]
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
-    env.iter().rev().find(|(n, _)| *n == name).map(|(_, v)| v)
+    env.iter().rev().find(|(n, _)| name_eq(n, name)).map(|(_, v)| v)
 }
 
 /// The text form of a float (type.num.7): the shortest decimal that reads
@@ -436,6 +445,41 @@ fn num_binop(op: BinOp, k: Num, a: i64, b: i64, pos: Pos) -> Result<Value, Trap>
         return trap(rule, pos, format!("`{x} {sym} {y}` overflows `{}`", k.name()));
     }
     Ok(Value::Num(k, k.encode(result)))
+}
+
+/// The int arithmetic that cannot trap: everything else (overflow, a zero
+/// divisor) is `binop`'s (expr.arith.1, expr.arith.3).
+#[inline(always)]
+fn int_arith(op: BinOp, a: i64, b: i64) -> Option<i64> {
+    match op {
+        BinOp::Add => a.checked_add(b),
+        BinOp::Sub => a.checked_sub(b),
+        BinOp::Mul => a.checked_mul(b),
+        BinOp::Div if b != 0 => a.checked_div(b),
+        BinOp::Rem if b != 0 => Some(a.wrapping_rem(b)), // exact: `a % -1` is 0
+        _ => None,
+    }
+}
+
+#[inline(always)]
+fn int_cmp(op: BinOp, a: i64, b: i64) -> Option<bool> {
+    match op {
+        BinOp::Eq => Some(a == b),
+        BinOp::Ne => Some(a != b),
+        BinOp::Lt => Some(a < b),
+        BinOp::Le => Some(a <= b),
+        BinOp::Gt => Some(a > b),
+        BinOp::Ge => Some(a >= b),
+        _ => None,
+    }
+}
+
+#[inline(always)]
+fn int_op(op: BinOp, a: i64, b: i64) -> Option<Value> {
+    match int_arith(op, a, b) {
+        Some(v) => Some(Value::Int(v)),
+        None => int_cmp(op, a, b).map(Value::Bool),
+    }
 }
 
 /// The type or trait an expression names, when it isn't a value: `Shape`
@@ -688,7 +732,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Stmt::Assign { target, op, value, pos } => self.assign(target, *op, value, *pos, env)?,
             Stmt::While { cond, body, .. } => {
-                while self.eval(cond, env)?.bool() {
+                while self.cond(cond, env)? {
                     match self.block(body, env) {
                         Ok(_) | Err(Exit::Continue) => {}
                         Err(Exit::Break) => break,
@@ -810,7 +854,14 @@ impl<'a, W: Write> Interp<'a, W> {
     ) -> Flow<()> {
         // A plain local needs no `Place`: same steps as below with an empty path.
         if let Expr::Name(n, _) = target {
-            let slot = env.iter().rposition(|(m, _)| m == n).expect("checked: a local");
+            let slot = env.iter().rposition(|(m, _)| name_eq(m, n)).expect("checked: a local");
+            if let (Some(op), Value::Int(a)) = (op, &env[slot].1)
+                && let Some(b) = self.int_leaf(value, env)
+                && let Some(v) = int_op(op, *a, b)
+            {
+                env[slot].1 = v;
+                return Ok(());
+            }
             let v = match op {
                 None => self.eval(value, env)?,
                 Some(op) => {
@@ -838,7 +889,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn place(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Place> {
         match e {
             Expr::Name(n, _) => {
-                let slot = env.iter().rposition(|(m, _)| m == n).expect("checked: a local");
+                let slot = env.iter().rposition(|(m, _)| name_eq(m, n)).expect("checked: a local");
                 Ok(Place { slot, path: Vec::new() })
             }
             Expr::Field { recv, name, .. } => {
@@ -877,37 +928,117 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `eval_general`'s, so the two stay in step by construction.
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         match e {
+            Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
+                // Int names and literals as operands need no evaluation call or clone (ADR 0219).
+                if let (Some(a), Some(b)) = (self.int_val(lhs, env), self.int_val(rhs, env))
+                    && let Some(v) = int_op(*op, a, b)
+                {
+                    return Ok(v);
+                }
+                let l = self.eval(lhs, env)?;
+                let r = self.eval(rhs, env)?;
+                if let (Value::Int(a), Value::Int(b)) = (&l, &r)
+                    && let Some(v) = int_op(*op, *a, *b)
+                {
+                    return Ok(v);
+                }
+                Ok(self.binop(*op, l, r, *pos)?)
+            }
             Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
             Expr::Name(n, _) => match lookup(env, n) {
                 Some(v) => Ok(v.clone()),
                 None => self.eval_general(e, env),
             },
-            Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
-                let l = self.eval(lhs, env)?;
-                let r = self.eval(rhs, env)?;
-                // The common int cases inline; overflow and the rest go to `binop` (expr.arith.1).
-                if let (Value::Int(a), Value::Int(b)) = (&l, &r) {
-                    let fast = match op {
-                        BinOp::Add => a.checked_add(*b).map(Value::Int),
-                        BinOp::Sub => a.checked_sub(*b).map(Value::Int),
-                        BinOp::Mul => a.checked_mul(*b).map(Value::Int),
-                        BinOp::Eq => Some(Value::Bool(a == b)),
-                        BinOp::Ne => Some(Value::Bool(a != b)),
-                        BinOp::Lt => Some(Value::Bool(a < b)),
-                        BinOp::Le => Some(Value::Bool(a <= b)),
-                        BinOp::Gt => Some(Value::Bool(a > b)),
-                        BinOp::Ge => Some(Value::Bool(a >= b)),
-                        _ => None,
-                    };
-                    if let Some(v) = fast {
-                        return Ok(v);
-                    }
-                }
-                Ok(self.binop(*op, l, r, *pos)?)
+            Expr::If { branches, els, else_err, .. } => self.eval_if(branches, els, else_err, env),
+            Expr::Binary { op: BinOp::And, lhs, rhs, .. } => {
+                Ok(Value::Bool(self.eval(lhs, env)?.bool() && self.eval(rhs, env)?.bool()))
             }
+            Expr::Binary { op: BinOp::Or, lhs, rhs, .. } => {
+                Ok(Value::Bool(self.eval(lhs, env)?.bool() || self.eval(rhs, env)?.bool()))
+            }
+            Expr::Unary { op: UnOp::Not, operand, .. } => Ok(Value::Bool(!self.eval(operand, env)?.bool())),
             _ => self.eval_general(e, env),
         }
+    }
+
+    /// `if` and `else if` chains (expr.if.1-5). Its own small frame, called
+    /// from the hot `eval` as well as from `eval_general`.
+    #[inline(never)]
+    fn eval_if(
+        &mut self,
+        branches: &'a [(Cond, Block)],
+        els: &'a Option<Block>,
+        else_err: &'a Option<(String, Pos)>,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+            let mut failure = None;
+            for (cond, body) in branches {
+                match cond {
+                    Cond::Expr(c) => {
+                        if self.cond(c, env)? {
+                            return self.block(body, env);
+                        }
+                    }
+                    // expr.if.5: run the branch with the value bound, if there is one.
+                    Cond::Bind { name, value, .. } => match self.eval(value, env)? {
+                        Value::None => {}
+                        Value::Fail(f) => failure = Some(f),
+                        v => {
+                            let mark = env.len();
+                            env.push((name.as_str(), Value::unwrap_present(v)));
+                            let r = self.block(body, env);
+                            env.truncate(mark);
+                            return r;
+                        }
+                    },
+                }
+            }
+            let Some(body) = els else { return Ok(Value::Unit) };
+            let mark = env.len();
+            if let (Some((name, _)), Some(f)) = (else_err, failure) {
+                env.push((name.as_str(), f.error.clone()));
+            }
+            let r = self.block(body, env);
+            env.truncate(mark);
+            return r;
+    }
+
+    /// The value of an int local or literal, without cloning.
+    #[inline(always)]
+    fn int_leaf(&self, e: &Expr, env: &Env<'a>) -> Option<i64> {
+        match e {
+            Expr::Name(n, _) => match lookup(env, n) {
+                Some(Value::Int(v)) => Some(*v),
+                _ => None,
+            },
+            Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// An int leaf, or one arithmetic operator over two int leaves, as `n % 2`
+    /// or `3 * n`. Pure, and bounded, so a miss costs a constant and the caller
+    /// evaluates the operand normally (ADR 0219).
+    #[inline(always)]
+    fn int_val(&self, e: &Expr, env: &Env<'a>) -> Option<i64> {
+        match e {
+            Expr::Binary { op, lhs, rhs, .. } => int_arith(*op, self.int_leaf(lhs, env)?, self.int_leaf(rhs, env)?),
+            _ => self.int_leaf(e, env),
+        }
+    }
+
+    /// A condition's truth value; a comparison of int operands never builds a `Value`.
+    #[inline(always)]
+    fn cond(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<bool> {
+        if let Expr::Binary { op, lhs, rhs, .. } = e
+            && let Some(a) = self.int_val(lhs, env)
+            && let Some(b) = self.int_val(rhs, env)
+            && let Some(t) = int_cmp(*op, a, b)
+        {
+            return Ok(t);
+        }
+        Ok(self.eval(e, env)?.bool())
     }
 
     #[inline(never)]
@@ -1079,38 +1210,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 Value::Set(Rc::new(t))
             }
-            Expr::If { branches, els, else_err, .. } => {
-                let mut failure = None;
-                for (cond, body) in branches {
-                    match cond {
-                        Cond::Expr(c) => {
-                            if self.eval(c, env)?.bool() {
-                                return self.block(body, env);
-                            }
-                        }
-                        // expr.if.5: run the branch with the value bound, if there is one.
-                        Cond::Bind { name, value, .. } => match self.eval(value, env)? {
-                            Value::None => {}
-                            Value::Fail(f) => failure = Some(f),
-                            v => {
-                                let mark = env.len();
-                                env.push((name.as_str(), Value::unwrap_present(v)));
-                                let r = self.block(body, env);
-                                env.truncate(mark);
-                                return r;
-                            }
-                        },
-                    }
-                }
-                let Some(body) = els else { return Ok(Value::Unit) };
-                let mark = env.len();
-                if let (Some((name, _)), Some(f)) = (else_err, failure) {
-                    env.push((name.as_str(), f.error.clone()));
-                }
-                let r = self.block(body, env);
-                env.truncate(mark);
-                return r;
-            }
+            Expr::If { branches, els, else_err, .. } => return self.eval_if(branches, els, else_err, env),
             Expr::Match { scrutinee, arms, .. } => {
                 let v = self.eval(scrutinee, env)?;
                 for arm in arms {
