@@ -1,4 +1,3 @@
 bootstrap/tests/native/enums_out.ail:4:6: error[native.subset.1]: generic enum `Maybe` isn't in the native subset yet
 bootstrap/tests/native/enums_out.ail:15:10: error[native.subset.1]: not in the native subset yet: maps
-bootstrap/tests/native/enums_out.ail:18:7: error[native.subset.1]: `==` on `Bag`, which holds a `Pt`, isn't in the native subset yet
 bootstrap/tests/native/enums_out.ail:22:10: error[native.subset.1]: not in the native subset yet: printing a `Bag`

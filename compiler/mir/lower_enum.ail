@@ -191,8 +191,10 @@ fn Lower.tag_of(mut self, n str, x int) int
     load(x, 0, Ty.Int)
 
 ## `a == b` or `a != b` on enums: the indexes for an enum without fields
-## or when one side is a variant without fields (`tok == Newline`), else
-## the generated `eq.E` (the same variant with equal fields).
+## or when one side is a variant without fields (`tok == Newline`); the
+## index and that variant's fields when one side is built right there
+## (`tok == Sym(".")`); else the generated `eq.E` (the same variant with
+## equal fields).
 fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     # After a problem, a `bool` keeps the uses quiet.
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
@@ -207,6 +209,10 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return Val(id: op(name, [tag_of(n, a.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
     if k := singleton_tag(a.id)
         return Val(id: op(name, [tag_of(n, b.id), konst(k, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    if k := built_tag(b.id)
+        return variant_eq(name, a.id, b.id, VariantRef(en: n, k: k), pos)
+    if k := built_tag(a.id)
+        return variant_eq(name, b.id, a.id, VariantRef(en: n, k: k), pos)
     mut seen := Set[str]()
     if not comparable(a.ty, pos, n, mut seen)
         return quiet
@@ -237,6 +243,60 @@ fn Lower.singleton_tag(self, v int) int?
             return sv.k
     none
 
+## The variant index of value `v` of the current function when it is a
+## variant object built in it (`rt.obj_new` of kind 5, then its index).
+fn Lower.built_tag(self, v int) int?
+    mut def := Map[int, Inst]()
+    mut tag := -1
+    for blk in blocks
+        for i in blk.insts
+            if i.dst >= 0
+                def[i.dst] = i
+    for blk in blocks
+        for i in blk.insts
+            if i.op == "store" and i.imm == 0 and i.args[0] == v
+                if c := def.get(i.args[1])
+                    if c.op == "const"
+                        tag = c.imm
+    nw := def.get(v)?
+    if nw.op != "call" or nw.name != "rt.obj_new" or tag < 0
+        return none
+    kind := def.get(nw.args[1])?
+    if kind.op != "const" or kind.imm != OBJ_ENUM
+        return none
+    tag
+
+## `a == b` where `b` is variant `v`: `a`'s index is `v`'s, then each of
+## that variant's fields is equal (only its fields need `==`).
+fn Lower.variant_eq(mut self, name str, a int, b int, v VariantRef, pos ast.Pos) Val
+    n := v.en
+    k := v.k
+    fields := enums[n][k].fields
+    mut seen := Set[str]()
+    for fd in fields
+        if not comparable(fd.ty, pos, n, mut seen)
+            return Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
+    join := new_block()
+    r := new_value(Ty.Bool, "")
+    blocks[join].params.push(r)
+    body := new_block()
+    branch(op("eq", [tag_of(n, a), konst(k, Ty.Int)], Ty.Bool), body, [], join, [konst(0, Ty.Bool)])
+    seal(body)
+    cur = body
+    for j in 0..fields.len()
+        ft := fields[j].ty
+        e := field_eq(ft, load(a, j + 1, ft), load(b, j + 1, ft))
+        next := new_block()
+        branch(e, next, [], join, [konst(0, Ty.Bool)])
+        seal(next)
+        cur = next
+    jump(join, [konst(1, Ty.Bool)])
+    seal(join)
+    cur = join
+    if name == "ne"
+        return Val(id: op("not", [r], Ty.Bool), ty: Ty.Bool)
+    Val(id: r, ty: Ty.Bool)
+
 fn Lower.eq_fn(mut self, t Ty) str
     name := "eq.{t.name()}"
     if not sigs.contains(name)
@@ -244,13 +304,21 @@ fn Lower.eq_fn(mut self, t Ty) str
         eq_tys[name] = t
     name
 
-## Whether `==` on `t` is in the subset: numbers, strings, enums and lists
-## of those (reported at `pos`, naming enum `top`, otherwise).
+## Whether `==` on `t` is in the subset: numbers, strings, enums, structs
+## and lists of those (reported at `pos`, naming enum `top`, otherwise).
 fn Lower.comparable(mut self, t Ty, pos ast.Pos, top str, mut seen Set[str]) bool
     if is_number(t) or t == Ty.Str
         return true
     if e := t.elem()
         return comparable(e, pos, top, mut seen)
+    if s := struct_name(t)
+        if seen.contains(s)
+            return true
+        seen.add(s)
+        for sl in structs[s]
+            if not comparable(sl.ty, pos, top, mut seen)
+                return false
+        return true
     n := enum_name(t) else
         problem(pos, "`==` on `{top}`, which holds a `{t.name()}`, isn't in the native subset yet")
         return false
@@ -277,6 +345,8 @@ fn Lower.gen_enum_eqs(mut self)
             t := eq_tys[name]
             if e := t.elem()
                 gen_list_eq(name, t, e)
+            elif s := struct_name(t)
+                gen_struct_eq(name, s)
             else
                 gen_eq(name, enum_name(t) else "")
 
@@ -342,6 +412,22 @@ fn Lower.gen_list_eq(mut self, fkey str, t Ty, e Ty)
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
     end_eq(fkey, yes, no)
 
+## `eq.S(a, b)`: every field equal.
+fn Lower.gen_struct_eq(mut self, fkey str, s str)
+    t := Ty.Struct(s)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    yes := new_block()
+    no := new_block()
+    slots := structs[s]
+    for k in 0..slots.len()
+        st := slots[k].ty
+        e := field_eq(st, load(ps[0], k, st), load(ps[1], k, st))
+        next := new_block()
+        branch(e, next, [], no, [])
+        cur = next
+    jump(yes, [])
+    end_eq(fkey, yes, no)
+
 fn Lower.end_eq(mut self, fkey str, yes int, no int)
     cur = yes
     finish(return_of(konst(1, Ty.Bool)))
@@ -356,7 +442,7 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
         return op("feq", [x, y], Ty.Bool)
     if t == Ty.Str
         return call("rt.str_eq", [x, y], Ty.Bool)
-    if t.elem() != none
+    if t.elem() != none or struct_name(t) != none
         return call(eq_fn(t), [x, y], Ty.Bool)
     if m := enum_name(t)
         if not is_flat(m)

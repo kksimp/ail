@@ -36,12 +36,13 @@ of the mixed enums (`Ty.Int`, `Tok.Newline`) are built constantly.
    from a place, and a binding read back is copied when it is bound
    mutably, pushed or returned, as for structs (own.val.1).
 4. **`==` and `!=`** on an enum with fields compare the variant index when
-   one side is a variant without fields (`tok == Newline`, the common case
-   in the compiler); otherwise they call a generated `eq.E`: the same
-   pointer, or the same index and equal fields (numbers, strings through
-   `rt.str_eq`, enums, and lists of those through a generated
-   `eq.List[T]`). An enum holding a struct isn't comparable natively yet
-   (native.subset.1).
+   one side is a variant without fields (`tok == Newline`). When one side is
+   a variant built right there (`tok == Sym(".")`, the parser's common
+   case), they compare the index and then only that variant's fields, so
+   the other variants' field types don't matter. Otherwise they call a
+   generated `eq.E`: the same pointer, or the same index and equal fields.
+   Fields compare as numbers, strings (`rt.str_eq`), enums, and structs and
+   lists through generated `eq.S` and `eq.List[T]`.
 5. **Names.** `Ty.Enum(name)` in MIR. Variants are built qualified
    (`E.V`, `E.V(...)`), bare where the expected type names the enum
    (type.enum.3), or bare when only one enum has that variant name.

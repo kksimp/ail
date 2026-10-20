@@ -1,6 +1,6 @@
 # Enums and `match` at the edges of the native subset (native.subset.1):
-# generic enums, `==` on an enum holding a struct, printing an enum, and a
-# computed constant of a type outside the subset (its uses stay quiet).
+# generic enums, printing an enum, and a computed constant of a type
+# outside the subset (its uses stay quiet).
 enum Maybe[T]
     Some(v T)
     Nothing

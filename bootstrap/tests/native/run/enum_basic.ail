@@ -20,6 +20,16 @@ enum Tok
     Nums(ns List[List[int]])
     Newline
 
+struct Leaf
+    n int
+    f float
+    at List[int]
+
+enum Ast
+    Sym(text str)
+    Node(leaf Leaf)
+    Opaque(xs List[Item])
+
 struct Item
     shape Shape
     op Op
@@ -87,3 +97,10 @@ fn main()
     print(toks[2] == Newline)
     print(toks[0] != Newline)
     print(Tok.Newline == toks[1])
+    # A variant built in the comparison needs only its own fields comparable.
+    words := [Ast.Sym("."), Ast.Node(Leaf(n: 1, f: 2.0, at: [3])), Ast.Sym("(")]
+    print(words[0] == Ast.Sym("."))
+    print(words[2] != Ast.Sym("."))
+    print(words[1] == Ast.Sym("."))
+    print(words[1] == Ast.Node(Leaf(n: 1, f: 2.0, at: [3])))
+    print(words[1] == Ast.Node(Leaf(n: 1, f: 2.0, at: [4])))

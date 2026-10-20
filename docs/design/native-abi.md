@@ -121,7 +121,8 @@ built by the generated `init.enums` into a program global before `main`
 runs; program globals (computed constants, ADR 0604) follow the runtime's
 first `RT_GLOBALS` (16) slots, and the image's global area is sized from the
 slots the MIR uses. `==` on an enum with fields compares the index when one
-side is a variant without fields, else calls the generated `eq.E`.
+side is a variant without fields, the index and that variant's fields when
+one side is built in place, else calls the generated `eq.E`.
 
 ## 3. Entry and exit
 
