@@ -353,6 +353,7 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
         Value::Handle(h) => s.push_str(&h.text()),
         Value::Tensor(t) => s.push_str(&format!("tensor(shape: {:?}, {} elements)", t.shape, t.len())),
         Value::Atomic(c) => s.push_str(&c.text()),
+        Value::Fn(f) => s.push_str(&format!("fn#{f}")),
     }
 }
 

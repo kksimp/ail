@@ -5,7 +5,7 @@
 ## site (`Site`), which the code generator turns into a branch to a stub.
 ## `ail run compiler mir FILE` prints a module with `module_text`.
 
-## A value's machine type. Strings and lists are pointers.
+## A value's machine type. Strings, lists and structs are pointers.
 pub enum Ty
     Int
     Float
@@ -16,6 +16,8 @@ pub enum Ty
     ## `Map[K, V]` and `Set[T]` (ADR 0568); `K` is `int`, `bool` or `str`.
     Map(key Ty, val Ty)
     Set(elem Ty)
+    ## A struct object (native-abi.md §2): one 8-byte slot per field.
+    Struct(name str)
     Unknown
     Unit
 
@@ -55,6 +57,7 @@ pub fn Ty.name(self) str
         List(e) => "List[{e.name()}]"
         Map(k, v) => "Map[{k.name()}, {v.name()}]"
         Set(e) => "Set[{e.name()}]"
+        Struct(n) => n
         Unknown => "?"
         Unit => "unit"
 
@@ -79,6 +82,8 @@ pub fn Ty.name(self) str
 ## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
 ## | `len` | list | `xs.len()` |
 ## | `copy` | a | the same value |
+## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
+## | `store` | object, value | writes the slot at byte offset `imm` |
 pub struct Inst
     pub dst int
     pub op str
@@ -151,6 +156,8 @@ pub struct Site
     pub line int
     pub col int
     pub func str
+    ## The source file, an index into `Module.files` (ADR 0393).
+    pub file int
 
 pub struct Module
     pub path str
@@ -159,6 +166,9 @@ pub struct Module
     pub sites List[Site]
     ## The source text's lines, for trap excerpts.
     pub lines List[str]
+    ## Every source file of the program and its lines; file 0 is `path`.
+    pub files List[str]
+    pub file_lines List[List[str]]
 
 ## Whether an instruction may be removed when its value is unused.
 pub fn Inst.is_pure(self) bool

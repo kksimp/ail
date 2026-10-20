@@ -1,0 +1,19 @@
+# Collatz chain lengths: the longest chain below a limit. Native code
+# for this loop is within a small factor of C (see docs/design/native-guide.md).
+fn steps(n int) int
+    mut x := n
+    mut k := 0
+    while x != 1
+        x = if x % 2 == 0 then x / 2 else 3 * x + 1
+        k += 1
+    k
+
+fn main()
+    mut best := 1
+    mut best_steps := 0
+    for n in 1..10000
+        k := steps(n)
+        if k > best_steps
+            best = n
+            best_steps = k
+    print("longest chain below 10000: {best} with {best_steps} steps")

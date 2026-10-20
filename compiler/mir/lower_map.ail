@@ -15,10 +15,10 @@ fn is_key_ty(t Ty) bool
     t == Ty.Int or t == Ty.Bool or t == Ty.Str
 
 fn is_value_ty(t Ty) bool
-    is_number(t) or t == Ty.Str or t.elem() != none or t.is_coll()
+    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
-fn coll_type_of(name str, args List[ast.TypeRef]) Ty?
+fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
     if name == "Map" and args.len() == 2
         k := type_of(args[0])?
         v := type_of(args[1])?
@@ -115,6 +115,8 @@ fn Lower.copy_coll(mut self, v Val) int
 ## The trap's first line and source excerpt as string values, as the code
 ## generator builds them for a checked operation.
 fn Lower.trap_texts(mut self, rule str, pos ast.Pos) List[int]
+    path := if file < file_paths.len() then file_paths[file] else ""
+    src_lines := if file < file_texts.len() then file_texts[file] else []
     head := "{path}:{pos.line}:{pos.col}: trap[{rule}]: "
     line := if pos.line >= 1 and pos.line <= src_lines.len() then src_lines[pos.line - 1] else ""
     gutter := "{pos.line}"
@@ -144,7 +146,7 @@ fn Lower.entry_or(mut self, e int, t Ty, zero int) int
 
 ## `Map[K, V]()` and `Set[T]()` (type.coll.8).
 fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val?
-    t := coll_type_of(name, targs) else
+    t := self.coll_type_of(name, targs) else
         return unsupported(pos, "this `{name}` type")
     Val(id: new_table(t), ty: t)
 
@@ -404,11 +406,6 @@ CONST_SLOTS := 48
 
 ## A constant whose value is a list literal is built once, on first use,
 ## and kept in a global slot (ADR 0570); a use binding it copies it.
-fn Lower.lower_const(mut self, name str, c ast.Expr, want Ty?) Val?
-    match c
-        ListLit(_, _) => cached_const("{prefix}{name}", c)
-        _ => lower_expr(c, want)
-
 fn Lower.cached_const(mut self, key str, c ast.Expr) Val?
     mut slot := const_slots.get(key) else -1
     if slot < 0

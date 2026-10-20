@@ -11,9 +11,10 @@
 ./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail build FILE.ail [-o OUT] # native executable for the host (or --target x86_64-linux|aarch64-linux|aarch64-macos): numbers, strings, lists, loops, free functions, env.args() (native.subset.1)
+./ail build FILE.ail [-o OUT] # native executable (see Native builds below)
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
+./ail run --record r.json FILE.ail      # write every effect's result; `--replay r.json` repeats the run exactly (`ail test --record` keeps failed tests)
 ./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
 ./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot
 ./ail effects [--json] FILE.ail       # each function's inferred effects
@@ -34,6 +35,8 @@
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail check --budget 500 DIR  # any command: ~500 tokens, errors first, then `[budget ...; continue with --from K]`
+./ail diff OLD NEW            # what changed by meaning: declarations, diagnostics, tests (--rev HEAD FILE: against git)
+./ail edit FILE.ail < E.json  # edits by id: [{"op":"rename","id":"fn:f","to":"g"}], replace_body, replace, insert, delete, import; then fmt + check
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N; `ail test --trace` keeps a failing test's)
 ./ail run --watch n FILE.ail # each assignment to `mut` variable n (and `push`, `pop`, `xs[i] = e`...), with value and position
@@ -54,6 +57,21 @@ fn area(w int, h int) int
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
+
+## Native builds
+
+```sh
+./ail build examples/native_fib.ail   # writes ./native_fib, a static executable
+./native_fib                          # same output as ./ail run
+```
+
+- A native build covers free functions over numbers, strings, bools and lists
+  of them: loops, calls, `print`, `join`, `chars`, `env.args()` (native.subset.1).
+  Structs, enums, methods, traits, maps and generics are not built yet, and
+  `ail build` names the first one it meets (`error[native.subset.1]`).
+- A trap prints the same first line as `ail run` and exits 1.
+- Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
+- Guide: [design/native-guide.md](design/native-guide.md).
 
 ## Layout
 
@@ -603,6 +621,14 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 
 Two `mut` arguments of one call can't refer to the same value.
 
+Any argument of your own functions and methods can be named, `show(tag, scale: 3, n: 4)`:
+positional ones first, then the named ones in any order, every parameter once.
+Arguments run in parameter order. Built-ins take no names.
+
+A declared function is a value of type `fn(A, B) R`: `f := double`,
+`apply(double, 4)` for `fn apply(f fn(int) int, x int) int`, `f(21)`. Not
+generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+
 ## Shared cells, resources and `move`
 
 `ref T` is the one way to share a value: copies of a reference see each
@@ -708,7 +734,7 @@ Failures are values: `fs.IoError(path, kind)` and
 `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`;
 `net.NetError(url, kind, message)`.
 
-```ail
+```ail norun
 fn main() !
     text := fs.read_text("in.txt")?          # str ! fs.IoError
     fs.write_text("out.txt", text)?           # also append_text
@@ -733,14 +759,13 @@ fn main() !
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
-| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`) |
-| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `which(name) str?` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.timeout_ms`, `o.max_redirects`); server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_line()`, `write(text)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind` |
+| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`); server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
 | `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b` (elementwise, or with a scalar on either side: `t * 2.0`); methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
 | `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), linear time, no backreferences or lookaround; offsets in characters; write patterns as `r"..."` |
+| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `t[i]` (rows; `[]` for 1-D, read with `item()`), `t[lo..hi]` (rows); `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)` (offset required) and `date.parse_in(text, zone)` `: DateTime ! DateError`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); a zone is `"UTC"`, `"+05:30"` or `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)` (months clamp the day), `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format("%Y-%m-%d %H:%M:%S %z")` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
 | `std.tz` | `offset(zone, secs) int?` (none for an unknown zone), `system() str`; effects `fs`, `env` |
@@ -867,6 +892,29 @@ unsafe fn twice(x int) int
 fn safe_twice(x int) int
     unsafe
         twice(x)
+```
+
+C functions are declared, not imported. Types: `int`, `float`, `bool`,
+`i8`...`u64`, `f32`, and `*T` pointers; at most 6 integer-like and 8 float
+arguments; no `mut`. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
+A narrow C `int` result is declared `i32`. Wrap each call in a safe function.
+Pointers: `p.read()`, `p.write(v)`, `p.offset(n)` (elements), `p.is_null()`;
+`mem.alloc(n, 0)` allocates `n` ints set to the example (`0.0` gives `*float`),
+`mem.null()`, `mem.cast(p, example)`, `mem.free(p)`. Null, past-the-end and
+freed accesses trap (`unsafe.ptr.4–6`).
+
+```ail
+use std.mem
+
+extern c "libm" fn hypot(a float, b float) float
+extern c fn strlen(s *u8) int
+
+fn c_length(text str) int
+    unsafe
+        p := mem.cstr(text)
+        n := strlen(p)
+        mem.free(p)
+        n
 ```
 
 ## Contracts

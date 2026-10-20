@@ -1,0 +1,40 @@
+## std.net.16: bodies as bytes. An echo server answers with the bytes it got.
+use std.net
+
+fn worker(srv net.Server) !
+    while true
+        ex := srv.accept() else err
+            return
+        r := ex.request
+        if r.path == "/blob"
+            ex.respond_bytes(
+                200,
+                {"content-type": "application/octet-stream"},
+                b"\x00\xff\x10binary",
+            )?
+        else
+            ex.respond_bytes(201, {}, r.data + b"!")?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn worker(srv)
+    base := "http://{srv.addr()}"
+
+    g := net.get_bytes("{base}/blob")?
+    print("{g.status} {g.data} {g.data.len()}")
+    t := net.get("{base}/blob")?
+    print(t.body.byte_len())
+
+    p := net.post_bytes("{base}/echo", b"\x01\x02\xfe", "application/octet-stream")?
+    print("{p.status} {p.data.hex()}")
+
+    mut o := net.options()
+    o.data = b"raw\xff"
+    q := net.request_bytes("PUT", "{base}/echo", o)?
+    print("{q.status} {q.data}")
+
+    text := net.post("{base}/echo", "plain", "text/plain")?
+    print(text.body)
+
+    srv.close()
+    w.wait()?

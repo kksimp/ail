@@ -43,6 +43,10 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
             inner_ty := resolve_type(inner)
             no_unique(inner_ty, inner.pos, "the contents of a `ref`")
             return Ty.RefOf(inner_ty)
+        PtrTo(inner) =>
+            inner_ty := resolve_type(inner)
+            ptr_target(inner_ty, inner.pos)
+            return Ty.PtrOf(inner_ty)
         Fallible =>
             unsupported(
                 t.pos,
@@ -53,6 +57,14 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
             if i := trait_named(tr, t.pos, "trait.any.1")
                 return Ty.AnyOf(i)
             return Ty.Unknown
+        FnType(params, ret) =>
+            mut ps := List[Ty]()
+            for p in params
+                ps.push(resolve_type(p))
+            mut r := Ty.Unit
+            if rt := ret
+                r = resolve_type(rt)
+            return Ty.FnTy(ps, r)
         Named(n, args) => return resolve_named(n, args, t.pos)
 
 fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
@@ -244,7 +256,11 @@ fn Checker.ty_name(self, t Ty) str
         Param(p) => tparams[p].name
         AnyOf(tr) => "any {prog.traits[tr].name}"
         RefOf(x) => "ref {ty_name(x)}"
+        PtrOf(x) => "*{ty_name(x)}"
         Conc(k, x) => if k == "TaskGroup" then "TaskGroup" else "{k}[{ty_name(x)}]"
+        FnTy(ps, r) =>
+            args := [ty_name(p) for p in ps].join(", ")
+            if r == Ty.Unit then "fn({args})" else "fn({args}) {ty_name(r)}"
 
 fn Checker.with_args(self, n str, args List[Ty]) str
     if args.len() == 0 then n else "{n}[{[ty_name(a) for a in args].join(", ")}]"

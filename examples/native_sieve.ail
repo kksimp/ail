@@ -1,0 +1,21 @@
+# The sieve of Eratosthenes over a list of bools: a list built by `push`,
+# indexed in place, and a `for` over a range.
+fn sieve(limit int) List[int]
+    mut composite := []
+    for i in 0..limit + 1
+        composite.push(false)
+    mut primes := []
+    for n in 2..limit + 1
+        if not composite[n]
+            primes.push(n)
+            mut m := n * n
+            while m <= limit
+                composite[m] = true
+                m += n
+    primes
+
+fn main()
+    ps := sieve(100)
+    print(ps)
+    print("{ps.len()} primes up to 100, the last is {ps[ps.len() - 1]}")
+    print("primes up to 1000000: {sieve(1000000).len()}")
