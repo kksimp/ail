@@ -16,6 +16,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **AoS / SoA** | Array of Structs vs. Struct of Arrays: two memory layouts for collections of records. SoA often vectorises and caches better. |
 | **Arena (scoped allocation)** | A region where many objects with a shared lifetime are allocated, then freed together in one operation. |
 | **Asserted loop** | A `par for` loop that the checker can't prove independent but finds no conflict in; it relies on the programmer's assertion (`conc.par.5`, ADR 0237). |
+| **Atomic** | `Atomic[int]` or `Atomic[bool]`, a cell shared by every copy, so tasks and `par for` iterations update it without a lock: `load`, `store`, `cas`, and `add` on an `int`, each one sequentially consistent step (`conc.atomic.3–6`, ADR 0320). |
 | **Associated function** | A function declared `fn Type.name(...)` without `self`, called `Type.name(...)` (ADR 0082). |
 | **Attribute** | `@name` or `@name(args)` metadata placed before a declaration (ADR 0083). |
 | **Automatic implementation** | `Eq`, `ToStr` and `Hash`, which every type implements without an `impl` when its parts do; an explicit `impl Eq` or `impl ToStr` replaces it (ADR 0126, ADR 0133). |
@@ -31,6 +32,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Deterministic mode** | `ail run --deterministic`: denies `clock`, `random`, `proc` and `net` so a program gives the same output for the same inputs (`eff.det.1–3`, ADR 0207). |
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
+| **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early; the scope still waits for it (`conc.cancel.1–2`, ADR 0321). |
 | **Channel** | A bounded queue between tasks, `Channel[T](capacity)`: `send` waits while it is full, `recv` waits while it is empty and gives `none` once it is closed and empty; `for v in ch` receives until then (ADR 0100, ADR 0188, ADR 0300). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
@@ -116,6 +118,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Qualified name** | An item named through its module, `geo.Point`; the bootstrap renames every imported item to its module path plus its name (ADR 0156). |
+| **Random schedule** | `--schedule=random:SEED` for `ail test` and `ail run`: the interpreter switches tasks at points picked from `SEED`, so a race shows up under some seeds and replays exactly under the same one (`conc.sched.1–2`, ADR 0322). |
 | **Raw string** | `r"..."` or `r"""..."""`: a string literal with no escapes or interpolation (ADR 0135). |
 | **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
 | **Reduction** | Combining every iteration's value into one, like `total += x`. AIL parallelises `int` `+=` reductions and `xs.sum()` without changing the result (`conc.par.4`, ADR 0239). |
@@ -139,6 +142,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
+| **Tensor** | `tensor.Tensor[T]`: a value holding a shape and a contiguous buffer of `int` or `float`, whose methods run as vector kernels (`std.tensor.*`, ADRs 0328–0330). |
 | **Target** | An OS + ISA combination the compiler generates code for, e.g. `linux-arm64`. See spec `plat.target.1`. |
 | **Task** | A function call running concurrently, started by `spawn f(x)`. Its handle, `Task[T]`, must be consumed once by `.wait()` or `g.add(t)` (ADRs 0095-0096, 0187). |
 | **Task group** | `TaskGroup()`, which owns tasks that return nothing and waits for them when its block ends, or at `wait_all()` (ADR 0096, ADR 0187). |

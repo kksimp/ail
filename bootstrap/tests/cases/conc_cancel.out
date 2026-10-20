@@ -1,0 +1,5 @@
+worker 1 got 10
+worker 1 stopped: cancelled true
+worker 2 stopped: cancelled true
+main cancelled: false
+poll failed: the task was cancelled

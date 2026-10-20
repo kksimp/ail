@@ -1,0 +1,40 @@
+## An agent-style task runner: run each command from a plan with its own
+## time limit, keep going after failures, and report what happened.
+
+PLAN := """
+echo build ok 2000
+false x 2000
+sleep 5 200
+no-such-tool x 2000
+echo tests ok 2000
+"""
+
+struct Step
+    cmd str
+    args List[str]
+    limit int
+
+fn parse(line str) Step?
+    words := line.split(" ")
+    if words.len() < 2
+        return none
+    Step(cmd: words[0], args: words[1..words.len() - 1], limit: words.last()?.to_int()?)
+
+fn run_step(s Step) bool
+    r := proc.run(s.cmd, s.args, none, s.limit) else err
+        print("{s.cmd}: {err.kind}")
+        return false
+    print("{s.cmd}: {if r.status == 0 then r.out.trim() else "exit {r.status}"}")
+    r.status == 0
+
+fn main() !
+    mut bad := 0
+    for line in PLAN.lines()
+        step := parse(line) else continue
+        if not run_step(step)
+            bad += 1
+    print("{bad} steps failed")
+
+@test fn parses_a_step()
+    assert_eq(parse("sleep 5 200")?.limit, 200)
+    assert_eq(parse("x"), none)

@@ -1,0 +1,13 @@
+# std.tensor (ADR 0328): a 160x160 matrix product plus elementwise and
+# reduction kernels. `tensor_loops.ail` is the same work in plain loops, and
+# `tensor.py` in Python without NumPy. Every value is a multiple of 1/8 well
+# under 2^53, so each summation order gives the same exact result.
+fn main()
+    n := 160
+    xs := [(i % 17).to_float() * 0.25 for i in 0..n * n]
+    ys := [(i % 13).to_float() * 0.5 for i in 0..n * n]
+    a := tensor.from(xs, [n, n])
+    b := tensor.from(ys, [n, n])
+    c := a.matmul(b)
+    v := a.add(b).mul(a)
+    print(c.sum() + v.sum() + a.dot(b))

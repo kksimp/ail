@@ -124,6 +124,16 @@ impl<'p> Checker<'p> {
             }
             return None;
         };
+        if (module, name) == ("tensor", "Tensor") {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.1",
+                pos,
+                "a tensor isn't built from fields",
+                format!("use `{head}.from(xs, shape)` or `{head}.zeros(shape)`"),
+            );
+            return Some(Ty::Err);
+        }
         let qualified = format!("{module}.{name}");
         if let Some(Def::Struct(s)) = self.types.get(qualified.as_str()).copied() {
             self.resolved.std_calls.insert(pos, StdCall::Type(s));
@@ -142,6 +152,9 @@ impl<'p> Checker<'p> {
         };
         self.resolved.std_calls.insert(pos, StdCall::Fn(module, f));
         let what = format!("{head}.{f}");
+        if module == "tensor" {
+            return Some(self.tensor_call(f, args, pos, expect));
+        }
         if (module, f) == ("io", "eprint") {
             return Some(self.eprint_call(args, pos));
         }
@@ -201,6 +214,9 @@ impl<'p> Checker<'p> {
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
+            // conc.cancel.2
+            ("task", "cancelled") => (vec![], Bool),
+            ("task", "check") => (vec![], Ty::Res(Box::new(Unit), Errs::Set(vec![self.prelude_error("Cancelled")]))),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
             ("ui", "clipboard_get") => (vec![], opt(Str)),
@@ -210,6 +226,14 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
             ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
+        }
+    }
+
+    /// A prelude error type, such as `Cancelled` (conc.cancel.2).
+    fn prelude_error(&self, name: &str) -> Ty {
+        match self.types.get(name) {
+            Some(Def::Struct(s)) => Ty::Struct(*s, Vec::new()),
+            _ => Ty::Err,
         }
     }
 

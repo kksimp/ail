@@ -25,6 +25,36 @@ fn editor_checks_clean_and_passes_its_tests() {
     assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
 }
 
+/// Ctrl-Shift-H previews a replace across the directory's `.ail` files,
+/// then Ctrl-Enter applies it to the buffers without saving (ADR 0339).
+#[test]
+fn editor_replaces_in_files() {
+    let dir = std::env::temp_dir().join(format!("ail-edit-replace-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(tool("tools/edit/testdata/agent.ail"), dir.join("a.ail")).unwrap();
+    std::fs::write(dir.join("b.ail"), "fn main()\n    print(half(2))\n").unwrap();
+    let screen = |more: &[&str]| {
+        let mut args = vec!["run".to_string(), tool("tools/edit/edit.ail"), "--print".to_string()];
+        for f in ["--at=5:4", "--key=ctrl+shift+h", "--key=enter", "--type=halve", "--key=enter"].iter().chain(more) {
+            args.push(f.to_string());
+        }
+        args.push("a.ail".to_string());
+        let out = ail().args(&args).current_dir(&dir).env("AIL", env!("CARGO_BIN_EXE_ail")).output().unwrap();
+        assert!(out.status.success(), "{more:?}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let preview = screen(&[]);
+    for want in ["replace `half` with `halve`: 4 lines in 2 files", " a.ail:12:10: x := half(4)? → x := halve(4)?", " b.ail:2:11: print(half(2)) → print(halve(2))"] {
+        assert!(preview.contains(want), "preview lacks {want:?}:\n{preview}");
+    }
+    let applied = screen(&["--key=ctrl+enter"]);
+    for want in [" a.ail *   b.ail * ", "  5 fn halve(n int) int ! HalfError", "| replaced `half` in 2 files, not saved"] {
+        assert!(applied.contains(want), "applied lacks {want:?}:\n{applied}");
+    }
+    assert!(std::fs::read_to_string(dir.join("b.ail")).unwrap().contains("half(2)"), "nothing is saved");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// Drives the editor headless (`--print` with keys) against the real
 /// `ail api` and `ail fmt`, so a change to their output breaks this test
 /// rather than the editor: hover, completion of locals and members, F12,
@@ -114,7 +144,13 @@ fn editor_agent_panel_reads_the_real_outputs() {
         assert!(card.contains(want), "program card lacks {want:?}:\n{card}");
     }
     let card_jump = screen(&["--key=ctrl+shift+i", "--key=down", "--key=down", "--key=down", "--key=down", "--key=down", "--key=enter"]);
-    assert!(card_jump.contains("Ln 5, Col 1"), "card jump:\n{card_jump}");
+    assert!(card_jump.contains("Ln 5, Col 4"), "card jump:\n{card_jump}");
+    let problems = screen(&["--at=13:5", "--type=x", "--key=ctrl+shift+m"]);
+    for want in [" problems: 1 errors, 0 others", "agent.ail:13:5: error[expr.name.1] unknown name `xprint`"] {
+        assert!(problems.contains(want), "problems lack {want:?}:\n{problems}");
+    }
+    let problem_jump = screen(&["--at=13:5", "--type=x", "--key=end", "--key=ctrl+shift+m", "--key=enter"]);
+    assert!(problem_jump.contains("Ln 13, Col 5"), "problem jump:\n{problem_jump}");
     let covered = screen(&["--key=ctrl+shift+c"]);
     assert!(covered.contains("\n  8!        return Odd(n)\n") && covered.contains("\n  9     n / 2\n") && covered.contains("| coverage: lines 2/7"), "coverage:\n{covered}");
     std::fs::remove_dir_all(&dir).ok();

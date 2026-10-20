@@ -1,0 +1,10 @@
+# std.tensor.1, std.tensor.3, std.tensor.8, expr.call.2: what a tensor rejects.
+fn main()
+    a := tensor.from([1.0, 2.0])
+    print(a.elements)
+    b := tensor.Tensor(elements: {0: 1.0})
+    print(a.mean())
+    print(a.map(|x| "x"))
+    c := tensor.from(["a", "b"])
+    i := tensor.from([1, 2])
+    print(a.dot(i))
