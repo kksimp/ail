@@ -28,6 +28,7 @@ mod contracts;
 pub mod parallel;
 mod net;
 mod osext;
+mod spawn;
 mod random;
 mod tz;
 mod stdlib;
@@ -404,7 +405,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
-    let has_unique = prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique);
+    // A standard module's unique type (`proc.Child`) has no cleanup to run, so
+    // it doesn't slow programs that don't declare one (std.proc.7).
+    let has_unique = prog.structs.iter().any(|s| s.unique && !s.name.contains('.')) || prog.enums.iter().any(|e| e.unique);
     let has_defer = prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b));
     Interp {
         prog,

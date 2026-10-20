@@ -60,7 +60,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         ),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
-        "proc" => (&["run", "which"], &["proc", "io"]),
+        "proc" => (&["run", "which", "start", "wait", "kill"], &["proc", "io"]),
         // std.net.1: every request reaches the network.
         "net" => (&["get", "post"], &["net", "io"]),
         // std.path.1: text only, so no effects.
@@ -72,7 +72,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.tensor.1: values only, so no effects.
         "tensor" => (&["from", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
-        "task" => (&["cancelled", "check"], &[]),
+        "task" => (&["cancelled", "check", "select"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.
         "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,
