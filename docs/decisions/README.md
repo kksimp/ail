@@ -178,6 +178,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
+| [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
+| [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
 | [0194](0194-sized-numeric-types.md) | Sized numeric types: contextual literals, same-type arithmetic, trapping overflow *(delegated)* | Accepted | 2026-10-20 |

@@ -19,7 +19,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **Deterministic mode** | `ail run --deterministic`: denies `clock`, `random`, `proc` and `net` so a program gives the same output for the same inputs (`eff.det.1–3`, ADR 0207). |
-| **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
+| **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
@@ -96,6 +96,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Property test** | A `@test` with parameters: `ail test` runs it on generated inputs from a replayable seed and shrinks a failure to the smallest failing input (ADR 0198–0199). |
 | **Test** | A function marked `@test`, run by `ail test`: it passes unless an assertion fails, it traps, or it returns an error (ADR 0167). |
 | **Doc example** | A block fenced `ail` in a `##` doc comment, run by `ail test` as the test `doc:NAME` (ADR 0200). |
+| **Text cell** | One character position in a `std.ui` window, with a foreground and background color; the window is a grid of them, `cols` by `rows` (ADR 0177). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
 | **Total order (float)** | Float's `cmp`: numeric order with NaN after every number and `-0.0` equal to `0.0`, used for sorting; the operators `<` and `==` stay IEEE (ADR 0130). |
@@ -108,5 +109,6 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |
 | **Whole-program optimisation** | Optimising across all modules at once (specialisation, devirtualisation, cross-module constant propagation). See OQ-017. |
+| **Window host** | In the bootstrap, the main thread that owns `std.ui`'s window and serves the interpreter thread's requests, because macOS allows windows only on the main thread (ADR 0178). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |

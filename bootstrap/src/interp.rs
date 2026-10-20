@@ -24,6 +24,7 @@ pub use random::seed as set_seed;
 pub use stdlib::set_program;
 mod prop;
 mod testing;
+mod ui;
 pub use prop::PropInfo;
 pub use testing::run_tests;
 
@@ -1580,6 +1581,9 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             let f = self.methods[tn][name];
             return self.invoke(f, None, args, pos, env);
+        }
+        if let Some(&crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(&pos) {
+            return self.ui_method(m, recv, args, pos, env);
         }
         let recv = self.operand(recv, env)?;
         if let Some(Call::Trait(tr)) = call {

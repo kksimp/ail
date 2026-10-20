@@ -20,6 +20,7 @@ mod modules;
 mod num;
 mod parser;
 mod stdlib;
+mod ui;
 
 use std::process::ExitCode;
 
@@ -52,7 +53,8 @@ options:
                 the same inputs always give the same output (std.random.5)
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
   --deny LIST   with run or check: reject a program whose `main` reaches a
-                denied capability (fs, env, proc, clock, random, net, or all) (eff.cap.1)
+                denied capability (fs, env, proc, clock, random, net, ui,
+                or all) (eff.cap.1)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -228,20 +230,17 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let result = std::thread::Builder::new()
-        .stack_size(STACK_BYTES)
-        .spawn(move || {
-            let at = |pos| {
-                let (file, p) = modules::locate(&program.files, pos);
-                format!("{file}:{}:{}", p.line, p.col)
-            };
-            interp::run(&program, &resolved).map_err(|stop| match stop {
-                interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
-                interp::Stop::Failed(report) => report.render_with(at),
-            })
+    // std.ui: this thread hosts any window the program opens (ADR 0178).
+    let result = ui::run_hosted(STACK_BYTES, move || {
+        let at = |pos| {
+            let (file, p) = modules::locate(&program.files, pos);
+            format!("{file}:{}:{}", p.line, p.col)
+        };
+        interp::run(&program, &resolved).map_err(|stop| match stop {
+            interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
+            interp::Stop::Failed(report) => report.render_with(at),
         })
-        .expect("spawn interpreter thread")
-        .join();
+    });
     match result {
         Ok(Ok(())) => ExitCode::SUCCESS,
         Ok(Err(message)) => {

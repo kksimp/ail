@@ -17,7 +17,7 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `net` is reserved; nothing gives it yet.
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -51,6 +51,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "proc" => (&["run"], &["proc", "io"]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.ui.9: opening a window and every `ui.Window` method.
+        "ui" => (&["open", "Window"], &["ui", "io"]),
         _ => return None,
     };
     names.contains(&name).then_some(effects)
@@ -442,6 +444,12 @@ impl Walker<'_, '_> {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
                     }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && let Some(effects) = std_effects("ui", "Window")
+                {
+                    for &e in effects {
+                        self.add(e, format!("ui.Window.{m}"));
+                    }
                 } else if let Expr::Name(m, _) = &**recv
                     && self.prog.enums.iter().any(|d| d.name == *m)
                 {
@@ -610,7 +618,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

@@ -5,6 +5,10 @@ The Rust front end and reference interpreter for AIL ([ADR 0023](../docs/decisio
 It is temporary scaffolding for the compiler, apart from the interpreter, which
 stays as a permanent test oracle.
 
+Dependencies: only `minifb` and `embedded-graphics`, pinned in `Cargo.toml`,
+for `std.ui`'s window and font (ADR 0177). On Linux, X11 is loaded at run
+time, so building and `./ail selftest` need no display libraries.
+
 ## Using it
 
 From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0087):
@@ -15,6 +19,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/commands.ail
 ./ail run examples/shapes.ail
 ./ail run examples/tool.ail        # files and processes (std modules)
+./ail run examples/ui_hello.ail    # a window (std.ui); needs a display
 ./ail run FILE a b                 # words after FILE go to the program (env.args())
 .\ail.ps1 run examples\hello.ail   # Windows (not yet tested on Windows)
 ./ail run bootstrap/tests/cases/packages/geometry   # a package: root module plus `use`d modules
@@ -47,7 +52,10 @@ reported but don't stop a program from running.
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
 | `src/fmt.rs` | `ail fmt`: reprints the token stream and the lexer's comment side table (`lex_with_comments`) in canonical layout; refuses any change but layout | none (non-normative): `fmt.*` in [formatting.md](../docs/design/formatting.md), ADRs 0169–0170 |
-| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError` | `std.use.1`, `std.err.1` |
+| `src/stdlib.rs`, `src/std/types.ail` | The standard modules: names, functions, and their types `fs.IoError`, `proc.Output`, `proc.ProcError`, `ui.Window`, `ui.Size`, `ui.Event`, `ui.UiError` | `std.use.1`, `std.err.1`, `std.ui.2` |
+| `src/check/ui.rs` | Types of the `ui.Window` methods | `std.ui.2–8` |
+| `src/interp/ui.rs` | Runs `ui.open` and the `ui.Window` methods | `std.ui.1–8` |
+| `src/ui.rs` | The window: cell grid, key names, and the main-thread window host over `minifb` and `embedded-graphics` (ADRs 0177–0179) | `std.ui.1–8` |
 | `src/check/stdlib.rs` | Imports and calls of the standard modules | `std.use.1–3`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2` |
 | `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.random.1–5`, `std.time.1–2` |
 | `src/interp/random.rs` | The `std.random` generator (SplitMix64) | `std.random.2–3` |
@@ -126,7 +134,7 @@ package's are reported file by file.
   traits' `x.eq(y)`, `x.cmp(y)` (returning `Ordering`), `x.to_str()`,
   `a.min(b)` and `a.max(b)`; automatic `Hash` for map keys and set elements
 - **Standard modules:** `use std.fs`, `std.env`, `std.io`, `std.proc`,
-  `std.random` and `std.time` (and `use std.NAME as d`), their functions called as
+  `std.random`, `std.time` and `std.ui` (a window of text cells; ADR 0177) (and `use std.NAME as d`), their functions called as
   `fs.read_text(path)`, and their types written `fs.IoError` (spec 17-std)
 - **Methods:** inside a method, the receiver's fields and methods by bare
   name (`pos += 1`, `peek()`); `[]` and `{}` declared with `:=` are typed by
