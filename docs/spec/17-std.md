@@ -1379,84 +1379,6 @@ fn main() !
     print("done")                     # the system gzip and unzip read this output
 ```
 
-```ail skip=bootstrap rules=std.date.1,std.date.2,std.date.3,std.date.4,std.date.5
-use std.date
-
-fn main()
-    d := Date(2024, 2, 29)
-    print(d.iso())                    # 2024-02-29
-    print(d.days())                   # 19782
-    print(d.weekday())                # 4: a Thursday
-    print(d.yday())                   # 60
-    print(Date.from_days(0).iso())    # 1970-01-01
-    print(Date.new(2023, 2, 29) == none)   # true: no such day
-    print(d.add_days(365).iso())      # 2025-02-28
-    print(d.since(Date(2024, 1, 1)))  # 59
-    print(Date(2024, 1, 31).add_months(1).iso())   # 2024-02-29
-    print(Date(2024, 2, 29).add_years(1).iso())    # 2025-02-28
-    print(Date.is_leap(1900))         # false
-    print(Date.days_in_month(2023, 2))             # 28
-```
-
-```ail skip=bootstrap rules=std.date.6,std.date.7,std.date.8,std.date.9,std.date.10,std.tz.1,std.tz.2
-use std.date
-use std.tz
-
-fn main() !
-    a := date.utc(1700000000000)
-    print(a.iso())                    # 2023-11-14T22:13:20Z
-    b := date.at(1700000000000, "Europe/Paris")
-    print(b.iso())
-    print(a.unix_ms() == b.unix_ms()) # true: the same instant
-    print(a == b)                     # false: the fields differ
-    print(a.before(b))                # false
-    print(a.in_zone("UTC").hour)      # 22
-    print(b.offset)
-    print(a.format("%Y-%m-%d %H:%M:%S %a %b"))
-    print(a.format("%z %Z"))
-    print(tz.offset("Europe/Paris", 1700000000) else 0)
-    print(tz.system().len() > 0)      # true: UTC when no zone is installed
-```
-
-```ail skip=bootstrap rules=std.date.7,std.date.15
-use std.date
-
-fn main()
-    date.at(0, "No/Such_Zone") else err
-        print(err)                    # the zone is unknown: DateError
-```
-
-```ail skip=bootstrap rules=std.date.11,std.date.12
-use std.date
-
-fn main()
-    now := date.now()                 # reads the clock: --deterministic rejects it
-    later := now.add_ms(1000)
-    print(later.before(now))
-```
-
-```ail skip=bootstrap rules=std.date.13,std.date.14,std.date.15
-use std.date
-
-fn main() !
-    d := date.parse_date("2024-03-10")?
-    print(d.iso())                    # 2024-03-10
-    t := date.parse_iso("2024-03-10T08:30:00.123+02:00")?
-    print(t.iso())                    # 2024-03-10T08:30:00.123+02:00
-    local := date.parse_in("2024-03-10 08:30", "Europe/Paris")?
-    print(local.iso())
-    date.parse_iso("2024-03-10T08:30") else err
-        print(err)                    # no offset: an error
-```
-
-```ail skip=bootstrap rules=std.tz.3
-use std.tz
-
-fn main()
-    print(tz.system().len() > 0)      # "UTC" on Windows until the registry reader lands
-    print(tz.offset("UTC", 0) else 0) # 0
-```
-
 ```ail norun rules=std.net.6,std.net.7
 use std.net
 
@@ -1512,4 +1434,84 @@ fn main() !
     print(msg)
     status := proc.wait(move c)?
     print(status)
+```
+
+```ail rules=std.date.1,std.date.2,std.date.3,std.date.4,std.date.5
+use std.time.date
+
+fn main()
+    d := date.Date(year: 2024, month: 2, day: 29)
+    print(d.iso())                                   # 2024-02-29
+    print(d.days())                                  # 19782
+    print(d.weekday())                               # 4: a Thursday
+    print(d.yday())                                  # 60
+    print(date.Date.from_days(0).iso())              # 1970-01-01
+    print(date.Date.new(2023, 2, 29) == none)        # true: no such day
+    print(d.add_days(365).iso())                     # 2025-02-28
+    print(d.since(date.Date(year: 2024, month: 1, day: 1)))   # 59
+    print(date.Date(year: 2024, month: 1, day: 31).add_months(1).iso())   # 2024-02-29
+    print(d.add_years(1).iso())                      # 2025-02-28
+    print(date.is_leap(1900))                        # false
+    print(date.days_in_month(2023, 2))               # 28
+```
+
+```ail rules=std.date.6,std.date.7,std.date.8,std.date.9,std.date.10,std.tz.1,std.tz.2
+use std.time.date
+use std.tz
+
+fn main() !
+    a := date.utc(1700000000000)
+    print(a.iso())                                   # 2023-11-14T22:13:20Z
+    b := date.at(1700000000000, "Europe/Paris")?
+    print(b.iso())
+    print(a.unix_ms() == b.unix_ms())                # true: the same instant
+    print(a == b)                                    # false: the fields differ
+    print(a.before(b))                               # false
+    print(a.in_zone("UTC")?.hour)
+    print(a.format("%Y-%m-%d %H:%M:%S %a %b"))
+    print(tz.offset("Europe/Paris", 1700000000) else 0)
+    print(tz.system().len() > 0)
+```
+
+```ail rules=std.date.7,std.date.15
+use std.time.date
+
+fn main()
+    z := date.at(0, "No/Such_Zone") else err
+        print(err)                                   # DateError: the zone is unknown
+        return
+    print(z.iso())
+```
+
+```ail norun rules=std.date.11,std.date.12
+use std.time.date
+
+fn main()
+    now := date.now()                                # reads the clock: --deterministic rejects it
+    later := now.add_ms(1000)
+    print(later.before(now))
+```
+
+```ail rules=std.date.13,std.date.14,std.date.15
+use std.time.date
+
+fn main() !
+    d := date.parse_date("2024-03-10")?
+    print(d.iso())                                   # 2024-03-10
+    t := date.parse_iso("2024-03-10T08:30:00.123+02:00")?
+    print(t.iso())                                   # 2024-03-10T08:30:00.123+02:00
+    local := date.parse_in("2024-03-10 08:30", "Europe/Paris")?
+    print(local.iso())
+    bad := date.parse_iso("2024-03-10T08:30") else err
+        print(err)                                   # no offset: an error
+        return
+    print(bad.iso())
+```
+
+```ail rules=std.tz.3
+use std.tz
+
+fn main()
+    print(tz.system().len() > 0)                     # "UTC" on Windows until the registry reader lands
+    print(tz.offset("UTC", 0) else 0)                # 0
 ```
