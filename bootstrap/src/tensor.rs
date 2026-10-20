@@ -224,6 +224,39 @@ impl Tensor {
         Ok(Tensor { shape, data })
     }
 
+    /// std.tensor.16: the valid 2-D convolution of an `h x w` image with an
+    /// `kh x kw` kernel, stride 1, no padding: the result is
+    /// `(h - kh + 1) x (w - kw + 1)`. Each output adds its products in
+    /// row-major order of the kernel, one at a time, so the order is fixed.
+    pub fn conv2d(&self, kernel: &Tensor) -> Result<Tensor, Fault> {
+        let (&[h, w], &[kh, kw]) = (self.shape.as_slice(), kernel.shape.as_slice()) else {
+            return fault(
+                "std.tensor.16",
+                format!("`conv2d` needs two 2-D tensors, but the shapes are {:?} and {:?}", self.shape, kernel.shape),
+            );
+        };
+        if kh > h || kw > w {
+            return fault("std.tensor.16", format!("`conv2d`: a {kh}x{kw} kernel doesn't fit a {h}x{w} image"));
+        }
+        let (Data::F(img), Data::F(k)) = (&self.data, &kernel.data) else {
+            return fault("std.tensor.16", "`conv2d` is on `float` tensors".into());
+        };
+        let (oh, ow) = (h - kh + 1, w - kw + 1);
+        let mut out = vec![0.0; oh * ow];
+        for oy in 0..oh {
+            for ox in 0..ow {
+                let mut s = 0.0;
+                for ky in 0..kh {
+                    for kx in 0..kw {
+                        s += img[(oy + ky) * w + ox + kx] * k[ky * kw + kx];
+                    }
+                }
+                out[oy * ow + ox] = s;
+            }
+        }
+        Ok(Tensor { shape: vec![oh, ow], data: Data::F(out) })
+    }
+
     /// std.tensor.14: `-t`, elementwise. A `float` is negated exactly; an
     /// `int` that is `i64::MIN` traps (std.tensor.6).
     pub fn neg(&self) -> Result<Tensor, Fault> {

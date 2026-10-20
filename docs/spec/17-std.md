@@ -801,6 +801,14 @@ element of a tensor with exactly one element and traps otherwise. Assigning
 to an element, `t[i] = v`, is a compile-time error: a tensor is a value, so
 build a new one. *(ADR 0509)*
 
+**std.tensor.16** — `t.conv2d(k)` is the valid 2-D convolution of an `h` by
+`w` `float` image `t` with an `kh` by `kw` kernel `k`, stride 1 and no
+padding: the result is `(h - kh + 1)` by `(w - kw + 1)`. Each output adds
+its products in the kernel's row-major order, one at a time, so the sum is
+the same on every target. Both operands must be 2-D, and the kernel must
+fit the image; otherwise the call traps. `conv2d` on a `Tensor[int]` is a
+compile-time error. *(ADR 0511)*
+
 ```ail
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
