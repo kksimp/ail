@@ -476,3 +476,46 @@ an error naming the colors. *(ADR 0294)*
 places the caret like `cursor` (std.ui.5) and sets its shape: `Bar` (a
 thin line at the cell's left, `cursor`'s shape), `Block` (the cell's colors
 swapped) or `Underline` (a line at the cell's foot). *(ADR 0294)*
+
+### Widgets: `std.ui.widgets`
+
+**std.ui.19** — `use std.ui.widgets` imports a standard module written in
+AIL and shipped inside the toolchain. It is an ordinary module (spec 16):
+its items are used qualified (`widgets.ListView`), its source is shown as
+`<std>/ui/widgets.ail` in diagnostics, and it needs the `ui` capability
+only where it draws. It is the one standard module with a submodule path.
+*(ADR 0314)*
+
+**std.ui.20** — A widget's colors come from a theme, a `Map[str, int]` keyed
+by the kinds the editor's themes use (`bg`, `fg`, `pane_bg`, `line_bg`,
+`select_bg`, `status_bg`, `status_fg`, `gutter_fg`); `widgets.color(theme,
+kind)` gives a kind's color, with the dark default for a kind the theme
+leaves out. *(ADR 0315)*
+
+**std.ui.21** — Every widget has `render(self, r Rect, theme) List[Run]`,
+which is pure and fills exactly the cells of `r`; `draw(self, mut w, r,
+theme)`, which puts those runs on a window; and `on_event(mut self, ev
+ui.Event, ...) Action`, where `Action` is `Ignored` (not for this widget),
+`Changed`, `Submit` (Enter, a press, or a click on a choice) or `Cancel`
+(Escape). Widgets that take mouse events also take their `Rect`.
+`widgets.text_rows(runs, cols, rows)` gives the text a window would show,
+so a program can print or test a screen without one. *(ADR 0315)*
+
+**std.ui.22** — `ListView` shows the items that `widgets.fuzzy` keeps for
+its `filter`: those holding the filter's characters in order, ignoring
+case. Typing edits the filter; Up, Down, PageUp and PageDown move the
+selection, which stays visible; `chosen()` is the selected item. With no
+match it shows its `empty` text. *(ADR 0315)*
+
+**std.ui.23** — `TextField` edits one line: printable keys insert at the
+cursor, and Backspace, Delete, Left, Right, Home and End do what they
+name. `caret_col(r)` is the caret's column, and `draw` places the caret
+there. *(ADR 0315)*
+
+**std.ui.24** — `Button` is pressed by a click, or by Enter or Space while
+`focused`. `Dialog` shows a message above its choices; Left, Right and Tab
+move between them. `Pane` scrolls lines with a cursor line (a `cursor`
+outside the lines highlights none) and takes the wheel. `Tree` shows
+`Node`s in depth-first order, hiding the children of a closed node; Right
+opens, Left closes, Enter opens or closes a parent and submits a leaf.
+*(ADR 0315)*

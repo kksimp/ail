@@ -850,7 +850,7 @@ impl<'p> Refs<'p> {
                 self.expr(cond);
                 self.block(body);
             }
-            Stmt::For { iter, body, .. } => {
+            Stmt::For { iter, body, .. } | Stmt::With { mutex: iter, body, .. } => {
                 self.expr(iter);
                 self.block(body);
             }

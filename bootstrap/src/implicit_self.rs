@@ -158,7 +158,7 @@ impl Cx<'_> {
                 self.expr(cond);
                 self.block(body);
             }
-            Stmt::For { var, var_pos, iter, body, .. } => {
+            Stmt::For { var, var_pos, iter, body, .. } | Stmt::With { mutex: iter, var, var_pos, body, .. } => {
                 self.expr(iter);
                 let (var, pos) = (var.clone(), *var_pos);
                 self.declare(&var, pos);

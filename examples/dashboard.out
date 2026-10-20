@@ -1,0 +1,14 @@
+ data: 3 files, scan 1
+ logscan.log             2283 bytes
+ sales.csv               208 bytes
+ tasks.json              427 bytes
+
+ preview
+region,product,units,price
+north,widget,12,2.50
+north,gadget,3,10.00
+south,widget,7,2.50
+south,gizmo,5,4.25
+east,gadget,4,10.00
+
+[ R rescan ]
