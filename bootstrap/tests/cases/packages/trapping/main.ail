@@ -1,0 +1,5 @@
+use calc
+
+fn main()
+    print(calc.ratio(4, 2))
+    print(calc.ratio(1, 0))

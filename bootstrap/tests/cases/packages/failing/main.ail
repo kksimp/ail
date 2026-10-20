@@ -1,0 +1,5 @@
+use calc
+
+fn main() ! calc.CalcError
+    print(calc.half(10)?)
+    print(calc.half(3)?)

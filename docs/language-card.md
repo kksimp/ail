@@ -1,7 +1,7 @@
 # AIL language card
 
-> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,480 tokens
-> (3,915 on the costliest tokenizer; measure with
+> Language card v1, 2026-10-20, bootstrap milestone 6. About 3,525 tokens
+> (3,973 on the costliest tokenizer; measure with
 > `tools/tokbench/run.sh docs/language-card.md`). Non-normative: the
 > [spec](spec/) is authoritative and the [quick reference](quick-reference.md)
 > has the long form. Everything here runs on the bootstrap interpreter.
@@ -12,6 +12,8 @@
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ```
+
+Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
 

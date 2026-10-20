@@ -8,6 +8,7 @@
 
 ```sh
 ./ail run FILE.ail           # check, then run
+./ail run DIR                # a package: DIR's files are the root module
 ./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
@@ -453,6 +454,34 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+
+## Modules
+
+A module is a directory of `.ail` files sharing one namespace. `use a.b`
+imports `ROOT/a/b`, where ROOT is the directory run (`ail run DIR`) or the
+file's directory (`ail run FILE`, whose siblings are not included).
+
+```ail fragment
+use geo                  # imports at the top of each file
+use util.text as fmt     # `as` renames; names must not clash
+
+fn main()
+    p := geo.Point(x: 1, y: 2)   # items are always qualified
+    print(geo.dist(p, geo.ORIGIN))
+    match geo.classify(p)
+        geo.Kind.Near => print(fmt.banner("near"))
+        _ => print(p.x)
+```
+
+```ail fragment
+pub struct Point         # `pub` exports; everything else is private
+    pub x int            # fields too; a private field means only this
+    y int                # module can build a `Point`
+```
+
+There are no item or wildcard imports, no `pub use`, and no import cycles.
+`fn T.m` must be in `T`'s module. Text forms show the module path:
+`geo.Point(x: 1, y: 2)`.
 
 ## Files, processes and the system
 

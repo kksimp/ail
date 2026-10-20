@@ -14,6 +14,7 @@ mod fmt;
 mod implicit_self;
 mod interp;
 mod lexer;
+mod modules;
 mod parser;
 mod stdlib;
 
@@ -24,9 +25,11 @@ usage: ail <command> [--json] [args]
 
 commands:
   run FILE [ARGS...]
-                check and run an AIL program; ARGS are the program's
-                (std.env.1: `env.args()`)
-  check FILE    check a program without running it
+                check and run an AIL program, with the modules it imports;
+                ARGS are the program's (std.env.1: `env.args()`)
+  run DIR [ARGS...]
+                check and run the package whose root module is DIR
+  check FILE    check a program (or a package DIR) without running it
   test FILE     run the program's `@test` functions
   effects FILE  print each function's inferred effects (eff.infer.6)
   explain RULE  print a spec rule, its ADRs and an example
@@ -112,48 +115,40 @@ fn effects_file(path: &str, json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Lex, parse and check `path`, reporting diagnostics; `None` if the
-/// program is rejected.
-fn front_end(path: &str, json: bool) -> Option<(ast::Program, check::Resolved)> {
-    let src = match std::fs::read_to_string(path) {
-        Ok(s) => s,
+/// Read and parse `path`, a file or a package directory, with the modules
+/// it imports (mod.unit.1-5). `None` if it can't be read.
+fn load(path: &str) -> Option<(ast::Program, Vec<diag::Diagnostic>)> {
+    let (program, mut diags) = match modules::load(path) {
+        Ok(loaded) => loaded,
         Err(e) => {
-            eprintln!("error: can't read {path}: {e}");
+            eprintln!("error: {e}");
             return None;
         }
     };
-    let (tokens, mut diags) = lexer::lex(&src);
-    let (program, parse_diags) = parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
+    // A string literal with an error throws off the rest of its line, so
+    // report only the string's own errors there.
     let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
     diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
+    Some((program, diags))
+}
+
+/// Lex, parse and check `path`, reporting diagnostics; `None` if the
+/// program is rejected.
+fn front_end(path: &str, json: bool) -> Option<(ast::Program, check::Resolved)> {
+    let (program, mut diags) = load(path)?;
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
-        diag::report(&mut diags, path, &src, json);
+        modules::report(&program.files, diags, json);
     }
     (!rejected).then_some((program, resolved))
 }
 
 fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
-    let src = match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: can't read {path}: {e}");
-            return ExitCode::from(2);
-        }
-    };
-
-    let (tokens, mut diags) = lexer::lex(&src);
-    let (program, parse_diags) = parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
-    // A string literal with an error throws off the rest of its line, so
-    // report only the string's own errors there.
-    let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
-    diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
+    let Some((program, mut diags)) = load(path) else { return ExitCode::from(2) };
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
@@ -163,7 +158,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
-        diag::report(&mut diags, path, &src, json);
+        modules::report(&program.files, diags, json);
     }
     if rejected {
         return ExitCode::from(2);
@@ -172,13 +167,16 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let file = path.to_string();
     let result = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
         .spawn(move || {
+            let at = |pos| {
+                let (file, p) = modules::locate(&program.files, pos);
+                format!("{file}:{}:{}", p.line, p.col)
+            };
             interp::run(&program, &resolved).map_err(|stop| match stop {
-                interp::Stop::Trap(t) => format!("{file}:{t}"),
-                interp::Stop::Failed(report) => report.render(&file),
+                interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
+                interp::Stop::Failed(report) => report.render_with(at),
             })
         })
         .expect("spawn interpreter thread")
@@ -200,18 +198,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
 /// own, report in source order. Exit 0 if all pass, 1 if any fails, 2 if
 /// the program is rejected.
 fn run_tests(path: &str, json: bool) -> ExitCode {
-    let src = match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: can't read {path}: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let (tokens, mut diags) = lexer::lex(&src);
-    let (program, parse_diags) = parser::parse_with_prelude(tokens);
-    diags.extend(parse_diags);
-    let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
-    diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
+    let Some((program, mut diags)) = load(path) else { return ExitCode::from(2) };
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
@@ -222,7 +209,7 @@ fn run_tests(path: &str, json: bool) -> ExitCode {
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
-        diag::report(&mut diags, path, &src, json);
+        modules::report(&program.files, diags, json);
     }
     if rejected {
         return ExitCode::from(2);

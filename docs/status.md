@@ -44,6 +44,10 @@ implemented and tested on Linux x86-64; examples and test cases are canonical.
 Lane 12 added `tools/edit/edit.ail`, a code editor written in AIL with a
 headless, tested core that drives `ail check --json`, fixes, `ail explain` and
 `ail api`; its window front end waits for `std.ui` (ADRs 0180–0181).
+Lane 3 added user modules (ADRs 0153–0156): `ail run DIR` runs a package,
+`use a.b` imports a directory, items are reached by qualified name, and
+`pub` controls visibility of items, fields and methods. Linux selftest
+passes; macOS verification is pending.
 
 ## Design topics
 
@@ -65,7 +69,7 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 9 | Generics | D (core) + Q; I+T (bootstrap subset) | [0041](decisions/0041-square-bracket-generics.md), [0074](decisions/0074-inline-generic-bounds.md), [0078](decisions/0078-trait-typed-parameters.md), [0080](decisions/0080-generic-compilation-strategy.md), [0128](decisions/0128-methods-on-generic-types.md), [0129](decisions/0129-using-generics-and-traits.md), [0133](decisions/0133-automatic-hash.md) | `gram.generic.1`, `gen.*` |
 | 10 | Traits/interfaces | D (core) + Q; I+T (bootstrap subset) | [0072](decisions/0072-dot-named-methods.md), [0073](decisions/0073-explicit-trait-impls.md), [0075](decisions/0075-unmarked-receiver-mutation.md), [0077](decisions/0077-operator-traits.md), [0079](decisions/0079-any-dynamic-dispatch.md), [0081](decisions/0081-default-methods.md), [0082](decisions/0082-method-placement-coherence.md), [0126](decisions/0126-automatic-equality-and-text.md), [0127](decisions/0127-standard-comparison-and-text-traits.md), [0128](decisions/0128-methods-on-generic-types.md), [0129](decisions/0129-using-generics-and-traits.md), [0133](decisions/0133-automatic-hash.md), [0137](decisions/0137-integer-methods-and-min-max.md), [0141](decisions/0141-implicit-self.md) | `trait.*` |
 | 11 | Concurrency | D (core) + Q | [0006](decisions/0006-arm64-baseline-v8-2.md) (LSE atomics), [0025](decisions/0025-memory-model-atomics.md), [0095](decisions/0095-colorless-tasks.md), [0096](decisions/0096-scope-bound-tasks.md), [0100](decisions/0100-task-communication.md) | `conc.*` |
-| 12 | Modules | D (core); I+T (constants, `use std.NAME`) | [0088](decisions/0088-entry-point-and-print.md), [0097](decisions/0097-directory-modules.md), [0098](decisions/0098-pub-visibility.md), [0099](decisions/0099-qualified-imports.md), [0101](decisions/0101-single-file-programs.md), [0132](decisions/0132-module-constants.md) | `mod.*` |
+| 12 | Modules | D (core); I+T (modules, `pub`, `use`, `use std.NAME`, constants) | [0088](decisions/0088-entry-point-and-print.md), [0097](decisions/0097-directory-modules.md), [0098](decisions/0098-pub-visibility.md), [0099](decisions/0099-qualified-imports.md), [0101](decisions/0101-single-file-programs.md), [0132](decisions/0132-module-constants.md), [0153](decisions/0153-package-root-and-loading.md), [0154](decisions/0154-imports-per-file-at-the-top.md), [0155](decisions/0155-member-visibility-and-method-placement.md), [0156](decisions/0156-bootstrap-modules-by-qualified-names.md) | `mod.*` |
 | 13 | Package management | — | | |
 | 14 | FFI | D (core) + Q | [0103](decisions/0103-c-header-import.md), [0104](decisions/0104-c-calls-unsafe.md), [0105](decisions/0105-libc-only-with-c.md) | `ffi.*` |
 | 15 | Unsafe semantics | D (core) + Q | [0102](decisions/0102-unsafe-blocks.md), [0106](decisions/0106-unsafe-operations.md) | `unsafe.*` |

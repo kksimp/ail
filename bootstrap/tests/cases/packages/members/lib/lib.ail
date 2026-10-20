@@ -1,0 +1,17 @@
+pub struct Account
+    pub owner str
+    balance int
+
+pub fn Account.open() Account
+    Account(owner: "me", balance: 0)
+
+fn Account.audit(self) bool
+    balance >= 0
+
+fn secret() int
+    42
+
+LIMIT := 10
+
+enum Kind
+    Hidden

@@ -1,0 +1,4 @@
+use a
+
+fn main()
+    print(a.f())
