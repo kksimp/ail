@@ -204,6 +204,8 @@ pub enum TypeShape
     AnyTrait(trait_name str)
     ## `ref T`
     RefTo(inner TypeRef)
+    ## `fn(A, B) R`: a function value's type; `ret` none for no result
+    FnType(params List[TypeRef], ret TypeRef?)
 
 pub enum Stmt
     Let(name str, pos Pos, mutable bool, value Expr, otherwise Else?)

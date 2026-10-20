@@ -748,7 +748,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any" | "ref") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
@@ -991,6 +991,25 @@ impl Parser {
             let pos = self.bump().pos;
             let inner = self.named_type("a type after `ref`", "own.ref.1")?;
             return Some(TypeRef { kind: TypeKind::Ref(Box::new(inner)), pos });
+        }
+        // `fn(A, B) R`: a function value's type (type.fn.1).
+        if self.at_kw("fn") {
+            let pos = self.bump().pos;
+            self.expect_sym("(", "`(` after `fn` in a type", "type.fn.1")?;
+            let mut params = Vec::new();
+            while !self.at_sym(")") {
+                params.push(self.type_ref("a parameter type", "type.fn.1")?);
+                if !self.eat_sym(",") {
+                    break;
+                }
+            }
+            self.expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?;
+            let ret = if matches!(self.peek(), Tok::Ident(_)) || self.at_kw("any") || self.at_kw("ref") {
+                Some(Box::new(self.optional_type("the result type", "type.fn.1")?))
+            } else {
+                None
+            };
+            return Some(TypeRef { kind: TypeKind::Fn { params, ret }, pos });
         }
         let (name, pos) = self.dotted_name(expected, rule)?;
         let mut args = Vec::new();

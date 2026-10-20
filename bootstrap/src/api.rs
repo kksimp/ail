@@ -798,6 +798,13 @@ pub(crate) fn type_text(t: &TypeRef) -> String {
         TypeKind::Optional(t) => format!("{}?", type_text(t)),
         TypeKind::Any(name) => format!("any {name}"),
         TypeKind::Ref(t) => format!("ref {}", type_text(t)),
+        TypeKind::Fn { params, ret } => {
+            let ps: Vec<String> = params.iter().map(type_text).collect();
+            match ret {
+                Some(r) => format!("fn({}) {}", ps.join(", "), type_text(r)),
+                None => format!("fn({})", ps.join(", ")),
+            }
+        }
         TypeKind::Fallible { ok, errors } => {
             let errs = errors.as_ref().map(|es| es.iter().map(type_text).collect::<Vec<_>>().join(" | "));
             match (ok, errs) {
@@ -968,6 +975,12 @@ impl<'p> Refs<'p> {
                 }
             }
             TypeKind::Optional(t) | TypeKind::Ref(t) => self.type_ref(t),
+            TypeKind::Fn { params, ret } => {
+                params.iter().for_each(|p| self.type_ref(p));
+                if let Some(r) = ret {
+                    self.type_ref(r);
+                }
+            }
             TypeKind::Any(name) => self.add(t.pos, format!("trait:{name}")),
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {

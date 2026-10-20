@@ -95,6 +95,8 @@ pub enum Ty {
     /// `Task[T]`, `TaskGroup` (with `Unit`), `Channel[T]` and `Mutex[T]`
     /// (conc.task.1, conc.share.2-3, ADRs 0186-0189).
     Conc(conc::Conc, Box<Ty>),
+    /// `fn(A, B) R`, a function value (type.fn.1); `Unit` when it has no result.
+    Fn(Vec<Ty>, Box<Ty>),
 }
 
 /// The error part of `T ! E`: an explicit set, or the inferred set of a
@@ -200,6 +202,9 @@ pub struct Resolved {
     /// For a call with named arguments, by the position of its first label:
     /// the argument indices in parameter order (expr.call.3).
     pub arg_order: HashMap<Pos, Vec<usize>>,
+    /// Names of declared functions used as values, by the name's position,
+    /// with the function's index (type.fn.2).
+    pub fn_values: HashMap<Pos, usize>,
     /// Methods called on a task, group, channel or mutex handle, by the
     /// position of the name: they synchronise with other tasks (conc.par.2).
     pub handle_calls: FastSet<Pos>,
@@ -515,6 +520,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
         (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => same(x, y),
         (Ty::Map(k, v), Ty::Map(l, w)) => same(k, l) && same(v, w),
         (Ty::Conc(a, x), Ty::Conc(b, y)) => a == b && same(x, y),
+        (Ty::Fn(xs, r), Ty::Fn(ys, s)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y)) && same(r, s),
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) => {
             s == t && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y))
         }
@@ -530,6 +536,7 @@ fn has_err(t: &Ty) -> bool {
         Ty::Map(k, v) => has_err(k) || has_err(v),
         Ty::Res(x, _) => has_err(x),
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(has_err),
+        Ty::Fn(ps, r) => ps.iter().any(has_err) || has_err(r),
         _ => false,
     }
 }
@@ -1146,6 +1153,11 @@ impl<'p> Checker<'p> {
                 );
                 return Ty::Err;
             }
+            TypeKind::Fn { params, ret } => {
+                let ps = params.iter().map(|p| self.resolve_type(p)).collect();
+                let r = ret.as_ref().map_or(Ty::Unit, |r| self.resolve_type(r));
+                return Ty::Fn(ps, Box::new(r));
+            }
             TypeKind::Any(tr) => {
                 return match self.trait_named(tr, t.pos, "trait.any.1") {
                     Some(i) => Ty::Any(i),
@@ -1547,6 +1559,10 @@ impl<'p> Checker<'p> {
             Ty::Ref(t) => format!("ref {}", self.ty_name(t)),
             Ty::Conc(conc::Conc::Group, _) => "TaskGroup".into(),
             Ty::Conc(k, t) => format!("{}[{}]", k.name(), self.ty_name(t)),
+            Ty::Fn(ps, r) => {
+                let ps: Vec<String> = ps.iter().map(|p| self.ty_name(p)).collect();
+                if **r == Ty::Unit { format!("fn({})", ps.join(", ")) } else { format!("fn({}) {}", ps.join(", "), self.ty_name(r)) }
+            }
         }
     }
 
@@ -2746,6 +2762,73 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// type.fn.2: the name of a declared function used as a value, `f := double`.
+    fn fn_value(&mut self, n: &str, i: usize, pos: Pos) -> Ty {
+        let f = &self.prog.fns[i];
+        let sig = self.sigs[i].clone();
+        let why = if f.receiver.is_some() || f.owner.is_some() {
+            Some("a method")
+        } else if !sig.generics.is_empty() {
+            Some("generic")
+        } else if sig.params.iter().any(|(m, _)| *m) || sig.moves.iter().any(|m| *m) {
+            Some("a function with a `mut` or `move` parameter")
+        } else if matches!(sig.ret, Ty::Res(..)) {
+            Some("a function that can fail")
+        } else if f.is_test() {
+            Some("a test")
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            self.error_help(
+                "type.fn.2",
+                pos,
+                format!("`{n}` is {why}, so it can't be used as a value"),
+                "wrap the call in a plain function and pass that",
+            );
+            return Ty::Err;
+        }
+        self.resolved.symbols.insert(pos, format!("fn:{n}"));
+        self.resolved.fn_values.insert(pos, i);
+        Ty::Fn(sig.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(sig.ret))
+    }
+
+    /// type.fn.3: call a value of function type.
+    fn call_value(&mut self, what: &str, t: Ty, args: &'p [Arg], pos: Pos) -> Ty {
+        let Ty::Fn(params, ret) = t else {
+            self.args_only(args);
+            if t != Ty::Err {
+                self.error("expr.call.1", pos, format!("`{what}` is a value, not a function"));
+            }
+            return Ty::Err;
+        };
+        if let Some((_, lpos)) = args.iter().find_map(|a| a.label.as_ref()) {
+            self.args_only(args);
+            self.error_help("expr.call.3", *lpos, "a function value takes no named arguments", "pass them by position");
+            return Ty::Err;
+        }
+        if args.len() != params.len() {
+            self.args_only(args);
+            self.error(
+                "expr.call.1",
+                pos,
+                format!("`{what}` takes {}, but {} given", count(params.len(), "argument"), was_were(args.len())),
+            );
+            return *ret;
+        }
+        for (a, want) in args.iter().zip(&params) {
+            let t = self.expr(&a.value, (!has_err(want)).then_some(want), true);
+            self.move_arg(a, false);
+            if a.mutable {
+                self.error_help("own.param.2", a.value.pos(), "this parameter isn't `mut`", "remove the `mut`");
+            }
+            if !self.accepts(want, &t) {
+                self.mismatch("expr.call.2", a.value.pos(), want, &t);
+            }
+        }
+        *ret
+    }
+
     fn name(&mut self, n: &str, pos: Pos, expect: Option<&Ty>) -> Ty {
         if let Some(k) = self.pending_of(n) {
             let want = match expect {
@@ -2806,8 +2889,11 @@ impl<'p> Checker<'p> {
         if self.module_as_value(n, pos) {
             return Ty::Err;
         }
-        if self.fns.contains_key(n) || PRELUDE.contains(&n) {
-            self.unsupported(pos, format!("using the function `{n}` as a value is not supported by the bootstrap yet"));
+        if let Some(&i) = self.fns.get(n) {
+            return self.fn_value(n, i, pos);
+        }
+        if PRELUDE.contains(&n) {
+            self.unsupported(pos, format!("using the built-in function `{n}` as a value is not supported by the bootstrap yet"));
             return Ty::Err;
         }
         if let Some(def) = self.types.get(n).copied() {
@@ -3142,19 +3228,15 @@ impl<'p> Checker<'p> {
             Expr::Name(n, p) => (n, *p, None),
             Expr::TypeArgs { name, args, pos } => (name, *pos, Some(args.as_slice())),
             _ => {
-                self.expr(callee, None, true);
-                self.args_only(args);
-                self.unsupported(
-                    callee.pos(),
-                    "calling the result of an expression is not supported by the bootstrap yet",
-                );
-                return Ty::Err;
+                let t = self.expr(callee, None, true);
+                return self.call_value("this value", t, args, callee.pos());
             }
         };
-        if targs.is_none() && self.local(n).is_some() {
-            self.args_only(args);
-            self.error("expr.call.1", npos, format!("`{n}` is a value, not a function"));
-            return Ty::Err;
+        if targs.is_none()
+            && let Some(l) = self.local(n)
+        {
+            let t = l.ty.clone();
+            return self.call_value(n, t, args, npos);
         }
         if n == "print" {
             return self.print_call(args, npos);
@@ -5253,6 +5335,7 @@ fn may_be_same(a: &Ty, b: &Ty) -> bool {
             Ty::List(e) | Ty::Opt(e) | Ty::Set(e) | Ty::Conc(_, e) => has_param(e),
             Ty::Map(k, v) => has_param(k) || has_param(v),
             Ty::Struct(_, args) | Ty::Enum(_, args) => args.iter().any(has_param),
+            Ty::Fn(ps, r) => ps.iter().any(has_param) || has_param(r),
             _ => false,
         }
     }
