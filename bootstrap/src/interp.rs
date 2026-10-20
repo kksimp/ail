@@ -442,7 +442,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
-        tier: bytecode::usable(prog, trace::mode(), limits::active(), has_unique, has_defer),
+        tier: bytecode::usable(prog, trace::mode(), has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
         reg_pool: Vec::new(),
         stats: bytecode::Stats {

@@ -50,8 +50,10 @@ A seeded mutation of the tier (one wrong int result) failed 14 corpus runs and
 ## Consequences
 
 - A tier bug shows up in `./ail selftest` on both platforms (ADR 0085).
-- When slice 4 lets the tier run under `--deterministic` and contracts,
+- If the tier comes to run under `--deterministic` and contracts,
   `fuzz.prop.5` can compare the same command with and without `--no-bytecode`.
+- [ADR 0364](0364-bytecode-tier-limits-coverage-and-traces.md) adds runs with
+  `--max-steps`, `--trace=all` and `--coverage` to the test.
 
 ## Rejected alternatives
 

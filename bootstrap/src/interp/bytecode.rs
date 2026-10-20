@@ -25,14 +25,14 @@ pub fn set_enabled(on: bool) {
 }
 
 /// Whether the tier runs for this program: only where nothing it doesn't
-/// carry yet is on (tracing, watching, run limits, coverage, unique values,
-/// `defer`, contracts).
-pub(super) fn usable(prog: &Program, tracing: u8, hook: bool, unique: bool, defer: bool) -> bool {
+/// carry yet is on (`--watch`, unique values, `defer`, contracts). Call and
+/// effect traces come from code the walker and the tier share; run limits
+/// and coverage take a `Hit` per statement (ADR 0364).
+pub(super) fn usable(prog: &Program, tracing: u8, unique: bool, defer: bool) -> bool {
     let contracts = prog.fns.iter().any(|f| !f.contracts.is_empty() || f.inherits.is_some())
         || prog.structs.iter().any(|s| !s.invariants.is_empty());
     ENABLED.load(AtomicOrdering::Relaxed)
-        && tracing == 0
-        && !hook
+        && tracing & trace::WATCH == 0
         && !unique
         && !defer
         && !(contracts && contracts::enabled())
@@ -365,6 +365,9 @@ enum Ins<'a> {
         dst: Opnd,
         exit: u32,
     },
+    /// The walker's `hit` before a statement or a `while` turn, with run
+    /// limits or coverage on (run.limit.1-3, test.cover.1).
+    Hit(Pos),
     /// An expression run on the tree walker.
     Expr {
         e: &'a Expr,
@@ -667,8 +670,15 @@ struct Compiler<'c, 'a, W: Write> {
 
 impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     fn emit(&mut self, i: Ins<'a>) -> u32 {
-        if !matches!(i, Ins::Expr { .. } | Ins::Stmt { .. } | Ins::EndBlock { .. } | Ins::Truncate(_) | Ins::End { .. })
-        {
+        if !matches!(
+            i,
+            Ins::Expr { .. }
+                | Ins::Stmt { .. }
+                | Ins::EndBlock { .. }
+                | Ins::Truncate(_)
+                | Ins::End { .. }
+                | Ins::Hit(_)
+        ) {
             self.native += 1;
         }
         self.ins.push(i);
@@ -1225,6 +1235,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     fn stmt(&mut self, s: &'a Stmt, dst: Opnd) {
         let mark = self.next_reg;
+        // run.limit.3, test.cover.1: a step, as the walker's `stmt` takes one.
+        if self.it.hook {
+            self.emit(Ins::Hit(s.pos()));
+        }
         match s {
             Stmt::Let { name, value, otherwise: Some(o), .. }
                 if !has_try(value) && !matches!(o, Else::Block { err: Some(_), .. }) =>
@@ -1311,6 +1325,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 let l = self.loop_start(depth);
                 self.loops[l as usize].cont = top;
                 let out = self.cond_jump(cond, false);
+                if self.it.hook {
+                    // A turn of a `while` is a step too.
+                    self.emit(Ins::Hit(s.pos()));
+                }
                 self.block(body, NONE);
                 self.emit(Ins::Jump(top));
                 self.loop_end();
@@ -2262,10 +2280,18 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     Err(how) => pc = self.leave(code, *exit, how, env, base)?,
                 },
+                Ins::Hit(pos) => {
+                    pc += 1;
+                    self.hit(*pos)?;
+                }
                 Ins::Stmt { s, exit } => match {
                     self.stats.handoffs += 1;
                     if let Some(k) = &mut self.stats.kinds {
                         *k.entry(Cow::Borrowed(kind_of_stmt(s))).or_default() += 1;
+                    }
+                    // The statement's `Hit` ran; the walker's `stmt` takes the step again.
+                    if self.hook {
+                        self.unhit();
                     }
                     self.stmt(s, env)
                 } {

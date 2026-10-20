@@ -333,3 +333,27 @@ interpreter loop's own work is 25%, bounds checks 6%, value drops 5%,
 allocation 7%, and call set-up (`run_body`, register files) 10%. The parser
 adds the walker's `to_str` for interpolation (5%). A further large step needs
 frames without names (ADR 0361's Option B).
+
+## Bytecode tier, slice 4 (lane 111)
+
+[ADR 0364](../decisions/0364-bytecode-tier-limits-coverage-and-traces.md)
+lets the tier run under `--timeout`, `--max-memory`, `--max-steps`,
+`--coverage` and `--trace`. A `Hit` instruction before each statement, and at
+each `while` turn, calls the walker's `hit`. Call and effect traces come from
+code both tiers share. Only `--watch` still keeps a run on the walker.
+Before this slice these runs used the walker alone.
+
+Callgrind instructions, walker then tier:
+
+| Run | Walker | Tier | Gain |
+|---|---|---|---|
+| `loops` | 3,952.7M | 1,874.5M | 2.11x |
+| `loops --max-steps 1000000000` | 4,784.6M | 2,595.5M | 1.84x |
+| `loops --trace=calls` | 3,961.5M | 1,883.1M | 2.10x |
+| `interp` | 818.2M | 600.0M | 1.36x |
+| `interp --max-steps 1000000000` | 876.0M | 648.2M | 1.35x |
+| `interp --trace=calls` | 864.1M | 646.1M | 1.34x |
+
+A step limit costs `loops` 38% on the tier and 21% on the walker. `loops` is
+nearly all one-line statements, and `hit` is the same call on both tiers.
+
