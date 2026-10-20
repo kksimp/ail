@@ -77,6 +77,11 @@ All verified on Linux x86-64 and macOS ARM64.
 
 `tools/edit/edit.ail`, a code editor written in AIL (ADRs 0180–0181, 0241): a headless, tested core driving `ail check --json`, fixes, `ail explain` and `ail api`, with a `std.ui` window front end. It has completion, hover, find and replace, format on save, tabs, a Ctrl-P picker, a command palette, project search and replace, a file tree, rename through references, themes, an agent panel (info, trace, failure paths, coverage, program card) per-directory session memory, a problems list that stays live, a replace preview with per-row accept, and tests on save (ADRs 0244, 0291–0296, 0312–0313, 0331, 0338–0339, 0353–0354).
 
+
+### PDF reader
+
+`tools/pdf`, a PDF reader, searcher and viewer written in AIL (ADR 0520, [design note](design/pdf-viewer.md)): the text layer from the fonts' Unicode maps with no OCR; xref tables and streams, object streams, repair of damaged tables, Flate/LZW/ASCII85 with predictors, ToUnicode CMaps and encodings; `pdf text`, `grep` (boxes, across line breaks), `json` (the page model for agents), `info` (flags scans), `outline`, `bench`, and a text-cell viewer with search (`--print`, `--json`). Stopgaps until `bytes`: `od` for reads and an inflate in AIL. Not yet: encryption, pixel rendering.
+
 ## Design topics
 
 The 28 topics that must be resolved before implementation (founding brief §22).
