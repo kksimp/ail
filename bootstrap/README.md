@@ -28,14 +28,14 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run bootstrap/tests/cases/packages/geometry   # a package: root module plus `use`d modules
 ./ail run bootstrap/tests/cases/packages/deps_path  # an ail.pkg with path dependencies and capability grants
 ./ail check --json FILE            # diagnostics as JSON lines
-./ail test [--json] [--cases N] [--seed S] FILE  # run tests, properties, doc examples
+./ail test [--json] [--cases N] [--seed S] FILE  # run tests, properties, doc examples (--trace: a failing test's events)
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
 ./ail api --card [--budget N] DIR|FILE  # a program's own card: modules, entry, tests, manifest, examples, trimmed to a token budget
-./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols); `fails_with` per fallible fn
+./ail api FILE|DIR                 # declarations as JSON (--pretty, --text, --symbols); a DIR outlines the whole package with module-prefixed ids; `fails_with` per fallible fn
 ./ail check --errors FILE          # each function's error types and failure paths, JSON
-./ail api --locals|--type|--refs FILE LINE COL   # names in scope, type at a position, references
+./ail api --locals|--type|--refs [DIR] FILE LINE COL   # names in scope, type at a position, references
 ./ail fix FILE [--dry-run]         # apply the fixes diagnostics carry, re-check, repeat (ADR 0203)
 ./ail fmt FILE_OR_DIR...           # canonical layout; --check prints a diff, --stdout prints
 ./ail selftest                     # the bootstrap's own tests, incl. a 200-program fuzz smoke
@@ -61,7 +61,7 @@ reported but don't stop a program from running.
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel` | `conc.par.2–6` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–5` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
-| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–2`, `trace.snap.1–4` |
+| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–3`, `trace.test.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
 | `src/parser/messages.rs`, `src/check/absent.rs`, `src/interp/absent.rs` | Messages on error types (turned into an `impl ToStr` at parse time); `?` on an optional failing with the prelude's `Absent` where errors are inferred | `err.msg.1–2`, `err.prop.5` |
@@ -86,7 +86,7 @@ reported but don't stop a program from running.
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
 | `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
-| `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
+| `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1`, `api.pkg.1–4` |
 | `src/check/errpaths.rs`, `src/api/errors.rs` | failure paths and error sets the checker records; `ail check --errors`, `fails_with` in `ail api`; the `err.ret.*` diagnostics and error fixes | `err.ret.1–3`, `err.fix.1`, `err.api.1`, `err.paths.1` |
 | `src/api/query.rs`, `src/check/facts.rs` | `ail api --locals/--type/--refs`: position queries from facts the checker records | `api.query.1`, `api.loc.1–2`, `api.type.1–2`, `api.refs.1–3` |
 
@@ -215,8 +215,10 @@ writes calls, returns, effects, tasks and contract checks to stderr (JSON
 lines with `--json`), up to `--trace-limit N` events plus a summary;
 `--watch NAME` shows assignments to a `mut` variable; a trap reports the
 source line and each frame's arguments and locals (ten lines; `--verbose`
-for all; one object with `--json`). Not yet: `ail test --trace`, watching
-mutations through methods and `mut` arguments, exact expression end columns.
+for all; one object with `--json`). `ail test --trace` keeps a failing test's
+events (`"trace"` in its JSON entry, ADR 0326) and `--watch` follows `mut`
+arguments and `mut self` calls (ADR 0327). Not yet: watching builtin mutating
+methods (`push`), exact expression end columns.
 
 Effects (ADRs 0163–0165): every function's effect set is inferred and
 printed by `ail effects`; `@pure` and `--deny` are checked at compile time.

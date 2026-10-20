@@ -13,6 +13,7 @@ use crate::ast::*;
 use crate::check::{self, Call, Resolved};
 use crate::diag::{self, Pos};
 use crate::docs;
+use crate::modules;
 
 pub mod card;
 pub mod errors;
@@ -27,7 +28,7 @@ fn is_prelude(pos: Pos) -> bool {
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api FILE [--text | --pretty] [--symbols] [--json]\n       ail api (--locals | --type | --refs) FILE LINE COL [--pretty] [--json]\n";
+pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api [--outline] DIR|FILE [--text | --pretty] [--symbols] [--json]\n       ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]\n";
 
 /// How the outline is written (api.out.2, api.text.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +57,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             "--text" if form == Form::Json => form = Form::Text,
             "--pretty" if form == Form::Json => form = Form::Pretty,
             "--symbols" => symbols = true,
+            "--outline" => {}
             f if !f.starts_with("--") && file.is_none() => file = Some(f),
             _ => {
                 eprint!("{USAGE}");
@@ -67,6 +69,23 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         eprint!("{USAGE}");
         return ExitCode::from(2);
     };
+    // api.pkg.1: a package directory is outlined whole, with module-prefixed ids.
+    if std::path::Path::new(path).is_dir() {
+        return match package_outline(path, symbols, form) {
+            Ok(out) => {
+                print!("{out}");
+                ExitCode::SUCCESS
+            }
+            Err(PackageFailure::Message(m)) => {
+                eprintln!("error: {m}");
+                ExitCode::from(2)
+            }
+            Err(PackageFailure::Diags(files, diags)) => {
+                modules::report(&files, diags, json);
+                ExitCode::from(2)
+            }
+        };
+    }
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -116,6 +135,106 @@ pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<Strin
     Json::Obj(top).write(&mut out, (form == Form::Pretty).then_some(0));
     out.push('\n');
     Ok(out)
+}
+
+enum PackageFailure {
+    Message(String),
+    Diags(Vec<crate::ast::SourceFile>, Vec<diag::Diagnostic>),
+}
+
+/// The outline of the package directory `dir` (api.pkg.1): every module's
+/// declarations in one list, ordered by file then position. An item's `id`
+/// is prefixed with its module (`fn:net.get`, `type:ui.Window`), and it gains
+/// `module` and `file` keys after the single-file ones; `line` counts from
+/// the top of its own file. `--symbols` adds `references` with a `file` key.
+fn package_outline(dir: &str, symbols: bool, form: Form) -> Result<String, PackageFailure> {
+    let (mut prog, mut diags) = modules::load(dir).map_err(PackageFailure::Message)?;
+    let mut resolved = Resolved::default();
+    if diags.is_empty() {
+        (diags, resolved) = check::check(&prog);
+    }
+    diags.retain(|d| d.rule != "mod.main.1");
+    if diags.iter().any(|d| !d.warning) {
+        return Err(PackageFailure::Diags(prog.files, diags));
+    }
+    let mut by_line = HashMap::new();
+    for f in prog.files.iter().filter(|f| f.path.ends_with(".ail")) {
+        for (line, doc) in docs::by_line(&f.src) {
+            by_line.insert(f.base + line, doc);
+        }
+    }
+    docs::attach_lines(&mut prog, &by_line);
+    let effects = check::effects::effects_of(&prog, &resolved);
+    let mut api = Api::new(&prog, effects);
+    api.errors = std::mem::take(&mut resolved.fn_errors);
+    api.whole = true;
+    let mut items = api.outline_items();
+    items.sort_by_key(|i| (i.pos.line, i.pos.col));
+    for i in &mut items {
+        localize(&prog, i);
+    }
+    if form == Form::Text {
+        let mut out = String::new();
+        let mut file = String::new();
+        for i in &items {
+            let here = i.extra.iter().find_map(|(k, v)| if *k == "file" { if let Json::Str(s) = v { Some(s.as_str()) } else { None } } else { None });
+            if here.is_some_and(|h| h != file) {
+                file = here.unwrap_or_default().to_string();
+                writeln!(out, "# {file}").unwrap();
+            }
+            i.text(0, &mut out);
+        }
+        return Ok(out);
+    }
+    let mut top = vec![
+        ("api", Json::Int(API_VERSION)),
+        ("package", Json::Str(dir.to_string())),
+        ("items", Json::Arr(items.into_iter().map(Item::json).collect())),
+    ];
+    if symbols {
+        let mut refs = Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
+        refs.program();
+        let mut found = refs.found;
+        found.retain(|(p, _)| !crate::ast::is_prelude(*p));
+        found.sort_by(|a, b| (a.0.line, a.0.col, &a.1).cmp(&(b.0.line, b.0.col, &b.1)));
+        found.dedup();
+        let list = found.into_iter().map(|(p, id)| {
+            let (file, line) = match prog.file_at(p) {
+                Some(f) => (f.path.clone(), p.line - f.base),
+                None => (String::new(), p.line),
+            };
+            Json::Obj(vec![
+                ("id", Json::Str(id)),
+                ("line", Json::Int(line as i64)),
+                ("col", Json::Int(p.col as i64)),
+                ("file", Json::Str(file)),
+            ])
+        });
+        top.push(("references", Json::Arr(list.collect())));
+    }
+    let mut out = String::new();
+    Json::Obj(top).write(&mut out, (form == Form::Pretty).then_some(0));
+    out.push('\n');
+    Ok(out)
+}
+
+/// Make an item's lines count from the top of its file, and say which file
+/// and module it is in (api.pkg.1).
+fn localize(prog: &Program, item: &mut Item) {
+    if let Some(f) = prog.file_at(item.pos) {
+        item.extra.push(("module", Json::Str(f.module.clone())));
+        item.extra.push(("file", Json::Str(f.path.clone())));
+        shift_lines(item, f.base);
+    }
+}
+
+fn shift_lines(item: &mut Item, base: usize) {
+    item.pos.line = item.pos.line.saturating_sub(base);
+    for (_, ms) in &mut item.members {
+        for m in ms {
+            shift_lines(m, base);
+        }
+    }
 }
 
 /// A JSON value whose objects keep their keys in the order given (api.out.2).

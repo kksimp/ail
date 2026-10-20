@@ -43,6 +43,27 @@ pub fn load(arg: &str) -> Result<(Program, Vec<Diagnostic>), String> {
     load_package(root, root_files, None)
 }
 
+/// Like `load` for the package directory `dir`, for a query about `target`
+/// (text `src`) in it (api.pkg.2). Also returns how many lines to add to a
+/// line of `target` to get a position in the program: 0 for a file of the
+/// root module, which is loaded first so nothing shifts, else its file base.
+pub fn load_in(dir: &str, target: &str, src: &str) -> Result<(Program, Vec<Diagnostic>, usize), String> {
+    let mut files = ail_files(Path::new(dir));
+    let want = std::fs::canonicalize(target).map_err(|e| format!("can't read {target}: {e}"))?;
+    let same = |f: &PathBuf| std::fs::canonicalize(f).is_ok_and(|c| c == want);
+    if let Some(at) = files.iter().position(same) {
+        let first = files.remove(at);
+        files.insert(0, first);
+        let (prog, diags) = load_package(PathBuf::from(dir), files, Some(src.to_string()))?;
+        return Ok((prog, diags, 0));
+    }
+    let (prog, diags) = load(dir)?;
+    let base = prog.files.iter().find(|f| same(&PathBuf::from(&f.path))).map(|f| f.base).ok_or_else(|| {
+        format!("{target} is not part of the package {dir}: no root file imports its module (api.pkg.2)")
+    })?;
+    Ok((prog, diags, base))
+}
+
 /// Like `load` for a single file whose text is `src` (for `ail api`).
 pub fn load_src(path: &str, src: &str) -> (Program, Vec<Diagnostic>) {
     let path = Path::new(path);

@@ -15,6 +15,8 @@ pub struct Outcome {
     pub prop: Option<PropInfo>,
     /// The trap's source line, values and frames, when a trap failed it (test.run.5).
     pub snapshot: Option<String>,
+    /// The failing test's trace events, one per line (trace.test.1).
+    pub trace: Vec<String>,
 }
 
 impl<'a, W: Write> Interp<'a, W> {
@@ -56,11 +58,13 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         let _watch = limits::watch();
         it.reset_limits();
         it.snap = Some(Box::default());
+        super::trace::capture_begin();
         if !f.params.is_empty() && const_failure.is_none() {
             let (pos, failure, info) = it.run_property(f, cases, seed.unwrap_or_else(|| super::prop::default_seed(&f.name)));
             let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
             it.out.get_mut().clear();
-            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: Some(info), snapshot: None });
+            super::trace::capture_end();
+            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: Some(info), snapshot: None, trace: Vec::new() });
             continue;
         }
         let mut trapped = None;
@@ -94,7 +98,9 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         let _ = it.out.flush();
         let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
         it.out.get_mut().clear();
-        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: None, snapshot });
+        let events = super::trace::capture_end();
+        let trace = if failure.is_some() { events } else { Vec::new() };
+        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: None, snapshot, trace });
     }
     outcomes
 }

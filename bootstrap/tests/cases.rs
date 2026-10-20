@@ -268,6 +268,28 @@ fn property_options_replay() {
     assert_eq!(out.status.code(), Some(2));
 }
 
+/// trace.test.1-2: `ail test --trace` puts a failing test's events in its JSON
+/// entry, none for a passing test, and a plain run has no `trace` key.
+#[test]
+fn test_trace_failing_only() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace/test_trace_fail.ail");
+    let run = |extra: &[&str]| {
+        let out = ail().args(["test", "--json"]).args(extra).arg(&path).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let plain = run(&[]);
+    assert!(!plain.contains("\"trace\""), "{plain}");
+    let traced = run(&["--trace=calls"]);
+    let lines: Vec<&str> = traced.lines().collect();
+    assert!(lines[0].contains("\"test\":\"passes\"") && !lines[0].contains("\"trace\""), "{traced}");
+    assert!(lines[1].contains("\"test\":\"fails\"") && lines[1].contains("\"trace\":[{"), "{traced}");
+    assert!(lines[1].contains("\"fn\":\"Counter.bump\""), "{traced}");
+    let limited = run(&["--trace", "--trace-limit", "1"]);
+    assert!(limited.contains("\"trace\":\"dropped\""), "{limited}");
+    let human = ail().args(["test", "--trace=calls"]).arg(&path).output().unwrap();
+    assert!(String::from_utf8_lossy(&human.stdout).contains("  trace: call fails()"));
+}
+
 /// Related notes (fix.note.1): a duplicate declaration points at the first.
 #[test]
 fn duplicates_carry_notes() {
@@ -288,7 +310,7 @@ fn duplicates_carry_notes() {
 fn trace_options_rejected() {
     let hello = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/hello.ail");
     for (args, want) in [
-        (&["check", "--trace"][..], "work with `ail run`"),
+        (&["check", "--trace"][..], "work with `ail run` and `ail test`"),
         (&["run", "--trace=bogus"][..], "trace.run.1"),
         (&["run", "--trace-limit", "many"][..], "trace.run.4"),
         (&["run", "--watch"][..], "trace.watch.1"),

@@ -71,3 +71,59 @@ fn every_example_answers_locals() {
         }
     }
 }
+
+fn big_package(name: &str) -> std::path::PathBuf {
+    let dir = package(name);
+    fs::write(dir.join("main.ail"), "use geo\n\nfn main()\n    p := geo.origin()\n    print(\"{p.x} {far()}\")\n").unwrap();
+    fs::write(dir.join("util.ail"), "use geo\n\npub fn far() int\n    geo.origin().x\n").unwrap();
+    dir
+}
+
+/// api.pkg.1: a package directory is outlined whole, with module-prefixed ids,
+/// file-local lines and a `module` and `file` per item.
+#[test]
+fn outline_of_a_package_directory() {
+    let dir = big_package("outline");
+    let out = ail().args(["api", "--outline"]).arg(&dir).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.starts_with("{\"api\":1,\"package\":"), "{text}");
+    for want in ["\"id\":\"fn:geo.origin\"", "\"id\":\"type:geo.P\"", "\"id\":\"fn:far\"", "\"module\":\"geo\"", "util.ail"] {
+        assert!(text.contains(want), "{want} in {text}");
+    }
+    let symbols = ail().args(["api", "--symbols"]).arg(&dir).output().unwrap();
+    let symbols = String::from_utf8(symbols.stdout).unwrap();
+    assert!(symbols.contains("\"references\":[") && symbols.contains("\"id\":\"fn:geo.origin\""), "{symbols}");
+    let text_form = ail().args(["api", "--text"]).arg(&dir).output().unwrap();
+    assert!(String::from_utf8_lossy(&text_form.stdout).contains("fn geo.origin() geo.P"));
+}
+
+/// api.pkg.2-3: `--refs DIR FILE LINE COL` finds uses in every file of the
+/// package, from a use, from the name after `geo.`, or from the declaration.
+#[test]
+fn refs_across_a_package() {
+    let dir = big_package("refs_pkg");
+    let util = dir.join("util.ail");
+    let shapes = dir.join("geo/shapes.ail");
+    let ask = |file: &Path, line: &str, col: &str| {
+        let out = ail().args(["api", "--refs"]).arg(&dir).arg(file).args([line, col]).output().unwrap();
+        assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(out.stdout).unwrap()
+    };
+    for text in [ask(&util, "4", "9"), ask(&util, "4", "5"), ask(&shapes, "4", "8")] {
+        assert!(text.contains("\"symbol\":\"fn:geo.origin\""), "{text}");
+        for file in ["main.ail", "util.ail", "geo/shapes.ail"] {
+            assert!(text.contains(&format!("{}\"", dir.join(file).display())), "{file} in {text}");
+        }
+    }
+    // The single-file form keeps working (api.pkg.4).
+    let single = package("refs_single");
+    let out = ail().args(["api", "--refs"]).arg(single.join("main.ail")).args(["4", "12"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    // A file outside the package is an error.
+    let stray = dir.join("../stray.ail");
+    fs::write(&stray, "fn main()\n    print(\"x\")\n").unwrap();
+    let out = ail().args(["api", "--refs"]).arg(&dir).arg(&stray).args(["1", "4"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("api.pkg.2"));
+}
