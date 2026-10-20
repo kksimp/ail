@@ -61,7 +61,7 @@ reported but don't stop a program from running.
 | `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel`; `par for` comprehensions | `conc.par.2–6`, `conc.par.12` |
 | `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `Atomic`, `with`, `cancel`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6`, `conc.atomic.3–5`, `conc.cancel.1` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
-| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–3`, `trace.test.1–2`, `trace.snap.1–4` |
+| `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–4`, `trace.test.1–2`, `trace.snap.1–4` |
 | `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186) or a seeded random one; channels, `for v in ch`, mutexes, `with`, groups, cancellation, deadlock traps | `conc.task.1–9`, `conc.share.1–7`, `conc.cancel.1–2`, `conc.sched.1` |
 | `src/interp/atomic.rs` | `Atomic[int]` and `Atomic[bool]` as shared hardware atomics | `conc.atomic.3–6` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
@@ -229,8 +229,8 @@ lines with `--json`), up to `--trace-limit N` events plus a summary;
 source line and each frame's arguments and locals (ten lines; `--verbose`
 for all; one object with `--json`). `ail test --trace` keeps a failing test's
 events (`"trace"` in its JSON entry, ADR 0326) and `--watch` follows `mut`
-arguments and `mut self` calls (ADR 0327). Not yet: watching builtin mutating
-methods (`push`), exact expression end columns.
+arguments and `mut self` calls (ADR 0327) and shows builtin mutating methods
+and `xs[i] = e` as element writes (ADR 0347). Not yet: exact expression end columns.
 
 Effects (ADRs 0163–0165): every function's effect set is inferred and
 printed by `ail effects`; `@pure` and `--deny` are checked at compile time.

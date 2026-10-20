@@ -1725,7 +1725,7 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.tracing & trace::WATCH != 0
             && let Some((root, _)) = place_path(target)
         {
-            self.trace_watch(root, env, target.pos());
+            self.watch_element(root, env, &p, target.pos());
         }
         Ok(())
     }

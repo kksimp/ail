@@ -83,10 +83,21 @@ assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
 the variable's whole new value and the position of the assignment. It counts
 against the event budget (trace.run.4). *(ADR 0268)*
 
-**trace.watch.2** — A builtin mutating method (`NAME.push(x)`) is not an
-assignment and isn't shown; the next assignment shows its effect. A change
+**trace.watch.2** — A builtin mutating method (`NAME.push(x)`) is shown as
+a write to the element (trace.watch.4). A change
 made by a user function through a `mut` argument or `mut self` is shown
 (trace.watch.3). *(ADRs 0268, 0327)*
+
+**trace.watch.4** — A write to one element of the watched collection is a
+watch event with the whole new value and what was written: the list methods
+`push`, `pop`, `insert`, `remove_at`, `swap`, `extend`, `clear`, `reverse`,
+`sort`, the map method `remove`, the set methods `add` and `remove`, and
+`NAME[i] = e` and `NAME[k] = e` (also `op=`). In text the event ends with
+`[push 3 at index 2]`, `[pop 3 at index 3]`, `[insert 9 at index 0]`,
+`[remove_at 9 at index 0]`, `[set 5 at index 1]`, `[set 2 at key "b"]`,
+`[remove 1 at key "a"]` or `[add 3]`; in JSON it adds `"op"`, `"element"` and
+`"index"` or `"key"`. A `pop`, `remove_at`, `remove` or `add` that changes nothing
+is not shown. *(ADR 0347)*
 
 **trace.watch.3** — A user function or method called with the watched variable
 (or a name that stands for it) as a `mut` argument or `mut` receiver follows it

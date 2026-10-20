@@ -25,6 +25,26 @@ pub const SYMBOLS: &[&str] = &[
 /// A line ending in one of these continues on the next line (lex.stmt.2).
 const BINARY_SYMBOLS: &[&str] = &["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="];
 
+/// Whether a line starts with a binary operator that cannot begin a statement, so it
+/// continues the previous one (lex.stmt.2 (5)): `and`, `or`, `+ * / % == != < <= > >=`.
+fn leading_operator(rest: &[char]) -> bool {
+    let word = |w: &str| {
+        rest.len() >= w.len()
+            && rest.iter().zip(w.chars()).all(|(a, b)| *a == b)
+            && rest.get(w.len()).is_none_or(|c| !(c.is_alphanumeric() || *c == '_'))
+    };
+    if word("and") || word("or") {
+        return true;
+    }
+    let two = rest.get(1).copied();
+    match rest[0] {
+        '=' | '!' => two == Some('='),
+        '<' | '>' => true,
+        '+' | '*' | '/' | '%' => two != Some('='),
+        _ => false,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tok {
     Ident(String),
@@ -207,8 +227,8 @@ fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comm
         // (a chained call); the statement's newline is taken back.
         if lx.open.is_empty()
             && !continuing
-            && line[lead] == '.'
-            && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+            && (line[lead] == '.' && line.get(lead + 1).is_some_and(|c| c.is_alphabetic() || *c == '_')
+                || leading_operator(&line[lead..]))
             && matches!(lx.tokens.last().map(|t| &t.tok), Some(Tok::Newline))
             && lx.tokens.len() >= 2
             && !matches!(lx.tokens[lx.tokens.len() - 2].tok, Tok::Indent | Tok::Dedent)
@@ -1151,6 +1171,14 @@ mod tests {
                 Eof
             ]
         );
+    }
+
+    #[test]
+    fn a_line_may_start_with_a_binary_operator() {
+        assert_eq!(rules("x := a\n    and b\n"), Vec::<&str>::new());
+        assert_eq!(toks("x := a\n    + b\n").iter().filter(|t| **t == Tok::Newline).count(), 1);
+        // `-` can start a statement, so it does not continue one.
+        assert_eq!(toks("x := a\n-b\n").iter().filter(|t| **t == Tok::Newline).count(), 2);
     }
 
     #[test]

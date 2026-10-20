@@ -71,6 +71,20 @@ chained calls at its top level and no operator after the first (`xs.f().g()`)
 is split into the head and one `.method(...)` per line, indented one level; a
 call still too long splits by fmt.wrap. A chain that fits is joined.
 
+**fmt.op** (ADR 0346): a line still over 100 characters after fmt.wrap and
+fmt.chain is split before each top-level binary operator of the lowest
+precedence (`or`, `and`, `== != <= >=`, `+ -`, `* / %`), one extra indent,
+the operator first (lex.stmt.2 (5)). `-` ends its line instead, since a line
+may not start with it; `<` and `>` are never split points (they bracket type
+arguments). A line with a top-level closure is left alone. Each piece lays out
+again, so a piece that is still long splits by the other rules.
+
+```ail
+if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000
+    or alpha_value == beta_value
+    or beta_value == 77
+```
+
 ```ail
 names := people
     .filter(|p| p.age >= 18)

@@ -23,4 +23,4 @@
 
 - *Trailing `.` at the line end.* Rejected: a dot at the end hides the next name from the line it belongs to, and needs another continuation rule.
 - *Splitting only inside brackets (wrap the chain in parentheses).* Rejected: costs two tokens per chain and makes the formatter add brackets, which `fmt.safe` forbids.
-- *Splitting any line at an operator.* Left to a later change (open: a long binary expression).
+- *Splitting any line at an operator.* Done in [ADR 0346](0346-formatter-splits-at-binary-operators.md).

@@ -237,6 +237,11 @@ impl<'a, W: Write> Interp<'a, W> {
             };
             put(env, &p, false, Value::List(Rc::new(restored)))?;
             sorted?;
+            if self.tracing & super::trace::WATCH != 0
+                && let Some(before) = self.watch_before(env, &p, name, &a)
+            {
+                self.watch_after(env, &p, name, before, pos);
+            }
             return Ok(Value::Unit);
         }
         if name == "clear" && self.has_unique {
@@ -247,6 +252,7 @@ impl<'a, W: Write> Interp<'a, W> {
             self.release(old, pos)?;
             return Ok(Value::Unit);
         }
+        let watching = if self.tracing & super::trace::WATCH != 0 { self.watch_before(env, &p, name, &a) } else { None };
         let result = with_slot(env, &p, false, |slot| -> Result<Value, Trap> {
             Ok(match (slot, name) {
             (Value::List(items), "push") => {
@@ -304,6 +310,9 @@ impl<'a, W: Write> Interp<'a, W> {
             (other, _) => unreachable!("checked: `{name}` on {other:?}"),
         })
         })??;
+        if let Some(before) = watching {
+            self.watch_after(env, &p, name, before, pos);
+        }
         a.clear();
         self.arg_pool.push(a);
         Ok(result)
