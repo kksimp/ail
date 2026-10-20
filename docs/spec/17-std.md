@@ -813,6 +813,22 @@ the same on every target. Both operands must be 2-D, and the kernel must
 fit the image; otherwise the call traps. `conv2d` on a `Tensor[int]` is a
 compile-time error. *(ADR 0521)*
 
+**std.tensor.17** — `t.argmax(axis)` and `t.argmin(axis)` give the `int`
+index of the largest or smallest element along `axis`, as a `Tensor[int]`
+whose shape drops that axis; with no argument they give the index in the
+flattened tensor, an `int`. The first of equal elements wins, and a NaN never
+replaces the running best, as `max` does (std.tensor.11). An empty axis
+traps. *(ADR 0523)*
+
+**std.tensor.18** — `t.clamp(lo, hi)` on a `float` tensor limits each element
+to `[lo, hi]`; a NaN stays NaN. Bounds that are NaN, or with `lo > hi`, trap.
+On a `Tensor[int]` it is a compile-time error. *(ADR 0523)*
+
+**std.tensor.19** — `t.round()` on a `float` tensor rounds each element half
+away from zero to an `int`, giving a `Tensor[int]` of the same shape. A NaN,
+an infinity or a value outside `int` traps. On a `Tensor[int]` it is a
+compile-time error. *(ADR 0523)*
+
 ```ail
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])

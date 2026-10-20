@@ -269,6 +269,52 @@ impl Tensor {
         Ok(Tensor { shape: vec![oh, ow], data: Data::F(out) })
     }
 
+    /// std.tensor.17: the index of the largest (`max`) or smallest element
+    /// along `axis`, or over every element when `axis` is `None` (a result
+    /// of shape `[]`). The first of equal elements wins, and a NaN never
+    /// replaces the running best, as with `max`.
+    pub fn arg_reduce(&self, axis: Option<i64>, max: bool) -> Result<Tensor, Fault> {
+        let (before, n, after, shape) = self.split(axis, if max { "argmax" } else { "argmin" })?;
+        if n == 0 && before * after > 0 {
+            return fault("std.tensor.17", format!("`argmax` of an empty axis of a tensor of shape {:?}", self.shape));
+        }
+        let data = match &self.data {
+            Data::F(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
+            Data::I(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
+        };
+        Ok(Tensor { shape, data })
+    }
+
+    /// std.tensor.18: each element clamped to `[lo, hi]`; a NaN stays NaN.
+    pub fn clamp(&self, lo: f64, hi: f64) -> Result<Tensor, Fault> {
+        if lo.is_nan() || hi.is_nan() || lo > hi {
+            return fault("std.tensor.18", format!("`clamp({lo}, {hi})`: the bounds must satisfy lo <= hi"));
+        }
+        let Data::F(v) = &self.data else {
+            return fault("std.tensor.18", "`clamp` is on `float` tensors".into());
+        };
+        let data = v.iter().map(|&x| if x.is_nan() { x } else { x.clamp(lo, hi) }).collect();
+        Ok(Tensor { shape: self.shape.clone(), data: Data::F(data) })
+    }
+
+    /// std.tensor.19: each element rounded half away from zero to an `int`.
+    /// A NaN, an infinity or a value outside `int` traps.
+    pub fn round_int(&self) -> Result<Tensor, Fault> {
+        let Data::F(v) = &self.data else {
+            return fault("std.tensor.19", "`round` is on `float` tensors".into());
+        };
+        let mut out = Vec::with_capacity(v.len());
+        for &x in v {
+            let r = x.round();
+            // `i64::MAX as f64` rounds up to 2^63, which is out of range.
+            if !(-9.223_372_036_854_776e18..9.223_372_036_854_776e18).contains(&r) {
+                return fault("std.tensor.19", format!("`round` of {x}, which isn't a finite `int` value"));
+            }
+            out.push(r as i64);
+        }
+        Ok(Tensor { shape: self.shape.clone(), data: Data::I(out) })
+    }
+
     /// std.tensor.14: `-t`, elementwise. A `float` is negated exactly; an
     /// `int` that is `i64::MIN` traps (std.tensor.6).
     pub fn neg(&self) -> Result<Tensor, Fault> {
@@ -521,6 +567,25 @@ fn expand<T: Copy>(v: &[T], src: &[usize], out: &[usize]) -> Vec<T> {
         }
     }
     res
+}
+
+/// The index along the axis of each result (std.tensor.17): the first
+/// element, then each later one that `better` prefers over the best so far.
+fn arg_axis<T: Copy>(v: &[T], before: usize, n: usize, after: usize, better: impl Fn(T, T) -> bool) -> Vec<i64> {
+    let mut out = Vec::with_capacity(before * after);
+    for b in 0..before {
+        for a in 0..after {
+            let at = |k: usize| v[(b * n + k) * after + a];
+            let mut best = 0;
+            for k in 1..n {
+                if better(at(k), at(best)) {
+                    best = k;
+                }
+            }
+            out.push(best as i64);
+        }
+    }
+    out
 }
 
 fn overflow() -> Fault {
