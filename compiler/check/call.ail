@@ -670,7 +670,12 @@ fn Checker.fields_literal(
                 expr_pos(a.value),
                 "field `{fname}` is {show(ft)}, but this is {show(t)}",
             )
-    missing := [fields[k].name for k in 0..fields.len() if not given[k]]
+    # std.net.17: `net.Response(...)` may leave `all_headers` out.
+    missing := [
+        fields[k].name
+        for k in 0..fields.len() if not given[k]
+            and not (label == "net.Response" and fields[k].name == "all_headers")
+    ]
     if missing.len() > 0 and not lost
         word := if missing.len() == 1 then "field" else "fields"
         err_help(
