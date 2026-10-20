@@ -1,14 +1,14 @@
- data: 2 files, scan 1
+ data: 3 files, scan 1
  logscan.log             2283 bytes
+ sales.csv               208 bytes
  tasks.json              427 bytes
 
-
  preview
-{"tasks": [
-  {"id": "t1", "title": "rotate logs", "status": "todo", "ho
-  {"id": "t2", "title": "rebuild index", "status": "todo", "
-  {"id": "t3", "title": "email report", "status": "done", "h
-  {"id": "t4", "status": "todo", "hours": 2.5},
-  {"id": "t5", "title": "prune cache", "status": "todo", "ho
+region,product,units,price
+north,widget,12,2.50
+north,gadget,3,10.00
+south,widget,7,2.50
+south,gizmo,5,4.25
+east,gadget,4,10.00
 
 [ R rescan ]
