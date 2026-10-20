@@ -39,7 +39,7 @@ hand-made disadvantage.
 ## Measurement
 
 Mean of the five offline tokenizers, comments removed, both sides keep blank
-lines. Total: 2,461.6 AIL against 2,148.6 Python (+14.6%). Four programs are
+lines. Total: 2,488.4 AIL against 2,148.6 Python (+15.8%). Four programs are
 under Python (`matrix` −43%, `poller` −12%, `logwatch` −6%, `supervise` −0.4%);
 six are above it, and four of those trace to missing library items. The
 table and the causes are in [program-measurements-agent-r3.md](../design/program-measurements-agent-r3.md).
