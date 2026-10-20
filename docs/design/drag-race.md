@@ -46,6 +46,6 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 ## Notes
 
 - Each program gets the size in its `NAME.args` in every language; C is built with `-std=c11 -O2 -ffp-contract=off -lm`.
-- The `native` columns are empty until lane 120's `ail build FILE -o OUT` lands; the harness fills them without a change (ADR 0460).
+- `native` is `ail build FILE -o OUT`; a program outside the native subset reads `build` (native.subset.1). The `-` in a ratio means one side has no number.
 - `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.
 - Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.
