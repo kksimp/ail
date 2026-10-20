@@ -20,7 +20,9 @@
 
 MAP_BYTES := 88
 
-fn map_alloc(n int) int
+## Heap kinds (native-abi.md): 7 table, 3 entries (scanned word by word),
+## 11 index (no pointers). With the collector (#174) this is `alloc(n, kind)`.
+fn map_alloc(n int, kind int) int
     alloc(n)
 
 fn map_zero(p int, words int)
@@ -75,15 +77,15 @@ fn map_key_eq(kind int, a int, b int) bool
 fn map_tables(m int, ecap int)
     store64(m + 16, ecap)
     store64(m + 24, ecap * 2 - 1)
-    store64(m + 40, map_alloc(ecap * 24))
-    idx := map_alloc(ecap * 16)
+    store64(m + 40, map_alloc(ecap * 24, 3))
+    idx := map_alloc(ecap * 16, 11)
     map_zero(idx, ecap * 2)
     store64(m + 48, idx)
 
 ## An empty map or set. `kind` is the key kind; `vmode` and `vinfo` say how
 ## a copy treats values.
 fn map_new(kind int, vmode int, vinfo int) int
-    m := map_alloc(MAP_BYTES)
+    m := map_alloc(MAP_BYTES, 7)
     store64(m, 0)
     store64(m + 8, 0)
     store64(m + 32, kind)
@@ -240,15 +242,15 @@ fn map_values_bool(m int) List[int]
 
 ## A copy that shares nothing with `m`: tables, and the lists and maps in it.
 fn map_copy(m int) int
-    n := map_alloc(MAP_BYTES)
+    n := map_alloc(MAP_BYTES, 7)
     copy_bytes(n, m, MAP_BYTES)
     store64(n + 80, 0)
     used := load64(m + 8)
-    ents := map_alloc(load64(m + 16) * 24)
+    ents := map_alloc(load64(m + 16) * 24, 3)
     copy_bytes(ents, load64(m + 40), 24 * used)
     store64(n + 40, ents)
     size := load64(m + 24) + 1
-    idx := map_alloc(size * 8)
+    idx := map_alloc(size * 8, 11)
     copy_bytes(idx, load64(m + 48), size * 8)
     store64(n + 48, idx)
     vmode := load64(m + 56)
