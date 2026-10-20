@@ -541,7 +541,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
             Str(text) =>
                 i += 1
                 lib = text
-            Ident(_) | Kw(_) | Sym(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+            Ident(_) | Kw(_) | Sym(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
         if within != ast.Within.TopLevel
             diag("ffi.decl.2", kw_pos)
             return none
