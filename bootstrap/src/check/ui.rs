@@ -50,6 +50,8 @@ impl<'p> Checker<'p> {
             "font_size" => (vec![], Int),
             "clear" | "set_font_size" => (vec![Int], Unit),
             "put" => (vec![Int, Int, Str, Int, Int], Unit),
+            "put_styled" => (vec![Int, Int, Str, Int, Int, ty("ui.Style")], Unit),
+            "set_cursor" => (vec![Int, Int, ty("ui.Cursor")], Unit),
             "cursor" => (vec![Int, Int], Unit),
             "set_title" => (vec![Str], Unit),
             "present" | "close" => (vec![], Unit),

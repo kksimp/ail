@@ -3946,6 +3946,9 @@ impl<'p> Checker<'p> {
     }
 
     fn field(&mut self, recv: &'p Expr, name: &str, pos: Pos, expect: Option<&Ty>) -> Ty {
+        if let Some(ty) = self.std_constant(recv, name, pos) {
+            return ty;
+        }
         // `Enum.Variant` and `Enum[int].Variant` (type.enum.3).
         let head = match recv {
             Expr::Name(n, _) if self.local(n).is_none() => Some((n.as_str(), None)),

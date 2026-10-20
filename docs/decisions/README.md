@@ -282,3 +282,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0291](0291-editor-command-palette-one-key-list.md) | The editor's command palette and README key table come from one list; format moves to Alt-Shift-F *(delegated)* | Accepted | 2026-10-20 |
 | [0292](0292-editor-project-search.md) | Editor project search: Ctrl-Shift-F, matches in the pane, F4 for the next *(delegated)* | Accepted | 2026-10-20 |
 | [0293](0293-editor-file-tree-and-check-all-tabs.md) | Editor file tree (Ctrl-B) and checking every tab on save, counts on tab labels *(delegated)* | Accepted | 2026-10-20 |
+| [0294](0294-std-ui-styles-colors-caret.md) | `std.ui` text styles, named colors and caret shapes *(delegated)* | Accepted | 2026-10-20 |

@@ -1753,6 +1753,10 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `recv.name`: a field, or a unit variant `Enum.Variant` (type.struct.2, type.enum.2).
     #[inline(never)]
     fn eval_field(&mut self, recv: &'a Expr, name: &'a str, name_pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        // std.ui.17: a named constant such as `ui.RED` is an int known at check time.
+        if let Some(&crate::stdlib::StdCall::Const(v)) = self.resolved.std_calls.get(&name_pos) {
+            return Ok(Value::Int(v));
+        }
         if let Some(Value::Struct(s, fields)) = self.borrowed(recv, env) {
             return Ok(fields[self.field_index(*s, name)].clone());
         }

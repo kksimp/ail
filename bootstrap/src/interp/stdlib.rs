@@ -43,6 +43,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             StdCall::Fn(module, f) => (module, f),
             StdCall::Method(_) => unreachable!("interp::method_call runs `ui.Window` methods"),
+            StdCall::Const(_) => unreachable!("interp::eval reads module constants"),
         };
         if (module, f) == ("random", "shuffle") {
             let p = self.place(&args[0].value, env)?;

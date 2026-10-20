@@ -52,7 +52,22 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             "put" => {
                 let Value::Str(text) = &values[2] else { unreachable!("checked: str") };
-                ui::put(id, int(0), int(1), text, int(3), int(4));
+                ui::put(id, int(0), int(1), text, int(3), int(4), 0);
+                Value::Unit
+            }
+            "put_styled" => {
+                let Value::Str(text) = &values[2] else { unreachable!("checked: str") };
+                let Value::Struct(_, style) = &values[5] else { unreachable!("checked: ui.Style") };
+                let on = |i: usize| matches!(style[i], Value::Bool(true));
+                let bits = [ui::BOLD, ui::ITALIC, ui::UNDERLINE];
+                let style = (0..3).filter(|&i| on(i)).fold(0, |b, i| b | bits[i]);
+                ui::put(id, int(0), int(1), text, int(3), int(4), style);
+                Value::Unit
+            }
+            "set_cursor" => {
+                let Value::Enum(_, v, _) = &values[2] else { unreachable!("checked: ui.Cursor") };
+                let shape = [ui::CaretShape::Bar, ui::CaretShape::Block, ui::CaretShape::Underline][*v];
+                ui::set_cursor(id, int(0), int(1), shape);
                 Value::Unit
             }
             "set_title" => {
