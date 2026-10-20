@@ -1,0 +1,9 @@
+## std.use.4: a local hides the standard module with its name, and so does
+## a type of the program.
+struct time
+    ms int
+
+fn main()
+    path := "x/y"
+    print(path.dir(path))
+    print(time.now_ms())

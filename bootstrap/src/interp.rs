@@ -17,6 +17,7 @@ use std::rc::Rc;
 
 use std::cmp::Ordering;
 
+mod absent;
 mod builtins;
 mod keyfn;
 pub mod limits;
@@ -1927,6 +1928,9 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Try { expr, context, pos } => {
                 let v = self.eval(expr, env)?;
                 match v {
+                    Value::None if self.resolved.absent_try.contains(pos) => {
+                        return Err(self.absent(context.as_deref(), *pos, env)?);
+                    }
                     Value::None if self.resolved.optional_try.contains(pos) => {
                         self.returned = Some((Value::None, *pos));
                         return Err(Exit::Return);

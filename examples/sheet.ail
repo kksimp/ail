@@ -62,7 +62,7 @@ enum Expr
     Neg(operand Expr)
     Bin(op Op, left Expr, right Expr)
     Agg(func Func, first Pos, last Pos)
-    If(cmp Ordering, left Expr, right Expr, then Expr, other Expr)
+    If(cmp Ordering, left Expr, right Expr, yes Expr, other Expr)
 
 enum Token
     Num(text str)
@@ -80,22 +80,12 @@ fn Token.describe(self) str
         End => "end of formula"
 
 error enum ParseError
-    BadCell(text str)
-    BadChar(c char)
-    Expected(what str, found Token)
-    Unexpected(found Token)
-    UnknownFunc(name str)
-    TooLarge(text str)
-
-impl ToStr for ParseError
-    fn to_str(self) str
-        match self
-            BadCell(text) => "bad cell name {text}"
-            BadChar(c) => "unexpected character '{c}'"
-            Expected(what, found) => "expected {what} but found {found.describe()}"
-            Unexpected(found) => "unexpected {found.describe()}"
-            UnknownFunc(name) => "unknown function {name}"
-            TooLarge(text) => "number too large: {text}"
+    BadCell(text str) "bad cell name {text}"
+    BadChar(c char) "unexpected character '{c}'"
+    Expected(what str, found Token) "expected {what} but found {found.describe()}"
+    Unexpected(found Token) "unexpected {found.describe()}"
+    UnknownFunc(name str) "unknown function {name}"
+    TooLarge(text str) "number too large: {text}"
 
 fn tokenize(src str) !List[Token]
     chars := src.chars()
@@ -220,11 +210,11 @@ fn Parser.call(mut self, name str) !Expr
         _ => Equal
     right := sum()?
     expect(',')?
-    then := sum()?
+    yes := sum()?
     expect(',')?
     other := sum()?
     expect(')')?
-    If(cmp, left, right, then, other)
+    If(cmp, left, right, yes, other)
 
 fn parse_formula(src str) !Expr
     mut p := Parser(tokenize(src)?, 0)
@@ -241,8 +231,8 @@ fn collect_refs(e Expr, mut out Set[Pos])
         Agg(_, first, last) =>
             for p in cells_in(first, last)
                 out.add(p)
-        If(_, left, right, then, other) =>
-            for part in [left, right, then, other]
+        If(_, left, right, yes, other) =>
+            for part in [left, right, yes, other]
                 collect_refs(part, mut out)
 
 enum Content
@@ -287,16 +277,9 @@ fn div(a int, b int) !int
     a / b
 
 error enum LoadError
-    MissingEquals
-    BadName(text str)
-    BadContent(text str)
-
-impl ToStr for LoadError
-    fn to_str(self) str
-        match self
-            MissingEquals => "missing '='"
-            BadName(text) => "bad cell name '{text}'"
-            BadContent(text) => "bad content '{text}'"
+    MissingEquals "missing '='"
+    BadName(text str) "bad cell name '{text}'"
+    BadContent(text str) "bad content '{text}'"
 
 fn parse_content(text str) !Content?
     if text == ""
@@ -404,11 +387,8 @@ fn Sheet.eval(mut self, e Expr) !int
                 Avg => div(nums.sum(), nums.len())?
                 Min => nums.min() else 0
                 Max => nums.max() else 0
-        If(cmp, left, right, then, other) =>
-            if eval(left)?.cmp(eval(right)?) == cmp
-                eval(then)?
-            else
-                eval(other)?
+        If(cmp, left, right, yes, other) =>
+            if eval(left)?.cmp(eval(right)?) == cmp then eval(yes)? else eval(other)?
 
 fn Sheet.display(mut self, pos Pos) str
     if not cells.contains(pos)
@@ -484,10 +464,7 @@ fn Sheet.print_deps(self)
             Broken(_, err) => print("  {pos} <- {CellError.BadParse.code()} {err}")
             Formula =>
                 deps := deps(pos)
-                listing := if deps == []
-                    "(none)"
-                else
-                    deps.join(", ")
+                listing := if deps == [] then "(none)" else deps.join(", ")
                 print("  {pos} <- {listing}")
             Number | Label => continue
 
@@ -504,10 +481,7 @@ fn Sheet.print_order(self)
         print("blocked by a cycle: {o.blocked.join(", ")}")
 
 fn or_empty(text str) str
-    if text == ""
-        "(empty)"
-    else
-        text
+    if text == "" then "(empty)" else text
 
 fn print_changes(before Map[Pos, str], after Map[Pos, str])
     mut all := {}

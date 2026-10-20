@@ -1,7 +1,6 @@
 ## A window that says hello (std.ui, ADR 0177). Needs a display, so it is
 ## not part of the selftest: `./ail run examples/ui_hello.ail`.
 ## Escape or closing the window quits; other keys are shown.
-use std.ui
 
 fn draw(mut w ui.Window, last str)
     w.clear(0x1E1E2E)
@@ -23,10 +22,7 @@ fn main()
             Key(key, ctrl, _, _) =>
                 if key == "escape"
                     break
-                last = if ctrl
-                    "ctrl-{key}"
-                else
-                    key
+                last = if ctrl then "ctrl-{key}" else key
                 draw(mut w, last)
             Mouse(col, row, button, kind) =>
                 last = "{button} {kind} at {col},{row}"

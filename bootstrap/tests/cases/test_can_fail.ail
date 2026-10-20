@@ -1,0 +1,9 @@
+## test.attr.4: a test can always fail, so `?` works in it without `!`.
+fn half(n int) int?
+    if n % 2 == 0 then n / 2 else none
+
+@test fn halves()
+    assert_eq(half(4)?, 2)
+
+@test fn odd_fails()
+    assert_eq(half(3)?, 1)

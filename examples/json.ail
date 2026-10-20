@@ -81,14 +81,10 @@ enum Json
     Arr(items List[Json])
     Obj(members List[Member])
 
-error struct ParseError
+error struct ParseError "parse error at {line}:{col}: {msg}"
     line int
     col int
     msg str
-
-impl ToStr for ParseError
-    fn to_str(self) str
-        "parse error at {line}:{col}: {msg}"
 
 struct Parser
     chars List[char]
@@ -291,10 +287,7 @@ fn quote(s str) str
             '\u{8}' => "\\b"
             '\u{c}' => "\\f"
             _ =>
-                if c.code() < 0x20
-                    "\\u{c.code().to_hex().pad_left(4, '0')}"
-                else
-                    "{c}"
+                if c.code() < 0x20 then "\\u{c.code().to_hex().pad_left(4, '0')}" else "{c}"
         out.push(piece)
     out.push("\"")
     out.join("")

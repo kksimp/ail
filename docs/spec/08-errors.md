@@ -36,6 +36,31 @@ fn tag(k Kind) str
 **err.decl.1** — `error struct Name` and `error enum Name` declare error
 types. Apart from that, they are ordinary structs and enums. *(ADR 0120)*
 
+**err.msg.1** — An error type may carry a message, a string literal written
+after `error struct Name` or after a variant of an `error enum`. The message
+is the type's display text: it defines `impl ToStr` for the type, with the
+struct's or variant's fields in scope by name (for an enum, the variant's
+fields; a field the message doesn't name is skipped). An `error struct` with a
+message may have no fields. A message on a type that isn't an error type is a
+compile-time error. *(ADR 0278)*
+
+**err.msg.2** — Either every variant of an `error enum` has a message or none
+does, and a generic error type has none; otherwise it's a compile-time error.
+A type with messages can't also have an `impl ToStr` (`trait.impl.6`).
+*(ADR 0278)*
+
+```ail
+error enum LoadError
+    MissingEquals "missing '='"
+    BadName(text str) "bad cell name '{text}'"
+
+error struct NotFound "nothing at {path}"
+    path str
+
+fn main()
+    print(LoadError.BadName(text: "Z9"))   # bad cell name 'Z9'
+```
+
 **err.decl.2** — Only error types can be errors: the `E` of `T ! E`, the
 members of an error union (`err.type.5`), and the members of an inferred
 error set. *(ADR 0120)*
@@ -142,8 +167,8 @@ or returns absence. *(ADR 0045, ADR 0048)*
 
 **err.prop.2** — Applying postfix `?` to an expression of optional type `T?`
 is a compile-time error unless the enclosing function's return type is an
-optional type, or the `?` is inside the value of an `else` (`err.prop.4`).
-*(ADR 0051, ADR 0252)*
+optional type, its errors are inferred (`err.prop.5`), or the `?` is inside
+the value of an `else` (`err.prop.4`). *(ADR 0051, ADR 0252, ADR 0279)*
 
 **err.prop.3** — If the enclosing function states its error type, every error
 type `e` can fail with MUST be a member of it. Otherwise `e?` is a
@@ -164,6 +189,22 @@ fn label(j Json) str
 
 fn main()
     print(label(Json.Null))   # anonymous
+```
+
+**err.prop.5** — In a function whose error set is inferred (`!T` or `!`,
+`err.type.2`), and that doesn't return an optional, `e?` on an optional `e`
+evaluates to the contained value, or fails with the prelude's
+`error struct Absent` (display text `a value is absent`), which then joins the
+inferred set. `e? m` attaches the context `m` (`err.ctx.2`). A function that
+states its errors must handle absence with `else`. *(ADR 0279)*
+
+```ail
+fn port(text str) !int
+    text.to_int()? "port {text}"
+
+fn main()
+    print(port("8080") else 0)   # 8080
+    print(port("http") else -1)  # -1
 ```
 
 A `?` that has nowhere to go is rejected with the signature change that would

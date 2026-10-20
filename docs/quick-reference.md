@@ -24,6 +24,7 @@
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
 ./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
 ./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
+./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N)
@@ -182,8 +183,8 @@ fn find(names List[str], wanted str) int?   # an int, or `none`
     none
 
 error enum ParseError                       # only `error` types can be errors
-    Empty
-    BadNumber(text str)
+    Empty "empty input"                     # optional message: the display text,
+    BadNumber(text str) "bad number {text}" # on every variant or none
 
 fn parse(s str) int ! ParseError            # an int, or a ParseError
     if s == ""
@@ -201,7 +202,7 @@ fn main() !                                 # main can fail; the error is report
     i := find(["a", "b"], "b") else -1      # `else`: a fallback value...
     n := parse("12") else return            # ...or leave...
     t := total(["1", "x"]) else err         # ...or handle the error
-        print("bad input: {err}")           # ParseError.BadNumber(text: "x")
+        print("bad input: {err}")           # bad input: bad number x
         0
     print("{i} {n} {t}")
     if v := parse("7")                      # do one thing or the other, then go on
@@ -222,6 +223,12 @@ fn main() !                                 # main can fail; the error is report
   header: `for x in j.arr("items") else []`.
 - `?` on an optional works in a function that returns an optional, or before
   an `else`, which then catches the `none`: `j.get("u")?.str("name") else "?"`.
+- In a function whose errors are inferred (`!T`, `!`) and in a test, `?` on
+  `none` fails with the prelude error `Absent` ("a value is absent"), with
+  context if given: `n := text.to_int()? "port {text}"`. A function that
+  states its errors (`T ! E`) needs `else` instead.
+- `error struct NotFound "nothing at {path}"` gives a struct a message; it
+  may then have no fields. Without messages, write `impl ToStr`.
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
@@ -328,6 +335,7 @@ kind := if n < 0     # `if` used as a value needs `else`;
     "negative"       # elif/else line up with the line the `if` starts on
 else
     "non-negative"
+sign := if n < 0 then "-" else "+"   # one line: `then` and `else`, no `elif`
 
 while n > 0
     n -= 1
@@ -491,6 +499,7 @@ fn main()
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["ann"] += 1                       # `op=` on a missing key starts from 0
+mut counts := {}                       # typed by first use: counts[w] += 1
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
 for name in ages.keys()                # `for k in m` is an error; also values()
@@ -612,16 +621,15 @@ dep textkit path vendor/textkit
 
 ## Files, processes and the system
 
-Import a standard module with `use std.NAME` and call it by its name
-(spec 17-std). Failures are values: `fs.IoError(path, kind)` and
+The standard modules are in scope without `use`: call them by name,
+`fs.read_text(p)` (spec 17-std, ADR 0277). A local, or the program's own item,
+with a module's name hides it; `use std.fs as files` still works.
+Failures are values: `fs.IoError(path, kind)` and
 `proc.ProcError(cmd, kind)`, `kind` one of `not_found`, `permission`,
 `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`;
 `net.NetError(url, kind, message)`.
 
 ```ail
-use std.fs
-use std.proc
-
 fn main() !
     text := fs.read_text("in.txt")?          # str ! fs.IoError
     fs.write_text("out.txt", text)?           # also append_text
@@ -647,8 +655,6 @@ fn main() !
 A window is a grid of text cells; draw with `put`, then `present`:
 
 ```ail
-use std.ui
-
 fn main()
     mut w := ui.open("Demo", 40, 10) else return   # fails headless: kind "no_display"
     w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)
@@ -671,6 +677,8 @@ fn main()
 ```
 
 A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
+It can always fail, so `?` works in it: `assert_eq(parse("7")?, 7)` fails the
+test if `parse` fails or gives `none`.
 `assert` and `assert_eq` also work in ordinary code (a failure traps).
 
 A test with parameters is a **property**: `ail test` runs it on generated
