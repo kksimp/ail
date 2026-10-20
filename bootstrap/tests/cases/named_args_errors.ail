@@ -1,0 +1,9 @@
+fn show(tag str, n int, scale int) str
+    "{tag}:{n * scale}"
+
+fn main()
+    print(show("a", nn: 4, scale: 1))
+    print(show("a", n: 4, n: 4, scale: 1))
+    print(show(tag: "a", 4, 1))
+    print(show("a", n: 4))
+    print(show("a", "b", tag: "c"))

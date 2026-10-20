@@ -18,6 +18,7 @@ mod fix;
 mod foreign;
 mod fmt;
 mod implicit_self;
+mod named_args;
 mod interp;
 mod lexer;
 mod modules;
@@ -444,7 +445,7 @@ fn front_end(path: &str, json: bool) -> Option<(ast::Program, check::Resolved)> 
 }
 
 fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
-    let Some((program, mut diags)) = load(path) else { return ExitCode::from(2) };
+    let Some((mut program, mut diags)) = load(path) else { return ExitCode::from(2) };
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
@@ -463,6 +464,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
     if !execute {
         return ExitCode::SUCCESS;
     }
+    named_args::reorder(&mut program, &resolved);
 
     // std.ui: this thread hosts any window the program opens (ADR 0178).
     let result = ui::run_hosted(STACK_BYTES, move || {
@@ -540,6 +542,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
     if rejected {
         return ExitCode::from(2);
     }
+    named_args::reorder(&mut program, &resolved);
     let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)

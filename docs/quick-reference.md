@@ -603,6 +603,10 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 
 Two `mut` arguments of one call can't refer to the same value.
 
+Any argument of your own functions and methods can be named, `show(tag, scale: 3, n: 4)`:
+positional ones first, then the named ones in any order, every parameter once.
+Arguments run in parameter order. Built-ins take no names.
+
 ## Shared cells, resources and `move`
 
 `ref T` is the one way to share a value: copies of a reference see each

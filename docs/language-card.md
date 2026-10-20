@@ -105,6 +105,7 @@ fn Point.origin() Point           # associated function: Point.origin()
 fn main()
     mut p := Point(y: 2, x: 1)    # name fields, in any order
     p.shift(3)                    # `mut self` methods need a `mut` variable
+    p.shift(dx: 3)                # arguments may be named, after positional ones
     print(p.sum())                # method calls always have ()
     c := Color.Red                # qualified, unless the type is known: `c = Green`
     p.x = 10                      # fields of a `mut` variable can be assigned
