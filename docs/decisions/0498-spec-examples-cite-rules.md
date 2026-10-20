@@ -31,10 +31,10 @@ needs a runnable example.
 
 A block tagged `skip=bootstrap` is counted for coverage, as it is for the
 rules it cites. Those rules are specified; the bootstrap doesn't build them
-yet (the `std.date` and `std.tz` modules, for now). The block is still checked
-by the spec's author, but not by the harness, until the feature lands and the
-tag is removed. Rules covered only this way are listed in the PR, so a reviewer
-can see which examples are unverified.
+yet. Such a block is not checked or run until the feature lands and the tag is
+removed. Rules covered only this way are listed in the PR, so a reviewer can
+see which examples are unverified. (The `std.time.date` and `std.tz` examples
+were first written this way; they now run against the built modules.)
 
 ## Rejected alternatives
 
@@ -51,5 +51,5 @@ can see which examples are unverified.
 
 Not applicable: this changes the test harness and the spec's examples, not the
 language syntax, so `tools/tokbench` does not apply. Example count after this
-change: 364 checked, 56 skipped (`skip=bootstrap`); zero uncovered rules in the
+change: 370 checked, 50 skipped (`skip=bootstrap`); zero uncovered rules in the
 five batch chapters.
