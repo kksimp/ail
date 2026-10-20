@@ -219,6 +219,9 @@ impl<'p> Checker<'p> {
             ("task", "check") => (vec![], Ty::Res(Box::new(Unit), Errs::Set(vec![self.prelude_error("Cancelled")]))),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
+            // std.tz.1-2
+            ("tz", "offset") => (vec![Str, Int], opt(Int)),
+            ("tz", "system") => (vec![], Str),
             ("ui", "clipboard_get") => (vec![], opt(Str)),
             ("ui", "clipboard_set") => (vec![Str], Unit),
             ("ui", "open") => (

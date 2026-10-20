@@ -29,6 +29,7 @@ pub mod parallel;
 mod net;
 mod osext;
 mod random;
+mod tz;
 mod stdlib;
 mod tasks;
 mod tensor;

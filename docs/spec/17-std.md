@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -309,6 +309,102 @@ fn main() !
 
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+## Calendar: `std.time.date`
+
+A standard module written in AIL (`use std.time.date`, ADR 0447). A
+**duration** is an `int` of milliseconds; the constants `date.SEC`, `MIN`,
+`HOUR` and `DAY` name the usual ones. A **zone** is a `str`: `"UTC"` (or
+`"Z"`), a fixed offset such as `"+05:30"` (`±HH`, `±HHMM` or `±HH:MM`), or an
+IANA name such as `"America/New_York"` read from the platform's tz database
+(`std.tz`, ADR 0448).
+
+**std.date.1** — `Date(year, month, day)` is a day of the proleptic Gregorian
+calendar. `Date.new(y, m, d)` is `none` unless the day exists.
+`is_leap(y)` and `days_in_month(y, m)` follow the Gregorian rules. A `Date`
+compares by year, then month, then day, and prints as its `iso()` text.
+
+**std.date.2** — `d.days()` is the number of days since 1970-01-01, negative
+before it; `Date.from_days(n)` is its inverse.
+
+**std.date.3** — `d.weekday()` is 1 for Monday to 7 for Sunday; `d.yday()`
+is 1 for January 1.
+
+**std.date.4** — `d.add_days(n)` and `a.since(b)` (days from `b` to `a`) are
+exact for any `n`.
+
+**std.date.5** — `d.add_months(n)` moves the month and keeps the day, except
+that a day the target month lacks becomes that month's last day (January 31
+plus one month is February 28 or 29). `d.add_years(n)` is `add_months(12 * n)`,
+so February 29 becomes February 28 in a common year. *(ADR 0449)*
+
+**std.date.6** — `DateTime` is an instant seen in a zone: `date`, `hour`,
+`minute`, `second`, `ms`, `offset` (seconds east of UTC at that instant) and
+`zone`. `==` compares these fields, so the same instant in two zones is not
+equal; `a.unix_ms() == b.unix_ms()` and `a.before(b)` compare instants.
+
+**std.date.7** — `date.utc(ms)` and `date.at(ms, zone)` give the instant `ms`
+milliseconds after 1970-01-01T00:00:00Z; `at` fails with `DateError` for an
+unknown zone. `dt.in_zone(zone)` is the same instant in another zone. Reading
+a local time in a zone (`parse_in`, `add_days`, `add_months`, `add_years`)
+resolves it to an instant: a local time that happens twice (the clock goes
+back) takes the first, and one that is skipped (the clock goes forward) takes
+the offset in force before the change, so it lands just after the gap.
+*(ADR 0449)*
+
+**std.date.8** — `dt.unix_ms()`, `a.before(b)` and `a.since(b)` (milliseconds
+from `b` to `a`) work on instants.
+
+**std.date.9** — `dt.iso()` is `YYYY-MM-DDTHH:MM:SS`, then `.mmm` unless the
+milliseconds are zero, then `Z` for offset 0 or `±HH:MM`. `d.iso()` is
+`YYYY-MM-DD`. Years below 1000 are padded to four digits. *(ADR 0450)*
+
+**std.date.10** — `dt.format(pattern)` replaces these tokens and copies the
+rest: `%Y` year, `%y` two-digit year, `%m` month, `%d` day, `%e` day padded
+with a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
+minute, `%S` second, `%f` milliseconds, `%a` and `%A` weekday name, `%b` and
+`%B` month name (English), `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone text,
+`%s` Unix seconds, `%%` a percent sign. An unknown token such as `%q` is kept
+as written. *(ADR 0451)*
+
+**std.date.11** — `date.now()` is the current instant in UTC and
+`date.now_local()` the current instant in the system zone (`tz.system()`, UTC
+when that zone isn't installed). Both read the clock, so `--deterministic`
+rejects a program that reaches them (`eff.det.1`); the rest of the module is
+pure.
+
+**std.date.12** — `dt.add_ms(n)` adds elapsed time. `dt.add_days(n)`,
+`add_months(n)` and `add_years(n)` keep the wall-clock time in the same zone
+(std.date.7), so across a clock change a day may last 23 or 25 hours.
+
+**std.date.13** — `date.parse_date(text)` reads `YYYY-MM-DD`.
+
+**std.date.14** — `date.parse_iso(text)` reads `YYYY-MM-DD` and `T` (or a
+space) and `HH:MM[:SS[.fraction]]` and an offset `Z`, `±HH`, `±HHMM` or
+`±HH:MM`; digits of the fraction past milliseconds are dropped. The result is
+in the text's own offset. Text with no offset is an error; `date.parse_in(text,
+zone)` reads it in `zone` instead (an offset in the text still wins). Seconds
+go to 59: leap seconds are not supported. *(ADR 0450)*
+
+**std.date.15** — Refused text, zones and dates fail with `DateError(text,
+why)`, which displays as `why: \`text\``.
+
+## Zones: `std.tz`
+
+**std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
+zone `zone` at the instant `secs` (seconds since the epoch), or `none` when the
+zone isn't installed, the name is empty or unsafe (it may hold only letters,
+digits and `/ _ + -`, no `..`, no leading `/`). It reads TZif files (RFC 9636)
+from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
+POSIX rule for instants after its last transition. It has the effects `fs` and
+`env`. *(ADR 0448)*
+
+**std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
+else the zone `/etc/localtime` links to, else `"UTC"`.
+
+**std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
+every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
+lands; UTC and fixed offsets work everywhere.
 
 ## Randomness: `std.random`
 
