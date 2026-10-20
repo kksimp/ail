@@ -22,10 +22,6 @@ use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 /// with the spec rule each belongs to.
 const NOT_YET: &[(&str, &str)] = &[
     ("pub", "mod.vis.1"),
-    ("unique", "own.uniq.1"),
-    ("move", "own.move.1"),
-    ("ref", "own.ref.1"),
-    ("defer", "own.defer.1"),
     ("spawn", "conc.task.1"),
     ("unsafe", "unsafe.block.1"),
     ("extern", "ffi.decl.2"),
@@ -153,6 +149,28 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                     prog.structs.push(s);
                 }
             }
+            // `unique struct` and `unique enum` (own.uniq.1).
+            Tok::Kw("unique") => match p.peek_at(1) {
+                Tok::Kw("struct") => {
+                    p.i += 1;
+                    if let Some(mut s) = p.struct_decl(false) {
+                        s.unique = true;
+                        prog.structs.push(s);
+                    }
+                }
+                Tok::Kw("enum") => {
+                    p.i += 1;
+                    if let Some(mut e) = p.enum_decl(false) {
+                        e.unique = true;
+                        prog.enums.push(e);
+                    }
+                }
+                _ => {
+                    p.i += 1;
+                    p.unexpected("`struct` or `enum` after `unique`", "own.uniq.1");
+                    p.skip_statement();
+                }
+            },
             Tok::Kw("enum") => {
                 if let Some(e) = p.enum_decl(false) {
                     prog.enums.push(e);
@@ -200,7 +218,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             }
             _ => {
                 p.unexpected(
-                    "a declaration (`fn`, `struct`, `enum`, `error`, `trait`, `impl` or a constant)",
+                    "a declaration (`fn`, `struct`, `enum`, `error`, `unique`, `trait`, `impl` or a constant)",
                     "gram.syntax.1",
                 );
                 p.skip_statement();
@@ -520,8 +538,18 @@ impl Parser {
                 } else {
                     receiver = Some(Receiver { mutable });
                 }
+            } else if self.at_kw("move") && matches!(self.peek_at(1), Tok::Kw("self")) {
+                let pos = self.pos();
+                self.error_help(
+                    UNSUPPORTED,
+                    pos,
+                    "`move self` receivers are not supported by the bootstrap yet (spec own.move.1)",
+                    "take the value as a parameter instead: `fn close(move f File)`",
+                );
+                return None;
             } else {
                 let mutable = self.eat_kw("mut");
+                let moved = !mutable && self.eat_kw("move");
                 let (pname, ppos) = self.name("a parameter name", "gram.fn.2")?;
                 if self.at_sym(":") {
                     let pos = self.pos();
@@ -534,7 +562,7 @@ impl Parser {
                     self.i += 1;
                 }
                 let ty = self.type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?;
-                params.push(Param { name: pname, pos: ppos, mutable, ty });
+                params.push(Param { name: pname, pos: ppos, mutable, moved, ty });
             }
             if !self.eat_sym(",") {
                 break;
@@ -552,7 +580,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!") | Tok::Kw("any" | "ref") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
@@ -775,6 +803,12 @@ impl Parser {
     /// `Name` or `Name[Arg, ...]` (gram.generic.1), or a module's type
     /// `m.Name`, kept as the dotted name (mod.use.2, std.use.2).
     fn named_type(&mut self, expected: &str, rule: &'static str) -> Option<TypeRef> {
+        // `ref T` (own.ref.1); `ref T?` is an optional reference.
+        if self.at_kw("ref") {
+            let pos = self.bump().pos;
+            let inner = self.named_type("a type after `ref`", "own.ref.1")?;
+            return Some(TypeRef { kind: TypeKind::Ref(Box::new(inner)), pos });
+        }
         let (mut name, pos) = self.name(expected, rule)?;
         if self.at_sym(".") && matches!(self.peek_at(1), Tok::Ident(_)) {
             self.i += 1;
@@ -844,7 +878,7 @@ impl Parser {
             fields.push(p.field_decl("type.struct.2")?);
             Some(())
         });
-        Some(StructDecl { name, pos, doc: None, is_error, generics, fields })
+        Some(StructDecl { name, pos, doc: None, is_error, unique: false, generics, fields })
     }
 
     /// `enum Name` followed by one variant per line (type.enum.1-2).
@@ -881,7 +915,7 @@ impl Parser {
             variants.push(Variant { name: vname, pos: vpos, doc: None, fields });
             Some(())
         });
-        Some(EnumDecl { name, pos, doc: None, is_error, generics, variants })
+        Some(EnumDecl { name, pos, doc: None, is_error, unique: false, generics, variants })
     }
 
     /// An indented block of one-line members, each parsed by `member`.
@@ -952,6 +986,12 @@ impl Parser {
     fn statement_inner(&mut self) -> Option<Stmt> {
         let pos = self.pos();
         match self.peek().clone() {
+            // `defer S` (own.defer.1).
+            Tok::Kw("defer") => {
+                self.bump();
+                let inner = self.statement_inner()?;
+                Some(Stmt::Defer(Box::new(inner), pos))
+            }
             Tok::Kw("mut") => {
                 self.bump();
                 let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
@@ -1250,6 +1290,12 @@ impl Parser {
             let operand = self.unary()?;
             return Some(Expr::Unary { op: UnOp::Neg, operand: Box::new(operand), pos });
         }
+        // `ref e` (own.ref.1, ADR 0067).
+        if self.at_kw("ref") {
+            let pos = self.bump().pos;
+            let value = self.unary()?;
+            return Some(Expr::Ref { value: Box::new(value), pos });
+        }
         self.postfix()
     }
 
@@ -1317,8 +1363,9 @@ impl Parser {
                 None
             };
             let mutable = self.eat_kw("mut");
+            let moved = !mutable && self.eat_kw("move");
             let value = self.expression()?;
-            args.push(Arg { label, mutable, value });
+            args.push(Arg { label, mutable, moved, value });
             if !self.eat_sym(",") {
                 break;
             }
@@ -1771,7 +1818,7 @@ mod tests {
 
     #[test]
     fn unsupported_keywords_are_reported_precisely() {
-        let (_, rules) = parse_src("fn main()\n    defer x\n");
+        let (_, rules) = parse_src("fn main()\n    unsafe x\n");
         assert_eq!(rules, vec![UNSUPPORTED]);
     }
 

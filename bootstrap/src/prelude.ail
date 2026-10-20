@@ -27,6 +27,11 @@ trait ToStr
 
 ## Map keys and set elements. Automatic, with no methods (trait.auto.5).
 trait Hash
+
+## The cleanup of a unique type: runs once when the value's owner goes out
+## of scope, unless it was moved away first (own.uniq.3, ADR 0191).
+trait Drop
+    fn drop(mut self)
 ## @module json
 ## `std.json` (lane 5, plan section 4): a JSON value, parser and printer. It
 ## is read only when the program names one of its public items and doesn't

@@ -12,6 +12,7 @@
 use crate::fasthash::FastMap as HashMap;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use std::cmp::Ordering;
@@ -52,6 +53,8 @@ enum Value {
     None,
     /// The failure of a `T ! E` result (err.model.1).
     Fail(Rc<Failure>),
+    /// A `ref T` cell (own.ref.1): copies share it.
+    Ref(Rc<RefCell<Value>>),
 }
 
 /// An error value with its context messages and return trace (err.ctx.1-2).
@@ -170,11 +173,23 @@ const MAX_DEPTH: usize = 10_000;
 /// Locals of one call, innermost last.
 type Env<'a> = Vec<(&'a str, Value)>;
 
-/// A place (own.place.1) resolved to a local slot and a path of steps.
+/// A place (own.place.1) resolved to a local slot and a path of steps, or
+/// to a path inside a `ref` cell when the place goes through one (own.ref.3).
 #[derive(Clone, Debug)]
 struct Place {
     slot: usize,
     path: Vec<Step>,
+    cell: Option<Rc<RefCell<Value>>>,
+}
+
+impl Place {
+    fn local(slot: usize) -> Self {
+        Place { slot, path: Vec::new(), cell: None }
+    }
+
+    fn in_cell(cell: Rc<RefCell<Value>>) -> Self {
+        Place { slot: 0, path: Vec::new(), cell: Some(cell) }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -240,7 +255,43 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         depth: 0,
         closed: false,
         consts: HashMap::default(),
+        has_unique: prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique),
+        has_defer: prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b)),
+        has_moves: !resolved.moves.is_empty(),
+        showing: Vec::new(),
     }
+}
+
+/// Keep the first way out: a trap or exit already on its way wins over one
+/// from a cleanup (own.uniq.3, own.defer.1).
+fn keep_first(result: &mut Flow<Value>, r: Flow<()>) {
+    if let Err(e) = r
+        && result.is_ok()
+    {
+        *result = Err(e);
+    }
+}
+
+/// Whether a block, or a block inside it, has a `defer` (own.defer.1).
+fn has_defer(b: &Block) -> bool {
+    fn in_expr(e: &Expr) -> bool {
+        match e {
+            Expr::If { branches, els, .. } => {
+                branches.iter().any(|(_, b)| has_defer(b)) || els.as_ref().is_some_and(|b| has_defer(b))
+            }
+            Expr::Match { arms, .. } => arms.iter().any(|a| has_defer(&a.body)),
+            _ => false,
+        }
+    }
+    b.iter().any(|s| match s {
+        Stmt::Defer(..) => true,
+        Stmt::While { body, .. } | Stmt::For { body, .. } => has_defer(body),
+        Stmt::Let { value, otherwise, .. } => {
+            in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
+        }
+        Stmt::Expr(e) | Stmt::Assign { value: e, .. } => in_expr(e),
+        _ => false,
+    })
 }
 
 pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
@@ -281,6 +332,14 @@ struct Interp<'a, W: Write> {
     closed: bool,
     /// The values of the constants computed so far (mod.const.1).
     consts: HashMap<&'a str, Value>,
+    /// The program declares a unique type, so scopes release values
+    /// (own.uniq.3); uses `defer` (own.defer.1); moves values (own.uniq.2).
+    /// Each is off for most programs, which then pay nothing for it.
+    has_unique: bool,
+    has_defer: bool,
+    has_moves: bool,
+    /// The `ref` cells whose text form is being made, to show cycles.
+    showing: Vec<*const RefCell<Value>>,
 }
 
 fn lookup<'e>(env: &'e Env<'_>, name: &str) -> Option<&'e Value> {
@@ -342,9 +401,15 @@ fn element(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
 /// With `insert`, a missing map key at the end of the path is added, for
 /// `m[k] = v` (type.map.3).
 fn slot_mut<'e>(env: &'e mut Env<'_>, p: &Place, insert: bool) -> Result<&'e mut Value, Trap> {
-    let mut v = &mut env[p.slot].1;
-    let last = p.path.len();
-    for (n, step) in p.path.iter().enumerate() {
+    debug_assert!(p.cell.is_none(), "a place in a `ref` cell goes through `with_slot`");
+    slot_in(&mut env[p.slot].1, &p.path, insert)
+}
+
+/// The storage at `path` inside `root`, as for `slot_mut`.
+fn slot_in<'e>(root: &'e mut Value, path: &[Step], insert: bool) -> Result<&'e mut Value, Trap> {
+    let mut v = root;
+    let last = path.len();
+    for (n, step) in path.iter().enumerate() {
         v = match (step, v) {
             (Step::Key(k, pos), Value::Map(t)) => {
                 let t = Rc::make_mut(t);
@@ -386,8 +451,13 @@ enum Operand {
 
 /// The value at a place, without copying it.
 fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<&'e Value, Trap> {
-    let mut v = &env[p.slot].1;
-    for step in &p.path {
+    debug_assert!(p.cell.is_none(), "a place in a `ref` cell goes through `view`");
+    peek_in(&env[p.slot].1, &p.path)
+}
+
+fn peek_in<'e>(root: &'e Value, path: &[Step]) -> Result<&'e Value, Trap> {
+    let mut v = root;
+    for step in path {
         v = match (step, v) {
             (Step::Field(i), Value::Struct(_, fields)) => &fields[*i],
             (Step::Index(i, pos), Value::List(items)) => element(items, *i, *pos)?,
@@ -453,7 +523,129 @@ fn key_text(k: &Value) -> String {
 }
 
 fn load(env: &Env<'_>, p: &Place) -> Result<Value, Trap> {
-    peek(env, p).cloned()
+    view(env, p, Value::clone)
+}
+
+/// own.ref.5: a cell whose contents are out for a `mut` access (a `mut self`
+/// method, a `mut` argument, `for mut`) can't be used through another copy.
+fn busy<T>(pos: Pos) -> Result<T, Trap> {
+    trap(
+        "own.ref.5",
+        pos,
+        "this `ref` cell is used while a `mut` access to it is in progress (another copy of the reference is being changed)"
+            .into(),
+    )
+}
+
+/// The position for a trap at a place, when there is one in its path.
+fn place_pos(p: &Place) -> Pos {
+    p.path
+        .iter()
+        .find_map(|s| match s {
+            Step::Index(_, pos) | Step::Key(_, pos) => Some(*pos),
+            Step::Field(_) => None,
+        })
+        .unwrap_or(Pos { line: 0, col: 0 })
+}
+
+/// Look at the value at a place, which may be in a `ref` cell.
+fn view<R>(env: &Env<'_>, p: &Place, f: impl FnOnce(&Value) -> R) -> Result<R, Trap> {
+    match &p.cell {
+        None => Ok(f(peek(env, p)?)),
+        Some(c) => {
+            let Ok(b) = c.try_borrow() else { return busy(place_pos(p)) };
+            if matches!(*b, Value::Unit) {
+                return busy(place_pos(p));
+            }
+            Ok(f(peek_in(&b, &p.path)?))
+        }
+    }
+}
+
+/// Change the value at a place, which may be in a `ref` cell (own.ref.4).
+fn with_slot<R>(env: &mut Env<'_>, p: &Place, insert: bool, f: impl FnOnce(&mut Value) -> R) -> Result<R, Trap> {
+    match &p.cell {
+        None => Ok(f(slot_mut(env, p, insert)?)),
+        Some(c) => {
+            let Ok(mut b) = c.try_borrow_mut() else { return busy(place_pos(p)) };
+            if matches!(*b, Value::Unit) {
+                return busy(place_pos(p));
+            }
+            Ok(f(slot_in(&mut b, &p.path, insert)?))
+        }
+    }
+}
+
+/// Move the value out of a place for a `mut` access; `put` returns it.
+fn take(env: &mut Env<'_>, p: &Place) -> Result<Value, Trap> {
+    with_slot(env, p, false, |v| std::mem::replace(v, Value::Unit))
+}
+
+fn put(env: &mut Env<'_>, p: &Place, insert: bool, v: Value) -> Result<(), Trap> {
+    with_slot(env, p, insert, |slot| *slot = v)
+}
+
+/// own.ref.5: for a call, the contents of each `ref` cell that a `mut`
+/// operand reaches are moved to a hidden local, so that another copy of the
+/// reference can't see them half-changed: it finds the cell empty and traps.
+fn hoist(env: &mut Env<'_>, ops: &mut [Prepared], pos: Pos) -> Result<Vec<(usize, Rc<RefCell<Value>>)>, Trap> {
+    let mut hoisted: Vec<(usize, Rc<RefCell<Value>>)> = Vec::new();
+    for (place, _, mutable) in ops.iter_mut() {
+        let Some(p) = place.as_mut().filter(|_| *mutable) else { continue };
+        let Some(c) = p.cell.take() else { continue };
+        let slot = match hoisted.iter().find(|(_, h)| Rc::ptr_eq(h, &c)) {
+            Some((slot, _)) => *slot,
+            None => {
+                let Ok(mut b) = c.try_borrow_mut() else { return busy(pos) };
+                if matches!(*b, Value::Unit) {
+                    return busy(pos);
+                }
+                env.push(("", std::mem::replace(&mut *b, Value::Unit)));
+                drop(b);
+                hoisted.push((env.len() - 1, c));
+                env.len() - 1
+            }
+        };
+        p.slot = slot;
+    }
+    Ok(hoisted)
+}
+
+/// Put hoisted cell contents back, last first.
+fn unhoist(env: &mut Env<'_>, hoisted: Vec<(usize, Rc<RefCell<Value>>)>) {
+    for (_, c) in hoisted.into_iter().rev() {
+        let (_, v) = env.pop().expect("a hoisted cell");
+        *c.borrow_mut() = v;
+    }
+}
+
+/// A place holding a `ref` is the place of the cell's contents (own.ref.3).
+fn through_ref(env: &Env<'_>, p: Place) -> Result<Place, Trap> {
+    match view(env, &p, |v| if let Value::Ref(c) = v { Some(c.clone()) } else { None })? {
+        Some(c) => Ok(Place::in_cell(c)),
+        None => Ok(p),
+    }
+}
+
+/// Move a binding's value out (own.uniq.2, own.move.2); the checker makes
+/// sure nothing uses the binding again.
+fn move_out(env: &mut Env<'_>, n: &str) -> Value {
+    let slot = env.iter().rposition(|(m, _)| *m == n).expect("checked: a local");
+    std::mem::replace(&mut env[slot].1, Value::Unit)
+}
+
+/// The contents of a `ref` cell (own.ref.3), or the value itself.
+fn deref(v: Value, pos: Pos) -> Result<Value, Trap> {
+    match v {
+        Value::Ref(c) => {
+            let Ok(b) = c.try_borrow() else { return busy(pos) };
+            if matches!(*b, Value::Unit) {
+                return busy(pos);
+            }
+            Ok(b.clone())
+        }
+        v => Ok(v),
+    }
 }
 
 /// An operand's place (if it is one) and, unless it is passed `mut`, its value.
@@ -489,9 +681,15 @@ fn check_overlap(ops: &[Prepared], pos: Pos) -> Result<(), Trap> {
     Ok(())
 }
 
-/// Two places overlap when one is the other or contains it (own.excl.1).
+/// Two places overlap when one is the other or contains it (own.excl.1);
+/// places in the same `ref` cell have the same root (own.ref.5).
 fn overlaps(a: &Place, b: &Place) -> bool {
-    a.slot == b.slot
+    let same_root = match (&a.cell, &b.cell) {
+        (None, None) => a.slot == b.slot,
+        (Some(x), Some(y)) => Rc::ptr_eq(x, y),
+        _ => false,
+    };
+    same_root
         && a.path.iter().zip(&b.path).all(|(x, y)| match (x, y) {
             (Step::Field(i), Step::Field(j)) => i == j,
             (Step::Index(i, _), Step::Index(j, _)) => i == j,
@@ -522,7 +720,16 @@ impl<'a, W: Write> Interp<'a, W> {
         let n = env.len();
         let body = f.body.as_ref().expect("checked: the function has a body");
         let end = body.last().map_or(f.pos, Stmt::pos);
-        let (mut result, at) = match self.block(body, &mut env) {
+        let mut outcome = self.block(body, &mut env);
+        // own.uniq.3: a `move` parameter owns its value until the call ends.
+        if self.has_unique && f.params.iter().any(|p| p.moved) {
+            let first = usize::from(f.receiver.is_some());
+            for (k, _) in f.params.iter().enumerate().filter(|(_, p)| p.moved) {
+                let v = std::mem::replace(&mut env[first + k].1, Value::Unit);
+                keep_first(&mut outcome, self.release(v, pos).map_err(Exit::from));
+            }
+        }
+        let (mut result, at) = match outcome {
             Ok(v) => (v, end),
             Err(Exit::Return(v, at)) => (v, at),
             Err(Exit::Trap(t)) => return Err(*t),
@@ -543,6 +750,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
+        if self.has_unique || self.has_defer {
+            return self.owning_block(stmts, env);
+        }
         let mark = env.len();
         let mut result = Ok(Value::Unit);
         for s in stmts {
@@ -553,6 +763,101 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         env.truncate(mark);
         result
+    }
+
+    /// A block whose exit releases unique values (own.uniq.3-4) and runs
+    /// deferred statements (own.defer.1-2): in reverse order of their
+    /// declarations and `defer`s, by any exit, including a trap.
+    fn owning_block(&mut self, stmts: &'a Block, env: &mut Env<'a>) -> Flow<Value> {
+        let mark = env.len();
+        let pos = stmts.first().map_or(Pos { line: 0, col: 0 }, Stmt::pos);
+        let mut defers: Vec<(usize, &'a Stmt)> = Vec::new();
+        let mut result = Ok(Value::Unit);
+        for (i, s) in stmts.iter().enumerate() {
+            if let Stmt::Defer(inner, _) = s {
+                defers.push((env.len(), inner));
+                continue;
+            }
+            result = self.stmt(s, env);
+            // A new unique value nobody took is released at once.
+            if i + 1 < stmts.len()
+                && let Stmt::Expr(Expr::Call { .. } | Expr::Method { .. }) = s
+                && let Ok(v) = &mut result
+            {
+                let v = std::mem::replace(v, Value::Unit);
+                if let Err(t) = self.release(v, pos) {
+                    result = Err(t.into());
+                }
+            }
+            if result.is_err() {
+                break;
+            }
+        }
+        let mut d = defers.len();
+        let mut slot = env.len();
+        while slot > mark {
+            slot -= 1;
+            while d > 0 && defers[d - 1].0 > slot {
+                d -= 1;
+                keep_first(&mut result, self.stmt(defers[d].1, env).map(|_| ()));
+            }
+            if self.has_unique {
+                let v = std::mem::replace(&mut env[slot].1, Value::Unit);
+                keep_first(&mut result, self.release(v, pos).map_err(Exit::from));
+            }
+        }
+        while d > 0 {
+            d -= 1;
+            keep_first(&mut result, self.stmt(defers[d].1, env).map(|_| ()));
+        }
+        env.truncate(mark);
+        result
+    }
+
+    /// Whether a value is unique and so needs releasing (own.uniq.3).
+    fn is_unique(&self, v: &Value) -> bool {
+        match v {
+            Value::Struct(s, _) => self.prog.structs[*s].unique,
+            Value::Enum(e, _, _) => self.prog.enums[*e].unique,
+            _ => false,
+        }
+    }
+
+    /// Release a value whose owner's scope ends (own.uniq.3): its type's
+    /// `drop`, then its unique fields, last first. Other values need nothing.
+    fn release(&mut self, v: Value, pos: Pos) -> Result<(), Trap> {
+        if !self.is_unique(&v) {
+            return Ok(());
+        }
+        let mut v = v;
+        let con = match &v {
+            Value::Struct(s, _) => Con::Struct(*s),
+            Value::Enum(e, _, _) => Con::Enum(*e),
+            _ => unreachable!("a unique value"),
+        };
+        if let Some(drop) = self.resolved.std.drop
+            && let Some(&i) = self.resolved.impls.get(&(drop, con))
+            && let Some(&m) = self.prog.impls[i].methods.iter().find(|&&m| self.prog.fns[m].name == "drop")
+        {
+            let prog = self.prog;
+            let (_, finals) = self.call(&prog.fns[m], Some(v), Vec::new(), pos)?;
+            v = finals.into_iter().next().unwrap_or(Value::Unit);
+        }
+        if let Value::Struct(_, fields) | Value::Enum(_, _, fields) = v {
+            for f in Rc::unwrap_or_clone(fields).into_iter().rev() {
+                self.release(f, pos)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Store into a place; a unique value it held is released (own.uniq.3).
+    fn replace_at(&mut self, env: &mut Env<'a>, p: &Place, insert: bool, v: Value) -> Result<(), Trap> {
+        if !self.has_unique {
+            return put(env, p, insert, v);
+        }
+        let old = with_slot(env, p, insert, |slot| std::mem::replace(slot, v))?;
+        self.release(old, place_pos(p))
     }
 
     fn stmt(&mut self, s: &'a Stmt, env: &mut Env<'a>) -> Flow<Value> {
@@ -593,6 +898,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.otherwise(otherwise, v, env)?;
                 }
             }
+            // own.defer.1: `owning_block` runs it when the block exits.
+            Stmt::Defer(..) => {}
         }
         Ok(Value::Unit)
     }
@@ -621,10 +928,20 @@ impl<'a, W: Write> Interp<'a, W> {
     /// written back afterwards, however the iteration ends (expr.loop.6).
     fn for_mut(&mut self, var: &'a str, iter: &'a Expr, body: &'a Block, env: &mut Env<'a>) -> Flow<()> {
         let list = self.place(iter, env)?;
-        let Value::List(items) = peek(env, &list)? else { unreachable!("checked: list") };
+        // own.ref.5: a list in a `ref` cell is out of the cell during the loop.
+        let mut ops = [(Some(list), None, true)];
+        let hoisted = hoist(env, &mut ops, iter.pos())?;
+        let [(Some(list), _, _)] = ops else { unreachable!("the list's place") };
+        let r = self.for_mut_in(var, &list, iter.pos(), body, env);
+        unhoist(env, hoisted);
+        r
+    }
+
+    fn for_mut_in(&mut self, var: &'a str, list: &Place, pos: Pos, body: &'a Block, env: &mut Env<'a>) -> Flow<()> {
+        let Value::List(items) = peek(env, list)? else { unreachable!("checked: list") };
         for i in 0..items.len() {
             let mut at = list.clone();
-            at.path.push(Step::Index(i as i64, iter.pos()));
+            at.path.push(Step::Index(i as i64, pos));
             let v = std::mem::replace(slot_mut(env, &at, false)?, Value::Unit);
             env.push((var, v));
             let r = self.block(body, env);
@@ -698,7 +1015,10 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.binop(op, old, rhs, pos)?
                 }
             };
-            env[slot].1 = v;
+            let old = std::mem::replace(&mut env[slot].1, v);
+            if self.has_unique {
+                self.release(old, pos)?;
+            }
             return Ok(());
         }
         let p = self.place(target, env)?;
@@ -710,7 +1030,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.binop(op, old, rhs, pos)?
             }
         };
-        *slot_mut(env, &p, op.is_none())? = v;
+        self.replace_at(env, &p, op.is_none(), v)?;
         Ok(())
     }
 
@@ -718,17 +1038,22 @@ impl<'a, W: Write> Interp<'a, W> {
         match e {
             Expr::Name(n, _) => {
                 let slot = env.iter().rposition(|(m, _)| m == n).expect("checked: a local");
-                Ok(Place { slot, path: Vec::new() })
+                Ok(Place::local(slot))
             }
             Expr::Field { recv, name, .. } => {
                 let mut p = self.place(recv, env)?;
-                let Value::Struct(s, _) = peek(env, &p)? else { unreachable!("checked: struct") };
-                p.path.push(Step::Field(self.field_index(*s, name)));
+                p = through_ref(env, p)?;
+                let s = view(env, &p, |v| match v {
+                    Value::Struct(s, _) => *s,
+                    other => unreachable!("checked: struct, found {other:?}"),
+                })?;
+                p.path.push(Step::Field(self.field_index(s, name)));
                 Ok(p)
             }
             Expr::Index { recv, index, pos } => {
                 let mut p = self.place(recv, env)?;
-                let is_map = matches!(peek(env, &p)?, Value::Map(_));
+                p = through_ref(env, p)?;
+                let is_map = view(env, &p, |v| matches!(v, Value::Map(_)))?;
                 let i = self.eval(index, env)?;
                 p.path.push(if is_map { Step::Key(i, *pos) } else { Step::Index(i.int(), *pos) });
                 Ok(p)
@@ -739,6 +1064,12 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// Evaluate a call operand: a place (rooted in a local) stays a place.
     fn operand(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Operand> {
+        if self.has_moves
+            && let Expr::Name(n, pos) = e
+            && self.resolved.moves.contains_key(pos)
+        {
+            return Ok(Operand::Value(move_out(env, n)));
+        }
         if place_path(e).is_some_and(|(root, _)| lookup(env, root).is_some()) {
             Ok(Operand::Place(self.place(e, env)?))
         } else {
@@ -758,7 +1089,7 @@ impl<'a, W: Write> Interp<'a, W> {
         match e {
             Expr::Int(v, pos) if !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
-            Expr::Name(n, _) => match lookup(env, n) {
+            Expr::Name(n, pos) if !self.has_moves || !self.resolved.moves.contains_key(pos) => match lookup(env, n) {
                 Some(v) => Ok(v.clone()),
                 None => self.eval_general(e, env),
             },
@@ -849,6 +1180,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 Value::Str(Rc::from(s))
             }
+            Expr::Name(n, pos) if self.resolved.moves.contains_key(pos) => move_out(env, n),
             Expr::Name(n, pos) => match lookup(env, n) {
                 Some(v) => v.clone(),
                 None if self.prog.consts.iter().any(|c| c.name == *n) => self.constant(n, *pos)?,
@@ -869,13 +1201,14 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Call { callee, args, pos } => self.call_expr(callee, args, *pos, env)?,
             Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env)?,
             Expr::TypeArgs { .. } => unreachable!("checked: type arguments only on a callee or receiver"),
-            Expr::Field { recv, name, .. } => {
+            Expr::Field { recv, name, name_pos } => {
                 if let Some(tn) = type_head(recv, env, self.prog) {
                     let e = self.enums[tn];
                     let v = self.variant_index(e, name);
                     return Ok(Value::Enum(e, v, Rc::new(Vec::new())));
                 }
-                let Value::Struct(s, fields) = self.eval(recv, env)? else { unreachable!("checked: struct") };
+                let v = self.eval(recv, env)?;
+                let Value::Struct(s, fields) = deref(v, *name_pos)? else { unreachable!("checked: struct") };
                 fields[self.field_index(s, name)].clone()
             }
             Expr::Index { recv, index, pos } => {
@@ -928,6 +1261,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.binop(*op, l, r, *pos)?
             }
             Expr::Range { .. } => unreachable!("checked: ranges only in `for` and slices"),
+            Expr::Ref { value, .. } => Value::Ref(Rc::new(RefCell::new(self.eval(value, env)?))),
             Expr::Map(pairs, pos) => {
                 let mut t = Table::default();
                 for (k, v) in pairs {
@@ -959,13 +1293,17 @@ impl<'a, W: Write> Interp<'a, W> {
                             }
                         }
                         // expr.if.5: run the branch with the value bound, if there is one.
-                        Cond::Bind { name, value, .. } => match self.eval(value, env)? {
+                        Cond::Bind { name, value, pos } => match self.eval(value, env)? {
                             Value::None => {}
                             Value::Fail(f) => failure = Some(f),
                             v => {
                                 let mark = env.len();
                                 env.push((name.as_str(), v));
-                                let r = self.block(body, env);
+                                let mut r = self.block(body, env);
+                                if self.has_unique {
+                                    let v = std::mem::replace(&mut env[mark].1, Value::Unit);
+                                    keep_first(&mut r, self.release(v, *pos).map_err(Exit::from));
+                                }
                                 env.truncate(mark);
                                 return r;
                             }
@@ -1168,6 +1506,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 true
             }
             (Value::Set(x), Value::Set(y)) => x.len() == y.len() && x.keys().all(|k| y.get(k).is_some()),
+            // own.ref.6: references are equal when they share a cell.
+            (Value::Ref(x), Value::Ref(y)) => Rc::ptr_eq(x, y),
             (x, y) => unreachable!("checked: comparing {x:?} and {y:?}"),
         })
     }
@@ -1380,6 +1720,19 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 format!("{{{}}}", parts.join(", "))
             }
+            // own.ref.6: `ref` and the contents; a cell already being shown
+            // (a cycle) is `ref ...`.
+            Value::Ref(c) => {
+                let ptr = Rc::as_ptr(c);
+                if self.showing.contains(&ptr) {
+                    return Ok("ref ...".into());
+                }
+                let inner = deref(v.clone(), pos)?;
+                self.showing.push(ptr);
+                let text = self.describe(&inner, pos);
+                self.showing.pop();
+                format!("ref {}", text?)
+            }
         })
     }
 
@@ -1437,20 +1790,30 @@ impl<'a, W: Write> Interp<'a, W> {
             return self.invoke(f, None, args, pos, env);
         }
         let recv = self.operand(recv, env)?;
+        // own.ref.3: a method of a `ref` runs on the cell's contents.
+        let recv = match recv {
+            Operand::Place(p) => Operand::Place(through_ref(env, p)?),
+            Operand::Value(Value::Ref(c)) => Operand::Place(Place::in_cell(c)),
+            v => v,
+        };
         if let Some(Call::Trait(tr)) = call {
             return self.trait_method(tr, name, recv, args, pos, env);
         }
-        let value = match &recv {
-            Operand::Place(p) => peek(env, p)?,
-            Operand::Value(v) => v,
+        let type_name = match &recv {
+            Operand::Place(p) => view(env, p, |v| self.type_name_of(v))?,
+            Operand::Value(v) => self.type_name_of(v),
         };
-        let type_name = match value {
-            Value::Struct(s, _) => self.prog.structs[*s].name.as_str(),
-            Value::Enum(e, _, _) => self.prog.enums[*e].name.as_str(),
-            _ => return self.builtin(recv, name, args, pos, env),
-        };
+        let Some(type_name) = type_name else { return self.builtin(recv, name, args, pos, env) };
         let f = self.methods[type_name][name];
         self.invoke(f, Some(recv), args, pos, env)
+    }
+
+    fn type_name_of(&self, v: &Value) -> Option<&'a str> {
+        match v {
+            Value::Struct(s, _) => Some(self.prog.structs[*s].name.as_str()),
+            Value::Enum(e, _, _) => Some(self.prog.enums[*e].name.as_str()),
+            _ => None,
+        }
     }
 
     /// A trait's method called on `recv`: the implementation for its type,
@@ -1465,7 +1828,7 @@ impl<'a, W: Write> Interp<'a, W> {
         env: &mut Env<'a>,
     ) -> Flow<Value> {
         let value = match &recv {
-            Operand::Place(p) => peek(env, p)?.clone(),
+            Operand::Place(p) => load(env, p)?,
             Operand::Value(v) => v.clone(),
         };
         if let Some(f) = self.dispatch(tr, name, &value) {
@@ -1508,24 +1871,25 @@ impl<'a, W: Write> Interp<'a, W> {
             ops.push(prepare(op, param.mutable, env)?);
         }
         check_overlap(&ops, pos)?;
+        let hoisted = hoist(env, &mut ops, pos)?;
         let mut values = Vec::with_capacity(ops.len());
         for (place, value, _) in &mut ops {
             values.push(match value.take() {
                 Some(v) => v,
-                None => std::mem::replace(
-                    slot_mut(env, place.as_ref().expect("checked: `mut` operands are places"), false)?,
-                    Value::Unit,
-                ),
+                None => take(env, place.as_ref().expect("checked: `mut` operands are places"))?,
             });
         }
         let recv_value = if has_recv { Some(values.remove(0)) } else { None };
-        let (result, finals) = self.call(f, recv_value, values, pos)?;
-        for ((place, _, mutable), v) in ops.into_iter().zip(finals) {
-            if mutable {
-                *slot_mut(env, &place.expect("checked: `mut` operands are places"), false)? = v;
+        let called = self.call(f, recv_value, values, pos);
+        if let Ok((_, finals)) = &called {
+            for ((place, _, mutable), v) in ops.into_iter().zip(finals.iter().cloned()) {
+                if mutable {
+                    put(env, &place.expect("checked: `mut` operands are places"), false, v)?;
+                }
             }
         }
-        Ok(result)
+        unhoist(env, hoisted);
+        Ok(called?.0)
     }
 
     fn print(&mut self, v: &Value, pos: Pos) -> Result<(), Trap> {

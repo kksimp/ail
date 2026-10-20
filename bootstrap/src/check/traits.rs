@@ -136,6 +136,7 @@ impl<'p> Checker<'p> {
                     "Ord" => self.std.ord = i,
                     "ToStr" => self.std.to_str = i,
                     "Hash" => self.std.hash = i,
+                    "Drop" => self.std.drop = Some(i),
                     _ => {}
                 }
             }
@@ -259,6 +260,8 @@ impl<'p> Checker<'p> {
                 .iter()
                 .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
+            // own.ref.5: references compare by identity, and aren't keys or ordered.
+            Ty::Ref(_) => tr == eq,
             Ty::Union(_) => tr == eq || tr == self.std.hash,
             Ty::Opt(inner) => (tr == eq || tr == self.std.hash) && self.implements_in(inner, tr, seen),
             // type.map.4: maps and sets compare with `==`, and aren't keys.

@@ -20,6 +20,8 @@
 mod builtins;
 mod stdlib;
 pub mod effects;
+mod moves;
+mod ownership;
 mod testing;
 mod traits;
 
@@ -69,6 +71,8 @@ pub enum Ty {
     Param(usize),
     /// `any Trait` (trait.any.1).
     Any(usize),
+    /// `ref T` (own.ref.1).
+    Ref(Box<Ty>),
 }
 
 /// The error part of `T ! E`: an explicit set, or the inferred set of a
@@ -116,6 +120,8 @@ pub struct Std {
     pub to_str: usize,
     pub hash: usize,
     pub ordering: usize,
+    /// `Drop`, the cleanup trait of unique types (own.uniq.3, ADR 0191).
+    pub drop: Option<usize>,
 }
 
 /// A method call that goes through a trait.
@@ -153,6 +159,13 @@ pub struct Resolved {
     /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
     /// Trait calls are in `calls` and bare variants in `variants` instead.
     pub symbols: HashMap<Pos, String>,
+    /// Names whose use moves the binding's value out (own.uniq.2,
+    /// own.move.2), by position, with the rule that makes it a move. The
+    /// interpreter takes the value out of the binding there.
+    pub moves: FastMap<Pos, &'static str>,
+    /// The root positions of places written through a `ref` (own.ref.4),
+    /// which give a function `mutates` (eff.infer.2).
+    pub ref_writes: FastSet<Pos>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -202,6 +215,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.collect_types();
     c.collect_impls();
     c.resolve_fields();
+    c.check_unique_fields();
     c.collect_fns();
     c.collect_consts();
     c.check_uses();
@@ -231,6 +245,8 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     }
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
+    c.check_drop_impls();
+    c.diags.extend(moves::check(prog, &c.resolved));
     c.diags.extend(effects::check_pure(prog, &c.resolved));
     (c.diags, c.resolved)
 }
@@ -244,6 +260,8 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
 struct Sig {
     receiver: Option<bool>,
     params: Vec<(bool, Ty)>,
+    /// Which parameters are `move` (own.move.1); empty when none are.
+    moves: Vec<bool>,
     ret: Ty,
     generics: Vec<usize>,
     owner: usize,
@@ -252,7 +270,7 @@ struct Sig {
 
 impl Sig {
     fn plain(receiver: Option<bool>, params: Vec<(bool, Ty)>, ret: Ty) -> Self {
-        Sig { receiver, params, ret, generics: Vec::new(), owner: 0, declared: 0 }
+        Sig { receiver, params, moves: Vec::new(), ret, generics: Vec::new(), owner: 0, declared: 0 }
     }
 }
 
@@ -260,6 +278,8 @@ impl Sig {
 enum Kind {
     Binding,
     Param,
+    /// A `move` parameter, which owns its value (own.move.1).
+    MoveParam,
     SelfParam,
     LoopVar,
 }
@@ -676,6 +696,7 @@ impl<'p> Checker<'p> {
             let sig = Sig {
                 receiver: f.receiver.map(|r| r.mutable),
                 params,
+                moves: if f.params.iter().any(|p| p.moved) { f.params.iter().map(|p| p.moved).collect() } else { Vec::new() },
                 ret,
                 generics,
                 owner: owner_ids.len(),
@@ -829,6 +850,8 @@ impl<'p> Checker<'p> {
                 self.constant_expr(v);
             }),
             Expr::Unary { operand, .. } => self.constant_expr(operand),
+            // A constant is shared by the whole program, so it can't hold a cell.
+            Expr::Ref { pos, .. } => reject(self, *pos, "a `ref` cell"),
             Expr::Binary { lhs, rhs, .. } => {
                 self.constant_expr(lhs);
                 self.constant_expr(rhs);
@@ -946,6 +969,11 @@ impl<'p> Checker<'p> {
         let (name, args) = match &t.kind {
             TypeKind::Named { name, args } => (name, args),
             TypeKind::Optional(inner) => return Ty::Opt(Box::new(self.resolve_type(inner))),
+            TypeKind::Ref(inner) => {
+                let inner_ty = self.resolve_type(inner);
+                self.no_unique(&inner_ty, inner.pos, "the contents of a `ref`");
+                return Ty::Ref(Box::new(inner_ty));
+            }
             TypeKind::Fallible { .. } => {
                 self.unsupported(
                     t.pos,
@@ -997,7 +1025,9 @@ impl<'p> Checker<'p> {
                     );
                     return Ty::Err;
                 }
-                return Ty::List(Box::new(self.resolve_type(&args[0])));
+                let elem = self.resolve_type(&args[0]);
+                self.no_unique(&elem, args[0].pos, "a list element");
+                return Ty::List(Box::new(elem));
             }
             "Map" | "Set" => {
                 let want = if name == "Map" { 2 } else { 1 };
@@ -1013,7 +1043,9 @@ impl<'p> Checker<'p> {
                 }
                 let first = self.resolve_type(&args[0]);
                 let ty = if want == 2 {
-                    Ty::Map(Box::new(first.clone()), Box::new(self.resolve_type(&args[1])))
+                    let second = self.resolve_type(&args[1]);
+                    self.no_unique(&second, args[1].pos, "a map value");
+                    Ty::Map(Box::new(first.clone()), Box::new(second))
                 } else {
                     Ty::Set(Box::new(first.clone()))
                 };
@@ -1072,7 +1104,11 @@ impl<'p> Checker<'p> {
             }
             return Ty::Err;
         }
+        let arg_pos: Vec<Pos> = args.iter().map(|a| a.pos).collect();
         let args: Vec<Ty> = args.iter().map(|a| self.resolve_type(a)).collect();
+        for (a, at) in args.iter().zip(arg_pos) {
+            self.no_unique(a, at, "a type argument");
+        }
         for (&p, a) in params.iter().zip(&args) {
             for b in self.tparams[p].bounds.clone() {
                 let what = format!("`{name}`'s parameter `{}`", self.tparams[p].name);
@@ -1282,6 +1318,7 @@ impl<'p> Checker<'p> {
             Ty::Union(m) => m.iter().map(|t| self.ty_name(t)).collect::<Vec<_>>().join(" | "),
             Ty::Param(p) => self.tparams[*p].name.clone(),
             Ty::Any(tr) => format!("any {}", self.prog.traits[*tr].name),
+            Ty::Ref(t) => format!("ref {}", self.ty_name(t)),
         }
     }
 
@@ -1327,7 +1364,8 @@ impl<'p> Checker<'p> {
         }
         for (p, (_, ty)) in f.params.iter().zip(&sig.params) {
             if self.declare(&p.name, p.pos) {
-                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param });
+                let kind = if p.moved { Kind::MoveParam } else { Kind::Param };
+                self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind });
             }
         }
         let need = !Self::returns_nothing(&sig.ret);
@@ -1378,6 +1416,13 @@ impl<'p> Checker<'p> {
             let last = i + 1 == stmts.len();
             ty = self.stmt(s, if last { expect } else { None }, last && need);
             leaves |= ty == Ty::Never;
+            // own.uniq.2: a block's value leaves it.
+            if last
+                && need
+                && let Stmt::Expr(e) = s
+            {
+                self.consume(e, &ty);
+            }
             // err.use.1: a failure can't be discarded.
             if (!last || !need) && matches!(s, Stmt::Expr(_)) && self.reject_unhandled(&ty, s.pos()) {
                 ty = Ty::Err;
@@ -1411,6 +1456,7 @@ impl<'p> Checker<'p> {
                     return Ty::Unit;
                 }
                 let vt = self.expr(value, None, true);
+                self.consume(value, &vt);
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => Self::ok_type(&vt),
@@ -1479,6 +1525,10 @@ impl<'p> Checker<'p> {
                 Ty::Never
             }
             Stmt::Expr(e) => self.expr(e, expect, need),
+            Stmt::Defer(inner, pos) => {
+                self.defer_stmt(inner, *pos);
+                Ty::Unit
+            }
         }
     }
 
@@ -1501,6 +1551,7 @@ impl<'p> Checker<'p> {
             }
             Some(v) => {
                 let t = self.expr(v, Some(&ret), true);
+                self.consume(v, &t);
                 if !self.accepts(&ret, &t) {
                     self.mismatch("expr.block.2", v.pos(), &ret, &t);
                 }
@@ -1873,6 +1924,7 @@ impl<'p> Checker<'p> {
         }
         self.require_mutable(target, None, "assigned");
         let vt = self.expr(value, Some(&tt), true);
+        self.consume(value, &vt);
         match op {
             Some(op) => {
                 self.operator(op, &tt, &vt, pos);
@@ -1885,6 +1937,11 @@ impl<'p> Checker<'p> {
     /// Report if `e` isn't a mutable place (own.place.1). `rule` is the rule
     /// for this context; without one, the rule is chosen by the kind of root.
     fn require_mutable(&mut self, e: &'p Expr, rule: Option<&'static str>, action: &str) {
+        // own.ref.4: a `ref` cell's contents are mutable through any copy.
+        if self.writes_through_ref(e, rule == Some("trait.method.3")) {
+            self.resolved.ref_writes.insert(e.pos());
+            return;
+        }
         let Some((root, _)) = place_path(e) else {
             let rule = rule.unwrap_or("expr.bind.6");
             self.error(rule, e.pos(), format!("only a variable, or a field or element of one, can be {action}"));
@@ -1898,7 +1955,7 @@ impl<'p> Checker<'p> {
             Kind::Binding => {
                 ("expr.bind.3", format!("`{root}` is immutable"), format!("declare it with `mut {root} := ...`"))
             }
-            Kind::Param => (
+            Kind::Param | Kind::MoveParam => (
                 "own.param.1",
                 format!("the parameter `{root}` is read-only"),
                 format!("declare it `mut {root} Type`, and pass it with `mut`"),
@@ -1973,6 +2030,7 @@ impl<'p> Checker<'p> {
                 Else::Block { body, .. } => self.overlapping_use(target, body),
             }),
             Stmt::Return(None, _) | Stmt::Break(_) | Stmt::Continue(_) => None,
+            Stmt::Defer(st, _) => self.overlap_in_stmt(target, st),
         }
     }
 
@@ -2006,7 +2064,7 @@ impl<'p> Checker<'p> {
             Expr::Method { recv, args, .. } => e(recv).or_else(|| args.iter().find_map(|a| e(&a.value))),
             Expr::Field { recv, .. } => e(recv),
             Expr::Index { recv, index, .. } => e(recv).or_else(|| e(index)),
-            Expr::Unary { operand, .. } => e(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => e(operand),
             Expr::Binary { lhs, rhs, .. } => e(lhs).or_else(|| e(rhs)),
             Expr::Range { lo, hi, .. } => lo.as_deref().and_then(e).or_else(|| hi.as_deref().and_then(e)),
             Expr::Map(pairs, _) => pairs.iter().find_map(|(k, v)| e(k).or_else(|| e(v))),
@@ -2084,7 +2142,13 @@ impl<'p> Checker<'p> {
                 );
                 Ty::Err
             }
-            Expr::List(elems, pos) => self.list(elems, *pos, expect),
+            Expr::List(elems, pos) => {
+                let t = self.list(elems, *pos, expect);
+                if let Ty::List(e) = &t {
+                    self.no_unique(e, *pos, "a list element");
+                }
+                t
+            }
             Expr::Call { callee, args, .. } => self.call(callee, args, expect),
             Expr::Method { recv, name, name_pos, args } => self.method(recv, name, *name_pos, args, expect),
             Expr::Field { recv, name, name_pos } => self.field(recv, name, *name_pos, expect),
@@ -2111,6 +2175,7 @@ impl<'p> Checker<'p> {
                 self.if_expr(branches, els.as_ref(), else_err.as_ref(), *pos, expect, need)
             }
             Expr::Match { scrutinee, arms, pos } => self.match_expr(scrutinee, arms, *pos, expect, need),
+            Expr::Ref { value, pos } => self.ref_expr(value, *pos, expect),
         }
     }
 
@@ -2619,20 +2684,29 @@ impl<'p> Checker<'p> {
         }
         let first = self.resolve_type(&targs[0]);
         Some(match name {
-            "List" => Ty::List(Box::new(first)),
+            "List" => {
+                self.no_unique(&first, pos, "a list element");
+                Ty::List(Box::new(first))
+            }
             "Set" => {
                 self.require_key(&first, pos);
                 Ty::Set(Box::new(first))
             }
             _ => {
                 self.require_key(&first, pos);
-                Ty::Map(Box::new(first), Box::new(self.resolve_type(&targs[1])))
+                let second = self.resolve_type(&targs[1]);
+                self.no_unique(&second, pos, "a map value");
+                Ty::Map(Box::new(first), Box::new(second))
             }
         })
     }
 
     /// Map keys and set elements must implement `Hash` (type.map.2).
     fn require_key(&mut self, t: &Ty, pos: Pos) {
+        if self.is_unique(t) {
+            self.no_unique(t, pos, "a map key or set element");
+            return;
+        }
         if self.implements(t, self.std.hash) {
             return;
         }
@@ -2842,9 +2916,10 @@ impl<'p> Checker<'p> {
             return subst_unknown(&sig.ret, &binds, vars);
         }
         let before = self.diags.len();
-        for (a, (pmut, pty)) in args.iter().zip(&sig.params) {
+        for (k, (a, (pmut, pty))) in args.iter().zip(&sig.params).enumerate() {
             let hint = subst_unknown(pty, &binds, vars);
             let t = self.expr(&a.value, (hint != Ty::Err).then_some(&hint), true);
+            self.move_arg(a, sig.moves.get(k).copied().unwrap_or(false));
             bind(pty, &t, vars, &mut binds);
             let want = subst_unknown(pty, &binds, vars);
             if *pmut && !a.mutable {
@@ -3042,6 +3117,7 @@ impl<'p> Checker<'p> {
             if self.reject_unhandled(&t, a.value.pos()) {
                 continue;
             }
+            self.consume(&a.value, &t);
             bind(&types[i], &t, vars, binds);
             let ft = subst_unknown(&types[i], binds, vars);
             if !self.accepts(&ft, &t) {
@@ -3144,6 +3220,15 @@ impl<'p> Checker<'p> {
         }
         let rt = self.expr(recv, None, true);
         if self.reject_unhandled(&rt, recv.pos()) || rt == Ty::Err {
+            self.args_only(args);
+            return Ty::Err;
+        }
+        // own.ref.3: a method of a `ref T` is called on the `T` in the cell.
+        let rt = match rt {
+            Ty::Ref(t) => *t,
+            t => t,
+        };
+        if self.reject_drop_call(&rt, name, pos) {
             self.args_only(args);
             return Ty::Err;
         }
@@ -3423,6 +3508,11 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&rt, recv.pos()) || rt == Ty::Err {
             return Ty::Err;
         }
+        // own.ref.3: a field of a `ref T` is the field of the `T` in the cell.
+        let rt = match rt {
+            Ty::Ref(t) => *t,
+            t => t,
+        };
         if !self.candidates(&rt, name).is_empty() {
             self.error_help(
                 "expr.op.3",

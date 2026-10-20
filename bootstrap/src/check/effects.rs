@@ -348,6 +348,7 @@ impl Walker<'_, '_> {
                 }
             }
             Stmt::Assign { target, value, .. } => {
+                self.ref_write(target);
                 self.expr(target);
                 self.expr(value);
             }
@@ -365,6 +366,15 @@ impl Walker<'_, '_> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Stmt::Defer(s, _) => self.stmt(s),
+        }
+    }
+
+    /// eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`; the
+    /// checker records the root position of each such write.
+    fn ref_write(&mut self, place: &Expr) {
+        if self.resolved.ref_writes.contains(&place.pos()) {
+            self.direct.entry("mutates").or_insert_with(|| "a write through a `ref`".to_string());
         }
     }
 
@@ -420,6 +430,9 @@ impl Walker<'_, '_> {
                     }
                     None => self.expr(callee),
                 }
+                for a in args.iter().filter(|a| a.mutable) {
+                    self.ref_write(&a.value);
+                }
                 args.iter().for_each(|a| self.expr(&a.value));
             }
             Expr::Method { recv, name, name_pos, args } => {
@@ -446,6 +459,10 @@ impl Walker<'_, '_> {
                     // hash or show its elements.
                     self.std_traits();
                 }
+                self.ref_write(recv);
+                for a in args.iter().filter(|a| a.mutable) {
+                    self.ref_write(&a.value);
+                }
                 self.expr(recv);
                 args.iter().for_each(|a| self.expr(&a.value));
             }
@@ -454,7 +471,7 @@ impl Walker<'_, '_> {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { op, lhs, rhs, .. } => {
                 if !op.is_arithmetic() && !matches!(op, BinOp::And | BinOp::Or) {
                     self.std_traits();

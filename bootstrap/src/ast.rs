@@ -94,6 +94,8 @@ pub struct StructDecl {
     /// by `docs::attach`.
     pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique struct` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
 }
@@ -118,6 +120,8 @@ pub struct EnumDecl {
     /// by `docs::attach`.
     pub doc: Option<String>,
     pub is_error: bool,
+    /// `unique enum` (own.uniq.1).
+    pub unique: bool,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
 }
@@ -208,12 +212,14 @@ pub struct Receiver {
     pub mutable: bool,
 }
 
-/// `name Type` or `mut name Type` (gram.fn.2, own.param.1-2).
+/// `name Type`, `mut name Type` or `move name Type` (gram.fn.2,
+/// own.param.1-2, own.move.1).
 #[derive(Debug)]
 pub struct Param {
     pub name: String,
     pub pos: Pos,
     pub mutable: bool,
+    pub moved: bool,
     pub ty: TypeRef,
 }
 
@@ -235,6 +241,8 @@ pub enum TypeKind {
     Fallible { ok: Option<Box<TypeRef>>, errors: Option<Vec<TypeRef>> },
     /// `any Trait` (trait.any.1)
     Any(String),
+    /// `ref T` (own.ref.1)
+    Ref(Box<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;
@@ -281,6 +289,8 @@ pub enum Stmt {
         value: Expr,
         otherwise: Else,
     },
+    /// `defer S` (own.defer.1); `pos` is the `defer`'s.
+    Defer(Box<Stmt>, Pos),
 }
 
 impl Stmt {
@@ -288,7 +298,7 @@ impl Stmt {
         match self {
             Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
-            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) => *p,
+            Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
         }
     }
@@ -455,6 +465,11 @@ pub enum Expr {
         otherwise: Box<Else>,
         pos: Pos,
     },
+    /// `ref e`: a new shared cell holding the value of `e` (own.ref.1, ADR 0067).
+    Ref {
+        value: Box<Expr>,
+        pos: Pos,
+    },
 }
 
 impl Expr {
@@ -477,6 +492,7 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Ref { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
             Expr::Range { lo: Some(e), .. } => e.pos(),
             Expr::Call { callee: e, .. }
@@ -506,11 +522,13 @@ pub enum InterpPart {
     Fmt(Expr, crate::lexer::FormatSpec),
 }
 
-/// A call argument: `value`, `mut place` (own.param.2) or `label: value` (type.struct.3).
+/// A call argument: `value`, `mut place` (own.param.2), `move name`
+/// (own.move.2) or `label: value` (type.struct.3).
 #[derive(Debug)]
 pub struct Arg {
     pub label: Option<(String, Pos)>,
     pub mutable: bool,
+    pub moved: bool,
     pub value: Expr,
 }
 

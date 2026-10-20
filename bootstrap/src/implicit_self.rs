@@ -137,6 +137,7 @@ impl Cx<'_> {
                 self.otherwise(otherwise);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
+            Stmt::Defer(s, _) => self.stmt(s),
         }
     }
 
@@ -213,7 +214,7 @@ impl Cx<'_> {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);
