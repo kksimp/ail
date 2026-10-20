@@ -1,0 +1,31 @@
+# trace.watch.1, trace.watch.3 (ADR 0471): `--watch` runs on the bytecode tier
+# and shows the same assignments as the walker, in loops, through `mut`
+# arguments, through a mutating method, and in a helper that is not watched.
+
+struct Acc
+    sum int
+
+fn Acc.add(mut self, v int)
+    self.sum += v
+
+fn bump(mut n int, by int)
+    n += by
+
+fn helper(x int) int
+    mut k := 0
+    while k < x
+        k += 1
+    k * 2
+
+fn main()
+    mut total := 0
+    mut acc := Acc(sum: 0)
+    mut i := 0
+    while i < 4
+        total += i
+        acc.add(i)
+        bump(mut total, 1)
+        i += 1
+    print(total)
+    print(acc.sum)
+    print(helper(3))
