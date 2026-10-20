@@ -67,6 +67,7 @@ defined when the diagnostic format is designed.
 | 14 | [FFI and C interoperability](14-ffi.md) | `ffi` | Drafted (partial) |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |
 | 16 | Reflection | `refl` | Not started |
+| 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

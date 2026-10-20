@@ -150,3 +150,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
 | [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
+| [0157](0157-standard-os-modules.md) | The machine is reached through five built-in standard modules, `use std.fs` and friends *(delegated)* | Accepted | 2026-10-20 |
+| [0158](0158-standard-io-errors.md) | Standard failures are `fs.IoError` and `proc.ProcError` with a short `kind` *(delegated)* | Accepted | 2026-10-20 |
+| [0159](0159-program-arguments.md) | `ail run FILE ARGS...` gives the program its arguments and its path *(delegated)* | Accepted | 2026-10-20 |
+| [0160](0160-process-runs.md) | `proc.run` runs a program directly and fails only if it can't start *(delegated)* | Accepted | 2026-10-20 |

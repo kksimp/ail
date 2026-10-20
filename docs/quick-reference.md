@@ -8,6 +8,7 @@
 
 ```sh
 ./ail run FILE.ail           # check, then run
+./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ```
 
@@ -409,3 +410,30 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+
+## Files, processes and the system
+
+Import a standard module with `use std.NAME` and call it by its name
+(spec 17-std). Failures are values: `fs.IoError(path, kind)` and
+`proc.ProcError(cmd, kind)`, `kind` one of `not_found`, `permission`,
+`exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `other`.
+
+```ail
+use std.fs
+use std.proc
+
+fn main() !
+    text := fs.read_text("in.txt")?          # str ! fs.IoError
+    fs.write_text("out.txt", text)?           # also append_text
+    names := fs.list_dir(".")?                # sorted names
+    r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
+    print("{r.status} {r.out} {r.err}")      # proc.Output
+```
+
+| Module | Functions |
+|---|---|
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents); all but `exists` are `! fs.IoError` |
+| `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
+| `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
+| `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
+| `std.time` | `now_ms() int`, `sleep_ms(ms)` |

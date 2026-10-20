@@ -1300,9 +1300,6 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
-        if let Some(&c) = self.resolved.std_calls.get(&pos) {
-            return self.std_call(c, args, pos, env);
-        }
         let call = self.resolved.calls.get(&pos).copied();
         // `Trait.name(x, ...)` (trait.res.1).
         if let Some(Call::Qualified(tr)) = call {
@@ -1313,6 +1310,10 @@ impl<'a, W: Write> Interp<'a, W> {
         // `Type.Variant(field: value)` (type.enum.6), or an associated
         // function `Type.name(args)` (trait.method.4).
         if let Some(tn) = type_head(recv, env, self.prog) {
+            // `m.f(args)` on a standard module (std.use.2).
+            if let Some(&c) = self.resolved.std_calls.get(&pos) {
+                return self.std_call(c, args, pos, env);
+            }
             if tn == "char" {
                 let n = self.eval(&args[0].value, env)?.int();
                 let c = u32::try_from(n).ok().and_then(char::from_u32);

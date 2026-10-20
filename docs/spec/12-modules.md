@@ -36,6 +36,9 @@ their trait's visibility. *(ADR 0098)*
 (`c.item`). Importing individual items, and wildcard imports, are not
 supported. *(ADR 0099)*
 
+**Note:** The standard modules (`use std.fs` and others) are in
+[chapter 17](17-std.md).
+
 ```ail
 use net.http
 
