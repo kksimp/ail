@@ -1,0 +1,7 @@
+# gram.attr.1: attributes the bootstrap doesn't know yet are reported.
+
+@inline fn double(x int) int
+    x * 2
+
+fn main()
+    print(double(2))

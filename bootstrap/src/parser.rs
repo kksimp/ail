@@ -11,12 +11,15 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Arg, Arm, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl, InterpPart,
-    Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind, TypeRef,
-    UnOp, Variant, Within, is_prelude,
+    Arg, Arm, Attr, BinOp, Block, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl, GenericParam, ImplDecl,
+    InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt, StructDecl, TraitDecl, TypeKind,
+    TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
+
+/// Attributes the bootstrap understands (gram.attr.1): `@pure` (eff.pure.1).
+const KNOWN_ATTRS: &[&str] = &["pure"];
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
@@ -106,6 +109,19 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             Tok::Kw("fn") => {
                 if let Some(f) = p.function(Within::TopLevel) {
                     prog.fns.push(f);
+                }
+            }
+            // `@pure fn ...` (gram.attr.1-2)
+            Tok::Sym("@") => {
+                let attrs = p.attributes();
+                if p.at_kw("fn") {
+                    if let Some(mut f) = p.function(Within::TopLevel) {
+                        f.attrs = attrs;
+                        prog.fns.push(f);
+                    }
+                } else {
+                    p.unexpected("`fn` after the attribute", "gram.attr.2");
+                    p.skip_statement();
                 }
             }
             Tok::Kw("trait") => p.trait_decl(&mut prog),
@@ -397,6 +413,28 @@ impl Parser {
 
     // ---- Declarations ----
 
+    /// `@name @name ...` before a declaration (gram.attr.1-2). Attributes the
+    /// bootstrap doesn't know are reported and dropped.
+    fn attributes(&mut self) -> Vec<Attr> {
+        let mut attrs = Vec::new();
+        while self.at_sym("@") {
+            let pos = self.bump().pos;
+            let Some((name, _)) = self.name("an attribute name after `@`", "gram.attr.1") else {
+                break;
+            };
+            if self.at_sym("(") {
+                self.error(UNSUPPORTED, pos, format!("arguments to `@{name}` are not supported by the bootstrap yet"));
+                break;
+            }
+            if KNOWN_ATTRS.contains(&name.as_str()) {
+                attrs.push(Attr { name, pos });
+            } else {
+                self.error(UNSUPPORTED, pos, format!("the attribute `@{name}` is not supported by the bootstrap yet"));
+            }
+        }
+        attrs
+    }
+
     /// `fn [Type.]name(params) [ReturnType]` followed by an indented body.
     /// In a trait, the body is optional (trait.decl.2).
     fn function(&mut self, within: Within) -> Option<FnDecl> {
@@ -501,7 +539,7 @@ impl Parser {
         } else {
             Some(self.block(&format!("the signature of {full}"), "gram.fn.1")?)
         };
-        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within })
+        Some(FnDecl { owner, name, pos, generics, receiver, params, ret, body, within, attrs: Vec::new() })
     }
 
     /// `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).

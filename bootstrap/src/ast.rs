@@ -114,6 +114,16 @@ pub struct FnDecl {
     /// `None` only for a trait method without a default (trait.decl.2).
     pub body: Option<Block>,
     pub within: Within,
+    /// Attributes written before `fn` (gram.attr.1-2), e.g. `@pure` (eff.pure.1).
+    pub attrs: Vec<Attr>,
+}
+
+/// `@name` before a declaration (gram.attr.1). Arguments, `@name(...)`, are
+/// not supported by the bootstrap yet.
+#[derive(Debug, Clone)]
+pub struct Attr {
+    pub name: String,
+    pub pos: Pos,
 }
 
 /// Where a function is declared.
@@ -148,6 +158,10 @@ impl FnDecl {
     /// A free function, method or associated function declared at the top level.
     pub fn top_level(&self) -> bool {
         self.within == Within::TopLevel
+    }
+
+    pub fn has_attr(&self, name: &str) -> bool {
+        self.attrs.iter().any(|a| a.name == name)
     }
 }
 
