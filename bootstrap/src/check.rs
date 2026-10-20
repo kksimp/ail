@@ -4043,7 +4043,7 @@ impl<'p> Checker<'p> {
             && slots.iter().all(|(i, k)| i.is_some() && *k == ArgKind::Positional)
         {
             let names: Vec<&str> = slots.iter().filter_map(|(i, _)| i.map(|i| fields[i].name.as_str())).collect();
-            // The call is written with the module's alias (`date.Date`), so anchor on the last name.
+            // A qualified type is written with its module's alias (`date.Date`); the anchor takes the name as written.
             let written = type_label.rsplit('.').next().unwrap_or(type_label);
             d = d.fix("name the fields", vec![Edit::call_named(call, written, &names)]);
         }
