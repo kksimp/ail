@@ -474,7 +474,7 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize) -> St
 /// A cheap token estimate (api.card.3): a run of letters or digits costs one
 /// token per four characters (at least one), any other non-space character
 /// one token, a newline one. Against `tools/tokbench` it lands within 3% to
-/// 10% above the largest of the five tokenizers on cards over 300 tokens, so
+/// 17% above the largest of the five tokenizers on cards over 300 tokens, so
 /// a card within budget here is within budget for each of them (ADR 0311).
 pub fn estimate_tokens(s: &str) -> usize {
     let mut tokens: usize = 0;
