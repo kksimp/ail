@@ -1,0 +1,68 @@
+## std.ui.19-24: the widgets of `std.ui.widgets`, driven by hand-built
+## events and rendered without a window.
+use std.ui
+use std.ui.widgets
+
+fn key(k str) ui.Event
+    Key(key: k, ctrl: false, alt: false, shift: false)
+
+fn show(runs List[widgets.Run])
+    for r in runs
+        print("|{r.text}|")
+
+fn main()
+    theme := Map[str, int]()
+    r := widgets.Rect(col: 0, row: 0, cols: 16, rows: 3)
+    # TextField: typing, moving and deleting.
+    mut t := widgets.TextField.new("name: ", "ab")
+    t.on_event(key("left"))
+    t.on_event(key("x"))
+    t.on_event(key("backspace"))
+    t.on_event(key("c"))
+    print("{t.text} {t.cursor} {t.caret_col(r)} {t.on_event(key("enter"))}")
+    show(t.render(r, theme))
+    # ListView: the fuzzy filter, moving, choosing, a click.
+    mut l := widgets.ListView.new(["alpha.ail", "beta.md", "gamma.ail", "delta.ail"])
+    for k in ["a", "i", "l"]
+        l.on_event(key(k), r)
+    print(l.shown())
+    l.on_event(key("down"), r)
+    print("{l.chosen() else "none"} {l.on_event(key("enter"), r)}")
+    show(l.render(r, theme))
+    print(l.on_event(Mouse(col: 2, row: 0, button: "left", kind: "down"), r))
+    print(l.chosen() else "none")
+    l.on_event(key("q"), r)
+    show(l.render(r, theme))
+    print(widgets.fuzzy("tools/edit/edit.ail", "TEE"))
+    # Button and Dialog.
+    mut b := widgets.Button(label: "OK", focused: true)
+    print("{b.on_event(key("enter"), r)} {b.on_event(key("x"), r)}")
+    mut d := widgets.Dialog.new("Save changes?", ["Save", "Discard", "Cancel"])
+    d.on_event(key("right"), r)
+    d.on_event(key("right"), r)
+    d.on_event(key("right"), r)
+    print("{d.selected} {d.on_event(key("escape"), r)}")
+    dr := widgets.Rect(col: 0, row: 0, cols: 30, rows: 3)
+    print(d.on_event(Mouse(col: 11, row: 2, button: "left", kind: "down"), dr))
+    print(d.selected)
+    # Pane: moving, scrolling, choosing a line.
+    mut p := widgets.Pane.new(["one", "two", "three", "four", "five"])
+    p.on_event(key("end"), r)
+    print("{p.cursor} {p.top}")
+    p.on_event(Scroll(lines: -5), r)
+    print(p.top)
+    show(p.render(r, theme))
+    # Tree: opening, closing, choosing a leaf.
+    mut tr := widgets.Tree.new([
+        widgets.Node(label: "src", depth: 0, open: false),
+        widgets.Node(label: "main.ail", depth: 1, open: false),
+        widgets.Node(label: "README.md", depth: 0, open: false),
+    ])
+    show(tr.render(r, theme))
+    tr.on_event(key("right"), r)
+    tr.on_event(key("down"), r)
+    print("{tr.nodes[tr.selected].label} {tr.on_event(key("enter"), r)}")
+    show(tr.render(r, theme))
+    print(widgets.color(theme, "bg") == 0x1e1e1e)
+    print(widgets.color({"bg": 1}, "bg"))
+    print(widgets.Action.Ignored)
