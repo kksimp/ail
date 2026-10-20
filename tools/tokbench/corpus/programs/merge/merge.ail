@@ -21,7 +21,7 @@ fn overlay(base Json, over Json) Json
     out
 
 fn main() !
-    dir := "{path.dir(env.program())}/configs"
+    dir := "{path.dir(env.program())}/../../../../../examples/configs"
     base := parse_json(fs.read_text("{dir}/base.json")?)? "base"
     local := parse_json(fs.read_text("{dir}/local.json")?)? "local"
     cfg := Config.from_json(overlay(base, local))? "merged"

@@ -16,7 +16,7 @@ fn top_errors(counts Map[str, int], n int) List[str]
     counts.keys().sorted().sorted(by: |m| -counts[m]).take(n)
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/data/logscan.log")? "reading the log"
+    text := fs.read_text("{path.dir(env.program())}/../../../../../examples/data/logscan.log")? "reading the log"
     mut per_hour := {}
     mut hours := {}
     mut errors := {}

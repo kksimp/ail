@@ -17,7 +17,7 @@ fn parse_row(line str) Sale?
     )
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/data/sales.csv")?
+    text := fs.read_text("{path.dir(env.program())}/../../../../../examples/data/sales.csv")?
     mut revenue := {}
     mut units := {}
     mut by_product := {}

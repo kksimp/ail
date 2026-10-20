@@ -11,7 +11,7 @@ impl FromJson for Todo
 impl ToJson for Todo
 
 fn main() !
-    dir := "{path.dir(env.program())}/data"
+    dir := "{path.dir(env.program())}/../../../../../examples/data"
     doc := parse_json(fs.read_text("{dir}/tasks.json")? "reading tasks")? "parsing tasks"
     mut updated := []
     mut ran := 0

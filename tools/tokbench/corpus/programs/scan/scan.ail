@@ -14,7 +14,7 @@ fn scan(root str) !List[Found]
     out
 
 fn main() !
-    found := scan("{path.dir(env.program())}/data")?
+    found := scan("{path.dir(env.program())}/../../../../../examples/data")?
     mut by_ext := {}
     mut by_hash := {}
     for f in found
