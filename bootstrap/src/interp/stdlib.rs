@@ -1,5 +1,5 @@
-//! The standard modules at run time (spec 17-std): files (std.fs.1-6), the
-//! environment (std.env.1-3), standard input, standard error and exit
+//! The standard modules at run time (spec 17-std): files (std.fs.1-7), the
+//! environment (std.env.1-4), standard input, standard error and exit
 //! (std.io.1-4), processes (std.proc.1) and the clock (std.time.1-2).
 //! Failures are `fs.IoError` and `proc.ProcError` values whose `kind` is
 //! one of the short names of std.err.1.
@@ -13,12 +13,13 @@ use crate::ast::Arg;
 use crate::diag::Pos;
 use crate::stdlib::{StdCall, error_kind};
 
-/// The program's arguments: the words after `ail run FILE` (std.env.1).
-static PROGRAM_ARGS: OnceLock<Vec<String>> = OnceLock::new();
+/// The program's path as given to `ail run` (std.env.4), and its
+/// arguments, the words after it (std.env.1).
+static PROGRAM: OnceLock<(String, Vec<String>)> = OnceLock::new();
 
-/// Record the program's arguments before it runs (std.env.1).
-pub fn set_program_args(args: Vec<String>) {
-    let _ = PROGRAM_ARGS.set(args);
+/// Record the program's path and arguments before it runs (std.env.1, std.env.4).
+pub fn set_program(path: &str, args: Vec<String>) {
+    let _ = PROGRAM.set((path.to_string(), args));
 }
 
 fn text(s: impl Into<Rc<str>>) -> Value {
@@ -75,25 +76,34 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             ("fs", "remove") => {
                 let path = str_arg(0);
-                // std.fs.6: files only, so a slip can't remove a directory.
+                // std.fs.6: a file, or an empty directory, never a tree.
                 let result = match std::fs::symlink_metadata(&*path) {
-                    Ok(m) if m.is_dir() => Err("is_dir"),
-                    Ok(_) => std::fs::remove_file(&*path).map_err(|e| error_kind(&e)),
-                    Err(e) => Err(error_kind(&e)),
+                    Ok(m) if m.is_dir() => std::fs::remove_dir(&*path),
+                    Ok(_) => std::fs::remove_file(&*path),
+                    Err(e) => Err(e),
                 };
                 match result {
                     Ok(()) => Value::Unit,
-                    Err(kind) => self.io_error(&path, kind, pos),
+                    Err(e) => self.io_error(&path, error_kind(&e), pos),
+                }
+            }
+            ("fs", "make_dir") => {
+                let path = str_arg(0);
+                // std.fs.7: with any missing parents; an existing directory is fine.
+                match std::fs::create_dir_all(&*path) {
+                    Ok(()) => Value::Unit,
+                    Err(e) => self.io_error(&path, error_kind(&e), pos),
                 }
             }
             ("env", "args") => {
-                let args = PROGRAM_ARGS.get().map(Vec::as_slice).unwrap_or_default();
+                let args = PROGRAM.get().map(|(_, a)| a.as_slice()).unwrap_or_default();
                 Value::List(Rc::new(args.iter().map(|a| text(a.as_str())).collect()))
             }
             ("env", "get") => match std::env::var(&*str_arg(0)) {
                 Ok(v) => text(v),
                 Err(_) => Value::None,
             },
+            ("env", "program") => text(PROGRAM.get().map_or("", |(p, _)| p.as_str())),
             ("env", "cwd") => match std::env::current_dir() {
                 Ok(d) => text(d.to_string_lossy().into_owned()),
                 Err(e) => return stop("std.env.3", pos, format!("can't read the working directory: {e}")),

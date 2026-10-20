@@ -1,6 +1,6 @@
 //! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc` and
 //! `std.time` (spec 17-std): their imports (std.use.1-3), the types of
-//! their functions (std.fs.1-6, std.env.1-3, std.io.1-4, std.proc.1,
+//! their functions (std.fs.1-7, std.env.1-4, std.io.1-4, std.proc.1,
 //! std.time.1-2), and their types `fs.IoError`, `proc.Output` and
 //! `proc.ProcError` (std.err.1).
 
@@ -145,10 +145,10 @@ impl<'p> Checker<'p> {
             ("fs", "write_text" | "append_text") => (vec![Str, Str], io(Unit)),
             ("fs", "exists") => (vec![Str], Bool),
             ("fs", "list_dir") => (vec![Str], io(list(Str))),
-            ("fs", "remove") => (vec![Str], io(Unit)),
+            ("fs", "remove" | "make_dir") => (vec![Str], io(Unit)),
             ("env", "args") => (vec![], list(Str)),
             ("env", "get") => (vec![Str], opt(Str)),
-            ("env", "cwd") => (vec![], Str),
+            ("env", "cwd" | "program") => (vec![], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
             // std.io.4: `exit` never returns (ADR 0139).

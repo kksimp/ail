@@ -19,7 +19,7 @@ use std::cmp::Ordering;
 mod builtins;
 mod stdlib;
 
-pub use stdlib::set_program_args;
+pub use stdlib::set_program;
 
 use builtins::{Key, Table, map_value};
 

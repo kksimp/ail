@@ -43,7 +43,7 @@ fn main() -> ExitCode {
     let rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
     match rest.as_slice() {
         ["run", file] => {
-            interp::set_program_args(program_args);
+            interp::set_program(file, program_args);
             run_file(file, json, true)
         }
         ["check", file] => run_file(file, json, false),

@@ -9,8 +9,8 @@ use crate::lexer::lex;
 
 /// Each standard module and its functions (std.use.1-2), sorted.
 pub const MODULES: &[(&str, &[&str])] = &[
-    ("env", &["args", "cwd", "get"]),
-    ("fs", &["append_text", "exists", "list_dir", "read_text", "remove", "write_text"]),
+    ("env", &["args", "cwd", "get", "program"]),
+    ("fs", &["append_text", "exists", "list_dir", "make_dir", "read_text", "remove", "write_text"]),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
     ("proc", &["run"]),
     ("time", &["now_ms", "sleep_ms"]),

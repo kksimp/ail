@@ -1,0 +1,8 @@
+## std.time.1-2: the clock, and sleeping.
+use std.time
+
+fn main()
+    start := time.now_ms()
+    time.sleep_ms(5)
+    print(time.now_ms() - start >= 5)
+    print(start > 1_700_000_000_000)
