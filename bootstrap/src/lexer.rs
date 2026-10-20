@@ -12,7 +12,7 @@ pub const UNSUPPORTED: &str = "bootstrap.unsupported";
 /// Reserved words (lex.kw.1, ADR 0114, ADR 0120). `c` is deliberately absent (lex.kw.2).
 pub const KEYWORDS: &[&str] = &[
     "and", "any", "as", "break", "continue", "defer", "elif", "else", "enum", "error", "extern", "false", "fn", "for",
-    "if", "impl", "in", "match", "move", "mut", "none", "not", "or", "pub", "ref", "return", "self", "spawn", "struct",
+    "if", "impl", "in", "match", "move", "mut", "none", "not", "or", "par", "pub", "ref", "return", "self", "spawn", "struct",
     "todo", "trait", "true", "unique", "unsafe", "use", "while",
 ];
 

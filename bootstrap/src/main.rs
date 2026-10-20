@@ -35,7 +35,8 @@ commands:
   check FILE    check a program (or a package DIR) without running it
   test FILE     run the program's `@test` functions, properties and doc examples;
                 --cases N (default 100) and --seed S set a property's inputs
-  effects FILE  print each function's inferred effects (eff.infer.6)
+  effects FILE  print each function's inferred effects (eff.infer.6);
+                --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
@@ -109,6 +110,7 @@ fn main() -> ExitCode {
             }
         },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
+        ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
@@ -173,6 +175,18 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
 fn effects_file(path: &str, json: bool) -> ExitCode {
     let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
     print!("{}", check::effects::render(&check::effects::effects_of(&program, &resolved), json));
+    ExitCode::SUCCESS
+}
+
+/// `ail effects --parallel FILE [--json]`: each loop's verdict (conc.par.6).
+fn parallel_file(path: &str, json: bool) -> ExitCode {
+    let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
+    let at = |pos| {
+        let (file, p) = modules::locate(&program.files, pos);
+        let file = if file.is_empty() { path } else { file };
+        format!("{file}:{}:{}", p.line, p.col)
+    };
+    print!("{}", check::parallel::render(&check::parallel::analyze(&program, &resolved), json, &at));
     ExitCode::SUCCESS
 }
 

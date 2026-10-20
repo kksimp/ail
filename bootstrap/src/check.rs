@@ -20,6 +20,7 @@
 mod builtins;
 mod stdlib;
 pub mod effects;
+pub mod parallel;
 mod privacy;
 mod testing;
 mod traits;
@@ -241,6 +242,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
+    c.diags.extend(parallel::check_par(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 

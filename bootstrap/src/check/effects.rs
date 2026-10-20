@@ -71,29 +71,7 @@ pub struct Effects<'p> {
 impl<'p> Effects<'p> {
     pub fn infer(prog: &'p Program, resolved: &Resolved) -> Self {
         let nodes = prog.fns.len();
-        let mut w = Walker {
-            prog,
-            resolved,
-            fns: HashMap::new(),
-            std_impls: Vec::new(),
-            direct: BTreeMap::new(),
-            calls: Vec::new(),
-        };
-        for (i, f) in prog.fns.iter().enumerate() {
-            if f.owner.is_none() && f.within == Within::TopLevel {
-                w.fns.insert(f.name.as_str(), i);
-            }
-        }
-        // eff.infer.5: operators, interpolation, `print` and the built-in
-        // collection methods call the standard traits' implementations.
-        let std = resolved.std;
-        if !prog.traits.is_empty() {
-            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
-                w.std_impls.extend(implementations(prog, tr, name));
-            }
-            w.std_impls.sort_unstable();
-            w.std_impls.dedup();
-        }
+        let mut w = Walker::new(prog, resolved);
         let mut direct = Vec::with_capacity(nodes);
         let mut calls = Vec::with_capacity(nodes);
         for f in &prog.fns {
@@ -127,6 +105,21 @@ impl<'p> Effects<'p> {
             }
         }
         Effects { prog, direct, calls, sets }
+    }
+
+    /// The effects that running `body` has, each with its source: the
+    /// block's own operations (`print`), or a chain of calls such as
+    /// `log -> print` (conc.par.2, ADR 0237).
+    pub fn of_block(&self, resolved: &Resolved, body: &Block) -> BTreeMap<&'static str, String> {
+        let mut w = Walker::new(self.prog, resolved);
+        w.block(body);
+        let mut out = w.direct;
+        for &j in &w.calls {
+            for &e in self.sets[j].iter().filter(|e| propagates(e)) {
+                out.entry(e).or_insert_with(|| self.chain(j, e));
+            }
+        }
+        out
     }
 
     /// The effect set of function `i`, sorted (eff.infer.6).
@@ -321,7 +314,34 @@ struct Walker<'p, 'r> {
     calls: Vec<usize>,
 }
 
-impl Walker<'_, '_> {
+impl<'p, 'r> Walker<'p, 'r> {
+    fn new(prog: &'p Program, resolved: &'r Resolved) -> Self {
+        let mut w = Walker {
+            prog,
+            resolved,
+            fns: HashMap::new(),
+            std_impls: Vec::new(),
+            direct: BTreeMap::new(),
+            calls: Vec::new(),
+        };
+        for (i, f) in prog.fns.iter().enumerate() {
+            if f.owner.is_none() && f.within == Within::TopLevel {
+                w.fns.insert(f.name.as_str(), i);
+            }
+        }
+        // eff.infer.5: operators, interpolation, `print` and the built-in
+        // collection methods call the standard traits' implementations.
+        let std = resolved.std;
+        if !prog.traits.is_empty() {
+            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
+                w.std_impls.extend(implementations(prog, tr, name));
+            }
+            w.std_impls.sort_unstable();
+            w.std_impls.dedup();
+        }
+        w
+    }
+
     fn add(&mut self, e: &'static str, source: impl Into<String>) {
         self.direct.entry(e).or_insert_with(|| source.into());
     }
