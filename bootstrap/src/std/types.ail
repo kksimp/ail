@@ -29,6 +29,8 @@ enum Event
     Key(key str, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
+    Mouse(col int, row int, button str, kind str)
+    Scroll(lines int)
 
 error struct UiError
     kind str

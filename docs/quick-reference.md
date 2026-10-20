@@ -541,7 +541,7 @@ fn main() !
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
-| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`; colors `0xRRGGBB` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |
 
 A window is a grid of text cells; draw with `put`, then `present`:
 
@@ -557,8 +557,8 @@ fn main()
             Key(key, ctrl, _, _) =>                # "a", "enter", "f1"; Ctrl-S is ("s", true)
                 if key == "escape"
                     break
-            Resize(_, _) => w.present()
             Close => break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
 ```
 
 ## Tests and assertions

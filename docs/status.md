@@ -57,7 +57,10 @@ monospace text cells with key and resize events, through `minifb` and
 `embedded-graphics` in the bootstrap, a new capability `ui`, and
 `examples/ui_hello.ail`. Selftest passes headless on Linux; the window was
 tested under X11 (Xvfb); macOS is pending. The path to a native layer is in
-[gui-path.md](design/gui-path.md).
+[gui-path.md](design/gui-path.md). Mouse, scroll, clipboard and window titles
+followed (ADR 0240, `std.ui.10–13`), and the editor's window front end got
+tabs, a Ctrl-P file picker, mouse selection, wheel scrolling, the system
+clipboard and F5/F6 runs (ADR 0241).
 
 ## Design topics
 

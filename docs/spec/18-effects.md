@@ -27,8 +27,8 @@ constant expression runs no code (`mod.const.2–3`). *(ADR 0163)*
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`, and
-`time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods of `ui.Window` give `ui`
-and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
+`time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
+of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
 `spawn`. Nothing gives `net` yet. *(ADR 0163)*
 
 **eff.infer.5** — A call whose target is known from the types (a free

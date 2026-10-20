@@ -14,7 +14,7 @@ failures are values (ADR 0157). There is no string-typed shell.
 
 **std.use.1** — `use std.NAME` imports the standard module `NAME`, available
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
-The standard modules are `env`, `fs`, `io`, `proc`, `time` and `ui`. Importing
+The standard modules are `env`, `fs`, `io`, `proc`, `random`, `time` and `ui`. Importing
 `std` itself, a submodule of a standard module, or any other `std.NAME` is a
 compile-time error that lists the modules. *(ADR 0157)*
 
@@ -188,6 +188,8 @@ enum Event
     Key(key str, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
     Close
+    Mouse(col int, row int, button str, kind str)
+    Scroll(lines int)
 error struct UiError
     kind str               # "no_display", "closed" or "other"
     message str
@@ -200,7 +202,7 @@ be shown (no display, or a run without a window host), and `other` when
 `cols` or `rows` is outside 1 to 1000 or a window is already open. *(ADR 0177)*
 
 **std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
-`present`, `next_event`, `poll_event` and `close`; naming another is a
+`present`, `next_event`, `poll_event`, `set_title` and `close`; naming another is a
 compile-time error. All but `size(self) Size` take `mut self`. `size` is the
 grid's size in cells, which follows `Resize` events; it is 0 by 0 for a
 window that was never opened or has been closed with `close`. *(ADR 0177)*
@@ -241,7 +243,8 @@ After that, and after `close(mut self)`, the window is closed: `next_event`
 and `poll_event` return `Close`, and drawing does nothing. A program that
 ends closes its window. *(ADR 0177)*
 
-**std.ui.9** — `ui.open` and every `Window` method give the capability `ui`
+**std.ui.9** — `ui.open`, `ui.clipboard_get`, `ui.clipboard_set` and every
+`Window` method give the capability `ui`
 and the effect `io` (`eff.infer.4`), so `ail run --deny ui` refuses a program
 that can open a window (`eff.cap.1`). *(ADR 0177)*
 
@@ -260,7 +263,28 @@ fn main()
             Key(key, _, _, _) =>
                 if key == "escape"
                     break
-            Resize(_, _) => continue
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => continue
             Close => break
     w.close()
 ```
+
+**std.ui.10** — `Mouse(col, row, button, kind)` reports a mouse button over
+cell (`col`, `row`): `button` is `left`, `right` or `middle`, and `kind` is
+`down` when it is pressed, `up` when it is released, and `drag` when the
+mouse moves to another cell while it is held. Movement with no button held
+gives no event. *(ADR 0240)*
+
+**std.ui.11** — `Scroll(lines)` reports the wheel or a trackpad: `lines` is
+the number of text lines to scroll, positive towards the end of a document.
+A wheel notch is about 3 lines. *(ADR 0240)*
+
+**std.ui.12** — `clipboard_set(text str)` puts `text` on the clipboard, and
+`clipboard_get() str?` returns its text, or `none` when it holds no text.
+Under `ail run` this is the system clipboard where the platform's tools
+reach it (`pbcopy` on macOS, `wl-copy`, `xclip` or `xsel` on Linux,
+PowerShell on Windows); otherwise, and always under `ail test`, it is a
+clipboard of the program's own, so tests never read or change the user's.
+Neither needs an open window. *(ADR 0240)*
+
+**std.ui.13** — `set_title(mut self, text str)` changes the window's title;
+on a closed window it does nothing. *(ADR 0240)*

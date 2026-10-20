@@ -28,6 +28,12 @@ fn main()
                 else
                     key
                 draw(mut w, last)
+            Mouse(col, row, button, kind) =>
+                last = "{button} {kind} at {col},{row}"
+                draw(mut w, last)
+            Scroll(lines) =>
+                last = "scroll {lines}"
+                draw(mut w, last)
             Resize(_, _) => draw(mut w, last)
             Close => break
     w.close()
