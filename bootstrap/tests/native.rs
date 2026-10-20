@@ -93,7 +93,8 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
             None => Command::new(&exe).current_dir(root()).output().unwrap(),
         };
         let snapshot = |l: &&str| {
-            !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"))
+            // Frame lines after an error's first line may be absent (native.build.1).
+            !(l.starts_with("  at ") || l.starts_with("note:") || l.starts_with("help:"))
         };
         let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
         let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();

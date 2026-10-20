@@ -1,0 +1,207 @@
+## Lowering tasks (conc.task.1-6, ADRs 0599-0601): `t := spawn f(x)` builds a
+## task record and queues it with the runtime (`compiler/rt/native/task.ail`),
+## `t.wait()?` waits for it, and a function per `spawn` site, with one
+## `rt.dispatch` that picks it by the record's id, lets a worker run the call.
+## The runtime links only when the program uses tasks (`uses_tasks`).
+use ast
+
+## Word offsets of a task record (task.ail).
+T_RESULT := 16
+T_ARGS := 80
+
+## One `spawn` site: the function it calls and that function's types.
+struct TaskSite
+    func str
+    params List[Ty]
+    ret Ty
+
+pub struct TaskState
+    ## Whether the task runtime is linked (so `print` takes the output lock).
+    on bool
+    sites List[TaskSite]
+    ## The result type of the task a handle variable holds, by variable key.
+    rets Map[str, Ty]
+
+pub fn new_task_state() TaskState
+    TaskState(on: false, sites: [], rets: {})
+
+## Whether a program's source may use tasks, `par for` or atomics, so the
+## task runtime is linked. A false positive only costs compile time.
+pub fn uses_tasks(text str) bool
+    text.contains("spawn ") or text.contains("par for") or text.contains("Atomic")
+
+## `fn main() !`: no result and no error type of its own. The only `?` the
+## subset knows is `t.wait()?`, which ends the program on a trap.
+fn bare_fallible(t ast.TypeRef) bool
+    match t.shape
+        Fallible(ok, errors) => ok == none and errors == none
+        _ => false
+
+fn is_spawn(e ast.Expr) bool
+    match e
+        Unary(o, _, _) =>
+            match o
+                Spawn => true
+                Neg | Not => false
+        _ => false
+
+## A primitive call from lowered program code: `store64` and the like.
+fn Lower.prim_op(mut self, name str, args List[int], ty Ty) int
+    mut i := inst(-1, "prim", args)
+    i.name = name
+    if ty.is_unit()
+        emit_void(i)
+        return -1
+    emit(i, ty)
+
+## `name := spawn f(args)`: lower the call's arguments into a task record,
+## queue it, and bind the record as the handle.
+fn Lower.lower_spawn_let(mut self, name str, pos ast.Pos, value ast.Expr)
+    inner := match value
+        Unary(_, x, _) => x
+        _ => value
+    h := lower_spawn(inner, pos) else
+        declare(name, Ty.Unknown, -1)
+        return
+    declare(name, Ty.Int, h.id)
+    key := lookup(name) else return
+    tk.rets[key] = tk.sites[tk.sites.len() - 1].ret
+
+fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
+    match e
+        Call(callee, args, cpos) =>
+            match callee
+                Name(name, npos) =>
+                    key := "{prefix}{name}"
+                    if bad.contains(key)
+                        return none
+                    sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
+                    if not tk.on
+                        return unsupported(pos, "`spawn`")
+                    if args.len() != sig.params.len()
+                        return unsupported(cpos, "this call")
+                    rec := call("rt.task_new", [konst(tk.sites.len(), Ty.Int)], Ty.Int)
+                    for k in 0..args.len()
+                        a := args[k]
+                        if a.label != none
+                            return unsupported(cpos, "labelled arguments")
+                        v := lower_value(a.value, sig.params[k])?
+                        id := convert(v, sig.params[k], expr_pos(a.value))
+                        # A task works on its own copy of a list (conc.share.1).
+                        w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
+                        at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
+                        prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
+                    call("rt.task_start", [rec], Ty.Unit)
+                    tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret))
+                    Val(id: rec, ty: Ty.Int)
+                _ => unsupported(cpos, "`spawn` of anything but a function")
+        _ => unsupported(pos, "`spawn` of anything but a function call")
+
+## `t.wait()?`: the task's result, or the program ends with the trap.
+fn Lower.lower_try(mut self, inner ast.Expr, pos ast.Pos) Val?
+    match inner
+        Method(recv, name, npos, margs) =>
+            if name == "wait" and margs.len() == 0
+                match recv
+                    Name(tname, _) =>
+                        key := lookup(tname) else return unsupported(pos, "`?`")
+                        res := tk.rets.get(key) else return unsupported(pos, "`?`")
+                        h := read_var(key, cur)
+                        if res.is_unit()
+                            call("rt.task_wait", [h], Ty.Int)
+                            return Val(id: -1, ty: Ty.Unit)
+                        if res.is_float()
+                            w := call("rt.task_wait", [h], Ty.Int)
+                            return Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
+                        return Val(id: call("rt.task_wait", [h], res), ty: res)
+                    _ => return unsupported(pos, "`wait` on anything but a task variable")
+            unsupported(pos, "`?`")
+        _ => unsupported(pos, "`?`")
+
+## `print` holds the output buffer's lock while a program runs tasks, so a
+## line from one task isn't split by another's.
+fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
+    if not tk.on
+        return lower_print_body(args, pos)
+    call("rt.out_lock", [], Ty.Unit)
+    r := lower_print_body(args, pos)
+    call("rt.out_unlock", [], Ty.Unit)
+    r
+
+# ---- the functions that run tasks ----
+
+## Start a function made by the compiler: the state `lower_fn` resets.
+fn Lower.synth_begin(mut self, name str, params List[Ty]) List[int]
+    fname = name
+    ret = Ty.Unit
+    blocks = []
+    vals = []
+    names = []
+    sealed = []
+    closed = []
+    preds = []
+    defs = []
+    incomplete = []
+    scopes = [Map[str, str]()]
+    var_ty = {}
+    var_vals = {}
+    nvars = 0
+    loops = []
+    cur = new_block()
+    sealed[cur] = true
+    mut ps := List[int]()
+    for t in params
+        v := new_value(t, "")
+        blocks[cur].params.push(v)
+        ps.push(v)
+    ps
+
+fn Lower.synth_end(mut self, params List[int])
+    func := simplify(fold(simplify(Func(
+        name: fname,
+        params: params,
+        ret: Ty.Unit,
+        blocks: blocks,
+        vals: vals,
+        names: names,
+    ))))
+    for err in verify(func)
+        problems.push(Problem(
+            rule: "native.build.2",
+            pos: ast.Pos(line: 1, col: 1),
+            message: "internal error: invalid MIR: {err}",
+        ))
+    funcs.push(func)
+
+## For each `spawn` site a function `task.K(rec)` that loads the arguments
+## from the record, makes the call and stores the result; and `rt.dispatch`.
+fn Lower.build_task_fns(mut self)
+    if not tk.on
+        return
+    for k in 0..tk.sites.len()
+        s := tk.sites[k]
+        ps := synth_begin("task.{k}", [Ty.Int])
+        rec := ps[0]
+        mut vs := List[int]()
+        for j in 0..s.params.len()
+            at := op("add", [rec, konst(T_ARGS + 8 * j, Ty.Int)], Ty.Int)
+            vs.push(prim_op(if s.params[j].is_float() then "loadf" else "load64", [at], s.params[j]))
+        r := call(s.func, vs, s.ret)
+        if not s.ret.is_unit()
+            at := op("add", [rec, konst(T_RESULT, Ty.Int)], Ty.Int)
+            prim_op(if s.ret.is_float() then "storef" else "store64", [at, r], Ty.Unit)
+        finish(return_of(-1))
+        synth_end(ps)
+    ps := synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
+    for k in 0..tk.sites.len()
+        yes := new_block()
+        no := new_block()
+        sealed[yes] = true
+        sealed[no] = true
+        branch(op("eq", [ps[0], konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+        cur = yes
+        call("task.{k}", [ps[1]], Ty.Unit)
+        finish(return_of(-1))
+        cur = no
+    finish(return_of(-1))
+    synth_end(ps)

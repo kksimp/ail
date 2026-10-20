@@ -742,6 +742,64 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, os)
             put_gpr(i.dst, d)
+        # Threads and atomics (ADRs 0599, 0600): ARMv8.1 LSE read-modify-write
+        # operations, `ldar`/`stlr`, all sequentially consistent.
+        "atomic_load" =>
+            d := out_gpr(i.dst, S1)
+            a.ldar(d, gpr(i.args[0], S0))
+            put_gpr(i.dst, d)
+        "atomic_store" => a.stlr(gpr(i.args[1], S1), gpr(i.args[0], S0))
+        "atomic_xchg" =>
+            addr := gpr(i.args[0], S0)
+            v := gpr(i.args[1], S1)
+            a.swpal(v, S2, addr)
+            put_gpr(i.dst, S2)
+        "atomic_add" =>
+            addr := gpr(i.args[0], S0)
+            v := gpr(i.args[1], S1)
+            a.ldaddal(v, S2, addr)
+            put_gpr(i.dst, S2)
+        "atomic_cas" =>
+            addr := gpr(i.args[0], S0)
+            e := gpr(i.args[1], S2)
+            a.mov_rr(S2, e)
+            n := gpr(i.args[2], S1)
+            a.casal(S2, n, addr)
+            put_gpr(i.dst, S2)
+        "sp" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, SP)
+            put_gpr(i.dst, d)
+        "clone" =>
+            if os == MACOS
+                a.brk()
+                return
+            # clone(CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM, stack, 0, 0, arg)
+            # as on x86-64; the child finds `arg` still in x4.
+            parallel([move_of(1, i.args[0]), move_of(4, i.args[1])])
+            a.mov_ri(0, 331520)
+            a.mov_ri(2, 0)
+            a.mov_ri(3, 0)
+            a.mov_ri(S2, 220)
+            a.svc(0)
+            parent := a.label()
+            a.cmp_ri(0, 0)
+            a.b_cond(NE, parent)
+            a.mov_rr(0, 4)
+            a.mov_ri(FP, 0)
+            a.bl("rt.worker_main")
+            a.brk()
+            a.bind(parent)
+            put_gpr(i.dst, 0)
+        "restart" =>
+            if os == MACOS
+                a.brk()
+                return
+            parallel([move_of(S0, i.args[0]), move_of(0, i.args[1])])
+            a.mov_rr(SP, S0)
+            a.mov_ri(FP, 0)
+            a.bl("rt.worker_main")
+            a.brk()
         "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(
             loc[i.dst],
             i.args[0],

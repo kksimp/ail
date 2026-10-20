@@ -42,11 +42,11 @@ fn main() !
                 print(syntax.ast_text(lexed, syntax.parse(lexed.tokens)))
         "mir" =>
             if args.len() > 2
-                print(mir.module_text(lower_file(args[1], runtime(args[2])?)?))
+                print(mir.module_text(lower_file(args[1], runtime(args[2], args[1])?)?))
             else
                 print(mir.module_text(lower_file(args[1], none)?))
         "build" =>
-            m := lower_file(args[1], runtime(args[2])?)?
+            m := lower_file(args[1], runtime(args[2], args[1])?)?
             target := if args.len() > 3 then args[3] else "x86_64-linux"
             match target
                 "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
@@ -79,9 +79,11 @@ fn check_dump(path str, many bool) !
             print("skip {s.file} {s.first} {s.last}")
 
 ## The native runtime in directory `dir`, parsed as one program.
-fn runtime(dir str) !ast.Program
+fn runtime(dir str, path str) !ast.Program
     mut texts := List[str]()
-    for name in ["prim.ail", "core.ail"]
+    # The task runtime links only into a program that may use tasks (ADR 0599).
+    tasks := mir.uses_tasks(fs.read_text(path)?)
+    for name in ["prim.ail", "core.ail", if tasks then "task.ail" else "notask.ail"]
         texts.push(fs.read_text("{dir}/{name}")?)
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 

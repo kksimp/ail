@@ -1,0 +1,247 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Tasks (conc.task.*, ADRs 0599-0601): a pool of worker threads sized to the
+## cores (at most 8, conc.par.9) that take tasks from one queue; `spawn` puts
+## a task record on the queue and `wait` sleeps on the record's state word.
+## Linux only: a thread is a `clone` with a stack from `mmap` and every sleep
+## is a futex. Only linked into a program that spawns tasks or runs `par for`
+## (`notask.ail` stands in otherwise). The locks, thread identity and the
+## allocator's lock are in `core.ail`.
+##
+## A task record (heap, 8-byte words):
+##   +0 state (0 queued or running, 2 done, 3 trapped)   +8 task id (picks
+##   the function in `dispatch`)   +16 result   +24 next in the queue
+##   +32 trap kind   +40 a   +48 b   +56 head string   +64 operator string
+##   +80 arguments, 8 bytes each
+## The pool block (mmap'd, 8-byte words):
+##   +0 lock   +8 head   +16 tail   +24 seq (idle workers sleep on it)
+##   +32 live workers   +40 workers blocked in `wait`   +48 idle workers
+##   +56 target workers   +128 the task each worker runs, by worker index
+
+P_LOCK := 0
+P_HEAD := 8
+P_TAIL := 16
+P_SEQ := 24
+P_LIVE := 32
+P_BLOCKED := 40
+P_IDLE := 48
+P_TARGET := 56
+P_CUR := 128
+
+T_STATE := 0
+T_ID := 8
+T_RESULT := 16
+T_NEXT := 24
+T_KIND := 32
+T_A := 40
+T_B := 48
+T_HEAD := 56
+T_OP := 64
+T_ARGS := 80
+
+## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
+fn cores() int
+    buf := alloc(128)
+    k := if target() == 0 then 204 else 123
+    r := syscall(k, 0, 128, buf, 0, 0, 0)
+    mut n := 0
+    if r > 0
+        for i in 0..r
+            mut b := load8(buf + i)
+            while b != 0
+                n += b.bit_and(1)
+                b = b.shr(1)
+    if n < 1
+        n = 1
+    if n > 8
+        n = 8
+    n
+
+## The pool block, made on first use. From then on the process has more
+## than one thread, so allocation takes its lock (`MULTI`).
+fn pool() int
+    p := load64(global(TASKS))
+    if p != 0
+        return p
+    q := sys_mmap(4096)
+    if q < 0
+        fail(1, 0, 0)
+    store64(q + P_TARGET, cores())
+    stacks := sys_mmap_lazy(MAXW * STACK_SZ)
+    if stacks < 0
+        fail(1, 0, 0)
+    store64(global(STACKS), stacks)
+    store64(global(TASKS), q)
+    store64(global(MULTI), 1)
+    q
+
+## A task record for function `id` of `dispatch`; the caller stores the
+## arguments from `T_ARGS` and calls `task_start`.
+fn task_new(id int) int
+    rec := alloc(T_ARGS + 8 * 14)
+    store64(rec + T_ID, id)
+    rec
+
+## Queue the task and make sure a worker will take it: wake an idle one, or
+## start one while fewer than the target are running.
+fn task_start(rec int)
+    p := pool()
+    lock(p + P_LOCK)
+    tail := load64(p + P_TAIL)
+    if tail == 0
+        store64(p + P_HEAD, rec)
+    else
+        store64(tail + T_NEXT, rec)
+    store64(p + P_TAIL, rec)
+    store64(p + P_SEQ, load64(p + P_SEQ) + 1)
+    idle := load64(p + P_IDLE)
+    live := load64(p + P_LIVE)
+    mut fresh := -1
+    if idle == 0 and live - load64(p + P_BLOCKED) < load64(p + P_TARGET) and live < MAXW
+        store64(p + P_LIVE, live + 1)
+        fresh = live
+    unlock(p + P_LOCK)
+    if idle > 0
+        futex_wake(p + P_SEQ, 1)
+    if fresh >= 0
+        start_thread(p, fresh)
+
+## Worker `idx`: its stack's low page is a guard, then a new thread.
+fn start_thread(p int, idx int)
+    base := load64(global(STACKS)) + idx * STACK_SZ
+    k := if target() == 0 then 10 else 226
+    syscall(k, base, 4096, 0, 0, 0, 0)
+    if clone(base + STACK_SZ - 64, idx) < 0
+        fail(1, 0, 0)
+
+## The loop of worker `idx`: run queued tasks, sleep on `seq` when there are
+## none. Entered by `clone` and by `restart` after a trap.
+fn worker_main(idx int)
+    p := load64(global(TASKS))
+    while true
+        lock(p + P_LOCK)
+        rec := load64(p + P_HEAD)
+        if rec != 0
+            next := load64(rec + T_NEXT)
+            store64(p + P_HEAD, next)
+            if next == 0
+                store64(p + P_TAIL, 0)
+            unlock(p + P_LOCK)
+            store64(p + P_CUR + 8 * idx, rec)
+            dispatch(load64(rec + T_ID), rec)
+            store64(p + P_CUR + 8 * idx, 0)
+            finish_task(rec, 2)
+        else
+            s := load64(p + P_SEQ)
+            store64(p + P_IDLE, load64(p + P_IDLE) + 1)
+            unlock(p + P_LOCK)
+            futex_wait(p + P_SEQ, s.bit_and(4294967295))
+            lock(p + P_LOCK)
+            store64(p + P_IDLE, load64(p + P_IDLE) - 1)
+            unlock(p + P_LOCK)
+
+## Publish a task's end (its result is already stored) and wake its waiters.
+fn finish_task(rec int, state int)
+    atomic_xchg(rec + T_STATE, state)
+    futex_wake(rec + T_STATE, 2147483647)
+
+## Called first by `trap`: on a worker, the trap ends the task and the
+## worker goes on with the next one; on the main thread it returns and the
+## process ends as usual.
+fn on_trap(kind int, a int, b int, head str, op str, tail str)
+    k := worker_index()
+    if k < 0
+        return
+    p := load64(global(TASKS))
+    rec := load64(p + P_CUR + 8 * k)
+    store64(rec + T_KIND, kind)
+    store64(rec + T_A, a)
+    store64(rec + T_B, b)
+    store64(rec + T_HEAD, str_addr(head))
+    store64(rec + T_OP, str_addr(op))
+    # A trap in the middle of a `print` still holds the output lock.
+    if atomic_load(global(OUT_OWNER)) == k + 2
+        store64(global(OUT_DEPTH), 0)
+        atomic_store(global(OUT_OWNER), 0)
+        unlock(global(OUT_LOCK))
+    store64(p + P_CUR + 8 * k, 0)
+    finish_task(rec, 3)
+    restart(load64(global(STACKS)) + (k + 1) * STACK_SZ - 64, k)
+
+## `t.wait()?` in `main`: sleep until the task ends, then its result word; a
+## trapped task ends the program as the interpreter's uncaught `Trapped`
+## does (err.trace.1).
+fn task_wait(rec int) int
+    if atomic_load(rec + T_STATE) == 0
+        k := worker_index()
+        if k >= 0
+            wait_enter()
+        while atomic_load(rec + T_STATE) == 0
+            futex_wait(rec + T_STATE, 0)
+        if k >= 0
+            wait_leave()
+    if atomic_load(rec + T_STATE) == 3
+        report_trapped(rec)
+    load64(rec + T_RESULT)
+
+## A worker is about to sleep in `wait`: it stops counting as running, and
+## a replacement starts if work is queued and nobody could take it.
+fn wait_enter()
+    p := load64(global(TASKS))
+    lock(p + P_LOCK)
+    store64(p + P_BLOCKED, load64(p + P_BLOCKED) + 1)
+    live := load64(p + P_LIVE)
+    mut fresh := -1
+    if load64(p + P_HEAD) != 0 and load64(p + P_IDLE) == 0
+        if live - load64(p + P_BLOCKED) < load64(p + P_TARGET) and live < MAXW
+            store64(p + P_LIVE, live + 1)
+            fresh = live
+    unlock(p + P_LOCK)
+    if fresh >= 0
+        start_thread(p, fresh)
+
+fn wait_leave()
+    p := load64(global(TASKS))
+    lock(p + P_LOCK)
+    store64(p + P_BLOCKED, load64(p + P_BLOCKED) - 1)
+    unlock(p + P_LOCK)
+
+## `error: Trapped(rule: "RULE", message: "LINE:COL: MESSAGE")` on standard
+## error, then exit 1. The trap's head is `PATH:LINE:COL: trap[RULE]: `.
+fn report_trapped(rec int)
+    h := load64(rec + T_HEAD)
+    n := load64(h)
+    d := h + 16
+    # `trap[`
+    mut t := 0
+    while t + 5 <= n and not is_trap_mark(d + t)
+        t += 1
+    # The location: the digits and colon before `: trap[`.
+    mut j := t - 3
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    j -= 1
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    flush()
+    out_str("error: Trapped(rule: \"")
+    mut e := t + 5
+    while e < n and load8(d + e) != 93
+        e += 1
+    out_bytes(d + t + 5, e - t - 5)
+    out_str("\", message: \"")
+    out_bytes(d + j + 1, t - j - 2)
+    out_byte(32)
+    trap_body(load64(rec + T_KIND), load64(rec + T_A), load64(rec + T_B), str_at(load64(rec + T_OP)))
+    out_str("\")\n")
+    flush_to(2)
+    sys_exit(1)
+
+fn is_trap_mark(a int) bool
+    load8(a) == 116 and load8(a + 1) == 114 and load8(a + 2) == 97 and load8(a + 3) == 112 and load8(a + 4) == 91
+
+## The function of task `id`: written by the compiler, one case per `spawn`
+## site and parallel loop.
+fn dispatch(id int, rec int)
+    todo
