@@ -9,6 +9,7 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.

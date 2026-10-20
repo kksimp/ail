@@ -150,3 +150,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0142](0142-positional-constructor-arguments.md) | Struct and variant values can be built positionally when no swap could compile (amends 0058) | Accepted | 2026-10-05 |
 | [0143](0143-empty-literals-typed-by-use.md) | An empty `[]` or `{}` declared with `:=` takes its type from its first use (amends 0090) | Accepted | 2026-10-05 |
 | [0144](0144-else-as-an-expression.md) | `else` is also an expression: `e else d` and `e else return ...` *(delegated)* | Accepted | 2026-10-05 |
+| [0150](0150-ail-api-outline.md) | `ail api` prints a program's declarations without bodies, as one-line JSON *(delegated)* | Accepted | 2026-10-20 |
+| [0151](0151-stable-symbol-ids-and-references.md) | Symbols have path ids; `--symbols` lists every reference by id *(delegated)* | Accepted | 2026-10-20 |
+| [0152](0152-doc-comment-attachment.md) | A doc comment is the run of `##` lines directly above a declaration *(delegated)* | Accepted | 2026-10-20 |
