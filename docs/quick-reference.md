@@ -544,16 +544,19 @@ struct Todo
     hours float
     tags List[str]
     note str?              # may be missing; `none` writes `null`
+    env Map[str, str]      # an object; lists, maps, optionals nest freely
 
 impl ToJson for Todo       # t.to_json() Json: an object of the fields in order
 impl FromJson for Todo     # Todo.from_json(j) Todo ! JsonError
 
-t := Todo.from_json(doc)?   # err.message: "missing hours", "expected a string, found number"
-doc.need("id")?.need_str()?  # the same checks by hand: need, need_str/num/int/bool/arr
+t := Todo.from_json(doc)?   # err.message names the path: "missing tags[2]", "id: expected a string, found number"
+doc.need("id")?.need_str()?  # the same checks by hand: need, need_str/num/int/bool/arr/obj
 ```
 
-Enums: a variant without fields is its name (`"Red"`); `FromJson` reads
-only those. `ail api --expanded FILE` prints the code a derive generated.
+Enums: a variant without fields is its name (`"Red"`), one with fields
+`{"kind": "Circle", "r": 2.0}`. Generic types derive `ToJson` with bounds
+(`impl ToJson for Pair[A ToJson, B ToJson]`) but not `FromJson` yet.
+`ail api --expanded FILE` prints the code a derive generated.
 
 ## Values and `mut`
 

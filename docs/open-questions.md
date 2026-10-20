@@ -171,6 +171,9 @@ generic code (ADR 0080), as Swift's witness tables provide. To be decided
 with the standard library (`Default`, numeric `zero`). `Hash` already
 behaves as if it required `Eq` (a `[T Hash]` bound allows `==`,
 [ADR 0133](decisions/0133-automatic-hash.md)), so the answer must cover it.
+`FromJson` for generic types (`Pair[A, B]`) waits on this: its derived
+`Pair.from_json` must call `A.from_json` through a bound
+([ADR 0343](decisions/0343-json-derives-maps-optionals-enum-payloads.md)).
 *Owner: AI under ADR 0076.*
 
 ## OQ-040 — `else` as an expression
