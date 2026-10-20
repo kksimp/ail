@@ -196,42 +196,60 @@ ADR 0076; decide when a real program needs it.*
 **Resolved** by [ADR 0209](decisions/0209-nested-optionals.md) (distinct nested types, `none` is the outermost).
 
 ## OQ-045 — Capability manifests for packages
-[ai-first-plan.md §3.2](design/ai-first-plan.md) gives every function an
-inferred capability set (`fs`, `env`, `proc`, `clock`, `net`) and lets
-`ail run --deny` refuse a program at compile time. The package half is open:
-should a package manifest declare the capabilities a dependency may use, so
-an AI-added dependency can't reach the filesystem or network unless granted
-(wishlist 5.1)? Options: (a) a `capabilities` list per dependency in the
-manifest, checked like `--deny` per package (recommended: it reuses the
-inference, and the grant is visible in one file); (b) capabilities as values
-passed explicitly from `main` (wishlist 6.6; most explicit, but costs tokens
-on every call chain); (c) nothing at the package level. Waits on Topic 13
-(packages). *Owner: designer.*
+**Resolved** by [ADR 0232](decisions/0232-capabilities-per-dependency.md) (`caps LIST` per `dep` line in `ail.pkg`, default none, checked at compile time by the `--deny` inference).
 
 ## OQ-046 — Deterministic execution mode
 **Resolved** by [ADR 0207](decisions/0207-deterministic-mode.md) (a guarantee for programs without `clock`, `random`, `proc` and `net`, plus `--deterministic`).
 
 ## OQ-047 — Inserting into and removing from lists
-`List` has `push`, `pop` and `swap` but no `insert(i, x)`, `remove(i)`,
-`extend(xs)` or concatenation, so the editor in `tools/edit/edit.ail`
-([ADR 0180](decisions/0180-editor-written-in-ail.md)) rebuilds its line list
-with a hand-written `splice` for every line edit. Options: (a) `insert`,
-`remove_at` and `extend` methods (recommended: one token each, the common
-names an agent reaches for, and the interpreter can do them in place);
-(b) `+` on lists (concise, but hides an O(n) copy); (c) a general
-`splice(from, to, items)` (one method, less obvious). *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0214](decisions/0214-list-editing-methods.md) (`insert`, `remove_at`, `extend`, `clear`, `reverse`, `first`).
 
 ## OQ-048 — Editing text without string indexing
-`str` has no indexing, slicing or `len()` (OQ-043), and `to_lower` exists
-only on `char`. The editor goes through `s.chars()`, slices the list, and
-joins it back with `join("")`: 19 `chars()` and 10 `join("")` in about 1,000
-lines, a few tokens and an O(n) copy each. Options: (a) character slicing
-`s.slice(a, b)` and `s.char_count()` (explicit about counting characters);
-(b) decide OQ-043 and add `s[a..b]` in the unit it picks; (c) keep
-`chars()` and add `str.to_lower`/`to_upper` only. Recommendation: (a) now,
-since it doesn't prejudge OQ-043, plus `str.to_lower`. *Owner: AI under ADR
-0076.*
+**Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
+
+## OQ-060 — Contracts beyond runtime checks
+[ADRs 0210–0213](decisions/0210-contract-syntax.md) add `requires` and
+`ensures`, checked at run time. Open: (1) `old(x)`, a parameter's value on
+entry, for `ensures` on `mut` parameters (recommended: add it, evaluated only
+when checks are on); (2) whether implementations inherit a trait method's
+contracts (recommended: yes, with Liskov rules: an implementation may weaken
+`requires` and strengthen `ensures`); (3) type invariants and loop
+invariants; (4) static proof, and whether an optimising build keeps the
+checks it can't prove (recommended: keep them, so `--no-contracts` stays an
+explicit choice). *Owner: AI under ADR 0076.*
+
+## OQ-071 — Standard modules without `use` lines
+[ADR 0184](decisions/0184-round-3-syntax-measurements.md) measured the
+`use std.env` / `use std.fs` / `use std.proc` lines of `examples/tool.ail` at
+4.3% of that 34-line tool, though only 0.1% of the corpus. Since standard
+modules are always reached qualified (`fs.read_text`), the line repeats what
+each use already says. Options: (a) standard modules are in scope without
+`use`, unless a local or user module has the name (recommended: small agent
+tools are the use case AIL targets, and `ail effects` already lists what a
+program touches); (b) one-line `use std.env, fs, proc` (−1.6% of `tool`);
+(c) keep one line per module. Decide with the user-modules work (lane 3),
+which owns module name resolution. *Owner: AI under ADR 0076.*
+
+## OQ-072 — Display text written on error variants
+`sheet` spends about 57 tokens, and `json` about 12, on `impl ToStr` blocks
+whose only job is one message per error variant (`BadName(text) => "bad cell
+name '{text}'"`). Options: (a) a message after each variant of an `error`
+type, `BadName(text str) "bad cell name '{text}'"`, interpolating its fields
+(about −0.5% of the corpus; the message sits next to the variant, as in
+Rust's `thiserror`); (b) keep `impl ToStr` (recommended for now: the saving
+is a tie under ADR 0076, and it adds a declaration form). Revisit if
+error-heavy programs join the corpus. *Owner: AI under ADR 0076.*
+
+## OQ-049 — A package registry and version ranges
+Dependencies come from a path or a pinned git commit
+([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
+central registry with names and semver ranges (`dep json 1.4`), resolved
+into `ail.lock` (recommended eventually: short `dep` lines and discovery for
+agents, but it needs hosting, accounts, a naming policy and a solver);
+(b) git URLs only, with tags as versions (no service to run; long URLs in
+every manifest); (c) a registry that only maps names to git URLs and commits
+(no solver; small service). Involves hosting and publishing, so it is the
+designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
 
 ## OQ-090 — May accelerator drivers compile AIL-generated code?
 ADR 0010 forbids external backends. GPUs and NPUs can't be reached without

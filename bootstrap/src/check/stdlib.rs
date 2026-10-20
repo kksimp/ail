@@ -157,6 +157,12 @@ impl<'p> Checker<'p> {
             ("random", "seed") => (vec![Int], Unit),
             ("time", "now_ms") => (vec![], Int),
             ("time", "sleep_ms") => (vec![Int], Unit),
+            ("ui", "clipboard_get") => (vec![], opt(Str)),
+            ("ui", "clipboard_set") => (vec![Str], Unit),
+            ("ui", "open") => (
+                vec![Str, Int, Int],
+                Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
+            ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
         }
     }

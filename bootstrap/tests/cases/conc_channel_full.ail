@@ -1,0 +1,19 @@
+# conc.share.3: sending blocks while the channel is full and receiving
+# blocks while it is empty. The bootstrap runs a new task at once, until it
+# blocks (ADR 0186), so this order is deterministic.
+
+fn produce(ch Channel[int], n int)
+    for i in 1..=n
+        print("send {i}")
+        ch.send(i)
+    ch.close()
+
+fn main()
+    ch := Channel[int](2)
+    p := spawn produce(ch, 4)
+    print("producer blocked")
+    while true
+        v := ch.recv() else break
+        print("got {v}")
+    p.wait() else
+        print("producer trapped")

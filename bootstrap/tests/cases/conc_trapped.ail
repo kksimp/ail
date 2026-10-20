@@ -1,0 +1,13 @@
+# conc.task.6: a trapped task makes `wait` fail with `Trapped`; the program
+# goes on.
+
+fn divide(a int, b int) int
+    a / b
+
+fn main()
+    t := spawn divide(10, 0)
+    n := t.wait() else err
+        print("rule: {err.rule}")
+        print("message: {err.message}")
+        -1
+    print(n)

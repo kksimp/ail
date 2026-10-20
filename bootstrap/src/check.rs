@@ -18,12 +18,16 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+pub mod conc;
+mod contracts;
+mod comprehension;
 mod stdlib;
 pub mod effects;
 pub mod parallel;
 mod privacy;
 mod testing;
 mod traits;
+mod ui;
 
 use std::collections::HashMap;
 
@@ -74,6 +78,9 @@ pub enum Ty {
     Param(usize),
     /// `any Trait` (trait.any.1).
     Any(usize),
+    /// `Task[T]`, `TaskGroup` (with `Unit`), `Channel[T]` and `Mutex[T]`
+    /// (conc.task.1, conc.share.2-3, ADRs 0186-0189).
+    Conc(conc::Conc, Box<Ty>),
 }
 
 /// The error part of `T ! E`: an explicit set, or the inferred set of a
@@ -167,7 +174,7 @@ const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &[
     "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
-    "Map", "Set",
+    "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex",
 ];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
@@ -242,6 +249,8 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
+    c.diags.extend(conc::check_handles(prog));
+    c.diags.extend(effects::check_contracts(prog, &c.resolved));
     c.diags.extend(parallel::check_par(prog, &c.resolved));
     (c.diags, c.resolved)
 }
@@ -367,6 +376,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
         (Ty::Err, _) | (_, Ty::Err) => true,
         (Ty::List(x), Ty::List(y)) | (Ty::Opt(x), Ty::Opt(y)) | (Ty::Set(x), Ty::Set(y)) => same(x, y),
         (Ty::Map(k, v), Ty::Map(l, w)) => same(k, l) && same(v, w),
+        (Ty::Conc(a, x), Ty::Conc(b, y)) => a == b && same(x, y),
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) => {
             s == t && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y))
         }
@@ -378,7 +388,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
 fn has_err(t: &Ty) -> bool {
     match t {
         Ty::Err => true,
-        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) => has_err(x),
+        Ty::List(x) | Ty::Opt(x) | Ty::Set(x) | Ty::Conc(_, x) => has_err(x),
         Ty::Map(k, v) => has_err(k) || has_err(v),
         Ty::Res(x, _) => has_err(x),
         Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(has_err),
@@ -897,6 +907,7 @@ impl<'p> Checker<'p> {
             Expr::Match { pos, .. } => reject(self, *pos, "`match`"),
             Expr::Try { pos, .. } => reject(self, *pos, "`?`"),
             Expr::Else { pos, .. } => reject(self, *pos, "`else`"),
+            Expr::Comp { pos, .. } => reject(self, *pos, "a comprehension"),
             Expr::TypeArgs { pos, .. } => reject(self, *pos, "a type"),
         }
     }
@@ -1049,6 +1060,7 @@ impl<'p> Checker<'p> {
                 self.require_key(&first, t.pos);
                 return ty;
             }
+            n if conc::TYPE_NAMES.contains(&n) => return self.conc_type(n, args, t.pos),
             n if SPEC_TYPES_NOT_YET.contains(&n) => {
                 self.unsupported(t.pos, format!("type `{n}` is not supported by the bootstrap yet (spec 04-types)"));
                 return Ty::Err;
@@ -1346,6 +1358,8 @@ impl<'p> Checker<'p> {
             Ty::Union(m) => m.iter().map(|t| self.ty_name(t)).collect::<Vec<_>>().join(" | "),
             Ty::Param(p) => self.tparams[*p].name.clone(),
             Ty::Any(tr) => format!("any {}", self.prog.traits[*tr].name),
+            Ty::Conc(conc::Conc::Group, _) => "TaskGroup".into(),
+            Ty::Conc(k, t) => format!("{}[{}]", k.name(), self.ty_name(t)),
         }
     }
 
@@ -1394,6 +1408,7 @@ impl<'p> Checker<'p> {
                 self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param, decl: None });
             }
         }
+        self.check_contracts(f, &sig.ret);
         let need = !Self::returns_nothing(&sig.ret);
         let got = self.block(body, need.then_some(&sig.ret), need);
         if need && !self.accepts(&sig.ret, &got) {
@@ -2095,6 +2110,11 @@ impl<'p> Checker<'p> {
             Expr::Range { lo, hi, .. } => lo.as_deref().and_then(e).or_else(|| hi.as_deref().and_then(e)),
             Expr::Map(pairs, _) => pairs.iter().find_map(|(k, v)| e(k).or_else(|| e(v))),
             Expr::Set(items, _) => items.iter().find_map(e),
+            Expr::Comp { elem, value, clauses, .. } => clauses
+                .iter()
+                .find_map(|c| e(&c.iter).or_else(|| c.cond.as_ref().and_then(e)))
+                .or_else(|| e(elem))
+                .or_else(|| value.as_deref().and_then(e)),
             Expr::If { branches, els, .. } => branches
                 .iter()
                 .find_map(|(c, b)| {
@@ -2206,6 +2226,9 @@ impl<'p> Checker<'p> {
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
             Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
             Expr::Set(items, pos) => self.set_literal(items, *pos, expect),
+            Expr::Comp { kind, elem, value, clauses, .. } => {
+                self.comprehension(*kind, elem, value.as_deref(), clauses, expect)
+            }
             Expr::Range { lo, hi, pos, .. } => {
                 self.range_bounds(lo.as_deref(), hi.as_deref());
                 self.unsupported(
@@ -2646,6 +2669,9 @@ impl<'p> Checker<'p> {
         }
         if n == "assert" || n == "assert_eq" {
             return self.assert_call(n, args, npos);
+        }
+        if let Some(t) = self.conc_constructor(n, targs, args, npos, expect) {
+            return t;
         }
         if let Some(t) = targs.and_then(|a| self.collection_constructor(n, a, npos)) {
             if !args.is_empty() {
@@ -3256,6 +3282,12 @@ impl<'p> Checker<'p> {
             self.args_only(args);
             return Ty::Err;
         }
+        if let Ty::Conc(k, inner) = &rt {
+            return self.conc_method(*k, inner, name, pos, args);
+        }
+        if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
         let cands = self.candidates(&rt, name);
         match cands.as_slice() {
             [] => {
@@ -3686,6 +3718,7 @@ impl<'p> Checker<'p> {
         let (want, rule, what) = match op {
             UnOp::Neg => (Ty::Int, "trait.op.1", "unary `-`"),
             UnOp::Not => (Ty::Bool, "type.bool.1", "`not`"),
+            UnOp::Spawn => return self.spawn_expr(operand, pos),
         };
         let t = self.expr(operand, Some(&want), true);
         if self.reject_unhandled(&t, operand.pos()) {
@@ -4184,9 +4217,12 @@ impl<'p> Checker<'p> {
                 } else {
                     covered[v] = true;
                 }
-                // expr.match.6: one binding (or `_`) per field, in order.
+                // expr.match.6: one binding (or `_`) per field, in order;
+                // expr.match.10: a bare name matches any fields and binds none.
                 let fields = &decl.variants[v].fields;
-                let given = bindings.as_deref().unwrap_or(&[]);
+                let Some(given) = bindings.as_deref() else {
+                    return Vec::new();
+                };
                 if fields.len() != given.len() {
                     let shown: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
                     let help = if fields.is_empty() {
@@ -4347,7 +4383,7 @@ fn may_be_same(a: &Ty, b: &Ty) -> bool {
     fn has_param(t: &Ty) -> bool {
         match t {
             Ty::Param(_) => true,
-            Ty::List(e) | Ty::Opt(e) | Ty::Set(e) => has_param(e),
+            Ty::List(e) | Ty::Opt(e) | Ty::Set(e) | Ty::Conc(_, e) => has_param(e),
             Ty::Map(k, v) => has_param(k) || has_param(v),
             Ty::Struct(_, args) | Ty::Enum(_, args) => args.iter().any(has_param),
             _ => false,

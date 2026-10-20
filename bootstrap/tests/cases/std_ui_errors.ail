@@ -1,0 +1,11 @@
+## std.ui.1-2, trait.method.3: wrong uses of a window.
+use std.ui
+
+fn main()
+    w := ui.open("t", 80, 24) else return
+    w.put(0, 0, "x", 0, 0)
+    mut v := w
+    v.draw()
+    v.put(0, 0, 1, 0, 0)
+    n := v.size() + 1
+    ui.open("t", 80) else return

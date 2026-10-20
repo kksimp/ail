@@ -1,0 +1,13 @@
+# conc.share.4-5, conc.task.1: the handle types' constructors and methods.
+
+fn work() int
+    1
+
+fn main()
+    ch := Channel(4)
+    good := Channel[int](4)
+    good.push(1)
+    good.send("one")
+    m := Mutex[str](1)
+    g := TaskGroup()
+    g.add(spawn work())

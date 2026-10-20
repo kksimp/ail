@@ -4,14 +4,14 @@ Chapter key: `eff`
 
 > **Status:** Drafted (partial). Specified: inferred effect sets, `@pure`, and
 > denying capabilities to a program. Not yet designed: effects written in
-> signatures and capability manifests for packages. Deterministic mode is
-> specified in the last section.
+> signatures. Capability grants in package manifests are specified with
+> denial. Deterministic mode is specified in the last section.
 
 ## Inference
 
 **eff.infer.1** — Every function has an *effect set*: the effects `io`,
 `fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
-`proc`, `clock`, `random` and `net`. The set is inferred; it is never written in
+`proc`, `clock`, `random`, `net` and `ui`. The set is inferred; it is never written in
 source. *(ADR 0163)*
 
 **eff.infer.2** — A function has `fail` if its return type is `T ! E`, `! E`,
@@ -27,7 +27,8 @@ constant expression runs no code (`mod.const.2–3`). *(ADR 0163)*
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`, and
-`time.*` gives `clock`, `random.*` gives `random`; an `unsafe` block gives `unsafe`; `spawn` gives
+`time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
+of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
 `spawn`. Nothing gives `net` yet. *(ADR 0163)*
 
 **eff.infer.5** — A call whose target is known from the types (a free
@@ -79,11 +80,29 @@ capability, such as `main -> save -> fs.write_text`. *(ADR 0165)*
 
 **eff.cap.2** — `LIST` is a comma-separated list of capabilities, or `all`
 for every capability. Any other name is a usage error (exit status 2) that
-lists the capabilities. *(ADR 0165)*
+lists the capabilities. In a manifest's `caps LIST` (`eff.cap.4–5`), `none`
+is also accepted, and an unknown name is a compile-time error at the
+manifest line. *(ADR 0165, ADR 0232)*
 
 **eff.cap.3** — `io` and the other effects are not capabilities and can't be
 denied: printing is how a program reports, and failure and mutation are
 already in signatures. *(ADR 0165)*
+
+**eff.cap.4** — A `dep` line's `caps LIST` (`mod.pkg.2`) grants that
+dependency the listed capabilities and no others; a `dep` line without
+`caps` grants none. Each function belongs to the package whose name is the
+first segment of its module, or else to the root package. A package's
+functions, including what they reach through other packages, must reach only
+capabilities that each grant of that package includes. Otherwise it is a
+compile-time error at the manifest line, one per grant and capability,
+naming a chain of calls from a function of the package (a public one if any
+reaches the capability), such as `geo.size -> clockwork.home -> env.cwd`.
+*(ADR 0232)*
+
+**eff.cap.5** — `caps LIST` on a `package` line limits that package's own
+functions the same way (`eff.cap.4`); for the root package it is an
+allow-list for the program. A `package` line without `caps` sets no limit.
+*(ADR 0232)*
 
 ## Deterministic execution
 

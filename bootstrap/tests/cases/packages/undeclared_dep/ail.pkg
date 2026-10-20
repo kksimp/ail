@@ -1,0 +1,3 @@
+# `b` is a dependency of `a`, not of the app (mod.pkg.3).
+package app
+dep a path vendor/a

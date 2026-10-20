@@ -178,8 +178,20 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
 | [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
 | [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |
+| [0177](0177-std-ui-text-grid-window.md) | `std.ui` is a window of text cells, shimmed with two pinned crates *(delegated)* | Accepted | 2026-10-20 |
+| [0178](0178-window-host-on-main-thread.md) | The main thread hosts the window; the interpreter keeps the grid *(delegated)* | Accepted | 2026-10-20 |
+| [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
+| [0240](0240-std-ui-mouse-scroll-clipboard-title.md) | `std.ui` adds mouse, scroll, clipboard and title *(delegated)* | Accepted | 2026-10-20 |
+| [0241](0241-editor-tabs-and-running.md) | The editor gets tabs, a file picker, mouse input and F5/F6 runs in its window front end *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
+| [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |
+| [0183](0183-bare-variant-patterns.md) | A bare variant pattern matches any fields: `Rect =>` for `Rect(_, _)` *(delegated)* | Accepted | 2026-10-20 |
+| [0184](0184-round-3-syntax-measurements.md) | Keep `:=`, `fn`, explicit `self`, return types and `use` lines after round-3 measurement *(delegated)* | Accepted | 2026-10-20 |
+| [0186](0186-deterministic-task-scheduler.md) | Run tasks in the interpreter on a deterministic, one-at-a-time scheduler; deadlocks trap *(delegated)* | Accepted | 2026-10-20 |
+| [0187](0187-trapped-and-task-groups.md) | `wait()` fails with `Trapped`; groups hold tasks that return nothing *(delegated)* | Accepted | 2026-10-20 |
+| [0188](0188-channel-api.md) | Channels: `Channel[T](capacity)`, `send`, `recv() T?`, `close` *(delegated)* | Accepted | 2026-10-20 |
+| [0189](0189-mutex-access-form.md) | Mutex access: `get`, `set`, `swap`, and `lock`/`unlock` pairs *(delegated)* | Accepted | 2026-10-20 |
 | [0194](0194-sized-numeric-types.md) | Sized numeric types: contextual literals, same-type arithmetic, trapping overflow *(delegated)* | Accepted | 2026-10-20 |
 | [0195](0195-sized-numeric-conversions.md) | Sized numbers convert with `to_<type>()` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0196](0196-inline-attribute.md) | `@inline` is accepted and recorded as a hint *(delegated)* | Accepted | 2026-10-20 |
@@ -196,6 +208,18 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
 | [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
 | [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0210](0210-contract-syntax.md) | Contracts are `requires` and `ensures` lines under the signature; `result` names the value *(delegated)* | Accepted | 2026-10-20 |
+| [0211](0211-contract-runtime-checks.md) | Contracts are checked at every call and trap with the values, blaming caller or function *(delegated)* | Accepted | 2026-10-20 |
+| [0212](0212-pure-conditions-and-no-contracts.md) | Conditions are pure, so `--no-contracts` can't change a program *(delegated)* | Accepted | 2026-10-20 |
+| [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |
+| [0214](0214-list-editing-methods.md) | List `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first` (resolves OQ-047) *(delegated)* | Accepted | 2026-10-20 |
+| [0215](0215-str-slice-and-search-methods.md) | `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper` (resolves OQ-048) *(delegated)* | Accepted | 2026-10-20 |
+| [0217](0217-agent-corpus-standing-benchmark.md) | Keep an agent-tool corpus as the standing token and speed benchmark; amends 0029 layer 1 *(delegated)* | Accepted | 2026-10-20 |
+| [0218](0218-agent-corpus-conventions.md) | Conventions for the agent-tool corpus programs *(delegated)* | Accepted | 2026-10-20 |
+| [0230](0230-package-manifest-ail-pkg.md) | A package's manifest is `ail.pkg`, one line per dependency *(delegated)* | Accepted | 2026-10-20 |
+| [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
+| [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
+| [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
 | [0236](0236-automatic-parallel-loops.md) | Run provably independent loops in parallel, with results identical to sequential *(delegated)* | Accepted | 2026-10-20 |
 | [0237](0237-par-for.md) | `par for` asserts independence; provable conflicts are errors *(delegated)* | Accepted | 2026-10-20 |
 | [0238](0238-parallel-runtime-model.md) | One work-stealing pool for tasks and parallel loops, with a minimum-work threshold *(delegated)* | Accepted | 2026-10-20 |

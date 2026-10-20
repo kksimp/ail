@@ -1,0 +1,11 @@
+# Path dependencies are imported by package name (mod.pkg.3).
+use geo
+use geo.shapes
+use textkit
+
+fn main()
+    p := geo.Point(x: 1, y: 2)
+    print(geo.describe(p))
+    print(shapes.area(shapes.Rect(w: 3, h: 4)))
+    print(textkit.shout("hi"))
+    print(geo.has_cache())

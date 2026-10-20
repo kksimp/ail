@@ -1,0 +1,9 @@
+Package(
+    name: "notes",
+    deps: [
+        Dep(name: "geo", path: "../geo", caps: ["fs"]),
+        Dep(name: "textkit", path: "vendor/textkit"),
+        Dep(name: "json", git: "https://github.com/example/ail-json", rev: "4f2a9c1e", caps: ["fs", "env"]),
+        Dep(name: "http", git: "https://github.com/example/ail-http", tag: "v1.4.0", caps: ["net", "clock"]),
+    ],
+)

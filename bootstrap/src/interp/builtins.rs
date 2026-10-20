@@ -205,7 +205,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Operand::Value(v) => v,
         };
         let mutating = match current {
-            Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort"),
+            Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
             Value::Map(_) => name == "remove",
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
@@ -243,6 +243,38 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Unit
             }
             (Value::List(items), "pop") => opt(Rc::make_mut(items).pop()),
+            // type.coll.14: `insert` allows the index `len`, `remove_at` doesn't.
+            (Value::List(items), "insert") => {
+                let i = a[0].int();
+                if usize::try_from(i).map_or(true, |u| u > items.len()) {
+                    trap::<()>(
+                        "type.coll.4",
+                        pos,
+                        format!("insert index {i} is out of bounds for a list of length {}", items.len()),
+                    )?;
+                }
+                let x = a.pop().expect("checked: two arguments");
+                Rc::make_mut(items).insert(i as usize, x);
+                Value::Unit
+            }
+            (Value::List(items), "remove_at") => {
+                let i = a[0].int();
+                element(items, i, pos)?;
+                Rc::make_mut(items).remove(i as usize)
+            }
+            (Value::List(items), "extend") => {
+                let Value::List(more) = &a[0] else { unreachable!("checked: a list") };
+                Rc::make_mut(items).extend(more.iter().cloned());
+                Value::Unit
+            }
+            (Value::List(items), "clear") => {
+                Rc::make_mut(items).clear();
+                Value::Unit
+            }
+            (Value::List(items), "reverse") => {
+                Rc::make_mut(items).reverse();
+                Value::Unit
+            }
             (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
             (Value::Set(t), "add") => {
                 let x = a.pop().expect("checked: one argument");
@@ -266,6 +298,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
                 "last" => opt(items.last().cloned()),
+                "first" => opt(items.first().cloned()),
                 "contains" | "index_of" => {
                     let mut found = None;
                     for (i, x) in items.iter().enumerate() {
@@ -397,6 +430,37 @@ impl<'a, W: Write> Interp<'a, W> {
             "byte_len" => Value::Int(text.len() as i64),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
+            "to_lower" => s(text.to_lowercase()),
+            "to_upper" => s(text.to_uppercase()),
+            // type.str.13: character positions; bounds are never clamped.
+            "slice" => {
+                let (lo, hi) = (a[0].int(), a[1].int());
+                let n = text.chars().count();
+                match (usize::try_from(lo), usize::try_from(hi)) {
+                    (Ok(l), Ok(h)) if l <= h && h <= n => {
+                        s(text.chars().skip(l).take(h - l).collect::<String>())
+                    }
+                    _ => {
+                        return trap(
+                            "type.str.13",
+                            pos,
+                            format!("slice({lo}, {hi}) is out of bounds for a str of length {n}"),
+                        );
+                    }
+                }
+            }
+            "char_at" => opt(usize::try_from(a[0].int()).ok().and_then(|i| text.chars().nth(i)).map(Value::Char)),
+            "find" => {
+                let sub = arg_str(0);
+                opt(text.find(&*sub).map(|b| Value::Int(text[..b].chars().count() as i64)))
+            }
+            "replace" => {
+                let from = arg_str(0);
+                if from.is_empty() {
+                    return trap("type.str.14", pos, "`replace` needs a non-empty text to find".into());
+                }
+                s(text.replace(&*from, &arg_str(1)))
+            }
             "starts_with" => Value::Bool(text.starts_with(&*arg_str(0))),
             "ends_with" => Value::Bool(text.ends_with(&*arg_str(0))),
             "contains" => Value::Bool(text.contains(&*arg_str(0))),

@@ -147,6 +147,11 @@ fn area(s Shape) int
     match s
         Circle(r) => 3 * r * r
         Rect(w, _) => w * w       # `_` skips a field
+
+fn round(s Shape) bool
+    match s
+        Circle => true            # bare: any fields, binds none
+        Rect => false
 ```
 
 ## Absence and errors
@@ -382,7 +387,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`.
+  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -402,7 +407,7 @@ mut out := []          # typed by its first use: out.push("a") makes a List[str]
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
-Also: `xs.pop()` and `xs.last()` (give `T?`), `xs.contains(x)`,
+Also: `xs.insert(i, x)`, `xs.remove_at(i)`, `xs.extend(ys)`, `xs.clear()`, `xs.reverse()`; `xs.pop()`, `xs.first()` and `xs.last()` (give `T?`), `xs.contains(x)`,
 `xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
 (a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
 `xs.sum()` (ints or floats). Slices don't clamp, and negative indexes are
@@ -417,6 +422,21 @@ for mut item in items      # `items` must be `mut`
 ```
 
 Inside a `for mut` loop, the body can't use the list itself (`items`).
+
+A comprehension builds a list, set or map in one expression:
+
+```ail fragment
+xs := [3, 1, 4]
+squares := [x * x for x in xs]             # [9, 1, 16]
+big := [x for x in xs if x > 2]            # [3, 4]
+pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # clauses nest, outermost first
+seen := {x % 2 for x in xs}                # a Set[int]
+sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
+nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
+```
+
+The loop variables are new names that end with the comprehension. `?` and
+`return` leave the function; `break` ends the comprehension.
 
 Loops use every core automatically when their iterations are independent:
 no output or capability, no `break`/`return`/`?`, and writes only to the
@@ -513,6 +533,17 @@ There are no item or wildcard imports, no `pub use`, and no import cycles.
 `fn T.m` must be in `T`'s module. Text forms show the module path:
 `geo.Point(x: 1, y: 2)`.
 
+A package root may hold `ail.pkg` (spec `mod.pkg.*`). Each `dep` is imported
+by its name (`use geo`, `use geo.shapes`) and may reach only the
+capabilities in its `caps` (none if omitted); `caps` on the `package` line
+limits the package itself. Violations are compile errors at the line.
+
+```
+package notes caps fs
+dep geo path ../geo caps fs
+dep textkit path vendor/textkit
+```
+
 ## Files, processes and the system
 
 Import a standard module with `use std.NAME` and call it by its name
@@ -540,6 +571,25 @@ fn main() !
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |
+
+A window is a grid of text cells; draw with `put`, then `present`:
+
+```ail
+use std.ui
+
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless: kind "no_display"
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, ctrl, _, _) =>                # "a", "enter", "f1"; Ctrl-S is ("s", true)
+                if key == "escape"
+                    break
+            Close => break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
+```
 
 ## Tests and assertions
 
@@ -576,11 +626,33 @@ A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
 fn double(x int) int
 ```
 
+## Tasks and channels
+
+```ail
+t := spawn load(1)            # runs load(1) as a task; args are copies
+p := t.wait()?                # its result; fails with Trapped if it trapped
+g := TaskGroup()              # tasks that return nothing
+g.add(spawn work(2))          # waited when g's block ends, or:
+g.wait_all()?
+ch := Channel[int](8)         # bounded: send waits while full
+ch.send(1)
+v := ch.recv() else break     # none once closed and empty
+ch.close()
+m := Mutex(0)                 # shared state: get, set, swap
+x := m.lock()                 # read-modify-write:
+m.unlock(x + 1)
+```
+
+Each task handle must be waited or added to a group exactly once, on every
+path. A handle can't be stored or passed; channels and mutexes can, and
+copies are the same channel or mutex. If every task is blocked, the program
+traps (deadlock).
+
 ## Effects
 
 Effects are inferred, never written: `io` (`print`, `fs`, `io`, `proc`),
-`fail` (`T ! E` result), `mutates` (`mut` parameter), and the capabilities
-`fs`, `env`, `proc`, `clock`, `random`, `net`. A call through `any Trait` counts every
+`fail` (`T ! E` result), `mutates` (`mut` parameter), `spawn`, and the capabilities
+`fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. A call through `any Trait` counts every
 implementation.
 
 ```ail
@@ -591,3 +663,17 @@ implementation.
 `@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
 area")` before a function warns at each call, with the reason (required).
 Unknown attributes are errors.
+
+## Contracts
+
+Lines directly under the signature; conditions are pure `bool`s. `result` is
+the returned value in `ensures`. A failed `requires` traps at the call
+(`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`), both
+with the arguments' values. `ail run --no-contracts` skips the checks.
+
+```ail
+fn divide(a int, b int) int
+    requires b != 0
+    ensures result * b + a % b == a
+    a / b
+```
