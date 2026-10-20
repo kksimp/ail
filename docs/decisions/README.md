@@ -368,3 +368,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
 | [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
+| [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
