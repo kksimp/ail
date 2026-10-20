@@ -59,16 +59,26 @@ fn sys_mmap(n int) int
 ## A thread-stack region: `n` bytes that need no commit up front.
 fn sys_mmap_lazy(n int) int
     t := target()
-    k := if t == 0 then 9 else 222
-    syscall(k, 0, n, 3, 16418, -1, 0)
+    k := if t == 0 then 9 else if t == 1 then 222 else 197
+    flags := if t == 2 then 4098 else 16418
+    syscall(k, 0, n, 3, flags, -1, 0)
 
 # ---- locks and threads (ADR 0599, 0600) ----
 
+## macOS has no futex: `__ulock_wait` and `__ulock_wake` of libSystem do the
+## same on a 32-bit word (UL_COMPARE_AND_WAIT is 1, ULF_WAKE_ALL 0x100).
 fn futex_wait(a int, v int)
+    if target() == 2
+        import_call("___ulock_wait", 1, a, v, 0)
+        return
     k := if target() == 0 then 202 else 98
     syscall(k, a, 128, v, 0, 0, 0)
 
 fn futex_wake(a int, n int)
+    if target() == 2
+        op := if n > 1 then 257 else 1
+        import_call("___ulock_wake", op, a, 0, 0)
+        return
     k := if target() == 0 then 202 else 98
     syscall(k, a, 129, n, 0, 0, 0)
 

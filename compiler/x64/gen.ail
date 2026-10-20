@@ -782,7 +782,12 @@ fn Gen.call_out(mut self, i mir.Inst)
             moves.push(move_of(INT_ARGS[ni], v))
             ni += 1
     parallel(moves)
-    a.call_sym(i.name)
+    if i.name.starts_with("libsys.")
+        # An import exists only on macOS; the runtime guards it with
+        # `target() == 2`, so on x86-64 Linux it is never reached.
+        a.ud2()
+    else
+        a.call_sym(i.name)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_xmm(i.dst, 0)
@@ -790,6 +795,13 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_gpr(i.dst, RAX)
 
 fn Gen.prim(mut self, i mir.Inst)
+    if i.name.starts_with("fn_addr:")
+        # The function's address is only used with an import: never reached.
+        a.ud2()
+        d := out_gpr(i.dst, S1)
+        a.mov_ri(d, 0)
+        put_gpr(i.dst, d)
+        return
     match i.name
         "load64" =>
             r := gpr(i.args[0], S0)

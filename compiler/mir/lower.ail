@@ -99,6 +99,8 @@ PRIMS := {
     "sp": "int",
     "clone": "int",
     "restart": "unit",
+    "import_call": "int",
+    "fn_addr": "int",
 }
 
 ## The `int` methods of two operands that are one instruction (expr.bit.1).
@@ -1199,9 +1201,21 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     mut vs := List[int]()
-    for a in args
-        v := lower_value(a.value, none)?
+    mut sym := ""
+    for k in 0..args.len()
+        # `import_call` and `fn_addr` name a symbol in their first argument,
+        # which must be a string literal (native-abi.md §11).
+        if k == 0 and (name == "import_call" or name == "fn_addr")
+            match args[0].value
+                Str(s, _) => sym = s
+                _ => return unsupported(expr_pos(args[0].value), "a computed symbol name")
+            continue
+        v := lower_value(args[k].value, none)?
         vs.push(v.id)
+    # An import is an ordinary call whose name carries the `libsys.` prefix
+    # (native-abi.md §11); the code generator calls it through its GOT slot.
+    if name == "import_call"
+        return Val(id: call("libsys.{sym}", vs, Ty.Int), ty: Ty.Int)
     t := match PRIMS[name]
         "int" => Ty.Int
         "float" => Ty.Float
@@ -1209,7 +1223,8 @@ fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
         "str" => Ty.Str
         _ => Ty.Unit
     mut i := inst(-1, "prim", vs)
-    i.name = name
+    # The symbol rides in the name: `fn_addr:rt.f`.
+    i.name = if sym == "" then name else "{name}:{sym}"
     if t.is_unit()
         emit_void(i)
         return Val(id: -1, ty: t)

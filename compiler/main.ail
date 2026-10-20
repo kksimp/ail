@@ -52,9 +52,6 @@ fn main() !
                 "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
                 "aarch64-linux" => print(obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)))
                 "aarch64-macos" =>
-                    if mir.uses_threads(m)
-                        io.eprint("{args[1]}:1:1: error[native.subset.1]: `spawn` and `par for` need threads, which macOS executables don't start yet (ADR 0599)")
-                        io.exit(1)
                     name := args[1].split("/").last() else args[1]
                     print(obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))))
                 _ =>

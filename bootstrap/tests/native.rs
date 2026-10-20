@@ -150,22 +150,24 @@ fn build_refuses_programs_outside_the_subset() {
     assert!(err.contains("error[native.subset.1]"), "{err}");
 }
 
-/// `spawn` and `par for` need threads, which Mach-O executables don't start
-/// yet (native.task.1, ADR 0599); atomics, which need none, build.
+/// A task program builds for macOS: its threads come from libSystem, so the
+/// Mach-O file carries a bind table naming `pthread_create` (native.task.1,
+/// ADR 0599); a program with no threads imports nothing.
 #[test]
-fn tasks_are_refused_for_macos() {
+fn tasks_build_for_macos_with_imports() {
     let tmp = std::env::temp_dir().join(format!("ail-native-macos-{}", std::process::id()));
     let build = |name: &str| {
-        Command::new(env!("CARGO_BIN_EXE_ail"))
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
             .current_dir(root())
             .args(["build", &format!("bootstrap/tests/native/run/{name}.ail"), "--target", "aarch64-macos", "-o"])
             .arg(&tmp)
             .output()
-            .unwrap()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        fs::read(&tmp).unwrap()
     };
-    let refused = build("task_basic");
-    let err = String::from_utf8_lossy(&refused.stderr);
-    assert!(!refused.status.success() && err.contains("error[native.subset.1]"), "{err}");
-    assert!(build("atomic_trap").status.success(), "an atomic needs no thread");
+    let has = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    assert!(has(&build("task_basic"), b"_pthread_create\0"));
+    assert!(!has(&build("arith"), b"_pthread_create\0"));
     let _ = fs::remove_file(&tmp);
 }

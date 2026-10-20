@@ -91,3 +91,14 @@ fn clone(top int, arg int) int
 ## abandoning its frames. Never returns.
 fn restart(top int, arg int)
     todo
+
+## Call the libSystem function `sym` (a string literal, with its leading
+## underscore) with up to four integer arguments through a pointer dyld
+## binds at load; gives its result (native-abi.md §11). macOS only: other
+## targets trap, so guard it with `target() == 2`.
+fn import_call(sym str, a int, b int, c int, d int) int
+    todo
+
+## The address of the function named by the string literal `sym`.
+fn fn_addr(sym str) int
+    todo

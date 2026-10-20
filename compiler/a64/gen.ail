@@ -693,7 +693,19 @@ fn Gen.call_out(mut self, i mir.Inst)
             moves.push(move_of(ni, v))
             ni += 1
     parallel(moves)
-    a.bl(i.name)
+    if i.name.starts_with("libsys.")
+        # An import: through the pointer slot dyld binds (native-abi.md §11).
+        # Other targets have no libSystem: the call traps if ever reached.
+        if os != MACOS
+            a.brk()
+        else
+            sym := i.name.replace("libsys.", "")
+            codegen.import_slot(mut img, sym)
+            a.adr_sym(S0, "imp:{sym}")
+            a.ldr(S0, S0, 0)
+            a.blr(S0)
+    else
+        a.bl(i.name)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_fpr(i.dst, 0)
@@ -701,6 +713,11 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_gpr(i.dst, 0)
 
 fn Gen.prim(mut self, i mir.Inst)
+    if i.name.starts_with("fn_addr:")
+        d := out_gpr(i.dst, S1)
+        a.adr_sym(d, i.name.replace("fn_addr:", ""))
+        put_gpr(i.dst, d)
+        return
     match i.name
         "load64" =>
             d := out_gpr(i.dst, S1)
@@ -794,9 +811,6 @@ fn Gen.prim(mut self, i mir.Inst)
             a.bind(parent)
             put_gpr(i.dst, 0)
         "restart" =>
-            if os == MACOS
-                a.brk()
-                return
             parallel([move_of(S0, i.args[0]), move_of(0, i.args[1])])
             a.mov_rr(SP, S0)
             a.mov_ri(FP, 0)

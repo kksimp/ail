@@ -331,6 +331,9 @@ pub fn Asm.bl(mut self, sym str)
 pub fn Asm.ret(mut self)
     word(3596551104)
 
+pub fn Asm.blr(mut self, n int)
+    word(3594452992 + n * 32)
+
 pub fn Asm.svc(mut self, imm int)
     word(3556769793 + imm * 32)
 
