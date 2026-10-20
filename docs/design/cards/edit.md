@@ -1,6 +1,6 @@
 # edit
 entry: main in edit.ail
-tests: 53 (`ail test` lists them)
+tests: 54 (`ail test` lists them)
 
 ## (root)
 ```
@@ -121,6 +121,7 @@ enum WsKey
 fn workspace_key(str, bool, bool) WsKey?
 struct Workspace
 fn base_name(str) str
+fn shown_path(str, str) str
 struct RenamePlan
 fn place(int, int, str) Range
 fn valid_name(str) bool
@@ -136,7 +137,7 @@ struct Source
 fn declared_at(List[Source], str) Loc?
 fn card_hits(Json, List[Source]) List[Hit]
 fn card_item(mut List[Hit], Json, List[Source], int, Loc) [mutates]
-fn problem_hits(str, mut Set[str]) List[Hit] [mutates]
+fn problem_hits(str, str, mut Set[str]) List[Hit] [mutates]
 fn list_files(str, int, int) List[str] [fs io]
 fn fuzzy(str, str) bool
 fn picker_list() std.ui.widgets.ListView
@@ -172,4 +173,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3397); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3409); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names

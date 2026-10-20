@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2]
+    if xs.contains(1)
+        print(1)

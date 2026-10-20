@@ -1,0 +1,3 @@
+fn main()
+    xs := List[int]()
+    print(xs)
