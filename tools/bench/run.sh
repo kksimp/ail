@@ -2,7 +2,7 @@
 # Before/after benchmark table (ADR 0492): tokens and speed for the examples,
 # the agent-tool corpus and tools/perfbench programs.
 #
-#   tools/bench/run.sh                    # before = main (or origin/main), 5 runs
+#   tools/bench/run.sh                    # before = origin/main, 5 runs
 #   tools/bench/run.sh --before REV       # any git revision
 #   tools/bench/run.sh --runs 10          # more timing runs per program
 #   tools/bench/run.sh --json             # machine-readable output
@@ -28,7 +28,9 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$before" ]; then
-    if git -C "$root" rev-parse --verify -q main >/dev/null; then before=main; else before=origin/main; fi
+    # origin/main, not a local main (which can be far behind); refresh it first.
+    git -C "$root" fetch -q origin main 2>/dev/null || echo "bench: could not fetch origin/main; using the last fetched copy" >&2
+    before=origin/main
 fi
 git -C "$root" rev-parse --verify -q "$before^{commit}" >/dev/null || {
     echo "bench: unknown revision: $before" >&2; exit 2; }
@@ -52,7 +54,7 @@ echo "bench: building the working tree ..." >&2
 
 after_label="$(git -C "$root" rev-parse --short HEAD)"
 git -C "$root" diff --quiet HEAD -- || after_label="$after_label+uncommitted"
-before_label="$(git -C "$wt" rev-parse --short HEAD) ($before)"
+before_label="$(git -C "$wt" rev-parse --short HEAD) ($before, $(git -C "$wt" log -1 --format=%s | cut -c1-60))"
 
 python3 "$root/tools/bench/bench.py" \
     --root "$root" \
