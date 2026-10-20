@@ -243,10 +243,11 @@ impl Parser {
                 Header::Reported
             }
             Tok::Kw("in") if cond => {
-                self.error("gram.foreign.1", pos, "AIL has no `in` operator for membership");
-                if let Some(d) = self.diags.last_mut() {
-                    d.help = Some("write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`".into());
-                }
+                self.diags.push(
+                    Diagnostic::new("gram.foreign.1", pos, "AIL has no `in` operator for membership")
+                        .help("write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`")
+                        .fix("write `.contains`", vec![Edit::operands(pos, "in", "$r.contains($l)")]),
+                );
                 Header::Reported
             }
             Tok::Sym("{") if matches!(self.peek_at(1), Tok::Newline) || self.line_ends_at(at) => self.braces(at),
@@ -343,6 +344,9 @@ impl Parser {
             });
             let mut d = Diagnostic::new("expr.bind.1", self.tok_pos(start), format!("`{name}` is declared without a type annotation"))
                 .help(format!("write `{name} := value`; the type is inferred. An empty collection names its type in the value: `List[int]()`"));
+            if eq.is_some() && empty {
+                d = d.fix("declare it with `:=` and the type as a constructor", vec![Edit::empty_decl(self.tok_pos(start))]);
+            }
             if let (Some(e), false) = (eq, empty) {
                 d = d.fix(
                     "declare it with `:=`",

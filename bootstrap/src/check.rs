@@ -4160,12 +4160,13 @@ impl<'p> Checker<'p> {
             Ty::List(t) => *t,
             Ty::Err => Ty::Err,
             Ty::Str => {
-                self.error_help(
-                    "type.str.2",
-                    recv.pos(),
-                    "a `str` can't be indexed",
-                    "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
-                );
+                let mut d = Diagnostic::new("type.str.2", recv.pos(), "a `str` can't be indexed")
+                    .help("index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part");
+                if let Expr::Name(n, _) = recv {
+                    let tail = if slice { ".join(\"\")" } else { "" };
+                    d = d.fix("index the characters", vec![Edit::call_with(recv.pos(), n.clone(), format!("{n}.chars()[$1]{tail}"))]);
+                }
+                self.diags.push(d);
                 Ty::Err
             }
             t => {
@@ -4313,11 +4314,23 @@ impl<'p> Checker<'p> {
         if !same(lt, rt) && (op.is_arithmetic() || !self.accepts(lt, rt)) {
             let msg = format!("`{sym}` needs operands of one type, found {} and {}", self.show(lt), self.show(rt));
             if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
-                self.error_help("trait.op.3", pos, msg, "build text with interpolation: \"{a}{b}\"");
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("build text with interpolation: \"{a}{b}\"")
+                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp\"")]),
+                );
             } else if *lt == Ty::Str && op == BinOp::Rem {
-                self.error_help("trait.op.3", pos, msg, "AIL has no `%` formatting; interpolate the values: \"n is {n}\"");
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("AIL has no `%` formatting; interpolate the values: \"n is {n}\"")
+                        .fix("interpolate", vec![Edit::operands(pos, "%", "$f")]),
+                );
             } else if *lt == Ty::Str && op == BinOp::Mul {
-                self.error_help("trait.op.3", pos, msg, "repeat a string with `s.repeat(n)`");
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("repeat a string with `s.repeat(n)`")
+                        .fix("write `.repeat`", vec![Edit::operands(pos, "*", "$l.repeat($r)")]),
+                );
             } else {
                 self.error("trait.op.3", pos, msg);
             }
@@ -4332,7 +4345,8 @@ impl<'p> Checker<'p> {
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
-                        .help("build text with interpolation: \"{a}{b}\""),
+                        .help("build text with interpolation: \"{a}{b}\"")
+                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp\"")]),
                 ),
                 t => {
                     let msg = format!("`{sym}` is not defined for {}", self.show(t));

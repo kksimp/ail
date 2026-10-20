@@ -405,11 +405,10 @@ impl Parser {
         let mutable = self.eat_kw("mut");
         if self.at_sym("(") {
             let at = self.pos();
-            self.error_help(
-                "expr.loop.1",
-                at,
-                "AIL has no C-style `for`",
-                "loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions",
+            self.diags.push(
+                Diagnostic::new("expr.loop.1", at, "AIL has no C-style `for`")
+                    .help("loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions")
+                    .fix("write the range loop", vec![Edit::c_for(at)]),
             );
             return None;
         }

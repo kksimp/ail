@@ -45,6 +45,7 @@ commands:
   effects FILE  print each function's inferred effects (eff.infer.6);
                 --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
+  explain       list every rule with its chapter and whether `ail fix` repairs it (--json)
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
   api --card [--budget N] DIR|FILE
@@ -182,6 +183,7 @@ fn main() -> ExitCode {
         ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
         ["fix", rest @ ..] => fix::command(rest, json),
+        ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
