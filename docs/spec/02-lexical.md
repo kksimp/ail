@@ -4,8 +4,8 @@ Chapter key: `lex`
 
 > **Status:** Drafted (partial). Specified: block structure, statement
 > termination, comments, keywords, and string (including multi-line and raw),
-> character and numeric literals. Not yet designed: the character set and
-> identifiers.
+> character and numeric literals, and the characters of a name. Not yet
+> designed: the character set and name normalisation.
 
 ## Keywords
 
@@ -17,6 +17,14 @@ return self spawn struct todo trait true unique unsafe use while with`.
 
 **lex.kw.2** — `c` is not reserved. It has its FFI meaning only directly
 after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*
+
+## Names
+
+**lex.name.1** — A name starts with a letter (the Unicode `Alphabetic`
+property) or `_`, and continues with letters, ASCII digits `0`–`9` and `_`:
+the characters for which `char.is_alpha()` and `char.is_alnum()` are true
+(`type.char.2`). A name that is a keyword is the keyword (`lex.kw.1`).
+*(ADR 0372)*
 
 ## Blocks
 

@@ -1,0 +1,18 @@
+# Each file in DIR holds an `ail api --ast` dump. Its first line must read
+# as an `ast.Program` and write back unchanged (api.ast.2, ADR 0376); the
+# names of the files that don't are printed, then the count checked.
+use ast
+
+fn main() !
+    dir := env.args()[0]
+    mut checked := 0
+    for name in fs.list_dir(dir)?
+        text := fs.read_text(path.join(dir, name))?
+        first := text.split("\n")[0]
+        p := ast.Program.from_json(parse_json(first)?) else err
+            print("{name}: {err}")
+            continue
+        if p.to_json().to_text() != first
+            print("{name}: changed")
+        checked += 1
+    print("checked {checked}")
