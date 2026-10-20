@@ -1,0 +1,705 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Number text and format specifications of the native runtime (ADR 0582):
+## `int` and `float` to text, `{x:.N}`, `{x:x}`, width, fill and alignment
+## (lex.str.7, type.str.11), and text to `float` (type.num.8), byte for byte
+## as the interpreter. Text is built in a growable byte buffer (the
+## builder, global slots 40-42), so printing a number allocates nothing and
+## `rt.fmt_*` return a string object for lane 172's `to_str` and
+## interpolation.
+##
+## The float algorithms are lane 122's from `compiler/rt/rt.ail` (ADR 0409):
+## the shortest digits that read back as the same value, closest when
+## several are as short (Steele and White, with Burger and Dybvig's exact
+## arithmetic), in fixed notation for decimal exponents -4 to 15 and
+## `d.ddde+XX` otherwise. Big numbers are little-endian base 10^9 limbs.
+## Nothing is ported from another project.
+
+# Global slots 40-42 are this file's.
+SB_PTR := 40
+SB_LEN := 41
+SB_CAP := 42
+
+BASE := 1000000000
+
+# ---- the builder ----
+
+fn sb_reset()
+    store64(global(SB_LEN), 0)
+
+fn sb_grow()
+    cap := load64(global(SB_CAP))
+    ncap := if cap == 0 then 256 else cap * 2
+    p := alloc(ncap)
+    n := load64(global(SB_LEN))
+    if n > 0
+        copy_bytes(p, load64(global(SB_PTR)), n)
+    store64(global(SB_PTR), p)
+    store64(global(SB_CAP), ncap)
+
+fn sb_byte(b int)
+    n := load64(global(SB_LEN))
+    if n == load64(global(SB_CAP))
+        sb_grow()
+    store8(load64(global(SB_PTR)) + n, b)
+    store64(global(SB_LEN), n + 1)
+
+fn sb_bytes(p int, n int)
+    for i in 0..n
+        sb_byte(load8(p + i))
+
+fn sb_text(s str)
+    p := str_addr(s)
+    sb_bytes(p + 16, load64(p))
+
+## The builder's text as a string object (its characters counted).
+fn sb_str() str
+    n := load64(global(SB_LEN))
+    p := load64(global(SB_PTR))
+    mut chars := 0
+    for i in 0..n
+        if load8(p + i).bit_and(192) != 128
+            chars += 1
+    s := str_new(n, chars)
+    if n > 0
+        copy_bytes(s + 16, p, n)
+    str_at(s)
+
+## The builder's text to standard output.
+fn sb_out()
+    out_bytes(load64(global(SB_PTR)), load64(global(SB_LEN)))
+
+# ---- integers ----
+
+## Decimal, working on negative remainders so the smallest `int` needs no
+## negation.
+fn put_int(n int)
+    if n == 0
+        sb_byte(48)
+        return
+    if n < 0
+        sb_byte(45)
+    mut v := n
+    mut scale := 1
+    while v / 10 != 0
+        v = v / 10
+        scale *= 10
+    v = n
+    while scale > 0
+        sb_byte(48 + (v / scale % 10).abs())
+        scale = scale / 10
+
+## Lowercase hexadecimal without `0x`, `-` first for a negative `n`
+## (type.str.11).
+fn put_hex(n int)
+    if n == 0
+        sb_byte(48)
+        return
+    if n < 0
+        sb_byte(45)
+    # The magnitude's bit pattern (the smallest `int` is its own negation).
+    u := if n < 0 then 0 - n else n
+    mut started := false
+    mut k := 15
+    while k >= 0
+        d := u.shr(4 * k).bit_and(15)
+        if d != 0 or started
+            started = true
+            sb_byte(if d < 10 then 48 + d else 87 + d)
+        k -= 1
+
+fn put_bool(b bool)
+    sb_text(if b then "true" else "false")
+
+# ---- strings of numbers, for `to_str`, interpolation and format specs ----
+
+fn fmt_int(n int) str
+    sb_reset()
+    put_int(n)
+    sb_str()
+
+fn fmt_hex(n int) str
+    sb_reset()
+    put_hex(n)
+    sb_str()
+
+fn fmt_bool(b bool) str
+    if b
+        return "true"
+    "false"
+
+fn fmt_float(x float) str
+    sb_reset()
+    put_float(x)
+    sb_str()
+
+fn fmt_float_fixed(x float, n int) str
+    sb_reset()
+    put_float_fixed(x, n)
+    sb_str()
+
+## `s` padded to `width` characters with `fill` (a string of one character):
+## `align` 0 left, 1 right, 2 centre, the odd one on the right (lex.str.7).
+## Longer text is not cut.
+fn fmt_pad(s str, width int, fill str, align int) str
+    p := str_addr(s)
+    f := str_addr(fill)
+    pad := width - load64(p + 8)
+    if pad <= 0
+        return s
+    left := if align == 0 then 0 else if align == 1 then pad else pad / 2
+    sb_reset()
+    for _ in 0..left
+        sb_bytes(f + 16, load64(f))
+    sb_bytes(p + 16, load64(p))
+    for _ in 0..pad - left
+        sb_bytes(f + 16, load64(f))
+    sb_str()
+
+# ---- standard output ----
+
+## A float as the interpreter prints it (type.num.7).
+fn out_float(x float)
+    sb_reset()
+    put_float(x)
+    sb_out()
+
+## `{x:.n}` (lex.str.7, type.str.11).
+fn out_float_fixed(x float, n int)
+    sb_reset()
+    put_float_fixed(x, n)
+    sb_out()
+
+# ---- float text (ADR 0409) ----
+
+## A float as the interpreter prints it (type.num.7).
+fn put_float(x float)
+    if x != x
+        sb_text("nan")
+        return
+    if x > 1.7976931348623157e308
+        sb_text("inf")
+        return
+    if x < -1.7976931348623157e308
+        sb_text("-inf")
+        return
+    if x == 0.0
+        if 1.0 / x < 0.0
+            sb_byte(45)
+        sb_text("0.0")
+        return
+    neg := x < 0.0
+    if neg
+        sb_byte(45)
+    ds := digits_of(if neg then 0.0 - x else x)
+    # The last element is the decimal point's position `p`: x = 0.DIGITS * 10^p.
+    n := ds.len() - 1
+    p := ds[n]
+    if p >= -3 and p <= 16
+        if p <= 0
+            sb_byte(48)
+            sb_byte(46)
+            for _ in 0..0 - p
+                sb_byte(48)
+            for i in 0..n
+                sb_byte(48 + ds[i])
+        elif p >= n
+            for i in 0..n
+                sb_byte(48 + ds[i])
+            for _ in 0..p - n
+                sb_byte(48)
+            sb_byte(46)
+            sb_byte(48)
+        else
+            for i in 0..n
+                if i == p
+                    sb_byte(46)
+                sb_byte(48 + ds[i])
+        return
+    sb_byte(48 + ds[0])
+    if n > 1
+        sb_byte(46)
+        for i in 1..n
+            sb_byte(48 + ds[i])
+    sb_byte(101)
+    e := p - 1
+    sb_byte(if e < 0 then 45 else 43)
+    a := e.abs()
+    if a < 10
+        sb_byte(48)
+    put_int(a)
+
+## `{x:.n}` (lex.str.7, type.str.11): `x` rounded to `n` decimals, half to
+## even on its exact value, with the sign of a negative or `-0.0`.
+fn put_float_fixed(x float, n int)
+    if x != x or x > 1.7976931348623157e308 or x < -1.7976931348623157e308
+        put_float(x)
+        return
+    bits := float_bits(x)
+    if bits < 0
+        sb_byte(45)
+    be := bits.shr(52).bit_and(2047)
+    mut f := bits.bit_and(4503599627370495)
+    mut e := -1074
+    if be > 0
+        f += 4503599627370496
+        e = be - 1075
+    # q = x * 10^n, rounded.
+    mut q := big_pow10(big_of(f), n)
+    if e >= 0
+        q = big_pow2(q, e)
+    else
+        mut round := 0
+        mut sticky := 0
+        mut left := 0 - e
+        while left > 0
+            m := if left > 29 then 29 else left
+            qr := big_div(q, 1.shl(m))
+            r := qr[qr.len() - 1]
+            sticky = sticky.bit_or(round)
+            if r.bit_and(1.shl(m - 1) - 1) != 0
+                sticky = 1
+            round = r.shr(m - 1).bit_and(1)
+            q = trim_last(qr)
+            left -= m
+        odd := q.len() > 0 and q[0] % 2 == 1
+        if round == 1 and (sticky == 1 or odd)
+            q = big_add(q, big_of(1))
+    digits := big_digits(q)
+    mut ds := List[int]()
+    for _ in digits.len()..n + 1
+        ds.push(0)
+    for d in digits
+        ds.push(d)
+    whole := ds.len() - n
+    for i in 0..whole
+        sb_byte(48 + ds[i])
+    if n > 0
+        sb_byte(46)
+        for i in whole..ds.len()
+            sb_byte(48 + ds[i])
+
+## `a / d` for a small `d`, then the remainder as one more element.
+fn big_div(a List[int], d int) List[int]
+    mut q := List[int]()
+    for _ in 0..a.len()
+        q.push(0)
+    mut r := 0
+    mut i := a.len() - 1
+    while i >= 0
+        t := r * BASE + a[i]
+        q[i] = t / d
+        r = t % d
+        i -= 1
+    q = trim(q)
+    q.push(r)
+    q
+
+## All but the last element, trimmed.
+fn trim_last(a List[int]) List[int]
+    mut out := List[int]()
+    for i in 0..a.len() - 1
+        out.push(a[i])
+    trim(out)
+
+## The decimal digits of a big number, most significant first.
+fn big_digits(a List[int]) List[int]
+    mut ds := List[int]()
+    if a.len() == 0
+        ds.push(0)
+        return ds
+    mut i := a.len() - 1
+    while i >= 0
+        mut limb := a[i]
+        mut part := List[int]()
+        for _ in 0..9
+            part.push(limb % 10)
+            limb = limb / 10
+        mut k := 8
+        if i == a.len() - 1
+            while k > 0 and part[k] == 0
+                k -= 1
+        while k >= 0
+            ds.push(part[k])
+            k -= 1
+        i -= 1
+    ds
+
+fn trim(a List[int]) List[int]
+    mut n := a.len()
+    while n > 0 and a[n - 1] == 0
+        n -= 1
+    mut out := List[int]()
+    for i in 0..n
+        out.push(a[i])
+    out
+
+fn big_of(v int) List[int]
+    mut out := List[int]()
+    mut x := v
+    while x > 0
+        out.push(x % BASE)
+        x = x / BASE
+    out
+
+fn big_mul(a List[int], k int) List[int]
+    mut out := List[int]()
+    if k == 0
+        return out
+    mut carry := 0
+    for limb in a
+        t := limb * k + carry
+        out.push(t % BASE)
+        carry = t / BASE
+    while carry > 0
+        out.push(carry % BASE)
+        carry = carry / BASE
+    out
+
+fn big_add(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut carry := 0
+    n := if a.len() > b.len() then a.len() else b.len()
+    for i in 0..n
+        x := if i < a.len() then a[i] else 0
+        y := if i < b.len() then b[i] else 0
+        t := x + y + carry
+        out.push(t % BASE)
+        carry = t / BASE
+    if carry > 0
+        out.push(carry)
+    out
+
+## `a - b`, for `a >= b`.
+fn big_sub(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut borrow := 0
+    for i in 0..a.len()
+        y := if i < b.len() then b[i] else 0
+        mut t := a[i] - y - borrow
+        if t < 0
+            t += BASE
+            borrow = 1
+        else
+            borrow = 0
+        out.push(t)
+    trim(out)
+
+## -1, 0 or 1.
+fn big_cmp(a List[int], b List[int]) int
+    if a.len() != b.len()
+        return if a.len() < b.len() then - 1 else 1
+    mut i := a.len() - 1
+    while i >= 0
+        if a[i] != b[i]
+            return if a[i] < b[i] then - 1 else 1
+        i -= 1
+    0
+
+fn big_pow2(a List[int], k int) List[int]
+    mut out := a
+    mut left := k
+    while left >= 29
+        out = big_mul(out, 536870912)
+        left -= 29
+    if left > 0
+        out = big_mul(out, 1.shl(left))
+    out
+
+fn big_pow10(a List[int], k int) List[int]
+    mut out := a
+    mut left := k
+    while left >= 9
+        out = big_mul(out, BASE)
+        left -= 9
+    if left > 0
+        mut p := 1
+        for _ in 0..left
+            p *= 10
+        out = big_mul(out, p)
+    out
+
+## The shortest digits of the positive finite `x`, then the decimal point's
+## position `k`, so that x = 0.DIGITS * 10^k.
+fn digits_of(x float) List[int]
+    # x = f * 2^e, f an integer below 2^53, from the bits.
+    bits := float_bits(x)
+    be := bits.shr(52).bit_and(2047)
+    mut f := bits.bit_and(4503599627370495)
+    mut e := -1074
+    if be > 0
+        f += 4503599627370496
+        e = be - 1075
+    # r/s = x; mp/s and mm/s are half the gaps above and below x.
+    mut r := List[int]()
+    mut s := List[int]()
+    mut mp := List[int]()
+    mut mm := List[int]()
+    wide := f == 4503599627370496 and be > 1
+    if e >= 0
+        if wide
+            r = big_pow2(big_of(f), e + 2)
+            s = big_of(4)
+            mp = big_pow2(big_of(1), e + 1)
+            mm = big_pow2(big_of(1), e)
+        else
+            r = big_pow2(big_of(f), e + 1)
+            s = big_of(2)
+            mp = big_pow2(big_of(1), e)
+            mm = mp
+    elif wide
+        r = big_of(f * 4)
+        s = big_pow2(big_of(1), 2 - e)
+        mp = big_of(2)
+        mm = big_of(1)
+    else
+        r = big_of(f * 2)
+        s = big_pow2(big_of(1), 1 - e)
+        mp = big_of(1)
+        mm = big_of(1)
+    even := f % 2 == 0
+    # Estimate k = ceil(log10 x), then fix it up exactly.
+    mut k := (53 + e) * 30103 / 100000
+    if k >= 0
+        s = big_pow10(s, k)
+    else
+        r = big_pow10(r, 0 - k)
+        mp = big_pow10(mp, 0 - k)
+        mm = big_pow10(mm, 0 - k)
+    # Too small: r + mp >= s (> when the high end is excluded).
+    while true
+        c := big_cmp(big_add(r, mp), s)
+        if c > 0 or c == 0 and even
+            s = big_mul(s, 10)
+            k += 1
+        else
+            break
+    # Too large: (r + mp) * 10 < s.
+    while true
+        c := big_cmp(big_mul(big_add(r, mp), 10), s)
+        if c < 0 or c == 0 and not even
+            r = big_mul(r, 10)
+            mp = big_mul(mp, 10)
+            mm = big_mul(mm, 10)
+            k -= 1
+        else
+            break
+    mut ds := List[int]()
+    while true
+        r = big_mul(r, 10)
+        mp = big_mul(mp, 10)
+        mm = big_mul(mm, 10)
+        mut d := 0
+        while big_cmp(r, s) >= 0
+            r = big_sub(r, s)
+            d += 1
+        cl := big_cmp(r, mm)
+        low := cl < 0 or cl == 0 and even
+        ch := big_cmp(big_add(r, mp), s)
+        high := ch > 0 or ch == 0 and even
+        if not low and not high
+            ds.push(d)
+            continue
+        if low and not high
+            ds.push(d)
+        elif high and not low
+            ds.push(d + 1)
+        elif big_cmp(big_add(r, r), s) < 0
+            ds.push(d)
+        else
+            ds.push(d + 1)
+        break
+    ds.push(k)
+    ds
+
+# ---- text to float (type.num.8) ----
+#
+# `s.to_float()`: the exact value of the decimal text, rounded to the nearest
+# `float` with ties to even. The text is the integer N and a decimal exponent
+# e; the value N * 10^e is scaled by a power of two until its quotient with
+# the denominator has 54 bits (found by the same big arithmetic as the digit
+# generator), then rounded in 64-bit integers. Overflow gives `inf`,
+# underflow a subnormal or zero.
+
+## `a * 2^k` for a big number and any `k >= 0`.
+fn fmt_big_shl(a List[int], k int) List[int]
+    big_pow2(a, k)
+
+## floor(m * 33219 / 10000), about m * log2(10).
+fn fmt_log2_of_pow10(m int) int
+    t := m * 33219
+    if t >= 0
+        return t / 10000
+    0 - (0 - t + 9999) / 10000
+
+## Digits `ds` (most significant first, no leading zero) as a big number.
+fn fmt_big_of_digits(ds List[int]) List[int]
+    mut out := List[int]()
+    mut i := 0
+    while i < ds.len()
+        mut chunk := 0
+        mut scale := 1
+        mut k := 0
+        while k < 9 and i + k < ds.len()
+            chunk = chunk * 10 + ds[i + k]
+            scale *= 10
+            k += 1
+        out = big_add(big_mul(out, scale), big_of(chunk))
+        i += k
+    out
+
+## The `float` with `bits`.
+fn fmt_float_with(neg bool, bits int) float
+    bits_float(if neg then bits.bit_or(-9223372036854775807 - 1) else bits)
+
+## The nearest `float` to `digits * 10^e10`, `digits` not empty.
+fn fmt_decimal_to_float(neg bool, digits List[int], e10 int) float
+    nd := digits.len()
+    if nd + e10 > 309
+        return fmt_float_with(neg, 9218868437227405312)
+    if nd + e10 < -326
+        return fmt_float_with(neg, 0)
+    mut num := fmt_big_of_digits(digits)
+    mut den := big_of(1)
+    if e10 >= 0
+        num = big_pow10(num, e10)
+    else
+        den = big_pow10(den, 0 - e10)
+    # s: the power of two that puts the quotient num/den in [2^53, 2^54).
+    mut s := 53 - fmt_log2_of_pow10(nd + e10 - 1) - 1
+    if s >= 0
+        num = fmt_big_shl(num, s)
+    else
+        den = fmt_big_shl(den, 0 - s)
+    mut fixing := true
+    while fixing
+        if big_cmp(num, fmt_big_shl(den, 54)) >= 0
+            den = big_mul(den, 2)
+            s -= 1
+        elif big_cmp(num, fmt_big_shl(den, 53)) < 0
+            num = big_mul(num, 2)
+            s += 1
+        else
+            fixing = false
+    # q = floor(num / den), bit by bit.
+    mut t := den
+    mut q := 0
+    mut multiples := List[List[int]]()
+    for k in 0..54
+        multiples.push(t)
+        t = big_mul(t, 2)
+    mut bit := 53
+    while bit >= 0
+        if big_cmp(num, multiples[bit]) >= 0
+            num = big_sub(num, multiples[bit])
+            q += 1.shl(bit)
+        bit -= 1
+    sticky := num.len() > 0
+    # value = q * 2^-s; the double is m * 2^(be - 1075), 53 bits m for a
+    # normal number. Drop `drop` bits of q: one, plus those a subnormal lacks.
+    mut drop := 1
+    be := 1 - s + 1075
+    if be < 1
+        drop += 1 - be
+    if drop >= 56
+        return fmt_float_with(neg, 0)
+    mut m := q.shr(drop)
+    round := q.shr(drop - 1).bit_and(1)
+    low := q.bit_and(1.shl(drop - 1) - 1) != 0 or sticky
+    if round == 1 and (low or m.bit_and(1) == 1)
+        m += 1
+    if drop > 1
+        # Subnormal: the bits are m itself (a carry into 2^52 is the smallest normal).
+        return fmt_float_with(neg, m)
+    mut e := be
+    if m == 9007199254740992
+        m = 4503599627370496
+        e += 1
+    if e >= 2047
+        return fmt_float_with(neg, 9218868437227405312)
+    fmt_float_with(neg, e.shl(52).bit_or(m.bit_and(4503599627370495)))
+
+fn fmt_is_digit(c int) bool
+    c >= 48 and c <= 57
+
+## `s.to_float()`: an optional `-`, digits, an optional `.` and digits, an
+## optional exponent; or exactly `inf`, `-inf` or `nan`. `parse_ok()` says
+## whether the text was one of those.
+fn str_to_float(s str) float
+    p := str_addr(s)
+    n := load64(p)
+    d := p + 16
+    store64(global(PARSE_OK), 0)
+    if n == 3 and load8(d) == 105 and load8(d + 1) == 110 and load8(d + 2) == 102
+        store64(global(PARSE_OK), 1)
+        return bits_float(9218868437227405312)
+    if n == 3 and load8(d) == 110 and load8(d + 1) == 97 and load8(d + 2) == 110
+        store64(global(PARSE_OK), 1)
+        return bits_float(9221120237041090560)
+    if n == 4
+        and load8(d) == 45
+        and load8(d + 1) == 105
+        and load8(d + 2) == 110
+        and load8(d + 3) == 102
+        store64(global(PARSE_OK), 1)
+        return bits_float(-4503599627370496)
+    neg := n > 0 and load8(d) == 45
+    mut i := if neg then 1 else 0
+    mut digits := List[int]()
+    mut seen := 0
+    mut frac := 0
+    while i < n and fmt_is_digit(load8(d + i))
+        seen += 1
+        c := load8(d + i) - 48
+        if digits.len() > 0 or c != 0
+            digits.push(c)
+        i += 1
+    if seen == 0
+        return 0.0
+    if i < n and load8(d + i) == 46
+        i += 1
+        mut after := 0
+        while i < n and fmt_is_digit(load8(d + i))
+            after += 1
+            c := load8(d + i) - 48
+            if digits.len() > 0 or c != 0
+                digits.push(c)
+            i += 1
+        if after == 0
+            return 0.0
+        frac = after
+    mut ex := 0
+    if i < n and (load8(d + i) == 101 or load8(d + i) == 69)
+        i += 1
+        mut eneg := false
+        if i < n and (load8(d + i) == 43 or load8(d + i) == 45)
+            eneg = load8(d + i) == 45
+            i += 1
+        mut ed := 0
+        while i < n and fmt_is_digit(load8(d + i))
+            ed += 1
+            if ex < 100000
+                ex = ex * 10 + load8(d + i) - 48
+            i += 1
+        if ed == 0
+            return 0.0
+        if eneg
+            ex = 0 - ex
+    if i != n
+        return 0.0
+    store64(global(PARSE_OK), 1)
+    # Trailing zeros of the digits are exponent, not precision.
+    mut e10 := ex - frac
+    while digits.len() > 0 and digits[digits.len() - 1] == 0
+        digits = fmt_trim_last_digit(digits)
+        e10 += 1
+    if digits.len() == 0
+        return fmt_float_with(neg, 0)
+    fmt_decimal_to_float(neg, digits, e10)
+
+fn fmt_trim_last_digit(ds List[int]) List[int]
+    mut out := List[int]()
+    for i in 0..ds.len() - 1
+        out.push(ds[i])
+    out

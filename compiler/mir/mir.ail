@@ -71,6 +71,9 @@ pub fn Ty.name(self) str
 ## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
 ## | `len` | list | `xs.len()` |
 ## | `copy` | a | the same value |
+## | `data` | list | the address of `xs`'s elements (the word at +16); `push` can move them |
+## | `ldx` | base, index | the element `index` of the elements at `base`, `imm` bytes each (8, or 1 for a `List[bool]`); not checked |
+## | `stx` | base, index, value | writes that element; not checked |
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |

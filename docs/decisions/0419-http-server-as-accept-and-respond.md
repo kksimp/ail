@@ -62,3 +62,14 @@ HTTP/2 and server-side TLS are out of scope (ADR 0360 is a client).
 - `Server` and `Exchange` are handles in a process-wide table; closed
   handles are never reused.
 - Follow-up: the handler wrapper, keep-alive, and request streaming.
+
+## Addendum (2026-10-20): the handler form
+
+With function values (lane 130, ADRs 0455-0456), the handler form is an AIL
+module, `std.net.http`: `http.serve(addr, handler)` and `http.run(srv,
+handler)` over `Server.accept` with four worker tasks (`std.net.18`). It is
+a module of its own because `net.serve(addr)` already exists with one
+argument and AIL has no overloading by arity; a name such as `serve_with`
+would not say what it adds. A pool, not a task per request, because each
+task is an OS thread with a large stack. Closures as handlers wait on
+lane 130's closures.

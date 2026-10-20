@@ -1,0 +1,6 @@
+# Printing a list of lists gives its text form, `[[1, 2], [3]]`. The native
+# build prints the addresses of the inner lists instead; this test fails until
+# lane 120's runtime prints nested lists (found by lane 183).
+fn main()
+    a := [[1, 2], [3]]
+    print(a)

@@ -683,6 +683,21 @@ fn pairs_of(v: &Value) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The pairs of a `Map[str, List[str]]`: one pair per value (std.net.17).
+fn list_pairs(v: &Value) -> Vec<(String, String)> {
+    let Value::Map(t) = v else { return Vec::new() };
+    let mut out = Vec::new();
+    for (k, vs) in t.entries() {
+        let (Value::Str(k), Value::List(vs)) = (k, vs) else { continue };
+        for v in vs.iter() {
+            if let Value::Str(v) = v {
+                out.push((k.to_string(), v.to_string()));
+            }
+        }
+    }
+    out
+}
+
 /// A failure's kind for a socket error (std.net.4).
 fn kind_of(e: &io::Error) -> &'static str {
     use io::ErrorKind as K;
@@ -890,7 +905,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 } else {
                     let Value::Struct(_, r) = &values[0] else { unreachable!("checked: net.Response") };
                     let Value::Str(body) = &r[2] else { unreachable!("checked: str") };
-                    (r[0].int(), pairs_of(&r[1]), body.as_bytes().to_vec())
+                    // std.net.17: names in `all_headers` are sent value by value, in place of `headers`'.
+                    let many = list_pairs(&r[3]);
+                    let mut h: Vec<(String, String)> = pairs_of(&r[1])
+                        .into_iter()
+                        .filter(|(k, _)| !many.iter().any(|(m, _)| m.eq_ignore_ascii_case(k)))
+                        .collect();
+                    h.extend(many);
+                    (r[0].int(), h, body.as_bytes().to_vec())
                 };
                 let sent = response_bytes(status, &headers, &body, ex.method == "HEAD");
                 let result = match sent {

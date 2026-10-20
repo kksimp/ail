@@ -1,0 +1,6 @@
+# A negative index that is not a literal traps at run time (type.coll.4).
+fn main()
+    xs := [1, 2, 3]
+    i := 0 - 1
+    print(xs[0])
+    print(xs[i])

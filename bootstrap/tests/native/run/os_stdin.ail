@@ -1,0 +1,14 @@
+# std.io.1-2: lines (with \n, \r\n and none at the end), then the rest.
+fn main()
+    mut n := 0
+    while n < 3
+        line := io.read_line() else
+            print("end")
+            return
+        print("[{line}] {line.len()}")
+        n += 1
+    rest := io.read_all()
+    print(rest.len())
+    print(rest)
+    again := io.read_line() else "end of input"
+    print(again)
