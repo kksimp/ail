@@ -47,6 +47,8 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
             ("hash", "crc32") => Value::Int(codec::crc32::crc32(&bytes_of(&v[0])) as i64),
             ("hash", "hash64") => Value::Int(hash64::hash64(&bytes_of(&v[0])) as i64),
             ("compress", "deflate") => list(codec::deflate::deflate(&bytes_of(&v[0]), LEVEL)),
+            ("compress", "zlib") => list(codec::zlib::zlib(&bytes_of(&v[0]), LEVEL)),
+            ("compress", "unzlib") => self.decoded(codec::zlib::unzlib(&bytes_of(&v[0]), LIMIT), pos),
             ("compress", "gzip") => list(gzip::gzip(&bytes_of(&v[0]), LEVEL)),
             ("compress", "inflate") => self.decoded(codec::inflate::inflate(&bytes_of(&v[0]), LIMIT), pos),
             ("compress", "gunzip") => self.decoded(gzip::gunzip(&bytes_of(&v[0]), LIMIT), pos),

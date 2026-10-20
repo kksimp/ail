@@ -65,7 +65,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
             (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
         }
-        "compress" => (&["deflate", "gunzip", "gzip", "inflate"], &[]),
+        "compress" => (&["deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib"], &[]),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run", "which"], &["proc", "io"]),

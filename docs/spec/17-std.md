@@ -245,6 +245,12 @@ with `too_big`. `unzip` creates `dir`, checks every CRC-32, and fails with
 entries and methods other than store and deflate fail with `unsupported`.
 *(ADR 0446)*
 
+**std.compress.7** — `zlib(s str) List[int]` and
+`unzlib(data List[int]) str ! compress.CompressError` use the zlib wrapper of
+RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
+streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
+and `unsupported` for a preset dictionary. *(ADR 0443)*
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*

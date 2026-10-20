@@ -9,6 +9,7 @@ pub mod gzip;
 pub mod hash64;
 pub mod inflate;
 pub mod zip;
+pub mod zlib;
 
 /// A failure to decode or encode compressed data: a short machine `kind`
 /// and a message for people (std.compress.2).

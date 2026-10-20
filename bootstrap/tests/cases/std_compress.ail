@@ -12,6 +12,12 @@ fn main() !
     print("{z[0]} {z[1]} {z[2]}")
     print(compress.gunzip(z)? == text)
     print(compress.inflate(compress.deflate(""))? == "")
+    print(compress.unzlib([120, 156, 203, 72, 205, 201, 201, 7, 0, 6, 44, 2, 21])?)
+    print(compress.unzlib(compress.zlib(text))? == text)
+    torn := compress.unzlib([120, 156, 203, 72, 205, 201, 201, 7, 0, 6, 44, 2, 22]) else err
+        print(err.kind)
+        ""
+    print(torn == "")
     bad := compress.gunzip([1, 2, 3, 4]) else err
         print(err.kind)
         ""
@@ -27,3 +33,6 @@ fn main() !
 
 @test fn gzip_round_trips(s str)
     assert_eq(compress.gunzip(compress.gzip(s)) else "lost", s)
+
+@test fn zlib_round_trips(s str)
+    assert_eq(compress.unzlib(compress.zlib(s)) else "lost", s)

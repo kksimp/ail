@@ -9,7 +9,7 @@ use crate::lexer::lex;
 
 /// Each standard module and its functions (std.use.1-2), sorted.
 pub const MODULES: &[(&str, &[&str])] = &[
-    ("compress", &["deflate", "gunzip", "gunzip_file", "gzip", "gzip_file", "inflate", "unzip", "zip_dir"]),
+    ("compress", &["deflate", "gunzip", "gunzip_file", "gzip", "gzip_file", "inflate", "unzip", "unzlib", "zip_dir", "zlib"]),
     ("env", &["args", "cwd", "get", "home", "program", "vars"]),
     (
         "fs",
