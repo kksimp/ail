@@ -1,0 +1,7 @@
+t1: running rotate logs
+keep t2: rebuild index (todo, 4.0h)
+keep t3: email report (done, 0.5h)
+skip t4: missing title
+t5: running prune cache
+t6: running check backups
+ran 3, failed 0, wrote 6 tasks (366 chars)

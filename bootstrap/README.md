@@ -19,6 +19,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/commands.ail
 ./ail run examples/shapes.ail
 ./ail run examples/tool.ail        # files and processes (std modules)
+./ail run examples/logscan.ail     # agent-tool corpus: also tasks.ail, build.ail (ADR 0217)
 ./ail run examples/ui_hello.ail    # a window (std.ui); needs a display
 ./ail run FILE a b                 # words after FILE go to the program (env.args())
 .\ail.ps1 run examples\hello.ail   # Windows (not yet tested on Windows)

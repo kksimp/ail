@@ -208,3 +208,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0213](0213-contracts-in-the-api.md) | `ail api` shows contracts as part of the signature *(delegated)* | Accepted | 2026-10-20 |
 | [0214](0214-list-editing-methods.md) | List `insert`, `remove_at`, `extend`, `clear`, `reverse`, `first` (resolves OQ-047) *(delegated)* | Accepted | 2026-10-20 |
 | [0215](0215-str-slice-and-search-methods.md) | `str` `slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper` (resolves OQ-048) *(delegated)* | Accepted | 2026-10-20 |
+| [0217](0217-agent-corpus-standing-benchmark.md) | Keep an agent-tool corpus as the standing token and speed benchmark; amends 0029 layer 1 *(delegated)* | Accepted | 2026-10-20 |
+| [0218](0218-agent-corpus-conventions.md) | Conventions for the agent-tool corpus programs *(delegated)* | Accepted | 2026-10-20 |
