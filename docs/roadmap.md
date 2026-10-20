@@ -44,7 +44,7 @@ proposal, not a decision.
 
 1. **Verify on macOS ARM64:** run `tools/verify.sh` on the whole 2026-10-20
    batch (the strict-lockstep rule, ADR 0008).
-2. **Stage 3 and 4 groundwork:** build the tiers designed in
+2. **Stage 3 started 2026-10-20 (designer's decision):** the lexer, parser and checker in AIL under `compiler/`, run by the bootstrap and differentially tested against it (lanes 113–114). **Stage 3 and 4 groundwork:** build the tiers designed in
    [ir-architecture.md](design/ir-architecture.md) (AST, HIR, MIR, machine IR)
    and the first native code for the hot loops the interpreter shows
    (`tools/perfbench/run.sh`); meanwhile a bytecode tier in the bootstrap
