@@ -756,6 +756,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
         Struct(s, _) =>
             sn := prog.structs[s].name
             if sn == "ui.Window" or sn == "tensor.Tensor"
+                if sn == "ui.Window"
+                    std_methods.add(pos_key(at))
                 args_only(args)
                 return gap("std.ui or std.tensor method")
         _ => rt = rt
@@ -829,6 +831,7 @@ fn Checker.inherent_call(
         return Ty.Unknown
     if mutable
         require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
+    targets[pos_key(at)] = i
     note_deprecated(i, at)
     move_receiver(i, recv)
     if gapped.contains(i) and is_inferred(sig.ret)
@@ -873,7 +876,23 @@ fn Checker.trait_call(
         return Ty.Unknown
     if sig.receiver == true
         require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
+    trait_calls[pos_key(at)] = tr
+    if c := con_of(rt)
+        if k := impl_of.get(impl_key(tr, c))
+            record_impl_target(at, k, tr, n)
     check_call(n, sig, [Bind(param: trait_self[tr], ty: rt)], args, recv, at, expect)
+
+## `x.name(...)` through trait `tr` on a value whose type has `impl` block
+## `k` runs that block's method or the trait's default (eff.infer.5).
+fn Checker.record_impl_target(mut self, at ast.Pos, k int, tr int, n str)
+    for m in prog.impls[k].methods
+        if prog.fns[m].name == n
+            targets[pos_key(at)] = m
+            return
+    for m in prog.traits[tr].methods
+        if prog.fns[m].name == n and prog.fns[m].body != none
+            targets[pos_key(at)] = m
+            return
 
 ## `Trait.name(x, ...)`: a trait's method called on `x` (trait.res.1).
 fn Checker.qualified(mut self, tr int, n str, at ast.Pos, args List[ast.Arg]) Ty
@@ -945,7 +964,7 @@ fn Checker.associated(
     if b := explicit
         binds = zip_binds(sig.generics[..sig.owner], [x.ty for x in b])
     note_deprecated(i, at)
-    declared_assoc.add(pos_key(at))
+    targets[pos_key(at)] = i
     if gapped.contains(i) and is_inferred(sig.ret)
         gap("calls a gapped associated function")
     check_call("{tn}.{n}", sig, binds, args, none, at, expect)

@@ -107,7 +107,15 @@ pub struct Checker
     ## Calls resolved to a declared function, or an associated function of a
     ## type, by `pos_key` of the name: the calls `spawn` can start (conc.task.1).
     pub declared_fns Set[int]
-    pub declared_assoc Set[int]
+    ## Facts for the effect pass, by `pos_key` of a method's name: the
+    ## function a call runs, the trait whose implementations it may run, the
+    ## standard module of `m.f(...)`, and `ui.Window` methods (eff.infer.3-5).
+    pub targets Map[int, int]
+    pub trait_calls Map[int, int]
+    pub std_fns Map[int, str]
+    pub std_methods Set[int]
+    ## Writes through a `ref`, by `pos_key` of the place (own.ref.4).
+    pub ref_writes Set[int]
 
 ## How a local was declared.
 pub enum LocalKind
@@ -186,7 +194,11 @@ pub fn new_checker(p ast.Program) Checker
         gap_now: false,
         allow_wildcards: false,
         declared_fns: Set[int](),
-        declared_assoc: Set[int](),
+        targets: Map[int, int](),
+        trait_calls: Map[int, int](),
+        std_fns: Map[int, str](),
+        std_methods: Set[int](),
+        ref_writes: Set[int](),
     )
 
 fn Checker.err(mut self, rule str, at ast.Pos, text str)

@@ -48,7 +48,10 @@ pub fn check_program(p ast.Program) Report
         c.check_fn(i)
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
+    c.diags.extend(c.check_pure())
     c.diags.extend(check_handles(p))
+    c.diags.extend(c.check_contract_effects())
+    c.diags.extend(c.check_constants())
     c.remap_generated()
     Report(
         diags: c.diags,
@@ -894,6 +897,7 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
 fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
     # own.ref.4: a `ref` cell's contents are mutable through any copy.
     if writes_through_ref(e, rule == "trait.method.3")
+        ref_writes.add(pos_key(expr_pos(e)))
         return
     root := place_root(e) else
         err(

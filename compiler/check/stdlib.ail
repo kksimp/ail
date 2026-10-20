@@ -70,6 +70,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
             d = d.with_help("`std.{module}` provides {list_names(fns_of)}")
         diags.push(d)
         return Ty.Unknown
+    std_fns[pos_key(at)] = module
     if module == "io" and n == "eprint"
         return eprint_call(args, at)
     if module == "random" and n == "shuffle"

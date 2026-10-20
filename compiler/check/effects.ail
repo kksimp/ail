@@ -1,0 +1,519 @@
+## Effects (ADR 0377), as `check/effects.rs`: inference (eff.infer.1-6),
+## `@pure` (eff.pure.1), pure contracts (contract.decl.3) and constants
+## computed at compile time (ct.const.2). Runs after typing and reads only
+## the program and the facts typing recorded.
+use ast
+
+## Effects that a `@pure` function may not have (eff.pure.1): everything but
+## `fail` and `mutates`, which its signature already shows. They are also
+## the effects that pass from a callee to its caller (eff.infer.3).
+fn impure(e str) bool
+    e != "fail" and e != "mutates"
+
+## The effects of a standard-module function `module.name` (eff.infer.4).
+fn std_effects(module str) List[str]
+    if module == "fs"
+        return ["fs", "io"]
+    if module == "env"
+        return ["env"]
+    if module == "io"
+        return ["io"]
+    if module == "proc"
+        return ["proc", "io"]
+    # std.net.1: every request reaches the network.
+    if module == "net"
+        return ["net", "io"]
+    if module == "random"
+        return ["random"]
+    if module == "time"
+        return ["clock"]
+    # std.ui.9: opening a window and every `ui.Window` method.
+    if module == "ui"
+        return ["ui", "io"]
+    # std.path.1, std.tensor.1, conc.cancel.2: no effects.
+    []
+
+## The effects a function or expression has directly, each with its source
+## (`print`, `fs.write_text`, `T ! E`), and the functions it may call.
+struct Walked
+    direct Map[str, str]
+    calls List[int]
+
+## The facts about calls that typing recorded.
+struct Facts
+    targets Map[int, int]
+    trait_calls Map[int, int]
+    std_fns Map[int, str]
+    std_methods Set[int]
+    ref_writes Set[int]
+    ## Free functions by name.
+    free Map[str, int]
+    ## The implementations of the standard traits (eff.infer.5).
+    std_impls List[int]
+
+## The inferred effects of a whole program.
+struct Effects
+    direct List[Map[str, str]]
+    calls List[List[int]]
+    sets List[List[str]]
+
+fn Checker.facts(self) Facts
+    mut free := Map[str, int]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if f.owner == none and f.within == ast.Within.TopLevel
+            free[f.name] = i
+    # eff.infer.5: operators, interpolation, `print` and the built-in
+    # collection methods call the standard traits' implementations.
+    mut impls := List[int]()
+    if prog.traits.len() > 0
+        for tm in [
+            TraitMethod(tr: std_eq, n: "eq"),
+            TraitMethod(tr: std_ord, n: "cmp"),
+            TraitMethod(tr: std_to_str, n: "to_str"),
+            TraitMethod(tr: std_hash, n: "hash"),
+        ]
+            for m in implementations(prog, tm.tr, tm.n)
+                if not impls.contains(m)
+                    impls.push(m)
+    Facts(
+        targets: targets,
+        trait_calls: trait_calls,
+        std_fns: std_fns,
+        std_methods: std_methods,
+        ref_writes: ref_writes,
+        free: free,
+        std_impls: impls.sorted(),
+    )
+
+struct TraitMethod
+    tr int
+    n str
+
+## The functions that `Trait.name` can run: each implementation's own, or
+## the trait's default (eff.infer.5).
+fn implementations(prog ast.Program, tr int, n str) List[int]
+    mut out := List[int]()
+    if tr >= prog.traits.len()
+        return out
+    decl := prog.traits[tr]
+    for m in decl.methods
+        if prog.fns[m].name == n and prog.fns[m].body != none
+            out.push(m)
+            break
+    for imp in prog.impls
+        if imp.trait_name == decl.name
+            for m in imp.methods
+                if prog.fns[m].name == n
+                    out.push(m)
+                    break
+    out
+
+fn infer_effects(prog ast.Program, fx Facts) Effects
+    mut direct := List[Map[str, str]]()
+    mut calls := List[List[int]]()
+    for f in prog.fns
+        mut w := Walked(direct: signature_effects(f), calls: [])
+        if body := f.body
+            w.block(prog, fx, body)
+        direct.push(w.direct)
+        calls.push(w.calls)
+    # eff.infer.3: the least fixed point.
+    mut sets := [d.keys().sorted() for d in direct]
+    mut changed := true
+    while changed
+        changed = false
+        for i in 0..prog.fns.len()
+            mut add := List[str]()
+            for j in calls[i]
+                for e in sets[j]
+                    if impure(e) and not sets[i].contains(e) and not add.contains(e)
+                        add.push(e)
+            if add.len() > 0
+                mut grown := sets[i]
+                grown.extend(add)
+                sets[i] = grown.sorted()
+                changed = true
+    Effects(direct: direct, calls: calls, sets: sets)
+
+## `name` or `Type.name`; a function of an `impl` block is named after the
+## implementing type, one of a `trait` block after the trait.
+fn display_name(prog ast.Program, f ast.FnDecl) str
+    match f.within
+        TopLevel => full_name(f)
+        InTrait(k) => "{prog.traits[k].name}.{f.name}"
+        InImpl(k) => "{prog.impls[k].target.name}.{f.name}"
+
+## The shortest chain of calls from function `from` to the source of effect
+## `e`, e.g. `main -> save -> fs.write_text`.
+fn Effects.chain(self, prog ast.Program, from int, e str) str
+    mut prev := [-1 for _ in 0..sets.len()]
+    mut seen := [false for _ in 0..sets.len()]
+    mut queue := [from]
+    seen[from] = true
+    mut head := 0
+    while head < queue.len()
+        i := queue[head]
+        head += 1
+        if source := direct[i].get(e)
+            mut path := [source]
+            mut at := i
+            while at >= 0
+                path.push(display_name(prog, prog.fns[at]))
+                at = prev[at]
+            path.reverse()
+            return path.join(" -> ")
+        for j in calls[i]
+            if not seen[j] and sets[j].contains(e)
+                seen[j] = true
+                prev[j] = i
+                queue.push(j)
+    display_name(prog, prog.fns[from])
+
+## `fail` from a `T ! E` or `!` return type, `mutates` from a `mut`
+## parameter or `mut self` (eff.infer.2).
+fn signature_effects(f ast.FnDecl) Map[str, str]
+    mut d := Map[str, str]()
+    if t := f.ret
+        if is_fallible(t.shape)
+            d["fail"] = "its return type"
+    if (f.receiver?.mutable else false) or [p for p in f.params if p.mutable].len() > 0
+        d["mutates"] = "a `mut` parameter"
+    d
+
+@allow("expr.match.3") fn is_fallible(s ast.TypeShape) bool
+    match s
+        Fallible => true
+        _ => false
+
+## eff.pure.1: a `@pure` function has none of `io`, `unsafe`, `spawn` or a
+## capability. One diagnostic per function, naming each chain of calls.
+fn Checker.check_pure(self) List[Diag]
+    if [f for f in prog.fns if has_attr(f, "pure")].len() == 0
+        return []
+    fx := infer_effects(prog, facts())
+    mut out := List[Diag]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        for a in f.attrs
+            if a.name != "pure"
+                continue
+            bad := [e for e in fx.sets[i] if impure(e)]
+            if bad.len() > 0
+                n := display_name(prog, f)
+                out.push(
+                    new_diag(
+                        "eff.pure.1",
+                        a.pos,
+                        "`{n}` is `@pure` but {reasons(prog, fx, i, bad)}",
+                    ).with_help("remove `@pure`, or move the effect out of `{n}` and pass its result in as an argument"),
+                )
+            break
+    out
+
+## `has effects io and fs via f -> save -> fs.write_text`, grouping effects
+## that come from the same chain.
+fn reasons(prog ast.Program, fx Effects, i int, bad List[str]) str
+    mut groups := List[Group]()
+    for e in bad
+        ch := fx.chain(prog, i, e)
+        add_to_group(mut groups, e, ch)
+    groups_text(groups)
+
+struct Group
+    effects List[str]
+    chain str
+
+fn add_to_group(mut groups List[Group], e str, ch str)
+    for k in 0..groups.len()
+        if groups[k].chain == ch
+            if not groups[k].effects.contains(e)
+                groups[k].effects.push(e)
+            return
+    groups.push(Group(effects: [e], chain: ch))
+
+fn groups_text(groups List[Group]) str
+    parts := [
+        "has {if g.effects.len() == 1 then "effect" else "effects"} {["`{e}`" for e in g.effects].join(" and ")} via {g.chain}"
+        for g in groups
+    ]
+    parts.join("; ")
+
+## contract.decl.3: a contract's condition has no effect but `fail`.
+fn Checker.check_contract_effects(self) List[Diag]
+    mut named := List[NamedContract]()
+    for f in prog.fns
+        for c in f.contracts
+            named.push(NamedContract(
+                c: c,
+                owner: full_name(f),
+                word: if c.is_ensures then "ensures" else "requires",
+            ))
+    for s in prog.structs
+        for c in s.invariants
+            named.push(NamedContract(c: c, owner: s.name, word: "invariant"))
+    if named.len() == 0
+        return []
+    facts_now := facts()
+    fx := infer_effects(prog, facts_now)
+    mut out := List[Diag]()
+    for nc in named
+        mut w := Walked(direct: Map[str, str](), calls: [])
+        w.expr(prog, facts_now, nc.c.cond)
+        for o in nc.c.olds
+            w.expr(prog, facts_now, o.value)
+        mut bad := Map[str, str]()
+        for e in w.direct.keys()
+            bad[e] = w.direct[e]
+        for j in w.calls
+            for e in fx.sets[j]
+                if not bad.contains(e)
+                    bad[e] = fx.chain(prog, j, e)
+        bad.remove("fail")
+        if bad.len() == 0
+            continue
+        what := ["`{e}` via {bad[e]}" for e in bad.keys().sorted()].join(", ")
+        out.push(
+            new_diag(
+                "contract.decl.3",
+                nc.c.pos,
+                "the `{nc.word}` condition of `{nc.owner}` must be pure, but it has {what}",
+            ).with_help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
+        )
+    out
+
+struct NamedContract
+    c ast.Contract
+    owner str
+    word str
+
+## ct.const.2 (ADR 0225): everything a constant's value may call must be
+## compile-time-safe: no `io`, `unsafe`, `spawn` or capability.
+fn Checker.check_constants(self) List[Diag]
+    if prog.consts.len() == 0
+        return []
+    facts_now := facts()
+    mut walked := List[Walked]()
+    mut any_call := false
+    for c in prog.consts
+        mut w := Walked(direct: Map[str, str](), calls: [])
+        w.expr(prog, facts_now, c.value)
+        if w.calls.len() > 0 or [e for e in w.direct.keys() if impure(e)].len() > 0
+            any_call = true
+        walked.push(w)
+    # Most constants call nothing; infer effects only when one does.
+    if not any_call
+        return []
+    fx := infer_effects(prog, facts_now)
+    mut out := List[Diag]()
+    for k in 0..prog.consts.len()
+        c := prog.consts[k]
+        w := walked[k]
+        mut groups := List[Group]()
+        for e in w.direct.keys().sorted()
+            if impure(e)
+                add_to_group(mut groups, e, "{c.name} -> {w.direct[e]}")
+        mut bad := List[str]()
+        for j in w.calls
+            for e in fx.sets[j]
+                if impure(e) and not w.direct.contains(e) and not bad.contains(e)
+                    bad.push(e)
+        for e in bad.sorted()
+            for j in w.calls
+                if fx.sets[j].contains(e)
+                    add_to_group(mut groups, e, "{c.name} -> {fx.chain(prog, j, e)}")
+                    break
+        if groups.len() == 0
+            continue
+        out.push(
+            new_diag(
+                "ct.const.2",
+                c.pos,
+                "`{c.name}` is computed at compile time but {groups_text(groups)}",
+            ).with_help("constants may call only functions without I/O or capabilities; compute this value in `main`"),
+        )
+    out
+
+fn Walked.add(mut self, e str, source str)
+    if not direct.contains(e)
+        direct[e] = source
+
+fn Walked.call(mut self, i int)
+    if not calls.contains(i)
+        calls.push(i)
+
+fn Walked.std_traits(mut self, fx Facts)
+    for m in fx.std_impls
+        call(m)
+
+fn Walked.block(mut self, prog ast.Program, fx Facts, b List[ast.Stmt])
+    for s in b
+        stmt(prog, fx, s)
+
+fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
+    match s
+        Let(_, _, _, value, o) =>
+            expr(prog, fx, value)
+            if e := o
+                otherwise(prog, fx, e)
+        Assign(target, _, value, _) =>
+            ref_write(fx, target)
+            expr(prog, fx, target)
+            expr(prog, fx, value)
+        While(c, body, _) =>
+            expr(prog, fx, c)
+            block(prog, fx, body)
+        For(_, _, _, _, iter, body, _) =>
+            expr(prog, fx, iter)
+            block(prog, fx, body)
+        With(mutex, _, _, body, _) =>
+            expr(prog, fx, mutex)
+            block(prog, fx, body)
+        Break => return
+        Continue => return
+        Return(v, _) =>
+            if e := v
+                expr(prog, fx, e)
+        Eval(e) => expr(prog, fx, e)
+        Handle(value, o) =>
+            expr(prog, fx, value)
+            otherwise(prog, fx, o)
+        Defer(inner, _) => stmt(prog, fx, inner)
+
+## eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`.
+fn Walked.ref_write(mut self, fx Facts, place ast.Expr)
+    if fx.ref_writes.contains(pos_key(expr_pos(place)))
+        add("mutates", "a write through a `ref`")
+
+fn Walked.otherwise(mut self, prog ast.Program, fx Facts, o ast.Else)
+    match o
+        Fallback(e) => expr(prog, fx, e)
+        Leave(s) => stmt(prog, fx, s)
+        Handler(_, body, _) => block(prog, fx, body)
+
+fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
+    match e
+        Str | Int | Float | Char | Bool | NoneLit | Hole | Name | TypeArgs => return
+        Interp(parts, _) =>
+            std_traits(fx)
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => expr(prog, fx, x)
+                    Fmt(x, _) => expr(prog, fx, x)
+        ListLit(items, _) =>
+            for x in items
+                expr(prog, fx, x)
+        SetLit(items, _) =>
+            for x in items
+                expr(prog, fx, x)
+        Comp(_, elem, value, clauses, _) =>
+            for c in clauses
+                expr(prog, fx, c.iter)
+                if x := c.cond
+                    expr(prog, fx, x)
+            expr(prog, fx, elem)
+            if v := value
+                expr(prog, fx, v)
+        MapLit(entries, _) =>
+            for en in entries
+                expr(prog, fx, en.key)
+                expr(prog, fx, en.value)
+        Call(callee, args, _) =>
+            if n := callee_name(callee)
+                # eff.infer.4: `print` writes to standard output.
+                if n == "print"
+                    add("io", "print")
+                    std_traits(fx)
+                elif i := fx.free.get(n)
+                    call(i)
+            else
+                expr(prog, fx, callee)
+            for a in args
+                if a.mutable
+                    ref_write(fx, a.value)
+            for a in args
+                expr(prog, fx, a.value)
+        Method(recv, n, name_pos, args) =>
+            key := pos_key(name_pos)
+            if i := fx.targets.get(key)
+                call(i)
+            elif tr := fx.trait_calls.get(key)
+                # `T.zero()` may run any implementation (trait.assoc.3, eff.infer.3).
+                for i in implementations(prog, tr, n)
+                    call(i)
+            elif std_head(fx, key, recv) != none
+                module := fx.std_fns.get(key) else ""
+                for ef in std_effects(module)
+                    add(ef, "{std_head(fx, key, recv) else module}.{n}")
+            elif fx.std_methods.contains(key)
+                for ef in std_effects("ui")
+                    add(ef, "ui.Window.{n}")
+            elif not is_enum_name(prog, recv)
+                # A built-in method (`xs.sort()`, `m.get(k)`) may compare,
+                # hash or show its elements.
+                std_traits(fx)
+            ref_write(fx, recv)
+            for a in args
+                if a.mutable
+                    ref_write(fx, a.value)
+            expr(prog, fx, recv)
+            for a in args
+                expr(prog, fx, a.value)
+        Member(recv, _, _) => expr(prog, fx, recv)
+        Index(recv, index, _) =>
+            expr(prog, fx, recv)
+            expr(prog, fx, index)
+        Unary(op, operand, _) =>
+            # eff.infer.1: `spawn` starts a task (conc.task.1).
+            if op == ast.UnOp.Spawn
+                add("spawn", "spawn")
+            expr(prog, fx, operand)
+        NewRef(value, _) => expr(prog, fx, value)
+        Binary(op, lhs, rhs, _) =>
+            if not is_arithmetic(op) and op != ast.BinOp.And and op != ast.BinOp.Or
+                std_traits(fx)
+            expr(prog, fx, lhs)
+            expr(prog, fx, rhs)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                expr(prog, fx, x)
+            if x := hi
+                expr(prog, fx, x)
+        If(branches, els, _, _) =>
+            for br in branches
+                expr(prog, fx, cond_value(br.cond))
+                block(prog, fx, br.body)
+            if b := els
+                block(prog, fx, b)
+        Match(scrutinee, arms, _) =>
+            expr(prog, fx, scrutinee)
+            for arm in arms
+                block(prog, fx, arm.body)
+        Try(x, context, _) =>
+            expr(prog, fx, x)
+            if c := context
+                expr(prog, fx, c)
+        OrElse(value, o, _) =>
+            expr(prog, fx, value)
+            otherwise(prog, fx, o)
+
+## The module name written in `m.f(...)`, for a recorded standard call.
+@allow("expr.match.3") fn std_head(fx Facts, key int, recv ast.Expr) str?
+    if not fx.std_fns.contains(key)
+        return none
+    match recv
+        Name(m, _) => m
+        _ => none
+
+@allow("expr.match.3") fn callee_name(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        TypeArgs(n, _, _) => n
+        _ => none
+
+## `Enum.Variant(...)` builds a value.
+@allow("expr.match.3") fn is_enum_name(prog ast.Program, e ast.Expr) bool
+    match e
+        Name(m, _) => [d for d in prog.enums if d.name == m].len() > 0
+        _ => false

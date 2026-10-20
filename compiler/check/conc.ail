@@ -250,7 +250,7 @@ fn Checker.not_mutex(mut self, mutex ast.Expr, t Ty)
         return not_spawnable(at)
     t := expr(operand, none, false)
     key := pos_key(callee)
-    declared := declared_fns.contains(key) or (assoc and declared_assoc.contains(key))
+    declared := declared_fns.contains(key) or (assoc and targets.contains(key))
     if t == Ty.Unknown
         return Ty.Unknown
     if not declared

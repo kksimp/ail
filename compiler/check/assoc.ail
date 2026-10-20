@@ -25,6 +25,7 @@ fn Checker.param_assoc_call(mut self, tn str, n str, at ast.Pos, args List[ast.A
     for tr in bound_traits
         if f := assoc_fn(tr, n)
             binds := [Bind(param: trait_self[tr], ty: Ty.Param(p))]
+            trait_calls[pos_key(at)] = tr
             return check_call("{tn}.{n}", sigs[f], binds, args, none, at, expect)
     args_only(args)
     mut offer := -1
@@ -91,7 +92,7 @@ fn Checker.impl_assoc_call(
     mut binds := List[Bind]()
     if e := explicit
         binds = zip_binds(info.params, [x.ty for x in e])
-    declared_assoc.add(pos_key(at))
+    targets[pos_key(at)] = f
     check_call("{def_name(d)}.{n}", sig, binds, args, none, at, expect)
 
 fn in_trait(w ast.Within, tr int) bool
