@@ -9,7 +9,7 @@
 //! and text forms use a type's `impl` or the built-in structural forms
 //! (trait.std.1-4, trait.auto.1-2, trait.derive.1).
 
-use std::collections::HashMap;
+use crate::fasthash::FastMap as HashMap;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
 use std::rc::Rc;
@@ -144,12 +144,12 @@ enum Exit {
     Continue,
     /// A returned value, and where it was returned.
     Return(Value, Pos),
-    Trap(Trap),
+    Trap(Box<Trap>),
 }
 
 impl From<Trap> for Exit {
     fn from(t: Trap) -> Self {
-        Exit::Trap(t)
+        Exit::Trap(Box::new(t))
     }
 }
 
@@ -209,8 +209,8 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
                 .collect(),
         };
     });
-    let mut fns = HashMap::new();
-    let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::new();
+    let mut fns = HashMap::default();
+    let mut methods: HashMap<&str, HashMap<&str, &FnDecl>> = HashMap::default();
     for f in prog.fns.iter().filter(|f| f.top_level()) {
         match &f.owner {
             Some(owner) => {
@@ -234,12 +234,12 @@ pub fn run(prog: &Program, resolved: &Resolved) -> Result<(), Stop> {
         out: BufWriter::new(stdout.lock()),
         depth: 0,
         closed: false,
-        consts: HashMap::new(),
+        consts: HashMap::default(),
     };
     // mod.const.1: constants are computed before the program runs.
     for c in &prog.consts {
         it.constant(&c.name, c.pos).map_err(|e| match e {
-            Exit::Trap(t) => Stop::Trap(t),
+            Exit::Trap(t) => Stop::Trap(*t),
             _ => unreachable!("checked: constants don't leave"),
         })?;
     }
@@ -513,7 +513,7 @@ impl<'a, W: Write> Interp<'a, W> {
         let (mut result, at) = match self.block(body, &mut env) {
             Ok(v) => (v, end),
             Err(Exit::Return(v, at)) => (v, at),
-            Err(Exit::Trap(t)) => return Err(t),
+            Err(Exit::Trap(t)) => return Err(*t),
             Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
         };
         // err.decl.3: an error value leaving a fallible function is its failure.
@@ -851,7 +851,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     Some(r) => Value::Int(r),
                     None => {
                         let message = format!("`-({v})` overflows `int`");
-                        return Err(Exit::Trap(Trap { rule: "expr.arith.1", pos: *pos, message }));
+                        return Err(Trap { rule: "expr.arith.1", pos: *pos, message }.into());
                     }
                 }
             }
@@ -1185,7 +1185,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         if n == "unreachable" && lookup(env, n).is_none() {
             let Value::Str(msg) = self.eval(&args[0].value, env)? else { unreachable!("checked: str") };
-            return Err(Exit::Trap(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }));
+            return Err(Trap { rule: "err.model.2", pos, message: format!("unreachable: {msg}") }.into());
         }
         if matches!(callee, Expr::TypeArgs { .. }) {
             match n.as_str() {
