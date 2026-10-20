@@ -1,0 +1,19 @@
+# Bounds checks in loops (native.bce.1, native.bce.2): the loop in `total`
+# gets guard blocks and a copy without checks; `node`'s `set` follows a
+# `push` of the list it took the index from.
+fn total(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[i]
+    s
+
+fn node(mut left List[int]) int
+    n := left.len()
+    left.push(-1)
+    left[n] = 7
+    n
+
+fn main()
+    print(total([1, 2, 3], 3))
+    mut l := List[int]()
+    print(node(mut l))

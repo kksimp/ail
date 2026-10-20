@@ -1,15 +1,16 @@
 # The edges of the subset's newer pieces: `else` on a binding only after
-# `s.to_int()`, `{x:.N}` only on a float, constants only of constant
-# expressions (native.subset.1).
+# `s.to_int()`, `s.to_float()` and the OS calls, format specifications only
+# on numbers, `bool` and `str`, constants only of constant expressions
+# (native.subset.1).
 LIMIT := 2 * 8
 SCALE := LIMIT.abs()
 
-fn pick(s str) float
-    n := s.to_float() else 0.0
+fn pick(s str) int
+    n := s.find("x") else 0
     n
 
 fn main()
     x := 2.5
-    print("{x:.2} {x:>8}")
+    print("{x:.2} {x:>8} {[1, 2]:>8}")
     print(LIMIT)
     print(pick("1.5"))

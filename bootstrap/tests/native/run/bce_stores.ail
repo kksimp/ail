@@ -1,0 +1,33 @@
+# Stores and loads through a list's elements taken once before the loop
+# (native.bce.1): ints, floats and bools, a fixed index, and a list that
+# a call grows after the loop.
+fn scale(mut xs List[float], n int)
+    for i in 0..n
+        xs[i] = xs[i] * 2.0 + xs[0]
+
+fn flip(mut xs List[bool], n int) int
+    mut c := 0
+    for i in 0..n
+        xs[i] = not xs[i]
+        if xs[i]
+            c += 1
+    c
+
+fn bump(mut xs List[int], n int)
+    for i in 0..n
+        xs[i] += xs[2] + i
+        xs[1] = xs[i]
+
+fn main()
+    mut f := [1.5, 2.5, 3.5]
+    scale(mut f, 3)
+    print(f)
+    mut b := [true, false, true, false]
+    print(flip(mut b, 4))
+    print(b)
+    mut x := [5, 6, 7, 8]
+    bump(mut x, 4)
+    print(x)
+    x.push(9)
+    bump(mut x, 5)
+    print(x)
