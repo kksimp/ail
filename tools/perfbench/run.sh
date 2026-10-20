@@ -13,7 +13,7 @@ root="$(cd "$here/../.." && pwd)"
 runs="${1:-5}"
 "$root/ail" run "$root/examples/hello.ail" >/dev/null   # builds the bootstrap
 
-programs=("$root/examples/interp.ail" "$root/examples/json.ail" "$root/examples/sheet.ail" "$here/programs/loops.ail" "$root/examples/logscan.ail" "$root/examples/tasks.ail" "$root/examples/build.ail")
+programs=("$root/examples/interp.ail" "$root/examples/json.ail" "$root/examples/sheet.ail" "$here/programs/loops.ail" "$root/examples/logscan.ail" "$root/examples/tasks.ail" "$root/examples/build.ail" "$here/programs/parsum.ail")
 corpus="$root/tools/tokbench/corpus/programs"
 
 now() { date +%s.%N; }
@@ -32,9 +32,16 @@ for p in "${programs[@]}"; do
     done
     read -r mn md <<<"$(printf '%s' "$times" | stats)"
     py="-"
-    if command -v python3 >/dev/null 2>&1 && [ -f "$corpus/$name/$name.py" ]; then
-        t0="$(now)"; python3 "$corpus/$name/$name.py" >/dev/null 2>&1 || true; t1="$(now)"
+    twin="$corpus/$name/$name.py"
+    [ -f "$twin" ] || twin="$here/programs/$name.py"
+    if command -v python3 >/dev/null 2>&1 && [ -f "$twin" ]; then
+        t0="$(now)"; python3 "$twin" >/dev/null 2>&1 || true; t1="$(now)"
         py="$(echo "$t1 - $t0" | bc -l | awk '{printf "%.3f", $1}')"
     fi
     printf '%-12s %9s %9s %12s\n' "$name" "$mn" "$md" "$py"
 done
+
+# conc.par.8-9: the thread pool on parsum, one thread against the default pool.
+one="$(for _ in $(seq "$runs"); do t0="$(now)"; AIL_THREADS=1 "$root/bootstrap/target/release/ail" run "$here/programs/parsum.ail" >/dev/null; t1="$(now)"; echo "$t1 - $t0" | bc -l; done | stats)"
+pool="$(for _ in $(seq "$runs"); do t0="$(now)"; "$root/bootstrap/target/release/ail" run "$here/programs/parsum.ail" >/dev/null; t1="$(now)"; echo "$t1 - $t0" | bc -l; done | stats)"
+printf 'parsum min_s: 1 thread %s, pool %s\n' "${one%% *}" "${pool%% *}"

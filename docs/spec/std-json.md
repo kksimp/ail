@@ -39,7 +39,25 @@ the same text. *(ADR 0161)*
 `Json.at(self, i int) Json?` is element `i`, and `none` when out of range or
 not an array. `as_str`, `as_num`, `as_bool`, `as_arr` and `as_obj` give the
 payload of the matching variant, and `none` for any other. They chain with
-`?` in a function that returns an optional. *(ADR 0161)*
+`?` in a function that returns an optional, or before an `else`
+(`err.prop.4`). *(ADR 0161)*
+
+**json.query.2** — `j.str(key)`, `j.num(key)`, `j.bool(key)` and
+`j.arr(key)` are `j.get(key)?.as_str()` and so on: member `key` when it holds
+that variant, and `none` otherwise. *(ADR 0254)*
+
+**json.query.3** — `j.set(key str, value Json)` (`mut self`) replaces the
+value of the first member named `key`, or adds the member at the end. It traps
+(`err.model.2`) unless `j` is an object. *(ADR 0254)*
+
+```ail
+fn main()
+    mut doc := parse_json("\{\"id\": \"t1\", \"hours\": 2}") else return
+    print(doc.str("id"))       # t1
+    print(doc.str("hours"))    # none
+    doc.set("done", Json.Bool(true))
+    print(doc.to_text())       # {"id":"t1","hours":2.0,"done":true}
+```
 
 ## Availability
 

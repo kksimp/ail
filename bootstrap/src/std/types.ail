@@ -25,6 +25,11 @@ struct Size
     cols int
     rows int
 
+struct Modifiers
+    ctrl bool
+    alt bool
+    shift bool
+
 enum Event
     Key(key str, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)

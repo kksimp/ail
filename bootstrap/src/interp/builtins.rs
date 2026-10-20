@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
 
-use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, peek, slot_mut, trap};
+use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, load, put, take, trap, view, with_slot};
 use crate::ast::Arg;
 use crate::diag::Pos;
 use crate::num::Num;
@@ -195,42 +195,46 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
+        if let [Arg { param: Some((var, _)), value, .. }] = args {
+            return self.keyed(recv, name, var, value, pos, env);
+        }
         // Arguments are read before the receiver changes, so they are copies (own.excl.4).
         let mut a = Vec::with_capacity(args.len());
         for arg in args {
             a.push(self.eval(&arg.value, env)?);
         }
-        let current = match &recv {
-            Operand::Place(p) => peek(env, p)?,
-            Operand::Value(v) => v,
-        };
-        let mutating = match current {
+        let mutating = |v: &Value| match v {
             Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
             Value::Map(_) => name == "remove",
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
         };
-        if !mutating {
-            let v = current.clone();
+        let is_mutating = match &recv {
+            Operand::Place(p) => view(env, p, mutating)?,
+            Operand::Value(v) => mutating(v),
+        };
+        if !is_mutating {
+            let v = match recv {
+                Operand::Place(p) => load(env, &p)?,
+                Operand::Value(v) => v,
+            };
             return Ok(self.read_only(v, name, a, pos)?);
         }
         let Operand::Place(p) = recv else { unreachable!("checked: `{name}` needs a mutable place") };
         if name == "sort" {
             // Sorting may call `cmp` implementations, so the list is moved out first.
-            let Value::List(items) = std::mem::replace(slot_mut(env, &p, false)?, Value::Unit) else {
-                unreachable!("checked: a list")
-            };
+            let Value::List(items) = take(env, &p)? else { unreachable!("checked: a list") };
             let sorted = self.sorted(Rc::unwrap_or_clone(items), pos);
             let restored = match &sorted {
                 Ok(xs) => xs.clone(),
                 Err(_) => Vec::new(),
             };
-            *slot_mut(env, &p, false)? = Value::List(Rc::new(restored));
+            put(env, &p, false, Value::List(Rc::new(restored)))?;
             sorted?;
             return Ok(Value::Unit);
         }
-        let slot = slot_mut(env, &p, false)?;
-        Ok(match (slot, name) {
+        Ok(with_slot(env, &p, false, |slot| -> Result<Value, Trap> {
+            Ok(match (slot, name) {
             (Value::List(items), "push") => {
                 Rc::make_mut(items).push(a.pop().expect("checked: one argument"));
                 Value::Unit
@@ -285,6 +289,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Set(t), "remove") => Value::Bool(Rc::make_mut(t).remove(&a[0]).is_some()),
             (other, _) => unreachable!("checked: `{name}` on {other:?}"),
         })
+        })??)
     }
 
     fn read_only(&mut self, v: Value, name: &str, mut a: Vec<Value>, pos: Pos) -> Result<Value, Trap> {
@@ -299,6 +304,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 "len" => Value::Int(items.len() as i64),
                 "last" => opt(items.last().cloned()),
                 "first" => opt(items.first().cloned()),
+                // type.coll.15: the first `n` elements, or all of them.
+                "take" => {
+                    let n = a[0].int();
+                    if n < 0 {
+                        return trap("type.coll.15", pos, format!("`take` needs a count of at least 0, not {n}"));
+                    }
+                    Value::List(Rc::new(items[..(n as usize).min(items.len())].to_vec()))
+                }
                 "contains" | "index_of" => {
                     let mut found = None;
                     for (i, x) in items.iter().enumerate() {
@@ -343,7 +356,10 @@ impl<'a, W: Write> Interp<'a, W> {
                         }
                         Value::Num(*k, k.encode(total))
                     }
-                    Some(Value::Float(_)) => Value::Float(items.iter().map(|x| x.float()).sum()),
+                    Some(Value::Float(_)) => {
+                        let xs: Vec<f64> = items.iter().map(|x| x.float()).collect();
+                        Value::Float(tree_sum(&xs))
+                    }
                     _ => {
                         let mut total: i64 = 0;
                         for x in items.iter() {
@@ -665,4 +681,21 @@ pub(super) fn map_value<'v>(
         Some(i) => Ok(t.val(i)),
         None => trap("type.map.3", pos, format!("the map has no key {}", shown())),
     }
+}
+
+/// A float list's sum in the fixed tree of type.coll.12 (ADR 0239). A
+/// leaf of up to 32 elements keeps four running sums, element `k` going to
+/// sum `k % 4`, and gives `(p0 + p1) + (p2 + p3)`; a longer list splits
+/// after `32 * ceil(n / 64)` elements and adds its halves' sums. The shape
+/// depends only on the length, so a vector or parallel sum gives the same bits.
+pub fn tree_sum(xs: &[f64]) -> f64 {
+    if xs.len() <= 32 {
+        let mut p = [0.0f64; 4];
+        for (k, x) in xs.iter().enumerate() {
+            p[k % 4] += x;
+        }
+        return (p[0] + p[1]) + (p[2] + p[3]);
+    }
+    let m = 32 * xs.len().div_ceil(64);
+    tree_sum(&xs[..m]) + tree_sum(&xs[m..])
 }

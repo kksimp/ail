@@ -600,7 +600,7 @@ impl Cx<'_> {
                 *name = self.type_name(name, t.pos);
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
-            TypeKind::Optional(inner) => self.type_ref(inner),
+            TypeKind::Optional(inner) | TypeKind::Ref(inner) => self.type_ref(inner),
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {
                     self.type_ref(ok);
@@ -667,6 +667,7 @@ impl Cx<'_> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Stmt::Defer(inner, _) => self.stmt(inner),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
         }
     }
@@ -777,7 +778,7 @@ impl Cx<'_> {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);

@@ -1,0 +1,11 @@
+# trace.run.2: `--trace=calls` shows each call with its arguments, each
+# return with its value, and each contract check, nested by depth.
+
+fn fact(n int) int
+    requires n >= 0
+    if n <= 1
+        return 1
+    n * fact(n - 1)
+
+fn main()
+    print(fact(3))

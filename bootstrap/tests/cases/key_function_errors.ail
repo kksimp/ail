@@ -1,0 +1,15 @@
+## Key function errors (expr.key.1-3, ADR 0250).
+struct Opaque
+    n int
+
+fn apply(x int) int
+    x
+
+fn main()
+    xs := [1, 2, 3]
+    a := xs.sorted(by: 3)
+    b := apply(|x| x)
+    c := xs.len(by: |x| x)
+    d := xs.sorted(by: |x| Opaque(n: x))
+    e := xs.sort(by: |x| x)
+    f := xs.sorted(by: |xs| xs)

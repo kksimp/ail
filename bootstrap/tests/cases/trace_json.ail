@@ -1,0 +1,10 @@
+# trace.run.2: with `--json`, each event is one JSON object per line.
+
+fn fact(n int) int
+    requires n >= 0
+    if n <= 1
+        return 1
+    n * fact(n - 1)
+
+fn main()
+    print(fact(3))

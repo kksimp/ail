@@ -38,7 +38,8 @@ commands:
   check FILE    check a program (or a package DIR) without running it
   test FILE     run the program's `@test` functions, properties and doc examples;
                 --cases N (default 100) and --seed S set a property's inputs
-  effects FILE  print each function's inferred effects (eff.infer.6)
+  effects FILE  print each function's inferred effects (eff.infer.6);
+                --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
@@ -52,13 +53,22 @@ options:
   --json        report diagnostics (or an explanation) as JSON lines, schema v1
   --deterministic
                 with run or check: same as `--deny clock,random,proc,net`, so
-                the same inputs always give the same output (std.random.5)
+                the same inputs always give the same output (std.random.5),
+                and runs every loop on one thread (conc.par.9)
+  --parallel    with run: run every loop proven independent on the thread
+                pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
   --deny LIST   with run or check: reject a program whose `main` reaches a
                 denied capability (fs, env, proc, clock, random, net, ui,
                 or all) (eff.cap.1)
   --no-contracts
                 with run or test: skip `requires`/`ensures` checks (contract.run.3)
+  --trace[=calls|effects|all]
+                with run: write each call, return, effect, task and contract
+                check to standard error (trace.run.1); --trace-limit N caps
+                the events shown (default 1000) before a summary line
+  --watch NAME  with run: show each assignment to a `mut` variable NAME (trace.watch.1)
+  --verbose     with run: a trap shows every frame and value (trace.snap.3)
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -72,8 +82,9 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--json" | "--deterministic" | "--no-contracts" => {}
+            "--json" | "--deterministic" | "--no-contracts" | "--parallel" => {}
             "--deny" | "--seed" => i += 1,
+            a if interp::trace_option_words(a).is_some() => i += interp::trace_option_words(a).unwrap_or(1) - 1,
             _ => words.push(i),
         }
         i += 1;
@@ -97,6 +108,18 @@ fn main() -> ExitCode {
             }
         }
     }
+    // trace.run.1, trace.watch.1, trace.snap.3: `ail run`'s tracing options.
+    match interp::take_trace_options(&mut rest, json) {
+        Ok(true) if rest.first() != Some(&"run") => {
+            eprintln!("error: `--trace`, `--watch` and `--verbose` work with `ail run` (trace.run.1)");
+            return ExitCode::from(2);
+        }
+        Ok(_) => {}
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    }
     let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
         Ok(d) => d,
         Err(msg) => {
@@ -118,6 +141,7 @@ fn main() -> ExitCode {
             }
         },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
+        ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
@@ -169,8 +193,17 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
         args.drain(at..at + 2);
         interp::set_seed(seed);
     }
+    // conc.par.8: `run --parallel` puts every proven loop on the pool.
+    if args.first() == Some(&"run")
+        && let Some(at) = args.iter().position(|a| *a == "--parallel")
+    {
+        args.remove(at);
+        interp::parallel::set_mode(interp::parallel::Mode::Proven);
+    }
     if let Some(at) = args.iter().position(|a| *a == "--deterministic") {
         args.remove(at);
+        // conc.par.9: deterministic runs keep every loop on one thread.
+        interp::parallel::set_mode(interp::parallel::Mode::Off);
         deny.extend(check::effects::DETERMINISTIC_DENY);
         deny.sort_unstable();
         deny.dedup();
@@ -182,6 +215,18 @@ fn take_run_options(args: &mut Vec<&str>, mut deny: Vec<&'static str>) -> Result
 fn effects_file(path: &str, json: bool) -> ExitCode {
     let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
     print!("{}", check::effects::render(&check::effects::effects_of(&program, &resolved), json));
+    ExitCode::SUCCESS
+}
+
+/// `ail effects --parallel FILE [--json]`: each loop's verdict (conc.par.6).
+fn parallel_file(path: &str, json: bool) -> ExitCode {
+    let Some((program, resolved)) = front_end(path, json) else { return ExitCode::from(2) };
+    let at = |pos| {
+        let (file, p) = modules::locate(&program.files, pos);
+        let file = if file.is_empty() { path } else { file };
+        format!("{file}:{}:{}", p.line, p.col)
+    };
+    print!("{}", check::parallel::render(&check::parallel::analyze(&program, &resolved), json, &at));
     ExitCode::SUCCESS
 }
 
@@ -245,7 +290,8 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
             format!("{file}:{}:{}", p.line, p.col)
         };
         interp::run(&program, &resolved).map_err(|stop| match stop {
-            interp::Stop::Trap(t) => format!("{}: trap[{}]: {}", at(t.pos), t.rule, t.message),
+            // trace.snap.1-4: the trap with its snapshot.
+            interp::Stop::Trap(t) => interp::render_trap(&program, &t, interp::take_snapshot(), json),
             interp::Stop::Failed(report) => report.render_with(at),
         })
     });

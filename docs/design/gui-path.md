@@ -47,9 +47,10 @@ outline fonts through the platform text APIs.
   is a struct with an `int` that can be copied or forged. Programs that
   treat it as unique (one variable, passed as `mut`) keep working.
 - **Effects.** The `ui` capability and `--deny ui` stay as they are.
-- **Fonts and glyphs.** Latin-1 only, 10x20 pixels, no size option, `?` for
-  everything else. A native layer adds a font size, full Unicode via the
-  platform's text system, and wide-character cells.
+- **Fonts and glyphs.** Latin-1 only, `?` for everything else, and 13 fixed
+  sizes from 10 to 40 pixels (bitmap fonts, doubled above 20; ADR 0243). A
+  native layer allows any size, full Unicode via the platform's text
+  system, and wide-character cells.
 - **Clipboard.** Today it shells out to `pbcopy`, `wl-copy`, `xclip` or
   PowerShell (ADR 0240); a native layer uses `NSPasteboard`, the Win32
   clipboard API and the Wayland/X11 selection protocols.

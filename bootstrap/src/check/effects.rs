@@ -49,6 +49,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "env" => (&["args", "get", "cwd", "program"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
+        // std.path.1: text only, so no effects.
+        "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
         // std.ui.9: opening a window and every `ui.Window` method.
@@ -85,8 +87,8 @@ impl<'p> Effects<'p> {
             direct.push(std::mem::take(&mut w.direct));
             calls.push(std::mem::take(&mut w.calls));
         }
-        // Constants need no walk: a constant expression calls no function
-        // and runs no user code (mod.const.2-3, ADR 0132).
+        // Constants add nothing: they are computed at compile time, and
+        // `check_constants` keeps what they call free of effects (ct.const.2).
         // eff.infer.3: the least fixed point.
         let mut sets: Vec<BTreeSet<&'static str>> = direct.iter().map(|d| d.keys().copied().collect()).collect();
         loop {
@@ -107,6 +109,26 @@ impl<'p> Effects<'p> {
             }
         }
         Effects { prog, direct, calls, sets }
+    }
+
+    /// The effects that running `body` has, each with its source: the
+    /// block's own operations (`print`), or a chain of calls such as
+    /// `log -> print` (conc.par.2, ADR 0237).
+    pub fn of_block(&self, resolved: &Resolved, body: &Block) -> BTreeMap<&'static str, String> {
+        let mut w = Walker::new(self.prog, resolved);
+        w.block(body);
+        let mut out = w.direct;
+        for &j in &w.calls {
+            for &e in self.sets[j].iter().filter(|e| propagates(e)) {
+                out.entry(e).or_insert_with(|| self.chain(j, e));
+            }
+        }
+        out
+    }
+
+    /// The functions that function `i` may call (eff.infer.3).
+    pub fn calls_of(&self, i: usize) -> &[usize] {
+        &self.calls[i]
     }
 
     /// The effect set of function `i`, sorted (eff.infer.6).
@@ -250,6 +272,73 @@ pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
                 .help("compute the value in the body, or check it with `assert`; a condition may only read its inputs"),
             );
         }
+    }
+    diags
+}
+
+/// ct.const.2 (ADR 0225): a constant is computed at compile time, so
+/// everything its value may call must be compile-time-safe: no `io`,
+/// `unsafe`, `spawn` or capability. One diagnostic per constant, naming each
+/// chain of calls.
+pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.consts.is_empty() {
+        return Vec::new();
+    }
+    let mut w = Walker::new(prog, resolved);
+    let walked: Vec<_> = prog
+        .consts
+        .iter()
+        .map(|c| {
+            w.direct = BTreeMap::new();
+            w.calls = Vec::new();
+            w.expr(&c.value);
+            (std::mem::take(&mut w.direct), std::mem::take(&mut w.calls))
+        })
+        .collect();
+    // Most constants call nothing; infer effects only when one does.
+    if walked.iter().all(|(direct, calls)| calls.is_empty() && !direct.keys().any(|e| impure(e))) {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut diags = Vec::new();
+    for (c, (direct, calls)) in prog.consts.iter().zip(&walked) {
+        // Each forbidden effect with the chain that gives it, grouped by chain.
+        let mut groups: Vec<(Vec<&str>, String)> = Vec::new();
+        let mut note = |e: &'static str, chain: String| match groups.iter_mut().find(|(_, ch)| *ch == chain) {
+            Some((es, _)) => {
+                if !es.contains(&e) {
+                    es.push(e)
+                }
+            }
+            None => groups.push((vec![e], chain)),
+        };
+        for (&e, source) in direct.iter().filter(|(e, _)| impure(e)) {
+            note(e, format!("{} -> {source}", c.name));
+        }
+        let mut bad: BTreeSet<&'static str> = BTreeSet::new();
+        for &j in calls {
+            bad.extend(fx.of(j).iter().copied().filter(|e| impure(e) && !direct.contains_key(e)));
+        }
+        for e in bad {
+            let j = calls.iter().copied().find(|&j| fx.of(j).contains(e)).expect("an effect comes from a callee");
+            note(e, format!("{} -> {}", c.name, fx.chain(j, e)));
+        }
+        if groups.is_empty() {
+            continue;
+        }
+        let parts: Vec<String> = groups
+            .iter()
+            .map(|(es, chain)| {
+                let es: Vec<String> = es.iter().map(|e| format!("`{e}`")).collect();
+                let noun = if es.len() == 1 { "effect" } else { "effects" };
+                format!("has {noun} {} via {chain}", es.join(" and "))
+            })
+            .collect();
+        let msg = format!("`{}` is computed at compile time but {}", c.name, parts.join("; "));
+        diags.push(
+            Diagnostic::new("ct.const.2", c.pos, msg)
+                .help("constants may call only functions without I/O or capabilities; compute this value in `main`"),
+        );
     }
     diags
 }
@@ -407,6 +496,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                 }
             }
             Stmt::Assign { target, value, .. } => {
+                self.ref_write(target);
                 self.expr(target);
                 self.expr(value);
             }
@@ -424,6 +514,15 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.expr(value);
                 self.otherwise(otherwise);
             }
+            Stmt::Defer(s, _) => self.stmt(s),
+        }
+    }
+
+    /// eff.infer.2: a write through a `ref` (own.ref.4) gives `mutates`; the
+    /// checker records the root position of each such write.
+    fn ref_write(&mut self, place: &Expr) {
+        if self.resolved.ref_writes.contains(&place.pos()) {
+            self.direct.entry("mutates").or_insert_with(|| "a write through a `ref`".to_string());
         }
     }
 
@@ -491,6 +590,9 @@ impl<'p, 'r> Walker<'p, 'r> {
                     }
                     None => self.expr(callee),
                 }
+                for a in args.iter().filter(|a| a.mutable) {
+                    self.ref_write(&a.value);
+                }
                 args.iter().for_each(|a| self.expr(&a.value));
             }
             Expr::Method { recv, name, name_pos, args } => {
@@ -523,6 +625,10 @@ impl<'p, 'r> Walker<'p, 'r> {
                     // hash or show its elements.
                     self.std_traits();
                 }
+                self.ref_write(recv);
+                for a in args.iter().filter(|a| a.mutable) {
+                    self.ref_write(&a.value);
+                }
                 self.expr(recv);
                 args.iter().for_each(|a| self.expr(&a.value));
             }
@@ -536,7 +642,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.add("spawn", "spawn");
                 self.expr(operand);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { op, lhs, rhs, .. } => {
                 if !op.is_arithmetic() && !matches!(op, BinOp::And | BinOp::Or) {
                     self.std_traits();

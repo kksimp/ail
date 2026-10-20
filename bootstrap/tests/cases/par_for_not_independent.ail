@@ -1,0 +1,19 @@
+# conc.par.5: a `par for` whose iterations provably interfere is an error.
+fn show(x int)
+    print(x)
+
+fn main()
+    xs := [1, 2, 3]
+    par for x in xs
+        show(x)
+    mut last := 0
+    par for x in xs
+        last = x
+    par for x in xs
+        if x == 2
+            break
+    mut acc := 0.0
+    par for x in xs
+        acc += 0.5
+    print(last)
+    print(acc)

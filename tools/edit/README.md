@@ -8,9 +8,11 @@ is headless: an `Editor` value, `Command`s that change it, and a pure
 
 ```sh
 ./ail run tools/edit/edit.ail FILE                     # the editor, in a window
+./ail run tools/edit/edit.ail --font 15 FILE           # ...with a smaller font (10 to 40)
 ./ail run tools/edit/edit.ail --print FILE             # print one screen as text
 ./ail run tools/edit/edit.ail --print --check FILE     # ...after Ctrl-K
 ./ail run tools/edit/edit.ail --print --outline FILE   # ...with the outline
+./ail run tools/edit/edit.ail --print --at=11:15 --key=ctrl+i FILE  # move, press keys, type (--type=TEXT)
 ./ail run tools/edit/edit.ail --bench FILE             # time a render and an edit
 ./ail test tools/edit/edit.ail                         # the headless tests
 ```
@@ -28,8 +30,8 @@ is headless: an `Editor` value, `Command`s that change it, and a pure
 | Tab | Spaces to the next multiple of 4 (AIL has no tabs, lex.block.1) |
 | Backspace | In indentation, removes one level |
 | Ctrl-Space | Complete the word: after `.`, fields, variants and methods; otherwise the file's declarations (with signatures), keywords and words in the buffer. Up/Down choose, Enter or Tab accepts, Escape closes |
-| F12 | Go to the definition of the name under the cursor (`ail api --symbols`) |
-| Ctrl-I | Show the declaration and doc comment of the name under the cursor |
+| F12 | Go to the definition of the name under the cursor, locals included (`ail api --refs`, else the `--symbols` index) |
+| Ctrl-I | Show the type of the expression under the cursor, and the signature and doc comment of what it names (`ail api --type`) |
 | Ctrl-Shift-F | Format with `ail fmt` (also on save, when the program has no errors) |
 | `(` `[` `{` `"` | Insert the closing pair; typing the closer steps over it; Backspace in an empty pair deletes both |
 | Ctrl-/ | Comment or uncomment the line or selected lines |
@@ -47,11 +49,43 @@ is headless: an `Editor` value, `Command`s that change it, and a pure
 | Ctrl-O | Outline (`ail api --text`); Up/Down select, Enter jumps |
 | Escape | Close the explanation or the outline; stop selecting or finding |
 | Ctrl-Q | Quit; with unsaved changes in any tab, press it twice. Closing the window counts as Ctrl-Q |
-| F5, F6 | Run the buffer (`ail run`), or its tests (`ail test`); the output fills the pane |
+| F5, F6 | Run the buffer (`ail run`), or its tests (`ail test`); the output fills the pane (its end, when long), Esc closes it, and a click on a `FILE:LINE:COL` or `at LINE:COL` jumps there, opening the file in a tab if needed |
 | Ctrl-P | Open a file: type part of its path (letters in order), Up/Down, Enter |
 | Ctrl-Tab, Ctrl-Shift-Tab | Next, previous tab; a click on a tab selects it |
 | Ctrl-W | Close the tab; with unsaved changes, press it twice |
-| Mouse | Click places the caret, drag selects, the wheel scrolls, a click on a diagnostic jumps to it |
+| F2 | Rename the name under the cursor: through `ail api --refs` (declarations and locals), else every whole word; the prompt shows the count and how they were found, Enter applies, Ctrl-Z undoes (ADR 0244) |
+| Ctrl-+ (or Ctrl-=), Ctrl--, Ctrl-0 | Larger, smaller, default font size (ADR 0243) |
+| Mouse | Click places the caret, drag or Shift-click selects, the wheel scrolls, a click on a diagnostic jumps to it |
+
+## macOS sanity check
+
+About five minutes, from the repository root. On a Mac, Command works as
+Ctrl (ADR 0179), and laptop keyboards may need fn for F1–F12. Don't save
+(Ctrl-S): the steps edit `examples/hello.ail` and quit without saving.
+
+```sh
+./ail run tools/edit/edit.ail examples/hello.ail
+```
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | Look | A window titled `examples/hello.ail - edit`, a tab bar, `fn` in blue, the string in orange, a caret on line 1 |
+| 2 | Click after `print`; type `x` | The caret moves there; `x` appears and the title gains `*` |
+| 3 | Ctrl-Z | `x` is gone |
+| 4 | Shift-Right three times, then Ctrl-C; End, Ctrl-V | The three characters are highlighted, then pasted at the line end; Ctrl-Z undoes |
+| 5 | Drag across a word; Shift-click further right | The selection follows the mouse, then extends to the click |
+| 6 | Ctrl-K | Status line: `0 errors, 0 warnings` |
+| 7 | F5 | The pane shows `Hello, world!`; Esc closes it |
+| 8 | Click on `print`; F2 | A rename prompt on the tab bar names `print` with its count; Esc cancels |
+| 9 | End, Enter, type `pr`, Ctrl-Space | A completion list with `print`; Esc closes, Ctrl-Z undoes |
+| 10 | Ctrl-+ three times, Ctrl-- twice, Ctrl-0 | The text grows, shrinks, and returns to the default size; the window stays the same size |
+| 11 | Ctrl-P, type `ui_hel`, Enter | `examples/ui_hello.ail` opens in a second tab; Ctrl-Tab switches back |
+| 12 | Scroll with the trackpad in the second tab | The text scrolls about three lines per notch |
+| 13 | Ctrl-Q (twice if it asks about unsaved tabs) | The editor quits without saving |
+
+Also try `./ail run tools/edit/edit.ail --font 13 examples/hello.ail`: the
+window opens with small text. Report the step number of anything that
+differs.
 
 The `ail` it runs is `$AIL`, else `./ail` when started from the repository
 root, else `ail` on `PATH`. A check of unsaved changes writes the buffer to
@@ -78,9 +112,14 @@ imports resolve as they will on save.
   save with no errors, and on demand), so names declared since then come
   from the buffer's words without signatures.
 - Speed (Linux x86-64, interpreter): a 100x32 screen of a 1,000-line file
-  renders in about 7 ms; an edit takes about 0.1 ms.
+  renders in about 8 ms; an edit takes about 0.1 ms.
 - Typing `.` after a name opens member completion; typing `(` after a
   known function shows its signature on the status line. `"""` strings are
   highlighted across lines.
-- Not yet: types of locals in completion (the API has no local types yet),
-  Shift-click selection.
+- The word under the cursor is marked wherever else it appears on screen;
+  each line with a diagnostic shows the first message after its text;
+  typing `else` or `elif` lines it up with its `if`.
+- Completion offers the locals in scope with their types (`ail api --locals`)
+  and, after `x.`, only the members of `x`'s type (`ail api --type`). The
+  position queries need a program that parses; otherwise the editor falls
+  back to the outline index and the buffer's words.

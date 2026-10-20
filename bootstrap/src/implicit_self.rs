@@ -143,6 +143,7 @@ impl Cx<'_> {
                 self.otherwise(otherwise);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
+            Stmt::Defer(s, _) => self.stmt(s),
         }
     }
 
@@ -226,14 +227,20 @@ impl Cx<'_> {
             }),
             Expr::Method { recv, args, .. } => {
                 self.expr(recv);
-                args.iter_mut().for_each(|a| self.expr(&mut a.value));
+                for a in args.iter_mut() {
+                    // expr.key.2: a key function's parameter is a new local.
+                    if let Some((name, pos)) = a.param.clone() {
+                        self.declare(&name, pos);
+                    }
+                    self.expr(&mut a.value);
+                }
             }
             Expr::Field { recv, .. } => self.expr(recv),
             Expr::Index { recv, index, .. } => {
                 self.expr(recv);
                 self.expr(index);
             }
-            Expr::Unary { operand, .. } => self.expr(operand),
+            Expr::Unary { operand, .. } | Expr::Ref { value: operand, .. } => self.expr(operand),
             Expr::Binary { lhs, rhs, .. } => {
                 self.expr(lhs);
                 self.expr(rhs);

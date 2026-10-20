@@ -13,13 +13,19 @@
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
-./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output
+./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
+./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread
+./ail run --parallel FILE.ail      # also pool loops proven independent; AIL_THREADS=N sets the pool size
 ./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
+./ail api --type FILE.ail L C   # type at a position (also --locals, --refs)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
+./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N)
+./ail run --watch n FILE.ail # each assignment to `mut` variable n, with value and position
+./ail run --verbose FILE.ail # a trap shows every frame's values (default: 10 lines; --json: one object)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
@@ -81,12 +87,22 @@ variable inside a loop, use `=`, not `:=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-Constants are top-level `NAME := value`, built from literals, other
-constants, collection and struct literals and operators (no calls):
+Constants are top-level `NAME := value`, computed at compile time. The
+value may call functions that do no I/O and use no capability
+(`ct.const.2`); a value that can fail needs `else`. Put `if`, `match` and
+`?` in a function and call it:
 
 ```ail
 MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}     # a Set[str]
+WORDS := "fn if else".split(" ")
+SQUARES := squares(8)                   # squares must be free of I/O
+
+fn squares(n int) List[int]
+    mut out := List[int]()
+    for i in 0..n
+        out.push(i * i)
+    out
 ```
 
 ## Structs, enums and methods
@@ -199,8 +215,10 @@ fn main() !                                 # main can fail; the error is report
 - `if x := e` also works on optionals (`else` without a name), and in `elif`.
   On a result that can fail, it needs an `else`.
 - `else` also works inside an expression: `Min => nums.min() else 0`,
-  `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`.
-- `?` on an optional works only in a function that returns an optional.
+  `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`, and in a `for`
+  header: `for x in j.arr("items") else []`.
+- `?` on an optional works in a function that returns an optional, or before
+  an `else`, which then catches the `none`: `j.get("u")?.str("name") else "?"`.
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
 - Several error types: `fn load() Config ! IoError | ParseError`.
@@ -409,8 +427,17 @@ empty := List[int]()   # an empty list of a given type, anywhere
 Also: `xs.insert(i, x)`, `xs.remove_at(i)`, `xs.extend(ys)`, `xs.clear()`, `xs.reverse()`; `xs.pop()`, `xs.first()` and `xs.last()` (give `T?`), `xs.contains(x)`,
 `xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
 (a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
-`xs.sum()` (ints or floats). Slices don't clamp, and negative indexes are
-errors: write `xs[xs.len() - 1]` or `xs.last()`.
+`xs.sum()` (ints or floats), `xs.take(n)` (the first `n`, or fewer). Slices
+don't clamp, and negative indexes are errors: write `xs[xs.len() - 1]` or
+`xs.last()`.
+
+Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
+`max`; stable, so sort by name first, then by count):
+
+```ail fragment
+counts := {"b": 2, "a": 2, "c": 5}
+top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
+```
 
 `for x in xs` gives a copy of each element, and changing `xs` inside the loop
 doesn't affect it. To change the elements themselves, use `for mut`:
@@ -437,12 +464,30 @@ nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 The loop variables are new names that end with the comprehension. `?` and
 `return` leave the function; `break` ends the comprehension.
 
+Loops use every core automatically when their iterations are independent:
+no output or capability, no `break`/`return`/`?`, and writes only to the
+iteration's own locals, to `out[i]` in a `for i in a..b` loop, or to an
+`int` total with `+=`. Results are always the same as running in order, so
+float totals use `xs.sum()` (a fixed tree) rather than `+=`. When you know
+the iterations are independent but the checker can't see it (writes to
+`out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
+(it prints, or breaks out) is an error:
+
+```ail
+fn main()
+    perm := [1, 0]
+    mut out := [0, 0]
+    par for i in 0..2
+        out[perm[i]] = i * 10    # par asserts perm has no repeats
+    print(out)
+```
+
 ## Maps and sets
 
 ```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
-ages["ann"] += 1                       # the key must exist, or the program stops
+ages["ann"] += 1                       # `op=` on a missing key starts from 0
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
 for name in ages.keys()                # `for k in m` is an error; also values()
@@ -465,6 +510,8 @@ program uses it.
 ```ail
 doc := parse_json("\{\"a\": [1, \"x\"]}")?   # Json ! JsonError; err.at is the char offset
 doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/as_bool/as_arr/as_obj)
+doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
+doc.set("id", Json.Str("x"))                   # replace or add a member (mut doc)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
 ```
 
@@ -485,6 +532,41 @@ bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
 Two `mut` arguments of one call can't refer to the same value.
+
+## Shared cells, resources and `move`
+
+`ref T` is the one way to share a value: copies of a reference see each
+other's changes, and fields and methods reach the contents directly.
+
+```ail
+root := ref Node(value: 1, children: [])
+alias := root
+alias.value = 2        # root.value is 2; any copy may change the cell
+print(root == alias)   # true: same cell (`==` on refs is identity)
+```
+
+A `unique` type can't be copied: binding, assigning, returning or storing it
+moves it, and using the old name afterwards (on any path) is an error. Its
+`impl Drop` runs once, when its last owner's block ends, even on a trap.
+`defer S` runs `S` when the block ends; cleanups and defers run last first.
+
+```ail
+unique struct File
+    fd int
+
+impl Drop for File
+    fn drop(mut self)
+        print("closing {fd}")
+
+fn close(move f File)  # takes ownership; the caller writes `move` too
+    print("bye {f.fd}")
+
+f := File(fd: 3)
+close(move f)          # f can't be used after this
+```
+
+A unique value can't be a list element, map value, `ref` contents or type
+argument yet (OQ-050).
 
 ## Modules
 
@@ -548,11 +630,12 @@ fn main() !
 |---|---|
 | `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents); all but `exists` are `! fs.IoError` |
 | `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
+| `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
 | `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
-| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `cursor(col, row)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` |
 
 A window is a grid of text cells; draw with `put`, then `present`:
 

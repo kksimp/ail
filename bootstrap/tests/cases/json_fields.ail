@@ -1,0 +1,15 @@
+## Typed JSON fields and `set` (json.query.2-3, ADR 0254).
+fn main()
+    mut doc := parse_json("\{\"id\": \"t1\", \"hours\": 2, \"done\": false, \"tags\": [\"a\"]}") else return
+    print(doc.str("id"))
+    print(doc.num("hours"))
+    print(doc.bool("done"))
+    print(doc.arr("tags"))
+    print(doc.str("hours"))
+    print(doc.str("nope"))
+    print(Json.Null.str("id"))
+    doc.set("done", Json.Bool(true))
+    doc.set("owner", Json.Str("kim"))
+    print(doc.to_text())
+    mut arr := Json.Arr([])
+    arr.set("x", Json.Null)

@@ -75,6 +75,8 @@ struct TaskRec {
     deadlock: bool,
     /// What it is blocked on, for the deadlock message.
     waiting: &'static str,
+    /// A task running outside the scheduler (conc.par.10), until joined.
+    pooled: Option<super::parallel::Pooled>,
 }
 
 struct Chan {
@@ -117,7 +119,7 @@ struct Turned<T>(T);
 unsafe impl<T> Send for Turned<T> {}
 
 fn new_task(status: Status) -> TaskRec {
-    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "" }
+    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "", pooled: None }
 }
 
 impl Sched {
@@ -220,11 +222,16 @@ fn cancelled(pos: Pos) -> Trap {
 /// still only one thread touches values, and wait for every thread.
 pub(super) fn shutdown(ctx: Option<Ctx>) {
     let Some(ctx) = ctx else { return };
-    let threads = {
+    let (threads, pooled) = {
         let mut st = ctx.sched.lock();
         st.shutdown = true;
-        std::mem::take(&mut st.threads)
+        let pooled: Vec<_> = st.tasks.iter_mut().filter_map(|t| t.pooled.take()).collect();
+        (std::mem::take(&mut st.threads), pooled)
     };
+    // conc.par.10: pooled tasks have no effects; let them finish.
+    for task in pooled {
+        let _ = task.join();
+    }
     for (id, t) in threads {
         {
             let mut st = ctx.sched.lock();
@@ -296,9 +303,21 @@ impl<'a, W: Write> Interp<'a, W> {
         for a in args {
             values.push(self.eval(&a.value, env)?);
         }
+        if self.tracing & super::trace::EFFECTS != 0 {
+            self.trace_task(true, &f.full_name(), &values, pos);
+        }
+        let pooled = self.pool_task(f, &values, pos);
         let ctx = self.ctx();
         let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
         let mut st = sched.lock();
+        // conc.par.10: a pure task runs on its own thread, outside the
+        // scheduler; `wait` joins it.
+        if let Some(task) = pooled {
+            let mut rec = new_task(Status::Done);
+            rec.pooled = Some(task);
+            st.tasks.push(rec);
+            return Ok(Value::Handle(Handle::Task(st.tasks.len() - 1)));
+        }
         // Reclaim the threads of finished tasks.
         let (done, live) = std::mem::take(&mut st.threads).into_iter().partition(|(_, t)| t.is_finished());
         st.threads = live;
@@ -407,6 +426,9 @@ impl<'a, W: Write> Interp<'a, W> {
         let trap = |rule: &'static str, message: String| -> Flow<Value> { Err(Trap { rule, pos, message }.into()) };
         Ok(match (h, name) {
             (Handle::Task(t), "wait") => {
+                if self.tracing & super::trace::EFFECTS != 0 {
+                    self.trace_task(false, &Handle::Task(t).text(), &[], pos);
+                }
                 st.tasks[t].consumed = true;
                 drop(st);
                 return Ok(match self.join(sched, me, t, pos)? {
@@ -521,6 +543,10 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// Wait for task `t` (conc.task.6): its result, or its trap.
     fn join(&mut self, sched: &Sched, me: usize, t: usize, pos: Pos) -> Result<Result<Value, Trap>, Trap> {
+        let pooled = sched.lock().tasks[t].pooled.take();
+        if let Some(task) = pooled {
+            return Ok(super::parallel::unpool(task, pos));
+        }
         let mut st = sched.lock();
         while st.tasks[t].status != Status::Done {
             st.tasks[t].waiters.push(me);

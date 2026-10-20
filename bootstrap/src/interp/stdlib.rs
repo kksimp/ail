@@ -22,6 +22,11 @@ pub fn set_program(path: &str, args: Vec<String>) {
     let _ = PROGRAM.set((path.to_string(), args));
 }
 
+/// The program's path as given to `ail run`, for positions (trace.run.2).
+pub(super) fn program_path() -> String {
+    PROGRAM.get().map_or_else(String::new, |(p, _)| p.clone())
+}
+
 fn text(s: impl Into<Rc<str>>) -> Value {
     Value::Str(s.into())
 }
@@ -50,6 +55,9 @@ impl<'a, W: Write> Interp<'a, W> {
         let mut values = Vec::with_capacity(args.len());
         for a in args {
             values.push(self.eval(&a.value, env)?);
+        }
+        if self.tracing & super::trace::EFFECTS != 0 {
+            self.trace_effect(module, f, &values, pos);
         }
         let str_arg = |i: usize| match &values[i] {
             Value::Str(s) => s.clone(),
@@ -106,6 +114,10 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(e) => self.io_error(&path, error_kind(&e), pos),
                 }
             }
+            ("path", "dir") => text(crate::stdlib::path_dir(&str_arg(0))),
+            ("path", "base") => text(crate::stdlib::path_split(&str_arg(0)).1),
+            ("path", "ext") => text(crate::stdlib::path_ext(&str_arg(0))),
+            ("path", "join") => text(crate::stdlib::path_join(&str_arg(0), &str_arg(1))),
             ("env", "args") => {
                 let args = PROGRAM.get().map(|(_, a)| a.as_slice()).unwrap_or_default();
                 Value::List(Rc::new(args.iter().map(|a| text(a.as_str())).collect()))

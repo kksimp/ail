@@ -3,7 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.path`, `std.proc`, `std.random`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -89,6 +89,34 @@ read, the program traps. *(ADR 0157)*
 
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
+
+## Paths: `std.path`
+
+**std.path.1** — `std.path` works on path text only: it never touches the
+file system, so its functions have no effects (`eff.infer.4`). *(ADR 0253)*
+
+**std.path.2** — A separator is `/`, and also `\` on Windows.
+`dir(p str) str` is the text before the last separator: `.` when there is
+none, and the separator itself for a path in the root (`dir("/x")` is `/`).
+`base(p str) str` is the text after the last separator. *(ADR 0253)*
+
+**std.path.3** — `ext(p str) str` is the text after the last `.` of
+`base(p)`, without the dot, and `""` when there is none or the only `.` is the
+first character (`ext(".bashrc")` is `""`). *(ADR 0253)*
+
+**std.path.4** — `join(a str, b str) str` is `b` when `b` starts with a
+separator or `a` is empty; otherwise `a` and `b` with one `/` between.
+*(ADR 0253)*
+
+```ail
+use std.path
+
+fn main()
+    print(path.dir("examples/logscan.ail"))    # examples
+    print(path.base("examples/logscan.ail"))   # logscan.ail
+    print(path.ext("archive.tar.gz"))          # gz
+    print(path.join("examples", "data"))       # examples/data
+```
 
 ## Standard input and output: `std.io`
 
@@ -184,6 +212,10 @@ struct Window              # a handle; at most one window is open
 struct Size
     cols int
     rows int
+struct Modifiers
+    ctrl bool
+    alt bool
+    shift bool
 enum Event
     Key(key str, ctrl bool, alt bool, shift bool)
     Resize(cols int, rows int)
@@ -202,8 +234,9 @@ be shown (no display, or a run without a window host), and `other` when
 `cols` or `rows` is outside 1 to 1000 or a window is already open. *(ADR 0177)*
 
 **std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
-`present`, `next_event`, `poll_event`, `set_title` and `close`; naming another is a
-compile-time error. All but `size(self) Size` take `mut self`. `size` is the
+`present`, `next_event`, `poll_event`, `modifiers`, `set_title` and `close`; naming another is a
+compile-time error. All but `size(self) Size` and `modifiers(self) Modifiers`
+take `mut self`. `size` is the
 grid's size in cells, which follows `Resize` events; it is 0 by 0 for a
 window that was never opened or has been closed with `close`. *(ADR 0177)*
 
@@ -288,3 +321,18 @@ Neither needs an open window. *(ADR 0240)*
 
 **std.ui.13** — `set_title(mut self, text str)` changes the window's title;
 on a closed window it does nothing. *(ADR 0240)*
+
+**std.ui.14** — `modifiers(self) Modifiers` returns which of Ctrl, Alt and
+Shift were held when the last event that `next_event` or `poll_event`
+returned happened (as std.ui.7 reports them, Command counting as Ctrl on
+macOS), so a program can tell a Shift-click from a click. Before any event,
+and on a closed window, all three are false. *(ADR 0242)*
+
+**std.ui.15** — `set_font_size(mut self, px int)` changes the font to the
+available size nearest `px` (the smaller on a tie); `font_size(self) int`
+returns it. A size is a cell height in pixels, one of 10, 12, 13, 14, 15,
+18, 20, 24, 26, 28, 30, 36 and 40; a window opens at 20. The window keeps
+its size in pixels, so when the number of cells that fit changes, a
+`Resize` event follows (std.ui.7) and the grid takes the new size when the
+program receives it. On a window that is not open, `set_font_size` does
+nothing visible. *(ADR 0243)*

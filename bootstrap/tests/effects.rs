@@ -31,3 +31,14 @@ fn deny_rejects_an_unknown_capability() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("eff.cap.2"));
 }
+
+#[test]
+fn parallel_verdicts_of_parallel_example() {
+    let out = ail(&["effects", "--parallel", "examples/parallel.ail"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(String::from_utf8_lossy(&out.stdout), include_str!("effects/parallel.loops"));
+    let out = ail(&["effects", "--parallel", "--json", "examples/parallel.ail"]);
+    let json = String::from_utf8_lossy(&out.stdout);
+    assert!(json.starts_with("{\"ail_api\":1,\"loops\":[{\"at\":\"examples/parallel.ail:32:5\""), "{json}");
+    assert_eq!(json.matches("\"verdict\":\"parallel\"").count(), 2);
+}
