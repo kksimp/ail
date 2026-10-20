@@ -43,7 +43,7 @@ fn main() !
                 print(mir.module_text(lower_file(args[1], none)?))
         "build" =>
             m := lower_file(args[1], runtime(args[2])?)?
-            print(obj.hex(obj.elf_x64(x64.generate(m))))
+            print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)

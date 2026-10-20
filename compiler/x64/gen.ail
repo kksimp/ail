@@ -2,8 +2,8 @@
 ## laid out in reverse postorder with a frame of `rbp`, the callee-saved
 ## registers it uses, and its spill slots; checks branch to stubs at the end
 ## of the function that call `rt.trap` with the site's text and operands
-## (native-abi.md §7). The image (`Image`) holds the code, the read-only
-## data and the fixups the object writer resolves.
+## (native-abi.md §7). The result is a `codegen.Image` for the object
+## writer.
 use mir
 use codegen
 
@@ -23,18 +23,6 @@ pub fn registers() codegen.Target
     )
 
 INT_ARGS := [7, 6, 2, 1, 8, 9]
-
-## The code and data of a whole program, before addresses are known.
-pub struct Image
-    pub code List[int]
-    ## Function symbols to offsets in `code`.
-    pub funcs Map[str, int]
-    ## The code's references to symbols (functions, `d:` data, `globals`).
-    pub fixups List[Fixup]
-    pub data List[int]
-    pub data_syms Map[str, int]
-    pub globals int
-    pub entry int
 
 ## A move of the parallel moves at an edge or a call: into location `dst`
 ## from location `src`, or from a constant (`imm`) or a symbol's address.
@@ -56,7 +44,7 @@ struct Stub
 
 struct Gen
     a Asm
-    img Image
+    img codegen.Image
     m mir.Module
     f mir.Func
     loc List[int]
@@ -70,14 +58,11 @@ struct Gen
     slot_base int
     frame int
 
-pub fn new_image() Image
-    Image(code: [], funcs: {}, fixups: [], data: [], data_syms: {}, globals: 8, entry: 0)
-
 ## Generate the whole program: `_start`, then each function.
-pub fn generate(m mir.Module) Image
-    mut img := new_image()
+pub fn generate(m mir.Module) codegen.Image
+    mut img := codegen.new_image()
     for i in 0..m.strs.len()
-        add_str(mut img, "d:s{i}", m.strs[i])
+        codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
     # _start: align the stack, run `main`, exit 0.
     a.alu_rr("xor", RBP, RBP)
@@ -88,61 +73,13 @@ pub fn generate(m mir.Module) Image
     a.call_sym("rt.exit")
     a.ud2()
     img.code = a.code
-    img.fixups = a.fixups
+    for fx in a.fixups
+        img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
     for f in m.funcs
         gen_func(mut img, m, f)
     img
 
-## A string object (native-abi.md §2) in the read-only data.
-pub fn add_str(mut img Image, sym str, s str)
-    if img.data_syms.contains(sym)
-        return
-    bytes := utf8(s)
-    align(mut img.data, 16)
-    img.data_syms[sym] = img.data.len()
-    push64(mut img.data, bytes.len())
-    push64(mut img.data, s.chars().len())
-    img.data.extend(bytes)
-
-fn add_f64(mut img Image, x float) str
-    bits := codegen.f64_bits(x)
-    sym := "d:f{bits}"
-    if not img.data_syms.contains(sym)
-        align(mut img.data, 8)
-        img.data_syms[sym] = img.data.len()
-        push64(mut img.data, bits)
-    sym
-
-pub fn align(mut bytes List[int], n int)
-    while bytes.len() % n != 0
-        bytes.push(0)
-
-pub fn push64(mut bytes List[int], v int)
-    for i in 0..8
-        bytes.push(v.shr(8 * i).bit_and(255))
-
-## The UTF-8 bytes of a string.
-pub fn utf8(s str) List[int]
-    mut out := List[int]()
-    for c in s.chars()
-        n := c.code()
-        if n < 128
-            out.push(n)
-        elif n < 2048
-            out.push(192 + n.shr(6))
-            out.push(128 + n.bit_and(63))
-        elif n < 65536
-            out.push(224 + n.shr(12))
-            out.push(128 + n.shr(6).bit_and(63))
-            out.push(128 + n.bit_and(63))
-        else
-            out.push(240 + n.shr(18))
-            out.push(128 + n.shr(12).bit_and(63))
-            out.push(128 + n.shr(6).bit_and(63))
-            out.push(128 + n.bit_and(63))
-    out
-
-fn gen_func(mut img Image, m mir.Module, f0 mir.Func)
+fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
     f := codegen.split_edges(f0)
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
@@ -192,7 +129,7 @@ fn gen_func(mut img Image, m mir.Module, f0 mir.Func)
     img.funcs[f.name] = base
     img.code.extend(g.a.code)
     for fx in g.a.fixups
-        img.fixups.push(Fixup(at: fx.at + base, label: -1, sym: fx.sym, tail: fx.tail))
+        img.relocs.push(codegen.Reloc(at: fx.at + base, kind: "rel32", sym: fx.sym, tail: fx.tail))
 
 # ---- frame ----
 
@@ -281,7 +218,7 @@ fn Gen.xmm(mut self, v int, scratch int) int
         a.vmovsd_rm(scratch, slot(l))
         return scratch
     i := remat[v]
-    sym := add_f64(mut img, i.fimm)
+    sym := codegen.add_f64(mut img, i.fimm)
     a.vmovsd_rm(scratch, at_sym(sym, 0))
     scratch
 
@@ -317,7 +254,7 @@ fn Gen.move_of(mut self, dst int, v int) Move
     if i.op == "str"
         return Move(dst: dst, src: -1, imm: 0, sym: "d:s{i.imm}", float: fl)
     if i.op == "fconst"
-        return Move(dst: dst, src: -1, imm: 0, sym: add_f64(mut img, i.fimm), float: fl)
+        return Move(dst: dst, src: -1, imm: 0, sym: codegen.add_f64(mut img, i.fimm), float: fl)
     Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
 
 ## Perform moves as if all at once: a move waits while its destination is
@@ -604,7 +541,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.alu_rr("cmp", S1, S0)
             a.jcc(CC_NE, ok)
             # The smallest `int` is the only value that converts to it.
-            a.vmovsd_rm(X1, at_sym(add_f64(mut img, -9223372036854775807.0 - 1.0), 0))
+            a.vmovsd_rm(X1, at_sym(codegen.add_f64(mut img, -9223372036854775807.0 - 1.0), 0))
             a.vucomisd(xa, X1)
             bad := stub(4, i.args[0], i.args[0], i.site, "")
             a.jcc(CC_P, bad)
@@ -865,18 +802,7 @@ fn Gen.list_set(mut self, i mir.Inst)
 fn Gen.gen_stubs(mut self)
     for s in stubs
         a.bind(s.label)
-        site := m.sites[s.site]
-        head := "{m.path}:{site.line}:{site.col}: trap[{site.rule}]: "
-        line := if site.line >= 1 and site.line <= m.lines.len() then m.lines[site.line - 1] else ""
-        gutter := "{site.line}"
-        mut pad := List[str]()
-        chars := line.chars()
-        for k in 0..site.col - 1
-            pad.push(if k < chars.len() and chars[k] == '\t' then "\t" else " ")
-        tail := "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n"
-        add_str(mut img, "d:h{s.site}", head)
-        add_str(mut img, "d:t{s.site}", tail)
-        add_str(mut img, "d:o{s.op}", s.op)
+        codegen.add_trap_texts(mut img, m, s.site, s.op)
         mut moves := List[Move]()
         moves.push(Move(dst: RDI, src: -1, imm: s.kind, sym: "", float: false))
         if s.kind == 4
