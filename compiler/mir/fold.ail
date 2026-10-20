@@ -62,7 +62,10 @@ fn cse(f Func) Func
     for b in 0..n
         for k in 0..g.blocks[b].insts.len()
             g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
-        g.blocks[b].insts = [g.blocks[b].insts[k] for k in 0..g.blocks[b].insts.len() if not dup[b][k]]
+        g.blocks[b].insts = [
+            g.blocks[b].insts[k]
+            for k in 0..g.blocks[b].insts.len() if not dup[b][k]
+        ]
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = repl[t.cond]

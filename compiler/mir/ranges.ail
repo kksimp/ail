@@ -41,7 +41,14 @@ pub struct Proven
 ## What can be proven about the checked arithmetic of the loop `lp` (a
 ## counted loop `c`) when every held `int` it reads is within +-LIMIT.
 ## `held(v)` says whether `v` is held in the loop.
-pub fn prove(f Func, defs List[Def], lp LoopInfo, c Counted, order List[int], held List[bool]) Proven
+pub fn prove(
+    f Func,
+    defs List[Def],
+    lp LoopInfo,
+    c Counted,
+    order List[int],
+    held List[bool],
+) Proven
     mut spans := Map[int, Span]()
     mut limited := List[int]()
     mut sites := Set[str]()
@@ -78,7 +85,12 @@ fn span_of(
 ) Out
     if i.op == "const"
         return verdict(true, exact(i.imm, i.imm))
-    if i.op != "add" and i.op != "sub" and i.op != "mul" and i.op != "neg" and i.op != "div" and i.op != "rem"
+    if i.op != "add"
+        and i.op != "sub"
+        and i.op != "mul"
+        and i.op != "neg"
+        and i.op != "div"
+        and i.op != "rem"
         return verdict(true, top())
     a := arg_span(f, defs, i.args[0], mut spans, mut limited, held)
     if not a.known
@@ -133,7 +145,14 @@ fn max_abs(s Span) int
 
 ## A value's span: known for what the loop computed, +-LIMIT for a held
 ## `int` (which the guard then has to test), unknown otherwise.
-fn arg_span(f Func, defs List[Def], v int, mut spans Map[int, Span], mut limited List[int], held List[bool]) Span
+fn arg_span(
+    f Func,
+    defs List[Def],
+    v int,
+    mut spans Map[int, Span],
+    mut limited List[int],
+    held List[bool],
+) Span
     if s := spans.get(v)
         return s
     if k := const_of(f, defs, v)
