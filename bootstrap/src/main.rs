@@ -13,6 +13,7 @@ mod diag;
 mod explain;
 mod fasthash;
 mod doctest;
+mod edit;
 mod docs;
 mod fix;
 mod foreign;
@@ -54,6 +55,10 @@ commands:
                 indented; --text: an outline; --symbols: every reference)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
+  edit PATH < EDITS
+                apply a JSON list of edits by declaration id (replace_body, replace,
+                insert, delete, rename, import), format, check, and print the new
+                diagnostics; --dry-run, --diff, --if-clean (edit.op.1)
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
@@ -231,6 +236,7 @@ fn main() -> ExitCode {
         ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
+        ["edit", rest @ ..] => edit::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));

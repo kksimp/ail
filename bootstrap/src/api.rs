@@ -159,6 +159,24 @@ pub fn outline_with(
     Ok(out)
 }
 
+/// Every reference in the program as (file, line in that file, column, id),
+/// in position order; ids carry their module in a package (api.ref.1, api.pkg.1).
+pub fn references(prog: &Program, resolved: &Resolved, package: bool) -> Vec<(String, usize, usize, String)> {
+    let mut refs = Refs { prog, resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
+    refs.program();
+    let mut found = refs.found;
+    found.retain(|(p, _)| !crate::ast::is_prelude(*p) && (package || !is_prelude(*p)));
+    found.sort_by(|a, b| (a.0.line, a.0.col, &a.1).cmp(&(b.0.line, b.0.col, &b.1)));
+    found.dedup();
+    found
+        .into_iter()
+        .map(|(p, id)| match prog.file_at(p) {
+            Some(f) => (f.path.clone(), p.line - f.base, p.col, id),
+            None => (String::new(), p.line, p.col, id),
+        })
+        .collect()
+}
+
 enum PackageFailure {
     Message(String),
     Diags(Vec<crate::ast::SourceFile>, Vec<diag::Diagnostic>),

@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `edit`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -313,3 +313,62 @@ of the first record not shown.
 **budget.out.6** — A record is never cut, so a command whose whole output is
 one line (`ail api FILE`, `ail explain --json`) is shown whole; its text forms
 (`--text`) split into records.
+
+## Structured edits
+
+**edit.in.1** — `ail edit PATH` reads a JSON list of edits (or one edit
+object) from standard input and applies them in order to the file or
+package directory `PATH`. Each edit has an `"op"`: `replace_body`,
+`replace`, `insert`, `delete`, `rename` or `import`, with the keys of
+`edit.op.1–6`. Input that isn't such JSON is an error (exit 2)
+([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
+
+**edit.in.2** — Edits apply all or nothing: when one cannot be applied, the
+command names it (`edit K of N`), writes nothing and exits 2.
+
+**edit.id.1** — An edit names a declaration by its id (`api.id.1`):
+`fn:NAME`, `method:TYPE.NAME`, `type:NAME`, `trait:NAME`, `const:NAME`,
+and for `rename` also `field:TYPE.NAME` and `variant:TYPE.NAME`. Only
+declarations that start at column 0 are found. A declaration runs from its
+doc comment and attributes to its last indented line.
+
+**edit.id.2** — In a package, an id may carry the module of its file
+(`fn:geo.origin`, `api.pkg.1`). An id that names declarations in two files
+is an error that asks for the module.
+
+**edit.op.1** — `{"op":"replace_body","id":ID,"body":TEXT}` replaces the
+lines after the declaration's signature with `TEXT`, re-indented to one
+level. Leading `requires` and `ensures` lines are kept unless `TEXT` has
+its own.
+
+**edit.op.2** — `{"op":"replace","id":ID,"text":TEXT}` replaces the whole
+declaration, doc comment included. `{"op":"delete","id":ID}` removes it.
+
+**edit.op.3** — `{"op":"insert","text":TEXT}` adds a declaration after
+(`"after":ID`) or before (`"before":ID`) another, or at the end of the file
+(`"file"` picks it in a package; the default is the package's first root
+file).
+
+**edit.op.4** — The edits of `edit.op.1–3` are textual: their result is
+checked with the rest (`edit.out.2`), not before.
+
+**edit.op.5** — `{"op":"rename","id":ID,"to":NAME}` renames the declaration
+and every reference to it that `ail api --symbols` reports (`api.ref.1`),
+in every file of the program. The program as edited so far must check
+without errors; otherwise the rename fails.
+
+**edit.op.6** — `{"op":"import","module":M}` adds `use M` after the last
+`use` line (or at the top) unless it is there.
+
+**edit.out.1** — Every changed file is rewritten in canonical layout
+(`ail fmt`) when it parses.
+
+**edit.out.2** — The program is then checked and its diagnostics are
+reported as `ail check` reports them, followed by one summary line,
+`edited N files with K edits; E errors, W warnings` (with `--json`,
+`{"summary":true,"edits","written","files","errors","warnings"}`). The exit
+status is 2 when there are errors, 0 otherwise. The files are written even
+when there are errors, unless `--if-clean` is given.
+
+**edit.out.3** — `--dry-run` writes nothing and prints a unified diff of
+each file that would change; `--diff` prints the diff and writes.
