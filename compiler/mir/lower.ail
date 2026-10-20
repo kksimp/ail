@@ -89,6 +89,7 @@ PRIMS := {
     "float_bits": "int",
     "bits_float": "float",
     "target": "int",
+    "gc_regs": "int",
 }
 
 ## The `int` methods of two operands that are one instruction (expr.bit.1).

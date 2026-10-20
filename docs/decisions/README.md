@@ -378,6 +378,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0389](0389-mach-o-signed-by-the-backend.md) | Mach-O executables, dynamically loaded but importing nothing, signed ad hoc by the backend *(delegated)* | Accepted | 2026-10-20 |
 | [0390](0390-native-subset-for-the-drag-race.md) | The native subset grows to the drag-race programs: arguments, `to_int() else`, constant expressions, `{x:.N}`, strings and nested lists *(delegated)* | Accepted | 2026-10-20 |
 | [0391](0391-native-backend-optimisations.md) | First optimisations in the native backend: lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols *(delegated)* | Accepted | 2026-10-20 |
+| [0562](0562-native-heap-size-classes-and-header.md) | Native heap: reserved region, 16 KiB pages, size-class free lists, header word *(delegated)* | Accepted | 2026-10-20 |
+| [0563](0563-conservative-mark-sweep-collector.md) | The first native collector is conservative on the stack and registers, precise by kind inside objects *(delegated)* | Accepted | 2026-10-20 |
+| [0564](0564-collection-trigger-and-sweep.md) | Collection trigger, sweep and measurements *(delegated)* | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |

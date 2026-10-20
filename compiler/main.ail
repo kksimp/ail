@@ -81,7 +81,7 @@ fn check_dump(path str, many bool) !
 ## The native runtime in directory `dir`, parsed as one program.
 fn runtime(dir str) !ast.Program
     mut texts := List[str]()
-    for name in ["prim.ail", "core.ail"]
+    for name in ["prim.ail", "heap.ail", "gc.ail", "core.ail"]
         texts.push(fs.read_text("{dir}/{name}")?)
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 

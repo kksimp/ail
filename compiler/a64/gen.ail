@@ -738,6 +738,13 @@ fn Gen.prim(mut self, i mir.Inst)
             if k > 0
                 a.alu_ri("add", d, d, 8 * k)
             put_gpr(i.dst, d)
+        "gc_regs" =>
+            b := gpr(i.args[0], S0)
+            for k in 0..10
+                a.str(19 + k, b, 8 * k)
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, SP)
+            put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, os)

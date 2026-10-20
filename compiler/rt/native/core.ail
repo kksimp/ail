@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## The native runtime's core (native-abi.md, ADRs 0404-0408, 0387): system
-## calls, the bump allocator, buffered output, lists of numbers, and traps.
+## calls, the allocator (`heap.ail`), buffered output, lists of numbers, and traps.
 ## Written in the native subset over the primitives of `prim.ail`, and
 ## compiled by the backend into every executable. The algorithms follow
 ## lane 122's machine model in `compiler/rt/rt.ail`.
@@ -10,9 +10,6 @@
 # Global slots.
 OUT_BUF := 0
 OUT_LEN := 1
-HEAP_NEXT := 2
-HEAP_END := 3
-CHUNK := 4
 ARGC := 5
 ARGV := 6
 PARSE_OK := 7
@@ -42,7 +39,7 @@ fn sys_mmap(n int) int
     flags := if t == 2 then 4098 else 34
     syscall(k, 0, n, 3, flags, -1, 0)
 
-# ---- memory (ADR 0407) ----
+# ---- memory (ADR 0562) ----
 
 ## Called by the entry with the process's argument count and vector.
 fn init(argc int, argv int)
@@ -50,23 +47,7 @@ fn init(argc int, argv int)
     store64(global(ARGV), argv)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
-    store64(global(CHUNK), 1048576)
-
-## `n` zeroed bytes, 16-byte aligned, never freed.
-fn alloc(n int) int
-    size := (n + 15) / 16 * 16
-    mut p := load64(global(HEAP_NEXT))
-    if p == 0 or p + size > load64(global(HEAP_END))
-        mut chunk := load64(global(CHUNK))
-        if chunk < size
-            chunk = size
-        p = sys_mmap(chunk)
-        if p < 0
-            fail(1, 0, 0)
-        store64(global(HEAP_END), p + chunk)
-        store64(global(CHUNK), chunk * 2)
-    store64(global(HEAP_NEXT), p + size)
-    p
+    heap_init(argv)
 
 fn copy_bytes(dst int, src int, n int)
     mut i := 0
@@ -126,7 +107,7 @@ fn out_str(s str)
 
 ## A string object of `n` bytes, uninitialised, with `chars` characters.
 fn str_new(n int, chars int) int
-    p := alloc(16 + n)
+    p := alloc(16 + n, KIND_STR)
     store64(p, n)
     store64(p + 8, chars)
     p
@@ -251,11 +232,18 @@ fn out_list_float(xs List[int])
 
 ## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
 ## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
+## The kind of a list's element block: a `List[bool]`'s holds no pointers.
+fn data_kind(size int) int
+    if size == 1
+        KIND_ATOMIC
+    else
+        KIND_LDATA
+
 fn list_alloc(cap int, size int) List[int]
-    p := alloc(24)
+    p := alloc(24, KIND_LIST)
     c := if cap < 4 then 4 else cap
     store64(p + 8, c)
-    store64(p + 16, alloc(size * c))
+    store64(p + 16, alloc(size * c, data_kind(size)))
     list_at(p)
 
 fn list_new(cap int) List[int]
@@ -263,7 +251,7 @@ fn list_new(cap int) List[int]
 
 fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
-    data := alloc(size * cap)
+    data := alloc(size * cap, data_kind(size))
     copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
     store64(p + 16, data)

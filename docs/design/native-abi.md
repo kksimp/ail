@@ -73,10 +73,13 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
-**Heap object header.** None in this revision. A collector (ADR 0012's ladder)
-needs type information; the plan is a second ABI revision with an 8-byte word
-before each object, and the allocator already returns 16-byte aligned
-addresses with 8 bytes of slack for it (ADR 0407).
+**Heap object header** (ADR 0562). Every heap object has an 8-byte word at
+pointer minus 8: bits 0-7 kind, bit 8 mark (collector only), bits 9-15
+reserved, bits 16-63 payload bytes. Kinds: 1 string, 2 list header, 3 list
+data, 4 struct, 5 enum payload, 6 closure, 7 map, 8 set, 9 bytes, 10 boxed
+optional/result, 11 pointer-free words (`List[bool]` data), 12-255 reserved.
+The object pointer is 8-byte aligned (16-byte blocks start 8 bytes before it).
+Literals in read-only data have no header and are never freed.
 
 ## 3. Entry and exit
 
@@ -120,12 +123,26 @@ current macOS ARM64 and is what the first slice uses; the fallback is to import
 `_write`, `_exit` and `_mmap` from `libSystem` through the dyld stubs lane 126
 needs for `extern` anyway. Only the four shim functions change (ADR 0406).
 
-## 5. Allocator
+## 5. Allocator and collector
 
-A bump allocator over `mmap`ed chunks: first chunk 1 MiB, each later chunk
-`max(request, 2 * previous)`, 16-byte alignment, zeroed by the kernel, never
-freed. `alloc(n)` aborts with trap `run.limit.2` if `mmap` fails. This is
-the interim for the GC (ADR 0407).
+**As built (lane 171, ADRs 0562-0564).** `rt.alloc(n, kind)` returns `n`
+zeroed payload bytes with the header word before them. `rt.init` reserves up
+to 16 GiB of address space (`mmap`, no-reserve; the size halves until it is
+accepted), cut into 16 KiB pages with a page table (free, small page of class
+c, first or later page of a large span). Blocks up to 8192 bytes, header
+included, come from 36 size classes (16 to 256 in steps of 16, then four per
+doubling) with free lists; larger objects take whole pages. Failure to get
+memory traps `run.limit.2`.
+
+The collector (`compiler/rt/native/gc.ail`) is stop-the-world mark and sweep,
+run from `alloc` when the bytes allocated since the last collection exceed
+`max(8 MiB, live bytes)`. Roots: the stack from the stack pointer to the
+`argv` address saved by `rt.init`, the callee-saved registers (primitive
+`gc_regs`), and the global slots, all read as possible pointers, interior
+pointers included. Objects are scanned by kind (list headers: the data
+pointer; strings, bytes and kind 11: nothing; others: every word). The
+collector does not move objects. Global slots 8 and 9 hold the heap state
+block and the stack top; the image has 16 slots.
 
 ## 6. Output
 

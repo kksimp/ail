@@ -1,0 +1,138 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native collector (ADR 0562, 0564): stop-the-world mark and sweep.
+## Roots are found conservatively: every word of the stack from the current
+## stack pointer up to the saved top, the callee-saved registers, and the
+## runtime's global slots, taken as a pointer when it falls inside a live
+## object (interior pointers count). Inside objects the kind says what to
+## scan, and lists of scalars and strings hold no pointers.
+
+## The object that contains address `w`: the address of its header word, or
+## 0 when `w` is not inside the heap or lies in an unallocated block.
+fn gc_find(w int) int
+    base := hs(H_BASE)
+    if w < base or w >= hs(H_TOP)
+        return 0
+    pi := (w - base) / PAGE
+    t := load64(hs(H_PAGES) + 8 * pi)
+    tag := t.bit_and(255)
+    pb := base + pi * PAGE
+    if tag == 1
+        csz := class_size(t.shr(8))
+        bs := pb + (w - pb) / csz * csz
+        if bs + csz > pb + PAGE
+            return 0
+        return bs
+    if tag == 2
+        return pb
+    if tag == 3
+        return base + t.shr(8) * PAGE
+    0
+
+## Mark the object containing `w`, if any, and queue it for scanning.
+fn gc_mark(w int)
+    bs := gc_find(w)
+    if bs != 0
+        h := load64(bs)
+        kind := h.bit_and(255)
+        if kind != 0 and h.bit_and(256) == 0
+            store64(bs, h.bit_or(256))
+            if kind != KIND_STR and kind != KIND_BYTES and kind != KIND_ATOMIC
+                top := hs(H_MARKN)
+                if top >= hs(H_MARKCAP)
+                    fail(1, 0, 0)
+                store64(hs(H_MARKS) + 8 * top, bs)
+                hset(H_MARKN, top + 1)
+
+fn gc_scan_range(from int, to int)
+    mut p := from
+    while p < to
+        gc_mark(load64(p))
+        p += 8
+
+## Scan the queued objects until none is left.
+fn gc_drain()
+    mut top := hs(H_MARKN)
+    while top > 0
+        top -= 1
+        hset(H_MARKN, top)
+        bs := load64(hs(H_MARKS) + 8 * top)
+        h := load64(bs)
+        n := h.shr(16)
+        if h.bit_and(255) == KIND_LIST
+            # +0 len, +8 cap, +16 data
+            gc_mark(load64(bs + 24))
+        else
+            gc_scan_range(bs + 8, bs + 8 + n / 8 * 8)
+        top = hs(H_MARKN)
+
+## Free what is unmarked, clear the marks, and rebuild the free lists.
+## A page with no live block goes back to the page pool.
+fn gc_sweep()
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    top_i := (hs(H_TOP) - base) / PAGE
+    for c in 0..40
+        hset(H_HEADS + c, 0)
+        hset(H_BUMP + c, 0)
+        hset(H_BEND + c, 0)
+    mut live := 0
+    mut pi := 0
+    while pi < top_i
+        t := load64(pt + 8 * pi)
+        tag := t.bit_and(255)
+        pb := base + pi * PAGE
+        if tag == 1
+            idx := t.shr(8)
+            csz := class_size(idx)
+            per := PAGE / csz
+            mut marked := 0
+            for k in 0..per
+                if load64(pb + k * csz).bit_and(256) != 0
+                    marked += 1
+            if marked == 0
+                store64(pt + 8 * pi, 0)
+            else
+                live += marked * csz
+                mut head := hs(H_HEADS + idx)
+                mut k := per - 1
+                while k >= 0
+                    bs := pb + k * csz
+                    h := load64(bs)
+                    if h.bit_and(256) != 0
+                        store64(bs, h.bit_xor(256))
+                    else
+                        store64(bs, 0)
+                        store64(bs + 8, head)
+                        head = bs
+                    k -= 1
+                hset(H_HEADS + idx, head)
+            pi += 1
+        elif tag == 2
+            np := t.shr(8)
+            h := load64(pb)
+            if h.bit_and(256) != 0
+                store64(pb, h.bit_xor(256))
+                live += np * PAGE
+            else
+                for k in 0..np
+                    store64(pt + 8 * (pi + k), 0)
+            pi += np
+        else
+            pi += 1
+    hset(H_LIVE, live)
+    hset(H_HINT, 0)
+    hset(H_ALLOCD, 0)
+    hset(H_THRESH, if live > MIN_THRESH then live else MIN_THRESH)
+
+## Collect garbage. Called by `alloc` when enough has been allocated.
+fn gc_collect()
+    m := heap_state()
+    sp := gc_regs(m + 8 * H_REGS)
+    hset(H_MARKN, 0)
+    gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
+    gc_scan_range(sp, load64(global(STACK_TOP)))
+    gc_scan_range(global(0), global(16))
+    gc_drain()
+    gc_sweep()
