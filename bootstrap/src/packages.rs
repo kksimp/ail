@@ -2,8 +2,9 @@
 //! eff.cap.4-5), ADRs 0230-0233.
 //!
 //! A package root may hold an `ail.pkg` manifest (mod.pkg.1): one line
-//! `package NAME [caps LIST]`, then one `dep NAME path DIR [caps LIST]` line
-//! per dependency (mod.pkg.2-3). Every package in the dependency graph is
+//! `package NAME [caps LIST]`, then one `dep NAME path DIR [caps LIST]` or
+//! `dep NAME git URL rev|tag PIN [caps LIST]` line per dependency
+//! (mod.pkg.2-3, mod.pkg.6; git fetching and `ail.lock` are in `git.rs`). Every package in the dependency graph is
 //! read before any source file. A dependency's modules are loaded under its
 //! name (`use geo.shapes` is `DIR/shapes`), and a dependency resolves its own
 //! imports against its own root and its own manifest (mod.pkg.3). The
@@ -23,6 +24,8 @@ use crate::check::Resolved;
 use crate::check::effects::{CAPABILITIES, Effects};
 use crate::diag::{Diagnostic, Pos};
 
+pub mod git;
+
 /// The manifest's file name (mod.pkg.1).
 pub const MANIFEST: &str = "ail.pkg";
 
@@ -34,6 +37,9 @@ pub struct Packages {
     /// Package name to the dependencies its manifest declares.
     deps: HashMap<String, Vec<String>>,
     manifests: Vec<ManifestFile>,
+    /// `ail.lock` and the git dependencies resolved (mod.pkg.8).
+    lock: git::Lock,
+    opts: git::Options,
 }
 
 struct ManifestFile {
@@ -62,6 +68,8 @@ impl Packages {
             roots: HashMap::from([(String::new(), root.to_path_buf())]),
             deps: HashMap::new(),
             manifests: Vec::new(),
+            lock: git::Lock::read(root),
+            opts: git::options(),
         };
         let mut declared: HashMap<String, (usize, Pos)> = HashMap::new();
         let mut path = vec![(canonical(root), root.display().to_string())];
@@ -88,7 +96,74 @@ impl Packages {
         for (m, d) in clashes {
             p.manifests[m].diags.push(d);
         }
+        p.settle_lock();
         p
+    }
+
+    /// mod.pkg.8: refuse a stale lock under `--deterministic`, else write it
+    /// when the command writes locks.
+    fn settle_lock(&mut self) {
+        if !self.manifests.first().is_some_and(|m| m.package.is_empty()) {
+            return;
+        }
+        if self.opts.frozen {
+            let extra = self.lock.extra();
+            if !extra.is_empty() {
+                let names = extra.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
+                self.manifests[0].diags.push(
+                    Diagnostic::new(
+                        "mod.pkg.8",
+                        Pos { line: 1, col: 1 },
+                        format!("`ail.lock` is stale: it locks {names}, which no `ail.pkg` declares"),
+                    )
+                    .help("run `ail pkg update` and commit `ail.lock`, or run without `--deterministic`"),
+                );
+            }
+        } else if self.opts.write_lock || self.opts.refresh.is_some() {
+            if let Err(e) = self.lock.save() {
+                self.manifests[0].diags.push(Diagnostic::new("mod.pkg.8", Pos { line: 1, col: 1 }, e));
+            }
+        }
+    }
+
+    /// The git dependencies resolved, for `ail pkg update` (mod.pkg.9).
+    pub fn locked(&self) -> &[git::Entry] {
+        &self.lock.used
+    }
+
+    /// The directory of git dependency `dep`, fetched or from the cache
+    /// (mod.pkg.7-8); `None` after a diagnostic in manifest `me`.
+    fn git_dir(&mut self, me: usize, name: &str, source: &git::Source, pos: Pos) -> Option<PathBuf> {
+        if let Some(e) = self.lock.used.iter().find(|e| e.name == name) {
+            // Declared again by another manifest of the graph.
+            if e.source == *source {
+                return Some(git::home().join("deps").join(format!("{name}-{}", e.commit)));
+            }
+        }
+        let locked = self.lock.locked(name, source, &self.opts.refresh).map(str::to_string);
+        if locked.is_none() && self.opts.frozen {
+            self.manifests[me].diags.push(
+                Diagnostic::new(
+                    "mod.pkg.8",
+                    pos,
+                    format!("`ail.lock` is stale: it doesn't lock dependency `{name}` as this line names it"),
+                )
+                .help(format!("run `ail pkg update {name}` and commit `ail.lock`, or run without `--deterministic`")),
+            );
+            self.lock.failed = true;
+            return None;
+        }
+        match git::fetch(name, source, locked.as_deref(), self.opts.offline, pos) {
+            Ok((commit, dir)) => {
+                self.lock.used.push(git::Entry { name: name.to_string(), source: source.clone(), commit });
+                Some(dir)
+            }
+            Err(d) => {
+                self.manifests[me].diags.push(d);
+                self.lock.failed = true;
+                None
+            }
+        }
     }
 
     /// Read package `pkg`'s manifest in `dir` and its dependencies. `from`
@@ -130,8 +205,14 @@ impl Packages {
         }
         let base = dir;
         for dep in manifest.deps {
-            let Some(rel) = dep.path else { continue };
-            let dir = base.join(&rel);
+            let dir = match (dep.path, &dep.git) {
+                (Some(rel), _) => base.join(&rel),
+                (None, Some(source)) => match self.git_dir(me, &dep.name, source, dep.pos) {
+                    Some(dir) => dir,
+                    None => continue,
+                },
+                (None, None) => continue,
+            };
             if !dir.is_dir() {
                 self.manifests[me].diags.push(
                     Diagnostic::new("mod.pkg.3", dep.pos, format!("there is no directory `{}`", dir.display()))
@@ -254,12 +335,14 @@ struct Dep {
     pos: Pos,
     /// `path DIR`; `None` for a git dependency or an error.
     path: Option<String>,
+    /// `git URL` with its pin (mod.pkg.6).
+    git: Option<git::Source>,
     caps: Vec<&'static str>,
 }
 
 /// The words of one line, with their columns: whitespace separates them,
 /// `"..."` quotes one, and `#` starts a comment (mod.pkg.2).
-fn words(line: &str, n: usize, diags: &mut Vec<Diagnostic>) -> Vec<(String, Pos)> {
+pub(crate) fn words(line: &str, n: usize, diags: &mut Vec<Diagnostic>) -> Vec<(String, Pos)> {
     let chars: Vec<char> = line.chars().collect();
     let mut out = Vec::new();
     let mut i = 0;
@@ -396,6 +479,7 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
             diags.push(Diagnostic::new("mod.pkg.4", *name_pos, msg).help("give each dependency its own name"));
             continue;
         }
+        let mut git = None;
         let path = match (keys.get("path"), keys.get("git")) {
             (Some((p, _)), None) => {
                 for k in ["rev", "tag"] {
@@ -405,17 +489,15 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
                 }
                 Some(p.to_string())
             }
-            (None, Some((_, gpos))) => {
-                if keys.contains_key("rev") == keys.contains_key("tag") {
-                    diags.push(
+            (None, Some((url, gpos))) => {
+                match (keys.get("rev"), keys.get("tag")) {
+                    (Some((pin, _)), None) => git = Some(git::Source { url: url.to_string(), kind: "rev", pin: pin.to_string() }),
+                    (None, Some((pin, _))) => git = Some(git::Source { url: url.to_string(), kind: "tag", pin: pin.to_string() }),
+                    _ => diags.push(
                         Diagnostic::new("mod.pkg.6", *gpos, "a `git` dependency needs exactly one of `rev` and `tag`")
                             .help("pin it with `rev COMMIT` or `tag TAG`"),
-                    );
+                    ),
                 }
-                diags.push(
-                    Diagnostic::new("mod.pkg.6", *gpos, "the bootstrap doesn't fetch `git` dependencies yet")
-                        .help("clone the repository and depend on it with `path DIR`"),
-                );
                 None
             }
             (Some(_), Some((_, gpos))) => {
@@ -430,7 +512,7 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
                 None
             }
         };
-        m.deps.push(Dep { name: name.clone(), pos: *name_pos, path, caps: grant.unwrap_or_default() });
+        m.deps.push(Dep { name: name.clone(), pos: *name_pos, path, git, caps: grant.unwrap_or_default() });
     }
     if m.name.is_none() {
         diags.push(
@@ -493,4 +575,44 @@ pub fn check_grants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
         }
     }
     diags
+}
+
+/// `ail pkg update [NAME...]` (mod.pkg.9): resolve the named git
+/// dependencies of the package in the current directory (all if none are
+/// named) again, ignoring `ail.lock`, and rewrite the lock.
+pub fn update_command(names: &[&str], json: bool) -> std::process::ExitCode {
+    let refresh: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+    let o = git::options();
+    git::configure(git::Options { write_lock: true, frozen: false, refresh: Some(refresh.clone()), ..o });
+    let root = PathBuf::from(".");
+    let packages = Packages::read(&root);
+    let mut diags = Vec::new();
+    for n in &refresh {
+        if !packages.locked().iter().any(|e| e.name == *n) && packages.manifests.first().is_some_and(|m| m.package.is_empty()) {
+            diags.push(
+                Diagnostic::new("mod.pkg.9", Pos { line: 1, col: 1 }, format!("no `ail.pkg` of this program has a git dependency `{n}`"))
+                    .help("name a `dep NAME git ...` line of `ail.pkg` or of a dependency's"),
+            );
+        }
+    }
+    if packages.manifests.is_empty() {
+        eprintln!("error: there is no `{MANIFEST}` in the current directory (mod.pkg.9)");
+        return std::process::ExitCode::from(2);
+    }
+    let mut entries: Vec<String> = packages.locked().iter().map(|e| format!("{} {}", e.name, e.commit)).collect();
+    entries.sort();
+    let mut prog = Program::default();
+    let mut local = Vec::new();
+    // Diagnostics from `read` are local to their manifest; `finish` shifts them.
+    packages.finish(&mut prog, &mut local);
+    let at = Pos { line: prog.files.first().map_or(0, |f| f.base) + 1, col: 1 };
+    local.extend(diags.into_iter().map(|d| Diagnostic { pos: at, ..d }));
+    if !local.is_empty() {
+        crate::modules::report(&prog.files, local, json);
+        return std::process::ExitCode::from(2);
+    }
+    for e in entries {
+        println!("locked {e}");
+    }
+    std::process::ExitCode::SUCCESS
 }

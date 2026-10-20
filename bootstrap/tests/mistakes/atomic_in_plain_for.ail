@@ -1,0 +1,7 @@
+fn main()
+    n := Atomic(0)
+    for i in 0..4
+        n.add(1)
+    print(n.load())
+    m := Atomic(0.5)
+    print(m.load())

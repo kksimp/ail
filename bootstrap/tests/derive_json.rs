@@ -11,7 +11,7 @@ fn expanded_api_shows_generated_json_code() {
     assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8(out.stdout).unwrap();
     for want in [
-        "\"signature\":\"fn Shape.from_json(j Json) Shape ! JsonError\"",
+        "\"signature\":\"fn from_json(j Json) Self ! JsonError\"",
         "name := j.variant_name()?",
         "return Shape.Poly(v_points)",
         "return e.under(\\\"points[{v_points_i}]\\\")",

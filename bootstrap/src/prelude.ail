@@ -6,10 +6,20 @@ enum Ordering
     Equal
     Greater
 
+## An atomic operation's memory ordering, given as `a.load(order: Relaxed)`
+## (conc.atomic.7, ADR 0352). Leaving it out means `SeqCst`.
+enum AtomicOrder
+    SeqCst
+    Acquire
+    Release
+    AcqRel
+    Relaxed
+
 trait Eq
     fn eq(self, other Self) bool
 
-trait Ord
+## `Ord` requires `Eq` (trait.std.2, trait.super.1).
+trait Ord Eq
     fn cmp(self, other Self) Ordering
     fn min(self, other Self) Self
         if self.cmp(other) == Greater
@@ -25,8 +35,9 @@ trait Ord
 trait ToStr
     fn to_str(self) str
 
-## Map keys and set elements. Automatic, with no methods (trait.auto.5).
-trait Hash
+## Map keys and set elements. Automatic, with no methods (trait.auto.5);
+## requires `Eq` (trait.super.1, ADR 0133).
+trait Hash Eq
 
 ## The cleanup of a unique type: runs once when the value's owner goes out
 ## of scope, unless it was moved away first (own.uniq.3, ADR 0191).
@@ -496,10 +507,42 @@ impl ToJson for List[T ToJson]
     fn to_json(self) Json
         Json.Arr([x.to_json() for x in self])
 
-## A type that can be read from JSON. `impl FromJson for T` derives the
-## associated function `T.from_json(j Json) T ! JsonError` with
-## `derive_from_json` (ct.derive.2, ct.gen.1, ADR 0307).
+## A type that can be read from JSON. `impl FromJson for T` with no
+## functions derives `from_json` with `derive_from_json` (ct.derive.2,
+## ADR 0307); generic code calls it as `T.from_json(j)` (trait.assoc.2,
+## ADR 0350).
 @derive(derive_from_json) trait FromJson
+    fn from_json(j Json) Self ! JsonError
+
+impl FromJson for Json
+    fn from_json(j Json) Json ! JsonError
+        j
+
+impl FromJson for str
+    fn from_json(j Json) str ! JsonError
+        j.need_str()
+
+impl FromJson for int
+    fn from_json(j Json) int ! JsonError
+        j.need_int()
+
+impl FromJson for float
+    fn from_json(j Json) float ! JsonError
+        j.need_num()
+
+impl FromJson for bool
+    fn from_json(j Json) bool ! JsonError
+        j.need_bool()
+
+impl FromJson for List[T FromJson]
+    fn from_json(j Json) List[T] ! JsonError
+        a := j.need_arr()?
+        mut out := List[T]()
+        for i in 0..a.len()
+            x := T.from_json(a[i]) else e
+                return e.under("[{i}]")
+            out.push(x)
+        out
 
 ## A struct becomes an object of its fields in declaration order; an enum
 ## variant without fields becomes its name, one with fields an object
@@ -553,9 +596,7 @@ fn json_write(type_text str, e str, depth int) str
 ## `{"kind": "Name", fields...}` (json.derive.2). A failure names its path,
 ## such as `missing items[2].kind` (json.derive.3).
 fn derive_from_json(t TypeInfo) str ! DeriveError
-    if t.params.len() > 0
-        return DeriveError("generic code can't call `from_json` of a type parameter until OQ-039; write `fn {t.name}.from_json` for the types you need")
-    head := "fn {t.name}.from_json(j Json) {t.name} ! JsonError\n"
+    head := "fn from_json(j Json) Self ! JsonError\n"
     if t.kind == TypeKind.Struct
         reads := json_fields(t.fields, "    ")?
         args := ["{f.name}: v_{f.name}" for f in t.fields]
@@ -636,6 +677,55 @@ fn json_optional(inner str, src str, dest str, path str, indent str, depth int) 
     deeper := "{indent}    "
     body := json_read(inner, x, y, path, deeper, depth + 1)?
     "{indent}mut {l} := List[{inner}]()\n{indent}if {x} := {src}\n{body}{deeper}{l}.push({y})\n{indent}{dest} := {l}.first()\n"
+## @module default
+## A type with a default value, `T.default()` (trait.assoc.1, ADR 0350).
+## `impl Default for T` with no functions derives it for a struct whose
+## fields all have defaults: `0`, `0.0`, `""`, `false`, an empty list or
+## map, `none`, or the field type's own `default()`.
+@derive(derive_default) trait Default
+    fn default() Self
+
+impl Default for int
+    fn default() int
+        0
+
+impl Default for float
+    fn default() float
+        0.0
+
+impl Default for str
+    fn default() str
+        ""
+
+impl Default for bool
+    fn default() bool
+        false
+
+impl Default for List[T]
+    fn default() List[T]
+        List[T]()
+
+## A struct of each field's default (trait.assoc.1); an enum has no
+## default variant to pick, so it writes its own.
+fn derive_default(t TypeInfo) str ! DeriveError
+    if t.kind == TypeKind.Enum
+        return DeriveError("an enum has no default variant to pick; write `fn default() Self` in the `impl`")
+    args := ["{f.name}: {default_of(f.type_text)}" for f in t.fields]
+    "fn default() Self\n    {t.name}({args.join(", ")})\n"
+
+## The default value of a field's `type_text`.
+fn default_of(type_text str) str
+    if type_text.ends_with("?")
+        return "none"
+    if type_text.starts_with("List[") or type_text.starts_with("Map[") or type_text.starts_with("Set[")
+        return "{type_text}()"
+    match type_text
+        "int" => "0"
+        "float" => "0.0"
+        "str" => "\"\""
+        "bool" => "false"
+        _ => "{type_text}.default()"
+
 ## @module derive
 ## Derive generators (ct.derive.1-4, refl.info.1-3, ADRs 0227, 0229, 0306):
 ## the compiler passes a generator the `TypeInfo` of the deriving type.

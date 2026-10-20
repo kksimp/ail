@@ -335,6 +335,17 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0340](0340-set-operations.md) | `union`, `intersect` and `difference` on sets and lists *(delegated)* | Accepted | 2026-10-20 |
 | [0341](0341-map-push.md) | `m.push(k, x)` appends to a list-valued map entry *(delegated)* | Accepted | 2026-10-20 |
 | [0342](0342-named-arguments-for-std-optionals-rejected.md) | Named arguments for std optional parameters: measured no gain, not added *(delegated)* | Accepted | 2026-10-20 |
-| [0343](0343-json-derives-maps-optionals-enum-payloads.md) | `ToJson`/`FromJson` derives for maps, any optional, enum payloads as `{"kind": ...}`, and error paths; generic `FromJson` waits for OQ-039 *(delegated)* | Accepted | 2026-10-20 |
+| [0343](0343-json-derives-maps-optionals-enum-payloads.md) | `ToJson`/`FromJson` derives for maps, any optional, enum payloads as `{"kind": ...}`, and error paths; generic `FromJson` came with ADR 0350 *(delegated)* | Accepted | 2026-10-20 |
 | [0346](0346-formatter-splits-at-binary-operators.md) | The formatter splits long lines before binary operators *(delegated)* | Accepted | 2026-10-20 |
 | [0347](0347-watch-shows-collection-writes.md) | `--watch` shows writes to a collection's elements *(delegated)* | Accepted | 2026-10-20 |
+| [0348](0348-supertraits.md) | Supertraits written like bounds, `trait Ord Eq` (OQ-039) *(delegated)* | Accepted | 2026-10-20 |
+| [0349](0349-associated-functions-in-traits.md) | Associated functions in traits, called as `T.name()` (OQ-039) *(delegated)* | Accepted | 2026-10-20 |
+| [0350](0350-default-and-generic-fromjson.md) | `Default` and generic `FromJson` through associated functions *(delegated)* | Accepted | 2026-10-20 |
+| [0353](0353-editor-live-problems-and-reviewable-replace.md) | Editor problems list refreshes while shown; replace preview accepts or skips rows *(delegated)* | Accepted | 2026-10-20 |
+| [0354](0354-editor-tests-on-save.md) | Editor tests on save (Ctrl-Shift-U) with counts in the status line *(delegated)* | Accepted | 2026-10-20 |
+| [0355](0355-fetch-git-dependencies-with-system-git.md) | Fetch git dependencies with the system `git` into a read-only cache *(delegated)* | Accepted | 2026-10-20 |
+| [0356](0356-ail-lock-pins-commits.md) | `ail.lock` pins each git dependency to a commit; `run` and `test` write it *(delegated)* | Accepted | 2026-10-20 |
+| [0357](0357-ail-pkg-update.md) | `ail pkg update [NAME...]` re-resolves git dependencies *(delegated)* | Accepted | 2026-10-20 |
+| [0351](0351-cancel-trees-and-cancelled-send.md) | Cancel trees; `send` in a cancelled task drops its value *(delegated)* | Accepted | 2026-10-20 |
+| [0352](0352-weaker-atomic-orderings.md) | Weaker atomic orderings as a trailing `order:` argument *(delegated)* | Accepted | 2026-10-20 |
+| [0358](0358-mistakes-corpus-for-rounds-5-9.md) | The mistakes corpus covers the features of rounds 5 to 9 *(delegated)* | Accepted | 2026-10-20 |

@@ -297,6 +297,15 @@ fn Stack.new() Self                  # its methods use `T` directly;
 fn Stack.push(mut self, x T)
     items.push(x)
 
+trait Zero                           # a function without `self`
+    fn zero() Self
+
+trait Sized Ord + Zero               # supertraits: `[T Sized]` gives `<`, `==`, `T.zero()`
+    fn size(self) int
+
+fn zeros[T Zero](n int) List[T]
+    [T.zero() for _ in 0..n]         # zeros[int](3); `Type.zero()` on a type
+
 struct Scene
     shapes List[any Shape]           # `any`: values of different types
 
@@ -549,14 +558,15 @@ struct Todo
 
 impl ToJson for Todo       # t.to_json() Json: an object of the fields in order
 impl FromJson for Todo     # Todo.from_json(j) Todo ! JsonError
+impl Default for Todo      # Todo.default(): 0, "", false, [], {}, none per field
 
 t := Todo.from_json(doc)?   # err.message names the path: "missing tags[2]", "id: expected a string, found number"
 doc.need("id")?.need_str()?  # the same checks by hand: need, need_str/num/int/bool/arr/obj
 ```
 
 Enums: a variant without fields is its name (`"Red"`), one with fields
-`{"kind": "Circle", "r": 2.0}`. Generic types derive `ToJson` with bounds
-(`impl ToJson for Pair[A ToJson, B ToJson]`) but not `FromJson` yet.
+`{"kind": "Circle", "r": 2.0}`. Generic types derive both with bounds
+(`impl FromJson for Pair[A FromJson, B FromJson]`).
 `ail api --expanded FILE` prints the code a derive generated.
 
 ## Values and `mut`
@@ -660,7 +670,13 @@ limits the package itself. Violations are compile errors at the line.
 package notes caps fs
 dep geo path ../geo caps fs
 dep textkit path vendor/textkit
+dep json git "https://example.com/json.git" tag v1.2 caps fs
 ```
+
+A `git` dep needs `rev COMMIT` or `tag TAG`; `ail run`/`test` fetch it into
+`~/.ail/deps` (or `$AIL_HOME/deps`) and pin its commit in `ail.lock` (commit
+it). `ail pkg update [NAME]` re-pins; `--deterministic` rejects a stale lock,
+`--deny net` fetches nothing (`mod.pkg.6–9`).
 
 ## Files, processes and the system
 
@@ -773,11 +789,13 @@ n.add(1)                      # returns the old value; also load, store, cas
 g.cancel()                    # or t.cancel(): ask tasks to stop
 task.cancelled()              # in the task: was it cancelled?
 task.check()?                 # fails with Cancelled once cancelled
+n.add(1, order: Relaxed)      # weaker ordering: Relaxed Acquire Release AcqRel
 ```
 
-A cancelled task's `recv` gives `none` (and `for v in ch` ends),
-`time.sleep_ms` returns at once and `proc.run` fails; the scope still waits
-for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
+A cancel reaches every task the cancelled task started. A cancelled task's
+`recv` gives `none` (and `for v in ch` ends), a `send` on a full channel
+drops its value, `time.sleep_ms` returns at once and `proc.run` fails; the
+scope still waits for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
 `SEED` and prints the seed when a test fails, so the interleaving replays.
 
 Each task handle must be waited or added to a group exactly once, on every

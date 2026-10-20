@@ -60,12 +60,14 @@ const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInf
 /// The always-read prelude, plus the `json` module (after its `## @module`
 /// marker) when the program names one of its items and declares none of
 /// them; its `jsonderive` part when the program names `ToJson` or
-/// `FromJson`; and the `derive` module when `jsonderive` is read or the
-/// program names one of its items or writes `@derive`.
+/// `FromJson`; its `default` part when the program names `Default`; and the
+/// `derive` module when `jsonderive` or `default` is read or the program
+/// names one of its items or writes `@derive`.
 fn prelude_text(tokens: &[Token]) -> String {
     let (core, rest) = PRELUDE.split_once("## @module json\n").expect("prelude has a json module");
     let (json, rest) = rest.split_once("## @module jsonderive\n").expect("prelude has a jsonderive module");
-    let (json_derive, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
+    let (json_derive, rest) = rest.split_once("## @module default\n").expect("prelude has a default module");
+    let (default, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
     let wants = |names: &[&str]| {
         let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
         let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
@@ -81,7 +83,12 @@ fn prelude_text(tokens: &[Token]) -> String {
     if want_json_derive {
         text.push_str(json_derive);
     }
-    if want_json_derive || at_derive || wants(DERIVE_NAMES) {
+    // trait.assoc.1: `Default` and its generator (ADR 0350).
+    let want_default = wants(&["Default"]);
+    if want_default {
+        text.push_str(default);
+    }
+    if want_json_derive || want_default || at_derive || wants(DERIVE_NAMES) {
         text.push_str(derive);
     }
     text
@@ -791,15 +798,32 @@ impl Parser {
             self.skip_statement();
             return;
         }
+        // trait.super.1: `trait Ord Eq` and `trait Sorted Ord + ToStr`.
+        let mut supers = Vec::new();
+        if matches!(self.peek(), Tok::Ident(_)) {
+            let Some(first) = self.dotted_name("a supertrait", "trait.super.1") else {
+                self.skip_statement();
+                return;
+            };
+            supers.push(first);
+            while self.eat_sym("+") {
+                let Some(next) = self.dotted_name("a supertrait after `+`", "trait.super.1") else {
+                    self.skip_statement();
+                    return;
+                };
+                supers.push(next);
+            }
+        }
         let index = prog.traits.len();
-        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new(), derive: None });
+        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new(), derive: None, supers });
         if !self.eat(&Tok::Newline) {
             self.unexpected(&format!("end of line after `trait {name}`"), "trait.decl.1");
             self.skip_statement();
             return;
         }
         // The prelude's `Hash` has no methods: the language provides it (trait.auto.5).
-        if is_prelude(pos) && !matches!(self.peek(), Tok::Indent) {
+        // A trait with supertraits may have no methods: `trait Key Hash + ToStr` (trait.super.1).
+        if (is_prelude(pos) || !prog.traits[index].supers.is_empty()) && !matches!(self.peek(), Tok::Indent) {
             return;
         }
         let methods = self.fn_block(prog, Within::Trait(index), &format!("`trait {name}`"));
@@ -1365,12 +1389,14 @@ impl Parser {
         }
         if !self.eat_kw("mut") {
             let at = self.pos();
-            self.error_help(
+            let d = Diagnostic::new(
                 "conc.share.6",
                 at,
                 "a `with` block writes its variable back to the mutex, so the variable is `mut`",
-                "write `with m as mut x`; to read the value once, use `m.get()`",
-            );
+            )
+            .help("write `with m as mut x`; to read the value once, use `m.get()`")
+            .fix("write `as mut`", vec![Edit::insert(at, "mut ")]);
+            self.diags.push(d);
             return None;
         }
         let (var, var_pos) = self.name("a variable after `as mut`", "conc.share.6")?;

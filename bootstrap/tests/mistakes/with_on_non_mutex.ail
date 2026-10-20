@@ -1,0 +1,5 @@
+fn main()
+    mut total := 0
+    with total as mut x
+        x += 1
+    print(total)

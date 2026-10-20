@@ -247,6 +247,11 @@ fn largest[T Ord](items List[T]) T  # `T`: any type that implements `Ord`
   `Map[str, T]`, `T?`, enum variants as `{"kind": "Name", ...}`). A trait
   `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
   that writes an empty `impl`'s methods; `ail api --expanded` shows them.
+  Generic types derive through bounds: `impl FromJson for Pair[A FromJson,
+  B FromJson]`. `impl Default for T` derives `T.default()`.
+- `trait Ord Eq` names supertraits (joined with `+`); a bound gives their
+  methods. `fn zero() Self` in a trait is called `T.zero()` in generic code
+  and `Type.zero()` on a type; `x.zero()` is an error.
 
 Optionals nest and `else` works inside expressions:
 

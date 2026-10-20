@@ -4,8 +4,8 @@ Status: design for Topic 13 (package management), 2026-10-20. Decided in
 [ADRs 0230–0233](../decisions/README.md); normative rules in
 [12-modules.md](../spec/12-modules.md#packages) (`mod.pkg.*`) and
 [18-effects.md](../spec/18-effects.md#denying-capabilities) (`eff.cap.4–5`).
-The bootstrap implements path dependencies and capability grants; git
-dependencies, the lockfile and a registry are designed here only.
+The bootstrap implements path and git dependencies, capability grants and
+the lockfile (ADRs 0355–0357); a registry is designed here only.
 
 ## Goals
 
@@ -134,25 +134,27 @@ reach. `unsafe` and FFI (Topic 14–15) bypass inference; when they land, a
 dependency using either needs an explicit `caps unsafe` grant (open item
 below).
 
-## Versions, git dependencies and the lockfile (design; not implemented)
+## Versions, git dependencies and the lockfile
 
 - A git dependency pins exactly one `rev` (commit) or `tag`. There are no
   version ranges and no solver: one exact pin per package, and a diamond with
   two different pins for one name is an error naming both lines.
 - `ail.lock`, next to `ail.pkg`, records every git dependency of the whole
-  graph in the same line format, written by a future `ail fetch`:
+  graph in the same line format, written by `ail run` and `ail test` when
+  stale (ADR 0356; the design's `sum` was dropped, the commit names the tree):
 
   ```
-  json git https://github.com/example/ail-json commit 4f2a9c1e5b... sum sha256:9d1c...
+  dep json git https://github.com/example/ail-json tag v1.4 commit 4f2a9c1e5b...
   ```
 
-  `commit` is the full hash a `tag` resolved to; `sum` is the hash of the
-  package's files in sorted path order. A build with a lockfile uses only the
-  locked commits and fails if a fetched tree doesn't match its `sum`; it
-  never reaches the network once the cache holds the tree. Path dependencies
-  are part of the working tree and aren't locked.
-- Fetched trees live in a content-addressed cache (`$AIL_CACHE/pkg/<sum>`), so
-  two projects share one copy and a tree is never edited in place.
+  `commit` is the full hash the pin resolved to. A build uses the locked
+  commit while the line matches the manifest, and never reaches the network
+  once the cache holds the tree. `--deterministic` rejects a stale lock;
+  `ail pkg update [NAME]` re-pins (ADR 0357). Path dependencies are part of
+  the working tree and aren't locked.
+- The system `git` fetches each tree into `$AIL_HOME/deps/NAME-COMMIT`
+  (`~/.ail/deps` by default), without `.git` and read-only, so projects share
+  one copy and a tree is never edited in place (ADR 0355).
 
 ## Reproducible builds and cache keys (ADR 0015)
 
@@ -169,8 +171,6 @@ timestamps or absolute paths.
   the designer: it involves hosting, accounts, naming policy and publishing
   (AGENTS.md escalation criterion 4), plus version ranges and a solver. The
   line format leaves room for it: a `version` key on a `dep` line.
-- **Fetching** (`ail fetch`, `git` access) isn't in the bootstrap; a git
-  dependency is rejected with `mod.pkg.6` and a help to clone and use `path`.
 - **Features, build scripts, per-target dependencies**: not planned. Build
   scripts would run arbitrary code at build time, which a capability grant
   can't see.
@@ -196,6 +196,9 @@ timestamps or absolute paths.
   diagnostic ambiguous. Revisit with the registry.
 
 ## Open items
+
+- Verify a cached tree against its commit (the read-only files guard against
+  accidental edits only).
 
 - `caps unsafe` / `caps ffi` once unsafe code and FFI are implemented.
 - Whether `ail effects` should print each package's reached capabilities

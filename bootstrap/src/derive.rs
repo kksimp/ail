@@ -21,7 +21,7 @@ pub fn wanted(tokens: &[Token]) -> bool {
     tokens.iter().any(|t| matches!(t.tok, Tok::Kw("impl")))
         && tokens.windows(2).any(|w| match (&w[0].tok, &w[1].tok) {
             (Tok::Sym("@"), Tok::Ident(n)) => n == "derive",
-            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson",
+            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson" || n == "Default",
             _ => false,
         })
 }
@@ -144,6 +144,22 @@ fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
             continue;
         }
         let type_name = last(&imp.target.name).to_string();
+        // `impl X for Pair[int, str]` names types where the parameters go:
+        // the checker reports it (gen.method.2), so nothing is generated.
+        let declared: Vec<&str> = prog
+            .structs
+            .iter()
+            .filter(|s| s.name == type_name)
+            .map(|s| &s.generics)
+            .chain(prog.enums.iter().filter(|e| e.name == type_name).map(|e| &e.generics))
+            .next()
+            .map(|g| g.iter().map(|p| p.name.as_str()).collect())
+            .unwrap_or_default();
+        if let Some(ps) = &imp.target.params
+            && ps.iter().map(|p| p.name.as_str()).ne(declared.iter().copied())
+        {
+            continue;
+        }
         let Some(info) = type_info(prog, &type_name, prog.module_at(imp.pos)) else {
             errors.push(
                 Diagnostic::new(
@@ -448,8 +464,30 @@ pub fn remap(prog: &Program, diags: &mut [Diagnostic]) {
             d.pos.col
         );
         d.notes.insert(0, Note { pos: d.pos, message });
+        json_field_problem(g, d);
         d.pos = g.impl_pos;
         d.end = None;
         d.fixes.clear();
     }
+}
+
+/// json.derive.1-2: a derived JSON conversion that calls `to_json` or
+/// `from_json` on a field type with none says so in the user's terms, not
+/// as a missing method of generated code.
+fn json_field_problem(g: &Generated, d: &mut Diagnostic) {
+    let (trait_name, method) = match g.generator.as_str() {
+        "derive_to_json" => ("ToJson", "to_json"),
+        "derive_from_json" => ("FromJson", "from_json"),
+        _ => return,
+    };
+    let Some(ty) = d.message.strip_suffix(&format!(" has no method `{method}`")).map(str::to_string) else { return };
+    if d.rule != "expr.name.1" {
+        return;
+    }
+    let owner = g.label.split('.').next().unwrap_or(&g.label);
+    d.rule = if method == "to_json" { "json.derive.1" } else { "json.derive.2" };
+    d.message = format!("can't derive `{trait_name}` for `{owner}`: a field has type {ty}, which has no JSON form");
+    d.help = Some(format!(
+        "give {ty} its own `impl {trait_name}`, or change the field to `int`, `float`, `bool`, `str`, `Json`, a `List`, a `Map[str, _]`, an optional or a derived type"
+    ));
 }

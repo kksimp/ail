@@ -53,7 +53,8 @@ are the same cell, so tasks and `par for` share it without a `ref` or a
 **conc.atomic.4** — `a.load()` returns the value, `a.store(v)` replaces it,
 and `a.cas(old, new)` replaces it with `new` only if it equals `old`,
 returning whether it did. Each is one indivisible step, sequentially
-consistent (`conc.atomic.1`). *(ADR 0320)*
+consistent (`conc.atomic.1`) unless `order:` says otherwise
+(`conc.atomic.7`). *(ADR 0320)*
 
 **conc.atomic.5** — On an `Atomic[int]`, `a.add(n)` adds `n` in one
 indivisible step and returns the value from before. An add whose result
@@ -92,8 +93,28 @@ fn main()
     print(total.load())
 ```
 
-> **Note:** `conc.atomic.2`'s weaker orderings aren't provided yet; every
-> operation is SeqCst (ADR 0320).
+**conc.atomic.7** — A trailing named argument `order: O` gives an atomic
+method a weaker ordering (`conc.atomic.2`). `O` is written as a variant of
+the prelude enum `AtomicOrder`: `SeqCst`, `Acquire`, `Release`, `AcqRel` or
+`Relaxed`; any other expression is an error, so the checker always knows
+the ordering. `load` accepts `SeqCst`, `Acquire` and `Relaxed`; `store`
+accepts `SeqCst`, `Release` and `Relaxed`; `add` and `cas` accept all
+five. A `cas` that fails reads with the read half of its ordering
+(`Relaxed` for `Release`, `Acquire` for `AcqRel`). The orderings mean what
+they mean in the C++20 memory model. *(ADR 0352)*
+
+```ail
+fn publish(data Atomic[int], ready Atomic[bool])
+    data.store(42, order: Relaxed)
+    ready.store(true, order: Release)   # data is visible to an Acquire load that sees true
+
+fn main()
+    data := Atomic(0)
+    ready := Atomic(false)
+    publish(data, ready)
+    if ready.load(order: Acquire)
+        print(data.load(order: Relaxed))
+```
 
 ## Tasks
 
@@ -198,6 +219,18 @@ cancelled task, blocking calls return early: `ch.recv()` returns `none` and
 is woken by the cancel; `time.sleep_ms` returns at once; and `proc.run`
 fails with `ProcError` of kind `"cancelled"` without starting the process.
 *(ADR 0321)*
+
+**conc.cancel.3** — A cancel reaches the whole task tree: cancelling a task
+also cancels every unfinished task it started, and the tasks those
+started, as `conc.cancel.1` does for a group's tasks. A task records the
+task that started it. Tasks the scheduler runs on their own threads
+(`conc.par.10`) are pure, so a cancel has nothing to stop in them.
+*(ADR 0351)*
+
+**conc.cancel.4** — In a cancelled task, `ch.send(v)` on a full channel
+doesn't wait for room: it drops `v` and returns. A send with room still
+queues the value, and a send on a closed channel still traps
+(`conc.share.4`). *(ADR 0351)*
 
 ```ail
 fn worker(jobs Channel[int])
@@ -368,7 +401,9 @@ loop, `return`, `?`, or `else return`; (3) calls no method of a task,
 functions it calls; and
 (4) writes only places that `conc.par.3` or `conc.par.4` allow, or places
 rooted at names declared in the body (including the loop variable). Calls
-with a `mut` argument and methods with `mut self` write their place. *(ADR 0236)*
+with a `mut` argument and methods with `mut self` write their place. A
+write through a `ref` declared outside the body (`c.n = i`) is shared by every
+iteration and is an error in a `par for`. *(ADR 0236, ADR 0358)*
 
 **conc.par.3** — In a loop over a range, a write to `r[i]` (optionally
 followed by more fields or indexes), where `r` is declared outside the body,

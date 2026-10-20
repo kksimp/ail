@@ -1,0 +1,8 @@
+struct Cell
+    n int
+
+fn main()
+    c := ref Cell(n: 0)
+    par for i in 0..4
+        c.n = i
+    print(c.n)

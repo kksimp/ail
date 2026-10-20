@@ -1,0 +1,5 @@
+Pair(a: 0, b: "")
+Pair(a: "", b: Pair(a: 0, b: 0))
+[Pair(a: 0, b: ""), Pair(a: 0, b: "")]
+[Pair(a: "", b: 0), Pair(a: "", b: 0)]
+1

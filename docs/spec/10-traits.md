@@ -4,10 +4,11 @@ Chapter key: `trait`
 
 > **Status:** Drafted (partial). Specified: methods, associated functions,
 > placement, traits, default methods, explicit implementations, coherence,
-> call resolution, `Self`, operator traits, `any` dynamic dispatch, and the
-> standard traits `Eq`, `Ord`, `ToStr` and `Hash`. Not yet designed: associated
-> types (OQ-037), supertraits and associated functions in traits (OQ-039), the
-> arithmetic and indexing operator trait names, and custom hashing.
+> supertraits, associated functions in traits, call resolution, `Self`,
+> operator traits, `any` dynamic dispatch, and the standard traits `Eq`,
+> `Ord`, `ToStr`, `Hash` and `Default`. Not yet designed: associated types
+> (OQ-037), the arithmetic and indexing operator trait names, and custom
+> hashing.
 
 ## Methods
 
@@ -104,6 +105,73 @@ the trait's signature, with `Self` replaced by the implementing type.
 
 **trait.impl.6** — A type implements a trait at most once. *(ADR 0129)*
 
+## Supertraits
+
+**trait.super.1** — A trait MAY name supertraits after its name, joined with
+`+` as in a bound: `trait Ord Eq`, `trait Key Hash + ToStr`. A trait with
+supertraits MAY have no methods. A trait MUST NOT require itself, directly or
+through its supertraits. *(ADR 0348)*
+
+**trait.super.2** — `impl Sub for T` is a compile-time error unless `T`
+implements every supertrait of `Sub`; the help names the missing `impl`.
+*(ADR 0348)*
+
+**trait.super.3** — A bound `[T Sub]` provides every supertrait of `Sub`,
+transitively: their methods, and `==` when one of them is `Eq`. The prelude
+declares `trait Ord Eq` and `trait Hash Eq` (`trait.std.2`, `trait.auto.5`).
+*(ADR 0348)*
+
+```ail fragment
+trait Named Eq
+    fn name(self) str
+
+fn same_name[T Named](a T, b T) bool
+    a == b or a.name() == b.name()
+```
+
+## Associated functions in traits
+
+**trait.assoc.1** — A function in a trait without `self` is an associated
+function of the trait, such as `fn zero() Self`. An `impl` defines it with
+`Self` replaced (`trait.impl.5`), or inherits its default body. The prelude
+trait `Default` has `fn default() Self`; an empty `impl Default for T`
+derives it for a struct from each field's default (`0`, `0.0`, `""`,
+`false`, an empty list, map or set, `none`, or the field type's own
+`default()`); it is a `ct.derive.4` error for an enum. `int`, `float`,
+`str`, `bool` and `List[T]` implement `Default`. *(ADR 0349, ADR 0350)*
+
+**trait.assoc.2** — `T.name(args)`, with `T` a type parameter in scope (or
+`Self` in a trait's default body), calls the associated function `name` of
+a trait among `T`'s bounds and their supertraits. With no such trait it is
+a compile-time error; the help names a trait that declares `name`. Calling
+an associated function on a value, `x.name()`, is the same error.
+*(ADR 0349)*
+
+**trait.assoc.3** — `T.name(args)` runs the implementation of the type that
+`T` stands for in the running call. A generic function's type arguments are
+inferred as usual (`gen.infer.1`) or written (`f[int]()`); one that appears
+only in the result needs the expected type or written arguments. Implementations
+MAY pass the concrete types at run time (as the bootstrap does) or
+monomorphise; the result is the same. *(ADR 0349)*
+
+**trait.assoc.4** — `Type.name(args)` and `Type[A].name(args)` call the
+associated function `name` of a trait that `Type` implements, when `Type`
+declares no associated function of that name itself. *(ADR 0349)*
+
+```ail fragment
+trait Zero
+    fn zero() Self
+
+impl Zero for int
+    fn zero() int
+        0
+
+fn zeros[T Zero](n int) List[T]
+    [T.zero() for _ in 0..n]
+
+print(zeros[int](3))     # [0, 0, 0]
+```
+
 ## `Self`
 
 **trait.self.1** — In a trait, `Self` is the implementing type. In a method,
@@ -173,7 +241,8 @@ including in generic code through an `Eq` bound: NaN is unequal to itself and
 Ordering`, where `enum Ordering` has the variants `Less`, `Equal` and
 `Greater`. `a < b` is true when `a.cmp(b)` is `Less`, `a <= b` when it isn't
 `Greater`, and likewise for `>` and `>=`. A type that implements `Ord` also
-implements `Eq`, and a constraint `Ord` provides `==`. For `float`, the four
+implements `Eq`, and a constraint `Ord` provides `==`: the prelude declares
+`trait Ord Eq` (`trait.super.1`). For `float`, the four
 operators are instead the IEEE comparisons of `type.num.6`, also through an
 `Ord` bound, so each is false when an operand is NaN and they don't follow
 `cmp`; `float`'s `cmp` is the total order of `type.num.11`. `Ord` also has
@@ -273,6 +342,6 @@ aren't `Hash`. A hand-written `fn eq` (`trait.auto.3`) removes `Hash`. An
 `impl Ord` doesn't change `Eq` (`==` never calls `cmp`), so a type with
 `impl Ord` and an automatic `Eq` stays `Hash`. `impl Hash` is a compile-time
 error, since custom hashing isn't designed. A constraint `[T Hash]` implies
-`Eq`. Map keys and set elements MUST be `Hash` (`type.map.2`). Hash values are
+`Eq`: the prelude declares `trait Hash Eq` (`trait.super.3`). Map keys and set elements MUST be `Hash` (`type.map.2`). Hash values are
 never visible to programs, so output can't depend on the hash function.
 *(ADR 0133)*

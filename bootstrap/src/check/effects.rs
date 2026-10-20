@@ -638,6 +638,11 @@ impl<'p, 'r> Walker<'p, 'r> {
             Expr::Method { recv, name, name_pos, args } => {
                 if let Some(&i) = self.resolved.targets.get(name_pos) {
                     self.call(i);
+                } else if let Some(&(tr, _)) = self.resolved.assoc_calls.get(name_pos) {
+                    // `T.zero()` may run any implementation (trait.assoc.3, eff.infer.3).
+                    for i in implementations(self.prog, tr, name) {
+                        self.call(i);
+                    }
                 } else if let Some(call) = self.resolved.calls.get(name_pos) {
                     let (Call::Trait(tr) | Call::Qualified(tr)) = *call;
                     for i in implementations(self.prog, tr, name) {

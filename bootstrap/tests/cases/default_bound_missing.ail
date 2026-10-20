@@ -1,0 +1,10 @@
+## A type without `Default` can't be a `T Default` (gen.bound.3,
+## trait.assoc.3).
+struct Plain
+    n int
+
+fn fill[T Default](n int) List[T]
+    [T.default() for _ in 0..n]
+
+fn main()
+    print(fill[Plain](1))

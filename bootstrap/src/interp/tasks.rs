@@ -79,6 +79,9 @@ struct TaskRec {
     pooled: Option<super::parallel::Pooled>,
     /// Asked to stop by `cancel` (conc.cancel.1).
     cancelled: bool,
+    /// Tasks this one started on the scheduler, which a cancel reaches too
+    /// (conc.cancel.3, ADR 0351).
+    children: Vec<usize>,
 }
 
 struct Chan {
@@ -125,7 +128,7 @@ struct Turned<T>(T);
 unsafe impl<T> Send for Turned<T> {}
 
 fn new_task(status: Status) -> TaskRec {
-    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "", pooled: None, cancelled: false }
+    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "", pooled: None, cancelled: false, children: Vec::new() }
 }
 
 impl Sched {
@@ -155,9 +158,17 @@ impl Sched {
 
     /// conc.cancel.1: mark task `t` cancelled and wake it if it is blocked,
     /// so a blocking call can return early.
+    /// conc.cancel.3: the cancel reaches every task `t` started, and the
+    /// tasks those started, that hasn't finished.
     fn cancel(st: &mut State, t: usize) {
-        st.tasks[t].cancelled = true;
-        Sched::wake(st, t);
+        let mut todo = vec![t];
+        while let Some(t) = todo.pop() {
+            st.tasks[t].cancelled = true;
+            Sched::wake(st, t);
+            let kids = std::mem::take(&mut st.tasks[t].children);
+            todo.extend(kids.iter().copied().filter(|&k| st.tasks[k].status != Status::Done && !st.tasks[k].cancelled));
+            st.tasks[t].children = kids;
+        }
     }
 
     /// Give the turn to `next`.
@@ -415,6 +426,7 @@ impl<'a, W: Write> Interp<'a, W> {
         // conc.cancel.1: a task started by a cancelled task starts cancelled.
         rec.cancelled = st.tasks[me].cancelled;
         st.tasks.push(rec);
+        st.tasks[me].children.push(id);
         // SAFETY: `run` and `run_tests` stop and join every task thread
         // before the program and checker facts they borrow are dropped.
         let (prog, resolved, f) = unsafe {
@@ -576,6 +588,12 @@ impl<'a, W: Write> Interp<'a, W> {
                         }
                         break;
                     }
+                    // conc.cancel.4 (ADR 0351): a cancelled task doesn't wait
+                    // for room; the value is dropped and `send` returns.
+                    if st.tasks[me].cancelled {
+                        break;
+                    }
+                    let ch = &mut st.chans[c];
                     ch.waiters.push(me);
                     st = sched.block(st, me, "room in a channel", pos)?;
                 }

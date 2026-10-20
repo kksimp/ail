@@ -1,0 +1,11 @@
+# conc.atomic.7 (ADR 0352): a trailing `order:` names a weaker ordering.
+
+fn main()
+    hits := Atomic(0)
+    par for i in 0..1000
+        hits.add(1, order: Relaxed)
+    ready := Atomic(false)
+    ready.store(true, order: Release)
+    print("{hits.load(order: Acquire)} {ready.load(order: Acquire)}")
+    print(hits.cas(1000, 0, order: AcqRel))
+    print(hits.load(order: SeqCst))
