@@ -37,7 +37,11 @@ from pathlib import Path
 
 # examples/ programs that are also speed programs (the perfbench set).
 PERF_EXAMPLES = {"interp", "json", "sheet", "logscan", "tasks", "build"}
-GROUPS = ["agent", "compute", "examples"]
+# tools/perfbench classics (the CPU-bound programs with Python and C twins);
+# the rest of tools/perfbench (loops, parsum, tensor*, race_smoke) is "micro".
+CLASSICS = {"binarytrees", "collatz", "fannkuch", "fasta", "mandelbrot", "matmul",
+            "nbody", "sieve", "spectralnorm", "wordfreq"}
+GROUPS = ["agent", "compute", "micro", "examples"]
 
 
 def programs(root):
@@ -50,8 +54,9 @@ def programs(root):
         found.append({"key": "agent/" + p.stem, "rel": p.relative_to(root),
                       "group": "agent", "speed": True})
     for p in sorted((root / "tools/perfbench/programs").glob("*.ail")):
-        found.append({"key": "compute/" + p.stem, "rel": p.relative_to(root),
-                      "group": "compute", "speed": True})
+        group = "compute" if p.stem in CLASSICS else "micro"
+        found.append({"key": group + "/" + p.stem, "rel": p.relative_to(root),
+                      "group": group, "speed": True})
     return found
 
 
@@ -235,6 +240,8 @@ def main():
     ap.add_argument("--tokbench", required=True, help="path to tools/tokbench/run.sh")
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--format", choices=["table", "json"], default="table")
+    ap.add_argument("--card-ail", type=Path, help="AIL language card, for the card-plus-program line")
+    ap.add_argument("--card-py", type=Path, help="Python reference card, for the card-plus-program line")
     args = ap.parse_args()
     if args.runs < 1:
         sys.exit("bench: --runs must be at least 1")
@@ -247,15 +254,24 @@ def main():
     after_paths = {p["key"]: str(root / p["rel"]) for p in progs}
     before_paths = {p["key"]: str(before_root / p["rel"]) if (before_root / p["rel"]).exists() else None
                     for p in progs}
-    after_tok = count_tokens(args.tokbench, root, list(after_paths.values()))
+    # Python twins of the agent corpus and perfbench programs, for the card line.
+    twin_paths = {p["key"]: str((root / p["rel"]).with_suffix(".py")) for p in progs
+                  if (root / p["rel"]).with_suffix(".py").exists()}
+    after_tok = count_tokens(args.tokbench, root, list(after_paths.values()) + list(twin_paths.values()))
     before_tok = count_tokens(args.tokbench, root, [v for v in before_paths.values() if v])
+    card_ail = count_tokens(args.tokbench, root, [str(args.card_ail)]).get(str(args.card_ail)) \
+        if args.card_ail else None
+    card_py = count_tokens(args.tokbench, root, [str(args.card_py)]).get(str(args.card_py)) \
+        if args.card_py else None
     token_rows = []
     for p in progs:
         k = p["key"]
         b = before_tok.get(before_paths[k]) if before_paths[k] else None
         a = after_tok.get(after_paths[k])
         change = (a - b) / b * 100 if b and a is not None else None
-        token_rows.append({"program": k, "before": b, "after": a, "change_pct": change})
+        py_tok = after_tok.get(twin_paths[k]) if k in twin_paths else None
+        token_rows.append({"program": k, "before": b, "after": a, "change_pct": change,
+                           "python_twin": py_tok})
 
     # Speed.
     after_bin = root / "bootstrap/target/release/ail"
@@ -271,6 +287,16 @@ def main():
             speed_rows.append(measure_speed(p, ctx))
 
     group_stats = {g: group_summary(speed_rows, g) for g in GROUPS}
+    # Card-plus-program: the AIL card plus AIL programs, against the Python
+    # reference card plus the Python twins, over programs with a twin.
+    twinned = [r for r in token_rows if r["python_twin"] is not None and r["after"] is not None]
+    card_line = None
+    if card_ail is not None and card_py is not None and twinned:
+        ail_total = sum(r["after"] for r in twinned)
+        py_total = sum(r["python_twin"] for r in twinned)
+        card_line = {"programs": len(twinned), "ail_card": card_ail, "ail_programs": ail_total,
+                     "ail_total": card_ail + ail_total, "py_card": card_py, "py_programs": py_total,
+                     "py_total": card_py + py_total}
     both = [r for r in token_rows if r["before"] is not None and r["after"] is not None]
     tok_before = sum(r["before"] for r in both)
     tok_after = sum(r["after"] for r in both)
@@ -286,6 +312,7 @@ def main():
             "groups": {g: {k: {"ratio": v[0], "n": v[1]} for k, v in s.items()}
                        for g, s in group_stats.items()},
             "excluded": [r["program"] for r in excluded],
+            "card_plus_program": card_line,
         }, indent=2))
         return
 
@@ -311,7 +338,8 @@ def main():
           r["output"]] for r in speed_rows if not r["excluded"]])
     print()
     print("Geometric means per group (n = programs in that ratio)")
-    labels = {"agent": "agent (start-up bound)", "compute": "compute (perfbench)", "examples": "examples (perf set)"}
+    labels = {"agent": "agent (start-up bound)", "compute": "compute (classics)",
+              "micro": "micro (loops, tensor)", "examples": "examples (perf set)"}
     for g in GROUPS:
         s = group_stats[g]
         parts = []
@@ -320,6 +348,12 @@ def main():
             ratio, n = s[key]
             parts.append(f"{name} {fmt_ratio(ratio)} (n={n})")
         print(f"  {labels[g]:<26} " + "   ".join(parts))
+    if card_line:
+        c = card_line
+        print()
+        print(f"Card plus program, over {c['programs']} programs with a Python twin (tokbench mean):")
+        print(f"  AIL:    card {c['ail_card']:.0f} + programs {c['ail_programs']:.0f} = {c['ail_total']:.0f}")
+        print(f"  Python: card {c['py_card']:.0f} + twins {c['py_programs']:.0f} = {c['py_total']:.0f}")
     print("  native                     not measured: no `ail build` on this platform yet (ADR 0492)")
     if excluded:
         print()

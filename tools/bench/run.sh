@@ -63,4 +63,6 @@ python3 "$root/tools/bench/bench.py" \
     --after-label "$after_label" \
     --tokbench "$root/tools/tokbench/run.sh" \
     --runs "$runs" \
-    --format "$format"
+    --format "$format" \
+    --card-ail "$root/docs/language-card.md" \
+    --card-py "$root/tools/tokbench/reference/python-reference.md"
