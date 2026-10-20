@@ -318,15 +318,17 @@ it comes later for speed, and these frames will move onto it).
 - `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
   all of these in `./ail selftest`.
 
-Google's search page is the target page (captures from 2026-10-20 in the
-project's shared files, not in the repository: Google's code isn't ours to
-commit). It sends clients without JavaScript to an "enable JavaScript"
-page; with JavaScript, an obfuscated challenge script runs through `eval`,
-stores a token in the `SG_SS` cookie and reloads the search with `&sei=`.
-Chromium does the same with the captured page. On the engine the challenge
-takes 2.8 s and gives a token of the same form. Getting there needed
-indirect `eval`, `Date` setters, `Image`, `navigator.sendBeacon`, `btoa`
-on binary strings, and an assignment's target evaluated before its value.
+Google's search page was the first real target (captures from 2026-10-20
+in the project's shared files, not in the repository: Google's code isn't
+ours to commit). It sends clients without JavaScript to an "enable
+JavaScript" page. With JavaScript, an obfuscated challenge script runs
+through `eval`, stores a token in the `SG_SS` cookie, and reloads the search.
+The engine runs the challenge to the end. Getting there needed indirect and
+direct `eval`, function source text, `Date` setters, `Image`,
+`navigator.sendBeacon`, `btoa` on binary strings, an assignment's target
+evaluated before its value, and Chrome's surface above. The challenge is
+bot detection, so the engine is not tuned to it beyond general standards
+work. How Garlic gets search results is an open question for the designer.
 `--page --url URL FILE` loads a page at `URL` and lists every request and
 cookie, to compare with Chromium.
 
