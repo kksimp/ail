@@ -46,11 +46,13 @@ diagnostic, about a third of its source, which the AIL one doesn't yet
 is in the lexer, which writes everything, and in the grammar: no lifetimes,
 borrows or `Box`, and implicit `self`.
 
-Parsing `tools/edit/edit.ail` (5,249 lines) in the tree-walking
-interpreter takes 0.45 s to lex and 0.78 s to parse, measured inside the
-program. The bootstrap lexes and parses the same file, writes its JSON
-dump and exits in 0.15 s. So the AIL front end is at least 8 times slower
-for now; the bytecode tier (ADR 0359) is what should close that gap.
+Parsing `tools/edit/edit.ail` (5,249 lines) in the interpreter takes about
+0.45 s to lex and 0.85 s to parse, measured inside the program. The
+bootstrap lexes and parses the same file, writes its JSON dump and exits in
+0.15 s, so the AIL front end is at least 8 times slower. The bytecode tier
+(ADR 0361) doesn't change this yet: it compiles 119 of the 131 functions
+called, but string, list and method operations hand off to the walker, 4.3
+million times per parse.
 
 ## Checker agreement
 
