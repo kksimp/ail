@@ -108,6 +108,9 @@ Style:
 - Write precisely and concisely. Docs are loaded into AI context, so every
   sentence should earn its tokens.
 - Never put a model name or model identifier in any committed file.
+- Licence: Apache 2.0 with a Runtime Library Exception (ADR 0510). Only
+  Apache-2.0-compatible code or algorithm ports may be added; runtime code
+  embedded into user programs falls under the exception.
 
 ## Repository layout
 
