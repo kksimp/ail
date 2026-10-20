@@ -1,0 +1,46 @@
+## std.net.9, std.net.13: stopping. `close` ends every waiting `accept` with
+## kind `closed`; cancelling a task ends its wait; TLS to a server that
+## isn't TLS fails.
+use std.net
+
+fn accept_one(srv net.Server) str
+    ex := srv.accept() else err
+        return "accept: {err.kind}"
+    ex.respond(net.Response(status: 200, headers: {}, body: "late")) else err
+        return "respond: {err.kind}"
+    "answered"
+
+fn hang_up(l net.Listener) !
+    c := l.accept()?
+    c.write("not tls\n")?
+    c.close()
+
+fn tls_kind(port int) str
+    c := net.connect_tls("127.0.0.1", port) else err
+        return err.kind
+    c.close()
+    "connected"
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    port := srv.addr().split(":")[1].to_int() else 0
+
+    # Cancelling a task that waits in accept.
+    t := spawn accept_one(srv)
+    t.cancel()
+    print(t.wait()?)
+
+    # A request answered, then the server closed: later accepts fail.
+    w := spawn accept_one(srv)
+    r := net.get("http://127.0.0.1:{port}/x")?
+    print("{r.status} {r.body}")
+    print(w.wait()?)
+    srv.close()
+    print(accept_one(srv))
+
+    # std.net.13: TLS over a connection whose peer doesn't speak TLS.
+    l := net.listen("127.0.0.1:0")?
+    h := spawn hang_up(l)
+    lp := l.addr().split(":")[1].to_int() else 0
+    print("tls: {tls_kind(lp)}")
+    h.wait()?

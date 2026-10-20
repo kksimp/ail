@@ -167,3 +167,26 @@ First diagnostic of each program (help truncated at 90 characters).
 | `while_true_python` | `gram.foreign.1` | a line that opens a block ends where the header ends; the block is the indented lines b... | yes |
 | `wrong_arg_count` | `expr.call.1` | give exactly the arguments the signature lists; `ail api FILE` shows each signature | no |
 | `wrong_arg_type` | `expr.call.2` | pass a value of the expected type: convert with `n.to_float()`, `x.to_int()`, or `"{x}"... | no |
+
+## Lane 147: fixes for the bit operators (expr.bit.1)
+
+`&` and `^` are reported as `gram.foreign.1` with a fix that rewrites
+`l & r` as `l.bit_and(r)` and `l ^ r` as `l.bit_xor(r)` (`bootstrap/src/fix/bit.rs`,
+`diag/rewrite.rs` `Anchor::Operands`). The rewrite applies only when both
+operands are whole atoms of the line, so `a & 1 + 2` keeps its error: it
+could change precedence. Corpus: 143 programs, 90 fixed (63%), up from 140
+and 88. `|` and `~` have no fix yet: `|` is a closure delimiter in the lexer,
+and `~` is reported as `bootstrap.unsupported`.
+
+Dates (lane 147, PR #122's `std.time.date`): an unhandled `date.parse_date`
+stays `err.use.1` with no fix. The signature fix (`! E`) is not offered for an
+error type from another module, since its name is written with the module's
+alias (`date.DateError`), so the fix would add an unresolved name. Corpus:
+144 programs, 90 fixed (63%). The named-field fix for `date.Date(2026, 10, 20)`
+(`type.struct.7`) doesn't apply to a qualified call yet, since its anchor
+needs the callee as written.
+
+Networking and regex (lane 147): an unhandled `net.get` or `regex.compile`
+stays `err.use.1` with no fix, for the same reason as dates: the error type is
+another module's. Corpus: 146 programs, 90 fixed (62%). `regex.search` (a
+Python name) is `std.use.2` with no fix; the help lists the real functions.

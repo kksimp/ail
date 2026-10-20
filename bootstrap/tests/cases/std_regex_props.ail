@@ -1,0 +1,43 @@
+## std.regex.6-8: properties of the all-matches, replace and split rules (test.prop.1).
+use std.regex
+
+fn pats() List[regex.Regex]
+    mut out := []
+    for p in [r"a+", r"\w*", r"[ab]|c", r"(a|b)*", r"x?", r"b+?", r"\s", r"^a", r"\b"]
+        re := regex.compile(p) else return out
+        out.push(re)
+    out
+
+@test fn find_all_never_overlaps(text str)
+    for re in pats()
+        mut end := 0
+        for m in regex.find_all(re, text)
+            assert(m.start >= end)
+            assert(m.end >= m.start)
+            end = m.end
+
+@test fn find_all_matches_the_text_it_names(text str)
+    for re in pats()
+        for m in regex.find_all(re, text)
+            assert_eq(m.text.len(), m.end - m.start)
+
+@test fn replace_with_the_match_is_identity(text str)
+    for re in pats()
+        assert_eq(regex.replace(re, text, "$0"), text)
+
+@test fn is_match_agrees_with_find(text str)
+    for re in pats()
+        mut found := false
+        if m := regex.find(re, text)
+            found = m.end >= m.start
+        assert_eq(regex.is_match(re, text), found)
+
+@test fn split_pieces_hold_no_match(text str)
+    sep := regex.compile(r"[,;]") else return
+    for piece in regex.split(sep, text)
+        assert(not regex.is_match(sep, piece))
+
+@test fn escaped_text_matches_itself(text str)
+    re := regex.compile(regex.escape(text)) else return
+    assert(regex.is_match(re, text))
+    assert_eq(regex.find(re, text)?.text, text)

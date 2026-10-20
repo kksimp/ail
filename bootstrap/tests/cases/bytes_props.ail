@@ -1,0 +1,43 @@
+# Property tests for `bytes` (type.bytes.1-13): round trips and slicing.
+
+@test fn hex_round_trip(b bytes)
+    assert_eq(bytes.from_hex(b.hex()) else b"?", b)
+
+@test fn base64_round_trip(b bytes)
+    assert_eq(bytes.from_base64(b.base64()) else b"?", b)
+
+@test fn base64_length(b bytes)
+    assert_eq(b.base64().len(), (b.len() + 2) / 3 * 4)
+
+@test fn list_round_trip(b bytes)
+    assert_eq(bytes.from_list(b.to_list()), b)
+
+@test fn str_round_trip(s str)
+    assert_eq(s.to_bytes().to_str() else "?", s)
+    assert_eq(s.to_bytes().len(), s.byte_len())
+
+@test fn text_agrees_with_to_str(b bytes)
+    t := b.to_str() else b.text()
+    assert_eq(t, b.text())
+
+@test fn split_and_join(b bytes)
+    k := b.len() / 2
+    assert_eq(b[..k] + b[k..], b)
+    assert_eq(b[..k].len(), k)
+    assert_eq((b[0..0] + b), b)
+
+@test fn concat_laws(a bytes, b bytes)
+    c := a + b
+    assert_eq(c.len(), a.len() + b.len())
+    assert_eq(c, a.concat(b))
+    assert(c.starts_with(a))
+    assert(c.ends_with(b))
+    assert(c.contains(a))
+    assert_eq(c[a.len()..], b)
+
+@test fn find_is_a_position(a bytes, b bytes)
+    i := (a + b).find(b) else 999999
+    assert(i <= a.len())
+
+@test fn order_matches_equality(a bytes, b bytes)
+    assert_eq(a == b, not (a < b) and not (b < a))

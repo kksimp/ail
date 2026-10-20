@@ -26,6 +26,7 @@ mod comprehension;
 pub mod errpaths;
 pub mod facts;
 mod keyfn;
+mod net;
 mod stdlib;
 mod tensor;
 pub mod effects;
@@ -63,6 +64,8 @@ pub enum Ty {
     /// `float`, `f64` (type.num.1-2)
     Float,
     Str,
+    /// `bytes`, an immutable sequence of `u8` (type.bytes.1)
+    Bytes,
     /// `char` (type.str.1)
     Char,
     Bool,
@@ -111,6 +114,7 @@ pub enum Con {
     Int,
     Float,
     Str,
+    Bytes,
     Char,
     Bool,
     List,
@@ -231,7 +235,7 @@ pub struct Resolved {
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
 const BUILTIN_TYPES: &[&str] = &[
-    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
+    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "bytes", "char", "bool", "List",
     "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
 ];
 
@@ -998,7 +1002,7 @@ impl<'p> Checker<'p> {
             );
         };
         match e {
-            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
+            Expr::Str(..) | Expr::Bytes(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
             Expr::None(_) | Expr::Hole(_) | Expr::TypeArgs { .. } => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
@@ -1160,6 +1164,7 @@ impl<'p> Checker<'p> {
             "float" | "f64" => Ty::Float,
             n if Num::from_name(n).is_some() => Ty::Num(Num::from_name(n).expect("a sized type")),
             "str" => Ty::Str,
+            "bytes" => Ty::Bytes,
             "char" => Ty::Char,
             "bool" => Ty::Bool,
             "Self" => match self.self_ty.clone() {
@@ -1519,6 +1524,7 @@ impl<'p> Checker<'p> {
             Ty::Float => "float".into(),
             Ty::Num(n) => n.name().into(),
             Ty::Str => "str".into(),
+            Ty::Bytes => "bytes".into(),
             Ty::Char => "char".into(),
             Ty::Bool => "bool".into(),
             Ty::Unit | Ty::Never => "no value".into(),
@@ -2213,6 +2219,8 @@ impl<'p> Checker<'p> {
         }
         match self.expr(iter, None, true) {
             Ty::List(t) | Ty::Set(t) => *t,
+            // type.bytes.5: iterating `bytes` gives each `u8`.
+            Ty::Bytes => Ty::Num(Num::U8),
             // conc.share.7: each value received until the channel closes; the
             // loop synchronises with other tasks (conc.par.2).
             Ty::Conc(conc::Conc::Channel, t) => {
@@ -2390,6 +2398,19 @@ impl<'p> Checker<'p> {
             self.expr(value, None, true);
             return;
         }
+        // type.bytes.2: `bytes` never changes in place.
+        if let Expr::Index { recv, .. } = target
+            && self.quiet_type(recv) == Ty::Bytes
+        {
+            self.error_help(
+                "type.bytes.2",
+                target.pos(),
+                "`bytes` is immutable, so an element can't be assigned",
+                "build a new value: `b = b[..i] + bytes.from_list([x]) + b[i + 1..]`, or edit a `List[u8]` and convert it with `bytes.from_list`",
+            );
+            self.expr(value, None, true);
+            return;
+        }
         self.require_mutable(target, None, "assigned");
         let vt = self.expr(value, Some(&tt), true);
         self.consume(value, &vt);
@@ -2526,6 +2547,7 @@ impl<'p> Checker<'p> {
         }
         match x {
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)
@@ -2563,7 +2585,7 @@ impl<'p> Checker<'p> {
                 })
                 .or_else(|| els.as_ref().and_then(|b| self.overlapping_use(target, b))),
             Expr::Match { scrutinee, arms, .. } => {
-                e(scrutinee).or_else(|| arms.iter().find_map(|a| self.overlapping_use(target, &a.body)))
+                e(scrutinee).or_else(|| arms.iter().find_map(|a| a.guard.as_ref().and_then(e).or_else(|| self.overlapping_use(target, &a.body))))
             }
             Expr::Try { expr, context, .. } => e(expr).or_else(|| context.as_deref().and_then(e)),
             Expr::Else { value, otherwise, .. } => e(value).or_else(|| match &**otherwise {
@@ -2593,6 +2615,7 @@ impl<'p> Checker<'p> {
     fn expr_of(&mut self, e: &'p Expr, expect: Option<&Ty>, need: bool) -> Ty {
         match e {
             Expr::Str(..) => Ty::Str,
+            Expr::Bytes(..) => Ty::Bytes,
             // type.num.10: an integer literal where a float is expected is a float.
             Expr::Int(_, pos) if matches!(expect, Some(Ty::Float)) => {
                 self.resolved.float_literals.insert(*pos);
@@ -3833,6 +3856,27 @@ impl<'p> Checker<'p> {
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
+            // type.bytes.13: `bytes.from_list(xs)` and the like.
+            if tn == "bytes" && targs.is_none() {
+                let sig = match name {
+                    "from_list" => Sig::plain(None, vec![(false, Ty::List(Box::new(Ty::Num(Num::U8))))], Ty::Bytes),
+                    "from_hex" | "from_base64" => {
+                        Sig::plain(None, vec![(false, Ty::Str)], Ty::Opt(Box::new(Ty::Bytes)))
+                    }
+                    "zeros" => Sig::plain(None, vec![(false, Ty::Int)], Ty::Bytes),
+                    _ => {
+                        self.args_only(args);
+                        self.error_help(
+                            "type.bytes.13",
+                            pos,
+                            format!("`bytes` has no associated function `{name}`"),
+                            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
+                        );
+                        return Ty::Err;
+                    }
+                };
+                return self.check_call(&format!("bytes.{name}"), &sig, Vec::new(), args, None, pos, expect);
+            }
             // type.char.4: `char.from_code(n)`.
             if tn == "char" && targs.is_none() {
                 if name != "from_code" {
@@ -3872,6 +3916,9 @@ impl<'p> Checker<'p> {
             return self.conc_method(*k, inner, name, pos, args);
         }
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
+        if let Some(t) = self.net_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
@@ -4281,13 +4328,21 @@ impl<'p> Checker<'p> {
         } else {
             let it = self.expr(index, Some(&Ty::Int), true);
             if !self.accepts(&Ty::Int, &it) {
-                let msg = format!("a list index must be `int`, found {}", self.show(&it));
-                self.error("type.coll.4", index.pos(), msg);
+                if rt == Ty::Bytes {
+                    let msg = format!("a `bytes` index must be `int`, found {}", self.show(&it));
+                    self.error("type.bytes.3", index.pos(), msg);
+                } else {
+                    let msg = format!("a list index must be `int`, found {}", self.show(&it));
+                    self.error("type.coll.4", index.pos(), msg);
+                }
             }
         }
         match rt {
             Ty::List(t) if slice => Ty::List(t),
             Ty::List(t) => *t,
+            // type.bytes.3-4: an element is a `u8`; a slice is `bytes`.
+            Ty::Bytes if slice => Ty::Bytes,
+            Ty::Bytes => Ty::Num(Num::U8),
             Ty::Err => Ty::Err,
             Ty::Str => {
                 let mut d = Diagnostic::new("type.str.2", recv.pos(), "a `str` can't be indexed")
@@ -4362,6 +4417,10 @@ impl<'p> Checker<'p> {
         let t = self.expr(operand, Some(&want), true);
         if self.reject_unhandled(&t, operand.pos()) {
             return Ty::Err;
+        }
+        // std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
+        if op == UnOp::Neg && self.tensor_elem(&t).is_some() {
+            return t;
         }
         if op == UnOp::Neg && t == Ty::Float {
             return Ty::Float;
@@ -4482,6 +4541,8 @@ impl<'p> Checker<'p> {
                 Ty::Num(k) if !(k.is_float() && op == BinOp::Rem) => return lt.clone(),
                 // type.num.6: float arithmetic, without `%`.
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
+                // type.bytes.6: `a + b` joins two `bytes`.
+                Ty::Bytes if op == BinOp::Add => return Ty::Bytes,
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
                         .help("build text with interpolation: \"{a}{b}\"")
@@ -4666,6 +4727,9 @@ impl<'p> Checker<'p> {
         let mut wildcard = false;
         let mut agree = Agree::new(expect, need, "arm", "`match`");
         for arm in arms {
+            // expr.match.11: a guarded arm covers nothing, so what the pattern
+            // marks as covered is undone once it's checked.
+            let kept = arm.guard.as_ref().map(|_| (covered.clone(), seen.clone(), wildcard, self.diags.len()));
             let bindings = match (&e, &literal, &arm.pat) {
                 (Some((e, args)), _, _) => self.pattern(*e, args, &arm.pat, &mut covered, &mut wildcard),
                 (_, Some(t), _) => {
@@ -4679,11 +4743,20 @@ impl<'p> Checker<'p> {
                 }
                 _ => Vec::new(),
             };
+            if let Some((c, sn, w, n)) = kept {
+                (covered, seen, wildcard) = (c, sn, w);
+                // `_ if c` hides nothing, so the `_` warning doesn't apply.
+                let tail = self.diags.split_off(n);
+                self.diags.extend(tail.into_iter().filter(|d| d.rule != "expr.match.3"));
+            }
             let mark = self.locals.len();
             for (name, npos, ty) in bindings {
                 if name != "_" && self.declare(&name, npos) {
                     self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding, decl: None });
                 }
+            }
+            if let Some(g) = &arm.guard {
+                self.condition(g);
             }
             agree.block(self, &arm.body, pos);
             self.end_scope(mark);
@@ -4809,6 +4882,34 @@ impl<'p> Checker<'p> {
                 let msg = format!("`{name}` is a variant pattern, but the value matched is {}", self.show(t));
                 self.error("expr.match.4", *pos, msg);
             }
+            // expr.match.12: a range covers some values, never all, so it
+            // marks nothing as seen.
+            Pattern::Range { lo, hi, inclusive, pos } => {
+                let ends = match (lo, hi) {
+                    (Literal::Int(a), Literal::Int(b)) => Some((Ty::Int, i128::from(*a), i128::from(*b))),
+                    (Literal::Char(a), Literal::Char(b)) => Some((Ty::Char, i128::from(*a as u32), i128::from(*b as u32))),
+                    _ => None,
+                };
+                let Some((kind, a, b)) = ends else {
+                    self.error("expr.match.12", *pos, "the two ends of a range pattern must both be integers or both characters");
+                    return;
+                };
+                let ok = kind == *t || (kind == Ty::Int && matches!(t, Ty::Num(k) if !k.is_float()));
+                if !ok {
+                    let msg = format!("this range is of {}, but the value matched is {}", self.show(&kind), self.show(t));
+                    self.error("expr.match.12", *pos, msg);
+                } else if a > b || (a == b && !*inclusive) {
+                    let dots = if *inclusive { "..=" } else { ".." };
+                    self.error_help(
+                        "expr.match.12",
+                        *pos,
+                        format!("this range pattern is empty: the start is not below the end of `{dots}`"),
+                        "write the smaller bound first",
+                    );
+                } else if *wildcard {
+                    self.error("expr.match.5", *pos, "this arm can never match; earlier arms cover every case");
+                }
+            }
         }
     }
 
@@ -4852,7 +4953,7 @@ impl<'p> Checker<'p> {
                 }
                 Vec::new()
             }
-            Pattern::Literal(_, pos) => {
+            Pattern::Literal(_, pos) | Pattern::Range { pos, .. } => {
                 let msg = format!("`{}` is an enum; match it with its variants", decl.name);
                 self.error("expr.match.4", *pos, msg);
                 Vec::new()

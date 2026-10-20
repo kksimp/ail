@@ -385,6 +385,7 @@ impl Parser {
             Tok::Kw(k) => format!("the keyword `{k}`"),
             Tok::Sym(s) => format!("`{s}`"),
             Tok::Str(_) | Tok::Interp(_) => "a string".into(),
+            Tok::Bytes(_) => "a `bytes` literal".into(),
             Tok::Int(_) | Tok::IntMin => "an integer".into(),
             Tok::Float(_) => "a number".into(),
             Tok::Char(_) => "a character".into(),
@@ -1767,6 +1768,10 @@ impl Parser {
                 self.i += 1;
                 Some(Expr::Str(s, pos))
             }
+            Tok::Bytes(b) => {
+                self.i += 1;
+                Some(Expr::Bytes(b, pos))
+            }
             Tok::Interp(parts) => {
                 self.i += 1;
                 self.interpolation(parts, pos)
@@ -2060,6 +2065,8 @@ impl Parser {
 
     fn arm(&mut self) -> Option<Arm> {
         let pat = self.pattern()?;
+        // expr.match.11: `pattern if cond =>`.
+        let guard = if self.eat_kw("if") { Some(self.expression_plain()?) } else { None };
         if !self.eat_sym("=>") {
             if self.at_sym(":") || self.at_sym("->") {
                 let at = self.pos();
@@ -2082,7 +2089,7 @@ impl Parser {
         }
         if matches!(self.peek(), Tok::Newline) {
             let body = self.block("`=>`", "expr.match.1")?;
-            return Some(Arm { pat, body });
+            return Some(Arm { pat, guard, body });
         }
         // expr.match.9: one statement on the arm's line, such as a value,
         // `return x`, `continue` or `total += n`.
@@ -2091,7 +2098,7 @@ impl Parser {
             self.unexpected("end of line after the arm", "expr.match.1");
             return None;
         }
-        Some(Arm { pat, body: vec![stmt] })
+        Some(Arm { pat, guard, body: vec![stmt] })
     }
 
     /// A pattern, or several joined by `|` (expr.match.8).
@@ -2108,8 +2115,47 @@ impl Parser {
         Some(Pattern::Or(alts, pos))
     }
 
-    /// `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+    /// A pattern that is one alternative: a literal or `lo..hi` / `lo..=hi`
+    /// range of integers or characters (expr.match.12), or see `plain_pattern`.
     fn single_pattern(&mut self) -> Option<Pattern> {
+        let pos = self.pos();
+        let lo = self.plain_pattern()?;
+        let inclusive = if self.at_sym("..=") {
+            true
+        } else if self.at_sym("..") {
+            false
+        } else {
+            return Some(lo);
+        };
+        let Pattern::Literal(lo @ (Literal::Int(_) | Literal::Char(_)), _) = lo else {
+            self.error_help(
+                "expr.match.12",
+                pos,
+                "only integer and character literals can start a range pattern",
+                "write `lo..hi` or `lo..=hi` with literal ends",
+            );
+            return None;
+        };
+        self.i += 1;
+        let hpos = self.pos();
+        match self.plain_pattern()? {
+            Pattern::Literal(hi @ (Literal::Int(_) | Literal::Char(_)), _) => {
+                Some(Pattern::Range { lo, hi, inclusive, pos })
+            }
+            _ => {
+                self.error_help(
+                    "expr.match.12",
+                    hpos,
+                    "the end of a range pattern must be an integer or character literal",
+                    "write `lo..hi` or `lo..=hi` with literal ends",
+                );
+                None
+            }
+        }
+    }
+
+    /// `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+    fn plain_pattern(&mut self) -> Option<Pattern> {
         let pos = self.pos();
         match self.peek().clone() {
             Tok::Ident(n) if n == "_" => {

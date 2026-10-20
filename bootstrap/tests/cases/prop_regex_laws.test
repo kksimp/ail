@@ -1,0 +1,3 @@
+{"test":"split_then_join_is_identity","status":"pass","line":5,"col":10,"message":"","cases":100,"seed":435468033425677640}
+{"test":"find_all_count_matches_split","status":"pass","line":9,"col":10,"message":"","cases":100,"seed":6813127134971639315}
+{"summary":true,"passed":2,"failed":0}
