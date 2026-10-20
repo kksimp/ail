@@ -1,0 +1,5 @@
+bootstrap/tests/native/opt_unsupported.ail:3:14: error[native.subset.1]: struct `Missing` isn't in the native subset yet
+bootstrap/tests/native/opt_unsupported.ail:3:14: error[native.subset.1]: `to_str`: methods and generic functions aren't in the native subset yet
+bootstrap/tests/native/opt_unsupported.ail:11:4: error[native.subset.1]: `labelled` must end with its result
+bootstrap/tests/native/opt_unsupported.ail:12:14: error[native.subset.1]: not in the native subset yet: `?` with a context message
+bootstrap/tests/native/opt_unsupported.ail:14:18: error[native.subset.1]: `nested`: its result type isn't in the native subset yet

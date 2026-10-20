@@ -25,11 +25,15 @@ on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
 value), `while`, `for` over a range or a list, `break`, `continue`,
 `return`, calls, `print` of those values or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
-methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
+`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, optionals
+of numbers, strings and lists (`none`, `x == none`, `if v := o`, `o else d`,
+`o?` in a function returning an optional), functions that can fail (`T ! E`,
+`! E`, `!`) whose errors are message-only `error struct`s without fields
+(`return E()`, `f()?`, `f() else ...`, `else err`, a failing `main`), and
+the methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 and the bit operations of expr.bit.1. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390)*
+*(ADRs 0384, 0390, 0574, 0575, 0576)*
 
 ```ail
 fn steps(n int) int
