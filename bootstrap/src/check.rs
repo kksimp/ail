@@ -1676,7 +1676,11 @@ impl<'p> Checker<'p> {
                 self.mismatch("expr.block.2", at, &sig.ret, &got);
             } else {
                 let mut d = Diagnostic::new("expr.block.2", at, msg);
-                if sig.ret == Ty::Int && got == Ty::Float {
+                let want = match &sig.ret {
+                    Ty::Res(ok, _) => (**ok).clone(),
+                    t => t.clone(),
+                };
+                if want == Ty::Int && got == Ty::Float {
                     // Two candidates, the likelier first; neither is applied, since each is a choice.
                     d = d.help("convert the value with `x.to_int()`, or declare the return type `float` instead");
                 }
@@ -4039,7 +4043,9 @@ impl<'p> Checker<'p> {
             && slots.iter().all(|(i, k)| i.is_some() && *k == ArgKind::Positional)
         {
             let names: Vec<&str> = slots.iter().filter_map(|(i, _)| i.map(|i| fields[i].name.as_str())).collect();
-            d = d.fix("name the fields", vec![Edit::call_named(call, type_label, &names)]);
+            // The call is written with the module's alias (`date.Date`), so anchor on the last name.
+            let written = type_label.rsplit('.').next().unwrap_or(type_label);
+            d = d.fix("name the fields", vec![Edit::call_named(call, written, &names)]);
         }
         self.diags.push(d);
     }
