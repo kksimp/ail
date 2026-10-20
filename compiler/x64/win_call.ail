@@ -54,8 +54,17 @@ pub fn generate_windows(m mir.Module) codegen.Image
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
+    rt := has_fn(m, "rt.init")
     a.alu_ri("sub", RSP, 40)
+    if rt
+        a.mov_ri(RDI, 0)
+        a.mov_ri(RSI, 0)
+        a.call_sym("rt.init")
     a.call_sym("main")
+    if rt
+        # rt.exit flushes the output, then calls sys_exit, which ends in ExitProcess.
+        a.mov_ri(RDI, 0)
+        a.call_sym("rt.exit")
     a.mov_rr(RCX, RAX)
     a.call_import("ExitProcess")
     a.ud2()
@@ -63,8 +72,14 @@ pub fn generate_windows(m mir.Module) codegen.Image
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
     for f in m.funcs
-        gen_func(mut img, m, f)
+        gen_func(mut img, m, f, true)
     img
+
+fn has_fn(m mir.Module, name str) bool
+    for f in m.funcs
+        if f.name == name
+            return true
+    false
 
 ## A module with one function, `main`, that writes a line with kernel32's
 ## `GetStdHandle(-11)` and `WriteFile(h, buf, len, &written, 0)`, then returns
