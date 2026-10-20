@@ -21,6 +21,8 @@ mod builtins;
 mod keyfn;
 mod contracts;
 pub mod parallel;
+mod net;
+mod osext;
 mod random;
 mod stdlib;
 mod tasks;

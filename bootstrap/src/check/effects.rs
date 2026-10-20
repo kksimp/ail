@@ -16,7 +16,7 @@ use crate::diag::{Diagnostic, Pos};
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
-/// `net` is reserved; nothing gives it yet.
+/// `std.net` gives `net` (std.net.1).
 pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
@@ -43,12 +43,27 @@ fn propagates(e: &str) -> bool {
 pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> {
     let (names, effects): (&[&str], &'static [&'static str]) = match module {
         "fs" => (
-            &["read_text", "write_text", "append_text", "exists", "list_dir", "remove", "make_dir"],
+            &[
+                "read_text",
+                "write_text",
+                "append_text",
+                "exists",
+                "list_dir",
+                "remove",
+                "make_dir",
+                "walk",
+                "glob",
+                "metadata",
+                "rename",
+                "copy",
+            ],
             &["fs", "io"],
         ),
-        "env" => (&["args", "get", "cwd", "program"], &["env"]),
+        "env" => (&["args", "get", "cwd", "program", "vars"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
-        "proc" => (&["run"], &["proc", "io"]),
+        "proc" => (&["run", "which"], &["proc", "io"]),
+        // std.net.1: every request reaches the network.
+        "net" => (&["get", "post"], &["net", "io"]),
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),

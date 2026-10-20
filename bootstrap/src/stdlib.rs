@@ -1,5 +1,5 @@
 //! The standard modules `std.fs`, `std.env`, `std.io`, `std.proc`,
-//! `std.path`, `std.random`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0206, 0177): their names, the functions
+//! `std.net`, `std.path`, `std.random`, `std.time` and `std.ui` (spec 17-std, ADRs 0157-0160, 0206, 0177, 0281-0283): their names, the functions
 //! each provides, and the declarations of their types. The checker types
 //! calls to them in `check/stdlib.rs`; the interpreter runs them in
 //! `interp/stdlib.rs`.
@@ -9,11 +9,18 @@ use crate::lexer::lex;
 
 /// Each standard module and its functions (std.use.1-2), sorted.
 pub const MODULES: &[(&str, &[&str])] = &[
-    ("env", &["args", "cwd", "get", "program"]),
-    ("fs", &["append_text", "exists", "list_dir", "make_dir", "read_text", "remove", "write_text"]),
+    ("env", &["args", "cwd", "get", "program", "vars"]),
+    (
+        "fs",
+        &[
+            "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_text", "remove", "rename",
+            "walk", "write_text",
+        ],
+    ),
     ("io", &["eprint", "exit", "read_all", "read_line"]),
+    ("net", &["get", "post"]),
     ("path", &["base", "dir", "ext", "join"]),
-    ("proc", &["run"]),
+    ("proc", &["run", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("time", &["now_ms", "sleep_ms"]),
     ("ui", &["clipboard_get", "clipboard_set", "open"]),
@@ -52,6 +59,9 @@ pub enum StdCall {
 /// there, and its module.
 const TYPES: &[(&str, &str)] = &[
     ("IoError", "fs"),
+    ("Metadata", "fs"),
+    ("Response", "net"),
+    ("NetError", "net"),
     ("Output", "proc"),
     ("ProcError", "proc"),
     ("Window", "ui"),

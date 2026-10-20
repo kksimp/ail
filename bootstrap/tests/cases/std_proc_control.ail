@@ -1,0 +1,17 @@
+## std.proc.2-3: input, a time limit, `which`; std.env.5: the environment as a map.
+use std.env
+use std.proc
+
+fn main() !
+    sorted := proc.run("sort", [], "pear\napple\nfig\n")?
+    print(sorted.out)
+    quick := proc.run("sh", ["-c", "echo done"], none, 10000)?
+    print(quick.out.trim())
+    slow := proc.run("sleep", ["5"], none, 50) else err
+        print(err)
+        proc.Output(status: -1, out: "", err: "")
+    print(slow.status)
+    print(proc.which("sh") != none)
+    print(proc.which("ail-no-such-program"))
+    vars := env.vars()
+    print(vars.contains("PATH"))

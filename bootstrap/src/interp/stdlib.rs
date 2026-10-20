@@ -1,6 +1,7 @@
-//! The standard modules at run time (spec 17-std): files (std.fs.1-7), the
-//! environment (std.env.1-4), standard input, standard error and exit
-//! (std.io.1-4), processes (std.proc.1) and the clock (std.time.1-2).
+//! The standard modules at run time (spec 17-std): files (std.fs.1-12), the
+//! environment (std.env.1-5), standard input, standard error and exit
+//! (std.io.1-4), processes (std.proc.1-3), HTTP (std.net.1-4) and the clock
+//! (std.time.1-2).
 //! Failures are `fs.IoError` and `proc.ProcError` values whose `kind` is
 //! one of the short names of std.err.1.
 
@@ -8,6 +9,7 @@ use std::io::{BufRead, Read, Write};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
+use super::builtins::Table;
 use super::{random, slot_mut, Env, Exit, Failure, Flow, Interp, Trap, Value};
 use crate::ast::Arg;
 use crate::diag::Pos;
@@ -114,6 +116,28 @@ impl<'a, W: Write> Interp<'a, W> {
                     Err(e) => self.io_error(&path, error_kind(&e), pos),
                 }
             }
+            ("fs", "walk") => {
+                let path = str_arg(0);
+                match super::osext::walk(&path) {
+                    Ok(files) => Value::List(Rc::new(files.into_iter().map(text).collect())),
+                    Err((at, kind)) => self.io_error(&at.into(), kind, pos),
+                }
+            }
+            ("fs", "glob") => Value::List(Rc::new(super::osext::glob(&str_arg(0)).into_iter().map(text).collect())),
+            ("fs", "metadata") => {
+                let path = str_arg(0);
+                match super::osext::metadata(&path) {
+                    Ok((size, modified, is_dir)) => {
+                        let s = self.structs["fs.Metadata"];
+                        Value::Struct(s, Rc::new(vec![Value::Int(size), Value::Int(modified), Value::Bool(is_dir)]))
+                    }
+                    Err(kind) => self.io_error(&path, kind, pos),
+                }
+            }
+            ("fs", "rename" | "copy") => match super::osext::move_or_copy(&str_arg(0), &str_arg(1), f == "copy") {
+                Ok(()) => Value::Unit,
+                Err((at, kind)) => self.io_error(&at.into(), kind, pos),
+            },
             ("path", "dir") => text(crate::stdlib::path_dir(&str_arg(0))),
             ("path", "base") => text(crate::stdlib::path_split(&str_arg(0)).1),
             ("path", "ext") => text(crate::stdlib::path_ext(&str_arg(0))),
@@ -126,6 +150,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 Ok(v) => text(v),
                 Err(_) => Value::None,
             },
+            ("env", "vars") => {
+                let mut t = Table::default();
+                for (k, v) in super::osext::vars() {
+                    t.insert(text(k), Some(text(v)));
+                }
+                Value::Map(Rc::new(t))
+            }
             ("env", "program") => text(PROGRAM.get().map_or("", |(p, _)| p.as_str())),
             ("env", "cwd") => match std::env::current_dir() {
                 Ok(d) => text(d.to_string_lossy().into_owned()),
@@ -179,20 +210,56 @@ impl<'a, W: Write> Interp<'a, W> {
                         other => unreachable!("checked: str, found {other:?}"),
                     })
                     .collect();
-                match std::process::Command::new(&*cmd).args(&argv).stdin(std::process::Stdio::null()).output() {
-                    Ok(out) => {
+                // std.proc.2: optional input and time limit.
+                let input = match values.get(2) {
+                    Some(Value::Str(s)) => Some(s.clone()),
+                    _ => None,
+                };
+                let timeout = match values.get(3) {
+                    Some(Value::Int(ms)) if *ms < 0 => {
+                        return stop("std.proc.2", pos, format!("can't time out after {ms} milliseconds"));
+                    }
+                    Some(Value::Int(ms)) => Some(*ms as u64),
+                    _ => None,
+                };
+                self.flush(pos)?;
+                match super::osext::run(&cmd, &argv, input.as_deref(), timeout) {
+                    Ok((status, out, err)) => {
                         let s = self.structs["proc.Output"];
                         let fields = vec![
-                            Value::Int(exit_status(&out.status)),
-                            text(String::from_utf8_lossy(&out.stdout).into_owned()),
-                            text(String::from_utf8_lossy(&out.stderr).into_owned()),
+                            Value::Int(exit_status(&status)),
+                            text(String::from_utf8_lossy(&out).into_owned()),
+                            text(String::from_utf8_lossy(&err).into_owned()),
                         ];
                         Value::Struct(s, Rc::new(fields))
                     }
-                    Err(e) => {
+                    Err(kind) => {
                         let s = self.structs["proc.ProcError"];
-                        let error = Value::Struct(s, Rc::new(vec![Value::Str(cmd), text(error_kind(&e))]));
+                        let error = Value::Struct(s, Rc::new(vec![Value::Str(cmd), text(kind)]));
                         fail(error, pos)
+                    }
+                }
+            }
+            ("proc", "which") => super::osext::which(&str_arg(0)).map_or(Value::None, text),
+            ("net", "get" | "post") => {
+                let url = str_arg(0);
+                let result = if f == "get" {
+                    super::net::get(&url)
+                } else {
+                    super::net::post(&url, &str_arg(1), &str_arg(2))
+                };
+                match result {
+                    Ok(r) => {
+                        let mut headers = Table::default();
+                        for (k, v) in r.headers {
+                            headers.insert(text(k), Some(text(v)));
+                        }
+                        let s = self.structs["net.Response"];
+                        Value::Struct(s, Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), text(r.body)]))
+                    }
+                    Err(e) => {
+                        let s = self.structs["net.NetError"];
+                        fail(Value::Struct(s, Rc::new(vec![text(e.url), text(e.kind), text(e.message)])), pos)
                     }
                 }
             }

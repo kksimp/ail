@@ -1,0 +1,5 @@
+## std.proc.2: a negative time limit traps.
+use std.proc
+
+fn main() !
+    proc.run("true", [], none, -1)?
