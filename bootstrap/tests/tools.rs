@@ -54,6 +54,24 @@ fn garlic_checks_clean_and_renders_headless() {
     assert!(second.contains("# Second page"), "--follow 1:\n{second}");
     let viewport = run(&["--height", "4", "--viewport", "--do", "find:the end", "--json"]);
     assert!(viewport.contains("\"message\":\"found `the end`") && !viewport.contains("\"Second page\""), "--viewport:\n{viewport}");
+    // Scripts run (tools/garlic/jsdom): their changes and timers show, and
+    // a script's navigation is followed; `--no-js` shows the page as sent.
+    let page_of = |flags: &[&str], file: &str| {
+        let mut args = vec!["run".to_string(), path.clone()];
+        args.extend(flags.iter().map(|f| f.to_string()));
+        args.push(tool(file));
+        let out = ail().args(&args).output().unwrap();
+        assert!(out.status.success(), "{flags:?} {file}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let scripted = page_of(&["--print"], "tools/garlic/testdata/script.html");
+    for want in ["# Made by script", "* onion bulb", "timer ran", "[filled by script"] {
+        assert!(scripted.contains(want), "script.html lacks {want:?}:\n{scripted}");
+    }
+    let redirected = page_of(&["--print"], "tools/garlic/testdata/redirect.html");
+    assert!(redirected.contains("# Second page"), "redirect.html:\n{redirected}");
+    let plain = page_of(&["--no-js", "--print"], "tools/garlic/testdata/redirect.html");
+    assert!(plain.contains("Please enable JavaScript."), "--no-js:\n{plain}");
 }
 
 /// Ctrl-Shift-H previews a replace across the directory's `.ail` files,
