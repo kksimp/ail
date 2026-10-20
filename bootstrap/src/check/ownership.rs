@@ -298,6 +298,7 @@ impl<'p> Checker<'p> {
             Stmt::Let { .. } => Some("a binding"),
             Stmt::Defer(..) => Some("another `defer`"),
             Stmt::While { .. } | Stmt::For { .. } => Some("a loop"),
+            Stmt::With { .. } => Some("a `with` block"),
         };
         if let Some(what) = what {
             self.error_help(

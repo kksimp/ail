@@ -1,0 +1,20 @@
+# `with` needs a mutex, and its body cant use the mutex it holds; a
+# `par for` body cant hold one (conc.share.6, conc.par.2).
+
+fn main()
+    m := Mutex(0)
+    n := 3
+    with n as mut x
+        x += 1
+    with m as mut x
+        m.set(2)
+        x += 1
+    mut out := [0, 0, 0, 0, 0, 0, 0, 0]
+    par for i in 0..8
+        with m as mut x
+            x += i
+        out[i] = i
+    print(out)
+    ch := Channel[int](1)
+    par for v in ch
+        out[0] = v

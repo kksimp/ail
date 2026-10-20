@@ -136,6 +136,10 @@ impl<'p> Walker<'p> {
                 self.expr(cond);
                 self.loop_body(body, None);
             }
+            Stmt::With { mutex, body, .. } => {
+                self.expr(mutex);
+                self.block(body);
+            }
             Stmt::For { var, iter, body, .. } => {
                 self.expr(iter);
                 self.loop_body(body, Some(var));

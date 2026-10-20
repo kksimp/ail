@@ -1,0 +1,17 @@
+## conc.task.1: a spawned function whose body calls a method (the parallel
+## analysis once indexed its call facts before computing them).
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    n += 1
+
+fn count(k int) int
+    mut c := Counter(n: 0)
+    for _ in 0..k
+        c.bump()
+    c.n
+
+fn main()
+    t := spawn count(3)
+    print(t.wait() else -1)

@@ -1,0 +1,12 @@
+# A channel nobody closes: `for v in ch` waits forever, which is a deadlock (conc.share.7, conc.task.7).
+
+fn produce(out Channel[int])
+    out.send(1)
+    out.send(2)
+
+fn main() !
+    ch := Channel[int](4)
+    p := spawn produce(ch)
+    for v in ch
+        print(v)
+    p.wait()?
