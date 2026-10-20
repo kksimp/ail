@@ -15,7 +15,8 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/commands.ail
 ./ail run examples/shapes.ail
 .\ail.ps1 run examples\hello.ail   # Windows (not yet tested on Windows)
-./ail check --json FILE            # diagnostics as JSON lines
+./ail check --json FILE            # diagnostics as JSON lines (schema v1, with fixes)
+./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
 ./ail selftest                     # the bootstrap's own tests
 ```
 
@@ -27,12 +28,13 @@ reported but don't stop a program from running.
 
 | File | Stage | Spec rules enforced |
 |---|---|---|
-| `src/lexer.rs` | Text to tokens, including INDENT/DEDENT and interpolated strings | `lex.block.1–4`, `lex.stmt.1–3`, `lex.kw.1–2`, `lex.comment.*`, `lex.str.1–5`, `lex.num.1–3` |
+| `src/lexer.rs` | Text to tokens, including INDENT/DEDENT and interpolated strings | `lex.block.1–4`, `lex.stmt.1–3`, `lex.kw.1–2` (incl. `todo`), `lex.comment.*`, `lex.str.1–5`, `lex.num.1–3` |
 | `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr` and `enum Ordering`, read before every program at line 0 | `trait.std.1–3` |
 | `src/parser.rs` | Tokens to syntax tree | `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `gen.decl.1`, `gen.bound.1`, `gen.method.1–3`, `gen.infer.2`, `trait.decl.1–2`, `trait.impl.1`, `trait.any.1`, `type.struct.1–3`, `type.enum.1–2`, `type.opt.2`, `err.decl.1`, `err.type.1–2`, `err.type.5`, `err.else.1–3`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.if.5–6`, `expr.loop.1–3`, `expr.loop.6`, `expr.match.1`, `expr.match.6`, `expr.prec.1–2`, `expr.op.1–3` |
-| `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.str.2–3`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2`, `own.excl.5`, `type.opt.4–5`, `type.enum.6`, `type.str.4–5`, `expr.loop.6`, `expr.match.6`, `err.decl.1–3`, `err.type.1–2`, `err.type.5–6`, `err.prop.1–3`, `err.use.1–2`, `err.else.1–3`, `err.ctx.2`, `err.text.1`, `expr.if.5–6`, `expr.cmp.1`, `gen.decl.1–2`, `gen.bound.1–4`, `gen.method.1–3`, `gen.infer.1–2`, `gen.anon.1`, `trait.decl.1–2`, `trait.impl.1–6`, `trait.self.1`, `trait.res.1`, `trait.any.1–5`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–4` (traits and generics in `src/check/traits.rs`) |
-| `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.str.4–5`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2` |
-| `src/diag.rs` | Text and JSON diagnostics, errors and warnings | ADR 0002 (rule IDs), ADR 0024 |
+| `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.hole.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.str.2–3`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2`, `own.excl.5`, `type.opt.4–5`, `type.enum.6`, `type.str.4–5`, `expr.loop.6`, `expr.match.6`, `err.decl.1–3`, `err.type.1–2`, `err.type.5–6`, `err.prop.1–3`, `err.use.1–2`, `err.else.1–3`, `err.ctx.2`, `err.text.1`, `expr.if.5–6`, `expr.cmp.1`, `gen.decl.1–2`, `gen.bound.1–4`, `gen.method.1–3`, `gen.infer.1–2`, `gen.anon.1`, `trait.decl.1–2`, `trait.impl.1–6`, `trait.self.1`, `trait.res.1`, `trait.any.1–5`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–4` (traits and generics in `src/check/traits.rs`) |
+| `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.str.4–5`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2` |
+| `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
+| `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 
 All errors in a file are reported in one pass, sorted by position.
 
@@ -59,7 +61,7 @@ All errors in a file are reported in one pass, sorted by position.
 - **Expressions:** `if` and `match` as values; `match` with variant,
   `Variant(a, _)`, literal (`1`, `-1`, `'a'`, `"s"`, `true`), or-pattern
   (`A | B`) and `_` patterns, and one-line statement arms (`=> continue`);
-  `e?` and `e? "context"`; `none`; `unreachable("why")`; calls,
+  `e?` and `e? "context"`; `none`; `unreachable("why")`; typed holes `todo`; calls,
   with type arguments inferred or written (`f[int](x)`, `Stack[int].new()`);
   trait method calls, including qualified ones (`Shape.area(x)`);
   `==` and `!=` on any type that supports them, and `<` on `Ord` types;

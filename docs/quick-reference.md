@@ -9,6 +9,20 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail explain RULE           # what a rule ID means, with its ADRs and an example
+```
+
+With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
+span and, where the fix is obvious, `fixes` to apply by line and column
+([semantic-api.md](design/semantic-api.md)).
+
+Write `todo` for code you haven't written yet. It has whatever type is
+expected; `ail check` warns (`expr.hole.1`) with that type and the names in
+scope, and running it traps (`expr.hole.2`).
+
+```ail
+fn area(w int, h int) int
+    todo     # warning: hole: expected `int`; in scope: `h int`, `w int`
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.

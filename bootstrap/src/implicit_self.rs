@@ -268,6 +268,7 @@ impl Cx<'_> {
             | Expr::Char(..)
             | Expr::Bool(..)
             | Expr::None(_)
+            | Expr::Hole(_)
             | Expr::Name(..)
             | Expr::TypeArgs { .. } => {}
         }

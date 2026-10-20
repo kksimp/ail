@@ -6,6 +6,7 @@
 mod ast;
 mod check;
 mod diag;
+mod explain;
 mod implicit_self;
 mod interp;
 mod lexer;
@@ -19,10 +20,11 @@ usage: ail <command> [--json] [args]
 commands:
   run FILE      check and run an AIL program
   check FILE    check a program without running it
+  explain RULE  print a spec rule, its ADRs and an example
   version       print the version
 
 options:
-  --json        report diagnostics as JSON lines (for tools and AI agents)
+  --json        report diagnostics (or an explanation) as JSON lines, schema v1
 ";
 
 /// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
@@ -35,6 +37,7 @@ fn main() -> ExitCode {
     match rest.as_slice() {
         ["run", file] => run_file(file, json, true),
         ["check", file] => run_file(file, json, false),
+        ["explain", rule] => explain::run(rule, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS

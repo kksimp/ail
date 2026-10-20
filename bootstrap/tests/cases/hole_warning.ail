@@ -1,0 +1,17 @@
+struct Box
+    w int
+    h int
+
+fn area(b Box) int
+    todo
+
+fn label(n int) str
+    if n > 0
+        "big"
+    else
+        todo
+
+fn main()
+    print(label(1))
+    b := Box(w: 2, h: 3)
+    print(b.w)

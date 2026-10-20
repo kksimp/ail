@@ -2,7 +2,7 @@
 //!
 //! Rules enforced: mod.main.1, mod.main.3, mod.unit.1, expr.name.1,
 //! expr.bind.1-6, expr.block.2-3, expr.call.1-2, expr.cmp.1, expr.if.1-2,
-//! expr.if.4-6, expr.loop.1-6, expr.match.2-6, expr.op.2-3, type.bool.1,
+//! expr.if.4-6, expr.hole.1, expr.loop.1-6, expr.match.2-6, expr.op.2-3, type.bool.1,
 //! type.coll.2-7, type.str.2-5, type.struct.3-6, type.enum.3, type.enum.5-6,
 //! type.opt.4-5, trait.method.1-5, trait.decl.1-2, trait.impl.1-6,
 //! trait.self.1, trait.res.1, trait.op.1, trait.op.3, trait.any.1-5,
@@ -29,7 +29,7 @@ use crate::ast::{
     Arg, ArgKind, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep,
     Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
-use crate::diag::{Diagnostic, Pos};
+use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::UNSUPPORTED;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -427,7 +427,12 @@ impl<'p> Checker<'p> {
             if BUILTIN_TYPES.contains(&name) || SPEC_TYPES_NOT_YET.contains(&name) || built_in {
                 self.error("mod.unit.1", pos, format!("`{name}` is already a built-in type"));
             } else if self.types.contains_key(name) || self.traits.contains_key(name) {
-                self.error("mod.unit.1", pos, format!("`{name}` is declared more than once in this module"));
+                let mut d =
+                    Diagnostic::new("mod.unit.1", pos, format!("`{name}` is declared more than once in this module"));
+                if let Some(first) = self.types.get(name) {
+                    d = d.note(self.def_pos(*first), format!("`{name}` is first declared here"));
+                }
+                self.diags.push(d);
             } else {
                 self.types.insert(name, def);
             }
@@ -496,7 +501,7 @@ impl<'p> Checker<'p> {
         let names: Vec<&str> = self.traits.keys().copied().collect();
         let mut d = Diagnostic::new("expr.name.1", pos, format!("unknown trait `{n}`"));
         if let Some(s) = suggest(n, &names) {
-            d = d.help(format!("did you mean `{s}`?"));
+            d = d.did_you_mean(n, s);
         }
         self.diags.push(d);
         None
@@ -794,7 +799,7 @@ impl<'p> Checker<'p> {
         };
         match e {
             Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
-            Expr::None(_) => {}
+            Expr::None(_) | Expr::Hole(_) => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
                     if let InterpPart::Expr(x) = p {
@@ -1221,7 +1226,7 @@ impl<'p> Checker<'p> {
         let candidates: Vec<&str> = BUILTIN_TYPES.iter().copied().chain(self.types.keys().copied()).collect();
         let mut d = Diagnostic::new("expr.name.1", pos, format!("unknown type `{name}`"));
         if let Some(s) = suggest(name, &candidates) {
-            d = d.help(format!("did you mean `{s}`?"));
+            d = d.did_you_mean(name, s);
         } else if name.len() == 1 && name.chars().all(|c| c.is_ascii_uppercase()) {
             d = d.help(format!("to make it a type parameter, declare it after the name: `fn name[{name}](...)`"));
         }
@@ -1406,6 +1411,12 @@ impl<'p> Checker<'p> {
                 }
                 if self.declare(name, *pos) {
                     self.locals.push(Local { name: name.clone(), ty, mutable: *mutable, kind: Kind::Binding });
+                } else if *mutable
+                    && let Some(d) = self.diags.last_mut()
+                    && let Some(f) = d.fixes.first_mut()
+                {
+                    // `mut x := e` again becomes `x = e`, so the `mut` goes too.
+                    f.edits.insert(0, Edit::replace(Pos { line: pos.line, col: 1 }, "mut ", ""));
                 }
                 Ty::Unit
             }
@@ -1587,12 +1598,14 @@ impl<'p> Checker<'p> {
     /// Check a new local name against the no-shadowing rules; true if it can be added.
     fn declare(&mut self, name: &str, pos: Pos) -> bool {
         if let Some(l) = self.locals.iter().rev().find(|l| l.name == name) {
-            let help = if l.mutable {
-                format!("`{name}` is a `mut` variable; to change it, write `{name} = ...`")
+            let mut d = Diagnostic::new("expr.bind.4", pos, format!("`{name}` is already declared in this function"));
+            d = if l.mutable {
+                d.help(format!("`{name}` is a `mut` variable; to change it, write `{name} = ...`"))
+                    .fix(format!("assign to `{name}` with `=`"), vec![Edit::replace(pos, ":=", "=")])
             } else {
-                "choose a different name; names can't be shadowed".into()
+                d.help("choose a different name; names can't be shadowed")
             };
-            self.error_help("expr.bind.4", pos, format!("`{name}` is already declared in this function"), help);
+            self.diags.push(d);
             return false;
         }
         let what = if self.fns.contains_key(name) || PRELUDE.contains(&name) {
@@ -1811,12 +1824,16 @@ impl<'p> Checker<'p> {
             if n == "self" {
                 self.expr(target, None, true);
             } else {
-                self.error_help(
-                    "expr.bind.3",
-                    *npos,
-                    format!("`{n}` isn't declared"),
-                    format!("declare it with `mut {n} := ...`"),
-                );
+                let mut d = Diagnostic::new("expr.bind.3", *npos, format!("`{n}` isn't declared"))
+                    .help(format!("declare it with `mut {n} := ...`"));
+                if op.is_none() {
+                    let edits = vec![
+                        Edit { pos: *npos, end: *npos, old: None, text: "mut ".into() },
+                        Edit::replace(pos, "=", ":="),
+                    ];
+                    d = d.fix(format!("declare `{n}` with `mut {n} :=`"), edits);
+                }
+                self.diags.push(d);
             }
             return;
         }
@@ -1956,6 +1973,7 @@ impl<'p> Checker<'p> {
             | Expr::Char(..)
             | Expr::Bool(..)
             | Expr::None(_)
+            | Expr::Hole(_)
             | Expr::Name(..)
             | Expr::TypeArgs { .. } => None,
             Expr::Interp(parts, _) => parts.iter().find_map(|p| match p {
@@ -2010,6 +2028,7 @@ impl<'p> Checker<'p> {
             Expr::Char(..) => Ty::Char,
             Expr::Bool(..) => Ty::Bool,
             Expr::None(pos) => self.none(*pos, expect),
+            Expr::Hole(pos) => self.hole(*pos, expect),
             Expr::Try { expr, context, pos } => self.try_expr(expr, context.as_deref(), *pos),
             // err.else.6: the value, or the fallback when it's absent or failed.
             Expr::Else { value, otherwise, .. } => {
@@ -2278,6 +2297,33 @@ impl<'p> Checker<'p> {
                 Ty::Err
             }
         }
+    }
+
+    /// `todo`, a typed hole (expr.hole.1): it takes the expected type, or an
+    /// unknown one that any use accepts, and warns with what the gap needs.
+    fn hole(&mut self, pos: Pos, expect: Option<&Ty>) -> Ty {
+        let mut scope: Vec<String> = (self.locals.iter())
+            .map(|l| match l.ty {
+                Ty::Err => format!("`{}` (type unknown)", l.name),
+                _ => format!("`{} {}`", l.name, self.ty_name(&l.ty)),
+            })
+            .collect();
+        scope.sort();
+        let scope = if scope.is_empty() { "nothing".to_string() } else { scope.join(", ") };
+        let (msg, help, ty) = match expect {
+            Some(t) if !matches!(t, Ty::Err) => (
+                format!("hole: expected {}; in scope: {scope}", self.show(t)),
+                format!("replace `todo` with a value of type {}", self.show(t)),
+                t.clone(),
+            ),
+            _ => (
+                format!("hole: the expected type isn't known here; in scope: {scope}"),
+                "replace `todo` with an expression".to_string(),
+                Ty::Err,
+            ),
+        };
+        self.diags.push(Diagnostic::warning("expr.hole.1", pos, msg).help(help));
+        ty
     }
 
     /// `e?` and `e? "context"` (err.prop.1-3, err.ctx.2).
@@ -2913,7 +2959,7 @@ impl<'p> Checker<'p> {
                         let mut d =
                             Diagnostic::new("type.struct.4", *lpos, format!("`{type_label}` has no field `{label}`"));
                         if let Some(s) = suggest(label, &names) {
-                            d = d.help(format!("did you mean `{s}`?"));
+                            d = d.did_you_mean(label, s);
                         }
                         self.diags.push(d);
                     }
@@ -3142,7 +3188,7 @@ impl<'p> Checker<'p> {
                 self.prog.traits[tr].methods.iter().map(|&m| self.prog.fns[m].name.as_str()).collect();
             let mut d = Diagnostic::new("expr.name.1", pos, format!("`{trait_name}` has no method `{name}`"));
             if let Some(s) = suggest(name, &names) {
-                d = d.help(format!("did you mean `{s}`?"));
+                d = d.did_you_mean(name, s);
             }
             self.diags.push(d);
             return Ty::Err;
@@ -3248,7 +3294,7 @@ impl<'p> Checker<'p> {
         if let Some(h) = builtins::method_help(rt, name) {
             d = d.help(h);
         } else if let Some(s) = suggest(name, &names) {
-            d = d.help(format!("did you mean `{s}`?"));
+            d = d.did_you_mean(name, s);
         } else if let Ty::Param(p) = rt {
             d = d.help(format!(
                 "a type parameter has only the methods of its constraints; add one, e.g. `[{} Trait]`",
@@ -3290,7 +3336,7 @@ impl<'p> Checker<'p> {
                     let names: Vec<&str> = self.prog.enums[e].variants.iter().map(|v| v.name.as_str()).collect();
                     let mut d = Diagnostic::new("expr.name.1", pos, format!("`{tn}` has no variant `{name}`"));
                     if let Some(s) = suggest(name, &names) {
-                        d = d.help(format!("did you mean `{s}`?"));
+                        d = d.did_you_mean(name, s);
                     }
                     self.diags.push(d);
                 }
@@ -3324,7 +3370,7 @@ impl<'p> Checker<'p> {
                 let names: Vec<&str> = decl.fields.iter().map(|f| f.name.as_str()).collect();
                 let mut d = Diagnostic::new("type.struct.6", pos, format!("`{}` has no field `{name}`", decl.name));
                 if let Some(s) = suggest(name, &names) {
-                    d = d.help(format!("did you mean `{s}`?"));
+                    d = d.did_you_mean(name, s);
                 }
                 self.diags.push(d);
                 Ty::Err
@@ -3859,7 +3905,7 @@ impl<'p> Checker<'p> {
                     let mut d =
                         Diagnostic::new("expr.name.1", *pos, format!("`{}` has no variant `{name}`", decl.name));
                     if let Some(s) = suggest(name, &names) {
-                        d = d.help(format!("did you mean `{s}`?"));
+                        d = d.did_you_mean(name, s);
                     }
                     self.diags.push(d);
                     return Vec::new();
@@ -3904,7 +3950,7 @@ impl<'p> Checker<'p> {
         if let Some(h) = builtins::function_help(name) {
             d = d.help(h);
         } else if let Some(s) = suggest(name, &candidates) {
-            d = d.help(format!("did you mean `{s}`?"));
+            d = d.did_you_mean(name, s);
         }
         self.diags.push(d);
     }

@@ -327,3 +327,29 @@ sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is
 > decided in the error-handling chapter.
+
+## Holes
+
+**expr.hole.1** — `todo` is a *typed hole*: an expression that stands for code
+not yet written. It is accepted wherever an expression is. Its type is the type
+the context expects; where no type is expected, its type is unknown and every
+use of the value is accepted. Each hole MUST be reported as a warning, not an
+error, whose message states the expected type (or that none is known) and lists
+the local names in scope with their types, sorted by name. *(ADR 0147)*
+
+```ail
+fn area(w int, h int) int
+    todo
+
+fn main()
+    print("started")
+```
+
+The checker warns "hole: expected `int`; in scope: `h int`, `w int`", and the
+program still runs: `area` is never called.
+
+**expr.hole.2** — Evaluating a hole MUST trap (`err.trap.1`). *(ADR 0147)*
+
+> **Note:** a hole lets a program be written top-down: the checker says what
+> each gap needs, and the program runs until it reaches one. The bootstrap
+> doesn't infer an unknown hole type from later uses; a later lane may.

@@ -1,0 +1,5 @@
+fn main()
+    mut total := 0
+    for i in 0..3
+        mut total := total + i
+    prnt(total)
