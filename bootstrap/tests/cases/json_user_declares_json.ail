@@ -1,0 +1,7 @@
+# A program that declares its own `Json` keeps it: the prelude module is not read (json.prelude.1)
+enum Json
+    A
+    B
+
+fn main()
+    print("ok")
