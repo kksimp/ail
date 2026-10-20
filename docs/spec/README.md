@@ -85,6 +85,7 @@ aren't run.
 | 16 | [Reflection](16-reflection.md) | `refl` | Drafted (skeleton) |
 | 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace` | Drafted (partial) |
 | 22 | [Tool lookups: api, explain, fix](22-tools.md) | `api`, `explain`, `fix` | Drafted (partial) |
+| 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 

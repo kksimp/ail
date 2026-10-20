@@ -1,0 +1,160 @@
+## MIR: the backend's typed SSA form (ADR 0384, ir-architecture.md §4).
+## A function is a list of basic blocks; each value is defined once, by a
+## block parameter or an instruction, and an edge passes arguments to its
+## target's parameters (no phi nodes). Checks that can trap carry a trap
+## site (`Site`), which the code generator turns into a branch to a stub.
+## `ail run compiler mir FILE` prints a module with `module_text`.
+
+## A value's machine type. Strings and lists are pointers.
+pub enum Ty
+    Int
+    Float
+    Bool
+    Str
+    ## A list of numbers; `elem` is `Unknown` until the first use types it.
+    List(elem Ty)
+    Unknown
+    Unit
+
+fn Ty.is_float(self) bool
+    match self
+        Float => true
+        _ => false
+
+fn Ty.is_unit(self) bool
+    match self
+        Unit => true
+        _ => false
+
+fn Ty.is_unknown(self) bool
+    match self
+        Unknown => true
+        _ => false
+
+## The element type of a list type, else `none`.
+fn Ty.elem(self) Ty?
+    match self
+        List(e) => e
+        _ => none
+
+fn Ty.name(self) str
+    match self
+        Int => "int"
+        Float => "float"
+        Bool => "bool"
+        Str => "str"
+        List(e) => "List[{e.name()}]"
+        Unknown => "?"
+        Unit => "unit"
+
+## One instruction: `dst` is the value it defines (-1 for none), `args`
+## the values it reads. The operations (`op`):
+##
+## | op | args | meaning |
+## |---|---|---|
+## | `const` | | `imm`, an `int` or `bool` (0, 1) |
+## | `fconst` | | `fimm` |
+## | `str` | | the address of string literal `imm` (`Module.strs`) |
+## | `add sub mul div rem` | a, b | `int` arithmetic; traps at `site` on overflow and, for `div` and `rem`, a zero divisor (expr.arith.1-3); `site` -1: can't overflow |
+## | `fadd fsub fmul fdiv` | a, b | `float` arithmetic |
+## | `eq ne lt le gt ge` | a, b | `int`/`bool` comparison, a `bool` |
+## | `feq fne flt fle fgt fge` | a, b | `float` comparison; NaN is unequal to everything |
+## | `neg` / `fneg` / `not` | a | negation (`neg` traps on the smallest `int`) |
+## | `itof` / `ftoi` | a | `n.to_float()`, `x.to_int()` (truncates; traps on NaN and out of range) |
+## | `sqrt abs floor ceil` | a | on `float` |
+## | `call` | arguments | function `name`; `dst` -1 when it returns nothing |
+## | `prim` | arguments | runtime primitive `name` (native-abi.md §6) |
+## | `get` | list, index | `xs[i]`, bounds-checked at `site` (type.coll.4); `site` -1: known in bounds |
+## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
+## | `len` | list | `xs.len()` |
+## | `copy` | a | the same value |
+pub struct Inst
+    pub dst int
+    pub op str
+    pub args List[int]
+    pub imm int
+    pub fimm float
+    pub name str
+    pub site int
+
+pub fn inst(dst int, op str, args List[int]) Inst
+    Inst(dst: dst, op: op, args: args, imm: 0, fimm: 0.0, name: "", site: -1)
+
+## How a block ends: `jump` (one target), `branch` on `cond` (targets: if
+## true, if false), `return` (`value`, -1 for none), or `unreachable`
+## (after a trap). `args[k]` are the values edge `k` passes to
+## `targets[k]`'s parameters.
+pub struct Term
+    pub kind str
+    pub cond int
+    pub targets List[int]
+    pub args List[List[int]]
+    pub value int
+
+pub fn jump_to(target int, args List[int]) Term
+    Term(kind: "jump", cond: -1, targets: [target], args: [args], value: -1)
+
+pub fn branch_on(cond int, yes int, no int) Term
+    Term(kind: "branch", cond: cond, targets: [yes, no], args: [[], []], value: -1)
+
+pub fn return_of(value int) Term
+    Term(kind: "return", cond: -1, targets: [], args: [], value: value)
+
+pub fn unreachable_term() Term
+    Term(kind: "unreachable", cond: -1, targets: [], args: [], value: -1)
+
+## The values a terminator reads, including edge arguments.
+fn Term.uses(self) List[int]
+    mut out := List[int]()
+    if cond >= 0
+        out.push(cond)
+    for a in args
+        out.extend(a)
+    if value >= 0
+        out.push(value)
+    out
+
+pub struct Block
+    pub params List[int]
+    pub insts List[Inst]
+    pub term Term
+
+pub struct Func
+    pub name str
+    ## The entry block's parameters are the function's parameters.
+    pub params List[int]
+    pub ret Ty
+    pub blocks List[Block]
+    ## The type of each value.
+    pub vals List[Ty]
+    ## A source name for each value that has one, else "".
+    pub names List[str]
+
+## A check that can trap (run.trap.*): the rule, and where. `kind` says how
+## the runtime builds the message from the operands: `arith` (`a OP b`
+## overflows), `div` (division by zero), `bounds`, `neg`, `float_int`.
+pub struct Site
+    pub rule str
+    pub kind str
+    pub op str
+    pub line int
+    pub col int
+    pub func str
+
+pub struct Module
+    pub path str
+    pub funcs List[Func]
+    pub strs List[str]
+    pub sites List[Site]
+    ## The source text's lines, for trap excerpts.
+    pub lines List[str]
+
+## Whether an instruction may be removed when its value is unused.
+fn Inst.is_pure(self) bool
+    match op
+        "const" | "fconst" | "str" | "fadd" | "fsub" | "fmul" | "fdiv" => true
+        "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
+        "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
+        "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "copy" => true
+        "add" | "sub" | "mul" | "neg" => site < 0
+        _ => false

@@ -1,0 +1,111 @@
+## The MIR verifier (ADR 0384, ADR 0018's miscompilation defence): run after
+## lowering and after every pass. It checks that each value is defined
+## once, every use is dominated by its definition, every edge passes as many
+## arguments as its target has parameters, of the same types, and that
+## operands have the types their operations need.
+
+## The problems found, as `FUNC: message`; empty when the function is sound.
+pub fn verify(f Func) List[str]
+    mut errs := List[str]()
+    n := f.blocks.len()
+    mut def_block := [-1 for _ in 0..f.vals.len()]
+    mut def_index := [-1 for _ in 0..f.vals.len()]
+    for b in 0..n
+        for p in f.blocks[b].params
+            if def_block[p] >= 0
+                errs.push("{f.name}: v{p} is defined twice")
+            def_block[p] = b
+            def_index[p] = -1
+        insts := f.blocks[b].insts
+        for k in 0..insts.len()
+            d := insts[k].dst
+            if d >= 0
+                if def_block[d] >= 0
+                    errs.push("{f.name}: v{d} is defined twice")
+                def_block[d] = b
+                def_index[d] = k
+    if f.params != f.blocks[0].params
+        errs.push("{f.name}: the entry block's parameters aren't the function's")
+    dom := dominators(f)
+    for b in 0..n
+        blk := f.blocks[b]
+        for k in 0..blk.insts.len()
+            i := blk.insts[k]
+            for u in i.args
+                check_use(f, dom, def_block, def_index, u, b, k, mut errs)
+            check_types(f, i, mut errs)
+        for u in blk.term.uses()
+            check_use(f, dom, def_block, def_index, u, b, blk.insts.len(), mut errs)
+        for e in 0..blk.term.targets.len()
+            t := blk.term.targets[e]
+            args := blk.term.args[e]
+            params := f.blocks[t].params
+            if args.len() != params.len()
+                errs.push("{f.name}: b{b} passes {args.len()} values to b{t}, which has {params.len()} parameters")
+                continue
+            for j in 0..args.len()
+                if f.vals[args[j]].name() != f.vals[params[j]].name()
+                    errs.push("{f.name}: b{b} passes a {f.vals[args[j]].name()} to b{t}'s {f.vals[params[j]].name()}")
+        if blk.term.kind == "branch" and blk.term.targets[0] == blk.term.targets[1]
+            errs.push("{f.name}: b{b} branches twice to b{blk.term.targets[0]}")
+        if blk.term.kind == "return"
+            if f.ret.is_unit() != (blk.term.value < 0)
+                errs.push("{f.name}: b{b} returns the wrong kind of value")
+    errs
+
+fn check_use(
+    f Func,
+    dom List[List[bool]],
+    db List[int],
+    di List[int],
+    u int,
+    b int,
+    k int,
+    mut errs List[str],
+)
+    if u < 0 or u >= f.vals.len() or db[u] < 0
+        errs.push("{f.name}: b{b} uses v{u}, which is never defined")
+        return
+    if db[u] == b
+        if di[u] >= k
+            errs.push("{f.name}: b{b} uses v{u} before defining it")
+        return
+    if not dom[b][db[u]]
+        errs.push("{f.name}: v{u} (defined in b{db[u]}) doesn't dominate its use in b{b}")
+
+fn check_types(f Func, i Inst, mut errs List[str])
+    want := match i.op
+        "add" | "sub" | "mul" | "div" | "rem" | "neg" | "itof" | "lt" | "le" | "gt" | "ge" => "int"
+        "fadd" | "fsub" | "fmul" | "fdiv" | "fneg" | "ftoi" | "sqrt" | "abs" | "floor" | "ceil" => "float"
+        "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => "float"
+        "not" => "bool"
+        _ => ""
+    if want == ""
+        return
+    for a in i.args
+        if f.vals[a].name() != want
+            errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
+
+## `dom[b][d]`: block `d` dominates block `b` (the iterative data-flow
+## algorithm; MIR functions are small).
+fn dominators(f Func) List[List[bool]]
+    n := f.blocks.len()
+    mut preds := [List[int]() for _ in 0..n]
+    for b in 0..n
+        for t in f.blocks[b].term.targets
+            preds[t].push(b)
+    mut dom := [[true for _c in 0..n] for _r in 0..n]
+    dom[0] = [d == 0 for d in 0..n]
+    mut changed := true
+    while changed
+        changed = false
+        for b in 1..n
+            mut next := [true for _ in 0..n]
+            for p in preds[b]
+                for d in 0..n
+                    next[d] = next[d] and dom[p][d]
+            next[b] = true
+            if next != dom[b]
+                dom[b] = next
+                changed = true
+    dom
