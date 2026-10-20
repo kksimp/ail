@@ -26,16 +26,6 @@ use crate::ast::{
 use crate::diag::{Diagnostic, Pos};
 use crate::lexer::{Part, Tok, Token, lex};
 
-/// Whether `std.NAME` is a standard module. The standard modules are lane 4
-/// of the 2026-10-20 plan (`std.fs`, `std.env`, ...); until they land, none
-/// is known. `std` imports and the expressions that use them are left for
-/// that lane's checker.
-pub fn resolve_std(name: &str) -> bool {
-    // TODO(lane 4, standard modules): `crate::stdlib::is_std_module(name)`.
-    let _ = name;
-    false
-}
-
 /// Read the program at `arg` (a file or a package directory) with every
 /// module it imports. `Err` is a message for a file or directory that
 /// can't be read.
@@ -48,10 +38,29 @@ pub fn load(arg: &str) -> Result<(Program, Vec<Diagnostic>), String> {
         }
         (path.to_path_buf(), files)
     } else {
-        let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
-        (dir.to_path_buf(), vec![path.to_path_buf()])
+        (parent(path), vec![path.to_path_buf()])
     };
+    load_package(root, root_files, None)
+}
 
+/// Like `load` for a single file whose text is `src` (for `ail api`).
+pub fn load_src(path: &str, src: &str) -> (Program, Vec<Diagnostic>) {
+    let path = Path::new(path);
+    load_package(parent(path), vec![path.to_path_buf()], Some(src.to_string()))
+        .unwrap_or_else(|e| (Program::default(), vec![Diagnostic::new("mod.use.4", Pos { line: 1, col: 1 }, e)]))
+}
+
+fn parent(path: &Path) -> PathBuf {
+    path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf()
+}
+
+/// Load the root module's files, the first given as `first_src` if any,
+/// and every module they import.
+fn load_package(
+    root: PathBuf,
+    root_files: Vec<PathBuf>,
+    mut first_src: Option<String>,
+) -> Result<(Program, Vec<Diagnostic>), String> {
     let mut files: Vec<SourceFile> = Vec::new();
     let mut tokens: Vec<Token> = Vec::new();
     let mut diags = Vec::new();
@@ -63,7 +72,10 @@ pub fn load(arg: &str) -> Result<(Program, Vec<Diagnostic>), String> {
             if (files.len() + 1) * FILE_LINES >= crate::ast::PRELUDE_LINE {
                 return Err(format!("the program has more than {} files", files.len()));
             }
-            let src = std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?;
+            let src = match first_src.take() {
+                Some(src) => src,
+                None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+            };
             let base = files.len() * FILE_LINES;
             let (mut toks, lex_diags) = lex(&src);
             toks.pop(); // Eof
@@ -224,29 +236,22 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
         }
     }
     let mut edges: Vec<(String, String, Pos)> = Vec::new();
+    let mut unresolved: Vec<HashSet<String>> = vec![HashSet::new(); prog.files.len()];
     for u in &prog.uses {
         let Some(fi) = file_index(prog, u.pos) else { continue };
         let module = prog.files[fi].module.clone();
         let dotted = u.dotted();
-        let (name, name_pos) = u.name();
+        let (name, name_pos) = (u.name().0.as_str(), u.name().1);
         if u.pos.line > first_decl[fi] {
             diags.push(
                 Diagnostic::new("mod.use.3", u.pos, "`use` must come before the file's declarations")
                     .help("move the import to the top of the file"),
             );
         }
+        // The standard modules, and their errors (std.use.1-3), are the
+        // checker's (`check/stdlib.rs`); their uses are left as written.
         let target = if u.path[0].0 == "std" {
-            match u.path.as_slice() {
-                [_, (m, _)] if resolve_std(m) => Some(Target::Std),
-                _ => {
-                    diags.push(Diagnostic::new(
-                        "mod.use.4",
-                        u.path[0].1,
-                        format!("there is no standard module `{dotted}`"),
-                    ));
-                    None
-                }
-            }
+            Some(Target::Std)
         } else if dotted == module {
             diags.push(
                 Diagnostic::new("mod.use.5", u.path[0].1, format!("module `{dotted}` imports itself"))
@@ -264,7 +269,10 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
             );
             None
         };
-        if imports[fi].contains_key(name) {
+        if let Some(first) = imports[fi].get(name) {
+            if matches!((first, &target), (Target::Std, Some(Target::Std))) && !unresolved[fi].contains(name) {
+                continue; // std.use.3
+            }
             diags.push(
                 Diagnostic::new("mod.use.6", name_pos, format!("`{name}` is already imported in this file"))
                     .help(format!("write `use {dotted} as OTHER` to give it another name")),
@@ -283,6 +291,9 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, root: &Path) {
             continue;
         }
         // An unresolved import is still bound, so its uses aren't reported again.
+        if target.is_none() {
+            unresolved[fi].insert(name.to_string());
+        }
         imports[fi].insert(name.to_string(), target.unwrap_or(Target::Std));
     }
     report_cycles(&edges, diags);
@@ -511,6 +522,9 @@ impl Cx<'_> {
         match self.import(head).cloned() {
             Some(Target::Module(m)) => self.item(&m, head, rest, pos),
             Some(Target::Std) => name.to_string(),
+            // A standard module used without its import: std.use.2, reported
+            // by the checker.
+            None if crate::stdlib::is_std_module(head) => name.to_string(),
             None => {
                 self.diags.push(
                     Diagnostic::new("mod.use.2", pos, format!("`{head}` is not an imported module"))
@@ -547,7 +561,8 @@ impl Cx<'_> {
     /// expr.bind.5: a local can't take the name of an item of its module or
     /// of an import. The checker reports clashes with root-module items.
     fn local(&mut self, name: &str, pos: Pos) {
-        let what = if self.import(name).is_some() {
+        // A standard module's name is the checker's (expr.bind.5).
+        let what = if matches!(self.import(name), Some(Target::Module(_))) {
             "an imported module"
         } else if !self.module.is_empty() && self.own(name) {
             "an item"

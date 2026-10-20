@@ -81,8 +81,9 @@ declarations. An import applies to the file that declares it.
 *(ADR 0154)*
 
 **mod.use.4** — `use a.b` requires a directory `a/b` under the package root
-that contains at least one `.ail` file. `use std.NAME` names a standard
-module. Anything else is a compile-time error. *(ADR 0153)*
+that contains at least one `.ail` file; otherwise it is a compile-time
+error. `use std.NAME` names a standard module instead (`std.use.1`).
+*(ADR 0153)*
 
 **mod.use.5** — Imports MUST NOT form a cycle; a module can't import itself.
 The error names the cycle. *(ADR 0153)*
@@ -90,6 +91,9 @@ The error names the cycle. *(ADR 0153)*
 **mod.use.6** — An import name MUST differ from the file's other import names
 and from the module's top-level names. `use a.b as c` resolves a clash.
 *(ADR 0154)*
+
+**Note:** The standard modules (`use std.fs` and others) are in
+[chapter 17](17-std.md).
 
 ```ail skip=bootstrap
 use net.http

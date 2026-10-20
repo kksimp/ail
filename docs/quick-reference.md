@@ -9,11 +9,13 @@
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail run DIR                # a package: DIR's files are the root module
+./ail run FILE.ail a b       # words after FILE are the program's: env.args()
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
 ./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
 ./ail effects [--json] FILE.ail       # each function's inferred effects
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
+./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
@@ -474,6 +476,33 @@ pub struct Point         # `pub` exports; everything else is private
 There are no item or wildcard imports, no `pub use`, and no import cycles.
 `fn T.m` must be in `T`'s module. Text forms show the module path:
 `geo.Point(x: 1, y: 2)`.
+
+## Files, processes and the system
+
+Import a standard module with `use std.NAME` and call it by its name
+(spec 17-std). Failures are values: `fs.IoError(path, kind)` and
+`proc.ProcError(cmd, kind)`, `kind` one of `not_found`, `permission`,
+`exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `other`.
+
+```ail
+use std.fs
+use std.proc
+
+fn main() !
+    text := fs.read_text("in.txt")?          # str ! fs.IoError
+    fs.write_text("out.txt", text)?           # also append_text
+    names := fs.list_dir(".")?                # sorted names
+    r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
+    print("{r.status} {r.out} {r.err}")      # proc.Output
+```
+
+| Module | Functions |
+|---|---|
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents); all but `exists` are `! fs.IoError` |
+| `std.env` | `args() List[str]`, `get(name) str?`, `cwd() str`, `program() str` |
+| `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
+| `std.proc` | `run(cmd, args) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }` |
+| `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 
 ## Tests and assertions
 

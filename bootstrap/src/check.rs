@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod builtins;
+mod stdlib;
 pub mod effects;
 mod privacy;
 mod testing;
@@ -32,6 +33,7 @@ use crate::ast::{
     Arg, ArgKind, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep,
     Pattern, Program, Stmt, TypeKind, TypeRef, UnOp, Within, field_slots, is_prelude, place_path,
 };
+use crate::fasthash::{FastMap, FastSet};
 use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::UNSUPPORTED;
 
@@ -130,22 +132,28 @@ pub enum Call {
 #[derive(Debug, Default)]
 pub struct Resolved {
     /// Bare enum variants, by the position of the name: (enum, variant).
-    pub variants: HashMap<Pos, (usize, usize)>,
+    pub variants: FastMap<Pos, (usize, usize)>,
     /// Method calls through a trait, by the position of the method name.
-    pub calls: HashMap<Pos, Call>,
+    pub calls: FastMap<Pos, Call>,
     /// The `impl` block for each trait and type constructor (trait.impl.6).
-    pub impls: HashMap<(usize, Con), usize>,
+    pub impls: FastMap<(usize, Con), usize>,
     /// Empty `{}` literals that are sets rather than maps (type.coll.3).
-    pub empty_sets: std::collections::HashSet<Pos>,
+    pub empty_sets: FastSet<Pos>,
     /// `e?` on an optional, which passes on `none` (err.prop.2); every other
     /// `?` passes on only a failure, so a successful `none` stays a value.
-    pub optional_try: std::collections::HashSet<Pos>,
+    pub optional_try: FastSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
-    pub float_literals: std::collections::HashSet<Pos>,
+    pub float_literals: FastSet<Pos>,
     /// The function each method or associated function call runs, by the
     /// position of its name, when that is known statically (eff.infer.3).
     pub targets: HashMap<Pos, usize>,
     pub std: Std,
+    /// Calls to the standard modules, by the position of the name (std.use.2).
+    pub std_calls: HashMap<Pos, crate::stdlib::StdCall>,
+    /// The declaration a name, call, method, field or variant refers to, by
+    /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
+    /// Trait calls are in `calls` and bare variants in `variants` instead.
+    pub symbols: HashMap<Pos, String>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -197,6 +205,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolve_fields();
     c.collect_fns();
     c.collect_consts();
+    c.check_uses();
     c.check_deferred_bounds();
     c.check_main();
     c.check_attrs();
@@ -221,7 +230,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     for (i, f) in prog.fns.iter().enumerate() {
         c.check_fn(i, f);
     }
-    c.resolved.impls = c.impl_of.clone();
+    c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
     (c.diags, c.resolved)
@@ -958,6 +967,9 @@ impl<'p> Checker<'p> {
             }
             return Ty::Param(id);
         }
+        if let Some(t) = self.std_type(name, args, t.pos) {
+            return t;
+        }
         let ty = match name.as_str() {
             "int" | "i64" => Ty::Int,
             "float" | "f64" => Ty::Float,
@@ -1622,6 +1634,8 @@ impl<'p> Checker<'p> {
             "a type"
         } else if self.consts.contains_key(name) {
             "a constant"
+        } else if self.std_module(name).is_some() {
+            "an imported module"
         } else {
             return true;
         };
@@ -2160,6 +2174,7 @@ impl<'p> Checker<'p> {
             return l.ty.clone();
         }
         if let Some(&i) = self.consts.get(n) {
+            self.resolved.symbols.insert(pos, format!("const:{n}"));
             return self.const_type(i);
         }
         if n == "self" {
@@ -2187,6 +2202,9 @@ impl<'p> Checker<'p> {
             return self.enum_value(e, None, expect, pos, n);
         }
         if !self.variant_owners(n).is_empty() {
+            return Ty::Err;
+        }
+        if self.module_as_value(n, pos) {
             return Ty::Err;
         }
         if self.fns.contains_key(n) || PRELUDE.contains(&n) {
@@ -2537,6 +2555,7 @@ impl<'p> Checker<'p> {
         }
         match self.types.get(n.as_str()).copied() {
             Some(Def::Struct(s)) => {
+                self.resolved.symbols.insert(npos, format!("type:{n}"));
                 let explicit = targs.map(|a| self.explicit_args(n, &self.struct_params[s].clone(), a, npos));
                 return self.struct_literal(s, explicit, args, npos, expect);
             }
@@ -2555,6 +2574,7 @@ impl<'p> Checker<'p> {
         }
         if let Some(&i) = self.fns.get(n.as_str()) {
             self.reject_test_call(i, npos);
+            self.resolved.symbols.insert(npos, format!("fn:{n}"));
             let sig = self.sigs[i].clone();
             let binds = match targs {
                 Some(a) => {
@@ -3100,6 +3120,11 @@ impl<'p> Checker<'p> {
             _ => None,
         };
         if let Some((tn, targs)) = head {
+            if targs.is_none()
+                && let Some(t) = self.std_call(tn, name, pos, args, expect)
+            {
+                return t;
+            }
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
@@ -3136,6 +3161,7 @@ impl<'p> Checker<'p> {
                 self.private_fn(*i, pos);
                 let sig = self.sigs[*i].clone();
                 let tn = self.type_name(&rt).unwrap_or_default();
+                self.resolved.symbols.insert(pos, format!("method:{tn}.{name}"));
                 match sig.receiver {
                     None => {
                         self.args_only(args);
@@ -3285,6 +3311,7 @@ impl<'p> Checker<'p> {
         if let Def::Enum(e) = def
             && let Some(v) = self.variant_index(e, name)
         {
+            self.resolved.symbols.insert(pos, format!("variant:{tn}.{name}"));
             let explicit = targs.map(|a| self.explicit_args(tn, &owner, a, pos));
             return self.variant_literal(e, v, explicit, args, pos, expect);
         }
@@ -3294,6 +3321,7 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         };
         self.private_fn(i, pos);
+        self.resolved.symbols.insert(pos, format!("method:{tn}.{name}"));
         let sig = self.sigs[i].clone();
         if sig.receiver.is_some() {
             self.args_only(args);
@@ -3365,6 +3393,7 @@ impl<'p> Checker<'p> {
             match def {
                 Def::Enum(e) => {
                     if let Some(v) = self.variant_index(e, name) {
+                        self.resolved.symbols.insert(pos, format!("variant:{tn}.{name}"));
                         let fields = &self.prog.enums[e].variants[v].fields;
                         if !fields.is_empty() {
                             let shown: Vec<String> = fields.iter().map(|f| format!("{}: ...", f.name)).collect();
@@ -3412,6 +3441,7 @@ impl<'p> Checker<'p> {
                 let decl = &self.prog.structs[*s];
                 if let Some(i) = decl.fields.iter().position(|f| f.name == name) {
                     self.private_field(*s, i, pos);
+                    self.resolved.symbols.insert(pos, format!("field:{}.{name}", decl.name));
                     let binds: Vec<(usize, Ty)> =
                         self.struct_params[*s].iter().copied().zip(args.iter().cloned()).collect();
                     return subst(&self.field_types[*s][i], &binds);
@@ -3959,6 +3989,7 @@ impl<'p> Checker<'p> {
                     self.diags.push(d);
                     return Vec::new();
                 };
+                self.resolved.symbols.insert(*pos, format!("variant:{}.{name}", decl.name));
                 if *wildcard || covered[v] {
                     self.error("expr.match.5", *pos, format!("this arm can never match; `{name}` is already covered"));
                 } else {

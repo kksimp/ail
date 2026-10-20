@@ -1,6 +1,7 @@
 # A package: the root module, `geo` (two files) and `util.text` (mod.unit.1-2).
 use geo
 use util.text as fmt
+use std.fs
 
 struct Label
     text str
@@ -33,3 +34,4 @@ fn main()
     print(stack.size())
     print(root_point().label)
     print(c.name())
+    print(fs.exists("no-such-file.txt") or geo.has_file("no-such-file.txt"))

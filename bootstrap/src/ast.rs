@@ -24,7 +24,7 @@ pub struct Program {
     pub files: Vec<SourceFile>,
 }
 
-/// `use a.b.c` or `use a.b.c as d` (mod.use.1).
+/// `use a.b.c`, or `use a.b.c as d` (mod.use.1, std.use.1).
 #[derive(Debug, Clone)]
 pub struct Use {
     pub path: Vec<(String, Pos)>,
@@ -33,15 +33,9 @@ pub struct Use {
 }
 
 impl Use {
-    /// The name the import binds: the alias, or the last segment (mod.use.1).
-    pub fn name(&self) -> (&str, Pos) {
-        match &self.alias {
-            Some((a, p)) => (a.as_str(), *p),
-            None => {
-                let (n, p) = self.path.last().expect("a path");
-                (n.as_str(), *p)
-            }
-        }
+    /// The name the module is available under: the alias, or the last segment.
+    pub fn name(&self) -> &(String, Pos) {
+        self.alias.as_ref().unwrap_or_else(|| self.path.last().expect("a use path has a segment"))
     }
 
     /// `a.b.c`
@@ -96,6 +90,9 @@ impl Program {
 pub struct ConstDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub value: Expr,
 }
 
@@ -121,6 +118,9 @@ pub struct GenericParam {
 pub struct TraitDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     /// Indexes into `Program::fns`.
     pub methods: Vec<usize>,
 }
@@ -144,6 +144,9 @@ pub struct ImplDecl {
 pub struct StructDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub is_error: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
@@ -153,6 +156,9 @@ pub struct StructDecl {
 pub struct Field {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub ty: TypeRef,
 }
 
@@ -162,6 +168,9 @@ pub struct Field {
 pub struct EnumDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub is_error: bool,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
@@ -172,6 +181,9 @@ pub struct EnumDecl {
 pub struct Variant {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub fields: Vec<Field>,
 }
 
@@ -185,6 +197,9 @@ pub struct FnDecl {
     pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     /// The function's own type parameters (gen.decl.1, gen.method.3).
     pub generics: Vec<GenericParam>,
     pub receiver: Option<Receiver>,

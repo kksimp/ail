@@ -1,3 +1,5 @@
+use std.fs
+
 pub struct Point
     pub x int
     pub y int
@@ -15,3 +17,6 @@ pub fn Point.scaled(self, k int) Point
 
 fn square(n int) int
     n * n
+
+pub fn has_file(path str) bool
+    fs.exists(path)

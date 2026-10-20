@@ -36,12 +36,13 @@ fn propagates(e: &str) -> bool {
 /// The effects of a standard-module function `module.name` (eff.infer.4),
 /// keyed by the qualified names of the module table in
 /// `docs/design/ai-first-plan.md` section 4.
-// TODO(lane 4): once the checker resolves `use std.NAME` calls, look the
-// call up in `Resolved` instead of by the receiver's name.
 pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> {
     let (names, effects): (&[&str], &'static [&'static str]) = match module {
-        "fs" => (&["read_text", "write_text", "append_text", "exists", "list_dir", "remove"], &["fs", "io"]),
-        "env" => (&["args", "get", "cwd"], &["env"]),
+        "fs" => (
+            &["read_text", "write_text", "append_text", "exists", "list_dir", "remove", "make_dir"],
+            &["fs", "io"],
+        ),
+        "env" => (&["args", "get", "cwd", "program"], &["env"]),
         "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
         "proc" => (&["run"], &["proc", "io"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
@@ -429,8 +430,9 @@ impl Walker<'_, '_> {
                     for i in implementations(self.prog, tr, name) {
                         self.call(i);
                     }
-                } else if let Expr::Name(m, _) = &**recv
-                    && let Some(effects) = std_effects(m, name)
+                } else if let Some(crate::stdlib::StdCall::Fn(module, f)) = self.resolved.std_calls.get(name_pos)
+                    && let Expr::Name(m, _) = &**recv
+                    && let Some(effects) = std_effects(module, f)
                 {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
@@ -557,7 +559,7 @@ mod tests {
         effects_of(prog, resolved)[id].iter().copied().collect()
     }
 
-    const SAVE: &str = "fn main()\n    n := count()\n    save(n)\nfn count() int\n    3\nfn save(n int)\n    fs.write_text(\"out.txt\", \"{n}\")\n";
+    const SAVE: &str = "use std.fs\nfn main()\n    n := count()\n    save(n)\nfn count() int\n    3\nfn save(n int)\n    fs.write_text(\"out.txt\", \"{n}\")\n";
 
     #[test]
     fn std_module_calls_give_capabilities() {
@@ -565,7 +567,7 @@ mod tests {
         assert_eq!(set(&prog, &resolved, "fn:save"), ["fs", "io"]);
         assert_eq!(set(&prog, &resolved, "fn:main"), ["fs", "io"]);
         assert!(set(&prog, &resolved, "fn:count").is_empty());
-        let src = "fn main()\n    t := time.now_ms()\n    e := env.cwd()\n    r := proc.run(\"ls\", [])\n";
+        let src = "use std.time\nuse std.env\nuse std.proc\nfn main()\n    t := time.now_ms()\n    e := env.cwd()\n    r := proc.run(\"ls\", [])\n";
         let (prog, resolved) = front(src);
         assert_eq!(set(&prog, &resolved, "fn:main"), ["clock", "env", "io", "proc"]);
     }
@@ -582,7 +584,7 @@ mod tests {
 
     #[test]
     fn pure_violation_names_each_chain() {
-        let src = "fn main()\n    print(f(1))\n@pure fn f(x int) int\n    log(x)\n    save(x)\n    x\nfn log(x int)\n    print(x)\nfn save(n int)\n    fs.write_text(\"out.txt\", \"{n}\")\n";
+        let src = "use std.fs\nfn main()\n    print(f(1))\n@pure fn f(x int) int\n    log(x)\n    save(x)\n    x\nfn log(x int)\n    print(x)\nfn save(n int)\n    fs.write_text(\"out.txt\", \"{n}\")\n";
         let (prog, resolved) = front(src);
         let d = check_pure(&prog, &resolved);
         assert_eq!(d.len(), 1);

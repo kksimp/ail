@@ -153,10 +153,17 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0145](0145-diagnostics-schema-v1.md) | Version the JSON diagnostics as schema v1, with spans, notes and fixes *(delegated)* | Accepted | 2026-10-20 |
 | [0146](0146-ail-explain.md) | `ail explain RULE` prints a rule from the embedded specification *(delegated)* | Accepted | 2026-10-20 |
 | [0147](0147-typed-holes-todo.md) | Typed holes: the keyword `todo` *(delegated)* | Accepted | 2026-10-20 |
+| [0150](0150-ail-api-outline.md) | `ail api` prints a program's declarations without bodies, as one-line JSON *(delegated)* | Accepted | 2026-10-20 |
+| [0151](0151-stable-symbol-ids-and-references.md) | Symbols have path ids; `--symbols` lists every reference by id *(delegated)* | Accepted | 2026-10-20 |
+| [0152](0152-doc-comment-attachment.md) | A doc comment is the run of `##` lines directly above a declaration *(delegated)* | Accepted | 2026-10-20 |
 | [0153](0153-package-root-and-loading.md) | A package is rooted at the directory run; imports load lazily and can't form cycles *(delegated)* | Accepted | 2026-10-20 |
 | [0154](0154-imports-per-file-at-the-top.md) | Imports come first, apply to their file, and need unique names *(delegated)* | Accepted | 2026-10-20 |
 | [0155](0155-member-visibility-and-method-placement.md) | Methods live in their type's module; private fields block outside construction *(delegated)* | Accepted | 2026-10-20 |
 | [0156](0156-bootstrap-modules-by-qualified-names.md) | The bootstrap gives every item its qualified name before checking *(delegated)* | Accepted | 2026-10-20 |
+| [0157](0157-standard-os-modules.md) | The machine is reached through five built-in standard modules, `use std.fs` and friends *(delegated)* | Accepted | 2026-10-20 |
+| [0158](0158-standard-io-errors.md) | Standard failures are `fs.IoError` and `proc.ProcError` with a short `kind` *(delegated)* | Accepted | 2026-10-20 |
+| [0159](0159-program-arguments.md) | `ail run FILE ARGS...` gives the program its arguments and its path *(delegated)* | Accepted | 2026-10-20 |
+| [0160](0160-process-runs.md) | `proc.run` runs a program directly and fails only if it can't start *(delegated)* | Accepted | 2026-10-20 |
 | [0161](0161-std-json-in-the-prelude.md) | `std.json` lives in the prelude as `Json`, `parse_json`, with `float` numbers *(delegated)* | Accepted | 2026-10-20 |
 | [0162](0162-optional-prelude-modules.md) | Optional prelude modules are read only when named *(delegated)* | Accepted | 2026-10-20 |
 | [0163](0163-inferred-effect-sets.md) | Every function has an inferred effect set, shown by `ail effects` *(delegated)* | Accepted | 2026-10-20 |
@@ -167,3 +174,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0172](0172-spec-conformance-harness.md) | Every `ail` block in the spec runs as a conformance test, tagged by expectation *(delegated)* | Accepted | 2026-10-20 |
 | [0173](0173-format-specifications-in-interpolation.md) | Interpolation takes format specs: `{x:>8}`, `{r:.2}`, `{n:0>4x}` (resolves OQ-041) *(delegated)* | Accepted | 2026-10-20 |
 | [0174](0174-language-card.md) | A language card: the whole language in one read under 4,000 tokens, cut from the quick reference *(delegated)* | Accepted | 2026-10-20 |
+| [0175](0175-interpreter-fast-paths.md) | Speed up the interpreter with local fast paths and a fast hasher *(delegated)* | Accepted | 2026-10-20 |
+| [0176](0176-keep-name-based-locals.md) | Keep name-based local lookup in the interpreter *(delegated)* | Accepted | 2026-10-20 |

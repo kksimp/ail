@@ -1,0 +1,18 @@
+## The types of the standard modules (ADR 0157, spec 17-std). The bootstrap
+## reads this after the prelude and renames each type into its module, so
+## `IoError` here is `fs.IoError` in a program that has `use std.fs`.
+
+## std.fs
+error struct IoError
+    path str
+    kind str
+
+## std.proc
+struct Output
+    status int
+    out str
+    err str
+
+error struct ProcError
+    cmd str
+    kind str

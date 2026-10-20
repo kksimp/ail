@@ -1,0 +1,9 @@
+## std.err.1: a failed read is an `fs.IoError` that `main` reports (mod.main.2).
+use std.fs
+
+fn load(path str) str ! fs.IoError
+    fs.read_text(path)? "reading the config"
+
+fn main() !
+    print("start")
+    print(load("no_such_file.ail.cfg")?)

@@ -80,6 +80,7 @@ aren't run.
 | 19 | [Testing](19-testing.md) | `test` | Drafted (partial) |
 | 15 | Compile-time execution and metaprogramming | `ct` | Not started |
 | 16 | Reflection | `refl` | Not started |
+| 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline

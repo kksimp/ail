@@ -1,0 +1,12 @@
+## std.use.1-3, expr.bind.5: imports and names of the standard modules.
+use std.fss
+use std
+use std.fs
+use std.fs
+use std.io
+
+fn main()
+    x := fs.read_txt("a")
+    fs := 1
+    y := io
+    io.eprint(print(1))

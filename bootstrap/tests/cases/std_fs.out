@@ -1,0 +1,8 @@
+["one", "two"]
+replaced
+true
+["notes.txt", "sub"]
+not_empty: std_fs_case.tmp
+false
+fs.IoError(path: "std_fs_case.tmp/nothing", kind: "not_found")
+true

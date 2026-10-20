@@ -29,7 +29,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             format!("assertion failed: left is {}, right is {}", self.describe(&a, pos)?, self.describe(&b, pos)?)
         };
-        Err(Exit::Trap(Trap { rule: "test.assert.1", pos, message }))
+        Err(Exit::Trap(Box::new(Trap { rule: "test.assert.1", pos, message })))
     }
 }
 

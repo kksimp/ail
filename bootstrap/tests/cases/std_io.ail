@@ -1,0 +1,11 @@
+## std.io.1-4: standard input is empty here, `eprint` goes to standard
+## error, and `exit` ends the program after flushing standard output.
+use std.io
+
+fn main()
+    print(io.read_line())
+    print(io.read_all() == "")
+    io.eprint("not on standard output")
+    print("before exit")
+    io.exit(0)
+    print("never printed")
