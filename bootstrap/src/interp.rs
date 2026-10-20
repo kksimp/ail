@@ -287,6 +287,10 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     }
     let structs = prog.structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
     let enums = prog.enums.iter().enumerate().map(|(i, e)| (e.name.as_str(), i)).collect();
+    let user_std = [(resolved.std.eq, "eq"), (resolved.std.ord, "cmp"), (resolved.std.to_str, "to_str")].map(|(tr, name)| {
+        resolved.impls.keys().any(|(t, _)| *t == tr)
+            || prog.traits[tr].methods.iter().any(|&m| prog.fns[m].name == name && prog.fns[m].body.is_some())
+    });
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
@@ -304,6 +308,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         env_pool: Vec::new(),
         returned: None,
         ops_pool: Vec::new(),
+        user_std,
         mutating,
         field_slots: HashMap::default(),
         str_lits: HashMap::default(),
@@ -353,6 +358,9 @@ struct Interp<'a, W: Write> {
     /// The value of the `return` being carried out, and where it was returned.
     returned: Option<(Value, Pos)>,
     ops_pool: Vec<Vec<Prepared>>,
+    /// Whether the program implements, or gives a default body to, `eq`, `cmp` and `to_str`.
+    /// When not, `==`, ordering and text go straight to the built-in forms (trait.std.1).
+    user_std: [bool; 3],
     /// Names of methods that may change their receiver: the built-in mutators and every
     /// user method with a `mut` receiver. A call to any other method needs only the receiver's value.
     mutating: crate::fasthash::FastSet<&'a str>,
@@ -1457,7 +1465,9 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// `a == b` (trait.std.1): the type's `eq`, or structural equality (trait.auto.1).
     fn equal(&mut self, a: &Value, b: &Value, pos: Pos) -> Result<bool, Trap> {
-        if let Some(f) = self.dispatch(self.resolved.std.eq, "eq", a) {
+        if self.user_std[0]
+            && let Some(f) = self.dispatch(self.resolved.std.eq, "eq", a)
+        {
             let (r, _) = self.call(f, Some(a.clone()), vec![b.clone()], pos)?;
             return Ok(r.bool());
         }
@@ -1510,7 +1520,9 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `a.cmp(b)` (trait.std.2): the type's `cmp`, or the built-in order
     /// (trait.std.4, trait.derive.1).
     fn compare(&mut self, a: &Value, b: &Value, pos: Pos) -> Result<Ordering, Trap> {
-        if let Some(f) = self.dispatch(self.resolved.std.ord, "cmp", a) {
+        if self.user_std[1]
+            && let Some(f) = self.dispatch(self.resolved.std.ord, "cmp", a)
+        {
             let (r, _) = self.call(f, Some(a.clone()), vec![b.clone()], pos)?;
             let Value::Enum(_, v, _) = r else { unreachable!("checked: `cmp` returns an `Ordering`") };
             return Ok([Ordering::Less, Ordering::Equal, Ordering::Greater][v]);
@@ -1674,7 +1686,9 @@ impl<'a, W: Write> Interp<'a, W> {
     /// A value's text form inside another (trait.auto.2): its `to_str`, or
     /// `Type.Variant(field: value, ...)`, with strings quoted.
     fn describe(&mut self, v: &Value, pos: Pos) -> Result<String, Trap> {
-        if let Some(f) = self.dispatch(self.resolved.std.to_str, "to_str", v) {
+        if self.user_std[2]
+            && let Some(f) = self.dispatch(self.resolved.std.to_str, "to_str", v)
+        {
             let (r, _) = self.call(f, Some(v.clone()), Vec::new(), pos)?;
             let Value::Str(s) = r else { unreachable!("checked: `to_str` returns a `str`") };
             return Ok(s.to_string());
