@@ -35,7 +35,7 @@ runs exactly what its key runs.
 
 Option A. Formatting moves from Ctrl-Shift-F to **Alt-Shift-F** (the
 common format chord) so Ctrl-Shift-F is free for project search
-([ADR 0292](0292-editor-project-search-and-file-tree.md)). A test checks
+([ADR 0292](0292-editor-project-search.md)). A test checks
 every palette row's key reaches a handler and palette names are unique.
 
 ## Consequences
