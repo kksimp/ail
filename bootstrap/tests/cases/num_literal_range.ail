@@ -1,0 +1,9 @@
+# A literal must fit the sized type its context gives it (type.num.13).
+fn want(x u8) u8
+    x
+
+fn small(x i8) i8
+    x
+
+fn main()
+    print("{want(256)} {want(-1)} {small(-128)} {small(128)}")

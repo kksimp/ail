@@ -1,0 +1,6 @@
+# Unary minus is not defined for unsigned types (type.num.14).
+fn flip(x u32) u32
+    -x
+
+fn main()
+    print("{flip(1)}")

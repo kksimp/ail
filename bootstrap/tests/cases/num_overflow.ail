@@ -1,0 +1,7 @@
+# Sized arithmetic traps on overflow, as `int` does (type.num.14, expr.arith.1).
+fn grow(x u8) u8
+    x * 2
+
+fn main()
+    print("{grow(100)}")
+    print("{grow(200)}")

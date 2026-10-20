@@ -466,10 +466,12 @@ impl Parser {
                 self.skip_statement();
                 return None;
             };
+            let mut arg = None;
             if self.at_sym("(") {
                 let mut depth = 0usize;
                 loop {
                     match self.peek() {
+                        Tok::Str(text) if depth == 1 && arg.is_none() => arg = Some(text.clone()),
                         Tok::Sym("(") => depth += 1,
                         Tok::Sym(")") => depth -= 1,
                         Tok::Newline | Tok::Eof => break,
@@ -481,7 +483,7 @@ impl Parser {
                     }
                 }
             }
-            attrs.push(Attr { name, pos });
+            attrs.push(Attr { name, pos, arg });
         }
         if !self.at_kw("fn") {
             let pos = self.pos();

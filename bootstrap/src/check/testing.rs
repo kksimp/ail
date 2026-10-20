@@ -5,7 +5,7 @@ use crate::ast::{Arg, BinOp, FnDecl, TypeKind};
 use crate::diag::Pos;
 
 /// The attributes the bootstrap knows (test.attr.1).
-pub(super) const KNOWN_ATTRS: &[&str] = &["test", "pure"];
+pub(super) const KNOWN_ATTRS: &[&str] = &["test", "pure", "inline", "deprecated"];
 
 impl FnDecl {
     /// `@test fn name()` (test.attr.2).
@@ -26,6 +26,15 @@ impl<'p> Checker<'p> {
                         a.pos,
                         format!("unknown attribute `@{}`", a.name),
                         format!("the known attributes are {known}"),
+                    );
+                }
+                // gram.attr.4: `@deprecated` carries the reason as a string.
+                if a.name == "deprecated" && a.arg.is_none() {
+                    self.error_help(
+                        "gram.attr.4",
+                        a.pos,
+                        "`@deprecated` needs a reason",
+                        "write `@deprecated(\"use new_name instead\")`",
                     );
                 }
             }
@@ -163,5 +172,16 @@ impl<'p> Checker<'p> {
             self.text_form(&lt, args[0].value.pos(), "test.assert.2");
         }
         Ty::Unit
+    }
+}
+
+impl<'p> Checker<'p> {
+    /// gram.attr.4: using a function marked `@deprecated("why")` warns, with the reason.
+    pub(super) fn note_deprecated(&mut self, f: usize, pos: Pos) {
+        let decl = &self.prog.fns[f];
+        let Some(a) = decl.attrs.iter().find(|a| a.name == "deprecated") else { return };
+        let Some(why) = a.arg.as_deref() else { return };
+        let msg = format!("`{}` is deprecated: {why}", decl.name);
+        self.diags.push(crate::diag::Diagnostic::warning("gram.attr.4", pos, msg));
     }
 }

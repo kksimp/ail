@@ -36,10 +36,13 @@ use crate::ast::{
 use crate::fasthash::{FastMap, FastSet};
 use crate::diag::{Diagnostic, Edit, Fix, Pos};
 use crate::lexer::UNSUPPORTED;
+use crate::num::Num;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
     Int,
+    /// A sized numeric type other than `int` and `float` (type.num.1).
+    Num(Num),
     /// `float`, `f64` (type.num.1-2)
     Float,
     Str,
@@ -144,6 +147,8 @@ pub struct Resolved {
     pub optional_try: FastSet<Pos>,
     /// Integer literals that are floats because a float is expected (type.num.10).
     pub float_literals: FastSet<Pos>,
+    /// Literals typed by context as a sized numeric type (type.num.13).
+    pub sized_literals: FastMap<Pos, Num>,
     /// The function each method or associated function call runs, by the
     /// position of its name, when that is known statically (eff.infer.3).
     pub targets: HashMap<Pos, usize>,
@@ -159,7 +164,10 @@ pub struct Resolved {
 /// Names available without import (mod.main.3, ADR 0084).
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
-const BUILTIN_TYPES: &[&str] = &["int", "i64", "float", "f64", "str", "char", "bool", "List", "Map", "Set"];
+const BUILTIN_TYPES: &[&str] = &[
+    "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "char", "bool", "List",
+    "Map", "Set",
+];
 
 /// Type names the spec defines that the bootstrap doesn't support yet.
 const SPEC_TYPES_NOT_YET: &[&str] = &["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32", "Option"];
@@ -990,6 +998,7 @@ impl<'p> Checker<'p> {
         let ty = match name.as_str() {
             "int" | "i64" => Ty::Int,
             "float" | "f64" => Ty::Float,
+            n if Num::from_name(n).is_some() => Ty::Num(Num::from_name(n).expect("a sized type")),
             "str" => Ty::Str,
             "char" => Ty::Char,
             "bool" => Ty::Bool,
@@ -1237,6 +1246,14 @@ impl<'p> Checker<'p> {
                 "no implicit conversion: `x.to_int()` truncates toward zero; `x.round().to_int()` rounds",
             ),
             (Ty::Float, Ty::Int) => self.error_help(rule, pos, msg, "no implicit conversion: write `n.to_float()`"),
+            (Ty::Num(k), Ty::Int) | (Ty::Num(k), Ty::Float) => {
+                let help = format!("no implicit conversion: write `x.to_{}()`", k.name());
+                self.error_help(rule, pos, msg, help)
+            }
+            (Ty::Int | Ty::Float, Ty::Num(_)) => {
+                let name = if *want == Ty::Int { "to_int" } else { "to_float" };
+                self.error_help(rule, pos, msg, format!("no implicit conversion: write `x.{name}()`"))
+            }
             (Ty::Str, Ty::Char) => self.error_help(rule, pos, msg, "make a one-character string with \"{c}\""),
             (Ty::Char, Ty::Str) => self.error_help(rule, pos, msg, "a character is written in single quotes: 'a'"),
             _ => self.error(rule, pos, msg),
@@ -1307,6 +1324,7 @@ impl<'p> Checker<'p> {
         match t {
             Ty::Int => "int".into(),
             Ty::Float => "float".into(),
+            Ty::Num(n) => n.name().into(),
             Ty::Str => "str".into(),
             Ty::Char => "char".into(),
             Ty::Bool => "bool".into(),
@@ -2108,6 +2126,16 @@ impl<'p> Checker<'p> {
                 self.resolved.float_literals.insert(*pos);
                 Ty::Float
             }
+            // type.num.13: a literal is typed by the sized type the context expects.
+            Expr::Int(v, pos) if matches!(expect, Some(Ty::Num(_))) => {
+                let Some(Ty::Num(k)) = expect else { unreachable!() };
+                self.sized_literal(*v, false, *pos, *k);
+                Ty::Num(*k)
+            }
+            Expr::Float(_, pos) if matches!(expect, Some(Ty::Num(Num::F32))) => {
+                self.resolved.sized_literals.insert(*pos, Num::F32);
+                Ty::Num(Num::F32)
+            }
             Expr::Int(..) => Ty::Int,
             Expr::Float(..) => Ty::Float,
             Expr::Char(..) => Ty::Char,
@@ -2159,6 +2187,19 @@ impl<'p> Checker<'p> {
                 self.float_literal(operand);
                 Ty::Float
             }
+            Expr::Unary { op: UnOp::Neg, operand, .. }
+                if matches!(expect, Some(Ty::Num(_))) && matches!(**operand, Expr::Int(..) | Expr::Float(..)) =>
+            {
+                let Some(Ty::Num(k)) = expect else { unreachable!() };
+                match **operand {
+                    Expr::Int(v, p) => self.sized_literal(v, true, p, *k),
+                    Expr::Float(_, p) if *k == Num::F32 => {
+                        self.resolved.sized_literals.insert(p, Num::F32);
+                    }
+                    _ => {}
+                }
+                Ty::Num(*k)
+            }
             Expr::Unary { op, operand, pos } => self.unary(*op, operand, *pos),
             Expr::Binary { op, lhs, rhs, pos } => self.binary(*op, lhs, rhs, *pos),
             Expr::Map(pairs, pos) => self.map_literal(pairs, *pos, expect),
@@ -2182,7 +2223,7 @@ impl<'p> Checker<'p> {
     /// unhandled failure don't.
     /// `{x:spec}` (lex.str.7, type.str.11): `.N` needs a float, `x` an int.
     fn format_spec(&mut self, t: &Ty, spec: &crate::lexer::FormatSpec, pos: Pos) {
-        if spec.precision.is_some() && !matches!(t, Ty::Float | Ty::Err) {
+        if spec.precision.is_some() && !matches!(t, Ty::Float | Ty::Num(Num::F32) | Ty::Err) {
             self.error_help(
                 "type.str.11",
                 pos,
@@ -2190,7 +2231,7 @@ impl<'p> Checker<'p> {
                 "round a float with `{x:.2}`; to cut an int or text, convert it first",
             );
         }
-        if spec.hex && !matches!(t, Ty::Int | Ty::Err) {
+        if spec.hex && !matches!(t, Ty::Int | Ty::Err) && !matches!(t, Ty::Num(k) if !k.is_float()) {
             self.error_help(
                 "type.str.11",
                 pos,
@@ -2637,6 +2678,7 @@ impl<'p> Checker<'p> {
         }
         if let Some(&i) = self.fns.get(n.as_str()) {
             self.reject_test_call(i, npos);
+            self.note_deprecated(i, npos);
             self.resolved.symbols.insert(npos, format!("fn:{n}"));
             let sig = self.sigs[i].clone();
             let binds = match targs {
@@ -3241,6 +3283,7 @@ impl<'p> Checker<'p> {
                             self.require_mutable(recv, Some("trait.method.3"), "the receiver of a `mut self` method");
                         }
                         self.resolved.targets.insert(pos, *i);
+                        self.note_deprecated(*i, pos);
                         let binds = match &rt {
                             Ty::Struct(_, a) | Ty::Enum(_, a) => {
                                 sig.generics[..sig.owner].iter().copied().zip(a.iter().cloned()).collect()
@@ -3404,6 +3447,7 @@ impl<'p> Checker<'p> {
             None => Vec::new(),
         };
         self.resolved.targets.insert(pos, i);
+        self.note_deprecated(i, pos);
         self.check_call(&format!("{tn}.{name}"), &sig, binds, args, None, pos, expect)
     }
 
@@ -3603,6 +3647,39 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// An integer literal `v` (negated when `neg`) typed as `k` by context
+    /// (type.num.13): it must fit, and an `f32` takes it as a float.
+    fn sized_literal(&mut self, v: i64, neg: bool, pos: Pos, k: Num) {
+        if !k.is_float() {
+            let value = if neg { -i128::from(v) } else { i128::from(v) };
+            if !k.fits(value) {
+                let (lo, hi) = k.range();
+                self.error_help(
+                    "type.num.13",
+                    pos,
+                    format!("`{value}` doesn't fit in `{}`", k.name()),
+                    format!("`{}` holds {lo} to {hi}", k.name()),
+                );
+            }
+        }
+        self.resolved.sized_literals.insert(pos, k);
+        // The interpreter's fast path treats every literal in this set as special.
+        self.resolved.float_literals.insert(pos);
+    }
+
+    /// Whether `e` is an integer literal (or its negation) that takes the
+    /// sized type `k` from its other operand (type.num.13); if so, record it.
+    fn sized_operand(&mut self, e: &Expr, k: Num, neg: bool) -> bool {
+        match e {
+            Expr::Int(v, pos) => {
+                self.sized_literal(*v, neg, *pos, k);
+                true
+            }
+            Expr::Unary { op: UnOp::Neg, operand, .. } => self.sized_operand(operand, k, true),
+            _ => false,
+        }
+    }
+
     fn unary(&mut self, op: UnOp, operand: &'p Expr, pos: Pos) -> Ty {
         let (want, rule, what) = match op {
             UnOp::Neg => (Ty::Int, "trait.op.1", "unary `-`"),
@@ -3614,6 +3691,14 @@ impl<'p> Checker<'p> {
         }
         if op == UnOp::Neg && t == Ty::Float {
             return Ty::Float;
+        }
+        if let (UnOp::Neg, Ty::Num(k)) = (op, &t) {
+            if !k.is_signed() && !k.is_float() {
+                let msg = format!("unary `-` is not defined for `{}`, which is unsigned", k.name());
+                self.error_help("type.num.14", pos, msg, "negate a signed type, or subtract from zero with `wrapping_neg`");
+                return Ty::Err;
+            }
+            return t;
         }
         if self.accepts(&want, &t) {
             return want;
@@ -3643,6 +3728,12 @@ impl<'p> Checker<'p> {
         // type.num.10: `2 * x` with a float `x`.
         if lt == Ty::Int && rt == Ty::Float && self.float_literal(lhs) {
             lt = Ty::Float;
+        }
+        // type.num.13: `1 + x` with a sized `x`.
+        if let (Ty::Int, Ty::Num(k)) = (&lt, &rt)
+            && self.sized_operand(lhs, *k, false)
+        {
+            lt = rt.clone();
         }
         // expr.cmp.3: `xs.index_of(x) == -1` would always be false.
         if matches!(op, BinOp::Eq | BinOp::Ne)
@@ -3688,6 +3779,8 @@ impl<'p> Checker<'p> {
         if op.is_arithmetic() {
             match lt {
                 Ty::Int => return Ty::Int,
+                // type.num.14: sized arithmetic; `f32` has no `%`.
+                Ty::Num(k) if !(k.is_float() && op == BinOp::Rem) => return lt.clone(),
                 // type.num.6: float arithmetic, without `%`.
                 Ty::Float if op != BinOp::Rem => return Ty::Float,
                 Ty::Str if op == BinOp::Add => self.diags.push(
@@ -3831,6 +3924,7 @@ impl<'p> Checker<'p> {
         let (e, literal) = match st {
             Ty::Enum(e, ref args) => (Some((e, args.clone())), None),
             Ty::Int | Ty::Char | Ty::Str | Ty::Bool => (None, Some(st.clone())),
+            Ty::Num(k) if !k.is_float() => (None, Some(st.clone())),
             Ty::Err => (None, None),
             ref t if self.reject_unhandled(t, scrutinee.pos()) => (None, None),
             Ty::Union(_) => {
@@ -3967,6 +4061,7 @@ impl<'p> Checker<'p> {
             }
             Pattern::Literal(lit, pos) => {
                 let lt = match lit {
+                    Literal::Int(_) if matches!(t, Ty::Num(k) if !k.is_float()) => t.clone(),
                     Literal::Int(_) => Ty::Int,
                     Literal::Char(_) => Ty::Char,
                     Literal::Str(_) => Ty::Str,

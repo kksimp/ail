@@ -73,7 +73,7 @@ package's are reported file by file.
   (`geo.Point(x: 1, y: 2)`). `use std.NAME` imports a standard module (below).
 
 - **Tests (ADRs 0167–0168):** `@test fn name()` on top-level functions
-  (attributes `@test` and `@pure` only; arguments are skipped), run by
+  (attributes `@test`, `@pure`, `@inline` and `@deprecated("why")`; other arguments are skipped), run by
   `ail test FILE [--json]`; `assert(cond)` and `assert_eq(a, b)` trap with
   `test.assert.1`. `NAME.test` cases hold the expected `--json` output.
 - **Property tests and doc examples (ADRs 0198–0201):** a `@test` with
@@ -159,7 +159,12 @@ Calls to the standard modules (`fs.*`, `env.*`, `io.*`, `proc.*`, `time.*`)
 are recognised by name; `unsafe` and `spawn` aren't parsed yet, so nothing
 has those effects.
 
-Not yet: `f32` and the sized integer types, `s.bytes()`, `T ! E` outside
+Sized numbers (ADRs 0194–0195): `i8 i16 i32 u8 u16 u32 u64 f32` with literals typed by
+context, same-type arithmetic that traps on overflow, `to_<type>()` conversions, and
+`@inline`/`@deprecated` (ADRs 0196–0197). Not yet: `u64` literals above `i64::MAX`,
+sized `for` ranges, `impl` on sized types.
+
+Not yet: `s.bytes()`, `T ! E` outside
 return types, matching on a set of error types, range patterns and guards,
 the arithmetic operator traits, trait functions without `self` and
 supertraits (OQ-039), associated types (OQ-037), methods for one

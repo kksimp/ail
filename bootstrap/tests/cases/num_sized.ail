@@ -1,0 +1,34 @@
+# Sized numeric types: literals typed by context, same-type arithmetic (type.num.1, type.num.13-14).
+struct Px
+    r u8
+    g u8
+
+fn mix(a i32, b i32) i32
+    a * 3 + b
+
+fn scale(x f32) f32
+    x * 2.0
+
+fn half() f32
+    0.5
+
+fn big() u64
+    0.to_u64().wrapping_sub(1.to_u64())
+
+fn main()
+    x := 100.to_u8()
+    y := x + 55
+    print("{y} {y > x} {x == 100.to_u8()} {1 + y}")
+    print("{mix(-7, 2)} {mix(-7, 2).abs()} {-mix(1, 1)} {mix(-128, 0) / 3}")
+    p := Px(r: 255, g: 0)
+    print("{p} {p.r}")
+    g := half() + 0.2
+    print("{g} {g.to_float()} {scale(1.5)} {scale(3)}")
+    print("{[y, x].sum()} {[y, x].max()} {[y, x].sorted()}")
+    print("{y:x} {255.to_u8():x} {mix(2, 0) % 4}")
+    m := {x: "a"}
+    print("{m[100.to_u8()]}")
+    match y
+        155 => print("one fifty-five")
+        _ => print("other")
+    print("{big()} {big() / 3} {big() > 5.to_u64()}")
