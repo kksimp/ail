@@ -143,6 +143,20 @@ pub fn Asm.cmp_ri(mut self, n int, imm int)
 pub fn Asm.cmn_ri(mut self, n int, imm int)
     alu_ri("adds", XZR, n, imm)
 
+## `cmp n, m, asr #63`: whether `n` is the sign of `m` (the high half of a
+## product that didn't overflow).
+pub fn Asm.cmp_sign(mut self, n int, m int)
+    word(rrr(3951034368, XZR, n, m) + 63 * 1024)
+
+## `eor d, n, #1`.
+pub fn Asm.eor1(mut self, d int, n int)
+    word(3527409664 + n * 32 + d)
+
+## `cbz n, l` and `cbnz n, l`.
+pub fn Asm.cbz(mut self, n int, l int)
+    fixups.push(Fixup(at: code.len(), kind: "b19", label: l, sym: ""))
+    word(3019898880 + n)
+
 pub fn Asm.mul(mut self, d int, n int, m int)
     word(rrr(2600468480, d, n, m) + 31 * 1024)
 
@@ -266,6 +280,7 @@ pub fn Asm.fop1(mut self, op str, d int, n int)
         "fabs" => 509657088
         "frintm" => 509952000
         "frintp" => 509919232
+        "frintz" => 509984768
         _ => 509624320
     word(base + n * 32 + d)
 

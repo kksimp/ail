@@ -58,16 +58,37 @@ pub fn mir(file: &str) -> ExitCode {
     }
 }
 
-/// `ail build FILE [-o OUT]`: a native executable, by default named after
-/// FILE in the current directory (native.build.3).
+/// The target `ail build` makes by default: the host's.
+fn host_target() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => Some("x86_64-linux"),
+        ("linux", "aarch64") => Some("aarch64-linux"),
+        ("macos", "aarch64") => Some("aarch64-macos"),
+        _ => None,
+    }
+}
+
+/// `ail build FILE [-o OUT] [--target T]`: a native executable, by default
+/// for the host and named after FILE in the current directory
+/// (native.build.3).
 pub fn command(args: &[&str]) -> ExitCode {
-    let (file, out) = match args {
-        [file] => (*file, None),
-        [file, "-o", out] | ["-o", out, file] => (*file, Some(*out)),
-        _ => {
-            eprintln!("usage: ail build FILE [-o OUT]");
-            return ExitCode::from(2);
+    let (mut file, mut out, mut target) = (None, None, None);
+    let mut i = 0;
+    while i < args.len() {
+        match (args[i], args.get(i + 1)) {
+            ("-o", Some(o)) => (out, i) = (Some(*o), i + 1),
+            ("--target", Some(t)) => (target, i) = (Some(*t), i + 1),
+            (f, _) if file.is_none() && !f.starts_with('-') => file = Some(f),
+            _ => {
+                eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos]");
+                return ExitCode::from(2);
+            }
         }
+        i += 1;
+    }
+    let Some(file) = file else {
+        eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos]");
+        return ExitCode::from(2);
     };
     let Some(dir) = compiler_dir() else {
         eprintln!("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
@@ -80,14 +101,15 @@ pub fn command(args: &[&str]) -> ExitCode {
         _ => return ExitCode::from(1),
     }
     let rt = dir.join("rt/native");
-    let hex = match run_compiler(&["build", file, &rt.to_string_lossy()]) {
+    // The program's subset problems are reported on every host; a host
+    // without a target of its own gets the default target's.
+    let target: Option<&str> = target.or_else(|| host_target());
+    let hex = match run_compiler(&["build", file, &rt.to_string_lossy(), target.unwrap_or("x86_64-linux")]) {
         Ok(text) => text,
         Err(code) => return code,
     };
-    // The program's subset problems are reported on every host; only the
-    // executable is Linux x86-64 so far.
-    if !(cfg!(target_os = "linux") && cfg!(target_arch = "x86_64")) {
-        eprintln!("error[native.build.3]: `ail build` makes Linux x86-64 executables so far; this is another target");
+    if target.is_none() {
+        eprintln!("error[native.build.3]: `ail build` has no target for this host yet; pass `--target`");
         return ExitCode::from(2);
     }
     let Some(bytes) = decode(&hex) else {
