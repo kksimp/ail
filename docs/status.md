@@ -129,4 +129,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-113 with gaps), 48 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.
+See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-117 with gaps), 52 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.

@@ -237,6 +237,10 @@ fn main() !                                 # main can fail; the error is report
   may then have no fields. Without messages, write `impl ToStr`.
 - `print` of a `T?` shows the value, or `none`. A value is returned as a
   `T?` without wrapping: `return i`.
+- `mut best := none` has no type until its first assignment: `best = 3`
+  makes it an `int?`. `x := if c then 4 else none` is an `int?`.
+- A local may have the name of a function (it shadows it); calling that name
+  inside the local's block is an error.
 - Several error types: `fn load() Config ! IoError | ParseError`.
 - No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
   As a statement, `save() else err` + block handles the failure and goes on;
@@ -351,6 +355,7 @@ kind := if n < 0     # `if` used as a value needs `else`;
 else
     "non-negative"
 sign := if n < 0 then "-" else "+"   # one line: `then` and `else`, no `elif`
+pad := 2 + (if n < 0 then 1 else 0)  # a one-line `if` as an operand: in parentheses
 
 while n > 0
     n -= 1

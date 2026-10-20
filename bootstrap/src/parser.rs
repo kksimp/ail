@@ -1814,7 +1814,8 @@ impl Parser {
             }
             Tok::Sym("(") => {
                 self.i += 1;
-                let inner = self.range()?;
+                // expr.if.8: a parenthesised one-line `if` is an operand.
+                let inner = if self.at_kw("if") { self.if_expr()? } else { self.range()? };
                 let inner = self.else_expr(inner)?;
                 self.expect_sym(")", "`)`", "gram.syntax.1")?;
                 Some(inner)
@@ -1873,7 +1874,16 @@ impl Parser {
                 self.expect_sym("}", "`}` or `,` in the set", "type.coll.2")?;
                 Some(Expr::Set(elems, pos))
             }
-            Tok::Kw(k @ ("if" | "match")) => {
+            Tok::Kw("if") => {
+                self.error_help(
+                    "expr.if.8",
+                    pos,
+                    "an `if` operand needs parentheses",
+                    "write `(if c then a else b)`, or bind the `if` to a name first",
+                );
+                None
+            }
+            Tok::Kw(k @ "match") => {
                 self.error_help(
                     "gram.syntax.1",
                     pos,
