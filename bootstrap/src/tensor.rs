@@ -167,6 +167,63 @@ impl Tensor {
         Ok(Tensor { shape: self.shape.clone(), data })
     }
 
+    /// std.tensor.15: row `i` of a tensor with at least one axis; the
+    /// result drops that axis, so `t[i]` of a 1-D tensor has shape `[]`.
+    pub fn row(&self, i: i64) -> Result<Tensor, Fault> {
+        let n = self.rows_or_fault("index")?;
+        let Some(i) = usize::try_from(i).ok().filter(|&i| i < n) else {
+            return fault("std.tensor.15", format!("index {i} is out of bounds for a tensor of {n} rows"));
+        };
+        let mut t = self.rows_between(i, i + 1)?;
+        t.shape.remove(0);
+        Ok(t)
+    }
+
+    /// std.tensor.15: rows `lo..hi` (or `lo..=hi`, when `inclusive`) along
+    /// axis 0, so the result keeps the axis.
+    pub fn slice_rows(&self, lo: i64, hi: i64, inclusive: bool) -> Result<Tensor, Fault> {
+        let n = self.rows_or_fault("slice")?;
+        let end = if inclusive { hi.checked_add(1) } else { Some(hi) };
+        match (usize::try_from(lo), end.and_then(|e| usize::try_from(e).ok())) {
+            (Ok(a), Some(b)) if a <= b && b <= n => self.rows_between(a, b),
+            _ => fault(
+                "std.tensor.15",
+                format!("rows {lo}..{hi} are out of bounds for a tensor of {n} rows"),
+            ),
+        }
+    }
+
+    /// std.tensor.15: the one element of a tensor of shape `[]` (`t[i].item()`).
+    pub fn item(&self) -> Result<Scalar, Fault> {
+        if self.len() != 1 {
+            return fault("std.tensor.15", format!("`item` needs one element, but the shape is {:?}", self.shape));
+        }
+        Ok(match &self.data {
+            Data::F(v) => Scalar::F(v[0]),
+            Data::I(v) => Scalar::I(v[0]),
+        })
+    }
+
+    fn rows_or_fault(&self, what: &str) -> Result<usize, Fault> {
+        match self.shape.first() {
+            Some(&n) => Ok(n),
+            None => fault("std.tensor.15", format!("`{what}` of a tensor of shape [], which has no rows")),
+        }
+    }
+
+    /// Rows `a..b` along axis 0, with every other axis kept.
+    fn rows_between(&self, a: usize, b: usize) -> Result<Tensor, Fault> {
+        let row: usize = self.shape[1..].iter().product();
+        let (lo, hi) = (a * row, b * row);
+        let data = match &self.data {
+            Data::F(v) => Data::F(v[lo..hi].to_vec()),
+            Data::I(v) => Data::I(v[lo..hi].to_vec()),
+        };
+        let mut shape = self.shape.clone();
+        shape[0] = b - a;
+        Ok(Tensor { shape, data })
+    }
+
     /// std.tensor.14: `-t`, elementwise. A `float` is negated exactly; an
     /// `int` that is `i64::MIN` traps (std.tensor.6).
     pub fn neg(&self) -> Result<Tensor, Fault> {

@@ -2361,6 +2361,21 @@ impl<'p> Checker<'p> {
     // ---- Assignment and places ----
 
     fn assign(&mut self, target: &'p Expr, op: Option<BinOp>, value: &'p Expr, pos: Pos) {
+        // std.tensor.15: a tensor is a value, so `t[i] = v` is an error; build a new tensor.
+        if let Expr::Index { recv, .. } = target
+            && let Expr::Name(n, _) = &**recv
+            && let Some(l) = self.locals.iter().rev().find(|l| l.name == *n)
+            && self.tensor_elem(&l.ty).is_some()
+        {
+            self.expr(value, None, true);
+            self.error_help(
+                "std.tensor.15",
+                target.pos(),
+                "a tensor's elements can't be assigned: a tensor is a value",
+                "build a new tensor with `map`, or with `tensor.from`",
+            );
+            return;
+        }
         // type.coll.13: `m[k] = v`, `m[k] += n` or `x = e` can fix a pending
         // local's type; `op=` starts a missing key at zero (ADR 0251, ADR 0280).
         if let Expr::Index { recv, index, .. } = target
@@ -4490,6 +4505,20 @@ impl<'p> Checker<'p> {
         let rt = self.expr(recv, None, true);
         if self.reject_unhandled(&rt, recv.pos()) {
             return Ty::Err;
+        }
+        // std.tensor.15: `t[i]` and `t[lo..hi]` are tensors. The rank falls by one
+        // for `t[i]` at run time, so the type stays `tensor.Tensor[T]`.
+        if self.tensor_elem(&rt).is_some() {
+            if let Expr::Range { lo, hi, .. } = index {
+                self.range_bounds(lo.as_deref(), hi.as_deref());
+            } else {
+                let it = self.expr(index, Some(&Ty::Int), true);
+                if !self.accepts(&Ty::Int, &it) {
+                    let msg = format!("a tensor index must be `int`, found {}", self.show(&it));
+                    self.error_help("std.tensor.15", index.pos(), msg, "index with an `int`, or slice with `lo..hi`");
+                }
+            }
+            return rt;
         }
         // `m[k]` (type.map.3).
         if let Ty::Map(k, v) = &rt {

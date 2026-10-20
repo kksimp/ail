@@ -1,0 +1,4 @@
+# std.tensor.15: `item` of a tensor with many elements traps.
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(a.item())

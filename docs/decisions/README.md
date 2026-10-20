@@ -433,6 +433,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
 | [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
 | [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
+| [0509](0509-tensor-indexing-and-slicing.md) | Tensor `t[i]` drops the first axis, `t[lo..hi]` keeps it; `item()` (AI, delegated) | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |

@@ -1937,6 +1937,12 @@ impl<'a, W: Write> Interp<'a, W> {
                             bytes::at(b, i, *pos)?
                         }
                         other => unreachable!("checked: list, map or bytes, found {other:?}"),
+                        // std.tensor.15: `t[i]` drops axis 0.
+                        Value::Tensor(t) => match t.row(get!(*idx).int()) {
+                            Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+                            Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        },
+                        other => unreachable!("checked: list, map or tensor, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);

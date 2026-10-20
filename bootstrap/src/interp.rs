@@ -1984,6 +1984,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let i = self.eval(index, env)?.int();
                 return Ok(bytes::at(&b, i, pos)?);
             }
+            Value::Tensor(t) => return self.tensor_index(&t, index, pos, env),
             other => unreachable!("checked: list or map, found {other:?}"),
         };
         if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {

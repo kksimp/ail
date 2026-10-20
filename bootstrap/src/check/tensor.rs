@@ -122,6 +122,7 @@ impl<'p> Checker<'p> {
             "shape" => (vec![], Ty::List(Box::new(Ty::Int))),
             "len" => (vec![], Ty::Int),
             "to_list" => (vec![], Ty::List(Box::new(elem))),
+            "item" => (vec![], elem),
             // std.tensor.11: over every element, or over one axis.
             "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
             "sum" | "max" | "mean" => (vec![Ty::Int], t),

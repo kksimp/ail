@@ -1090,6 +1090,18 @@ is a result. An `int` element that is the least `int` traps as in
 std.tensor.6. *(ADR 0508)*
 
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
+**std.tensor.15** — `t[i]` (an `int` `i`) is the tensor of `t`'s rows after
+the first, with that first axis dropped: a 1-D tensor's `t[i]` has shape
+`[]`. `t[lo..hi]` and `t[lo..=hi]` (a missing bound is the start or the end)
+are the rows of that range, with every axis kept. The index is typed as a
+`tensor.Tensor[T]` in both cases, so the checker doesn't need a rank. A
+row index outside `0` to the row count, or a range outside it, traps. An
+index that is not an `int` is a compile-time error. `t.item()` is the one
+element of a tensor with exactly one element and traps otherwise. Assigning
+to an element, `t[i] = v`, is a compile-time error: a tensor is a value, so
+build a new one. *(ADR 0509)*
+
+```ail
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
     print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
