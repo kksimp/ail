@@ -132,21 +132,33 @@ impl Tensor {
         })
     }
 
-    /// std.tensor.4, std.tensor.10: elementwise `op`.
+    /// std.tensor.4, std.tensor.10: elementwise `op`, with NumPy-style
+    /// broadcasting (std.tensor.4): shapes line up from the right, and an
+    /// axis of size 1, or a missing axis, stretches to the other size.
     pub fn zip(&self, other: &Tensor, op: Op) -> Result<Tensor, Fault> {
-        self.same_shape(other, op.name())?;
-        let data = match (&self.data, &other.data) {
-            (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, op)),
-            (Data::I(a), Data::I(b)) => {
-                let mut out = Vec::with_capacity(a.len());
-                for (x, y) in a.iter().zip(b) {
-                    out.push(op.i(*x, *y).ok_or_else(overflow)?);
-                }
-                Data::I(out)
-            }
-            _ => unreachable!("checked: one element type"),
+        if self.shape == other.shape {
+            return Ok(Tensor { shape: self.shape.clone(), data: zip_data(&self.data, &other.data, op)? });
+        }
+        let Some(shape) = broadcast_shape(&self.shape, &other.shape) else {
+            return fault(
+                "std.tensor.4",
+                format!("`{}` can't broadcast shapes {:?} and {:?}", op.name(), self.shape, other.shape),
+            );
         };
-        Ok(Tensor { shape: self.shape.clone(), data })
+        let data = zip_data(&self.expanded(&shape), &other.expanded(&shape), op)?;
+        Ok(Tensor { shape, data })
+    }
+
+    /// The elements of `self` broadcast to `shape` (std.tensor.4), copied
+    /// row-major. A tensor already of `shape` is cloned as is.
+    fn expanded(&self, shape: &[usize]) -> Data {
+        if self.shape == shape {
+            return self.data.clone();
+        }
+        match &self.data {
+            Data::F(v) => Data::F(expand(v, &self.shape, shape)),
+            Data::I(v) => Data::I(expand(v, &self.shape, shape)),
+        }
     }
 
     /// std.tensor.10: `t op s` (`left`: `false`) or `s op t` (`true`),
@@ -446,6 +458,69 @@ impl Activation {
             Activation::Tanh => x.tanh(),
         }
     }
+}
+
+/// `a op b` elementwise over two buffers of one length (std.tensor.5, 6).
+fn zip_data(a: &Data, b: &Data, op: Op) -> Result<Data, Fault> {
+    Ok(match (a, b) {
+        (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, op)),
+        (Data::I(a), Data::I(b)) => {
+            let mut out = Vec::with_capacity(a.len());
+            for (x, y) in a.iter().zip(b) {
+                out.push(op.i(*x, *y).ok_or_else(overflow)?);
+            }
+            Data::I(out)
+        }
+        _ => unreachable!("checked: one element type"),
+    })
+}
+
+/// The shape two shapes broadcast to, or `None` when they don't:
+/// per axis from the right, sizes are equal, or one of them is 1.
+fn broadcast_shape(a: &[usize], b: &[usize]) -> Option<Vec<usize>> {
+    let rank = a.len().max(b.len());
+    (0..rank)
+        .map(|k| {
+            let da = if k + a.len() >= rank { a[k + a.len() - rank] } else { 1 };
+            let db = if k + b.len() >= rank { b[k + b.len() - rank] } else { 1 };
+            match (da, db) {
+                _ if da == db => Some(da),
+                (1, _) => Some(db),
+                (_, 1) => Some(da),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// `v` (of `src` shape) copied to `out` shape: the source's size-1 axes
+/// repeat, so their stride is 0. Walks `out` row-major with a counter.
+fn expand<T: Copy>(v: &[T], src: &[usize], out: &[usize]) -> Vec<T> {
+    let rank = out.len();
+    let mut stride = vec![0usize; rank];
+    let mut s = 1;
+    for k in (0..rank).rev() {
+        let d = if k + src.len() >= rank { src[k + src.len() - rank] } else { 1 };
+        stride[k] = if d == 1 { 0 } else { s };
+        s *= d;
+    }
+    let n: usize = out.iter().product();
+    let mut res = Vec::with_capacity(n);
+    let mut idx = vec![0usize; rank];
+    let mut off = 0;
+    for _ in 0..n {
+        res.push(v[off]);
+        for k in (0..rank).rev() {
+            idx[k] += 1;
+            off += stride[k];
+            if idx[k] < out[k] {
+                break;
+            }
+            off -= stride[k] * idx[k];
+            idx[k] = 0;
+        }
+    }
+    res
 }
 
 fn overflow() -> Fault {
