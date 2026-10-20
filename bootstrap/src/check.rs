@@ -26,6 +26,7 @@ mod comprehension;
 pub mod errpaths;
 pub mod facts;
 mod keyfn;
+mod net;
 mod stdlib;
 mod tensor;
 pub mod effects;
@@ -3872,6 +3873,9 @@ impl<'p> Checker<'p> {
             return self.conc_method(*k, inner, name, pos, args);
         }
         if let Some(t) = self.ui_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
+        if let Some(t) = self.net_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {

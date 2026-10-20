@@ -389,7 +389,8 @@ fn main() !
 
 **std.net.1** — Every function of `std.net` has the effects `net` and
 `io` (`eff.infer.4`), so `--deny net`, a package's capability grants and
-`--deterministic` (`eff.det.1`) cover it. *(ADR 0283)*
+`--deterministic` (`eff.det.1`) cover it; `serve` and `listen` add `net.serve`
+(`std.net.14`). *(ADR 0283, ADR 0422)*
 
 **std.net.2** — `get(url str) Response ! NetError` sends an HTTP/1.1 `GET`
 to an `http://` or `https://` URL (`std.net.5`)
@@ -408,10 +409,14 @@ the response as `get` does, without following redirects. *(ADR 0283)*
 
 **std.net.4** — A failure is `error struct NetError { url str, kind str,
 message str }`: the URL given, a short kind, and a sentence for people.
-`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`), `tls`
-(the TLS handshake or connection failed, `std.net.5`), `not_found` (the
-host has no address), `refused`, `timed_out`, `protocol` (a malformed
-response, or too many redirects) or `other`. *(ADR 0283, ADR 0369)*
+`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`, or not
+an address `HOST:PORT`), `bad_request` (a method, header name or header value
+the request or response may not carry, `std.net.6`), `tls` (the TLS handshake
+or connection failed, `std.net.5`), `not_found` (the host has no address),
+`refused`, `timed_out`, `closed` (the connection or server was closed, or the
+waiting task was cancelled, `std.net.9`), `bind` (the address is in use or
+not permitted, `std.net.9`), `protocol` (a malformed response, or too many
+redirects) or `other`. *(ADR 0283, ADR 0369, ADR 0418, ADR 0419)*
 
 **std.net.5** — An `https` URL (default port 443) is fetched over TLS 1.3.
 The server's certificate chain **MUST** lead to a trusted root, be within
@@ -432,6 +437,137 @@ fn main() !
         print("{err.kind}: {err.message}")
         return
     print("{r.status} {r.headers["content-type"]}")
+```
+
+**std.net.6** — `request(method str, url str, opts Options) Response ! NetError`
+sends any method with options, where `struct Options { headers Map[str, str],
+query Map[str, str], body str, timeout_ms int, max_redirects int }`.
+`options()` returns the defaults: no headers, no query, an empty body, a
+30000 ms timeout and 5 redirects; write `mut o := net.options()` and set
+fields. The method is made uppercase and must be an HTTP token. `headers`
+are sent after the defaults `Host`, `User-Agent: ail` and `Accept: */*`, and
+replace a default of the same name (case-insensitively); `Connection`,
+`Content-Length` and `Transfer-Encoding` are the client's own and are
+ignored. A header name must be an HTTP token and a value must not contain
+CR, LF or NUL: otherwise the request fails with kind `bad_request` before
+anything is sent. `query` is appended to the URL, percent-encoded, after any
+query the URL has. `body` is sent with a `Content-Length` (always for `POST`,
+`PUT` and `PATCH`). `timeout_ms` bounds connecting and each read and write,
+and must be at least 1; `max_redirects` must be at least 0 (otherwise the
+program traps). `get(url)` and `post(url, body, content_type)` are
+`request` with the defaults. *(ADR 0418)*
+
+**std.net.7** — Redirects (`std.net.2`) are followed only for `GET` and
+`HEAD`, at most `max_redirects` times; with `max_redirects` 0 the redirect
+response itself is returned, and one more redirect than allowed fails with
+kind `protocol`. When a redirect leaves the scheme, host or port it started
+at, the headers `Authorization` and `Cookie` are dropped from the requests
+that follow. Response bodies are read whole and returned as `str`: streaming
+bodies are deferred until `bytes` (lane 123) and incremental reads can be
+designed together, and a request that needs one uses a `Conn` (`std.net.12`)
+and writes the HTTP itself. *(ADR 0418)*
+
+**std.net.8** — A network call waits cooperatively. In a program with
+tasks, a call that must wait for the network (connecting, reading, writing,
+`accept`) lets the other ready tasks run, so a client and a server in one
+program, or tasks that serve and ask, make progress. Without tasks it waits
+and times out the same way. A wait ends with kind `closed` when its task is
+cancelled (`conc.cancel.1`) or the program is shutting down. The set of
+tasks that run, and the order, is the scheduler's (`conc.task.*`, ADR 0186),
+not the network's. *(ADR 0420)*
+
+**std.net.9** — `serve(addr str) Server ! NetError` listens for HTTP on
+`HOST:PORT` (port 0 picks a free one) and returns a `Server`; failing to bind
+is kind `bind`. `srv.addr() str` is the address it listens on, with the real
+port. `srv.accept() Exchange ! NetError` waits for the next complete
+request, from whichever connection finishes sending first, so a slow client
+doesn't hold up others, and any number of tasks may call it on one server (a
+pool of workers). `srv.close()` stops listening: every waiting `accept`
+fails with kind `closed`, connections still sending a request are dropped,
+and an `Exchange` accepted earlier can still be answered (a graceful stop).
+`struct Exchange { request Request, handle int }` and `struct Request {
+method str, path str, query Map[str, str], headers Map[str, str], body str,
+peer str }`. A handler form `serve(addr, handler)` with `handler fn(Request)
+Response` follows function values (ADR 0419); until then a server is a
+loop over `accept`, usually in tasks. *(ADR 0419)*
+
+**std.net.10** — The server accepts only well-formed HTTP/1.0 and HTTP/1.1
+requests and answers the rest itself, with a plain-text body, without
+showing them to the program: `400` for a malformed request line or header
+(including whitespace before a colon, a folded line, a missing `Host` in
+HTTP/1.1, a non-numeric or repeated `Content-Length`, both `Content-Length`
+and `Transfer-Encoding`, or a bad chunk), `413` for a body over 16 MiB,
+`431` for a head over 64 KiB, `408` when a connection takes more than 10
+seconds to send a whole request, `501` for a transfer coding other than
+`chunked`, and `505` for another HTTP version. `Expect: 100-continue` is
+answered with `100 Continue`. `Request.path` is the target before `?`, as
+sent; `query` is the rest, split at `&` and `=`, with `%XX` and `+`
+decoded (a repeated key keeps its last value); header names are lowercase
+and a repeated header's values are joined with `, `; `body` is the decoded
+body as text, bytes that aren't UTF-8 as U+FFFD; `peer` is the client's
+address. *(ADR 0419)*
+
+**std.net.11** — `ex.respond(r Response) ! NetError` sends the response and
+closes the connection: the server sends `Connection: close` and does not
+keep connections alive. The status must be 100 to 599; header names must be
+tokens and values must not contain CR, LF or NUL; otherwise `respond` fails
+with kind `bad_request` and the exchange stays open to be answered again.
+`Content-Length`, `Connection` and `Transfer-Encoding` in `r.headers` are
+ignored (the server frames the response). A body is sent with a
+`Content-Type` of `text/plain; charset=utf-8` unless `r.headers` has one;
+`1xx`, `204` and `304` responses have no body; a reply to `HEAD` has the
+headers a `GET` would have and no body. Answering twice, or after the
+server's peer is gone, fails with kind `other` or `closed`. An exchange that
+is never answered keeps its connection until the program ends. *(ADR 0419)*
+
+**std.net.12** — `listen(addr str) Listener ! NetError` and `connect(host
+str, port int) Conn ! NetError` are raw TCP. `l.accept() Conn ! NetError`
+(any number of tasks may wait), `l.addr() str` and `l.close()` match
+`Server`. A `Conn` has `c.read(max int) str ! NetError`: waits for at
+least one byte and returns up to `max` bytes as text, never splitting a
+character across two reads (so it may return up to three bytes more), and
+`""` at the end of the stream; `c.read_line() str? ! NetError`: a line
+without its `\n` or `\r\n`, or absent at the end of the stream;
+`c.write(text str) ! NetError`; `c.set_timeout(ms int)` (default 30000):
+how long a read, write or connect may make no progress before kind
+`timed_out`; `c.peer() str`; and `c.close()`. A `Conn` and a `Server`
+handle are used from one task at a time (`Server.accept` excepted). After
+`close`, every operation fails with kind `closed`. Text only until `bytes`
+(lane 123) lands; then `read_bytes` and `write_bytes` join. *(ADR 0421)*
+
+**std.net.13** — `connect_tls(host str, port int) Conn ! NetError` connects
+and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
+certificate rules, and returns a `Conn` that reads and writes the
+decrypted stream. Failures are kind `tls`, or the transport's kind during
+the handshake. There is no TLS server. *(ADR 0421, ADR 0360)*
+
+**std.net.14** — Serving needs a capability of its own. `serve` and
+`listen` have the effects `net`, `net.serve` and `io`; every other `std.net`
+function and the methods of `Server`, `Exchange`, `Listener` and `Conn` have
+`net` and `io`. `--deny net.serve` refuses a program that can start a
+server and still lets it be a client; `--deny net` and `--deterministic`
+refuse both, and a package's `caps` list names `net.serve` separately
+(`eff.cap.4–5`). *(ADR 0422)*
+
+**std.net.15** — Targets: Linux x86-64 and macOS ARM64 run the same code
+over the platform's sockets. On Windows the sockets are the Rust standard
+library's (Winsock); the code uses nothing else, and it is untested there
+(ADR 0004, lane 153). *(ADR 0423)*
+
+```ail
+use std.net
+
+fn answer(srv net.Server) !
+    ex := srv.accept()?
+    q := ex.request.query.get("name") else "world"
+    ex.respond(net.Response(status: 200, headers: {}, body: "hello {q}"))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn answer(srv)
+    r := net.get("http://{srv.addr()}/?name=ail")?
+    print(r.body)
+    t.wait()?
 ```
 
 ## Clock: `std.time`

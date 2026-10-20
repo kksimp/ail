@@ -1,0 +1,11 @@
+## std.net.9-12: a handle has only its methods, and they check their arguments.
+use std.net
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    srv.listen()
+    c := net.connect("127.0.0.1", 80)?
+    c.write(5)?
+    ex := srv.accept()?
+    ex.respond("done")?
+    r := net.request("GET", "http://x/", "none")?

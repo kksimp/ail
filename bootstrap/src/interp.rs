@@ -27,6 +27,7 @@ pub mod limits;
 mod contracts;
 pub mod parallel;
 mod net;
+mod netsock;
 mod osext;
 mod spawn;
 mod codec;
@@ -3119,9 +3120,7 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn flush(&mut self, pos: Pos) -> Result<(), Trap> {
-        if self.conc.is_some() {
-            self.task_print("");
-        }
+        self.task_flush();
         match self.out.flush() {
             Err(e) if e.kind() != io::ErrorKind::BrokenPipe => {
                 trap("mod.main.3", pos, format!("writing to standard output failed: {e}"))

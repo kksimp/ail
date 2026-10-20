@@ -237,8 +237,23 @@ impl<'p> Checker<'p> {
             ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
             ("net", "get" | "post") => (
                 if f == "get" { vec![Str] } else { vec![Str, Str, Str] },
+            ("net", "get" | "post" | "request") => (
+                match f {
+                    "get" => vec![Str],
+                    "post" => vec![Str, Str, Str],
+                    _ => vec![Str, Str, std_ty("net.Options")],
+                },
                 Ty::Res(Box::new(std_ty("net.Response")), Errs::Set(vec![std_ty("net.NetError")])),
             ),
+            ("net", "options") => (vec![], std_ty("net.Options")),
+            ("net", "serve" | "listen" | "connect" | "connect_tls") => {
+                let (params, ok) = match f {
+                    "serve" => (vec![Str], "net.Server"),
+                    "listen" => (vec![Str], "net.Listener"),
+                    _ => (vec![Str, Int], "net.Conn"),
+                };
+                (params, Ty::Res(Box::new(std_ty(ok)), Errs::Set(vec![std_ty("net.NetError")])))
+            }
             ("random", "int") => (vec![Int, Int], Int),
             ("random", "float") => (vec![], Ty::Float),
             ("random", "seed") => (vec![Int], Unit),
