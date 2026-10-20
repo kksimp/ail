@@ -40,3 +40,13 @@ touches only `fn_value` and the two generators' `icall`.
   and each call would pay a load, all for captures the language lacks.
 - **Monomorphising callbacks away.** Doesn't cover values returned from
   functions or chosen at run time.
+
+## Addendum: `unreachable(message)`
+
+The self-compile survey found `unreachable("...")` (err.model.2) unsupported
+as a call to an unknown name. It is a MIR op `trap` (the message string; a
+site with kind `unreachable`) that ends its block with the `unreachable`
+terminator. Both generators jump to a trap stub with kind 7, and `rt.trap`
+prints `unreachable: MESSAGE` after the usual head line, as the interpreter
+does. The message may be any `str` the subset can build; interpolation
+outside `print` waits for lane 172. Not allowed in the runtime itself.

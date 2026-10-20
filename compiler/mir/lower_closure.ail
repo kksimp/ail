@@ -119,3 +119,16 @@ fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
         emit_void(i)
         return Val(id: -1, ty: Ty.Unit)
     Val(id: emit(i, sig.ret), ty: sig.ret)
+
+## `unreachable(message)` (err.model.2): a trap that ends the block.
+fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != 1 or args[0].label != none
+        return unsupported(pos, "this call of `unreachable`")
+    m := lower_value(args[0].value, Ty.Str)?
+    if m.ty != Ty.Str
+        return unsupported(expr_pos(args[0].value), "`unreachable` of a `{m.ty.name()}`")
+    mut i := inst(-1, "trap", [m.id])
+    i.site = site("err.model.2", "unreachable", "", pos)
+    emit_void(i)
+    finish(unreachable_term())
+    Val(id: -1, ty: Ty.Unit)

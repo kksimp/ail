@@ -32,7 +32,7 @@ lists of them or an interpolation of them (with
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 `round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
 construct is reported at its position under this rule, all of them at once,
-`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
+`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, and `unreachable(message)` (err.model.2), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
 *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0591)*
 
