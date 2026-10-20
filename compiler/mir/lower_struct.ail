@@ -13,9 +13,9 @@ struct Slot
     name str
     ty Ty
 
-## Record the structs of `prog` (names first, so fields may name any of
-## them) and report what isn't in the subset.
-fn Lower.declare_structs(mut self, prog ast.Program)
+## Record the names of the structs of `prog` (all files first, so fields
+## may name any struct) and report what isn't in the subset.
+fn Lower.declare_struct_names(mut self, prog ast.Program)
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
@@ -26,9 +26,12 @@ fn Lower.declare_structs(mut self, prog ast.Program)
         elif s.is_error
             problem(s.pos, "error struct `{s.name}` isn't in the native subset yet")
         else
-            structs[s.name] = []
+            structs["{prefix}{s.name}"] = []
+
+fn Lower.declare_struct_fields(mut self, prog ast.Program)
     for s in prog.structs
-        if not structs.contains(s.name)
+        key := "{prefix}{s.name}"
+        if not structs.contains(key)
             continue
         mut slots := List[Slot]()
         for fd in s.fields
@@ -36,7 +39,7 @@ fn Lower.declare_structs(mut self, prog ast.Program)
                 problem(fd.pos, "field `{fd.name}`: its type isn't in the native subset yet")
                 Ty.Unknown
             slots.push(Slot(name: fd.name, ty: t))
-        structs[s.name] = slots
+        structs[key] = slots
 
 ## The slot of field `name` in struct `n`, or -1.
 fn Lower.slot_of(self, n str, name str) int
@@ -138,6 +141,7 @@ fn Lower.self_value(mut self) int
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     if bad.contains(key)
+        fn_failed = true
         return none
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()

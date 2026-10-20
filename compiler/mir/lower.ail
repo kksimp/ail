@@ -23,6 +23,8 @@ pub struct Problem
 
 pub error struct Problems "the program is outside the native subset"
     pub items List[Problem]
+    ## The file of each problem.
+    pub files List[str]
 
 ## Where `continue` and `break` go in the innermost loop.
 struct Loop
@@ -82,6 +84,19 @@ struct Lower
     copy_tys Map[str, Ty]
     ## `problems.len()` when the current function began.
     fn_problems int
+    ## Set when the function used something already reported elsewhere (a
+    ## function or variable outside the subset): its MIR is incomplete.
+    fn_failed bool
+    ## The source file being lowered, its imports (name to module) and
+    ## those of every file, and each file's key prefix (ADR 0393).
+    file int
+    aliases Map[str, str]
+    file_aliases List[Map[str, str]]
+    file_prefix List[str]
+    ## The file that declares each constant, whose names its value uses.
+    const_home Map[str, int]
+    ## The file of each problem, filled in by `stamp_problems`.
+    problem_files List[int]
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -108,6 +123,20 @@ BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl",
 ## Lower a program and, when given, the runtime; `Problems` lists what is
 ## outside the subset.
 pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Module ! Problems
+    lower_package([Source(module: "", path: path, text: text, prog: prog)], rt)
+
+## One source file of a package: the module it belongs to (its import path,
+## "" for the root module), its path and text, and its syntax tree.
+pub struct Source
+    pub module str
+    pub path str
+    pub text str
+    pub prog ast.Program
+
+## Lower the files of a package (mod.unit.1-5, ADR 0393) and, when given,
+## the runtime. The first source is the root module's file holding `main`;
+## problems name the file they are in (`Problems.files`).
+pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     mut l := Lower(
         sigs: {},
         bad: Set[str](),
@@ -140,29 +169,56 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
         borrowed: Set[str](),
         copy_tys: {},
         fn_problems: 0,
+        fn_failed: false,
+        file: 0,
+        aliases: {},
+        file_aliases: [],
+        file_prefix: [],
+        const_home: {},
+        problem_files: [],
     )
+    for src in srcs
+        l.file_aliases.push(aliases_of(src.prog))
+        l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
     if r := rt
         l.declare_all(r, "rt.")
-    l.declare_all(prog, "")
-    if r := rt
-        l.prefix = "rt."
-        l.is_rt = true
-        for f in r.fns
-            if not PRIMS.contains(f.name)
-                l.lower_fn(f)
-    l.prefix = ""
-    l.is_rt = false
-    for f in prog.fns
-        l.lower_fn(f)
+    l.problem_files = [0 for _ in l.problems]
+    for k in 0..srcs.len()
+        l.enter_file(k)
+        l.declare_struct_names(srcs[k].prog)
+    for k in 0..srcs.len()
+        l.enter_file(k)
+        l.declare_struct_fields(srcs[k].prog)
+    for k in 0..srcs.len()
+        l.enter_file(k)
+        l.declare_all(srcs[k].prog, l.prefix)
+    l.stamp_problems()
+    for k in 0..srcs.len()
+        l.enter_file(k)
+        for f in srcs[k].prog.fns
+            l.lower_fn(f)
+        l.stamp_problems()
+    l.enter_file(0)
     l.gen_copies()
+    l.stamp_problems()
+    if r := rt
+        l.lower_rt(r)
+        l.stamp_problems()
     if l.problems.len() > 0
-        return Problems(items: l.problems.sorted(by: |p| p.pos.line * 100000 + p.pos.col))
+        mut order := [k for k in 0..l.problems.len()]
+        order = order.sorted(by: |k| (l.problem_files[k] * 1000000 + l.problems[k].pos.line) * 1000 + l.problems[k].pos.col)
+        return Problems(
+            items: [l.problems[k] for k in order],
+            files: [srcs[l.problem_files[k]].path for k in order],
+        )
     m := inline_module(Module(
-        path: path,
+        path: srcs[0].path,
         funcs: l.funcs,
         strs: l.strs,
         sites: l.sites,
-        lines: text.lines(),
+        lines: srcs[0].text.lines(),
+        files: [src.path for src in srcs],
+        file_lines: [src.text.lines() for src in srcs],
     ))
     mut errs := List[Problem]()
     for f in m.funcs
@@ -173,14 +229,46 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
                 message: "internal error: invalid MIR after inlining: {f.name}: {err}",
             ))
     if errs.len() > 0
-        return Problems(items: errs)
+        return Problems(items: errs, files: [srcs[0].path for _ in errs])
     m
+
+## The runtime functions the code generators call by name, besides those
+## the MIR calls.
+RT_ROOTS := ["rt.init", "rt.exit", "rt.trap", "rt.list_push", "rt.list_pushf", "rt.list_pushb"]
+
+## Lower the runtime functions the program reaches, and those they reach
+## (ADR 0393): a program pays only for the runtime it uses.
+fn Lower.lower_rt(mut self, r ast.Program)
+    prefix = "rt."
+    aliases = {}
+    is_rt = true
+    mut decls := Map[str, ast.FnDecl]()
+    for f in r.fns
+        if not PRIMS.contains(f.name)
+            decls["rt.{f.name}"] = f
+    mut done := Set[str]()
+    mut queue := RT_ROOTS
+    mut scanned := 0
+    while true
+        while scanned < funcs.len()
+            for blk in funcs[scanned].blocks
+                for i in blk.insts
+                    if i.op == "call" and decls.contains(i.name)
+                        queue.push(i.name)
+            scanned += 1
+        if queue.len() == 0
+            break
+        name := queue.pop() else ""
+        if done.contains(name) or not decls.contains(name)
+            continue
+        done.add(name)
+        lower_fn(decls[name])
+    is_rt = false
 
 fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
-    declare_structs(prog)
     for e in prog.enums
         problem(e.pos, "enum `{e.name}` isn't in the native subset yet")
     for t in prog.traits
@@ -188,6 +276,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for c in prog.consts
         if is_const_expr(c.value)
             consts["{pre}{c.name}"] = c.value
+            const_home["{pre}{c.name}"] = file
         else
             problem(
                 c.pos,
@@ -213,14 +302,14 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         return
     mut params := List[Ty]()
     if o := f.owner
-        if o.params != none or not structs.contains(o.name)
+        if o.params != none or not structs.contains("{pre}{o.name}")
             problem(
                 f.pos,
                 "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
             )
             return
         if f.receiver != none
-            params.push(Ty.Struct(o.name))
+            params.push(Ty.Struct("{pre}{o.name}"))
     elif f.receiver != none
         problem(
             f.pos,
@@ -282,8 +371,9 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                         return Ty.List(e)
                     none
                 _ =>
-                    if args.len() == 0 and structs.contains(name)
-                        return Ty.Struct(name)
+                    if args.len() == 0
+                        if k := type_key(name)
+                            return Ty.Struct(k)
                     none
         _ => none
 
@@ -456,7 +546,15 @@ fn Lower.lookup(self, name str) str?
 fn Lower.site(mut self, rule str, kind str, op str, pos ast.Pos) int
     if is_rt
         return -1
-    sites.push(Site(rule: rule, kind: kind, op: op, line: pos.line, col: pos.col, func: fname))
+    sites.push(Site(
+        rule: rule,
+        kind: kind,
+        op: op,
+        line: pos.line,
+        col: pos.col,
+        func: fname,
+        file: file,
+    ))
     sites.len() - 1
 
 fn Lower.str_lit(mut self, s str) int
@@ -476,7 +574,7 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
     mut k := 0
     if o := f.owner
         if f.receiver != none
-            self_ty = o.name
+            self_ty = "{prefix}{o.name}"
             declare("self", sig.params[0], params[0])
             borrowed.add(lookup("self") else "")
             k = 1
@@ -505,6 +603,7 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
     fname = name
     ret = rty
     fn_problems = problems.len()
+    fn_failed = false
     blocks = []
     vals = []
     names = []
@@ -528,7 +627,7 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
 ## Finish the function begun with `begin_fn`: simplify, fold, verify.
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
-    if problems.len() > fn_problems
+    if problems.len() > fn_problems or fn_failed
         return
     func := simplify(fold(simplify(Func(
         name: name,
@@ -944,8 +1043,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
         Name(name, pos) =>
             key := lookup(name) else
-                if c := consts.get("{prefix}{name}")
-                    return lower_expr(c, want)
+                if consts.contains("{prefix}{name}")
+                    return lower_const("{prefix}{name}", want)
                 k := self_slot(name)
                 if k >= 0
                     t := structs[self_ty][k].ty
@@ -956,6 +1055,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 )
                 return none
             if var_ty[key].is_unknown()
+                fn_failed = true
                 return none
             Val(id: read_var(key, cur), ty: var_ty[key])
         Unary(o, operand, pos) => lower_unary(o, operand, pos, want)
@@ -988,7 +1088,12 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         NoneLit(pos) => unsupported(pos, "`none`")
         Hole(pos) => unsupported(pos, "`todo`")
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
-        Member(recv, name, pos) => lower_member(recv, name, pos)
+        Member(recv, name, pos) =>
+            if key := qualified(e)
+                if consts.contains(key)
+                    return lower_const(key, want)
+                return unsupported(pos, "`{key}` as a value")
+            lower_member(recv, name, pos)
         Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
         MapLit(_, pos) => unsupported(pos, "maps")
         SetLit(_, pos) => unsupported(pos, "sets")
@@ -1231,8 +1336,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_print(args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
-            if structs.contains(name) and lookup(name) == none
-                return new_struct(name, args, pos)
+            if lookup(name) == none
+                if k := type_key(name)
+                    return new_struct(k, args, pos)
             if self_ty != "" and sigs.contains("{self_ty}.{name}")
                 return struct_call(
                     "{self_ty}.{name}",
@@ -1241,9 +1347,11 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     pos,
                 )
             if self_ty != "" and bad.contains("{self_ty}.{name}")
+                fn_failed = true
                 return none
             key := "{prefix}{name}"
             if bad.contains(key)
+                fn_failed = true
                 return none
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
             if args.len() != sig.params.len()
@@ -1256,6 +1364,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
             Val(id: call(key, vs, sig.ret), ty: sig.ret)
+        Member =>
+            if k := type_name(callee)
+                return new_struct(k, args, pos)
+            unsupported(pos, "this call")
         TypeArgs(name, targs, tpos) =>
             if name == "List" and targs.len() == 1 and args.len() == 0
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
@@ -1362,6 +1474,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return none
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, npos)
+    if m := module_name(recv)
+        if structs.contains("{m}.{name}")
+            return new_struct("{m}.{name}", args, npos)
+        return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
@@ -1429,7 +1545,16 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
 ## The struct `e` names, when it names one and no local: `T.f(...)`.
 fn Lower.type_name(self, e ast.Expr) str?
     match e
-        Name(n, _) => if structs.contains(n) and lookup(n) == none then n else none
+        Name(n, _) => if lookup(n) == none then type_key(n) else none
+        Member =>
+            p := path_of(e)?
+            type_key(p)
+        _ => none
+
+## The import path of the module `e` names in this file, if it names one.
+fn Lower.module_name(self, e ast.Expr) str?
+    match e
+        Name(n, _) => module_of(n)
         _ => none
 
 ## Whether `e` names module `m` (not a local of that name).
