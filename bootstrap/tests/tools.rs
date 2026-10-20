@@ -256,8 +256,9 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
 
 /// Garlic's JavaScript engine (`tools/garlic/js`, docs/design/garlic-js.md)
 /// checks clean, passes its `@test`s, its lexer prints the expected tokens,
-/// its parser matches every hand-written tree and error, and the packed
-/// test262 parser tests hold (their exceptions listed in `known.txt`).
+/// its parser matches every hand-written tree and error, the packed test262
+/// parser tests hold (their exceptions listed in `known.txt`), and its
+/// programs and pages print what Node and Chromium printed.
 #[test]
 fn garlic_js_parses_and_runs_its_suites() {
     let dir = tool("tools/garlic/js");
@@ -272,7 +273,7 @@ fn garlic_js_parses_and_runs_its_suites() {
     let tokens = ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
     let expected = std::fs::read_to_string(tool("tools/garlic/js/testdata/tokens/sample.tokens")).unwrap();
     assert_eq!(String::from_utf8_lossy(&tokens.stdout), expected, "--tokens sample.js");
-    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser"), ("--test-run", "tools/garlic/js/testdata/run")] {
+    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser"), ("--test-run", "tools/garlic/js/testdata/run"), ("--test-page", "tools/garlic/js/testdata/page")] {
         let out = ail().args(["run", &dir, flag, &tool(data)]).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
