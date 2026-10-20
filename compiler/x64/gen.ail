@@ -60,6 +60,8 @@ struct Gen
     saved_floats List[int]
     slot_base int
     frame int
+    ## Caller-saved registers in use, which a `push`'s slow path saves.
+    caller_used List[int]
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
@@ -113,6 +115,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
         saved_floats: [],
         slot_base: 0,
         frame: 0,
+        caller_used: codegen.caller_used(al, registers()),
     )
     for r in al.saved
         if r >= codegen.FLOAT_BASE
@@ -711,7 +714,7 @@ fn Gen.shift(mut self, i mir.Inst)
     put_gpr(i.dst, d)
 
 fn Gen.call(mut self, i mir.Inst)
-    if i.name == "rt.list_push" or i.name == "rt.list_pushf"
+    if codegen.is_push(i)
         push(i)
         return
     call_out(i)
@@ -729,13 +732,40 @@ fn Gen.push(mut self, i mir.Inst)
     v := i.args[1]
     if f.vals[v].is_float()
         a.vmovsd_mr(at_index(S1, RAX, 8, 0), xmm(v, X0))
+    elif f.vals[v] == mir.Ty.Bool
+        a.mov8_mr(at_index(S1, RAX, 1, 0), gpr(v, RDX))
     else
         a.mov_mr(at_index(S1, RAX, 8, 0), gpr(v, RDX))
     a.alu_ri("add", RAX, 1)
     a.mov_mr(at(l, 0), RAX)
     a.jmp(done)
     a.bind(slow)
+    # The runtime may use any caller-saved register: keep ours around it.
+    mut ints := List[int]()
+    mut floats := List[int]()
+    for r in caller_used
+        if r >= codegen.FLOAT_BASE
+            floats.push(r - codegen.FLOAT_BASE)
+        else
+            ints.push(r)
+    for r in ints
+        a.push(r)
+    mut size := 8 * floats.len()
+    if (size + 8 * ints.len()) % 16 != 0
+        size += 8
+    if size > 0
+        a.alu_ri("sub", RSP, size)
+    for k in 0..floats.len()
+        a.vmovsd_mr(at(RSP, 8 * k), floats[k])
     call_out(i)
+    for k in 0..floats.len()
+        a.vmovsd_rm(floats[k], at(RSP, 8 * k))
+    if size > 0
+        a.alu_ri("add", RSP, size)
+    mut k := ints.len() - 1
+    while k >= 0
+        a.pop(ints[k])
+        k -= 1
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
@@ -807,43 +837,53 @@ fn Gen.prim(mut self, i mir.Inst)
         _ => unreachable("x64: unknown primitive {i.name}")
 
 ## `xs[i]`: the list in S0, the index in S1, the elements' address in rax.
-fn Gen.list_index(mut self, i mir.Inst) Mem
+## The element's address, after the bounds check. A `List[bool]` holds one
+## byte per element, other lists 8 (native-abi.md §2).
+fn Gen.list_index(mut self, i mir.Inst, size int) Mem
     l := gpr(i.args[0], S0)
     if k := imm32(i.args[1])
         if i.site >= 0
             a.alu_mi("cmp", at(l, 0), k)
             a.jcc(CC_BE, stub(3, i.args[1], i.args[0], i.site, ""))
         a.mov_rm(RAX, at(l, 16))
-        return at(RAX, 8 * k)
+        return at(RAX, size * k)
     x := gpr(i.args[1], S1)
     if i.site >= 0
         a.alu_rm("cmp", x, at(l, 0))
         a.jcc(CC_AE, stub(3, i.args[1], i.args[0], i.site, ""))
     a.mov_rm(RAX, at(l, 16))
-    at_index(RAX, x, 8, 0)
+    at_index(RAX, x, size, 0)
 
 fn Gen.list_get(mut self, i mir.Inst)
-    mem := list_index(i)
-    if f.vals[i.dst].is_float()
+    t := f.vals[i.dst]
+    if t.is_float()
+        mem := list_index(i, 8)
         d := out_xmm(i.dst, X0)
         a.vmovsd_rm(d, mem)
         put_xmm(i.dst, d)
+    elif t == mir.Ty.Bool
+        mem := list_index(i, 1)
+        d := out_gpr(i.dst, S1)
+        a.movzx8_rm(d, mem)
+        put_gpr(i.dst, d)
     else
+        mem := list_index(i, 8)
         d := out_gpr(i.dst, S1)
         a.mov_rm(d, mem)
         put_gpr(i.dst, d)
 
 fn Gen.list_set(mut self, i mir.Inst)
     v := i.args[2]
-    if f.vals[v].is_float()
+    t := f.vals[v]
+    if t.is_float()
         x := xmm(v, X0)
-        a.vmovsd_mr(list_index(i), x)
+        a.vmovsd_mr(list_index(i, 8), x)
+    elif t == mir.Ty.Bool
+        r := gpr(v, RDX)
+        a.mov8_mr(list_index(i, 1), r)
     else
         r := gpr(v, RDX)
-        if r == RDX
-            a.mov_mr(list_index(i), RDX)
-        else
-            a.mov_mr(list_index(i), r)
+        a.mov_mr(list_index(i, 8), r)
 
 # ---- trap stubs ----
 

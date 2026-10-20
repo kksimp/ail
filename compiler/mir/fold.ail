@@ -51,7 +51,21 @@ fn Folder.def(self, v int) Inst?
 ## `i` rewritten, preceded by any instruction it now needs.
 fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List[Inst]
     mut r := i
-    if i.args.len() == 2
+    if i.args.len() == 1
+        if n := int_of(i.args[0])
+            # `-1` is `neg 1`; only the smallest `int` can trap (expr.arith.1).
+            if i.op == "neg" and n != MIN
+                r = konst(i.dst, 0 - n)
+            elif i.op == "not"
+                r = konst(i.dst, 1 - n)
+            elif i.op == "bnot"
+                r = konst(i.dst, n.bit_not())
+            elif i.op == "itof"
+                r = fkonst(i.dst, n.to_float())
+        elif x := float_of(i.args[0])
+            if i.op == "fneg"
+                r = fkonst(i.dst, -x)
+    elif i.args.len() == 2
         if n := int_value(i)
             r = konst(i.dst, n)
         elif x := float_value(i)

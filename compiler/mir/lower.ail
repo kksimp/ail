@@ -601,9 +601,11 @@ fn Lower.copy_list(mut self, v Val) int
     while t.elem() != none
         depth += 1
         t = t.elem() else Ty.Unknown
+    # A `List[bool]` holds bytes (native-abi.md §2).
+    bytes := konst(if t == Ty.Bool then 1 else 8, Ty.Int)
     if depth == 0
-        return call("rt.list_copy", [v.id], v.ty)
-    call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int)], v.ty)
+        return call("rt.list_copy", [v.id, bytes], v.ty)
+    call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int), bytes], v.ty)
 
 fn is_place(e ast.Expr) bool
     match e
@@ -1113,7 +1115,10 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
     Val(id: l, ty: Ty.List(elem))
 
 fn push_fn(elem Ty) str
-    if elem.is_float() then "rt.list_pushf" else "rt.list_push"
+    match elem
+        Float => "rt.list_pushf"
+        Bool => "rt.list_pushb"
+        _ => "rt.list_push"
 
 fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) Val?
     match callee

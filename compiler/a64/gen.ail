@@ -82,6 +82,8 @@ struct Gen
     saved List[int]
     slots int
     frame int
+    ## Caller-saved registers in use, which a `push`'s slow path saves.
+    caller_used List[int]
 
 ## Generate the whole program for `os`: the entry, then each function.
 pub fn generate(m mir.Module, os int) codegen.Image
@@ -140,6 +142,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         uses: uses,
         stubs: [],
         saved: al.saved,
+        caller_used: codegen.caller_used(al, registers()),
         slots: al.slots,
         frame: 0,
     )
@@ -620,7 +623,7 @@ fn Gen.shift(mut self, i mir.Inst)
     put_gpr(i.dst, d)
 
 fn Gen.call(mut self, i mir.Inst)
-    if i.name == "rt.list_push" or i.name == "rt.list_pushf"
+    if codegen.is_push(i)
         push(i)
         return
     call_out(i)
@@ -643,13 +646,37 @@ fn Gen.push(mut self, i mir.Inst)
     a.ldr(S1, l, 16)
     if float
         a.str_d_idx(r, S1, S2)
+    elif f.vals[v] == mir.Ty.Bool
+        a.strb_idx(r, S1, S2)
     else
         a.str_idx(r, S1, S2)
     a.alu_ri("add", S2, S2, 1)
     a.str(S2, l, 0)
     a.b(done)
     a.bind(slow)
-    call_out(i)
+    # The runtime may use any caller-saved register: keep ours around it.
+    # Spill slots are `sp`-relative, so the arguments go to scratch first.
+    a.mov_rr(S1, l)
+    if float
+        a.fop1("fmov", X1, r)
+    else
+        a.mov_rr(S0, r)
+    n := caller_used.len()
+    size := (8 * n + 15) / 16 * 16
+    if size > 0
+        adjust_sp("sub", size)
+    for k in 0..n
+        save(caller_used[k], 8 * k, true)
+    a.mov_rr(0, S1)
+    if float
+        a.fop1("fmov", 0, X1)
+    else
+        a.mov_rr(1, S0)
+    a.bl(i.name)
+    for k in 0..n
+        save(caller_used[k], 8 * k, false)
+    if size > 0
+        adjust_sp("add", size)
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
@@ -760,7 +787,13 @@ fn Gen.list_get(mut self, i mir.Inst)
         put_fpr(i.dst, d)
         return
     d := out_gpr(i.dst, S1)
-    if at[0] < 0
+    # A `List[bool]` holds one byte per element (native-abi.md §2).
+    if f.vals[i.dst] == mir.Ty.Bool
+        if at[0] < 0
+            a.ldrb_off(d, S2, at[1] / 8)
+        else
+            a.ldrb_idx(d, S2, at[0])
+    elif at[0] < 0
         a.ldr(d, S2, at[1])
     else
         a.ldr_idx(d, S2, at[0])
@@ -779,7 +812,12 @@ fn Gen.list_set(mut self, i mir.Inst)
     # x0 is free between calls.
     r := gpr(v, 0)
     at := list_index(i)
-    if at[0] < 0
+    if f.vals[v] == mir.Ty.Bool
+        if at[0] < 0
+            a.strb_off(r, S2, at[1] / 8)
+        else
+            a.strb_idx(r, S2, at[0])
+    elif at[0] < 0
         a.str(r, S2, at[1])
     else
         a.str_idx(r, S2, at[0])
