@@ -183,6 +183,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0179](0179-key-events-ctrl-chords.md) | Keys are typed characters, named keys, or Ctrl chords; Command is Ctrl on macOS *(delegated)* | Accepted | 2026-10-20 |
 | [0240](0240-std-ui-mouse-scroll-clipboard-title.md) | `std.ui` adds mouse, scroll, clipboard and title *(delegated)* | Accepted | 2026-10-20 |
 | [0241](0241-editor-tabs-and-running.md) | The editor gets tabs, a file picker, mouse input and F5/F6 runs in its window front end *(delegated)* | Accepted | 2026-10-20 |
+| [0242](0242-std-ui-modifiers-method.md) | `Window.modifiers()` reports the modifiers of the last event *(delegated)* | Accepted | 2026-10-20 |
 | [0180](0180-editor-written-in-ail.md) | Ship a code editor written in AIL (`tools/edit/`), with a headless core *(delegated)* | Accepted | 2026-10-20 |
 | [0181](0181-editor-screen-as-text-runs.md) | The editor's screen is a list of colored text runs plus plain rows *(delegated)* | Accepted | 2026-10-20 |
 | [0182](0182-comprehensions.md) | List, set and map comprehensions: `[f(x) for x in xs if c]` *(delegated)* | Accepted | 2026-10-20 |

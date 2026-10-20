@@ -112,6 +112,12 @@ pub enum Event {
     Scroll { lines: i64 },
 }
 
+/// Ctrl, Alt and Shift as they were when an event happened (std.ui.14).
+pub type Modifiers = [bool; 3];
+
+/// An event and the modifiers held when it happened.
+type Tagged = (Event, Modifiers);
+
 /// Why `ui.open` failed: `UiError.kind` and `UiError.message` (std.ui.1).
 pub type OpenError = (&'static str, String);
 
@@ -125,6 +131,8 @@ struct Session {
     cursor: (i64, i64),
     /// Set once the window has closed (std.ui.8).
     closed: bool,
+    /// The modifiers of the last event returned (std.ui.14).
+    mods: Modifiers,
 }
 
 thread_local! {
@@ -137,8 +145,8 @@ enum Msg {
     Open { title: String, cols: usize, rows: usize, reply: Sender<Result<(), OpenError>> },
     Present { grid: Grid, cursor: (i64, i64) },
     Title(String),
-    Poll(Sender<Option<Event>>),
-    Wait(Sender<Event>),
+    Poll(Sender<Option<Tagged>>),
+    Wait(Sender<Tagged>),
     Close,
     /// The interpreter thread has ended.
     Done,
@@ -170,7 +178,7 @@ pub fn open(title: &str, cols: i64, rows: i64) -> Result<i64, OpenError> {
         *n += 1;
         *n - 1
     });
-    SESSION.set(Some(Session { id, grid: Grid::new(cols, rows), cursor: (-1, -1), closed: false }));
+    SESSION.set(Some(Session { id, grid: Grid::new(cols, rows), cursor: (-1, -1), closed: false, mods: [false; 3] }));
     Ok(id)
 }
 
@@ -211,21 +219,30 @@ pub fn next_event(id: i64, wait: bool) -> Option<Event> {
     if !live {
         return Some(Event::Close);
     }
-    let event = if wait {
+    let closed = (Event::Close, [false; 3]);
+    let (event, mods) = if wait {
         let (reply, answer) = mpsc::channel();
         send(Msg::Wait(reply));
-        answer.recv().unwrap_or(Event::Close)
+        answer.recv().unwrap_or(closed)
     } else {
         let (reply, answer) = mpsc::channel();
         send(Msg::Poll(reply));
-        answer.recv().unwrap_or(Some(Event::Close))?
+        answer.recv().unwrap_or(Some(closed))?
     };
-    with(id, |s| match &event {
-        Event::Resize { cols, rows } => s.grid.resize(*cols, *rows),
-        Event::Close => s.closed = true,
-        _ => {}
+    with(id, |s| {
+        s.mods = mods;
+        match &event {
+            Event::Resize { cols, rows } => s.grid.resize(*cols, *rows),
+            Event::Close => s.closed = true,
+            _ => {}
+        }
     });
     Some(event)
+}
+
+/// std.ui.14: Ctrl, Alt and Shift as they were at the last event returned.
+pub fn modifiers(id: i64) -> Modifiers {
+    with(id, |s| s.mods).unwrap_or([false; 3])
 }
 
 /// std.ui.13: the window's title.
@@ -349,7 +366,7 @@ const TICK: Duration = Duration::from_millis(8);
 
 fn serve(rx: &Receiver<Msg>) {
     let mut window: Option<backend::Backend> = None;
-    let mut waiter: Option<Sender<Event>> = None;
+    let mut waiter: Option<Sender<Tagged>> = None;
     loop {
         let msg = if window.is_some() {
             match rx.recv_timeout(TICK) {
@@ -391,7 +408,7 @@ fn serve(rx: &Receiver<Msg>) {
                         w.pump();
                         w.events.pop_front()
                     }
-                    None => Some(Event::Close),
+                    None => Some((Event::Close, [false; 3])),
                 };
                 let _ = reply.send(event);
             }
@@ -417,7 +434,7 @@ fn serve(rx: &Receiver<Msg>) {
                     None => waiter = Some(reply),
                 },
                 None => {
-                    let _ = reply.send(Event::Close);
+                    let _ = reply.send((Event::Close, [false; 3]));
                 }
             }
         }
@@ -568,7 +585,7 @@ mod backend {
         last_drag: (i64, i64),
         /// Scrolling not yet reported as whole lines (std.ui.11).
         scroll: f32,
-        pub events: VecDeque<Event>,
+        pub events: VecDeque<(Event, [bool; 3])>,
     }
 
     impl Backend {
@@ -615,6 +632,12 @@ mod backend {
             Ok(b)
         }
 
+        /// Queue `e` with the modifiers held now (std.ui.14).
+        fn queue(&mut self, e: Event) {
+            let m = &self.mods;
+            self.events.push_back((e, [m.ctrl, m.alt, m.shift]));
+        }
+
         pub fn set_title(&mut self, title: &str) {
             self.window.set_title(title);
         }
@@ -642,7 +665,7 @@ mod backend {
                 };
                 self.buttons[i] = down;
                 if col >= 0 {
-                    self.events.push_back(Event::Mouse { col, row, button: name, kind });
+                    self.queue(Event::Mouse { col, row, button: name, kind });
                 }
             }
             self.last_drag = self.mouse;
@@ -654,7 +677,7 @@ mod backend {
                 let lines = self.scroll.trunc();
                 if lines != 0.0 {
                     self.scroll -= lines;
-                    self.events.push_back(Event::Scroll { lines: lines as i64 });
+                    self.queue(Event::Scroll { lines: lines as i64 });
                 }
             }
         }
@@ -671,7 +694,7 @@ mod backend {
             self.flush();
             if !self.window.is_open() {
                 self.closed = true;
-                self.events.push_back(Event::Close);
+                self.queue(Event::Close);
                 return;
             }
             let (w, h) = self.window.get_size();
@@ -682,7 +705,7 @@ mod backend {
                 let cells = ((w / CW).max(1), (h / CH).max(1));
                 if cells != self.cells {
                     self.cells = cells;
-                    self.events.push_back(Event::Resize { cols: cells.0, rows: cells.1 });
+                    self.queue(Event::Resize { cols: cells.0, rows: cells.1 });
                 }
                 if let Some((grid, cursor)) = self.shown.take() {
                     self.draw(grid, cursor, None);
@@ -703,7 +726,8 @@ mod backend {
                     Input::Char(c) => char::from_u32(c).filter(|c| !m.ctrl && *c >= ' ' && *c != '\u{7f}').map(String::from),
                 };
                 if let Some(key) = key {
-                    self.events.push_back(Event::Key { key, ctrl: m.ctrl, alt: m.alt, shift: m.shift });
+                    let (ctrl, alt, shift) = (m.ctrl, m.alt, m.shift);
+                    self.queue(Event::Key { key, ctrl, alt, shift });
                 }
             }
         }
