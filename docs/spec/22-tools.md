@@ -388,6 +388,9 @@ subsequence, at most 12 lines and then `... N more changed lines`. With
 `--json` they are the object's `"lines"`
 ([ADR 0399](../decisions/0399-compact-edits-and-diff-hunks.md)).
 
+```ail pkg=diff_pair tool=diff,old/a.ail,new/a.ail status=1 expect=-assert_eq rules=diff.out.7
+```
+
 ```ail pkg=diff_pair tool=diff,old/a.ail,new/a.ail status=1 expect=adds: rules=diff.out.1,diff.out.2,diff.out.3,diff.out.4,diff.out.6
 ```
 
@@ -743,7 +746,10 @@ written without errors, and its report and exit status follow the summary.
 ```ail pkg=edit_ops tool=edit,main.ail stdin=bad.json status=2 expect=written rules=edit.in.2,edit.id.1,edit.id.2
 ```
 
-```ail pkg=edit_ops tool=edit,main.ail stdin=text.txt status=2 expect=edit.in.1 rules=edit.in.1
+```ail pkg=edit_ops tool=edit,main.ail stdin=text.txt status=2 expect=edit.in.3 rules=edit.in.3
+```
+
+```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
 ```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
