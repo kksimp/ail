@@ -17,8 +17,8 @@ Each needs to know which construct to take next, and which lane owns it.
 `docs/design/self-compile-status.md` lists the top blocking constructs,
 ranked by the number of `native.subset.1` problems the survey reports for
 them, with the lane that owns each one from the lane briefs. Ownership
-follows the briefs: lane 120 owns structs, methods, enums, `match` and
-modules; lanes 171–177 own heap, strings, maps, closures, optionals and
+follows the briefs: lane 120 owns structs, methods, `match` and modules, and lane 179
+owns enums and non-literal constants (announced by lane 120); lanes 171–177 own heap, strings, maps, closures, optionals and
 bounds. A construct no brief covers is listed as unowned, with a proposed
 owner, rather than given to a lane by guesswork.
 
