@@ -55,3 +55,18 @@ fn pure_tasks_run_outside_the_scheduler() {
     assert!(log.contains("task `checked` on its own thread"), "{log}");
     assert!(!log.contains("`report`"), "a task with a mutex stays on the scheduler: {log}");
 }
+
+#[test]
+fn par_comprehension_runs_on_the_pool_with_sequential_output() {
+    let file = "bootstrap/tests/cases/par_comp.ail";
+    let one = run("1", &["run", file]);
+    let four = run("4", &["run", file]);
+    assert!(four.status.success(), "{}", String::from_utf8_lossy(&four.stderr));
+    assert_eq!(one.stdout, four.stdout);
+    let log = String::from_utf8_lossy(&four.stderr);
+    assert!(log.contains("par: line 17: comprehension: 40 elements on 4 threads"), "{log}");
+    assert!(log.contains("par: line 21: comprehension: 2 elements in order"), "{log}");
+    let det = run("4", &["run", "--deterministic", file]);
+    assert_eq!(det.stdout, one.stdout);
+    assert!(String::from_utf8_lossy(&det.stderr).is_empty(), "{}", String::from_utf8_lossy(&det.stderr));
+}

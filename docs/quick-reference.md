@@ -25,6 +25,7 @@
 ./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
 ./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
 ./ail api --type FILE.ail L C   # type at a position (also --locals, --refs; `ail api DIR` and `--refs DIR FILE L C` cover a whole package)
+./ail api --expanded --text FILE.ail # also the code derives generated (ToJson, FromJson, @derive traits)
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
@@ -483,7 +484,9 @@ iteration's own locals, to `out[i]` in a `for i in a..b` loop, or to an
 float totals use `xs.sum()` (a fixed tree) rather than `+=`. When you know
 the iterations are independent but the checker can't see it (writes to
 `out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
-(it prints, or breaks out) is an error:
+(it prints, or breaks out) is an error. A parallel map is a comprehension
+with `par for`: `lens := [steps(x) par for x in xs]` (one clause, a list;
+the element must not print, use a handle or write outside itself):
 
 ```ail
 fn main()
@@ -531,6 +534,25 @@ doc.to_text()                                  # {"a":[1.0,"x"]}, compact, membe
 Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
 `Obj(members)` (`JsonMember` has `key`, `value`). Write `Json.Num(1.0)` when
 the type isn't known. A program that declares its own `Json` keeps it.
+
+Derive the conversions of your own types (`json.derive.1-2`):
+
+```ail
+struct Todo
+    id str
+    hours float
+    tags List[str]
+    note str?              # may be missing; `none` writes `null`
+
+impl ToJson for Todo       # t.to_json() Json: an object of the fields in order
+impl FromJson for Todo     # Todo.from_json(j) Todo ! JsonError
+
+t := Todo.from_json(doc)?   # err.message: "missing hours", "expected a string, found number"
+doc.need("id")?.need_str()?  # the same checks by hand: need, need_str/num/int/bool/arr
+```
+
+Enums: a variant without fields is its name (`"Red"`); `FromJson` reads
+only those. `ail api --expanded FILE` prints the code a derive generated.
 
 ## Values and `mut`
 
@@ -652,6 +674,7 @@ fn main() !
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(col, row, text, fg, bg, ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar|Block|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`, `ORANGE`, `RED`, `WHITE`, `YELLOW` |
+| `std.ui.widgets` | `TextField`, `ListView` (fuzzy `filter`), `Button`, `Dialog`, `Pane`, `Tree`: `render(rect, theme) List[widgets.Run]`, `draw(mut w, rect, theme)`, `on_event(ev[, rect]) widgets.Action` (`Ignored`, `Changed`, `Submit`, `Cancel`); `widgets.Rect(col, row, cols, rows)`; `text_rows(runs, cols, rows)` prints a screen headless |
 
 A window is a grid of text cells; draw with `put`, then `present`:
 
@@ -717,10 +740,13 @@ g.wait_all()?
 ch := Channel[int](8)         # bounded: send waits while full
 ch.send(1)
 v := ch.recv() else break     # none once closed and empty
+for v in ch                   # receives until closed and empty
+    print(v)
+all := [v for v in ch]        # also in comprehensions
 ch.close()
 m := Mutex(0)                 # shared state: get, set, swap
-x := m.lock()                 # read-modify-write:
-m.unlock(x + 1)
+with m as mut x               # read-modify-write: holds m, stores x back
+    x += 1                    # on any exit; a trap keeps the old value
 ```
 
 Each task handle must be waited or added to a group exactly once, on every

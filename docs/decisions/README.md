@@ -298,5 +298,19 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0327](0327-watch-through-calls.md) | `--watch` follows a variable through `mut` calls *(delegated)* | Accepted | 2026-10-20 |
 | [0313](0313-editor-coverage-overlay.md) | Editor coverage overlay (Ctrl-Shift-C) until the next edit *(delegated)* | Accepted | 2026-10-20 |
 | [0297](0297-no-bytecode-tier-in-the-oracle.md) | Keep the interpreter a tree walker; the compiled form belongs to Stage 3 *(delegated)* | Accepted | 2026-10-20 |
+| [0306](0306-derive-generators-run-while-loading.md) | The bootstrap runs derive generators while it loads the program; `TypeInfo.is_error` *(delegated)* | Accepted | 2026-10-20 |
+| [0307](0307-generated-associated-functions.md) | Generated text may add associated functions of the deriving type *(delegated)* | Accepted | 2026-10-20 |
+| [0308](0308-tojson-fromjson-derives.md) | `ToJson` and `FromJson` are prelude derives written in AIL *(delegated)* | Accepted | 2026-10-20 |
+| [0309](0309-api-expanded-output.md) | `ail api --expanded` lists generated functions under their `impl`; built-in derives by name *(delegated)* | Accepted | 2026-10-20 |
+| [0300](0300-for-over-a-channel.md) | Iterate a channel with `for v in ch`; no `select` *(delegated)* | Accepted | 2026-10-20 |
+| [0301](0301-with-mutex-block.md) | Scoped mutex access: `with m as mut x` *(delegated)* | Accepted | 2026-10-20 |
+| [0302](0302-par-comprehension.md) | Parallel map: `[f(x) par for x in xs]` *(delegated)* | Accepted | 2026-10-20 |
 | [0310](0310-ail-api-card-format.md) | `ail api --card`: a program's own card *(delegated)* | Accepted | 2026-10-20 |
 | [0311](0311-ail-api-card-budget-and-trimming.md) | Card budget, token estimate and trimming order *(delegated)* | Accepted | 2026-10-20 |
+<<<<<<< HEAD
+| [0331](0331-editor-program-card-view.md) | Editor program card view (Ctrl-Shift-I) from `ail api --card --json` *(delegated)* | Accepted | 2026-10-20 |
+=======
+| [0314](0314-standard-modules-in-ail.md) | Standard modules written in AIL, starting with `std.ui.widgets` *(delegated)* | Accepted | 2026-10-20 |
+| [0315](0315-widget-contract.md) | Widgets render pure runs and turn events into an `Action` *(delegated)* | Accepted | 2026-10-20 |
+| [0316](0316-dashboard-example.md) | `examples/dashboard.ail` prints by default and opens a window with `--window` *(delegated)* | Accepted | 2026-10-20 |
+>>>>>>> origin/claude/project-thread-ipafhh

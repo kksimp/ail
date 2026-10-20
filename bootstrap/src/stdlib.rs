@@ -84,6 +84,21 @@ const SOURCE: &str = include_str!("std/types.ail");
 /// range (`ast::is_prelude`) and after the prelude itself.
 const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 
+/// The standard modules written in AIL (std.ui.19): their dotted path, the
+/// file name they are read under, and their source.
+const AIL_MODULES: &[(&str, &str, &str)] =
+    &[("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail"))];
+
+/// The file name of the standard module in AIL at `dotted`, if there is one.
+pub fn ail_module_path(dotted: &str) -> Option<&'static str> {
+    AIL_MODULES.iter().find(|(d, _, _)| *d == dotted).map(|(_, p, _)| *p)
+}
+
+/// The source of a standard module in AIL, by its file name.
+pub fn ail_module_source(path: &str) -> Option<&'static str> {
+    AIL_MODULES.iter().find(|(_, p, _)| *p == path).map(|(_, _, s)| *s)
+}
+
 /// Whether `std.NAME` is a standard module (std.use.1).
 pub fn is_std_module(name: &str) -> bool {
     MODULES.iter().any(|(m, _)| *m == name)

@@ -59,8 +59,61 @@ fn main()
     print(doc.to_text())       # {"id":"t1","hours":2.0,"done":true}
 ```
 
+**json.query.4** — `j.as_int()` is the number when it has no fraction, and
+`j.int(key)` is `j.get(key)?.as_int()`. `j.kind()` names the variant in
+JSON's words (`null`, `bool`, `number`, `string`, `array`, `object`).
+`j.need(key) Json ! JsonError` is member `key`, failing with the message
+`missing KEY`; `need_str`, `need_num`, `need_int`, `need_bool` and
+`need_arr` give the payload, failing with `expected a string, found KIND`
+and so on. These failures have `at` -1: the value isn't tied to a place in
+a text. *(ADR 0308)*
+
+## Derives
+
+**json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the
+generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
+`Json` and `List[T ToJson]` implement it. A derived struct gives an object of
+its fields in declaration order, a `T?` field that is `none` giving `null`; a
+derived enum gives a variant without fields as its name, and one with fields
+as `{"Name": {fields}}`. *(ADR 0308)*
+
+**json.derive.2** — `trait FromJson` has no methods; its generator
+`derive_from_json` adds the associated function `T.from_json(j Json) T !
+JsonError` (`ct.gen.1`). A struct reads each field from the member of its
+name with `need` and the `need_*` of its type, so a missing or mistyped
+member fails with its message; a field of another type `U` calls
+`U.from_json`, which `U` derives too; a field `T?` of `str`, `int`, `float`,
+`bool` or `Json` may be missing. An enum whose variants have no fields reads
+a variant's name. Generic types, other optional fields, maps and variants
+with fields are a `ct.derive.4` error naming the field. *(ADR 0308)*
+
+```ail
+struct Item
+    id str
+    hours float
+    tags List[str]
+    note str?
+
+impl ToJson for Item
+impl FromJson for Item
+
+fn main()
+    t := Item(id: "t1", hours: 1.5, tags: ["ops"], note: none)
+    text := t.to_json().to_text()
+    print(text)    # {"id":"t1","hours":1.5,"tags":["ops"],"note":null}
+    doc := parse_json(text) else return
+    back := Item.from_json(doc) else return
+    print(back == t)    # true
+    bad := parse_json("\{\"id\": 7}") else return
+    wrong := Item.from_json(bad) else err
+        print(err.message)    # expected a string, found number
+        return
+    print(wrong)
+```
+
 ## Availability
 
 **json.prelude.1** — The items above are read only when the program mentions
-`Json`, `JsonMember`, `JsonError` or `parse_json`. A program that declares one
-of those names itself gets its own and none of the module's. *(ADR 0162)*
+`Json`, `JsonMember`, `JsonError`, `parse_json`, `ToJson` or `FromJson`. A
+program that declares one of those names itself gets its own and none of the
+module's. *(ADR 0162, ADR 0308)*

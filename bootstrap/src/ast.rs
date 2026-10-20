@@ -25,6 +25,22 @@ pub struct Program {
     /// The capabilities each package manifest grants (eff.cap.4-5,
     /// `packages.rs`). Empty without an `ail.pkg`.
     pub grants: Vec<Grant>,
+    /// The code derive generators wrote, one per deriving `impl`; each is
+    /// a file of `files` (ct.gen.1-4, `derive.rs`).
+    pub generated: Vec<Generated>,
+}
+
+/// The methods a derive generator wrote for one `impl` (ct.gen.1-4).
+#[derive(Debug, Clone)]
+pub struct Generated {
+    /// Index into `Program::files`: its path is `gen:impl:TYPE.TRAIT`.
+    pub file: usize,
+    /// The deriving `impl`'s position.
+    pub impl_pos: Pos,
+    /// `Version.ToJson`
+    pub label: String,
+    /// The generator's name, `derive_to_json`.
+    pub generator: String,
 }
 
 /// `caps LIST` on a manifest line: the code of `package` (empty for the
@@ -139,6 +155,9 @@ pub struct TraitDecl {
     pub doc: Option<String>,
     /// Indexes into `Program::fns`.
     pub methods: Vec<usize>,
+    /// `@derive(f)` before `trait`: the derive generator's name and where it
+    /// is written (ct.derive.1).
+    pub derive: Option<(String, Pos)>,
 }
 
 /// `impl Trait for Type`, optionally with an indented block of functions
@@ -389,12 +408,22 @@ pub enum Stmt {
     },
     /// `defer S` (own.defer.1); `pos` is the `defer`'s.
     Defer(Box<Stmt>, Pos),
+    /// `with m as mut x`: hold mutex `m` for the block, with its value in
+    /// `x`, written back when the block ends (conc.share.6); `pos` is the
+    /// `with`'s.
+    With {
+        mutex: Expr,
+        var: String,
+        var_pos: Pos,
+        body: Block,
+        pos: Pos,
+    },
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
@@ -629,6 +658,8 @@ pub enum CompKind {
 /// filter (expr.comp.2).
 #[derive(Debug)]
 pub struct CompFor {
+    /// Written `par for` (conc.par.12).
+    pub par: bool,
     pub var: String,
     pub var_pos: Pos,
     pub iter: Expr,

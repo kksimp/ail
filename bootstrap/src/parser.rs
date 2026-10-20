@@ -19,6 +19,7 @@ use crate::diag::{Diagnostic, Edit, Pos};
 use crate::lexer::{Part, Tok, Token, UNSUPPORTED, lex};
 
 mod contracts;
+mod derive;
 pub use contracts::link as link_inherited_contracts;
 mod messages;
 mod mistakes;
@@ -49,19 +50,41 @@ const PRELUDE: &str = include_str!("prelude.ail");
 /// Names of the optional `std.json` prelude module (ADR 0161).
 const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
 
+/// Names of its derivable traits, read with it only when named (ADR 0308).
+const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson"];
+
+/// Names of the optional `derive` prelude module: what a derive generator
+/// receives (refl.info.1, ADR 0306).
+const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveError"];
+
 /// The always-read prelude, plus the `json` module (after its `## @module`
-/// marker) when the program names one of its items and declares none of them.
-fn prelude_text(tokens: &[Token]) -> &'static str {
-    let core = PRELUDE.split_once("## @module json\n").expect("prelude has a json module").0;
-    let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if JSON_NAMES.contains(&n.as_str()));
-    let declared = tokens.windows(2).any(|w| {
-        matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum")) && named(&w[1])
-    });
-    if tokens.iter().any(named) && !declared {
-        PRELUDE
-    } else {
-        core
+/// marker) when the program names one of its items and declares none of
+/// them; its `jsonderive` part when the program names `ToJson` or
+/// `FromJson`; and the `derive` module when `jsonderive` is read or the
+/// program names one of its items or writes `@derive`.
+fn prelude_text(tokens: &[Token]) -> String {
+    let (core, rest) = PRELUDE.split_once("## @module json\n").expect("prelude has a json module");
+    let (json, rest) = rest.split_once("## @module jsonderive\n").expect("prelude has a jsonderive module");
+    let (json_derive, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
+    let wants = |names: &[&str]| {
+        let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
+        let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
+        tokens.iter().any(named) && !declared
+    };
+    let want_json_derive = wants(JSON_DERIVE_NAMES);
+    let want_json = want_json_derive || wants(JSON_NAMES);
+    let at_derive = tokens.windows(2).any(|w| matches!((&w[0].tok, &w[1].tok), (Tok::Sym("@"), Tok::Ident(n)) if n == "derive"));
+    let mut text = core.to_string();
+    if want_json {
+        text.push_str(json);
     }
+    if want_json_derive {
+        text.push_str(json_derive);
+    }
+    if want_json_derive || at_derive || wants(DERIVE_NAMES) {
+        text.push_str(derive);
+    }
+    text
 }
 
 /// Parse a program after the prelude, whose lines are numbered from
@@ -77,7 +100,7 @@ pub fn parse_with_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// `parse_with_prelude` without the implicit-`self` pass, which a package
 /// runs after naming its modules' items (`modules.rs`).
 pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
-    let (mut all, diags) = lex(prelude_text(&tokens));
+    let (mut all, diags) = lex(&prelude_text(&tokens));
     debug_assert!(diags.is_empty(), "{diags:?}");
     all.pop(); // Eof
     fn shift(tokens: &mut [Token]) {
@@ -146,6 +169,8 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
             Tok::Kw("use") => p.use_decl(&mut prog),
             Tok::Kw("pub") => p.pub_marker(),
             // `@name fn ...` (gram.attr.1-2)
+            // `@derive(f) trait Name` (ct.derive.1)
+            Tok::Sym("@") if p.derive_trait(&mut prog) => {}
             Tok::Sym("@") => {
                 if let Some(f) = p.attributed_function() {
                     prog.fns.push(f);
@@ -761,7 +786,7 @@ impl Parser {
             return;
         }
         let index = prog.traits.len();
-        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new() });
+        prog.traits.push(TraitDecl { name: name.clone(), pos, doc: None, methods: Vec::new(), derive: None });
         if !self.eat(&Tok::Newline) {
             self.unexpected(&format!("end of line after `trait {name}`"), "trait.decl.1");
             self.skip_statement();
@@ -1172,6 +1197,7 @@ impl Parser {
                 Some(Stmt::While { cond, body, pos })
             }
             Tok::Kw("for") => self.for_loop(false, pos),
+            Tok::Kw("with") => self.with_stmt(pos),
             // conc.par.5: `par for` asserts that the iterations are independent.
             Tok::Kw("par") => {
                 self.bump();
@@ -1290,7 +1316,12 @@ impl Parser {
     /// `for` (expr.comp.2).
     fn comp_clauses(&mut self) -> Option<Vec<CompFor>> {
         let mut clauses = Vec::new();
-        while self.eat_kw("for") {
+        loop {
+            // conc.par.12: `[e par for x in xs]` computes the elements on the pool.
+            let par = self.at_comp_for() && self.eat_kw("par");
+            if !self.eat_kw("for") {
+                break;
+            }
             if self.at_kw("mut") {
                 let pos = self.pos();
                 self.error_help(
@@ -1308,9 +1339,37 @@ impl Parser {
             }
             let iter = self.range()?;
             let cond = if self.eat_kw("if") { Some(self.expression()?) } else { None };
-            clauses.push(CompFor { var, var_pos, iter, cond });
+            clauses.push(CompFor { par, var, var_pos, iter, cond });
         }
         Some(clauses)
+    }
+
+    /// At `for`, or `par for`, starting a comprehension clause (expr.comp.2, conc.par.12).
+    fn at_comp_for(&self) -> bool {
+        self.at_kw("for") || (self.at_kw("par") && matches!(self.peek_at(1), Tok::Kw("for")))
+    }
+
+    /// `with m as mut x` and its block (conc.share.6), at `with`.
+    fn with_stmt(&mut self, pos: Pos) -> Option<Stmt> {
+        self.bump();
+        let mutex = self.range()?;
+        if !self.eat_kw("as") {
+            self.unexpected("`as mut NAME` after the mutex", "conc.share.6");
+            return None;
+        }
+        if !self.eat_kw("mut") {
+            let at = self.pos();
+            self.error_help(
+                "conc.share.6",
+                at,
+                "a `with` block writes its variable back to the mutex, so the variable is `mut`",
+                "write `with m as mut x`; to read the value once, use `m.get()`",
+            );
+            return None;
+        }
+        let (var, var_pos) = self.name("a variable after `as mut`", "conc.share.6")?;
+        let body = self.block("the `with` header", "conc.share.6")?;
+        Some(Stmt::With { mutex, var, var_pos, body, pos })
     }
 
     /// `value else d` or `value else return ...` (err.else.6), the loosest
@@ -1699,7 +1758,7 @@ impl Parser {
                 let mut elems = Vec::new();
                 while !self.at_sym("]") {
                     elems.push(self.expression()?);
-                    if elems.len() == 1 && self.at_kw("for") {
+                    if elems.len() == 1 && self.at_comp_for() {
                         let elem = Box::new(elems.pop()?);
                         let clauses = self.comp_clauses()?;
                         self.expect_sym("]", "`]` after the comprehension", "expr.comp.1")?;
@@ -1721,7 +1780,7 @@ impl Parser {
                 let first = self.expression()?;
                 if self.eat_sym(":") {
                     let value = self.expression()?;
-                    if self.at_kw("for") {
+                    if self.at_comp_for() {
                         let clauses = self.comp_clauses()?;
                         self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
                         let (elem, value) = (Box::new(first), Some(Box::new(value)));
@@ -1736,7 +1795,7 @@ impl Parser {
                     self.expect_sym("}", "`}` or `,` in the map", "type.coll.2")?;
                     return Some(Expr::Map(pairs, pos));
                 }
-                if self.at_kw("for") {
+                if self.at_comp_for() {
                     let clauses = self.comp_clauses()?;
                     self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
                     return Some(Expr::Comp { kind: CompKind::Set, elem: Box::new(first), value: None, clauses, pos });

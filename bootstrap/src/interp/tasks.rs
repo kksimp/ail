@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 
-use super::{Env, Failure, Flow, Interp, Trap, Value, build};
-use crate::ast::{Arg, Expr, FnDecl, Program};
+use super::{Env, Exit, Failure, Flow, Interp, Trap, Value, build};
+use crate::ast::{Arg, Block, Expr, FnDecl, Program};
 use crate::check::Resolved;
 use crate::diag::Pos;
 
@@ -539,6 +539,51 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             _ => unreachable!("checked: a method of `{}`", h.text()),
         })
+    }
+
+    /// The next value of channel `c` for `for v in ch` (conc.share.7): the
+    /// oldest value, or `None` once it is closed and empty. Waits like `recv`.
+    pub(super) fn chan_next(&mut self, c: usize, pos: Pos) -> Flow<Option<Value>> {
+        let ctx = self.ctx();
+        let (sched, me) = (Arc::clone(&ctx.sched), ctx.me);
+        let mut st = sched.lock();
+        loop {
+            let ch = &mut st.chans[c];
+            if let Some(v) = ch.items.pop_front() {
+                for w in std::mem::take(&mut ch.waiters) {
+                    Sched::wake(&mut st, w);
+                }
+                return Ok(Some(v));
+            }
+            if ch.closed {
+                return Ok(None);
+            }
+            ch.waiters.push(me);
+            st = sched.block(st, me, "a value from a channel", pos)?;
+        }
+    }
+
+    /// `with m as mut x` body (conc.share.6): take the lock, run the body
+    /// with the value in `x`, then store `x` and release it, however the
+    /// body ends. A trap releases it and keeps the value from before.
+    pub(super) fn with_block(&mut self, mutex: &'a Expr, var: &'a str, body: &'a Block, pos: Pos, env: &mut Env<'a>) -> Flow<()> {
+        let Value::Handle(h @ Handle::Mutex(m)) = self.eval(mutex, env)? else { unreachable!("checked: a mutex") };
+        let v = self.handle_method(h, "lock", &[], pos, env)?;
+        let depth = env.len();
+        env.push((var, v));
+        let r = self.block(body, env);
+        let v = env.drain(depth..).next().map(|(_, v)| v);
+        let ctx = self.ctx();
+        let mut st = ctx.sched.lock();
+        let cell = &mut st.cells[m];
+        if let (Some(v), false) = (v, matches!(r, Err(Exit::Trap(_)))) {
+            cell.value = v;
+        }
+        cell.holder = None;
+        for w in std::mem::take(&mut cell.waiters) {
+            Sched::wake(&mut st, w);
+        }
+        r.map(|_| ())
     }
 
     /// Wait for task `t` (conc.task.6): its result, or its trap.

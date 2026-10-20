@@ -275,7 +275,10 @@ and `FieldInfo` gains `attrs`; unknown names stay errors (recommended: still
 one place that says what an attribute means, and typos are caught);
 (b) any `@name(...)` on a field is allowed and passed through (shortest, but
 a typo is silently ignored); (c) no field options; a type that needs them
-writes the `impl` by hand. *Owner: AI under ADR 0076.*
+writes the `impl` by hand. *Owner: AI under ADR 0076.* **Update
+2026-10-20:** the `ToJson`/`FromJson` derives (ADR 0308) use field names as
+member names, which `examples/` needs; still open until a program needs a
+rename, with (a) recommended.
 
 ## OQ-092 — Type information in constants and compile-time assertions
 `TypeInfo` reaches only derive generators (`refl.info.2`). A compile-time
@@ -285,10 +288,12 @@ compile-time code, plus `assert` in constants as a compile error
 (recommended when a use appears: small, and still no run-time reflection);
 (b) only through derives (status quo); (c) Zig-style `@typeInfo` anywhere at
 compile time (rejected in ADR 0225 and ADR 0229). *Owner: AI under ADR 0076.*
+**Update 2026-10-20:** generators now receive `TypeInfo` (ADR 0306); no
+program needs it in a constant yet, so this stays open with (a) recommended.
 
 ## OQ-093 — Generating items other than an impl body
-Generated code is limited to the methods of the deriving `impl`
-(`ct.gen.1`). Bindings generated from a schema, or a type per table, would
+Generated code is limited to the methods of the deriving `impl` and
+associated functions of its type (`ct.gen.1`, ADR 0307). Bindings generated from a schema, or a type per table, would
 need generators that add types or functions to a module. Options: (a) defer
 until a real use appears (recommended: C headers already have ADR 0103, and
 every current need is an impl); (b) a module-level `@generate(f)` whose items
@@ -312,6 +317,8 @@ limit (simpler, but a runaway allocation takes the machine down). *Owner: AI
 under ADR 0076, measured once the evaluator counts steps.*
 
 ## OQ-096 — Showing built-in derives in `ail api --expanded`
+**Resolved** by [ADR 0309](decisions/0309-api-expanded-output.md): option (b),
+`"derived_by": "built-in"`; template text would show code that doesn't run.
 `trait.derive.1`'s `Eq`, `Ord` and `ToStr` derives are specified as if a
 prelude generator wrote them, but the bootstrap implements them natively.
 Options: (a) `--expanded` prints their equivalent AIL text from a fixed

@@ -51,21 +51,21 @@ reported but don't stop a program from running.
 | File | Stage | Spec rules enforced |
 |---|---|---|
 | `src/lexer.rs` | Text to tokens, including INDENT/DEDENT and interpolated strings | `lex.block.1–4`, `lex.stmt.1–3`, `lex.kw.1–2` (incl. `todo`), `lex.comment.*`, `lex.str.1–5`, `lex.str.7`, `lex.num.1–3` |
-| `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr`, `Hash`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–3` |
+| `src/prelude.ail` | The standard traits `Eq`, `Ord`, `ToStr`, `Hash`, `Drop` and `enum Ordering`, read before every program at line 0; then, only when the program names `Json`, `JsonMember`, `JsonError` or `parse_json` and declares none of them, the `std.json` module after its `## @module json` marker, with its `ToJson`/`FromJson` part (`## @module jsonderive`) only when the program names them; then the `derive` module (`TypeInfo`, `DeriveError`), read with `std.json`, `@derive` or its names | `trait.std.1–3`, `json.type.1`, `json.err.1`, `json.parse.1`, `json.print.1`, `json.query.1`, `json.prelude.1`, `json.query.1–4`, `json.derive.1–2`, `refl.info.1–3` |
 | `src/modules.rs` | Loads a file or package and the modules it imports; renames each module's items to qualified names; import and item-privacy errors; per-file diagnostics | `mod.unit.1–5`, `mod.use.1–6`, `mod.vis.1`, `expr.bind.5` (for imported modules) |
 | `src/parser.rs` | Tokens to syntax tree (`use`, `pub` and qualified names in `src/parser/modules.rs`: `mod.use.1`, `mod.vis.1–2`, `mod.unit.4`) | `mod.use.1`, `gram.fn.1–2`, `gram.list.1`, `gram.generic.1`, `gram.syntax.1`, `gram.attr.1–2`, `gen.decl.1`, `gen.bound.1`, `gen.method.1–3`, `gen.infer.2`, `trait.decl.1–2`, `trait.impl.1`, `trait.any.1`, `type.struct.1–3`, `type.enum.1–2`, `type.opt.2`, `err.decl.1`, `err.type.1–2`, `err.type.5`, `err.else.1–3`, `expr.bind.1–3`, `expr.if.1`, `expr.if.3`, `expr.if.5–6`, `expr.if.8`, `expr.loop.1–3`, `expr.loop.6`, `expr.match.1`, `expr.match.6`, `expr.prec.1–2`, `expr.op.1–3`, `expr.comp.1–2` |
 | `src/packages.rs` | Reads `ail.pkg` manifests of the root and every path dependency, maps `use` paths to packages and directories, adds manifests to the program's files; after checking, checks each package's code against its capability grants | `mod.pkg.1–6`, `eff.cap.2`, `eff.cap.4–5` |
 | `src/check.rs` | Names, types, places, control flow | `mod.main.1`, `mod.main.3`, `mod.unit.1`, `expr.name.1`, `expr.hole.1`, `expr.bind.1–6`, `expr.block.2–3`, `expr.call.1–2`, `expr.if.2`, `expr.if.4`, `expr.loop.3–5`, `expr.match.2–5`, `expr.op.2–3`, `type.bool.1`, `type.coll.2–7`, `type.coll.14`, `type.str.2–3`, `type.str.13–14`, `type.str.11`, `type.struct.3–6`, `type.enum.3`, `type.enum.5`, `trait.method.1–5`, `trait.op.1`, `trait.op.3`, `own.param.1–2`, `own.excl.1–2`, `own.excl.5`, `type.opt.4–5`, `type.enum.6`, `type.str.4–5`, `expr.loop.6`, `expr.match.6`, `err.decl.1–3`, `err.type.1–2`, `err.type.5–6`, `err.prop.1–3`, `err.use.1–2`, `err.else.1–3`, `err.ctx.2`, `err.text.1`, `expr.if.5–6`, `expr.cmp.1`, `gen.decl.1–2`, `gen.bound.1–4`, `gen.method.1–3`, `gen.infer.1–2`, `gen.anon.1`, `trait.decl.1–2`, `trait.impl.1–6`, `trait.self.1`, `trait.res.1`, `trait.any.1–5`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–4` (traits and generics in `src/check/traits.rs`), `ct.const.1`, `ct.const.3`, `test.attr.1–4`, `test.assert.2` (in `src/check/testing.rs`), `mod.vis.1`, `mod.vis.3` (private fields and methods, in `src/check/privacy.rs`), `test.prop.2`, `expr.comp.1–4`, `expr.match.10`, `src/check/comprehension.rs`, `err.prop.1–4`, `expr.key.1–3`, `src/check/keyfn.rs` |
 | `src/check/ownership.rs`, `src/check/moves.rs` | Unique types, `move`, `ref` and `defer` while typing; then use after move on every path | `own.uniq.1–2`, `own.uniq.5–6`, `own.move.2–5`, `own.ref.1`, `own.ref.3–6`, `own.defer.3`, `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3` |
 | `src/check/effects.rs` | Effect inference over the call graph, `@pure`, `--deny`, `ail effects`, pure contract conditions, compile-time-safe constants | `eff.infer.1–6`, `eff.pure.1`, `eff.cap.1–3`, `contract.decl.3`, `ct.const.2` |
-| `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel` | `conc.par.2–6` |
-| `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–5` |
+| `src/check/parallel.rs` | Which `for` loops have independent iterations; `par for` errors; `ail effects --parallel`; `par for` comprehensions | `conc.par.2–6`, `conc.par.12` |
+| `src/check/conc.rs` | Types of `spawn`, `Task`, `TaskGroup`, `Channel`, `Mutex`, `with`; each task handle consumed once on every path | `conc.task.1`, `conc.task.5–6`, `conc.task.8`, `conc.share.1`, `conc.share.4–6` |
 | `src/interp/limits.rs` | `--timeout`, `--max-memory`, `--max-steps` and `ail test --coverage`; one `hook` flag tested per statement, off by default | `run.limit.1–4`, `test.cover.1–3`, `test.run.5` |
 | `src/interp/trace.rs` | `ail run --trace`, `--trace-limit`, `--watch`, and trap snapshots (`--verbose`, `--json`); hooks in `interp.rs`, `contracts.rs`, `stdlib.rs`, `tasks.rs` test one byte when off | `trace.run.1–5`, `trace.val.1–2`, `trace.watch.1–3`, `trace.test.1–2`, `trace.snap.1–4` |
-| `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, mutexes, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–5` |
+| `src/interp/tasks.rs` | Tasks: one thread each, one running at a time, in a fixed order (ADR 0186); channels, `for v in ch`, mutexes, `with`, groups, deadlock traps | `conc.task.1–9`, `conc.share.1–7` |
 | `src/parser/contracts.rs`, `src/check/contracts.rs`, `src/interp/contracts.rs` | `requires`, `ensures` (`result`, `old(e)`), trait inheritance and struct `invariant`: parsing, typing, runtime checks and `--no-contracts` | `contract.decl.1–3`, `contract.req.1`, `contract.ens.1–3`, `contract.inh.1–3`, `contract.inv.1–3`, `contract.run.1–3`, `contract.api.1–2` |
 | `src/parser/messages.rs`, `src/check/absent.rs`, `src/interp/absent.rs` | Messages on error types (turned into an `impl ToStr` at parse time); `?` on an optional failing with the prelude's `Absent` where errors are inferred | `err.msg.1–2`, `err.prop.5` |
-| `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–11` |
+| `src/interp/parallel.rs` | The thread pool: `par for` (and `run --parallel` loops) on `min(cores, 8)` workers with copied values, pure tasks on their own threads, `par for` comprehensions, rerun in order on a trap | `conc.par.1`, `conc.par.4`, `conc.par.8–12` |
 | `src/interp.rs` | Runs checked programs | `mod.main.2–3`, `expr.hole.2`, `own.val.1–2`, `own.excl.3–4`, `expr.arith.1`, `expr.arith.3`, `expr.arith.5`, `expr.loop.4`, `expr.loop.6`, `type.coll.4`, `type.coll.14`, `type.str.4–5`, `type.str.11`, `type.str.13–14`, `err.prop.1`, `err.else.1–3`, `err.ctx.1–3`, `err.text.1`, `err.trap.1`, `err.trap.3`, `gen.impl.1`, `trait.any.1`, `trait.std.1–4`, `trait.derive.1`, `trait.auto.1–2`, `test.assert.1`, `test.run.1–4` (in `src/interp/testing.rs`), `test.prop.1`, `test.prop.3–5` (in `src/interp/prop.rs`), `expr.comp.3–4`, `own.uniq.3–4`, `own.uniq.7`, `own.defer.1–2`, `own.ref.1–7` |
 | `src/doctest.rs` | Finds ```` ```ail ```` blocks in `##` doc comments and appends them to the source as tests for `ail test` | `test.doc.1–3` |
 | `src/fasthash.rs` | Fast hasher for the interpreter's name and position tables | ADR 0175 |
@@ -85,6 +85,7 @@ reported but don't stop a program from running.
 | `src/fix.rs` | `ail fix`: applies the first fix of each diagnostic, last to first, re-checks up to 5 rounds | none (non-normative): `fix.*` in [semantic-api.md](../docs/design/semantic-api.md), ADRs 0202–0205 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
 | `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
+| `src/derive.rs`, `src/parser/derive.rs`, `src/interp/generate.rs`, `src/api/expanded.rs` | Derive generators: `@derive(f) trait`; while loading, runs each empty `impl`'s generator on a wrapper program and splices its text in as a `gen:impl:T.Trait` file; reports generated-code problems at the `impl`; `ail api --expanded` | `ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3` (ADRs 0306–0309) |
 | `src/api/card.rs` | `ail api --card`: a program's card under a token budget | `api.card.1–5` |
 | `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1`, `api.pkg.1–4` |
 | `src/check/errpaths.rs`, `src/api/errors.rs` | failure paths and error sets the checker records; `ail check --errors`, `fails_with` in `ail api`; the `err.ret.*` diagnostics and error fixes | `err.ret.1–3`, `err.fix.1`, `err.api.1`, `err.paths.1` |
@@ -127,7 +128,11 @@ package's are reported file by file.
   `ToStr`, and `impl`s for `int`, `float`, `str`, `char`, `bool` and `List`;
   top-level constants `NAME := expr`, which may call compile-time-safe
   functions and methods (`ct.const.1–3`; `if`, `match` and `?` in a
-  constant are `bootstrap.unsupported`: call a function instead)
+  constant are `bootstrap.unsupported`: call a function instead);
+  derive generators: `@derive(f) trait X` and empty `impl X for T`, with
+  `TypeInfo`, the `ToJson` and `FromJson` derives, and `ail api --expanded`
+  (`ct.derive.1–4`, `ct.gen.1–4`, `refl.info.1–3`, `json.derive.1–2`; step
+  limits aren't counted)
 - **Statements:** `x := v`, `mut x := v`, `x := v else fallback`,
   `x := v else return ...`, `x := v else` or `else err` with a block,
   `p = v`, `p op= v` (for `+ - * / %`), `if`/`elif`/`else`, including
@@ -229,6 +234,9 @@ nothing has that effect.
 Tasks (ADRs 0186–0189): `t := spawn f(x)` then `t.wait()?` (`T ! Trapped`),
 `TaskGroup()` with `add` and `wait_all`, `Channel[T](n)` with `send`, `recv`
 and `close`, and `Mutex(v)` with `get`, `set`, `swap`, `lock` and `unlock`.
+`for v in ch` receives until the channel closes (`conc.share.7`), and
+`with m as mut x` holds a mutex for a block and stores `x` back
+(`conc.share.6`) (ADRs 0300–0301).
 Tasks run one at a time in a fixed order, so output repeats; a deadlock
 traps (`conc.task.7`). `spawn` takes a call of a declared function, without
 `mut` arguments.
@@ -240,7 +248,8 @@ provable conflict is a `conc.par.5` error. A `par for` (and, with
 `ail run --parallel`, every proven loop) runs on a pool of `min(cores, 8)`
 threads (`AIL_THREADS=N`; `AIL_PAR_LOG=1` reports it), and tasks that touch
 no handle run on their own threads (ADRs 0272–0275); the result is always
-the sequential one. Float `xs.sum()` adds in the fixed tree of
+the sequential one. `[f(x) par for x in xs]` computes a list's elements on
+the same pool (`conc.par.12`, ADR 0302). Float `xs.sum()` adds in the fixed tree of
 `type.coll.12`.
 
 Sized numbers (ADRs 0194–0195): `i8 i16 i32 u8 u16 u32 u64 f32` with literals typed by

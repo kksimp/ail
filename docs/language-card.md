@@ -194,6 +194,10 @@ fn main()
 - `impl Ord for Version` with no body compares the fields in order. `<` and
   friends work on `int`, `str`, lists and `Ord` types. Customise with
   `impl ToStr` (`fn to_str`), `impl Eq` (`fn eq`), or `fn cmp`.
+- `impl ToJson for T` and `impl FromJson for T` with no body derive
+  `t.to_json()` and `T.from_json(j) T ! JsonError` (fields by name). A trait
+  `@derive(f) trait X` names a generator `fn f(t TypeInfo) str ! DeriveError`
+  that writes an empty `impl`'s methods; `ail api --expanded` shows them.
 
 ## Control flow
 
@@ -331,7 +335,12 @@ g := TaskGroup()            # tasks returning nothing; waited at block end
 g.add(spawn work(2))
 ch := Channel[int](8)       # send waits while full; close() when done
 v := ch.recv() else break   # none once closed and empty
-m := Mutex(0)               # get, set, swap; x := m.lock() then m.unlock(x + 1)
+for v in ch                 # receives until closed and empty
+    print(v)
+m := Mutex(0)               # get, set, swap
+with m as mut x             # holds m; stores x back on any exit
+    x += 1
+ys := [f(x) par for x in xs]   # elements on all cores, in order
 ```
 
 Wait or `add` each task exactly once, on every path. A deadlock traps.

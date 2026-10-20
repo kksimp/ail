@@ -3,8 +3,8 @@
 Chapter key: `refl`
 
 > **Status:** Drafted (skeleton). Specified: the type information derive
-> generators receive, and the absence of run-time reflection. Not
-> implemented in the bootstrap. Design note:
+> generators receive, and the absence of run-time reflection. The bootstrap
+> implements `refl.info.1–3` (ADR 0306). Design note:
 > [reflection.md](../design/reflection.md).
 
 ## Type information
@@ -13,19 +13,23 @@ Chapter key: `refl`
 and `VariantInfo`. A `TypeInfo` describes one struct or enum as declared:
 `name`, `id` (its `ail api` id, `api.id.1`), `module` (the declaring
 module's path, empty at the package root), `kind` (`TypeKind.Struct` or
-`TypeKind.Enum`), `error` (whether it is an error type), `params` (generic
+`TypeKind.Enum`), `is_error` (whether it is an error type; `error` is a
+keyword, ADR 0306), `params` (generic
 parameter names in order), `fields` (a struct's fields) and `variants` (an
 enum's variants). A `FieldInfo` has `name`, `type_text` and `public`; a
 `VariantInfo` has `name` and `fields`. Fields and variants are in
-declaration order, not layout order (ADR 0013). *(ADR 0229)*
+declaration order, not layout order (ADR 0013). The prelude also declares
+`error struct DeriveError` with `message str`. They are read when the program
+writes `@derive`, names one of them, or uses `std.json`. *(ADR 0229,
+ADR 0306)*
 
-```ail skip=bootstrap
+```ail fragment
 struct TypeInfo
     name str
     id str
     module str
     kind TypeKind
-    error bool
+    is_error bool
     params List[str]
     fields List[FieldInfo]
     variants List[VariantInfo]
