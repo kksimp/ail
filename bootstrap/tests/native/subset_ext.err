@@ -1,3 +1,3 @@
 bootstrap/tests/native/subset_ext.ail:5:1: error[native.subset.1]: constant `SCALE`: only literals, other constants and arithmetic on them are in the native subset yet
 bootstrap/tests/native/subset_ext.ail:8:5: error[native.subset.1]: `else` on a binding isn't in the native subset yet, but for `s.to_int()`
-bootstrap/tests/native/subset_ext.ail:13:11: error[native.subset.1]: not in the native subset yet: format specifications other than `.N` on a float
+bootstrap/tests/native/subset_ext.ail:13:11: error[native.subset.1]: `x` on a `float`

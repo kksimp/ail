@@ -26,13 +26,14 @@ on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
 value), `while`, `for` over a range or a list, `break`, `continue`,
 `return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
 field names in a method), method calls, `print` of numbers, strings and
-lists of them or an interpolation of them (with
-`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
-methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-and the bit operations of expr.bit.1. Any other construct is reported at its
-position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392)*
+lists of them or an interpolation of them, interpolation as a value, `char`
+values and literals, `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
+`env.args()`, `s.to_int() else ...` as a binding's value, and the methods
+`abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, the bit
+operations of expr.bit.1, and those of native.str.1. Any other construct is
+reported at its position under this rule, all of them at once, and nothing is
+built.
+*(ADRs 0384, 0390, 0392, 0565, 0566)*
 
 ```ail
 fn steps(n int) int
@@ -46,6 +47,23 @@ fn steps(n int) int
 fn main()
     print("27 takes {steps(27)} steps")
 ```
+
+**native.str.1** — In a native program `str` and `char` behave as
+type.str.3-14 and type.char.1-4 say, with the interpreter's results and
+traps. The subset has: interpolation as a value, with `{x:.N}`, `{x:x}`,
+width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
+`str` and on `char`; on `str`, `len`, `byte_len`, `chars` (a `List[char]`),
+`lines`, `trim`, `to_upper`, `to_lower`, `to_str`, `contains`,
+`starts_with`, `ends_with` and `split` (each taking a `str` or a `char`),
+`slice`, `replace`, `repeat`, `pad_left`, `pad_right`; on `char`, `code`,
+`to_str`, `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`,
+`is_lower`, `to_upper`, `to_lower`; `to_str` on `int`, `float` and `bool`;
+`print` of a `char`, a `List[char]` and a `List[str]`. The methods whose
+result is an optional (`find`, `char_at`, `strip_prefix`, `strip_suffix`,
+`to_float`, `to_digit`, `char.from_code`) are reported under native.subset.1.
+The character predicates and case mappings are those of Unicode for
+U+0000 to U+00FF and approximate above that (OQ-172). *(ADRs 0565, 0566,
+0567)*
 
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first

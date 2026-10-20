@@ -11,6 +11,8 @@ pub enum Ty
     Float
     Bool
     Str
+    ## A Unicode scalar value, in a register like an `int` (type.char.1).
+    Char
     ## A list of numbers; `elem` is `Unknown` until the first use types it.
     List(elem Ty)
     ## A struct object (native-abi.md §2): one 8-byte slot per field.
@@ -45,6 +47,7 @@ pub fn Ty.name(self) str
         Float => "float"
         Bool => "bool"
         Str => "str"
+        Char => "char"
         List(e) => "List[{e.name()}]"
         Struct(n) => n
         Unknown => "?"

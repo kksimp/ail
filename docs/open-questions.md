@@ -328,3 +328,22 @@ expr.call.1).
 
 **Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md)
 (option a: an `if` operand is written in parentheses, expr.if.8).
+
+## OQ-172 — Unicode tables for the native `char` predicates and case mapping
+
+Native `c.is_alpha()`, `is_upper()`, `is_lower()`, `to_upper()`, `to_lower()`
+and `s.to_upper()`/`to_lower()` are exact for U+0000 to U+00FF and
+approximate above (ADR 0567); the interpreter uses Rust's tables.
+
+- **a. Generate range tables from the interpreter** (recommended): a generator
+  in AIL runs `ail run` over every scalar value and writes
+  `compiler/rt/native/unicode.ail` (about 30 KB of range data in string
+  constants, binary-searched). *Pros:* exact by construction, regenerated when
+  the pinned Rust moves. *Cons:* data in every executable (or only linked when
+  used, once the linker drops unused runtime functions).
+- **b. Trap above U+00FF.** *Pros:* never silently wrong. *Cons:* a program
+  with Greek or Cyrillic text can't be built natively.
+- **c. Leave the approximation.** *Pros:* nothing to do. *Cons:* `ail build`
+  and `ail run` differ on some non-Latin text.
+
+*Recommendation:* a, as the next slice of lane 172.

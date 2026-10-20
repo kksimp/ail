@@ -10,6 +10,6 @@ fn pick(s str) float
 
 fn main()
     x := 2.5
-    print("{x:.2} {x:>8}")
+    print("{x:.2} {x:x}")
     print(LIMIT)
     print(pick("1.5"))

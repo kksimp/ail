@@ -46,7 +46,7 @@ one byte, 0 or 1 (ADR 0391).
 | `int` | `i64` |
 | `float` | `f64` (IEEE 754 binary64) |
 | `bool` | `i64`, 0 or 1 |
-| `char` | `i64`, a Unicode scalar value |
+| `char` | `i64`, a Unicode scalar value; `List[char]` has 8-byte slots (ADR 0566) |
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
 
@@ -214,6 +214,18 @@ The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
 `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
+
+**Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
+adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
+`str_float`, `str_fixed`, `str_char`, `str_pad`, `str_pad_checked`,
+`str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
+(character index or -1; waits for optionals), `str_replace`, `str_split`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
+`out_char`, `out_list_char`, and `str_trap`. A function that
+can trap takes the constant head and excerpt as its last arguments (`str`
+values the lowering builds from the call's position). A character crosses the
+runtime as an `int`.
 
 The table below is the first draft:
 

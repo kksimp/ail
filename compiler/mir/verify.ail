@@ -84,7 +84,9 @@ fn check_types(f Func, i Inst, mut errs List[str])
     if want == ""
         return
     for a in i.args
-        if f.vals[a].name() != want
+        # A `char` is an `int` in a register (type.char.1).
+        have := if f.vals[a] == Ty.Char then "int" else f.vals[a].name()
+        if have != want
             errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
 
 ## `dom[b][d]`: block `d` dominates block `b` (the iterative data-flow
