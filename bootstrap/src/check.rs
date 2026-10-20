@@ -18,6 +18,7 @@
 //! which `impl` implements each trait for each type.
 
 mod absent;
+mod assoc;
 mod builtins;
 pub mod conc;
 mod contracts;
@@ -40,7 +41,8 @@ use crate::fasthash::FastMap as HashMap;
 
 use builtins::builtin;
 pub use errpaths::FailPath;
-use traits::{Cand, bind, bound, subst, subst_unknown};
+use traits::{Cand, bind, bound, subst_unknown};
+pub(crate) use traits::{bind as bind_types, con_of, subst};
 
 use crate::ast::{
     Arg, ArgKind, BinOp, Block, Cond, Else, Expr, Field, FnDecl, GenericParam, InterpPart, Literal, Owner, PathStep,
@@ -209,6 +211,19 @@ pub struct Resolved {
     pub ref_writes: FastSet<Pos>,
     /// Types of locals and expressions, recorded for `ail api` only (api.loc.1).
     pub facts: facts::Facts,
+    /// `T.name(...)` and `Type.name(...)` calls of a trait's associated
+    /// function, by the position of the name: the trait and the type whose
+    /// implementation runs, in terms of the caller's type parameters
+    /// (trait.assoc.2-4).
+    pub assoc_calls: FastMap<Pos, (usize, Ty)>,
+    /// The type arguments of calls whose type parameters are bound by a
+    /// trait with associated functions, by the call's position (trait.assoc.3).
+    pub type_args: FastMap<Pos, Vec<(usize, Ty)>>,
+    /// Each generic `impl` block's target type, by index, so the interpreter
+    /// can bind its parameters from a concrete type (trait.assoc.3).
+    pub impl_types: FastMap<usize, Ty>,
+    /// Each trait's `Self` parameter, by trait index (trait.self.1).
+    pub trait_self: Vec<usize>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -242,6 +257,8 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         enum_params: Vec::new(),
         list_param: 0,
         trait_self: Vec::new(),
+        supers: Vec::new(),
+        last_binds: Vec::new(),
         impl_info: Vec::new(),
         impl_of: HashMap::default(),
         std: Std::default(),
@@ -413,6 +430,10 @@ struct Checker<'p> {
     list_param: usize,
     /// Each trait's `Self` parameter (trait.self.1).
     trait_self: Vec<usize>,
+    /// Each trait's supertraits, transitively, without itself (trait.super.1-3).
+    supers: Vec<Vec<usize>>,
+    /// The type arguments the last checked call bound (trait.assoc.4).
+    last_binds: Vec<(usize, Ty)>,
     impl_info: Vec<ImplInfo>,
     impl_of: HashMap<(usize, Con), usize>,
     std: Std,
@@ -786,9 +807,6 @@ impl<'p> Checker<'p> {
                 ret = Ty::Unit;
             }
             if let Within::Trait(_) = f.within {
-                if f.receiver.is_none() {
-                    self.unsupported(f.pos, "a trait function without `self` is not designed yet (OQ-039)");
-                }
                 if !f.generics.is_empty() {
                     self.unsupported(
                         f.pos,
@@ -3492,6 +3510,7 @@ impl<'p> Checker<'p> {
             );
         }
         binds.extend(missing.into_iter().map(|m| (m, Ty::Err)));
+        self.note_type_args(vars, binds, pos);
         for &v in vars {
             if self.trait_self.contains(&v) {
                 continue;
@@ -3744,6 +3763,11 @@ impl<'p> Checker<'p> {
             {
                 return t;
             }
+            if targs.is_none()
+                && let Some(t) = self.param_assoc_call(tn, name, pos, args, expect)
+            {
+                return t;
+            }
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
@@ -3833,6 +3857,17 @@ impl<'p> Checker<'p> {
                         self.check_call(name, &sig, binds, args, Some(recv), pos, expect)
                     }
                 }
+            }
+            [Cand::Trait(tr)] if self.trait_method(*tr, name).is_some_and(|m| self.prog.fns[m].receiver.is_none()) => {
+                self.args_only(args);
+                let tn = self.ty_name(&rt);
+                self.error_help(
+                    "trait.assoc.2",
+                    pos,
+                    format!("`{name}` is an associated function of `{}`, not a method", self.prog.traits[*tr].name),
+                    format!("call it on the type: `{tn}.{name}(...)`"),
+                );
+                Ty::Err
             }
             [Cand::Trait(tr)] => self.trait_call(*tr, &rt, recv, name, pos, args, expect),
             _ => {
@@ -3962,6 +3997,10 @@ impl<'p> Checker<'p> {
             return self.variant_literal(e, v, explicit, args, pos, expect);
         }
         let Some(i) = self.method_index(tn, name) else {
+            let explicit = targs.map(|a| self.explicit_args(tn, &owner, a, pos));
+            if let Some(t) = self.impl_assoc_call(def, explicit, name, pos, args, expect) {
+                return t;
+            }
             self.args_only(args);
             self.error("expr.name.1", pos, format!("`{tn}` has no associated function `{name}`"));
             return Ty::Err;

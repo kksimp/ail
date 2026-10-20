@@ -1,0 +1,18 @@
+## `T.zero()` needs a bound that declares it, and an associated function
+## isn't called on a value (trait.assoc.2).
+trait Zero
+    fn zero() Self
+
+struct P
+    n int
+
+impl Zero for P
+    fn zero() P
+        P(n: 0)
+
+fn bad[T]() T
+    T.zero()
+
+fn main()
+    print(P(n: 1).zero())
+    print(bad[P]())

@@ -158,23 +158,7 @@ The 28 design topics in [status.md](status.md) each still need their own
 questions. They will be opened topic by topic during Stage 1.
 
 ## OQ-039 — Supertraits and associated functions in traits
-How does a user trait require another (`Ord` requires `Eq`, ADR 0127), and
-can a trait declare functions without `self`, called as `T.zero()` in generic
-code? Options for supertraits:
-- `trait Ord Eq`, mirroring constraints (`[T Eq]`): consistent, but reads
-  oddly;
-- `trait Ord: Eq` (Rust, Swift): familiar, but AIL writes no `:` in
-  declarations (ADR 0037).
-
-Associated functions in traits need the concrete type at run time in shared
-generic code (ADR 0080), as Swift's witness tables provide. To be decided
-with the standard library (`Default`, numeric `zero`). `Hash` already
-behaves as if it required `Eq` (a `[T Hash]` bound allows `==`,
-[ADR 0133](decisions/0133-automatic-hash.md)), so the answer must cover it.
-`FromJson` for generic types (`Pair[A, B]`) waits on this: its derived
-`Pair.from_json` must call `A.from_json` through a bound
-([ADR 0343](decisions/0343-json-derives-maps-optionals-enum-payloads.md)).
-*Owner: AI under ADR 0076.*
+**Resolved** by [ADR 0348](decisions/0348-supertraits.md) (`trait Ord Eq`) and [ADR 0349](decisions/0349-associated-functions-in-traits.md) (`fn zero() Self`, called as `T.zero()`).
 
 ## OQ-040 — `else` as an expression
 **Resolved** by [ADR 0144](decisions/0144-else-as-an-expression.md) (`e else d` is the loosest operator).

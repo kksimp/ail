@@ -157,6 +157,9 @@ pub struct TraitDecl {
     /// `@derive(f)` before `trait`: the derive generator's name and where it
     /// is written (ct.derive.1).
     pub derive: Option<(String, Pos)>,
+    /// `trait Ord Eq`: the supertraits every implementing type must also
+    /// implement, joined with `+` (trait.super.1).
+    pub supers: Vec<(String, Pos)>,
 }
 
 /// `impl Trait for Type`, optionally with an indented block of functions

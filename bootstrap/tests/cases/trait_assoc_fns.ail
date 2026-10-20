@@ -1,0 +1,36 @@
+## Trait functions without `self`, called as `T.zero()` in generic code and
+## `Type.zero()` on a type; a default body calls `Self.zero()`
+## (trait.assoc.1-4, ADR 0349).
+trait Zero
+    fn zero() Self
+    fn zeros(n int) List[Self]
+        [Self.zero() for _ in 0..n]
+
+struct Pair[A, B]
+    a A
+    b B
+
+impl Zero for int
+    fn zero() int
+        0
+
+impl Zero for str
+    fn zero() str
+        ""
+
+impl Zero for Pair[A Zero, B Zero]
+    fn zero() Pair[A, B]
+        Pair(a: A.zero(), b: B.zero())
+
+fn one[T Zero]() T
+    T.zero()
+
+fn two[T Zero]() List[T]
+    [one(), one[T]()]
+
+fn main()
+    print(Pair[int, str].zero())
+    print(one[Pair[str, Pair[int, int]]]())
+    print(two[Pair[int, str]]())
+    print(Pair[str, int].zeros(2))
+    print(1 + one[int]())

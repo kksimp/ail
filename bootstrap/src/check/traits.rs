@@ -19,7 +19,7 @@ pub(super) enum Cand {
 }
 
 /// Replace the type parameters bound in `binds`.
-pub(super) fn subst(t: &Ty, binds: &[(usize, Ty)]) -> Ty {
+pub(crate) fn subst(t: &Ty, binds: &[(usize, Ty)]) -> Ty {
     map_params(t, &|p| binds.iter().find(|(q, _)| *q == p).map(|(_, t)| t.clone()))
 }
 
@@ -54,7 +54,7 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
 /// Infer the parameters among `vars` that `pattern` mentions from the type
 /// `actual` of a value given for it (gen.infer.1). The first binding wins;
 /// later mismatches are reported by the caller.
-pub(super) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(usize, Ty)>) {
+pub(crate) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(usize, Ty)>) {
     match (pattern, actual) {
         (_, Ty::Err | Ty::Never | Ty::Unit) => {}
         (Ty::Param(p), a) if vars.contains(p) => {
@@ -100,7 +100,7 @@ fn mentions(t: &Ty, p: usize) -> bool {
 }
 
 /// The type constructor of a type that can have an `impl` (trait.impl.6).
-pub(super) fn con_of(t: &Ty) -> Option<Con> {
+pub(crate) fn con_of(t: &Ty) -> Option<Con> {
     Some(match t {
         Ty::Int => Con::Int,
         Ty::Float => Con::Float,
@@ -132,6 +132,7 @@ impl<'p> Checker<'p> {
             }
             let self_param = self.new_param("Self", vec![i]);
             self.trait_self.push(self_param);
+            self.resolved.trait_self.push(self_param);
             if is_prelude(t.pos) {
                 match name {
                     "Eq" => self.std.eq = i,
@@ -149,6 +150,44 @@ impl<'p> Checker<'p> {
                 }
             }
         }
+        self.collect_supers();
+    }
+
+    /// Resolve `trait Ord Eq` (trait.super.1): each trait's supertraits,
+    /// transitively. A trait that requires itself is an error.
+    fn collect_supers(&mut self) {
+        let prog = self.prog;
+        let direct: Vec<Vec<usize>> = prog
+            .traits
+            .iter()
+            .map(|t| t.supers.iter().filter_map(|(n, p)| self.trait_named(n, *p, "trait.super.1")).collect())
+            .collect();
+        for (i, t) in prog.traits.iter().enumerate() {
+            let mut all: Vec<usize> = Vec::new();
+            let mut todo = direct[i].clone();
+            while let Some(s) = todo.pop() {
+                if !all.contains(&s) {
+                    all.push(s);
+                    todo.extend(direct[s].iter().copied());
+                }
+            }
+            if all.contains(&i) {
+                self.error_help(
+                    "trait.super.1",
+                    t.pos,
+                    format!("`{}` requires itself through its supertraits", t.name),
+                    "remove one of the supertraits so they don't form a cycle",
+                );
+                all.retain(|&s| s != i);
+            }
+            self.supers.push(all);
+        }
+    }
+
+    /// Whether a bound `b` provides trait `tr`: it is `tr` or requires it
+    /// (gen.bound.2, trait.super.3).
+    pub(super) fn provides(&self, b: usize, tr: usize) -> bool {
+        b == tr || self.supers.get(b).is_some_and(|s| s.contains(&tr))
     }
 
     /// Resolve each `impl` block's trait and type, and register it
@@ -233,6 +272,9 @@ impl<'p> Checker<'p> {
                     self.impl_of.insert((t, c), self.impl_info.len());
                 }
             }
+            if !params.is_empty() {
+                self.resolved.impl_types.insert(self.impl_info.len(), target.clone());
+            }
             self.impl_info.push(ImplInfo { tr, target, params });
         }
     }
@@ -261,7 +303,7 @@ impl<'p> Checker<'p> {
             Ty::Param(p) => self.tparams[*p]
                 .bounds
                 .iter()
-                .any(|&b| b == tr || (tr == eq && (b == self.std.ord || b == self.std.hash))),
+                .any(|&b| self.provides(b, tr) || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
             // own.ref.6: references compare by identity, and aren't keys or ordered.
             Ty::Ref(_) => tr == eq,
@@ -599,6 +641,19 @@ impl<'p> Checker<'p> {
             if tr == self.std.ord && !self.implements(&target, self.std.eq) {
                 let msg = format!("{} implements `Ord`, so it must also support `==`", self.show(&target));
                 self.error("trait.std.2", imp.pos, msg);
+            }
+            // trait.super.2: an `impl` of a trait needs its supertraits'.
+            for s in self.supers[tr].clone() {
+                if (tr == self.std.ord && s == self.std.eq) || self.implements(&target, s) {
+                    continue;
+                }
+                let (tn, sn) = (&trait_decl.name, &prog.traits[s].name);
+                self.error_help(
+                    "trait.super.2",
+                    imp.pos,
+                    format!("{} implements `{tn}`, which requires `{sn}`, but it doesn't implement `{sn}`", self.show(&target)),
+                    format!("add `impl {sn} for {}`", imp.target.name),
+                );
             }
         }
     }

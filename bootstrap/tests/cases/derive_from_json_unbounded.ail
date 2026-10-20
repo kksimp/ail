@@ -1,0 +1,10 @@
+## A generic type derives FromJson only with `FromJson` bounds on its
+## parameters: the derived code calls `A.from_json` (trait.assoc.2).
+struct Pair[A, B]
+    first A
+    second B
+
+impl FromJson for Pair[A, B]
+
+fn main()
+    print(1)
