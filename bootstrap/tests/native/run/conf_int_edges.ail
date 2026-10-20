@@ -1,0 +1,31 @@
+# Integer edges that do not trap: the smallest int divided or taken modulo 1,
+# negative divisors, zero dividends, and the largest and smallest values.
+fn main()
+    lo := -9223372036854775807 - 1
+    hi := 9223372036854775807
+    print(lo / 1)
+    print(lo % 1)
+    print(lo + 0)
+    print(hi - 0)
+    print(-hi)
+    print(-hi - 1)
+    print(lo + hi)
+    print(hi * 0)
+    print(hi / hi)
+    print(lo / lo)
+    print(lo % lo)
+    print((lo + 1).abs())
+    print(-7 / 2)
+    print(7 / -2)
+    print(-7 % 2)
+    print(7 % -2)
+    print(0 / -5)
+    print(0 % 5)
+    print(hi % -1)
+    print(lo.to_float())
+    print(hi.min(lo))
+    print(hi.max(lo))
+    mut acc := 0
+    for x in [hi, lo, 5, -5]
+        acc = acc.bit_xor(x)
+    print(acc)
