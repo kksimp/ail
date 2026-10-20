@@ -71,29 +71,7 @@ pub struct Effects<'p> {
 impl<'p> Effects<'p> {
     pub fn infer(prog: &'p Program, resolved: &Resolved) -> Self {
         let nodes = prog.fns.len();
-        let mut w = Walker {
-            prog,
-            resolved,
-            fns: HashMap::new(),
-            std_impls: Vec::new(),
-            direct: BTreeMap::new(),
-            calls: Vec::new(),
-        };
-        for (i, f) in prog.fns.iter().enumerate() {
-            if f.owner.is_none() && f.within == Within::TopLevel {
-                w.fns.insert(f.name.as_str(), i);
-            }
-        }
-        // eff.infer.5: operators, interpolation, `print` and the built-in
-        // collection methods call the standard traits' implementations.
-        let std = resolved.std;
-        if !prog.traits.is_empty() {
-            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
-                w.std_impls.extend(implementations(prog, tr, name));
-            }
-            w.std_impls.sort_unstable();
-            w.std_impls.dedup();
-        }
+        let mut w = Walker::new(prog, resolved);
         let mut direct = Vec::with_capacity(nodes);
         let mut calls = Vec::with_capacity(nodes);
         for f in &prog.fns {
@@ -105,8 +83,8 @@ impl<'p> Effects<'p> {
             direct.push(std::mem::take(&mut w.direct));
             calls.push(std::mem::take(&mut w.calls));
         }
-        // Constants need no walk: a constant expression calls no function
-        // and runs no user code (mod.const.2-3, ADR 0132).
+        // Constants add nothing: they are computed at compile time, and
+        // `check_constants` keeps what they call free of effects (ct.const.2).
         // eff.infer.3: the least fixed point.
         let mut sets: Vec<BTreeSet<&'static str>> = direct.iter().map(|d| d.keys().copied().collect()).collect();
         loop {
@@ -227,6 +205,62 @@ pub fn check_pure(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     diags
 }
 
+/// ct.const.2 (ADR 0225): a constant is computed at compile time, so
+/// everything its value may call must be compile-time-safe: no `io`,
+/// `unsafe`, `spawn` or capability. One diagnostic per constant, naming each
+/// chain of calls.
+pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
+    if prog.consts.is_empty() {
+        return Vec::new();
+    }
+    let fx = Effects::infer(prog, resolved);
+    let mut w = Walker::new(prog, resolved);
+    let mut diags = Vec::new();
+    for c in &prog.consts {
+        w.direct = BTreeMap::new();
+        w.calls = Vec::new();
+        w.expr(&c.value);
+        // Each forbidden effect with the chain that gives it, grouped by chain.
+        let mut groups: Vec<(Vec<&str>, String)> = Vec::new();
+        let mut note = |e: &'static str, chain: String| match groups.iter_mut().find(|(_, ch)| *ch == chain) {
+            Some((es, _)) => {
+                if !es.contains(&e) {
+                    es.push(e)
+                }
+            }
+            None => groups.push((vec![e], chain)),
+        };
+        for (&e, source) in w.direct.iter().filter(|(e, _)| impure(e)) {
+            note(e, format!("{} -> {source}", c.name));
+        }
+        let mut bad: BTreeSet<&'static str> = BTreeSet::new();
+        for &j in &w.calls {
+            bad.extend(fx.of(j).iter().copied().filter(|e| impure(e) && !w.direct.contains_key(e)));
+        }
+        for e in bad {
+            let j = w.calls.iter().copied().find(|&j| fx.of(j).contains(e)).expect("an effect comes from a callee");
+            note(e, format!("{} -> {}", c.name, fx.chain(j, e)));
+        }
+        if groups.is_empty() {
+            continue;
+        }
+        let parts: Vec<String> = groups
+            .iter()
+            .map(|(es, chain)| {
+                let es: Vec<String> = es.iter().map(|e| format!("`{e}`")).collect();
+                let noun = if es.len() == 1 { "effect" } else { "effects" };
+                format!("has {noun} {} via {chain}", es.join(" and "))
+            })
+            .collect();
+        let msg = format!("`{}` is computed at compile time but {}", c.name, parts.join("; "));
+        diags.push(
+            Diagnostic::new("ct.const.2", c.pos, msg)
+                .help("constants may call only functions without I/O or capabilities; compute this value in `main`"),
+        );
+    }
+    diags
+}
+
 /// eff.cap.1: `main` must not reach a denied capability. One diagnostic
 /// per capability, at `main`.
 pub fn check_denied(prog: &Program, resolved: &Resolved, denied: &[&str]) -> Vec<Diagnostic> {
@@ -321,7 +355,34 @@ struct Walker<'p, 'r> {
     calls: Vec<usize>,
 }
 
-impl Walker<'_, '_> {
+impl<'p, 'r> Walker<'p, 'r> {
+    fn new(prog: &'p Program, resolved: &'r Resolved) -> Self {
+        let mut w = Walker {
+            prog,
+            resolved,
+            fns: HashMap::new(),
+            std_impls: Vec::new(),
+            direct: BTreeMap::new(),
+            calls: Vec::new(),
+        };
+        for (i, f) in prog.fns.iter().enumerate() {
+            if f.owner.is_none() && f.within == Within::TopLevel {
+                w.fns.insert(f.name.as_str(), i);
+            }
+        }
+        // eff.infer.5: operators, interpolation, `print` and the built-in
+        // collection methods call the standard traits' implementations.
+        let std = resolved.std;
+        if !prog.traits.is_empty() {
+            for (tr, name) in [(std.eq, "eq"), (std.ord, "cmp"), (std.to_str, "to_str"), (std.hash, "hash")] {
+                w.std_impls.extend(implementations(prog, tr, name));
+            }
+            w.std_impls.sort_unstable();
+            w.std_impls.dedup();
+        }
+        w
+    }
+
     fn add(&mut self, e: &'static str, source: impl Into<String>) {
         self.direct.entry(e).or_insert_with(|| source.into());
     }

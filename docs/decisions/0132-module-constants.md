@@ -6,6 +6,7 @@
 - **Details decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)): scope, `pub`, allowed forms, evaluation and error rules
 - **Topic:** 12 — Modules; 2 — Core syntax
 - **Spec rules:** [mod.const.1–3](../spec/12-modules.md)
+- **Amended by:** [ADR 0225](0225-constants-call-compile-time-safe-functions.md) (a constant may call compile-time-safe functions)
 - **Extends:** [ADR 0098](0098-pub-visibility.md) (it lists constants among the `pub`-able declarations but nothing declared one), [ADR 0097](0097-directory-modules.md) (mod.unit.1: a module-wide namespace)
 - **Evidence:** `examples/interp.ail`, `examples/json.ail`, `examples/sheet.ail`
 

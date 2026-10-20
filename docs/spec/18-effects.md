@@ -21,8 +21,9 @@ come from its own signature only. *(ADR 0163)*
 **eff.infer.3** — A function has every effect other than `fail` and
 `mutates` that any function it may call has. The effect sets of a program
 are the least sets that satisfy this rule (a fixed point over the call
-graph, so recursion is allowed). Constants contribute nothing, because a
-constant expression runs no code (`mod.const.2–3`). *(ADR 0163)*
+graph, so recursion is allowed). Constants contribute nothing: they are
+computed at compile time and may call only compile-time-safe code
+(`ct.const.2`). *(ADR 0163, ADR 0225)*
 
 **eff.infer.4** — The sources of effects are: `print` gives `io`; the
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,

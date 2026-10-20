@@ -196,3 +196,11 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0207](0207-deterministic-mode.md) | `ail run --deterministic` and a determinism guarantee for single-task programs (resolves OQ-046) *(delegated)* | Accepted | 2026-10-20 |
 | [0208](0208-str-len-counts-characters.md) | `s.len()` counts characters, `s.byte_len()` bytes (resolves OQ-043) *(delegated)* | Accepted | 2026-10-20 |
 | [0209](0209-nested-optionals.md) | Nested optionals are distinct types and `none` is the outermost (resolves OQ-044) *(delegated)* | Accepted | 2026-10-20 |
+| [0222](0222-four-compiler-representations.md) | The compiler has four representations: AST, HIR, MIR and machine IR *(delegated)* | Accepted | 2026-10-20 |
+| [0223](0223-hir-is-the-versioned-api-shape.md) | The HIR's printed shape is the versioned API; MIR stays internal *(delegated)* | Accepted | 2026-10-20 |
+| [0224](0224-incremental-cache-keys.md) | Incremental queries are keyed by stable ids and fingerprinted without spans *(delegated)* | Accepted | 2026-10-20 |
+| [0225](0225-constants-call-compile-time-safe-functions.md) | Constants may call compile-time-safe functions, computed with the interpreter's semantics (amends 0132) *(delegated)* | Accepted | 2026-10-20 |
+| [0226](0226-compile-time-limits-determinism-and-caching.md) | Compile-time evaluation has step and memory limits, is deterministic, and is cached by what it ran *(delegated)* | Accepted | 2026-10-20 |
+| [0227](0227-derive-generators.md) | A trait may name a derive generator: a compile-time function from `TypeInfo` to AIL source *(delegated)* | Accepted | 2026-10-20 |
+| [0228](0228-generated-code-is-visible-hir.md) | Generated code is ordinary HIR with a provenance link, shown by `ail api --expanded` *(delegated)* | Accepted | 2026-10-20 |
+| [0229](0229-compile-time-reflection-only.md) | Reflection is compile-time only: generators receive a `TypeInfo` value *(delegated)* | Accepted | 2026-10-20 |

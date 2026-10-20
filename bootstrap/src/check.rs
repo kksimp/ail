@@ -241,6 +241,7 @@ pub fn check(prog: &Program) -> (Vec<Diagnostic>, Resolved) {
     c.resolved.impls = c.impl_of.iter().map(|(k, v)| (*k, *v)).collect();
     c.resolved.std = c.std;
     c.diags.extend(effects::check_pure(prog, &c.resolved));
+    c.diags.extend(effects::check_constants(prog, &c.resolved));
     (c.diags, c.resolved)
 }
 
@@ -822,26 +823,38 @@ impl<'p> Checker<'p> {
         if t == Ty::Unit {
             self.error("mod.const.2", c.value.pos(), format!("`{}` would be a constant with no value", c.name));
         }
+        if matches!(t, Ty::Res(..)) {
+            self.error_help(
+                "ct.const.3",
+                c.value.pos(),
+                format!("`{}` would hold a result that may fail; a constant can't hold a failure", c.name),
+                "supply a fallback with `else`: `NAME := parse(text) else 0`",
+            );
+        }
         let t = self.const_types[i].clone().unwrap_or(t);
         self.const_types[i] = Some(t.clone());
         t
     }
 
-    /// Report the parts of a constant's value that aren't constant
-    /// expressions (mod.const.2): calls of functions and methods, and control
-    /// flow.
+    /// Report the parts of a constant's value that the bootstrap can't
+    /// compute. Calls, method calls, field access, indexing and ranges are
+    /// allowed (ct.const.1, ADR 0225); whether what they call is
+    /// compile-time-safe is checked after effect inference (ct.const.2).
+    /// `if`, `match`, `?` and `else` with a block are left to a function.
     fn constant_expr(&mut self, e: &Expr) {
-        let reject = |c: &mut Self, at: Pos, what: &str| {
-            c.error_help(
-                "mod.const.2",
-                at,
-                format!("a constant's value can't contain {what}"),
-                "use literals, operators, collection and struct literals, and other constants; or write a function",
+        let unsupported = |c: &mut Self, at: Pos, what: &str, rule: &str| {
+            c.diags.push(
+                Diagnostic::new(
+                    UNSUPPORTED,
+                    at,
+                    format!("the bootstrap can't compute {what} in a constant yet ({rule})"),
+                )
+                .help("move the logic into a function and call it: `NAME := build()`"),
             );
         };
         match e {
             Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::Name(..) => {}
-            Expr::None(_) | Expr::Hole(_) => {}
+            Expr::None(_) | Expr::Hole(_) | Expr::TypeArgs { .. } => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
                     if let InterpPart::Expr(x) | InterpPart::Fmt(x, _) = p {
@@ -859,43 +872,32 @@ impl<'p> Checker<'p> {
                 self.constant_expr(lhs);
                 self.constant_expr(rhs);
             }
-            // `Enum.Variant`
-            Expr::Field { recv, .. } if matches!(&**recv, Expr::Name(n, _) if self.types.contains_key(n.as_str())) => {}
-            // Struct literals, variants with data, and `List[T]()`.
+            Expr::Field { recv, .. } => self.constant_expr(recv),
             Expr::Call { callee, args, .. } => {
-                let ok = match &**callee {
-                    Expr::Name(n, _) => !self.fns.contains_key(n.as_str()) && !PRELUDE.contains(&n.as_str()),
-                    Expr::TypeArgs { name, .. } => !self.fns.contains_key(name.as_str()),
-                    _ => false,
-                };
-                if ok {
-                    args.iter().for_each(|a| self.constant_expr(&a.value));
-                } else {
-                    reject(self, e.pos(), "a function call");
-                }
+                self.constant_expr(callee);
+                args.iter().for_each(|a| self.constant_expr(&a.value));
             }
-            Expr::Method { recv, name, args, name_pos } => {
-                let variant = match &**recv {
-                    Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } => match self.types.get(n.as_str()) {
-                        Some(Def::Enum(en)) => self.variant_index(*en, name).is_some(),
-                        _ => false,
-                    },
-                    _ => false,
-                };
-                if variant {
-                    args.iter().for_each(|a| self.constant_expr(&a.value));
-                } else {
-                    reject(self, *name_pos, "a method call");
-                }
+            Expr::Method { recv, args, .. } => {
+                self.constant_expr(recv);
+                args.iter().for_each(|a| self.constant_expr(&a.value));
             }
-            Expr::Field { name_pos, .. } => reject(self, *name_pos, "a field access"),
-            Expr::Index { pos, .. } => reject(self, *pos, "indexing"),
-            Expr::Range { pos, .. } => reject(self, *pos, "a range"),
-            Expr::If { pos, .. } => reject(self, *pos, "`if`"),
-            Expr::Match { pos, .. } => reject(self, *pos, "`match`"),
-            Expr::Try { pos, .. } => reject(self, *pos, "`?`"),
-            Expr::Else { pos, .. } => reject(self, *pos, "`else`"),
-            Expr::TypeArgs { pos, .. } => reject(self, *pos, "a type"),
+            Expr::Index { recv, index, .. } => {
+                self.constant_expr(recv);
+                self.constant_expr(index);
+            }
+            Expr::Range { lo, hi, .. } => {
+                lo.iter().chain(hi.iter()).for_each(|x| self.constant_expr(x));
+            }
+            Expr::Else { value, otherwise, pos } => match &**otherwise {
+                Else::Value(d) => {
+                    self.constant_expr(value);
+                    self.constant_expr(d);
+                }
+                _ => unsupported(self, *pos, "`else` with a block or a jump", "ct.const.1"),
+            },
+            Expr::If { pos, .. } => unsupported(self, *pos, "`if`", "ct.const.1"),
+            Expr::Match { pos, .. } => unsupported(self, *pos, "`match`", "ct.const.1"),
+            Expr::Try { pos, .. } => unsupported(self, *pos, "`?`", "ct.const.3"),
         }
     }
 
@@ -2494,6 +2496,14 @@ impl<'p> Checker<'p> {
             } else if !self.accepts(&Ty::Str, &ct) {
                 self.mismatch("err.ctx.2", c.pos(), &Ty::Str, &ct);
             }
+        }
+        // ct.const.3: `?` in a constant is reported by `constant_expr`.
+        if self.const_busy.iter().any(|&b| b) {
+            return match t {
+                Ty::Res(ok, _) => *ok,
+                Ty::Opt(v) => *v,
+                t => t,
+            };
         }
         let ret = self.ret.clone();
         match t {

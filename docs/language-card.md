@@ -58,7 +58,7 @@ update a `mut` variable in a loop, use `=`, not `:=`.
 `use std.random`: `random.int(1, 6)` (inclusive), `random.float()`,
 `random.seed(n)`, `random.shuffle(mut xs)`; `--seed N` repeats a run.
 
-Constants are top-level `NAME := value` (literals, constants, operators; no calls).
+Constants are top-level `NAME := value`, computed at compile time; they may call functions without I/O or capabilities.
 
 ## Structs, enums and methods
 
