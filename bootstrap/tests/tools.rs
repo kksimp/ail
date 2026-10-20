@@ -25,6 +25,35 @@ fn editor_checks_clean_and_passes_its_tests() {
     assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
 }
 
+/// `tools/garlic/garlic.ail`, the text-mode browser
+/// (docs/design/garlic-browser.md), checks clean, passes its `@test`s, and
+/// prints a page and its page model headless.
+#[test]
+fn garlic_checks_clean_and_renders_headless() {
+    let path = tool("tools/garlic/garlic.ail");
+    let check = ail().args(["check", &path]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert!(check.status.success() && stderr.is_empty(), "ail check {path}:\n{stderr}");
+    let test = ail().args(["test", &path]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&test.stdout);
+    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
+    let page = tool("tools/garlic/testdata/index.html");
+    let run = |flags: &[&str]| {
+        let mut args = vec!["run".to_string(), path.clone()];
+        args.extend(flags.iter().map(|f| f.to_string()));
+        args.push(page.clone());
+        let out = ail().args(&args).output().unwrap();
+        assert!(out.status.success(), "{flags:?}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let text = run(&["--width", "60", "--print"]);
+    assert!(text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n"), "--print:\n{text}");
+    let json = run(&["--width", "60", "--height", "8", "--json"]);
+    assert!(json.starts_with("{\"api\":1,") && json.contains("\"role\":\"link\",\"name\":\"Second page\""), "--json:\n{json}");
+    let second = run(&["--follow", "1", "--print"]);
+    assert!(second.contains("# Second page"), "--follow 1:\n{second}");
+}
+
 /// Ctrl-Shift-H previews a replace across the directory's `.ail` files,
 /// then Ctrl-Enter applies it to the buffers without saving (ADR 0339).
 #[test]
