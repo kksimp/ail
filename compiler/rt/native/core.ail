@@ -101,9 +101,21 @@ fn out_byte(b int)
     store8(load64(global(OUT_BUF)) + n, b)
     store64(global(OUT_LEN), n + 1)
 
+## Copy into the buffer in as few pieces as fit, flushing when it fills.
 fn out_bytes(p int, n int)
-    for i in 0..n
-        out_byte(load8(p + i))
+    mut from := p
+    mut left := n
+    while left > 0
+        mut used := load64(global(OUT_LEN))
+        if used == OUT_CAP
+            flush()
+            used = 0
+        room := OUT_CAP - used
+        k := if left < room then left else room
+        copy_bytes(load64(global(OUT_BUF)) + used, from, k)
+        store64(global(OUT_LEN), used + k)
+        from += k
+        left -= k
 
 ## A string object: +0 bytes, +8 chars, +16 UTF-8 (native-abi.md §2).
 fn out_str(s str)
