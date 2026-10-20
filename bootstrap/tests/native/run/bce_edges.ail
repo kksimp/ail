@@ -1,0 +1,87 @@
+# Cases where a loop must keep its checks, or its loads, as they were
+# (native.bce.1): a store in the loop, a list that grows or is replaced, a
+# loop with a `continue`, a start other than 0, floats and bools.
+fn stale(mut xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[0]
+        xs[0] = xs[0] + 1
+    s
+
+fn grows(mut xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        xs.push(i)
+        s += xs[i]
+    s
+
+fn swaps(mut a List[List[int]], n int) int
+    mut s := 0
+    for i in 0..n
+        s += a[1][0]
+        a[1] = [i * 10]
+    s
+
+fn skips(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        if xs[i] % 2 == 0
+            continue
+        s += xs[i]
+    s
+
+fn from_two(xs List[int], n int) int
+    mut s := 0
+    for i in 2..n
+        s += xs[i] - xs[i - 1]
+    s
+
+fn floats(xs List[float], n int) float
+    mut s := 0.0
+    for i in 0..n
+        s += xs[i] * 0.5
+    s
+
+fn bools(xs List[bool], n int) int
+    mut c := 0
+    for i in 0..n
+        if xs[i]
+            c += 1
+    c
+
+fn two_out(xs List[int], n int) int
+    mut s := 0
+    mut m := 0
+    mut i := 0
+    while i < n
+        s += xs[i]
+        m = i
+        i += 1
+    s * 100 + m + i
+
+fn helper(xs List[int], i int) int
+    xs[i] * 2
+
+fn inlined(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += helper(xs, i)
+    s
+
+fn main()
+    mut a := [4, 8, 15, 16, 23, 42]
+    print(stale(mut a, 4))
+    print(a)
+    mut b := [1, 2]
+    print(grows(mut b, 5))
+    print(b.len())
+    mut rows := [[1, 2], [3, 4], [5, 6]]
+    print(swaps(mut rows, 3))
+    print(skips([1, 2, 3, 4, 5, 6, 7], 7))
+    print(from_two([1, 2, 4, 8, 16], 5))
+    print(from_two([1, 2, 4, 8, 16], 1))
+    print(floats([1.0, 2.0, 3.0], 3))
+    print(bools([true, false, true, true], 4))
+    print(two_out([5, 6, 7], 3))
+    print(two_out([5, 6, 7], 0))
+    print(inlined([1, 2, 3], 3))

@@ -1,0 +1,29 @@
+# fuzz-input: compress
+# fuzz-needs: std.compress
+# std.compress and std.hash: damaged input is an error, never a crash or a hang; what
+# compresses expands back; checksums repeat.
+use std.compress
+use std.hash
+
+fn main()
+    junk := bytes.from_list({{BYTES}})
+    a := compress.inflate(junk) else b""
+    b := compress.gunzip(junk) else b""
+    c := compress.unzlib(junk) else b""
+    print(a.len() + b.len() + c.len() >= 0)
+    text := {{TEXT}}
+    z := compress.gzip(text)
+    back := compress.gunzip(z) else e
+        print("FAIL gunzip of gzip: {e.message}")
+        return
+    if back.to_str() != text
+        print("FAIL gzip round trip changed the text")
+    d := compress.inflate(compress.deflate(text)) else e2
+        print("FAIL inflate of deflate: {e2.message}")
+        return
+    if d.to_str() != text
+        print("FAIL deflate round trip changed the text")
+    if hash.sha256(text).len() != 64
+        print("FAIL sha256 is not 64 hex digits")
+    if hash.crc32(text) != hash.crc32(text)
+        print("FAIL crc32 is not repeatable")

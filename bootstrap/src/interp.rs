@@ -23,6 +23,7 @@ mod atomic;
 mod builtins;
 mod bytecode;
 mod bytes;
+mod ffi;
 mod keyfn;
 pub mod limits;
 mod contracts;
@@ -35,6 +36,7 @@ mod codec;
 mod random;
 mod tz;
 mod regex;
+pub mod replay;
 mod stdlib;
 mod tasks;
 mod tensor;
@@ -102,6 +104,8 @@ enum Value {
     Tensor(Rc<crate::tensor::Tensor>),
     /// An `Atomic[int]` or `Atomic[bool]` (conc.atomic.3): copies share it.
     Atomic(std::sync::Arc<atomic::Cell>),
+    /// A declared function used as a value (type.fn.2), by index in the program.
+    Fn(usize),
 }
 
 impl Clone for Value {
@@ -130,6 +134,7 @@ impl Clone for Value {
             Value::Handle(h) => Value::Handle(*h),
             Value::Tensor(t) => Value::Tensor(Rc::clone(t)),
             Value::Atomic(c) => Value::Atomic(std::sync::Arc::clone(c)),
+            Value::Fn(f) => Value::Fn(*f),
         }
     }
 }
@@ -1177,6 +1182,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn run_body_inner(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if f.ext.is_some() {
+            return self.call_extern(f, env, pos);
+        }
         self.depth += 1;
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
@@ -1845,6 +1853,14 @@ impl<'a, W: Write> Interp<'a, W> {
     /// operators (ADR 0175). Every other form, and every fallback, is
     /// `eval_general`'s, so the two stay in step by construction.
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        // std.tensor.20: a chain of elementwise tensor operations, run fused.
+        if !self.resolved.fused.is_empty()
+            && matches!(e, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Method { .. })
+            && self.resolved.fused.contains(&e.pos())
+            && crate::fuse::plan(e).is_some()
+        {
+            return self.fused(e, env);
+        }
         match e {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
                 self.eval_binary(*op, lhs, rhs, *pos, env)
@@ -1976,6 +1992,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let i = self.eval(index, env)?.int();
                 return Ok(bytes::at(&b, i, pos)?);
             }
+            Value::Tensor(t) => return self.tensor_index(&t, index, pos, env),
             other => unreachable!("checked: list or map, found {other:?}"),
         };
         if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
@@ -2161,6 +2178,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Name(n, pos) => match lookup(env, n) {
                 Some(v) => v.clone(),
                 None if self.prog.consts.iter().any(|c| c.name == *n) => self.constant(n, *pos)?,
+                None if self.resolved.fn_values.contains_key(pos) => Value::Fn(self.resolved.fn_values[pos]),
                 None => {
                     let Some(&(e, v)) = self.resolved.variants.get(pos) else {
                         unreachable!("checked: `{n}` at {}:{} is a variant", pos.line, pos.col)
@@ -2570,6 +2588,26 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn call_expr(&mut self, callee: &'a Expr, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        // type.fn.3: a call through a value of function type.
+        if !self.resolved.fn_values.is_empty() {
+            let target = match callee {
+                Expr::Name(n, _) => match lookup(env, n) {
+                    Some(Value::Fn(f)) => Some(*f),
+                    _ => None,
+                },
+                Expr::TypeArgs { .. } => None,
+                other => match self.eval(other, env)? {
+                    Value::Fn(f) => Some(f),
+                    _ => unreachable!("checked: a function value"),
+                },
+            };
+            if let Some(f) = target {
+                let decl = &self.prog.fns[f];
+                return self.invoke(decl, None, args, callee.pos(), env);
+            }
+        } else if !matches!(callee, Expr::Name(..) | Expr::TypeArgs { .. }) {
+            unreachable!("checked: named callee");
+        }
         let n = match callee {
             Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } => n,
             _ => unreachable!("checked: named callee"),
@@ -2742,6 +2780,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
             Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
+            Value::Fn(f) => format!("fn {}", prog.fns[*f].name),
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
                 for x in items.iter() {
@@ -2860,6 +2899,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Ptr(m, elem)) = site.std {
+            return self.ptr_method(m, elem, recv, args, pos, env);
+        }
         let recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
         self.method_on(key, site, recv, name, args, pos, env)
     }
@@ -2874,7 +2916,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),

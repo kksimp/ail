@@ -5,6 +5,7 @@
 
 mod api;
 mod ast;
+mod build;
 mod budget;
 mod bump;
 mod check;
@@ -12,12 +13,15 @@ mod derive;
 mod diag;
 mod explain;
 mod fasthash;
+mod fuse;
 mod doctest;
+mod edit;
 mod docs;
 mod fix;
 mod foreign;
 mod fmt;
 mod implicit_self;
+mod named_args;
 mod interp;
 mod lexer;
 mod modules;
@@ -43,6 +47,8 @@ commands:
                 ARGS are the program's (std.env.1: `env.args()`)
   run DIR [ARGS...]
                 check and run the package whose root module is DIR
+  build FILE [-o OUT]
+                compile a program in the native subset to an executable (native.build.3)
   check FILE    check a program (or a package DIR) without running it;
                 --errors: each function's error types and failure paths as JSON
   test FILE     run the program's `@test` functions, properties and doc examples;
@@ -55,8 +61,17 @@ commands:
   explain       list every rule with its chapter and whether `ail fix` repairs it (--json)
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
+  api --mir FILE
+                the program's native-backend MIR (ADR 0384)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
+  diff OLD NEW  what changed between two versions of a file or package:
+                declarations (signature, pub, effects, errors, contracts, docs),
+                diagnostics, and test outcomes (--no-tests: skip them) (diff.out.1)
+  edit PATH < EDITS
+                apply a JSON list of edits by declaration id (replace_body, replace,
+                insert, delete, rename, import), format, check, and print the new
+                diagnostics; --dry-run, --diff, --if-clean (edit.op.1)
   fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
                 --check: exit 1 with a diff if any would change; --stdout: print instead
   fix FILE      apply the fixes diagnostics carry, re-check, repeat (up to 5
@@ -80,6 +95,8 @@ options:
   --parallel    with run: run every loop proven independent on the thread
                 pool, not only `par for` (conc.par.8); AIL_THREADS=N sets its size
   --seed N      with run: seed `std.random` so a run repeats (std.random.3)
+  --record R    with run or test: write every effect's result to R (test: failed tests only) (replay.rec.1)
+  --replay R    with run or test: answer effects from R, so the run repeats; FILE may be left out (replay.run.1)
   --schedule=random[:SEED]
                 with test or run: switch tasks at random points picked from
                 SEED (a new one if left off), so a test that fails on one
@@ -106,8 +123,10 @@ options:
 #[global_allocator]
 static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
 
-/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
-const STACK_BYTES: usize = 256 * 1024 * 1024;
+/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first. A
+/// debug build spends about 50 KB of Rust stack per AIL call, so MAX_DEPTH
+/// calls need over 500 MB there. The pages are only mapped as they are used.
+const STACK_BYTES: usize = 1024 * 1024 * 1024;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -120,7 +139,7 @@ fn main() -> ExitCode {
             "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
-            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" => i += 1,
+            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
             // budget.out.5: `--budget` may stand alone (the command's default).
             "--budget" if args.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())) => i += 1,
             "--budget" => {}
@@ -181,6 +200,14 @@ fn main() -> ExitCode {
         eprintln!("error: {msg}");
         return ExitCode::from(2);
     }
+    // replay.rec.1, replay.run.1: `--record R` and `--replay R`.
+    let replay_args = match take_replay(&mut rest, &program_args) {
+        Ok(a) => a,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            return ExitCode::from(2);
+        }
+    };
     // run.limit.1-4, test.cover.1-3: limits for `ail run` and `ail test`, coverage for `ail test`.
     let coverage = match take_limit_options(&mut rest) {
         Ok(c) => c,
@@ -224,13 +251,19 @@ fn main() -> ExitCode {
     }
     match rest.as_slice() {
         ["run", file] => {
-            interp::set_program(file, program_args);
-            run_file(file, json, true, &deny)
+            interp::set_program(file, replay_args.unwrap_or(program_args));
+            let code = run_file(file, json, true, &deny);
+            interp::replay::finish();
+            code
         }
         ["check", "--errors", file] | ["check", file, "--errors"] => api::errors::command(file, json),
         ["check", file] => run_file(file, json, false, &deny),
         ["test", file] => match take_test_options(&mut flags) {
-            Ok((cases, seed)) => run_tests(file, json, cases, seed, coverage),
+            Ok((cases, seed)) => {
+                let code = run_tests(file, json, cases, seed, coverage);
+                interp::replay::finish();
+                code
+            }
             Err(msg) => {
                 eprintln!("error: {msg}");
                 ExitCode::from(2)
@@ -242,7 +275,11 @@ fn main() -> ExitCode {
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain"] => explain::list(json),
         ["explain", rule] => explain::run(rule, json),
+        ["api", "--mir", file] => build::mir(file),
         ["api", rest @ ..] => api::command(rest, json),
+        ["diff", rest @ ..] => api::diff::command(rest, json),
+        ["build", rest @ ..] => build::command(rest),
+        ["edit", rest @ ..] => edit::command(rest, json),
         ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
@@ -360,6 +397,41 @@ fn take_deny(args: &mut Vec<&str>) -> Result<Vec<&'static str>, String> {
     check::effects::parse_deny(list)
 }
 
+/// Remove `--record R` or `--replay R` and start recording or replaying
+/// (replay.rec.1, replay.run.1). A replay without FILE runs the recorded
+/// program, and returns the recorded program arguments.
+fn take_replay(rest: &mut Vec<&str>, program_args: &[String]) -> Result<Option<Vec<String>>, String> {
+    let both = rest.contains(&"--record") && rest.contains(&"--replay");
+    for flag in ["--record", "--replay"] {
+        let Some(at) = rest.iter().position(|a| *a == flag) else { continue };
+        if !matches!(rest.first(), Some(&"run" | &"test")) {
+            return Err(format!("`{flag}` works with `ail run` and `ail test` (replay.rec.1)"));
+        }
+        if both {
+            return Err("`--record` and `--replay` can't be used together (replay.rec.1)".into());
+        }
+        let Some(path) = rest.get(at + 1).map(|p| p.to_string()) else {
+            return Err(format!("`{flag}` needs a file, e.g. `{flag} run.json` (replay.rec.1)"));
+        };
+        rest.drain(at..at + 2);
+        // replay.rec.5: one thread, so effects happen in one order.
+        interp::parallel::set_mode(interp::parallel::Mode::Off);
+        if flag == "--record" {
+            let seed = rest.iter().position(|a| *a == "--seed").and_then(|i| rest.get(i + 1)).and_then(|s| s.parse().ok());
+            let program = rest.get(1).copied().unwrap_or_default();
+            interp::set_seed(interp::replay::start_record(&path, program, program_args, seed));
+            return Ok(None);
+        }
+        let header = interp::replay::start_replay(&path)?;
+        interp::set_seed(header.seed);
+        if rest.len() == 1 {
+            rest.push(Box::leak(header.program.into_boxed_str()));
+        }
+        return Ok(Some(header.args));
+    }
+    Ok(None)
+}
+
 /// Remove `--deterministic` and `--seed S`, and return the denied
 /// capabilities including those `--deterministic` adds (std.random.3,
 /// std.random.5).
@@ -440,7 +512,7 @@ fn front_end(path: &str, json: bool) -> Option<(ast::Program, check::Resolved)> 
 }
 
 fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
-    let Some((program, mut diags)) = load(path) else { return ExitCode::from(2) };
+    let Some((mut program, mut diags)) = load(path) else { return ExitCode::from(2) };
     let mut resolved = check::Resolved::default();
     if diags.is_empty() {
         (diags, resolved) = check::check(&program);
@@ -459,6 +531,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
     if !execute {
         return ExitCode::SUCCESS;
     }
+    named_args::reorder(&mut program, &resolved);
 
     // std.ui: this thread hosts any window the program opens (ADR 0178).
     let result = ui::run_hosted(STACK_BYTES, move || {
@@ -536,6 +609,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
     if rejected {
         return ExitCode::from(2);
     }
+    named_args::reorder(&mut program, &resolved);
     let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)

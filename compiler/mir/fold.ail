@@ -1,0 +1,302 @@
+## Local rewrites on simplified MIR (ADR 0391): constant folding of
+## operations on constants that can't trap, checks that a constant operand
+## or a dominating comparison rules out (expr.arith.4), and `x % 2^k == 0`
+## as a bit test. Each rewrite keeps the value's id, so uses need no
+## renaming; `simplify` then drops what died.
+
+MAX := 9223372036854775807
+MIN := -9223372036854775807 - 1
+
+pub fn fold(f Func) Func
+    mut g := f
+    mut defs := [-1 for _ in 0..g.vals.len()]
+    mut insts := List[Inst]()
+    for b in 0..g.blocks.len()
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.dst >= 0
+                defs[i.dst] = insts.len()
+            insts.push(i)
+    mut fd := Folder(defs: defs, insts: insts)
+    for b in 0..g.blocks.len()
+        mut out := List[Inst]()
+        for i in g.blocks[b].insts
+            for extra in fd.rewrite(i, mut g.vals, mut g.names)
+                out.push(extra)
+        g.blocks[b].insts = out
+    cse(drop_bounded(g, fd))
+
+## Common subexpressions (ADR 0391): an instruction that computes what one
+## in a dominating block already did reuses that value. Checked arithmetic
+## counts too: had the first one trapped, the second wouldn't run.
+fn cse(f Func) Func
+    n := f.blocks.len()
+    dom := dominators(f)
+    mut seen := Map[str, List[int]]()
+    mut repl := [v for v in 0..f.vals.len()]
+    mut where := [-1 for _ in 0..f.vals.len()]
+    # Instructions that repeat an earlier one: the first would have trapped.
+    mut dup := [[false for _ in blk.insts] for blk in f.blocks]
+    for b in rpo(f)
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            if i.dst < 0 or not same_each_time(i)
+                continue
+            args := [repl[a] for a in i.args]
+            key := "{i.op}|{args}|{i.imm}|{i.fimm}|{i.name}|{f.vals[i.dst].name()}"
+            mut found := -1
+            if prior := seen.get(key)
+                for v in prior
+                    if dom[b][where[v]]
+                        found = v
+                        break
+            if found >= 0
+                repl[i.dst] = found
+                dup[b][k] = true
+            else
+                where[i.dst] = b
+                if not seen.contains(key)
+                    seen[key] = []
+                seen[key].push(i.dst)
+    mut g := f
+    for b in 0..n
+        for k in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
+        g.blocks[b].insts = [
+            g.blocks[b].insts[k]
+            for k in 0..g.blocks[b].insts.len() if not dup[b][k]
+        ]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = repl[t.cond]
+        if t.value >= 0
+            t.value = repl[t.value]
+        t.args = [[repl[a] for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
+
+## Whether an instruction gives the same value from the same operands and
+## does nothing else, but perhaps trap.
+fn same_each_time(i Inst) bool
+    # A list's length changes with `push`.
+    if i.op == "len"
+        return false
+    if i.is_pure()
+        return true
+    match i.op
+        "add" | "sub" | "mul" | "div" | "rem" | "neg" | "shl" | "shr" | "ftoi" => true
+        _ => false
+
+## The blocks in reverse postorder, so each comes after its dominators.
+fn rpo(f Func) List[int]
+    n := f.blocks.len()
+    mut seen := [false for _ in 0..n]
+    mut post := List[int]()
+    mut stack := [0]
+    mut next := [0 for _ in 0..n]
+    seen[0] = true
+    while stack.len() > 0
+        b := stack[stack.len() - 1]
+        succs := f.blocks[b].term.targets
+        if next[b] < succs.len()
+            s := succs[next[b]]
+            next[b] += 1
+            if not seen[s]
+                seen[s] = true
+                stack.push(s)
+        else
+            post.push(b)
+            stack.pop()
+    mut out := List[int]()
+    mut k := post.len() - 1
+    while k >= 0
+        out.push(post[k])
+        k -= 1
+    out
+
+## A fact a branch establishes in the blocks its edge dominates: `v + 1`
+## can't overflow (`up`), or `v - 1` can't (not `up`).
+struct Bound
+    block int
+    v int
+    up bool
+
+## `i + 1` where a dominating `i < n` held can't overflow, since `n` is at
+## most the largest `int`; `i - 1` where `i > n` held likewise.
+fn drop_bounded(f Func, fd Folder) Func
+    n := f.blocks.len()
+    mut preds := [0 for _ in 0..n]
+    for blk in f.blocks
+        for t in blk.term.targets
+            preds[t] += 1
+    mut facts := List[Bound]()
+    for blk in f.blocks
+        t := blk.term
+        if t.kind != "branch"
+            continue
+        c := fd.def(t.cond) else continue
+        if c.args.len() != 2
+            continue
+        x := c.args[0]
+        y := c.args[1]
+        # When the edge is taken, `lo < hi` holds.
+        for e in 0..2
+            to := t.targets[e]
+            if preds[to] != 1
+                continue
+            mut lo := -1
+            mut hi := -1
+            if e == 0 and c.op == "lt" or e == 1 and c.op == "ge"
+                lo = x
+                hi = y
+            elif e == 0 and c.op == "gt" or e == 1 and c.op == "le"
+                lo = y
+                hi = x
+            if lo >= 0
+                facts.push(Bound(block: to, v: lo, up: true))
+                facts.push(Bound(block: to, v: hi, up: false))
+    if facts.len() == 0
+        return f
+    dom := dominators(f)
+    mut g := f
+    for b in 0..n
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.site < 0 or i.op != "add" and i.op != "sub" or fd.int_of(i.args[1]) != 1
+                continue
+            for fact in facts
+                if fact.v == i.args[0] and fact.up == (i.op == "add") and dom[b][fact.block]
+                    g.blocks[b].insts[k].site = -1
+                    break
+    g
+
+struct Folder
+    ## The index in `insts` of each value's defining instruction, or -1.
+    defs List[int]
+    insts List[Inst]
+
+fn Folder.int_of(self, v int) int?
+    d := defs[v]
+    if d < 0
+        return none
+    i := insts[d]
+    if i.op == "const" then i.imm else none
+
+fn Folder.float_of(self, v int) float?
+    d := defs[v]
+    if d < 0
+        return none
+    i := insts[d]
+    if i.op == "fconst" then i.fimm else none
+
+fn Folder.def(self, v int) Inst?
+    d := defs[v]
+    if d < 0 then none else insts[d]
+
+## `i` rewritten, preceded by any instruction it now needs.
+fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List[Inst]
+    mut r := i
+    if i.args.len() == 1
+        if n := int_of(i.args[0])
+            # `-1` is `neg 1`; only the smallest `int` can trap (expr.arith.1).
+            if i.op == "neg" and n != MIN
+                r = konst(i.dst, 0 - n)
+            elif i.op == "not"
+                r = konst(i.dst, 1 - n)
+            elif i.op == "bnot"
+                r = konst(i.dst, n.bit_not())
+            elif i.op == "itof"
+                r = fkonst(i.dst, n.to_float())
+        elif x := float_of(i.args[0])
+            if i.op == "fneg"
+                r = fkonst(i.dst, -x)
+    elif i.args.len() == 2
+        if n := int_value(i)
+            r = konst(i.dst, n)
+        elif x := float_value(i)
+            r = fkonst(i.dst, x)
+        elif i.op == "div" or i.op == "rem"
+            # expr.arith.3: a constant divisor other than 0 can't trap,
+            # but for `MIN / -1` (expr.arith.1).
+            if d := int_of(i.args[1])
+                if d != 0 and (i.op == "rem" or d != -1)
+                    r.site = -1
+        elif i.op == "eq" or i.op == "ne"
+            if int_of(i.args[1]) == 0
+                if m := low_bits(i.args[0])
+                    # x % 2^k == 0 exactly when x's low k bits are 0.
+                    mask := vals.len()
+                    vals.push(Ty.Int)
+                    masked := vals.len()
+                    vals.push(Ty.Int)
+                    names.push("")
+                    names.push("")
+                    rem := def(i.args[0]) else i
+                    band := Inst(
+                        dst: masked,
+                        op: "band",
+                        args: [rem.args[0], mask],
+                        imm: 0,
+                        fimm: 0.0,
+                        name: "",
+                        site: -1,
+                    )
+                    r.args = [masked, i.args[1]]
+                    defs.push(-1)
+                    defs.push(-1)
+                    return [konst(mask, m), band, r]
+    if r.dst >= 0
+        defs[r.dst] = insts.len()
+        insts.push(r)
+    [r]
+
+## `k - 1` when `v` is `x % k` for a constant `k = 2^n`, n >= 1.
+fn Folder.low_bits(self, v int) int?
+    i := def(v)?
+    if i.op != "rem"
+        return none
+    k := int_of(i.args[1])?
+    if k < 2 or k.bit_and(k - 1) != 0
+        return none
+    k - 1
+
+## The result of an `int` operation on two constants, when it can't trap.
+fn Folder.int_value(self, i Inst) int?
+    a := int_of(i.args[0])?
+    b := int_of(i.args[1])?
+    match i.op
+        "add" => if b >= 0 and a <= MAX - b or b < 0 and a >= MIN - b then a + b else none
+        "sub" => if b <= 0 and a <= MAX + b or b > 0 and a >= MIN + b then a - b else none
+        "mul" =>
+            if small(a) and small(b) then a * b else none
+        "band" => a.bit_and(b)
+        "bor" => a.bit_or(b)
+        "bxor" => a.bit_xor(b)
+        "eq" => if a == b then 1 else 0
+        "ne" => if a != b then 1 else 0
+        "lt" => if a < b then 1 else 0
+        "le" => if a <= b then 1 else 0
+        "gt" => if a > b then 1 else 0
+        "ge" => if a >= b then 1 else 0
+        _ => none
+
+## The result of a `float` operation on two constants.
+fn Folder.float_value(self, i Inst) float?
+    a := float_of(i.args[0])?
+    b := float_of(i.args[1])?
+    match i.op
+        "fadd" => a + b
+        "fsub" => a - b
+        "fmul" => a * b
+        "fdiv" => if b != 0.0 then a / b else none
+        _ => none
+
+## |n| < 2^31.5, so a product of two such can't overflow.
+fn small(n int) bool
+    n >= -3037000499 and n <= 3037000499
+
+fn konst(dst int, n int) Inst
+    Inst(dst: dst, op: "const", args: [], imm: n, fimm: 0.0, name: "", site: -1)
+
+fn fkonst(dst int, x float) Inst
+    Inst(dst: dst, op: "fconst", args: [], imm: 0, fimm: x, name: "", site: -1)

@@ -1,0 +1,11 @@
+# unsafe.op.1, unsafe.op.2: reading, writing and moving a pointer are unsafe
+# operations; copying and testing one is not.
+fn bad(p *int) int
+    q := p
+    print(q.is_null())
+    p.write(2)
+    r := p.offset(1)
+    p.read()
+
+fn main()
+    print(1)

@@ -1,0 +1,30 @@
+# `List[bool]` holds one byte per element: indexing, pushing past the
+# capacity, copies by value, nested lists, and printing.
+fn flip(mut xs List[bool], i int)
+    xs[i] = not xs[i]
+
+fn main()
+    mut xs := []
+    for i in 0..37
+        xs.push(i % 3 == 0)
+    flip(mut xs, 1)
+    flip(mut xs, 36)
+    ys := xs
+    xs[0] = false
+    print(xs)
+    print(ys)
+    mut grid := List[List[bool]]()
+    for r in 0..3
+        mut row := [true, false, r == 1]
+        row.push(r > 0)
+        grid.push(row)
+    copy := grid
+    grid[1][0] = false
+    print(grid[1])
+    print(copy[1])
+    mut count := 0
+    for b in ys
+        if b
+            count += 1
+    print(count)
+    print(xs[40])

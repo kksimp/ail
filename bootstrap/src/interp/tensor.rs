@@ -9,6 +9,7 @@ use super::{Env, Flow, Interp, Trap, Value, float_text};
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
 use crate::ast::BinOp;
+use crate::fuse::{self, FOp, Input};
 use crate::tensor::{Activation, Data, Fault, Op, Reduce, Scalar, Sum, Tensor};
 
 fn trapped(f: Fault, pos: Pos) -> super::Exit {
@@ -83,6 +84,86 @@ impl<'a, W: Write> Interp<'a, W> {
         self.resolved.int_tensors.contains(&pos)
     }
 
+    /// std.tensor.15: `t[i]` drops axis 0 and `t[lo..hi]` keeps it.
+    pub(super) fn tensor_index(&mut self, t: &Tensor, index: &'a Expr, pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        let r = if let Expr::Range { lo, hi, inclusive, .. } = index {
+            let lo = match lo {
+                Some(e) => self.eval(e, env)?.int(),
+                None => 0,
+            };
+            let hi = match hi {
+                Some(e) => self.eval(e, env)?.int(),
+                None => t.shape.first().map_or(0, |&n| n as i64),
+            };
+            t.slice_rows(lo, hi, *inclusive)
+        } else {
+            let i = self.eval(index, env)?.int();
+            t.row(i)
+        };
+        Ok(Value::Tensor(Rc::new(r.map_err(|e| trapped(e, pos))?)))
+    }
+
+    /// std.tensor.20: a fused chain (`fuse::plan`) at `e`. The names are read
+    /// first, in order; when they are `float`s and `float` tensors of one
+    /// shape, one pass computes the result, otherwise each step runs as the
+    /// unfused operation would.
+    pub(super) fn fused(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        let plan = fuse::plan(e).expect("checked: a fusable chain");
+        let mut vals = Vec::with_capacity(plan.names.len());
+        for name in &plan.names {
+            vals.push(self.eval(name, env)?);
+        }
+        self.fused_values(&plan.ops, &vals)
+    }
+
+    /// A fused chain on its names' values (see `fused`), in either tier.
+    pub(super) fn fused_values(&mut self, ops: &[FOp], vals: &[Value]) -> Flow<Value> {
+        let inputs: Option<Vec<Input>> = vals
+            .iter()
+            .map(|v| match v {
+                Value::Tensor(t) => Some(Input::T(t)),
+                Value::Float(x) => Some(Input::F(*x)),
+                _ => None,
+            })
+            .collect();
+        if let Some(inputs) = inputs
+            && let Some(t) = fuse::run_fast(ops, &inputs)
+        {
+            return Ok(Value::Tensor(Rc::new(t)));
+        }
+        self.fused_steps(ops, vals)
+    }
+
+    /// The unfused steps of a fused chain, one operation at a time.
+    pub(super) fn fused_steps(&mut self, ops: &[FOp], vals: &[Value]) -> Flow<Value> {
+        let mut stack: Vec<Value> = Vec::with_capacity(vals.len() + 1);
+        for step in ops {
+            match *step {
+                FOp::Name(k) => stack.push(vals[k].clone()),
+                FOp::Const(x) => stack.push(Value::Float(x)),
+                FOp::Bin(op, pos) => {
+                    let b = stack.pop().expect("postfix");
+                    let a = stack.pop().expect("postfix");
+                    stack.push(self.binop(op, a, b, pos)?);
+                }
+                FOp::Neg(pos) => {
+                    let a = stack.pop().expect("postfix");
+                    stack.push(match a {
+                        Value::Float(x) => Value::Float(-x),
+                        Value::Tensor(t) => Value::Tensor(Rc::new(t.neg().map_err(|f| trapped(f, pos))?)),
+                        other => unreachable!("checked: a tensor or float, found {other:?}"),
+                    });
+                }
+                FOp::Act(act, pos) => {
+                    let a = stack.pop().expect("postfix");
+                    let Value::Tensor(t) = a else { unreachable!("checked: a tensor") };
+                    stack.push(Value::Tensor(Rc::new(t.activate(act).map_err(|f| trapped(f, pos))?)));
+                }
+            }
+        }
+        Ok(stack.pop().expect("one result"))
+    }
+
     /// `t.m(args)` (std.tensor.3-8).
     pub(super) fn tensor_method(
         &mut self,
@@ -127,10 +208,32 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             "transpose" => wrap(t.transpose())?,
+            "round" => wrap(t.round_int())?,
+            "argmax" | "argmin" => {
+                let r = t.arg_reduce(other.as_ref().map(Value::int), m == "argmax").map_err(|e| trapped(e, pos))?;
+                match (other, r.data) {
+                    (Some(_), data) => Value::Tensor(Rc::new(Tensor { shape: r.shape, data })),
+                    (None, Data::I(v)) => Value::Int(v[0]),
+                    (None, Data::F(_)) => unreachable!("arg_reduce gives `int`"),
+                }
+            }
+            "clamp" => {
+                let hi = match self.eval(&args[1].value, env)? {
+                    Value::Float(x) => x,
+                    other => unreachable!("checked: a float bound, found {other:?}"),
+                };
+                let Some(Value::Float(lo)) = other else { unreachable!("checked: a float bound") };
+                wrap(t.clamp(lo, hi))?
+            }
             "dot" => sum_value(t.dot(&tensor_arg()).map_err(|e| trapped(e, pos))?),
             "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
             "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,
             "matmul" => wrap(t.matmul(&tensor_arg()))?,
+            "conv2d" => wrap(t.conv2d(&tensor_arg()))?,
+            "item" => match t.item().map_err(|e| trapped(e, pos))? {
+                Scalar::F(x) => Value::Float(x),
+                Scalar::I(n) => Value::Int(n),
+            },
             "relu" => wrap(t.activate(Activation::Relu))?,
             "sigmoid" => wrap(t.activate(Activation::Sigmoid))?,
             "tanh" => wrap(t.activate(Activation::Tanh))?,

@@ -1,4 +1,5 @@
 fn mean(xs List[f64]) f64
     sum(xs) / xs.len().float()
+
 fn merge(a List[int], b List[int]) List[int]
     a + b

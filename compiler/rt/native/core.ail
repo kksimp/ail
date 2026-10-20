@@ -1,0 +1,554 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native runtime's core (native-abi.md, ADRs 0404-0408, 0387): system
+## calls, the bump allocator, buffered output, lists of numbers, and traps.
+## Written in the native subset over the primitives of `prim.ail`, and
+## compiled by the backend into every executable. The algorithms follow
+## lane 122's machine model in `compiler/rt/rt.ail`.
+
+# Global slots.
+OUT_BUF := 0
+OUT_LEN := 1
+HEAP_NEXT := 2
+HEAP_END := 3
+CHUNK := 4
+ARGC := 5
+ARGV := 6
+PARSE_OK := 7
+## A trap's third number (a slice's list length); the program ends after
+## it, so it shares `PARSE_OK`'s slot.
+TRAP_LEN := 7
+
+OUT_CAP := 65536
+
+# ---- system calls (native-abi.md §4) ----
+
+fn sys_write(fd int, p int, n int)
+    t := target()
+    mut done := 0
+    while done < n
+        k := if t == 0 then 1 else if t == 1 then 64 else 4
+        r := syscall(k, fd, p + done, n - done, 0, 0, 0)
+        if r == -4
+            continue
+        if r <= 0
+            return
+        done += r
+
+fn sys_exit(code int)
+    t := target()
+    k := if t == 0 then 231 else if t == 1 then 94 else 1
+    syscall(k, code, 0, 0, 0, 0, 0)
+
+fn sys_mmap(n int) int
+    t := target()
+    k := if t == 0 then 9 else if t == 1 then 222 else 197
+    flags := if t == 2 then 4098 else 34
+    syscall(k, 0, n, 3, flags, -1, 0)
+
+# ---- memory (ADR 0407) ----
+
+## Called by the entry with the process's argument count and vector.
+fn init(argc int, argv int)
+    store64(global(ARGC), argc)
+    store64(global(ARGV), argv)
+    store64(global(OUT_BUF), sys_mmap(OUT_CAP))
+    store64(global(OUT_LEN), 0)
+    store64(global(CHUNK), 1048576)
+
+## `n` zeroed bytes, 16-byte aligned, never freed.
+fn alloc(n int) int
+    size := (n + 15) / 16 * 16
+    mut p := load64(global(HEAP_NEXT))
+    if p == 0 or p + size > load64(global(HEAP_END))
+        mut chunk := load64(global(CHUNK))
+        if chunk < size
+            chunk = size
+        p = sys_mmap(chunk)
+        if p < 0
+            fail(1, 0, 0)
+        store64(global(HEAP_END), p + chunk)
+        store64(global(CHUNK), chunk * 2)
+    store64(global(HEAP_NEXT), p + size)
+    p
+
+fn copy_bytes(dst int, src int, n int)
+    mut i := 0
+    while i + 32 <= n
+        store64(dst + i, load64(src + i))
+        store64(dst + i + 8, load64(src + i + 8))
+        store64(dst + i + 16, load64(src + i + 16))
+        store64(dst + i + 24, load64(src + i + 24))
+        i += 32
+    while i + 8 <= n
+        store64(dst + i, load64(src + i))
+        i += 8
+    while i < n
+        store8(dst + i, load8(src + i))
+        i += 1
+
+# ---- output (ADR 0408) ----
+
+fn flush_to(fd int)
+    n := load64(global(OUT_LEN))
+    if n > 0
+        sys_write(fd, load64(global(OUT_BUF)), n)
+        store64(global(OUT_LEN), 0)
+
+fn flush()
+    flush_to(if load64(global(OUT_FD)) == 2 then 2 else 1)
+
+## Flush, then end the process.
+fn exit(code int)
+    flush()
+    sys_exit(code)
+
+fn out_byte(b int)
+    mut n := load64(global(OUT_LEN))
+    if n == OUT_CAP
+        flush()
+        n = 0
+    store8(load64(global(OUT_BUF)) + n, b)
+    store64(global(OUT_LEN), n + 1)
+
+## Copy into the buffer in as few pieces as fit, flushing when it fills.
+fn out_bytes(p int, n int)
+    mut from := p
+    mut left := n
+    while left > 0
+        mut used := load64(global(OUT_LEN))
+        if used == OUT_CAP
+            flush()
+            used = 0
+        room := OUT_CAP - used
+        k := if left < room then left else room
+        copy_bytes(load64(global(OUT_BUF)) + used, from, k)
+        store64(global(OUT_LEN), used + k)
+        from += k
+        left -= k
+
+## A string object: +0 bytes, +8 chars, +16 UTF-8 (native-abi.md §2).
+fn out_str(s str)
+    p := str_addr(s)
+    out_bytes(p + 16, load64(p))
+
+# ---- strings (type.str.*) ----
+
+## A string object of `n` bytes, uninitialised, with `chars` characters.
+fn str_new(n int, chars int) int
+    p := alloc(16 + n)
+    store64(p, n)
+    store64(p + 8, chars)
+    p
+
+## `s.len()`: its characters.
+fn str_len(s str) int
+    load64(str_addr(s) + 8)
+
+## `s.chars()`: each character as a string of its own.
+fn str_chars(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    out := list_new(load64(p + 8))
+    mut i := 0
+    while i < n
+        mut j := i + 1
+        while j < n and load8(p + 16 + j).bit_and(192) == 128
+            j += 1
+        c := str_new(j - i, 1)
+        copy_bytes(c + 16, p + 16 + i, j - i)
+        list_push(out, c)
+        i = j
+    out
+
+## `xs.join(sep)` for a list of strings.
+fn list_join(xs List[int], sep str) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    mut n := 0
+    mut chars := 0
+    for i in 0..k
+        e := load64(items + 8 * i)
+        n += load64(e)
+        chars += load64(e + 8)
+    if k > 1
+        n += (k - 1) * load64(sp)
+        chars += (k - 1) * load64(sp + 8)
+    r := str_new(n, chars)
+    mut at := r + 16
+    for i in 0..k
+        if i > 0
+            copy_bytes(at, sp + 16, load64(sp))
+            at += load64(sp)
+        e := load64(items + 8 * i)
+        copy_bytes(at, e + 16, load64(e))
+        at += load64(e)
+    str_at(r)
+
+fn out_nl()
+    out_byte(10)
+    if line_buffered()
+        flush()
+
+## Decimal, working on negative remainders so the smallest `int` needs no
+## negation.
+fn out_int(n int)
+    if n == 0
+        out_byte(48)
+        return
+    if n < 0
+        out_byte(45)
+    mut v := n
+    mut scale := 1
+    while v / 10 != 0
+        v = v / 10
+        scale *= 10
+    v = n
+    while scale > 0
+        d := v / scale % 10
+        out_byte(48 + d.abs())
+        scale = scale / 10
+
+fn out_bool(b bool)
+    if b
+        out_byte(116)
+        out_byte(114)
+        out_byte(117)
+        out_byte(101)
+    else
+        out_byte(102)
+        out_byte(97)
+        out_byte(108)
+        out_byte(115)
+        out_byte(101)
+
+fn out_sep(i int)
+    if i > 0
+        out_byte(44)
+        out_byte(32)
+
+fn out_list_int(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_int(load64(data + 8 * i))
+    out_byte(93)
+
+fn out_list_bool(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_bool(load8(data + i) != 0)
+    out_byte(93)
+
+fn out_list_float(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_float(loadf(data + 8 * i))
+    out_byte(93)
+
+## A string inside a printed value, in quotes, with `\\`, `"` and control
+## characters escaped (trait.auto.2).
+fn out_quoted(s str)
+    p := str_addr(s)
+    n := load64(p)
+    data := p + 16
+    out_byte(34)
+    mut i := 0
+    while i < n
+        b := load8(data + i)
+        if b == 92 or b == 34
+            out_byte(92)
+            out_byte(b)
+        elif b == 10
+            out_escape(110)
+        elif b == 9
+            out_escape(116)
+        elif b == 13
+            out_escape(114)
+        elif b == 0
+            out_escape(48)
+        elif b < 32 or b == 127
+            out_code(b)
+        elif b == 194 and i + 1 < n and load8(data + i + 1) >= 128 and load8(data + i + 1) < 160
+            # U+0080 to U+009F, the C1 controls.
+            out_code(load8(data + i + 1))
+            i += 1
+        else
+            out_byte(b)
+        i += 1
+    out_byte(34)
+
+fn out_escape(c int)
+    out_byte(92)
+    out_byte(c)
+
+## `\u{H}`, lowercase hex without leading zeros.
+fn out_code(c int)
+    out_byte(92)
+    out_byte(117)
+    out_byte(123)
+    if c >= 16
+        out_byte(hex_digit(c / 16))
+    out_byte(hex_digit(c % 16))
+    out_byte(125)
+
+fn hex_digit(d int) int
+    if d < 10 then 48 + d else 87 + d
+
+## A list of lists or strings: `depth` levels of lists around elements of
+## kind `leaf` (0 int, 1 float, 2 bool, 3 str).
+fn out_list_deep(xs List[int], depth int, leaf int)
+    if depth == 0
+        if leaf == 0
+            out_list_int(xs)
+        elif leaf == 1
+            out_list_float(xs)
+        elif leaf == 2
+            out_list_bool(xs)
+        else
+            p := list_addr(xs)
+            data := load64(p + 16)
+            out_byte(91)
+            for i in 0..load64(p)
+                out_sep(i)
+                out_quoted(str_at(load64(data + 8 * i)))
+            out_byte(93)
+        return
+    p := list_addr(xs)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..load64(p)
+        out_sep(i)
+        out_list_deep(list_at(load64(data + 8 * i)), depth - 1, leaf)
+    out_byte(93)
+
+## Record the length a slice trap reports (kind 7).
+fn note_len(n int)
+    store64(global(TRAP_LEN), n)
+
+## `xs[lo..hi]`, checked by the caller: a new list of `size`-byte elements.
+fn list_slice(xs List[int], lo int, hi int, size int) List[int]
+    p := list_addr(xs)
+    n := hi - lo
+    q := list_addr(list_alloc(n, size))
+    copy_bytes(load64(q + 16), load64(p + 16) + size * lo, size * n)
+    store64(q, n)
+    list_at(q)
+
+## A heap object of `size` bytes after its header word (native-abi.md §2):
+## bits 0-7 the kind, 16-63 the size. The pointer is to the first byte
+## after the header.
+fn obj_new(size int, kind int) int
+    p := alloc(size + 8)
+    store64(p, kind + size.shl(16))
+    p + 8
+
+# ---- lists (native-abi.md §2) ----
+
+## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
+## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
+fn list_alloc(cap int, size int) List[int]
+    p := alloc(24)
+    c := if cap < 4 then 4 else cap
+    store64(p + 8, c)
+    store64(p + 16, alloc(size * c))
+    list_at(p)
+
+fn list_new(cap int) List[int]
+    list_alloc(cap, 8)
+
+fn list_grow(p int, size int)
+    cap := load64(p + 8) * 2
+    data := alloc(size * cap)
+    copy_bytes(data, load64(p + 16), size * load64(p))
+    store64(p + 8, cap)
+    store64(p + 16, data)
+
+## Room for `(hi - lo) * per` more elements of `size` bytes, at most
+## 2^20 of them, called before a loop that pushes that many (ADR 0578).
+## Only the capacity changes.
+fn list_reserve(xs List[int], lo int, hi int, per int, size int)
+    if hi <= lo
+        return
+    p := list_addr(xs)
+    mut want := hi - lo
+    if want > 1048576
+        want = 1048576
+    need := load64(p) + want * per
+    if need <= load64(p + 8)
+        return
+    data := alloc(size * need)
+    copy_bytes(data, load64(p + 16), size * load64(p))
+    store64(p + 8, need)
+    store64(p + 16, data)
+
+## The slow paths of `push`: the code generator stores in place while the
+## list has room, and calls these when it is full.
+fn list_push(xs List[int], v int)
+    p := list_addr(xs)
+    n := load64(p)
+    if n == load64(p + 8)
+        list_grow(p, 8)
+    store64(load64(p + 16) + 8 * n, v)
+    store64(p, n + 1)
+
+fn list_pushf(xs List[int], x float)
+    list_push(xs, float_bits(x))
+
+fn list_pushb(xs List[int], b bool)
+    p := list_addr(xs)
+    n := load64(p)
+    if n == load64(p + 8)
+        list_grow(p, 1)
+    store8(load64(p + 16) + n, if b then 1 else 0)
+    store64(p, n + 1)
+
+fn list_copy(xs List[int], size int) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    q := list_addr(list_alloc(n, size))
+    copy_bytes(load64(q + 16), load64(p + 16), size * n)
+    store64(q, n)
+    list_at(q)
+
+## A copy of `xs` and of the lists in it, `depth` levels down; the innermost
+## lists' elements are `size` bytes.
+fn list_copy_deep(xs List[int], depth int, size int) List[int]
+    ys := list_copy(xs, 8)
+    q := list_addr(ys)
+    items := load64(q + 16)
+    for i in 0..load64(q)
+        inner := list_at(load64(items + 8 * i))
+        c := if depth > 1 then list_copy_deep(inner, depth - 1, size) else list_copy(inner, size)
+        store64(items + 8 * i, list_addr(c))
+    ys
+
+# ---- arguments and parsing (std.env.1, type.str.*) ----
+
+## `env.args()`: the words after the program's name, as string objects.
+fn args() List[int]
+    mut out := List[int]()
+    argv := load64(global(ARGV))
+    for i in 1..load64(global(ARGC))
+        c := load64(argv + 8 * i)
+        mut n := 0
+        while load8(c + n) != 0
+            n += 1
+        mut chars := 0
+        for k in 0..n
+            if load8(c + k).bit_and(192) != 128
+                chars += 1
+        s := str_new(n, chars)
+        copy_bytes(s + 16, c, n)
+        out.push(s)
+    out
+
+## `s.to_int()`: an optional `-` then decimal digits that fit in `int`;
+## `parse_ok()` says whether the last call succeeded.
+fn str_to_int(s str) int
+    p := str_addr(s)
+    n := load64(p)
+    store64(global(PARSE_OK), 0)
+    neg := n > 0 and load8(p + 16) == 45
+    mut i := if neg then 1 else 0
+    if i >= n
+        return 0
+    # Accumulate the negative value, which reaches the smallest `int`.
+    mut v := 0
+    while i < n
+        d := load8(p + 16 + i) - 48
+        if d < 0 or d > 9
+            return 0
+        if v < -922337203685477580 or v == -922337203685477580 and d > 8
+            return 0
+        v = v * 10 - d
+        i += 1
+    if not neg
+        if v == -9223372036854775807 - 1
+            return 0
+        v = 0 - v
+    store64(global(PARSE_OK), 1)
+    v
+
+fn parse_ok() bool
+    load64(global(PARSE_OK)) != 0
+
+# ---- traps (ADR 0405) ----
+
+## Print a trap and exit 1. `head` is `PATH:LINE:COL: trap[RULE]: `, `tail`
+## the source excerpt; `kind` picks the message, finished with `a`, `b`
+## and the operator `op` (native-abi.md §7).
+fn trap(kind int, a int, b int, head str, op str, tail str)
+    flush()
+    out_str(head)
+    if kind == 0
+        # `a OP b` overflows `int` (expr.arith.1)
+        out_byte(96)
+        out_int(a)
+        out_byte(32)
+        out_str(op)
+        out_byte(32)
+        out_int(b)
+        out_str("` overflows `int`")
+    elif kind == 1
+        out_str("division by zero in `")
+        out_int(a)
+        out_byte(32)
+        out_str(op)
+        out_byte(32)
+        out_int(b)
+        out_byte(96)
+    elif kind == 2
+        out_str("`-(")
+        out_int(a)
+        out_str(")` overflows `int`")
+    elif kind == 3
+        out_str("index ")
+        out_int(a)
+        out_str(" is out of bounds for a list of length ")
+        out_int(b)
+    elif kind == 4
+        out_byte(96)
+        out_float(bits_float(a))
+        out_str("` doesn't fit in `int`")
+    elif kind == 5
+        out_str("`(")
+        out_int(a)
+        out_str(").abs()` overflows `int`")
+    elif kind == 6
+        out_str("shift count `")
+        out_int(a)
+        out_str("` is outside `0..=63`")
+    elif kind == 7
+        # `xs[a..b]` (type.coll.4); `op` is `..` or `..=`.
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for a list of length ")
+        out_int(load64(global(TRAP_LEN)))
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
+
+## A failure of the runtime itself: out of memory (run.limit.2).
+fn fail(kind int, a int, b int)
+    flush()
+    out_str("trap[run.limit.2]: out of memory\n")
+    flush_to(2)
+    sys_exit(1)

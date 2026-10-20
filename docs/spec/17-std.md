@@ -3,9 +3,7 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
-> and `std.compress`, `std.fs`, `std.env`, `std.hash`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.compress`, `std.fs`, `std.env`, `std.hash`, `std.io`, `std.mem`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -36,7 +34,7 @@ hides the module in its scope: calling one of the module's functions through
 it is a compile-time error that says so. `use std.NAME` stays valid and
 behaves as `std.use.1`. *(ADR 0277)*
 
-```ail
+```ail rules=std.use.4
 fn main()
     print(path.ext("notes.txt"))   # txt
 ```
@@ -53,7 +51,7 @@ fields `cmd str` and `kind str`. `kind` is one of `not_found`,
 and is the same for the same failure on every platform. `std.net` fails
 with `net.NetError` (`std.net.4`). *(ADR 0158, ADR 0282, ADR 0321)*
 
-```ail
+```ail rules=std.err.1
 use std.fs
 
 fn load(path str) str ! fs.IoError
@@ -134,7 +132,7 @@ to the file, creating it or replacing its contents; `append_bytes(path str,
 data bytes) ! IoError` adds `data` at the end, creating the file if needed.
 They fail as `write_text` and `append_text` do. *(ADR 0415)*
 
-```ail
+```ail norun rules=std.fs.9
 use std.fs
 
 fn main() !
@@ -186,7 +184,7 @@ separator or `a` is empty; on Windows also when `b` starts with a drive and
 a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
 *(ADR 0253, ADR 0504)*
 
-```ail
+```ail rules=std.path.1,std.path.2,std.path.3,std.path.4
 use std.path
 
 fn main()
@@ -199,8 +197,8 @@ fn main()
 ## Hashing: `std.hash`
 
 **std.hash.1** — `std.hash` works on values only, so its functions have no
-effects (`eff.infer.4`). Each takes `str` and hashes its UTF-8 bytes; when
-the `bytes` type lands the same functions take `bytes` too (ADR 0442).
+effects (`eff.infer.4`). Each data argument is `bytes` or `str`; a `str` is
+hashed as its UTF-8 bytes (`type.bytes.10`). *(ADR 0442)*
 
 **std.hash.2** — `sha256(s str) str`, `sha384(s str) str` and
 `sha512(s str) str` return the digest of FIPS 180-4 as lower-case hex.
@@ -224,19 +222,18 @@ fn main()
 
 ## Compression: `std.compress`
 
-**std.compress.1** — Binary data is a `List[int]` of values 0 to 255 until
-the `bytes` type lands (ADR 0443). `deflate(s str) List[int]` and
-`gzip(s str) List[int]` compress the UTF-8 bytes of `s` at a fixed level (6)
-into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952). They
-never fail, and the same input gives the same output on every platform.
+**std.compress.1** — `deflate(data bytes) bytes` and `gzip(data bytes) bytes`
+compress `data` (a `str` is also accepted, as its UTF-8 bytes) at a fixed
+level (6) into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952).
+They never fail, and the same input gives the same output on every platform.
 They have no effects.
 
-**std.compress.2** — `inflate(data List[int]) str ! compress.CompressError`
-and `gunzip(data List[int]) str ! compress.CompressError` reverse them.
+**std.compress.2** — `inflate(data bytes) bytes ! compress.CompressError`
+and `gunzip(data bytes) bytes ! compress.CompressError` reverse them; use
+`.to_str()` (`type.bytes.8`) when the result is text.
 `CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
 data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
-CRC-32 or size mismatch), `too_big` (std.compress.4), `invalid_utf8` (the
-result is not text), `unsafe_path`, `unsupported`, or an I/O kind of
+CRC-32 or size mismatch), `too_big` (std.compress.4), `unsafe_path`, `unsupported`, or an I/O kind of
 `std.err.1` for file functions. *(ADR 0443)*
 
 **std.compress.3** — `gunzip` accepts the optional header fields of
@@ -260,8 +257,8 @@ with `too_big`. `unzip` creates `dir`, checks every CRC-32, and fails with
 entries and methods other than store and deflate fail with `unsupported`.
 *(ADR 0446)*
 
-**std.compress.7** — `zlib(s str) List[int]` and
-`unzlib(data List[int]) str ! compress.CompressError` use the zlib wrapper of
+**std.compress.7** — `zlib(data bytes) bytes` and
+`unzlib(data bytes) bytes ! compress.CompressError` use the zlib wrapper of
 RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
 streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
 and `unsupported` for a preset dictionary. *(ADR 0443)*
@@ -275,7 +272,7 @@ use std.compress
 
 fn main() !
     z := compress.gzip("abc abc abc abc")
-    print(compress.gunzip(z)?)
+    print(compress.gunzip(z)?.to_str() else "binary")
 ```
 
 ## Standard input and output: `std.io`
@@ -315,7 +312,7 @@ report it) and the captured text, with bytes that aren't UTF-8 as U+FFFD. A
 process that runs and fails is a successful `run` with a nonzero
 `status`; only a process that can't start is a `ProcError`. *(ADR 0160)*
 
-```ail
+```ail norun rules=std.proc.1
 use std.proc
 
 fn main() !
@@ -339,7 +336,7 @@ itself when it contains a separator and is an executable file, otherwise
 the first executable `DIR/name` for the directories of `PATH` in order
 (on Windows, also with each extension of `PATHEXT`). *(ADR 0282)*
 
-```ail
+```ail rules=std.proc.2,std.proc.3
 use std.proc
 
 fn main() !
@@ -386,6 +383,14 @@ is waited or killed once. `kill(move c Child) int` ends the child at once
 status (137 on Unix). A child that is neither waited nor killed when the
 program ends is killed then, so no program leaves a process running. *(ADR 0425)*
 
+**std.proc.8** — `run_bytes(cmd str, args List[str], input bytes?, timeout_ms
+int?) RawOutput ! ProcError` is `run` with `bytes` in and out: `input` is
+written to the process's standard input as it is, and `struct RawOutput {
+status int, out bytes, err bytes }` holds what it wrote, undecoded. Everything
+else, including the trailing optional arguments, the time limit, the failure
+kinds and the effects, is that of `run`. `Output` is unchanged, with
+`out` and `err` as `str`. *(ADR 0417)*
+
 ```ail
 use std.proc
 
@@ -396,6 +401,35 @@ fn main() !
     for line in c.out
         print(line)
     print(proc.wait(move c)?)
+```
+
+```ail rules=std.proc.8
+use std.proc
+
+fn main() !
+    r := proc.run_bytes("sort", [], b"b\na\n")?
+    print("{r.status} {r.out.len()}")
+```
+
+## Memory for C: `std.mem`
+
+**std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new
+NUL-terminated copy of `s`; `from_cstr(p *u8) str`, which reads a
+NUL-terminated string (invalid UTF-8 becomes U+FFFD); `alloc(n, example) *T`,
+`cast(p, example) *T`, `null() *u8` and `free(p)` (`unsafe.mem.3`). Each is an unsafe operation (`unsafe.op.1`), and a block that is
+not freed leaks. The rules for bad pointers are `unsafe.mem.1-2`. *(ADR 0434)*
+
+```ail fragment rules=std.mem.1
+use std.mem
+
+extern c fn strlen(s *u8) int
+
+fn c_length(text str) int
+    unsafe
+        p := mem.cstr(text)
+        n := strlen(p)
+        mem.free(p)
+        n
 ```
 
 ## Network: `std.net`
@@ -442,7 +476,7 @@ variable `SSL_CERT_FILE` when it is set. A server that doesn't speak TLS
 1.3 fails with kind `tls`. Redirects may move between `http` and `https`.
 *(ADR 0360, ADR 0366–0369)*
 
-```ail
+```ail norun rules=std.net.2,std.net.5
 use std.net
 
 fn main() !
@@ -500,8 +534,7 @@ fails with kind `closed`, connections still sending a request are dropped,
 and an `Exchange` accepted earlier can still be answered (a graceful stop).
 `struct Exchange { request Request, handle int }` and `struct Request {
 method str, path str, query Map[str, str], headers Map[str, str], body str,
-peer str }`. A handler form `serve(addr, handler)` with `handler fn(Request)
-Response` follows function values (ADR 0419); until then a server is a
+peer str }`. The handler form is `std.net.http` (`std.net.18`); otherwise a server is a
 loop over `accept`, usually in tasks. *(ADR 0419)*
 
 **std.net.10** — The server accepts only well-formed HTTP/1.0 and HTTP/1.1
@@ -545,8 +578,8 @@ without its `\n` or `\r\n`, or absent at the end of the stream;
 how long a read, write or connect may make no progress before kind
 `timed_out`; `c.peer() str`; and `c.close()`. A `Conn` and a `Server`
 handle are used from one task at a time (`Server.accept` excepted). After
-`close`, every operation fails with kind `closed`. Text only until `bytes`
-(lane 123) lands; then `read_bytes` and `write_bytes` join. *(ADR 0421)*
+`close`, every operation fails with kind `closed`. `read_bytes` and
+`write_bytes` are the undecoded forms (`std.net.16`). *(ADR 0421)*
 
 **std.net.13** — `connect_tls(host str, port int) Conn ! NetError` connects
 and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
@@ -567,6 +600,58 @@ over the platform's sockets. On Windows the sockets are the Rust standard
 library's (Winsock); the code uses nothing else, and it is untested there
 (ADR 0004, lane 153). *(ADR 0423)*
 
+**std.net.16** — Bodies as `bytes`. *(ADR 0416)*
+- `get_bytes(url str)`, `post_bytes(url str, data bytes, content_type str)`
+  and `request_bytes(method str, url str, opts Options)` act as `get`, `post`
+  and `request` but return `struct RawResponse { status int, headers
+  Map[str, str], data bytes } ! NetError`: the body undecoded. `Response.body`
+  stays a `str`, the same bytes with each invalid UTF-8 sequence as U+FFFD.
+- `Options` has a last field `data bytes`, empty from `options()`. A request
+  sends `data` as its body when it isn't empty, and `body` otherwise.
+- `Request` has a last field `data bytes`: the body the server received, as
+  it arrived (`body` is its lossy text).
+- `ex.respond_bytes(status int, headers Map[str, str], data bytes) !
+  NetError` answers an `Exchange` with `data` as the body; it checks the
+  status and headers as `respond` does.
+- `Conn.read_bytes(max int) bytes ! NetError` waits for at least one byte and
+  returns up to `max`, empty at the end of the stream; it fails as `read`
+  does, and `Conn.write_bytes(data bytes) ! NetError` writes all of `data`.
+
+**std.net.17** — Repeated headers. `Response` and `RawResponse` have a last
+field `all_headers Map[str, List[str]]`: each header name in lowercase with
+every value it arrived with, one by one and in order (a `Set-Cookie` whose
+`Expires` holds a comma stays whole); `headers` still joins them with `, `
+(`std.net.2`). `net.Response(...)` may leave `all_headers` out: it is then
+empty. When a server answers with `ex.respond(r)`, each name in
+`r.all_headers` is sent once per value in place of its entry in `r.headers`,
+which is how to send several `Set-Cookie` headers. *(ADR 0418)*
+
+**std.net.18** — The handler form. `use std.net.http` gives
+`http.serve(addr str, handler fn(net.Request) net.Response) ! net.NetError`,
+which listens on `addr` and answers every request with `handler`, and
+`http.run(srv net.Server, handler) !`, which does the same on a server the
+program holds and returns when `srv.close()` has stopped it. Four tasks
+answer requests at once, each one at a time; a handler is a declared
+function (`conc.task.*`, function values), and a client that goes away
+before its answer is not a failure. *(ADR 0419)*
+
+```ail rules=std.net.17,std.net.18
+use std.net
+use std.net.http
+
+fn page(r net.Request) net.Response
+    cookies := {"set-cookie": ["a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT", "b=2"]}
+    net.Response(status: 200, headers: {}, body: "hi {r.path}", all_headers: cookies)
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, page)
+    r := net.get("http://{srv.addr()}/x")?
+    print("{r.body} {r.all_headers["set-cookie"].len()} {r.headers["set-cookie"]}")
+    srv.close()
+    t.wait()?
+```
+
 ```ail
 use std.net
 
@@ -580,6 +665,21 @@ fn main() !
     t := spawn answer(srv)
     r := net.get("http://{srv.addr()}/?name=ail")?
     print(r.body)
+    t.wait()?
+```
+
+```ail rules=std.net.16
+use std.net
+
+fn echo(srv net.Server) !
+    ex := srv.accept()?
+    ex.respond_bytes(200, {}, ex.request.data + b"!")?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn echo(srv)
+    r := net.post_bytes("http://{srv.addr()}/", b"\x01\x02", "application/octet-stream")?
+    print("{r.status} {r.data.hex()}")
     t.wait()?
 ```
 
@@ -711,7 +811,7 @@ every order is equally likely (Fisher-Yates). The argument is marked `mut`
 **std.random.5** — `ail run --deterministic` rejects every program that
 reaches `random` (`eff.det.2`). *(ADR 0207)*
 
-```ail
+```ail rules=std.random.1,std.random.3,std.random.4
 use std.random
 
 fn main()
@@ -802,7 +902,7 @@ ends closes its window. *(ADR 0177)*
 and the effect `io` (`eff.infer.4`), so `ail run --deny ui` refuses a program
 that can open a window (`eff.cap.1`). *(ADR 0177)*
 
-```ail
+```ail norun rules=std.ui.1,std.ui.2,std.ui.5,std.ui.6,std.ui.7,std.ui.8
 use std.ui
 
 fn main()
@@ -947,8 +1047,11 @@ error that lists them. *(ADR 0328)*
 
 **std.tensor.4** — `a.add(b)` and `a.mul(b)` are elementwise `+` and `*`;
 `a.dot(b) T` is the sum of the elementwise products. `a` and `b` have the
-same element type (checked) and MUST have equal shapes: otherwise the call
-traps. *(ADR 0328)*
+same element type (checked). `add`, `mul` and the operators broadcast
+NumPy-style (std.tensor.10): the shapes line up from the right, and per axis
+the sizes are equal or one is 1, which stretches to the other; a missing
+leading axis counts as 1. The result has the broadcast shape. `dot` needs
+equal shapes. Shapes that don't broadcast trap. *(ADR 0328, amended by ADR 0522)*
 
 **std.tensor.5** — On `float` tensors, `add`, `mul` and `/` round each element
 as `+`, `*` and `/` do. `sum` and `dot` add in this order: element `i` (or
@@ -982,14 +1085,15 @@ isn't 1-D. *(ADR 0328)*
 
 **std.tensor.10** — `a + b`, `a - b`, `a * b` and `a / b` with a tensor
 operand are elementwise, with no other arithmetic operator defined for
-tensors. Both operands are tensors with one element type and equal shapes
-(`a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one is a tensor and the
+tensors. Both operands are tensors with one element type and broadcastable
+shapes (std.tensor.4; `a + b` is `a.add(b)`, `a * b` is `a.mul(b)`), or one
+is a tensor and the
 other a scalar of its element type, on either side, which is taken with
 every element: `t * 2.0`, `1.0 - t`, `8.0 / t`. `/` is defined on `float`
 tensors only; `/` on a `Tensor[int]` is a compile-time error. An `int`
 literal beside a `Tensor[float]` is a `float` (`type.num.10`). Rounding is
 std.tensor.5's and overflow std.tensor.6's; other operand types are a
-compile-time error, and unequal shapes trap. `+=`, `-=` and `*=` follow.
+compile-time error, and shapes that don't broadcast trap. `+=`, `-=` and `*=` follow.
 Matrix product stays `a.matmul(b)`. *(ADR 0344, ADR 0507)*
 
 **std.tensor.11** — `t.sum()`, `t.max()` and `t.mean()` reduce every element
@@ -1022,7 +1126,59 @@ of the same shape and element type. A `float` is negated exactly, so `-0.0`
 is a result. An `int` element that is the least `int` traps as in
 std.tensor.6. *(ADR 0508)*
 
-```ail
+**std.tensor.15** — `t[i]` (an `int` `i`) is the tensor of `t`'s rows after
+the first, with that first axis dropped: a 1-D tensor's `t[i]` has shape
+`[]`. `t[lo..hi]` and `t[lo..=hi]` (a missing bound is the start or the end)
+are the rows of that range, with every axis kept. The index is typed as a
+`tensor.Tensor[T]` in both cases, so the checker doesn't need a rank. A
+row index outside `0` to the row count, or a range outside it, traps. An
+index that is not an `int` is a compile-time error. `t.item()` is the one
+element of a tensor with exactly one element and traps otherwise. Assigning
+to an element, `t[i] = v`, is a compile-time error: a tensor is a value, so
+build a new one. *(ADR 0509)*
+
+**std.tensor.16** — `t.conv2d(k)` is the valid 2-D convolution of an `h` by
+`w` `float` image `t` with an `kh` by `kw` kernel `k`, stride 1 and no
+padding: the result is `(h - kh + 1)` by `(w - kw + 1)`. Each output adds
+its products in the kernel's row-major order, one at a time, so the sum is
+the same on every target. Both operands must be 2-D, and the kernel must
+fit the image; otherwise the call traps. `conv2d` on a `Tensor[int]` is a
+compile-time error. *(ADR 0521)*
+
+**std.tensor.17** — `t.argmax(axis)` and `t.argmin(axis)` give the `int`
+index of the largest or smallest element along `axis`, as a `Tensor[int]`
+whose shape drops that axis; with no argument they give the index in the
+flattened tensor, an `int`. The first of equal elements wins, and a NaN never
+replaces the running best, as `max` does (std.tensor.11). An empty axis
+traps. *(ADR 0523)*
+
+**std.tensor.18** — `t.clamp(lo, hi)` on a `float` tensor limits each element
+to `[lo, hi]`; a NaN stays NaN. Bounds that are NaN, or with `lo > hi`, trap.
+On a `Tensor[int]` it is a compile-time error. *(ADR 0523)*
+
+**std.tensor.19** — `t.round()` on a `float` tensor rounds each element half
+away from zero to an `int`, giving a `Tensor[int]` of the same shape. A NaN,
+an infinity or a value outside `int` traps. On a `Tensor[int]` it is a
+compile-time error. *(ADR 0523)*
+
+**std.tensor.20** — A chain of two or more elementwise operations on tensors
+(`+ - * /`, unary `-`, and `relu()`, `sigmoid()`, `tanh()` with no arguments)
+over names and float literals may run as one pass over the elements. The
+result is the same as the unfused calls, element by element, including traps
+and NaN, and the tree walker and the bytecode tier agree. A chain whose
+inputs don't share one shape, or that has a non-`float` input, runs unfused.
+Fusion is not visible in the program. *(ADR 0524)*
+
+```ail rules=std.tensor.20
+fn main()
+    a := tensor.from([1.0, -2.0, 3.0, 0.5], [2, 2])
+    b := tensor.from([4.0, 8.0, -1.0, 2.0], [2, 2])
+    print((a * b + a).relu())     # tensor.from([5.0, 0.0, 0.0, 1.5], [2, 2])
+    print(-(a - b) / b)           # tensor.from([0.75, 1.25, 4.0, 0.75], [2, 2])
+    print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
+```
+
+```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
     print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
@@ -1031,4 +1187,499 @@ fn main()
     print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
     print(a.map(|x| x * 2.0).sum())   # 20.0
     print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32
+```
+
+```ail rules=std.tensor.15,std.tensor.16,std.tensor.17,std.tensor.18,std.tensor.19
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    print(a[1])                    # tensor.from([3.0, 4.0])
+    print(a[0..2].sum())           # 10.0
+    print(a + tensor.from([10.0, 20.0]))   # broadcast over the last axis
+    img := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], [3, 3])
+    print(img.conv2d(tensor.from([1.0, 0.0, 0.0, -1.0], [2, 2])))
+    scores := tensor.from([0.1, 0.9, 0.4, 0.7, 0.2, 0.3], [2, 3])
+    print(scores.argmax(1))        # tensor.from([1, 0])
+    print(tensor.from([-1.5, 0.5, 2.5]).clamp(0.0, 1.0))
+    print(tensor.from([2.5, -2.5, 0.49]).round())
+```
+
+## Examples
+
+Conformance examples (ADR 0002) for the rules above. File examples run in a
+scratch directory and remove what they make. `norun` examples are checked
+but not run: they need a window, a network, or a clipboard the harness
+doesn't have.
+
+```ail rules=std.use.1,std.use.2
+use std.path as pth
+use std.env
+
+fn main()
+    print(pth.ext("notes.txt"))       # txt: `as` names the module
+    print(env.args().len())           # qualified function access
+```
+
+```ail error=std.use.3
+use std.io
+use std.fs as io                      # error: `io` is already the name of a module
+```
+
+```ail rules=std.use.3
+use std.fs
+use std.path as path_mod
+
+fn main()
+    print(fs.exists("no-such-file-here"))
+    print(path_mod.base("a/b.txt"))   # b.txt
+```
+
+```ail rules=std.fs.1,std.fs.2,std.fs.3,std.fs.4
+use std.fs
+
+fn main() !
+    fs.write_text("fs_a.txt", "one\n")?
+    fs.append_text("fs_a.txt", "two\n")?
+    print(fs.read_text("fs_a.txt")?)  # one, two
+    print(fs.exists("fs_a.txt"))      # true
+    fs.remove("fs_a.txt")?
+    print(fs.exists("fs_a.txt"))      # false
+```
+
+```ail rules=std.fs.1
+use std.fs
+
+fn main()
+    text := fs.read_text(".") else err
+        print("{err.kind}")          # is_dir
+        ""
+    print(text.len())                # 0
+```
+
+```ail rules=std.fs.5,std.fs.6,std.fs.7
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_b/a/b")?         # creates the missing parents
+    fs.make_dir("fs_b/a/b")?         # an existing directory is not a failure
+    fs.write_text("fs_b/z.txt", "")?
+    fs.write_text("fs_b/a.txt", "")?
+    print(fs.list_dir("fs_b")?)      # [a, a.txt, z.txt]: sorted by bytes
+    fs.remove("fs_b") else err
+        print(err.kind)              # not_empty: nothing removes a tree
+    fs.remove("fs_b/a/b")?
+    fs.remove("fs_b/a")?
+    fs.remove("fs_b/a.txt")?
+    fs.remove("fs_b/z.txt")?
+    fs.remove("fs_b")?
+```
+
+```ail rules=std.fs.8,std.fs.9
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_c/sub")?
+    fs.write_text("fs_c/b.ail", "")?
+    fs.write_text("fs_c/sub/a.ail", "")?
+    fs.write_text("fs_c/.hidden", "")?
+    print(fs.walk("fs_c")?)          # the files below fs_c, dot names included
+    print(fs.glob("fs_c/*.ail"))     # [fs_c/b.ail]
+    print(fs.glob("fs_c/**/*.ail"))  # [fs_c/b.ail, fs_c/sub/a.ail]
+    fs.remove("fs_c/sub/a.ail")?
+    fs.remove("fs_c/sub")?
+    fs.remove("fs_c/.hidden")?
+    fs.remove("fs_c/b.ail")?
+    fs.remove("fs_c")?
+```
+
+```ail rules=std.fs.10,std.fs.11,std.fs.12
+use std.fs
+
+fn main() !
+    fs.write_text("fs_d.txt", "hello")?
+    m := fs.metadata("fs_d.txt")?
+    print(m.size)                    # 5
+    print(m.is_dir)                  # false
+    fs.copy("fs_d.txt", "fs_d2.txt")?
+    fs.rename("fs_d2.txt", "fs_d3.txt")?
+    print(fs.read_text("fs_d3.txt")?)  # hello
+    fs.remove("fs_d.txt")?
+    fs.remove("fs_d3.txt")?
+```
+
+```ail rules=std.env.1,std.env.2,std.env.3,std.env.4,std.env.5,std.env.6
+use std.env
+
+fn main()
+    print(env.args().len())                      # 0: the harness passes no words
+    print(env.get("AIL_SPEC_NOT_SET") else "unset")   # unset
+    print(env.cwd().len() > 0)                   # true
+    print(env.program().len() > 0)               # true
+    print(env.vars().len() >= 0)                 # true
+    print(env.home() else "no home")
+```
+
+```ail rules=std.path.2,std.path.4
+use std.path
+
+fn main()
+    print(path.dir("examples/logscan.ail"))      # examples
+    print(path.dir("/x"))                        # /
+    print(path.dir("plain"))                     # .
+    print(path.join("", "data"))                 # data
+    print(path.join("a", "/abs"))                # /abs
+```
+
+```ail rules=std.io.1,std.io.2,std.io.3,std.io.4
+use std.io
+
+fn main()
+    line := io.read_line() else "no input"
+    print(line)                      # no input: the harness gives an empty standard input
+    print(io.read_all().len())       # 0
+    io.eprint("to standard error")
+    io.exit(0)
+```
+
+```ail rules=std.proc.1,std.proc.2
+use std.proc
+
+fn main() !
+    r := proc.run("sh", ["-c", "printf hi"])?
+    print(r.status)                  # 0
+    print(r.out)                     # hi
+    s := proc.run("sh", ["-c", "exit 3"])?
+    print(s.status)                  # 3: a process that fails is still a successful run
+    echoed := proc.run("sh", ["-c", "cat"], "b\na\n", 2000)?
+    print(echoed.out)                # the input is the standard input
+    t := proc.run("sh", ["-c", "sleep 5"], none, 100) else err
+        print(err.kind)              # timed_out
+        return
+    print(t.status)
+    u := proc.run("no-such-program-for-ail", []) else err
+        print(err.kind)              # not_found
+        return
+    print(u.status)
+```
+
+```ail rules=std.proc.3
+use std.proc
+
+fn main()
+    print(proc.which("sh") != none)  # true on Linux and macOS
+    print(proc.which("no-such-program-for-ail"))   # none
+```
+
+```ail norun rules=std.net.1,std.net.3,std.net.4,std.net.5
+use std.net
+
+fn main() !
+    r := net.get("https://example.com/health") else err
+        print("{err.kind}: {err.message}")
+        return
+    print(r.status)
+    p := net.post("https://example.com/api", "[]", "application/json") else err
+        print(err.kind)
+        return
+    print(p.status)
+```
+
+```ail rules=std.net.2,std.net.4
+use std.net
+
+fn main()
+    r := net.get("ftp://example.com/") else err
+        print(err.kind)              # bad_url: the scheme is not http or https
+        return
+    print(r.status)
+```
+
+```ail rules=std.time.1,std.time.2
+use std.time
+
+fn main()
+    start := time.now_ms()
+    time.sleep_ms(1)
+    print(time.now_ms() >= start)    # true
+```
+
+```ail rules=std.random.2,std.random.5
+use std.random
+
+fn main()
+    random.seed(7)
+    print(random.int(3, 3))          # 3: both bounds are inclusive
+    print(random.float() < 1.0)      # true
+```
+
+```ail norun rules=std.random.5
+use std.random
+
+fn main()
+    print(random.int(1, 6))          # ail run --deterministic rejects this program
+```
+
+```ail rules=std.ui.9,std.ui.14,std.ui.15,std.ui.17
+use std.ui
+
+fn main()
+    print(ui.RED)                    # the colors are ints
+    print(ui.BLACK)
+```
+
+```ail norun rules=std.ui.3,std.ui.4,std.ui.10,std.ui.11,std.ui.12,std.ui.13,std.ui.16,std.ui.18
+use std.ui
+
+fn main()
+    mut w := ui.open("Demo", 40, 5) else err
+        print("no window: {err.kind}")
+        return
+    w.clear(0x202020)
+    w.put(1, 1, "Hi", 0xFFFFFF, 0x202020)
+    w.put_styled(1, 2, "bold", 0xFFFFFF, 0x202020, ui.Style(bold: true, italic: false, underline: false))
+    w.set_cursor(3, 1, Block)
+    w.set_title("Demo 2")
+    w.set_font_size(18)
+    print(w.font_size())
+    ui.clipboard_set("copied")
+    print(ui.clipboard_get() else "")
+    w.present()
+    e := w.poll_event() else Close
+    match e
+        Mouse(_, _, _, _) => print("click")
+        Scroll(_) => print("wheel")
+        _ => print("other")
+    print(w.modifiers().shift)
+    w.close()
+```
+
+```ail rules=std.ui.19,std.ui.20,std.ui.21,std.ui.22,std.ui.23,std.ui.24
+use std.ui
+use std.ui.widgets
+
+fn main()
+    theme := {"bg": 0x101010, "fg": 0xEEEEEE}
+    print(widgets.color(theme, "fg"))
+    print(widgets.fuzzy("config.toml", "cfg"))        # true: letters in order
+    print(widgets.fit("abcdef", 3))
+    list := widgets.ListView.new(["alpha", "beta", "gamma"])
+    field := widgets.TextField.new("name", "ann")
+    print(field.caret_col(widgets.Rect(col: 0, row: 0, cols: 20, rows: 1)))
+    print(list.shown())
+    print(list.chosen() else "")
+    button := widgets.Button(label: "OK", focused: true)
+    print(button.render(widgets.Rect(col: 0, row: 0, cols: 6, rows: 1), theme).len())
+    lines := widgets.text_rows(list.render(widgets.Rect(col: 0, row: 0, cols: 12, rows: 3), theme), 12, 3)
+    print(lines.len())
+```
+
+```ail rules=std.tensor.6
+fn main()
+    xs := tensor.from([1, 2, 3], [3])
+    print(xs.sum())                 # 6: int sums add in index order
+    print(xs.dot(xs))               # 14
+    print(xs.add(xs).to_list())     # [2, 4, 6]
+```
+
+## Examples for the hash, compression, date, zone, net and process rules
+
+```ail rules=std.hash.1,std.hash.2,std.hash.3,std.hash.4
+use std.hash
+
+fn main()
+    print(hash.sha256("abc"))         # ba7816bf...: the FIPS 180-4 digest
+    print(hash.sha384("abc").len())   # 96 hex digits
+    print(hash.sha512("abc").len())   # 128 hex digits
+    print(hash.hmac_sha256("key", "The quick brown fox jumps over the lazy dog").len())   # 64
+    print(hash.crc32("abc"))          # 891568578
+    print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run
+```
+
+```ail rules=std.compress.1,std.compress.2,std.compress.3,std.compress.7
+use std.compress
+
+fn main() !
+    packed := compress.gzip("hello hello hello")
+    print(packed.len() > 0)
+    print(compress.gunzip(packed)?.to_str() else "")        # hello hello hello
+    raw := compress.deflate("abc")
+    print(compress.inflate(raw)?)                      # b"abc"
+    z := compress.zlib("abc")
+    print(z[0])                                        # 120: the zlib header 78 9c
+    print(compress.unzlib(z)?)                         # b"abc"
+```
+
+```ail rules=std.compress.2
+use std.compress
+
+fn main()
+    text := compress.inflate(b"\x01\x02\x03") else err
+        print(err.kind)               # corrupt: malformed data
+        b""
+    print(text.len())
+```
+
+```ail norun rules=std.compress.4,std.compress.5,std.compress.6
+use std.compress
+
+fn main() !
+    compress.gzip_file("notes.txt", "notes.txt.gz")?
+    compress.gunzip_file("notes.txt.gz", "notes2.txt")?
+    compress.zip_dir("site", "site.zip")?
+    compress.unzip("site.zip", "unpacked")?
+    print("done")                     # the system gzip and unzip read this output
+```
+
+```ail norun rules=std.net.6,std.net.7
+use std.net
+
+fn main() !
+    mut o := net.options()
+    o.headers["accept"] = "text/plain"
+    o.max_redirects = 0               # a redirect is returned, not followed
+    r := net.request("GET", "https://example.com/", o)?
+    print(r.status)
+```
+
+```ail norun rules=std.net.8,std.net.9,std.net.10,std.net.11
+use std.net
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    print(srv.addr())
+    ex := srv.accept()?
+    ex.respond(net.Response(status: 200, headers: {}, body: "ok"))?
+```
+
+```ail norun rules=std.net.12,std.net.13,std.net.14,std.net.15
+use std.net
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    c := net.connect("127.0.0.1", 80)?
+    t := net.connect_tls("example.com", 443)?
+    print(l.addr())
+```
+
+```ail norun rules=std.proc.4,std.proc.5,std.proc.6,std.proc.7
+use std.proc
+
+fn main() !
+    c := proc.start("sh", ["-c", "cat"])?
+    c.stdin.send("hello")
+    c.stdin.close()
+    for line in c.out
+        print(line)
+    status := proc.wait(move c)?
+    print(status)
+    d := proc.start("sh", ["-c", "sleep 60"])?
+    print(proc.kill(move d))          # 137 on Unix
+```
+
+```ail norun rules=std.proc.5
+use std.proc
+
+fn main() !
+    c := proc.start("sh", ["-c", "echo err 1>&2"])?
+    msg := c.err.recv()               # `none` once the stream ends
+    print(msg)
+    status := proc.wait(move c)?
+    print(status)
+```
+
+```ail rules=std.date.1,std.date.2,std.date.3,std.date.4,std.date.5
+use std.time.date
+
+fn main()
+    d := date.Date(year: 2024, month: 2, day: 29)
+    print(d.iso())                                   # 2024-02-29
+    print(d.days())                                  # 19782
+    print(d.weekday())                               # 4: a Thursday
+    print(d.yday())                                  # 60
+    print(date.Date.from_days(0).iso())              # 1970-01-01
+    print(date.Date.new(2023, 2, 29) == none)        # true: no such day
+    print(d.add_days(365).iso())                     # 2025-02-28
+    print(d.since(date.Date(year: 2024, month: 1, day: 1)))   # 59
+    print(date.Date(year: 2024, month: 1, day: 31).add_months(1).iso())   # 2024-02-29
+    print(d.add_years(1).iso())                      # 2025-02-28
+    print(date.is_leap(1900))                        # false
+    print(date.days_in_month(2023, 2))               # 28
+```
+
+```ail rules=std.date.6,std.date.7,std.date.8,std.date.9,std.date.10,std.tz.1,std.tz.2
+use std.time.date
+use std.tz
+
+fn main() !
+    a := date.utc(1700000000000)
+    print(a.iso())                                   # 2023-11-14T22:13:20Z
+    b := date.at(1700000000000, "Europe/Paris")?
+    print(b.iso())
+    print(a.unix_ms() == b.unix_ms())                # true: the same instant
+    print(a == b)                                    # false: the fields differ
+    print(a.before(b))                               # false
+    print(a.in_zone("UTC")?.hour)
+    print(a.format("%Y-%m-%d %H:%M:%S %a %b"))
+    print(tz.offset("Europe/Paris", 1700000000) else 0)
+    print(tz.system().len() > 0)
+```
+
+```ail rules=std.date.7,std.date.15
+use std.time.date
+
+fn main()
+    z := date.at(0, "No/Such_Zone") else err
+        print(err)                                   # DateError: the zone is unknown
+        return
+    print(z.iso())
+```
+
+```ail norun rules=std.date.11,std.date.12
+use std.time.date
+
+fn main()
+    now := date.now()                                # reads the clock: --deterministic rejects it
+    later := now.add_ms(1000)
+    print(later.before(now))
+```
+
+```ail rules=std.date.13,std.date.14,std.date.15
+use std.time.date
+
+fn main() !
+    d := date.parse_date("2024-03-10")?
+    print(d.iso())                                   # 2024-03-10
+    t := date.parse_iso("2024-03-10T08:30:00.123+02:00")?
+    print(t.iso())                                   # 2024-03-10T08:30:00.123+02:00
+    local := date.parse_in("2024-03-10 08:30", "Europe/Paris")?
+    print(local.iso())
+    bad := date.parse_iso("2024-03-10T08:30") else err
+        print(err)                                   # no offset: an error
+        return
+    print(bad.iso())
+```
+
+```ail rules=std.tz.3
+use std.tz
+
+fn main()
+    print(tz.system().len() > 0)                     # "UTC" on Windows until the registry reader lands
+    print(tz.offset("UTC", 0) else 0)                # 0
+```
+
+## Examples for bytes I/O
+
+```ail rules=std.fs.13,std.fs.14
+use std.fs
+
+fn main() !
+    fs.write_bytes("spec-bytes.bin", b"\x00\xffhi")?
+    print(fs.read_bytes("spec-bytes.bin")?)
+    fs.append_bytes("spec-bytes.bin", b"!")?
+    print(fs.read_bytes("spec-bytes.bin")?)
+```
+
+```ail norun rules=std.io.5
+fn main()
+    data := io.read_bytes()                 # reads the rest of standard input, undecoded
+    print(data.len())
 ```

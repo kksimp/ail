@@ -1,0 +1,7 @@
+fib(0) = 0, 0 by loop
+fib(1) = 1, 1 by loop
+fib(2) = 1, 1 by loop
+fib(10) = 55, 55 by loop
+fib(20) = 6765, 6765 by loop
+fib(25) = 75025, 75025 by loop
+fib(30) = 832040

@@ -1,4 +1,3 @@
-
 fn main() !
     src := "{path.dir(env.program())}/configs"
     tmp := env.get("TMPDIR") else "/tmp"

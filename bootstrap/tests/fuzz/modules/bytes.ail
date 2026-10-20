@@ -1,0 +1,29 @@
+# fuzz-input: bytes
+# fuzz-needs:
+# bytes: encodings round-trip, slices and concatenation agree, and lossy or strict text
+# conversion never crashes. Out-of-range slices trap with a rule id.
+
+fn main()
+    a := bytes.from_hex({{TEXT}}) else b""
+    b := bytes.from_hex({{TEXT2}}) else b""
+    if bytes.from_hex(a.hex()) != a
+        print("FAIL hex round trip")
+    if bytes.from_base64(a.base64()) != a
+        print("FAIL base64 round trip")
+    if bytes.from_list(a.to_list()) != a
+        print("FAIL list round trip")
+    ab := a + b
+    if ab.len() != a.len() + b.len()
+        print("FAIL concatenation length")
+    if not ab.starts_with(a) or not ab.ends_with(b)
+        print("FAIL concatenation parts")
+    if a.len() > 0 and ab.find(a) != 0
+        print("FAIL find of a prefix")
+    if s := a.to_str()
+        if s.to_bytes() != a
+            print("FAIL strict text round trip")
+    print(a.text().len() >= 0)
+    n := {{INT}} % (a.len() + 2)
+    if n >= 0
+        print((a[0..n]).len() == n)
+    print(bytes.from_base64({{TEXT}}) else b"")
