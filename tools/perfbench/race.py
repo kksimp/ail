@@ -23,7 +23,7 @@ DEFAULT_SET = [
     "examples/tasks.ail", "examples/build.ail",
     "tools/perfbench/programs/parsum.ail", "tools/perfbench/programs/tensor.ail",
     "tools/perfbench/programs/tensor_loops.ail", "tools/perfbench/programs/tensor_ops.ail",
-    "tools/perfbench/programs/tensor_ops_loops.ail",
+    "tools/perfbench/programs/tensor_ops_loops.ail", "tools/perfbench/programs/race_smoke.ail",
 ]
 
 
