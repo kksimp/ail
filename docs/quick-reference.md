@@ -660,7 +660,13 @@ limits the package itself. Violations are compile errors at the line.
 package notes caps fs
 dep geo path ../geo caps fs
 dep textkit path vendor/textkit
+dep json git "https://example.com/json.git" tag v1.2 caps fs
 ```
+
+A `git` dep needs `rev COMMIT` or `tag TAG`; `ail run`/`test` fetch it into
+`~/.ail/deps` (or `$AIL_HOME/deps`) and pin its commit in `ail.lock` (commit
+it). `ail pkg update [NAME]` re-pins; `--deterministic` rejects a stale lock,
+`--deny net` fetches nothing (`mod.pkg.6–9`).
 
 ## Files, processes and the system
 

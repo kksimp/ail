@@ -181,9 +181,42 @@ the cycle at the `dep` line that closes it. *(ADR 0231)*
 
 **mod.pkg.6** — `dep NAME git URL` names a repository and needs exactly one of
 `rev COMMIT` and `tag TAG`; `rev` and `tag` are errors on a `path`
-dependency. The bootstrap doesn't fetch repositories: a `git` dependency is a
-compile-time error whose help is to clone it and use `path`. *(ADR 0231,
-ADR 0233)*
+dependency. A git dependency is a package like a path one: `use NAME`
+imports it, it resolves its own imports and manifest (`mod.pkg.3`), and its
+`caps` grant applies to it unchanged (`eff.cap.4`). *(ADR 0231, ADR 0355)*
+
+```
+package notes
+dep geo git "https://example.com/geo.git" tag v1.2 caps fs
+```
+
+**mod.pkg.7** — The toolchain, not the program, fetches a git dependency:
+it runs the system `git` to clone `URL`, resolves the pin to a commit, and
+stores that commit's files, without `.git`, in `$AIL_HOME/deps/NAME-COMMIT`
+(`~/.ail/deps` without `AIL_HOME`). The files are read-only and a cached
+commit is never fetched or changed again. Under `--deny net` (and so
+`--deterministic`) nothing is fetched: a dependency missing from the cache is
+an error. A missing `git`, an unreachable repository, or a pin the
+repository lacks is a compile-time error at the `dep` line naming the
+dependency. *(ADR 0355)*
+
+**mod.pkg.8** — `ail.lock`, next to the root package's `ail.pkg`, holds one
+line `dep NAME git URL rev|tag PIN commit COMMIT` per git dependency of the
+whole graph, sorted by name. While a line matches its manifest's `git`,
+`rev`/`tag`, every command uses the locked commit, so a moved tag changes
+nothing. The lock is stale when it is absent with git dependencies, misses a
+dependency, has a line that no longer matches, or locks a dependency no
+manifest declares. `ail run` and `ail test` rewrite a stale lock after every
+fetch succeeds; other commands don't write it. With `--deterministic` a stale
+lock is a compile-time error. Dependencies' own `ail.lock` files are
+ignored, and path dependencies aren't locked. *(ADR 0233, ADR 0356)*
+
+**mod.pkg.9** — `ail pkg update [NAME...]`, run in a package root, resolves
+the named git dependencies (every one when none is named) from their
+manifest lines again, ignoring the lock, fetches them, rewrites `ail.lock`
+and prints `locked NAME COMMIT` for each git dependency. Naming a dependency
+that no manifest of the program declares with `git` is an error.
+*(ADR 0357)*
 
 ## Program entry point
 
