@@ -38,6 +38,10 @@ are implemented; `docs/language-card.md` is the whole language in under 4,000
 tokens. Linux selftest passes; macOS verification is pending.
 Lane 6 added inferred effect sets (`ail effects`), `@pure`, and compile-time
 capability denial with `ail run --deny` (ADRs 0163–0165).
+Lane 3 added user modules (ADRs 0153–0156): `ail run DIR` runs a package,
+`use a.b` imports a directory, items are reached by qualified name, and
+`pub` controls visibility of items, fields and methods. Linux selftest
+passes; macOS verification is pending.
 
 ## Design topics
 

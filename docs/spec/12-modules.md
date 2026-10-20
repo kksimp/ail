@@ -3,8 +3,8 @@
 Chapter key: `mod`
 
 > **Status:** Drafted (partial). Specified: modules, visibility, imports,
-> constants, single-file programs, and the entry point. Not yet designed:
-> packages, manifests, and dependency resolution (build-system topic).
+> constants, single-file programs, the package root, and the entry point.
+> Not yet designed: manifests and dependency resolution (build-system topic).
 
 ## Modules
 
