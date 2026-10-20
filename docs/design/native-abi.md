@@ -223,7 +223,7 @@ lane 126).
 
 **As built (lane 178, ADRs 0599–0601).** `compiler/rt/native/task.ail` is part
 of the runtime of a program whose source mentions `spawn `, `par for` or
-`Atomic`; `notask.ail` otherwise. Linux only (x86-64 and ARM64).
+`Atomic`; `notask.ail` otherwise. Linux x86-64 and ARM64, and macOS ARM64 through §11.
 
 - **Threads.** `clone` with `CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM` (flags
   `0x50F00`; syscall 56 on x86-64, 220 on ARM64), no TLS. Worker `k` has the
@@ -277,6 +277,28 @@ Header kinds (11 is lane 171's pointer-free words): 12 task record and 13
 environment or group record (every word may be a pointer), 14 atomic cell (no
 pointers). Until the collector merges, nothing is freed and `alloc` only
 serialises on `ALLOC_LOCK`.
+
+## 11. Imports from libSystem (macOS)
+
+A runtime file calls a libSystem function with the primitive
+`import_call("_name", a, b, c, d)` (the name is a string literal with its
+leading underscore, the four arguments integers; unused ones are 0). It lowers
+to an ordinary MIR `call` named `libsys._name`, so it clobbers the caller-saved
+registers like any call. The ARM64 generator passes the arguments as for any
+call, then `adrp x16, slot; add; ldr x16, [x16]; blr x16`. Slot `k`, for the
+`k`th distinct name in `Image.imports`, is the 8 bytes after the runtime's
+globals (`globals + k`), so the images grow by one word per import and
+nothing else moves.
+
+The Mach-O writer adds `LC_DYLD_INFO_ONLY` with a bind table only when the
+image imports something: ordinal 1 (libSystem), one `SET_SYMBOL`,
+`SET_TYPE_IMM pointer`, `SET_SEGMENT_AND_OFFSET_ULEB` (segment 2, `__DATA`) and
+`DO_BIND` per name. dyld fills the slots before `main` runs. On Linux a
+`libsys.` call is `ud2`/`brk`: the runtime guards each with `target() == 2`.
+`fn_addr("rt.name")` gives a function's address (for `pthread_create`).
+
+Used by `task.ail` (`pthread_attr_init`, `pthread_attr_setstack`,
+`pthread_create`, `sysconf`) and `core.ail` (`__ulock_wait`, `__ulock_wake`).
 
 ## Licensing
 

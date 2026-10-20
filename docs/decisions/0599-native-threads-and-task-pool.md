@@ -58,13 +58,16 @@ parallel (conc.task.9). The designer wants at least four cores used by default.
    statement or operand in `fn main() !`, whose `?` has no other source in
    the subset. Everything else about errors, `TaskGroup`, channels, mutexes
    and cancellation waits for the lanes that own optionals and errors.
-7. **macOS.** Mach-O executables import nothing today and Apple supports
-   threads only through `libSystem`. The decision: threads on macOS come from
-   `pthread_create` imported through dyld stubs, once lane 126's dynamic
-   imports and the Mach-O writer's import support land; raw `bsdthread_create`
-   is private and unstable, and is rejected. Until then `ail build --target
-   aarch64-macos` reports `spawn` and `par for` under native.subset.1.
-   Atomics, which need no thread, work on macOS.
+7. **macOS.** Apple supports threads only through `libSystem`, so workers are
+   `pthread_create` threads on the same stack region (`pthread_attr_setstack`),
+   waits are `__ulock_wait`/`__ulock_wake`, and the core count is
+   `sysconf(_SC_NPROCESSORS_ONLN)`. Raw `bsdthread_create` is private and
+   unstable and is rejected. The runtime reaches libSystem through the general
+   import mechanism of native-abi.md §11: `import_call("_name", a, b, c, d)` is
+   a MIR call named `libsys._name`, and the Mach-O writer binds one pointer slot
+   per distinct name from a bind table (`LC_DYLD_INFO_ONLY`). A trapped worker
+   restarts at the stack pointer its `thread_entry` recorded, since the pthread
+   keeps its own record at the top of the stack. Atomics need no thread.
 8. **Windows** will use `CreateThread` and `WaitOnAddress` from kernel32 when
    lane 187's PE writer has imports; nothing here depends on it.
 

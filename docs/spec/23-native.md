@@ -27,7 +27,7 @@ value), `while`, `for` over a range or a list, `break`, `continue`,
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-and the bit operations of expr.bit.1; and, on Linux, `t := spawn f(args)` and
+and the bit operations of expr.bit.1; and `t := spawn f(args)` and
 `t.wait()?` in `fn main() !`, `par for`, and `Atomic[int]` and
 `Atomic[bool]` with `load`, `store`, `cas` and `add` (`native.task.1`).
 Any other construct is reported at its position under this rule, all of
@@ -60,8 +60,8 @@ trap it met (`conc.atomic.6`). Atomic operations are sequentially consistent
 whatever `order:` says (`conc.atomic.2`). The program's output is the
 interpreter's wherever the interpreter defines it (`conc.task.9`); `print`
 holds a lock for one statement, so lines from different tasks don't mix.
-`ail build --target aarch64-macos` reports `spawn` and `par for` under
-`native.subset.1` until macOS threads exist. *(ADRs 0599–0601)*
+On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
+0599–0601)*
 
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
