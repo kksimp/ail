@@ -81,6 +81,10 @@ All verified on Linux x86-64 and macOS ARM64.
 
 `tools/garlic/garlic.ail`, Garlic, a text-mode web browser written in AIL ([garlic-browser.md](design/garlic-browser.md), 2026-10-20): an HTML tokenizer and tree builder, text-cell layout with numbered links, history and find, a `std.ui` window, and a page model agents read (`--json`: roles, names, links and the cells each was drawn in). No CSS or JavaScript yet; a JavaScript engine in AIL is a parallel lane.
 
+### PDF reader
+
+`tools/pdf`, a PDF reader, searcher and viewer written in AIL (ADR 0520, [design note](design/pdf-viewer.md)): the text layer from the fonts' Unicode maps with no OCR; xref tables and streams, object streams, repair of damaged tables, Flate/LZW/ASCII85 with predictors, ToUnicode CMaps and encodings; `pdf text`, `grep` (boxes, across line breaks), `json` (the page model for agents), `info` (flags scans), `outline`, `bench`, and a text-cell viewer with search (`--print`, `--json`). Stopgaps until `bytes`: `od` for reads and an inflate in AIL. Not yet: encryption, pixel rendering.
+
 ## Design topics
 
 The 28 topics that must be resolved before implementation (founding brief §22).

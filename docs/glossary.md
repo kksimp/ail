@@ -184,6 +184,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Test** | A function marked `@test`, run by `ail test`: it passes unless an assertion fails, it traps, or it returns an error (ADR 0167). |
 | **Text cell** | One character position in a `std.ui` window, with a foreground and background color; the window is a grid of them, `cols` by `rows` (ADR 0177). |
 | **Text form** | The `str` a value is shown as by `print`, interpolation and error reports: its `to_str()` (ADR 0126). |
+| **Text layer** | The text a PDF carries as glyph codes plus its fonts' maps to Unicode, read with positions and no OCR; scans have none (ADR 0520). |
 | **Thread pool** | The interpreter's `min(cores, 8)` worker threads (`AIL_THREADS=N` overrides) that run a `par for` in chunks on copied values, with the sequential result (`conc.par.8`, ADR 0272). |
 | **Tier 1 target** | A fully supported target: it gates CI, receives full optimisation, and ships official releases. |
 | **Token listing** | The output of `ail api --tokens FILE`: one `LINE:COL KIND VALUE` line per token, then comments and diagnostics; the AIL lexer must print it byte for byte (ADR 0371, `api.tok.1–3`). |
