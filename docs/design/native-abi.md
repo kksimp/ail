@@ -145,9 +145,9 @@ Linux clobbers `rcx` and `r11` on x86-64. The shim is four functions
 
 **macOS risk.** Apple documents `libSystem` as the stable interface and
 reserves the right to change raw syscall numbers. The raw route works on
-current macOS ARM64 and is what the first slice uses; the fallback is to import
-`_write`, `_exit` and `_mmap` from `libSystem` through the dyld stubs lane 126
-needs for `extern` anyway. Only the four shim functions change (ADR 0406).
+current macOS ARM64 and is what the first slice uses. ADR 0534 moves the macOS
+OS layer to libSystem calls (`_write`, `_exit`, `_mmap`, ...) through the dyld
+imports lane 178 adds; Linux keeps raw syscalls.
 
 ## 5. Allocator
 

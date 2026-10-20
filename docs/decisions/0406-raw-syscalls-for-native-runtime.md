@@ -1,6 +1,6 @@
 # 0406. Raw syscalls for the first native runtime, including on macOS
 
-- **Status:** Accepted
+- **Status:** Accepted; its macOS part amended by [ADR 0534](0534-macos-os-layer-through-libsystem.md)
 - **Date:** 2026-10-20
 - **Decided by: AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)**
 - **Topic:** Native runtime and ABI (lane 122)
