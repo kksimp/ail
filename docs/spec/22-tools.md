@@ -1,7 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`
-Chapter keys: `api`, `explain`, `fix`, `snap`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `replay`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -314,6 +313,7 @@ of the first record not shown.
 **budget.out.6** — A record is never cut, so a command whose whole output is
 one line (`ail api FILE`, `ail explain --json`) is shown whole; its text forms
 (`--text`) split into records.
+
 ## Snapshot updating
 **snap.update.1** — `ail test --update FILE` runs the tests of `FILE` as
 `ail test` does, and rewrites the expectations that failed so that they
@@ -341,3 +341,56 @@ what `ail run FILE` writes to standard output.
 (`would update ...`). With `--json` each change is a line
 `{"snapshot":"assert_eq"|"doc"|"out","file","line","col","old","new"}` and
 the summary is `{"snapshots":true,"dry_run","updated","files","skipped"}`.
+
+## Record and replay
+
+**replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
+and writes R, a recording of every captured call's result
+(`replay.cap.1`). `ail test --record R FILE` keeps the calls of the tests
+that failed. `--record` and `--replay` need `run` or `test`, a file name,
+and not each other
+([ADR 0398](../decisions/0398-record-and-replay.md)).
+**replay.rec.2** — A recording is JSON lines. The first is
+`{"ail_record":1,"program","args","seed","limit"}`: the program path as
+given, its arguments, and the seed `std.random` starts from (the `--seed`
+given, or one taken from the clock, `std.random.3`). Each captured call
+then adds `{"call":"MODULE.FN","line","col",...}` in the order the calls
+ran, with `"result"`, `"trap"` and `"message"`, or `"uncaptured":true`.
+`ail test` writes `{"test":NAME}` before each failed test's calls.
+**replay.rec.3** — A result is written as JSON: `unit` as `null`, `int`,
+`bool` and `str` as themselves, and the rest as objects (`{"f":"1.5"}`,
+`{"bytes":HEX}`, `{"char":"c"}`, `{"none":true}`,
+`{"struct":NAME,"fields":[...]}`, `{"enum":NAME,"variant":N,"fields":[...]}`,
+`{"map":[[k,v],...]}`, `{"set":[...]}`, `{"num":KIND,"bits":N}`,
+`{"nested":N}`, and a failure as `{"fail":ERROR,"context":[...],"trace":[[line,col],...]}`).
+A call that traps records the trap's rule and message.
+**replay.rec.4** — A recording holds at most 64 MiB of calls. A call that
+would pass the limit, and every later one, is left out, and the recording
+ends with `{"truncated":true}`.
+**replay.rec.5** — A recorded or replayed run keeps every loop on one
+thread (`conc.par.9`), and each test of `ail test --record` or `--replay`
+starts `std.random` from the recording's seed.
+
+**replay.cap.1** — The captured calls are every `std.fs`, `std.env`,
+`std.time`, `std.tz`, `std.net` and `std.proc` function, `io.read_line`,
+`io.read_all` and `io.read_bytes`, and `ui.clipboard_get` and
+`ui.clipboard_set`. Not captured: `print` and `io.eprint` (output, which
+the replay writes again), `io.exit`, `std.random` (repeated by the seed),
+`std.task`, `ui.open`, the pure modules, and methods on handles.
+**replay.cap.2** — A captured call whose result holds a handle (a process
+from `proc.start`, a socket, a listener) is recorded as
+`"uncaptured":true`, and a replay that reaches it stops with a trap
+`replay.cap.2`.
+
+**replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
+recording's program) with the recording's arguments and seed, and answers
+each captured call from R instead of running it: nothing is read, written,
+fetched, started or waited for. `ail test --replay R [FILE]` runs only the
+tests R holds, each from its own calls.
+**replay.run.2** — An unchanged program replays the recorded run: the same
+output, the same failures, and a trap at the same position with the same
+message. A recorded trap in a call traps again at that call.
+**replay.run.3** — A call that is not the recording's next one (another
+function, or none left) traps with `replay.run.3`, naming the call the
+recording expected and where it was recorded; a recorded result that names
+a type the program doesn't have traps the same way.

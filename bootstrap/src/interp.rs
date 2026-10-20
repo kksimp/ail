@@ -35,6 +35,7 @@ mod codec;
 mod random;
 mod tz;
 mod regex;
+pub mod replay;
 mod stdlib;
 mod tasks;
 mod tensor;

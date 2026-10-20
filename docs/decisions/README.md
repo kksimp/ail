@@ -377,6 +377,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0451](0451-format-patterns-use-strftime-tokens.md) | `format` patterns use strftime tokens *(delegated)* | Accepted | 2026-10-20 |
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
 | [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
+| [0398](0398-record-and-replay.md) | Record and replay: `--record R` writes every effect's result as JSON lines, `--replay R` answers effects from it *(delegated)* | Accepted | 2026-10-20 |
 | [0404](0404-native-calling-convention-and-value-layouts.md) | Native values: C-compatible calling convention, fixed layouts, runtime written in AIL on a machine model *(delegated)* | Accepted | 2026-10-20 |
 | [0405](0405-native-traps.md) | Native traps print the interpreter's first line and exit 1 *(delegated)* | Accepted | 2026-10-20 |
 | [0406](0406-raw-syscalls-for-native-runtime.md) | Raw syscalls for the first native runtime, including on macOS *(delegated)* | Accepted | 2026-10-20 |
