@@ -135,11 +135,31 @@ fn card_hits(Json, List[Source]) List[Hit]
 fn card_item(mut List[Hit], Json, List[Source], int, Loc) [mutates]
 fn list_files(str, int, int) List[str] [fs io]
 fn fuzzy(str, str) bool
+fn picker_list() std.ui.widgets.ListView
 fn window_main(mut Editor, List[str]) [env fs io mutates proc ui]
 fn font_flag(List[str]) int
 fn print_screen(Editor, List[str]) [env fs io proc ui]
 fn bench(mut Editor) [clock io mutates]
 fn main() ! [clock env fail fs io proc ui]
+```
+
+## std.ui.widgets
+```
+pub struct std.ui.widgets.Rect
+pub struct std.ui.widgets.Run
+pub enum std.ui.widgets.Action
+pub fn std.ui.widgets.color(Map[str, int], str) int
+pub fn std.ui.widgets.draw_runs(mut ui.Window, List[std.ui.widgets.Run]) [io mutates ui]
+pub fn std.ui.widgets.text_rows(List[std.ui.widgets.Run], int, int) List[str]
+pub fn std.ui.widgets.fit(str, int) str
+pub fn std.ui.widgets.fuzzy(str, str) bool
+pub struct std.ui.widgets.TextField
+pub struct std.ui.widgets.ListView
+pub struct std.ui.widgets.Button
+pub struct std.ui.widgets.Dialog
+pub struct std.ui.widgets.Pane
+pub struct std.ui.widgets.Node
+pub struct std.ui.widgets.Tree
 ```
 
 ## themes
@@ -148,4 +168,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3055); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3339); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
