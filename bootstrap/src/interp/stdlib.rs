@@ -209,6 +209,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 std::thread::sleep(std::time::Duration::from_millis(ms as u64));
                 Value::Unit
             }
+            ("ui", "clipboard_get") => crate::ui::clipboard_get().map_or(Value::None, text),
+            ("ui", "clipboard_set") => {
+                crate::ui::clipboard_set(&str_arg(0));
+                Value::Unit
+            }
             ("ui", "open") => {
                 let (title, cols, rows) = (str_arg(0), values[1].int(), values[2].int());
                 self.ui_open(&title, cols, rows, pos)

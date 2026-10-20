@@ -49,6 +49,7 @@ impl<'p> Checker<'p> {
             "clear" => (vec![Int], Unit),
             "put" => (vec![Int, Int, Str, Int, Int], Unit),
             "cursor" => (vec![Int, Int], Unit),
+            "set_title" => (vec![Str], Unit),
             "present" | "close" => (vec![], Unit),
             "next_event" => (vec![], ty("ui.Event")),
             "poll_event" => (vec![], Ty::Opt(Box::new(ty("ui.Event")))),

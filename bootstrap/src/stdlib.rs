@@ -15,7 +15,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("proc", &["run"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("time", &["now_ms", "sleep_ms"]),
-    ("ui", &["open"]),
+    ("ui", &["clipboard_get", "clipboard_set", "open"]),
 ];
 
 /// The methods of `ui.Window` (std.ui.2-8), sorted, each with whether its
@@ -28,6 +28,7 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
     ("poll_event", true),
     ("present", true),
     ("put", true),
+    ("set_title", true),
     ("size", false),
 ];
 

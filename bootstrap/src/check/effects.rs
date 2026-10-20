@@ -52,7 +52,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
         // std.ui.9: opening a window and every `ui.Window` method.
-        "ui" => (&["open", "Window"], &["ui", "io"]),
+        "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,
     };
     names.contains(&name).then_some(effects)

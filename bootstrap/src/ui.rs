@@ -105,6 +105,11 @@ pub enum Event {
     Key { key: String, ctrl: bool, alt: bool, shift: bool },
     Resize { cols: usize, rows: usize },
     Close,
+    /// std.ui.10: `button` is `left`, `right` or `middle`; `kind` is
+    /// `down`, `up` or `drag`.
+    Mouse { col: i64, row: i64, button: &'static str, kind: &'static str },
+    /// std.ui.11: lines to scroll, positive towards the end.
+    Scroll { lines: i64 },
 }
 
 /// Why `ui.open` failed: `UiError.kind` and `UiError.message` (std.ui.1).
@@ -131,6 +136,7 @@ thread_local! {
 enum Msg {
     Open { title: String, cols: usize, rows: usize, reply: Sender<Result<(), OpenError>> },
     Present { grid: Grid, cursor: (i64, i64) },
+    Title(String),
     Poll(Sender<Option<Event>>),
     Wait(Sender<Event>),
     Close,
@@ -217,9 +223,16 @@ pub fn next_event(id: i64, wait: bool) -> Option<Event> {
     with(id, |s| match &event {
         Event::Resize { cols, rows } => s.grid.resize(*cols, *rows),
         Event::Close => s.closed = true,
-        Event::Key { .. } => {}
+        _ => {}
     });
     Some(event)
+}
+
+/// std.ui.13: the window's title.
+pub fn set_title(id: i64, title: &str) {
+    if with(id, |s| !s.closed).unwrap_or(false) {
+        send(Msg::Title(title.to_string()));
+    }
 }
 
 /// std.ui.8: close the window; later calls on it do nothing.
@@ -228,6 +241,75 @@ pub fn close(id: i64) {
         SESSION.set(None);
         send(Msg::Close);
     }
+}
+
+// ---------------------------------------------------------------------------
+// The clipboard (std.ui.12): the system's, through its command-line tools,
+// or this program's own when none of them works.
+
+thread_local! {
+    static CLIPBOARD: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// The commands that write and read the system clipboard, in order of preference.
+fn clipboard_tools() -> (Vec<(&'static str, Vec<&'static str>)>, Vec<(&'static str, Vec<&'static str>)>) {
+    if cfg!(target_os = "macos") {
+        (vec![("pbcopy", vec![])], vec![("pbpaste", vec![])])
+    } else if cfg!(windows) {
+        (
+            vec![("powershell", vec!["-NoProfile", "-Command", "$input | Set-Clipboard"])],
+            vec![("powershell", vec!["-NoProfile", "-Command", "Get-Clipboard -Raw"])],
+        )
+    } else {
+        let mut set = Vec::new();
+        let mut get = Vec::new();
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            set.push(("wl-copy", vec![]));
+            get.push(("wl-paste", vec!["--no-newline"]));
+        }
+        if std::env::var_os("DISPLAY").is_some() {
+            set.push(("xclip", vec!["-selection", "clipboard"]));
+            set.push(("xsel", vec!["--clipboard", "--input"]));
+            get.push(("xclip", vec!["-selection", "clipboard", "-o"]));
+            get.push(("xsel", vec!["--clipboard", "--output"]));
+        }
+        (set, get)
+    }
+}
+
+/// std.ui.12: put `text` on the clipboard.
+pub fn clipboard_set(text: &str) {
+    use std::io::Write as _;
+    use std::process::{Command, Stdio};
+    CLIPBOARD.set(Some(text.to_string()));
+    for (cmd, args) in clipboard_tools().0 {
+        let child = Command::new(cmd)
+            .args(&args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        let Ok(mut child) = child else { continue };
+        let wrote = child.stdin.take().is_some_and(|mut i| i.write_all(text.as_bytes()).is_ok());
+        if wrote && child.wait().is_ok_and(|s| s.success()) {
+            return;
+        }
+    }
+}
+
+/// std.ui.12: the clipboard's text; `None` when it holds none.
+pub fn clipboard_get() -> Option<String> {
+    use std::process::{Command, Stdio};
+    for (cmd, args) in clipboard_tools().1 {
+        let out = Command::new(cmd).args(&args).stdin(Stdio::null()).stderr(Stdio::null()).output();
+        if let Ok(out) = out
+            && out.status.success()
+        {
+            let text = String::from_utf8_lossy(&out.stdout).into_owned();
+            return (!text.is_empty()).then_some(text);
+        }
+    }
+    CLIPBOARD.with_borrow(|c| c.clone().filter(|t| !t.is_empty()))
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +395,11 @@ fn serve(rx: &Receiver<Msg>) {
                     w.pump();
                 }
                 waiter = Some(reply);
+            }
+            Some(Msg::Title(t)) => {
+                if let Some(w) = &mut window {
+                    w.set_title(&t);
+                }
             }
             Some(Msg::Close) => window = None,
         }
@@ -469,6 +556,13 @@ mod backend {
         glyphs: HashMap<char, Vec<bool>>,
         cells: (usize, usize),
         closed: bool,
+        /// Each mouse button's state at the last pump, and the cell the
+        /// mouse was over (std.ui.10).
+        buttons: [bool; 3],
+        mouse: (i64, i64),
+        last_drag: (i64, i64),
+        /// Scrolling not yet reported as whole lines (std.ui.11).
+        scroll: f32,
         pub events: VecDeque<Event>,
     }
 
@@ -506,10 +600,58 @@ mod backend {
                 glyphs: HashMap::new(),
                 cells: (cols, rows),
                 closed: false,
+                buttons: [false; 3],
+                mouse: (-1, -1),
+                last_drag: (-1, -1),
+                scroll: 0.0,
                 events: VecDeque::new(),
             };
             b.flush();
             Ok(b)
+        }
+
+        pub fn set_title(&mut self, title: &str) {
+            self.window.set_title(title);
+        }
+
+        /// std.ui.10-11: mouse buttons, movement while a button is held, and
+        /// the wheel, in cells.
+        fn pump_mouse(&mut self) {
+            use minifb::{MouseButton, MouseMode};
+            if let Some((x, y)) = self.window.get_mouse_pos(MouseMode::Discard) {
+                self.mouse = ((x.max(0.0) as usize / CW) as i64, (y.max(0.0) as usize / CH) as i64);
+            }
+            let (col, row) = self.mouse;
+            let moved = self.mouse != self.last_drag;
+            for (i, (b, name)) in
+                [(MouseButton::Left, "left"), (MouseButton::Right, "right"), (MouseButton::Middle, "middle")]
+                    .into_iter()
+                    .enumerate()
+            {
+                let down = self.window.get_mouse_down(b);
+                let kind = match (self.buttons[i], down) {
+                    (false, true) => "down",
+                    (true, false) => "up",
+                    (true, true) if moved => "drag",
+                    _ => continue,
+                };
+                self.buttons[i] = down;
+                if col >= 0 {
+                    self.events.push_back(Event::Mouse { col, row, button: name, kind });
+                }
+            }
+            self.last_drag = self.mouse;
+            if let Some((_, dy)) = self.window.get_scroll_wheel() {
+                // About three lines per notch: minifb reports a notch as 1.0
+                // on X11 and macOS and as 12.0 on Windows.
+                let per_line = if cfg!(windows) { 4.0 } else { 1.0 / 3.0 };
+                self.scroll -= dy / per_line;
+                let lines = self.scroll.trunc();
+                if lines != 0.0 {
+                    self.scroll -= lines;
+                    self.events.push_back(Event::Scroll { lines: lines as i64 });
+                }
+            }
         }
 
         fn flush(&mut self) {
@@ -541,6 +683,7 @@ mod backend {
                     self.draw(grid, cursor, None);
                 }
             }
+            self.pump_mouse();
             let typed = std::mem::take(&mut *self.typed.borrow_mut());
             for input in typed {
                 let m = &mut self.mods;

@@ -46,6 +46,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 ui::put(id, int(0), int(1), text, int(3), int(4));
                 Value::Unit
             }
+            "set_title" => {
+                let Value::Str(t) = &values[0] else { unreachable!("checked: str") };
+                ui::set_title(id, t);
+                Value::Unit
+            }
             "cursor" => {
                 ui::cursor(id, int(0), int(1));
                 Value::Unit
@@ -66,7 +71,8 @@ impl<'a, W: Write> Interp<'a, W> {
         })
     }
 
-    /// A `ui.Event` value; its variants are `Key`, `Resize`, `Close` in order.
+    /// A `ui.Event` value; its variants are `Key`, `Resize`, `Close`, `Mouse`,
+    /// `Scroll` in order.
     fn ui_event(&self, e: Event) -> Value {
         let enum_ = self.enums["ui.Event"];
         let (v, fields) = match e {
@@ -75,6 +81,10 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Event::Resize { cols, rows } => (1, vec![Value::Int(cols as i64), Value::Int(rows as i64)]),
             Event::Close => (2, Vec::new()),
+            Event::Mouse { col, row, button, kind } => {
+                (3, vec![Value::Int(col), Value::Int(row), Value::Str(button.into()), Value::Str(kind.into())])
+            }
+            Event::Scroll { lines } => (4, vec![Value::Int(lines)]),
         };
         Value::Enum(enum_, v, Rc::new(fields))
     }
