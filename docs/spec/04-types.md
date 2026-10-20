@@ -323,6 +323,40 @@ fn main()
     print(lift(none))
 ```
 
+## Function types
+
+**type.fn.1** — `fn(A, B) R` is the type of a function value that takes
+arguments of types `A` and `B` and returns `R`; with no result it is
+`fn(A, B)`. A function type is a type like any other: it can be a parameter,
+a result, a local, a struct field or a list element. It has no equality, hash
+or text form. *(ADR 0455)*
+
+**type.fn.2** — The name of a declared function, used where a value is
+expected and not called, is a function value of its type: `f := double`. The
+function MUST be a top-level function that is not generic, not a test, has no
+`mut` or `move` parameter, and does not fail (`T ! E`); anything else is an
+error. A local of the same name hides the function. Naming a function as a
+value counts as calling it for effect inference (`eff.infer.3`, `eff.pure.1`).
+*(ADR 0455)*
+
+**type.fn.3** — A value of function type is called like a function:
+`f(x)`, or `(s.run)(x)` for a field and `pick(name)(x)` for a result. The
+arguments are passed by position, `mut` is not allowed, and each must fit the
+parameter type (`expr.call.1`, `expr.call.2`). Calling a function value adds no
+effect of its own. There are no anonymous functions and no captured variables.
+*(ADR 0456)*
+
+```ail
+fn double(n int) int
+    n * 2
+
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn main()
+    print("{apply(double, 4)}")
+```
+
 ## Booleans
 
 **type.opt.9** — A `mut` local declared with `:=` from `none` has no type

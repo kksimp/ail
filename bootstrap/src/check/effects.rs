@@ -611,8 +611,14 @@ impl<'p, 'r> Walker<'p, 'r> {
             | Expr::Bool(..)
             | Expr::None(_)
             | Expr::Hole(_)
-            | Expr::Name(..)
             | Expr::TypeArgs { .. } => {}
+            // type.fn.2: naming a function as a value counts as calling it,
+            // since the value can be called wherever it ends up.
+            Expr::Name(_, pos) => {
+                if let Some(&i) = self.resolved.fn_values.get(pos) {
+                    self.call(i);
+                }
+            }
             Expr::Interp(parts, _) => {
                 self.std_traits();
                 for p in parts {

@@ -1,0 +1,12 @@
+fn log(n int) int
+    print("n={n}")
+    n
+
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+@pure fn compute() int
+    apply(log, 1)
+
+fn main()
+    print("{compute()}")

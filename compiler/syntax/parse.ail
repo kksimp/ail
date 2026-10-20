@@ -612,6 +612,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         i += 1
     mut ret := none
     if tag_at(0) == "id" or at_sym("!") or at_sym("*") or at_kw("any") or at_kw("ref")
+    if tag_at(0) == "id" or at_sym("!") or at_kw("any") or at_kw("ref") or at_kw("fn")
         ret = type_ref("a return type", "gram.fn.2")?
     full := if o := owner then "`{o.name}.{name}`" else "`{name}`"
     # A trait method without a default ends with its signature (trait.decl.2).
@@ -817,6 +818,19 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         pos := bump().pos
         inner := named_type("a type after `*`", "unsafe.ptr.1")?
         return ast.TypeRef(shape: ast.TypeShape.PtrTo(inner), pos: pos)
+    # `fn(A, B) R`: a function value's type (type.fn.1).
+    if at_kw("fn")
+        expect_sym("(", "`(` after `fn` in a type", "type.fn.1")?
+        mut params := List[ast.TypeRef]()
+        while not at_sym(")")
+            params.push(type_ref("a parameter type", "type.fn.1")?)
+            if not eat_sym(",")
+                break
+        expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?
+        mut ret := absent[ast.TypeRef]()
+        if tag_at(0) == "id" or at_kw("any") or at_kw("ref")
+            ret = optional_type("the result type", "type.fn.1")?
+        return ast.TypeRef(shape: ast.TypeShape.FnType(params: params, ret: ret), pos: pos)
     n := dotted_name(expected, rule)?
     mut args := List[ast.TypeRef]()
     if at_sym("<")

@@ -489,6 +489,10 @@ fn spaced(before: Option<&FTok>, a: &FTok, b: &FTok) -> bool {
     if prefix(before, a) {
         return false;
     }
+    // `fn(int) int`, a function type (type.fn.1).
+    if a.kind == Kind::Kw("fn") && b.is("(") {
+        return false;
+    }
     if b.is("(") || b.is("[") {
         return !a.ends_operand();
     }

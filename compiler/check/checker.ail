@@ -776,6 +776,7 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
         Optional(inner) => ungeneratable(inner, seen)
         RefTo => "ref"
         PtrTo => "a raw pointer"
+        FnType => "fn"
         AnyTrait(tr) => "any {tr}"
         Fallible => "a fallible type"
         Named(n, args) =>

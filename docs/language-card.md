@@ -320,6 +320,9 @@ match ch             # literals and `|`; ints, strings and chars need `_`
 
 `if` and `match` work as statements or values; a function can end with either.
 
+A declared function is a value of type `fn(int) int`: `fn apply(f fn(int) int, x int) int`
+calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible ones; no lambdas.
+
 ## Operators and strings
 
 - `+ - * / %` on `int`. Overflow and division by zero stop the program (a

@@ -395,6 +395,8 @@ pub enum TypeKind {
     Ref(Box<TypeRef>),
     /// `*T`, a raw pointer (unsafe.ptr.1)
     Ptr(Box<TypeRef>),
+    /// `fn(A, B) R`, a function value's type; `ret` is `None` for no result (type.fn.1).
+    Fn { params: Vec<TypeRef>, ret: Option<Box<TypeRef>> },
 }
 
 pub type Block = Vec<Stmt>;

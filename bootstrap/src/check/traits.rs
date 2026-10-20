@@ -47,6 +47,7 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
         Ty::Res(x, Errs::Set(set)) => Ty::Res(Box::new(map_params(x, f)), Errs::Set(all(set))),
         Ty::Res(x, errs) => Ty::Res(Box::new(map_params(x, f)), errs.clone()),
         Ty::Union(m) => Ty::Union(all(m)),
+        Ty::Fn(ps, r) => Ty::Fn(all(ps), Box::new(map_params(r, f))),
         t => t.clone(),
     }
 }
@@ -75,6 +76,12 @@ pub(crate) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(u
                 bind(x, y, vars, binds);
             }
         }
+        (Ty::Fn(xs, r), Ty::Fn(ys, s)) if xs.len() == ys.len() => {
+            for (x, y) in xs.iter().zip(ys) {
+                bind(x, y, vars, binds);
+            }
+            bind(r, s, vars, binds);
+        }
         (Ty::Res(x, _), Ty::Res(y, _)) => bind(x, y, vars, binds),
         (Ty::Res(x, _), y) => bind(x, y, vars, binds),
         _ => {}
@@ -95,6 +102,7 @@ fn mentions(t: &Ty, p: usize) -> bool {
         Ty::Map(k, v) => mentions(k, p) || mentions(v, p),
         Ty::Res(x, Errs::Set(set)) => mentions(x, p) || set.iter().any(|e| mentions(e, p)),
         Ty::Res(x, _) => mentions(x, p),
+        Ty::Fn(ps, r) => ps.iter().any(|x| mentions(x, p)) || mentions(r, p),
         _ => false,
     }
 }
