@@ -5,7 +5,7 @@
 ## site (`Site`), which the code generator turns into a branch to a stub.
 ## `ail run compiler mir FILE` prints a module with `module_text`.
 
-## A value's machine type. Strings and lists are pointers.
+## A value's machine type. Strings, lists and structs are pointers.
 pub enum Ty
     Int
     Float
@@ -15,6 +15,8 @@ pub enum Ty
     List(elem Ty)
     ## `T?`: a pointer, or 0 for `none`; a number is boxed (ADR 0574).
     Opt(inner Ty)
+    ## A struct object (native-abi.md §2): one 8-byte slot per field.
+    Struct(name str)
     Unknown
     Unit
 
@@ -47,6 +49,7 @@ pub fn Ty.name(self) str
         Str => "str"
         List(e) => "List[{e.name()}]"
         Opt(t) => "{t.name()}?"
+        Struct(n) => n
         Unknown => "?"
         Unit => "unit"
 
@@ -71,6 +74,8 @@ pub fn Ty.name(self) str
 ## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
 ## | `len` | list | `xs.len()` |
 ## | `copy` | a | the same value |
+## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
+## | `store` | object, value | writes the slot at byte offset `imm` |
 pub struct Inst
     pub dst int
     pub op str

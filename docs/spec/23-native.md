@@ -18,12 +18,15 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
-function is a free function (no methods, generics or contracts) over
-`int`, `float`, `bool`, `str`, and lists of those and of lists, using
+function is a free function or a method of a struct (no generics or
+contracts) over `int`, `float`, `bool`, `str`, structs without generics or
+invariants, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
 on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
 value), `while`, `for` over a range or a list, `break`, `continue`,
-`return`, calls, `print` of those values or an interpolation of them (with
+`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
+field names in a method), method calls, `print` of numbers, strings and
+lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, optionals
 of numbers, strings and lists (`none`, `x == none`, `if v := o`, `o else d`,
@@ -33,7 +36,7 @@ of numbers, strings and lists (`none`, `x == none`, `if v := o`, `o else d`,
 the methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 and the bit operations of expr.bit.1. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0574, 0575, 0576)*
+*(ADRs 0384, 0390, 0392, 0574, 0575, 0576)*
 
 ```ail
 fn steps(n int) int

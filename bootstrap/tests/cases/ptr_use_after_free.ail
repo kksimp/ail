@@ -1,0 +1,10 @@
+# unsafe.ptr.6: using a freed block traps.
+# bytecode.skip: the trap snapshot shows a pointer's address, which differs per run.
+use std.mem
+
+fn main()
+    unsafe
+        p := mem.alloc(2, 5)
+        print(p.read())
+        mem.free(p)
+        p.write(6)

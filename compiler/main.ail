@@ -81,8 +81,11 @@ fn check_dump(path str, many bool) !
 ## The native runtime in directory `dir`, parsed as one program.
 fn runtime(dir str) !ast.Program
     mut texts := List[str]()
-    for name in ["prim.ail", "core.ail", "err.ail"]
-        texts.push(fs.read_text("{dir}/{name}")?)
+    # Every `.ail` file of the directory, so lanes add runtime files
+    # without editing this list.
+    for name in fs.list_dir(dir)?.sorted()
+        if name.ends_with(".ail")
+            texts.push(fs.read_text("{dir}/{name}")?)
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 
 ## Parse a program and lower it to MIR; problems outside the native subset

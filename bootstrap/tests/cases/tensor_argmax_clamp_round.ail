@@ -1,0 +1,11 @@
+# std.tensor.17-19: argmax and argmin along an axis, clamp with bounds, and round to int.
+fn main()
+    scores := tensor.from([0.1, 0.9, 0.4, 0.7, 0.2, 0.3], [2, 3])
+    print(scores.argmax(1))
+    print(scores.argmin(0))
+    print(scores.argmax())
+    print(tensor.from([3.0, 9.0, 9.0, 1.0]).argmax())
+    print(tensor.from([-1.5, 0.5, 2.5, 7.0]).clamp(0.0, 3.0))
+    print(tensor.from([2.5, -2.5, 0.49, 1.5]).round())
+    print(tensor.from([0.1, 0.9, 2.0, 1.0]).round().to_list())
+    print(tensor.from([0.0 / 0.0, 5.0]).clamp(0.0, 1.0).to_list()[1])

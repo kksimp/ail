@@ -79,6 +79,17 @@ struct Lower
     var_vals Map[str, List[int]]
     nvars int
     loops List[Loop]
+    ## The structs' fields (ADR 0392).
+    structs Map[str, List[Slot]]
+    ## The struct whose method is being lowered, else "".
+    self_ty str
+    ## Variables whose list or struct belongs to someone else (parameters,
+    ## `for` variables): returning one copies it.
+    borrowed Set[str]
+    ## The generated `copy.T` functions asked for, by name.
+    copy_tys Map[str, Ty]
+    ## `problems.len()` when the current function began.
+    fn_problems int
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -136,6 +147,11 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
         var_vals: {},
         nvars: 0,
         loops: [],
+        structs: {},
+        self_ty: "",
+        borrowed: Set[str](),
+        copy_tys: {},
+        fn_problems: 0,
     )
     if r := rt
         l.declare_all(r, "rt.")
@@ -150,6 +166,7 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
     l.is_rt = false
     for f in prog.fns
         l.lower_fn(f)
+    l.gen_copies()
     if l.problems.len() > 0
         return Problems(items: l.problems.sorted(by: |p| p.pos.line * 100000 + p.pos.col))
     m := inline_module(Module(
@@ -176,10 +193,7 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
     declare_errors(prog)
-    for s in prog.structs
-        if err_msgs.contains(s.name)
-            continue
-        problem(s.pos, "struct `{s.name}` isn't in the native subset yet")
+    declare_structs(prog)
     for e in prog.enums
         problem(e.pos, "enum `{e.name}` isn't in the native subset yet")
     for t in prog.traits
@@ -198,8 +212,8 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         before := problems.len()
         declare_fn(f, pre)
         if problems.len() > before
-            bad.add("{pre}{f.name}")
-            sigs.remove("{pre}{f.name}")
+            bad.add(fn_key(f, pre))
+            sigs.remove(fn_key(f, pre))
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if f.ext != none
@@ -209,22 +223,37 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             message: "`extern c fn {f.name}`: `ail build` can't link a C library yet (`ail run` can)",
         ))
         return
-    if f.owner != none or f.generics.len() > 0 or f.receiver != none
-        problem(f.pos, "`{f.name}`: methods and generic functions aren't in the native subset yet")
+    if f.generics.len() > 0
+        problem(f.pos, "`{f.name}`: generic functions aren't in the native subset yet")
+        return
+    mut params := List[Ty]()
+    if o := f.owner
+        if o.params != none or not structs.contains(o.name)
+            problem(
+                f.pos,
+                "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
+            )
+            return
+        if f.receiver != none
+            params.push(Ty.Struct(o.name))
+    elif f.receiver != none
+        problem(
+            f.pos,
+            "`{f.name}`: methods of traits and `impl` blocks aren't in the native subset yet",
+        )
         return
     if f.contracts.len() > 0
         problem(f.pos, "`{f.name}`: contracts aren't in the native subset yet")
     for a in f.attrs
         if a.name != "inline" and a.name != "pure"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
-    mut params := List[Ty]()
-    mut ints := 0
+    mut ints := params.len()
     mut floats := 0
     for p in f.params
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
-        if p.mutable and t.elem() == none
+        if p.mutable and not needs_copy(t)
             problem(
                 p.pos,
                 "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
@@ -245,10 +274,16 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             Ty.Unknown
         rty = t
-    sigs["{pre}{f.name}"] = Sig(params: params, ret: rty, fails: can_fail)
+    sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+
+## A function's name in MIR: `T.m` for a method of `T`.
+fn fn_key(f ast.FnDecl, pre str) str
+    if o := f.owner
+        return "{pre}{o.name}.{f.name}"
+    "{pre}{f.name}"
 
 ## The MIR type of a written type, if it is in the subset.
-fn type_of(t ast.TypeRef) Ty?
+fn Lower.type_of(self, t ast.TypeRef) Ty?
     match t.shape
         Optional(inner) => opt_of(type_of(inner)?)
         Named(name, args) =>
@@ -261,10 +296,13 @@ fn type_of(t ast.TypeRef) Ty?
                     if args.len() != 1
                         return none
                     e := type_of(args[0])?
-                    if is_number(e) or e == Ty.Str or e.elem() != none
+                    if is_number(e) or e == Ty.Str or needs_copy(e)
                         return Ty.List(e)
                     none
-                _ => none
+                _ =>
+                    if args.len() == 0 and structs.contains(name)
+                        return Ty.Struct(name)
+                    none
         _ => none
 
 fn is_literal(e ast.Expr) bool
@@ -449,10 +487,43 @@ fn Lower.str_lit(mut self, s str) int
 # ---- functions ----
 
 fn Lower.lower_fn(mut self, f ast.FnDecl)
-    fname = "{prefix}{f.name}"
-    sig := sigs.get(fname) else return
-    ret = sig.ret
+    key := fn_key(f, prefix)
+    sig := sigs.get(key) else return
+    params := begin_fn(key, sig.ret, sig.params)
     fails = sig.fails
+    self_ty = ""
+    mut k := 0
+    if o := f.owner
+        if f.receiver != none
+            self_ty = o.name
+            declare("self", sig.params[0], params[0])
+            borrowed.add(lookup("self") else "")
+            k = 1
+    for i in 0..f.params.len()
+        p := f.params[i]
+        declare(p.name, sig.params[k + i], params[k + i])
+        borrowed.add(lookup(p.name) else "")
+    body := f.body else return
+    want := not ret.is_unit()
+    result := lower_block(body, want)
+    if not done()
+        if want
+            if r := result
+                v := Val(id: convert(r, ret, f.pos), ty: r.ty)
+                e := final_expr(body[body.len() - 1]) else ast.Expr.NoneLit(f.pos)
+                finish(return_of(copy_if_borrowed(e, v)))
+            elif problems.len() == fn_problems
+                problem(f.pos, "`{f.name}` must end with its result")
+        else
+            finish(return_of(-1))
+    end_fn(key, f.pos)
+
+## Start a function: fresh state, and an entry block whose parameters are
+## the function's.
+fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
+    fname = name
+    ret = rty
+    fn_problems = problems.len()
     blocks = []
     vals = []
     names = []
@@ -466,29 +537,21 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
     var_vals = {}
     nvars = 0
     loops = []
+    borrowed = Set[str]()
     cur = new_block()
     sealed[cur] = true
-    mut params := List[int]()
-    for i in 0..f.params.len()
-        p := f.params[i]
-        v := new_value(sig.params[i], p.name)
-        blocks[cur].params.push(v)
-        params.push(v)
-        declare(p.name, sig.params[i], v)
-    body := f.body else return
-    want := not ret.is_unit()
-    result := lower_block(body, want)
-    if not done()
-        if want
-            if r := result
-                finish(return_of(convert(r, ret, f.pos)))
-            else
-                problem(f.pos, "`{f.name}` must end with its result")
-        else
-            finish(return_of(-1))
+    for t in ptys
+        blocks[cur].params.push(new_value(t, ""))
+    blocks[cur].params
+
+## Finish the function begun with `begin_fn`: simplify, fold, verify.
+fn Lower.end_fn(mut self, name str, pos ast.Pos)
+    # After a problem the MIR may be inconsistent; it is never built.
+    if problems.len() > fn_problems
+        return
     func := simplify(fold(simplify(Func(
-        name: fname,
-        params: params,
+        name: name,
+        params: blocks[0].params,
         ret: ret,
         blocks: blocks,
         vals: vals,
@@ -497,7 +560,7 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
     for err in verify(func)
         problems.push(Problem(
             rule: "native.build.2",
-            pos: f.pos,
+            pos: pos,
             message: "internal error: invalid MIR: {err}",
         ))
     funcs.push(func)
@@ -618,7 +681,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 return
             if e := value
                 v := lower_value(e, ret) else return
-                finish(return_of(convert(v, ret, pos)))
+                finish(return_of(copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))))
             else
                 finish(return_of(-1))
         Eval(e) =>
@@ -631,9 +694,21 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
-    if v.ty.elem() == none or not is_place(e)
+    if not needs_copy(v.ty) or not is_place(e)
         return v.id
-    copy_list(v)
+    copy_value(v)
+
+## A returned list or struct is copied when it belongs to someone else: a
+## field, an element, a parameter or a `for` variable (own.val.1).
+fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
+    if not needs_copy(v.ty)
+        return v.id
+    match e
+        Member | Index => copy_value(v)
+        Name(n, _) =>
+            key := lookup(n) else return copy_value(v)
+            if borrowed.contains(key) then copy_value(v) else v.id
+        _ => v.id
 
 ## A copy of the list `v`, deep through nested lists (own.val.1).
 fn Lower.copy_list(mut self, v Val) int
@@ -650,14 +725,18 @@ fn Lower.copy_list(mut self, v Val) int
 
 fn is_place(e ast.Expr) bool
     match e
-        Name | Index => true
+        Name | Index | Member => true
         _ => false
 
 fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     match target
         Name(name, npos) =>
             key := lookup(name) else
-                problem(npos, "unknown name `{name}`")
+                k := self_slot(name)
+                if k < 0
+                    problem(npos, "unknown name `{name}`")
+                    return
+                assign_slot(self_value(), self_ty, k, op, value, pos)
                 return
             ty := var_ty[key]
             mut v := -1
@@ -682,10 +761,11 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
                 v = binary(o, old, r, pos).id
             else
                 r := lower_value(value, elem) else return
-                v = convert(r, elem, pos)
+                v = copy_if_place(value, Val(id: convert(r, elem, pos), ty: elem))
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
+        Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
 fn Lower.bounds_site(mut self, pos ast.Pos) int
@@ -759,6 +839,7 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
     cur = inner
     if list >= 0
         declare(var, elem, op("get", [list, i], elem))
+        borrowed.add(lookup(var) else "")
     else
         declare(var, Ty.Int, i)
     loops.push(Loop(cont: latch, exit: exit))
@@ -887,6 +968,10 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             key := lookup(name) else
                 if c := consts.get("{prefix}{name}")
                     return lower_expr(c, want)
+                k := self_slot(name)
+                if k >= 0
+                    t := structs[self_ty][k].ty
+                    return Val(id: load(self_value(), k, t), ty: t)
                 problem(
                     pos,
                     "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
@@ -927,7 +1012,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         NoneLit(pos) => lower_none(want, pos)
         Hole(pos) => unsupported(pos, "`todo`")
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
-        Member(_, _, pos) => unsupported(pos, "fields")
+        Member(recv, name, pos) => lower_member(recv, name, pos)
         Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
         MapLit(_, pos) => unsupported(pos, "maps")
         SetLit(_, pos) => unsupported(pos, "sets")
@@ -1162,7 +1247,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         v := lower_value(x, if elem.is_unknown() then none else elem)?
         if elem.is_unknown()
             elem = v.ty
-        if not is_number(elem) and elem != Ty.Str and elem.elem() == none
+        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
@@ -1183,6 +1268,17 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_print(args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
+            if structs.contains(name) and lookup(name) == none
+                return new_struct(name, args, pos)
+            if self_ty != "" and sigs.contains("{self_ty}.{name}")
+                return struct_call(
+                    "{self_ty}.{name}",
+                    Val(id: self_value(), ty: Ty.Struct(self_ty)),
+                    args,
+                    pos,
+                )
+            if self_ty != "" and bad.contains("{self_ty}.{name}")
+                return none
             key := "{prefix}{name}"
             if bad.contains(key)
                 return none
@@ -1260,12 +1356,29 @@ fn out_fn(t Ty) str
         Str => "rt.out_str"
         List(e) =>
             match e
+                Int => "rt.out_list_int"
                 Float => "rt.out_list_float"
                 Bool => "rt.out_list_bool"
-                _ => "rt.out_list_int"
+                # Lists of strings and of lists: `rt.out_list_deep`.
+                _ => ""
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if e := v.ty.elem()
+        mut depth := 0
+        mut leaf := e
+        while leaf.elem() != none
+            depth += 1
+            leaf = leaf.elem() else Ty.Unknown
+        k := match leaf
+            Int => 0
+            Float => 1
+            Bool => 2
+            Str => 3
+            _ => -1
+        if k >= 0 and (depth > 0 or k == 3)
+            call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
+            return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
@@ -1284,7 +1397,11 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             message: "`mem.{name}`: `ail build` can't link the C allocator yet (`ail run` can)",
         ))
         return none
+    if n := type_name(recv)
+        return struct_call("{n}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if s := struct_name(r.ty)
+        return struct_call("{s}.{name}", r, args, npos)
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable
@@ -1342,6 +1459,12 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: -1, ty: Ty.Unit)
         _ => return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## The struct `e` names, when it names one and no local: `T.f(...)`.
+fn Lower.type_name(self, e ast.Expr) str?
+    match e
+        Name(n, _) => if structs.contains(n) and lookup(n) == none then n else none
+        _ => none
 
 ## Whether `e` names module `m` (not a local of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool

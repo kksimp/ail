@@ -56,6 +56,17 @@ line says what to expect:
 | ```` ```ail error=RULE ```` | Must report `RULE` among its errors. Handled as `fragment` when it has no `fn main`. |
 | ```` ```ail skip=bootstrap ```` | Uses a feature the bootstrap doesn't implement yet. Counted, not run. Remove the tag when the feature lands. |
 | ```` ```ail skip=context ```` | An illustration that uses declarations the chapter doesn't show. Counted, not run. Prefer making the example self-contained. |
+| ```` ```ail skip=bootstrap rules=ID ```` | Counted for the rules it cites, not checked or run (ADR 0498): the feature is specified but not yet built. |
+| ```` ```ail norun ```` | Checked but not run: it traps on purpose, or needs a window, network or input the harness doesn't have. |
+| ```` ```ail rules=ID,ID ```` | Demonstrates the listed rules (ADR 0498). Every rule of the types, expressions, std, effects and tools chapters must be demonstrated; `AIL_LIST_UNCOVERED=1 ./ail selftest --test spec -- --nocapture` lists the rest. |
+| ```` ```ail flags=A,B ```` | Checked with those `ail check` flags, such as `--deterministic` or `--deny fs`. Not run. |
+| ```` ```ail tool=A,B,FILE expect=TEXT ```` | Runs `ail A B FILE` on the block and requires `TEXT` in stdout (ADR 0500). `DIR` is the block's directory. |
+| ```` ```ail pkg=DIR status=N ```` | With `tool=`: `DIR` is a copy of the case package `bootstrap/tests/cases/packages/DIR`, and the tool must exit N. |
+| ```` ```ail fixture=DIR ```` | Checks the case fixture `bootstrap/tests/cases/DIR`, which must report each rule in `rules=` (ADR 0500). |
+
+A program that checks clean and has a `main` is also run on both interpreter
+tiers, and both must print the same output (ADR 0499). Blocks marked `norun`,
+`flags=`, `tool=` or `fixture=` are not run that way.
 
 An unknown tag fails the suite. Blocks in other languages (`text`, `ebnf`)
 aren't run.
@@ -86,7 +97,11 @@ aren't run.
 | 21 | [Runtime traces and trap snapshots](21-trace.md) | `trace` | Drafted (partial) |
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget` | Drafted (partial) |
 | 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `snap` | Drafted (partial) |
+| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `diff` | Drafted (partial) |
 | 23 | [Native compilation](23-native.md) | `native` | Drafted (partial) |
+| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `edit` | Drafted (partial) |
+| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `diff` | Drafted (partial) |
+| 22 | [Tools: api, explain, fix, budgets, diff, edit, replay, snapshots](22-tools.md) | `api`, `explain`, `fix`, `budget`, `snap`, `replay` | Drafted (partial) |
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |

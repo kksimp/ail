@@ -33,7 +33,7 @@ fn Lower.zero_of(mut self, t Ty) int
         Float => fconst(0.0)
         _ => konst(0, t)
 
-fn type_name(t ast.TypeRef) str?
+fn written_name(t ast.TypeRef) str?
     match t.shape
         Named(n, _) => n
         _ => none
@@ -49,7 +49,7 @@ fn Lower.ok_type(mut self, t ast.TypeRef) Ty?
         Fallible(ok, _) =>
             o := ok else return Ty.Unit
             # `! E` is written like `!T`; an error type there is the error (err.type.7).
-            if n := type_name(o)
+            if n := written_name(o)
                 if err_msgs.contains(n)
                     return Ty.Unit
             type_of(o)
