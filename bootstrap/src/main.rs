@@ -9,6 +9,7 @@ mod check;
 mod diag;
 mod explain;
 mod fasthash;
+mod doctest;
 mod docs;
 mod fmt;
 mod implicit_self;
@@ -27,7 +28,8 @@ commands:
                 check and run an AIL program; ARGS are the program's
                 (std.env.1: `env.args()`)
   check FILE    check a program without running it
-  test FILE     run the program's `@test` functions
+  test FILE     run the program's `@test` functions, properties and doc examples;
+                --cases N (default 100) and --seed S set a property's inputs
   effects FILE  print each function's inferred effects (eff.infer.6)
   explain RULE  print a spec rule, its ADRs and an example
   api FILE      print the program's declarations as JSON (--pretty:
@@ -65,6 +67,12 @@ fn main() -> ExitCode {
     };
     let json = args.iter().any(|a| a == "--json");
     let mut rest: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--json").collect();
+    let mut flags: Vec<&str> = Vec::new();
+    for name in ["--cases", "--seed"] {
+        if let Some(at) = rest.iter().position(|a| *a == name) {
+            flags.extend(rest.drain(at..(at + 2).min(rest.len())));
+        }
+    }
     let deny = match take_deny(&mut rest) {
         Ok(d) => d,
         Err(msg) => {
@@ -78,7 +86,13 @@ fn main() -> ExitCode {
             run_file(file, json, true, &deny)
         }
         ["check", file] => run_file(file, json, false, &deny),
-        ["test", file] => run_tests(file, json),
+        ["test", file] => match take_test_options(&mut flags) {
+            Ok((cases, seed)) => run_tests(file, json, cases, seed),
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                ExitCode::from(2)
+            }
+        },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
@@ -92,6 +106,21 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+/// `--cases N` and `--seed S` for `ail test` (test.prop.3).
+fn take_test_options(flags: &mut Vec<&str>) -> Result<(u64, Option<u64>), String> {
+    let (mut cases, mut seed) = (100, None);
+    for pair in flags.chunks(2) {
+        let [name, value] = pair else { return Err(format!("`{}` needs a number", pair[0])) };
+        let n: u64 = value.parse().map_err(|_| format!("`{name}` needs a non-negative number, found `{value}`"))?;
+        if *name == "--cases" {
+            cases = n;
+        } else {
+            seed = Some(n);
+        }
+    }
+    Ok((cases, seed))
 }
 
 /// Remove `--deny LIST` from the arguments and return the denied
@@ -198,8 +227,9 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
 
 /// `ail test FILE` (test.run.1-4): check, run each `@test` function on its
 /// own, report in source order. Exit 0 if all pass, 1 if any fails, 2 if
-/// the program is rejected.
-fn run_tests(path: &str, json: bool) -> ExitCode {
+/// the program is rejected. Doc examples run after the file's own tests
+/// (test.doc.1), and properties run `cases` inputs (test.prop.3).
+fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>) -> ExitCode {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -208,8 +238,23 @@ fn run_tests(path: &str, json: bool) -> ExitCode {
         }
     };
     let (tokens, mut diags) = lexer::lex(&src);
-    let (program, parse_diags) = parser::parse_with_prelude(tokens);
+    let (mut program, parse_diags) = parser::parse_with_prelude(tokens);
     diags.extend(parse_diags);
+    // test.doc.1: each ```ail block in a doc comment becomes a test.
+    let mut doc_tests = Vec::new();
+    let mut line_map = Vec::new();
+    if diags.is_empty() {
+        doc_tests = doctest::collect(&src, &program);
+        if !doc_tests.is_empty() {
+            let (augmented, map) = doctest::augment(&src, &doc_tests);
+            line_map = map;
+            let (tokens, d) = lexer::lex(&augmented);
+            let (p, pd) = parser::parse_with_prelude(tokens);
+            program = p;
+            diags.extend(d);
+            diags.extend(pd);
+        }
+    }
     let bad_lines: Vec<usize> = diags.iter().filter(|d| d.rule.starts_with("lex.str.")).map(|d| d.pos.line).collect();
     diags.retain(|d| d.rule.starts_with("lex.str.") || !bad_lines.contains(&d.pos.line));
     let mut resolved = check::Resolved::default();
@@ -219,6 +264,12 @@ fn run_tests(path: &str, json: bool) -> ExitCode {
     // test.run.1: a file of tests needs no `main`.
     if !program.fns.iter().any(|f| f.name == "main" && f.owner.is_none() && f.top_level()) {
         diags.retain(|d| d.rule != "mod.main.1" || d.pos.line != 1);
+    }
+    // test.doc.3: a problem in an example is reported at the example's own line.
+    for d in &mut diags {
+        if let Some(&line) = line_map.get(d.pos.line.wrapping_sub(1)).filter(|l| **l != 0) {
+            d.pos.line = line;
+        }
     }
     let rejected = diags.iter().any(|d| !d.warning);
     if !diags.is_empty() {
@@ -230,37 +281,62 @@ fn run_tests(path: &str, json: bool) -> ExitCode {
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
         .spawn(move || {
-            interp::run_tests(&program, &resolved)
+            interp::run_tests(&program, &resolved, cases, seed)
                 .into_iter()
-                .map(|o| (o.name, o.pos, o.failure, o.output))
+                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop))
                 .collect::<Vec<_>>()
         })
         .expect("spawn interpreter thread")
         .join();
-    let Ok(outcomes) = outcomes else {
+    let Ok(mut outcomes) = outcomes else {
         eprintln!("{path}: internal error in the bootstrap interpreter");
         return ExitCode::from(1);
     };
+    for o in &mut outcomes {
+        let Some(t) = doc_tests.iter().find(|t| t.fn_name == o.0) else { continue };
+        // test.doc.2-3: report under the example's name, at its own line.
+        o.0 = t.name.clone();
+        if o.2.is_none() {
+            o.2 = doctest::check_output(t, &o.3);
+            o.1 = diag::Pos { line: t.line(), col: 1 };
+        } else if let Some(&line) = line_map.get(o.1.line.wrapping_sub(1)).filter(|l| **l != 0) {
+            o.1.line = line;
+        }
+    }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;
-    for (name, pos, failure, output) in &outcomes {
+    for (name, pos, failure, output, prop) in &outcomes {
         if json {
             let (status, message) = match failure {
                 Some(m) => ("fail", m.as_str()),
                 None => ("pass", ""),
             };
-            println!(
-                "{{\"test\":{},\"status\":\"{status}\",\"line\":{},\"col\":{},\"message\":{}}}",
+            let mut line = format!(
+                "{{\"test\":{},\"status\":\"{status}\",\"line\":{},\"col\":{},\"message\":{}",
                 diag::json_str(name),
                 pos.line,
                 pos.col,
                 diag::json_str(message)
             );
+            if let Some(p) = prop {
+                line.push_str(&format!(",\"cases\":{},\"seed\":{}", p.cases, p.seed));
+                if let Some(input) = &p.input {
+                    line.push_str(&format!(",\"input\":{}", diag::json_str(input)));
+                }
+            }
+            println!("{line}}}");
         } else {
+            let tail = match prop {
+                Some(p) => format!(" ({} cases, seed {})", p.cases, p.seed),
+                None => String::new(),
+            };
             match failure {
-                None => println!("ok {name}"),
+                None => println!("ok {name}{tail}"),
                 Some(m) => {
-                    println!("FAIL {name}: {m} at {}:{}", pos.line, pos.col);
+                    println!("FAIL {name}: {m} at {}:{}{tail}", pos.line, pos.col);
+                    if let Some(input) = prop.as_ref().and_then(|p| p.input.as_ref()) {
+                        println!("  input: {input}");
+                    }
                     for line in output.lines() {
                         println!("  | {line}");
                     }

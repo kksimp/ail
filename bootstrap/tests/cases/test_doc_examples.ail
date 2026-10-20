@@ -1,0 +1,55 @@
+struct Counter
+    n int
+
+## Doubles a number.
+##
+## ```ail
+## print(double(4))
+## # => 8
+## print(double(-1))
+## # => -2
+## ```
+##
+## ```ail
+## assert_eq(double(21), 42)
+## ```
+fn double(x int) int
+    x * 2
+
+## Adds one.
+##
+## ```ail
+## c := Counter(n: 1)
+## print(c.next())
+## # => 2
+## ```
+fn Counter.next(self) int
+    self.n + 1
+
+## Not run: a fragment.
+##
+## ```ail fragment
+## this is not code
+## ```
+fn skipped() int
+    1
+
+## Wrong on purpose.
+##
+## ```ail
+## print(double(2))
+## # => 5
+## ```
+fn wrong() int
+    2
+
+## Fails on purpose.
+##
+## ```ail
+## assert_eq(double(2), 5)
+## ```
+fn fails() int
+    3
+
+@test fn plain()
+    assert_eq(double(2), 4)

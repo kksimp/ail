@@ -1,0 +1,7 @@
+{"test":"add_commutes","status":"pass","line":19,"col":10,"message":"","cases":100,"seed":119502069008926656}
+{"test":"sort_is_idempotent","status":"pass","line":22,"col":10,"message":"","cases":100,"seed":16864472865381171684}
+{"test":"string_length","status":"pass","line":25,"col":10,"message":"","cases":100,"seed":15537292891754489717}
+{"test":"point_sum","status":"pass","line":28,"col":10,"message":"","cases":100,"seed":14306397821829962693}
+{"test":"set_and_map","status":"pass","line":32,"col":10,"message":"","cases":100,"seed":13346589635008526104}
+{"test":"shape_area","status":"pass","line":35,"col":10,"message":"","cases":100,"seed":5917777241410980806}
+{"summary":true,"passed":6,"failed":0}

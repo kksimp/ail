@@ -207,3 +207,20 @@ fn api_outlines_every_accepted_program() {
     let out = ail().args(["api", "--bogus", "x.ail"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+/// test.prop.3: `--cases` and `--seed` fix a property's inputs, so a run
+/// replays exactly.
+#[test]
+fn property_options_replay() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases/test_prop_fail.ail");
+    let run = |extra: &[&str]| {
+        let out = ail().args(["test", "--json"]).args(extra).arg(&path).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let a = run(&["--seed", "7", "--cases", "50"]);
+    assert_eq!(a, run(&["--cases", "50", "--seed", "7"]));
+    assert!(a.contains("\"seed\":7,") && a.contains("\"cases\":50"), "{a}");
+    assert_ne!(a, run(&["--seed", "8", "--cases", "50"]));
+    let out = ail().args(["test", "--cases", "x"]).arg(&path).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
