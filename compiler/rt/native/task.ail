@@ -117,19 +117,24 @@ fn task_start(rec int)
 fn start_thread(p int, idx int)
     base := load64(global(STACKS)) + idx * STACK_SZ
     k := if target() == 0 then 10 else if target() == 1 then 226 else 74
-    syscall(k, base, 4096, 0, 0, 0, 0)
+    guard := if target() == 2 then 16384 else 4096
+    syscall(k, base, guard, 0, 0, 0, 0)
     if target() == 2
-        start_pthread(base, idx)
+        start_pthread(base + guard, idx)
         return
     if clone(base + STACK_SZ - 64, idx) < 0
         fail(1, 0, 0)
 
 ## macOS: threads come from libSystem's pthreads (ADR 0599), on the same
-## stack region; the guard page is the stack's lowest page.
-fn start_pthread(base int, idx int)
+## stack region; the guard is the stack's lowest page (16 KiB here).
+## `low` is the first byte above the guard; macOS pages are 16 KiB, and
+## `pthread_attr_setstack` refuses an address or size that isn't aligned.
+fn start_pthread(low int, idx int)
     attr := alloc(80)
     import_call("_pthread_attr_init", attr, 0, 0, 0)
-    import_call("_pthread_attr_setstack", attr, base + 4096, STACK_SZ - 4096, 0)
+    size := (load64(global(STACKS)) + (idx + 1) * STACK_SZ) - low
+    if import_call("_pthread_attr_setstack", attr, low, size, 0) != 0
+        fail(1, 0, 0)
     r := import_call("_pthread_create", attr + 64, attr, fn_addr("rt.thread_entry"), idx)
     if r != 0
         fail(1, 0, 0)
