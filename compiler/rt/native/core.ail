@@ -13,6 +13,9 @@ OUT_LEN := 1
 HEAP_NEXT := 2
 HEAP_END := 3
 CHUNK := 4
+ARGC := 5
+ARGV := 6
+PARSE_OK := 7
 
 OUT_CAP := 65536
 
@@ -41,7 +44,10 @@ fn sys_mmap(n int) int
 
 # ---- memory (ADR 0407) ----
 
-fn init()
+## Called by the entry with the process's argument count and vector.
+fn init(argc int, argv int)
+    store64(global(ARGC), argc)
+    store64(global(ARGV), argv)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
     store64(global(CHUNK), 1048576)
@@ -103,6 +109,61 @@ fn out_bytes(p int, n int)
 fn out_str(s str)
     p := str_addr(s)
     out_bytes(p + 16, load64(p))
+
+# ---- strings (type.str.*) ----
+
+## A string object of `n` bytes, uninitialised, with `chars` characters.
+fn str_new(n int, chars int) int
+    p := alloc(16 + n)
+    store64(p, n)
+    store64(p + 8, chars)
+    p
+
+## `s.len()`: its characters.
+fn str_len(s str) int
+    load64(str_addr(s) + 8)
+
+## `s.chars()`: each character as a string of its own.
+fn str_chars(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    out := list_new(load64(p + 8))
+    mut i := 0
+    while i < n
+        mut j := i + 1
+        while j < n and load8(p + 16 + j).bit_and(192) == 128
+            j += 1
+        c := str_new(j - i, 1)
+        copy_bytes(c + 16, p + 16 + i, j - i)
+        list_push(out, c)
+        i = j
+    out
+
+## `xs.join(sep)` for a list of strings.
+fn list_join(xs List[int], sep str) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    mut n := 0
+    mut chars := 0
+    for i in 0..k
+        e := load64(items + 8 * i)
+        n += load64(e)
+        chars += load64(e + 8)
+    if k > 1
+        n += (k - 1) * load64(sp)
+        chars += (k - 1) * load64(sp + 8)
+    r := str_new(n, chars)
+    mut at := r + 16
+    for i in 0..k
+        if i > 0
+            copy_bytes(at, sp + 16, load64(sp))
+            at += load64(sp)
+        e := load64(items + 8 * i)
+        copy_bytes(at, e + 16, load64(e))
+        at += load64(e)
+    str_at(r)
 
 fn out_nl()
     out_byte(10)
@@ -209,6 +270,67 @@ fn list_copy(xs List[int]) List[int]
     copy_bytes(load64(q + 16), load64(p + 16), 8 * n)
     store64(q, n)
     list_at(q)
+
+## A copy of `xs` and of the lists in it, `depth` levels down.
+fn list_copy_deep(xs List[int], depth int) List[int]
+    ys := list_copy(xs)
+    q := list_addr(ys)
+    items := load64(q + 16)
+    for i in 0..load64(q)
+        inner := list_at(load64(items + 8 * i))
+        c := if depth > 1 then list_copy_deep(inner, depth - 1) else list_copy(inner)
+        store64(items + 8 * i, list_addr(c))
+    ys
+
+# ---- arguments and parsing (std.env.1, type.str.*) ----
+
+## `env.args()`: the words after the program's name, as string objects.
+fn args() List[int]
+    mut out := List[int]()
+    argv := load64(global(ARGV))
+    for i in 1..load64(global(ARGC))
+        c := load64(argv + 8 * i)
+        mut n := 0
+        while load8(c + n) != 0
+            n += 1
+        mut chars := 0
+        for k in 0..n
+            if load8(c + k).bit_and(192) != 128
+                chars += 1
+        s := str_new(n, chars)
+        copy_bytes(s + 16, c, n)
+        out.push(s)
+    out
+
+## `s.to_int()`: an optional `-` then decimal digits that fit in `int`;
+## `parse_ok()` says whether the last call succeeded.
+fn str_to_int(s str) int
+    p := str_addr(s)
+    n := load64(p)
+    store64(global(PARSE_OK), 0)
+    neg := n > 0 and load8(p + 16) == 45
+    mut i := if neg then 1 else 0
+    if i >= n
+        return 0
+    # Accumulate the negative value, which reaches the smallest `int`.
+    mut v := 0
+    while i < n
+        d := load8(p + 16 + i) - 48
+        if d < 0 or d > 9
+            return 0
+        if v < -922337203685477580 or v == -922337203685477580 and d > 8
+            return 0
+        v = v * 10 - d
+        i += 1
+    if not neg
+        if v == -9223372036854775807 - 1
+            return 0
+        v = 0 - v
+    store64(global(PARSE_OK), 1)
+    v
+
+fn parse_ok() bool
+    load64(global(PARSE_OK)) != 0
 
 # ---- traps (ADR 0405) ----
 
@@ -334,6 +456,102 @@ fn out_float(x float)
     if a < 10
         out_byte(48)
     out_int(a)
+
+## `{x:.n}` (lex.str.7, type.str.11): `x` rounded to `n` decimals, half to
+## even on its exact value, with the sign of a negative or `-0.0`.
+fn out_float_fixed(x float, n int)
+    if x != x or x > 1.7976931348623157e308 or x < -1.7976931348623157e308
+        out_float(x)
+        return
+    bits := float_bits(x)
+    if bits < 0
+        out_byte(45)
+    be := bits.shr(52).bit_and(2047)
+    mut f := bits.bit_and(4503599627370495)
+    mut e := -1074
+    if be > 0
+        f += 4503599627370496
+        e = be - 1075
+    # q = x * 10^n, rounded.
+    mut q := big_pow10(big_of(f), n)
+    if e >= 0
+        q = big_pow2(q, e)
+    else
+        mut round := 0
+        mut sticky := 0
+        mut left := 0 - e
+        while left > 0
+            m := if left > 29 then 29 else left
+            qr := big_div(q, 1.shl(m))
+            r := qr[qr.len() - 1]
+            sticky = sticky.bit_or(round)
+            if r.bit_and(1.shl(m - 1) - 1) != 0
+                sticky = 1
+            round = r.shr(m - 1).bit_and(1)
+            q = trim_last(qr)
+            left -= m
+        odd := q.len() > 0 and q[0] % 2 == 1
+        if round == 1 and (sticky == 1 or odd)
+            q = big_add(q, big_of(1))
+    digits := big_digits(q)
+    mut ds := List[int]()
+    for _ in digits.len()..n + 1
+        ds.push(0)
+    for d in digits
+        ds.push(d)
+    whole := ds.len() - n
+    for i in 0..whole
+        out_byte(48 + ds[i])
+    if n > 0
+        out_byte(46)
+        for i in whole..ds.len()
+            out_byte(48 + ds[i])
+
+## `a / d` for a small `d`, then the remainder as one more element.
+fn big_div(a List[int], d int) List[int]
+    mut q := List[int]()
+    for _ in 0..a.len()
+        q.push(0)
+    mut r := 0
+    mut i := a.len() - 1
+    while i >= 0
+        t := r * BASE + a[i]
+        q[i] = t / d
+        r = t % d
+        i -= 1
+    q = trim(q)
+    q.push(r)
+    q
+
+## All but the last element, trimmed.
+fn trim_last(a List[int]) List[int]
+    mut out := List[int]()
+    for i in 0..a.len() - 1
+        out.push(a[i])
+    trim(out)
+
+## The decimal digits of a big number, most significant first.
+fn big_digits(a List[int]) List[int]
+    mut ds := List[int]()
+    if a.len() == 0
+        ds.push(0)
+        return ds
+    mut i := a.len() - 1
+    while i >= 0
+        mut limb := a[i]
+        mut part := List[int]()
+        for _ in 0..9
+            part.push(limb % 10)
+            limb = limb / 10
+        mut k := 8
+        if i == a.len() - 1
+            while k > 0 and part[k] == 0
+                k -= 1
+        while k >= 0
+            ds.push(part[k])
+            k -= 1
+        i -= 1
+    ds
 
 fn trim(a List[int]) List[int]
     mut n := a.len()

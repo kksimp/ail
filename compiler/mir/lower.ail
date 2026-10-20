@@ -85,6 +85,7 @@ PRIMS := {
     "str_addr": "int",
     "list_addr": "int",
     "list_at": "list",
+    "str_at": "str",
     "float_bits": "int",
     "bits_float": "float",
     "target": "int",
@@ -152,12 +153,12 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for t in prog.traits
         problem(t.pos, "trait `{t.name}` isn't in the native subset yet")
     for c in prog.consts
-        if is_literal(c.value)
+        if is_const_expr(c.value)
             consts["{pre}{c.name}"] = c.value
         else
             problem(
                 c.pos,
-                "constant `{c.name}`: only number and `bool` literals are in the native subset yet",
+                "constant `{c.name}`: only literals, other constants and arithmetic on them are in the native subset yet",
             )
     for f in prog.fns
         before := problems.len()
@@ -167,6 +168,13 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             sigs.remove("{pre}{f.name}")
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
+    if f.ext != none
+        problems.push(Problem(
+            rule: "ffi.native.1",
+            pos: f.pos,
+            message: "`extern c fn {f.name}`: `ail build` can't link a C library yet (`ail run` can)",
+        ))
+        return
     if f.owner != none or f.generics.len() > 0 or f.receiver != none
         problem(f.pos, "`{f.name}`: methods and generic functions aren't in the native subset yet")
         return
@@ -216,7 +224,7 @@ fn type_of(t ast.TypeRef) Ty?
                     if args.len() != 1
                         return none
                     e := type_of(args[0])?
-                    if is_number(e)
+                    if is_number(e) or e == Ty.Str or e.elem() != none
                         return Ty.List(e)
                     none
                 _ => none
@@ -229,6 +237,15 @@ fn is_literal(e ast.Expr) bool
             match o
                 Neg => is_literal(x)
                 _ => false
+        _ => false
+
+## A constant's value that is inlined at each use: literals, names of other
+## constants, and arithmetic on them (no calls, so no effects).
+fn is_const_expr(e ast.Expr) bool
+    match e
+        Int | Float | Bool | Str | Name => true
+        Unary(_, x, _) => is_const_expr(x)
+        Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
 
 fn is_number(t Ty) bool
@@ -485,11 +502,52 @@ fn final_expr(s ast.Stmt) ast.Expr?
 
 # ---- statements ----
 
+## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
+## when it fails, a fallback value or a statement that leaves.
+fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
+    recv := match value
+        Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
+        _ => none
+    if recv == none
+        problem(pos, "`else` on a binding isn't in the native subset yet, but for `s.to_int()`")
+        declare(name, Ty.Unknown, -1)
+        return
+    s := lower_value(recv?, Ty.Str) else
+        declare(name, Ty.Unknown, -1)
+        return
+    if not (s.ty == Ty.Str)
+        problem(pos, "`.to_int()` on `{s.ty.name()}`")
+        declare(name, Ty.Unknown, -1)
+        return
+    n := call("rt.str_to_int", [s.id], Ty.Int)
+    ok := call("rt.parse_ok", [], Ty.Bool)
+    join := new_block()
+    r := new_value(Ty.Int, "")
+    blocks[join].params.push(r)
+    fail := new_block()
+    branch(ok, join, [n], fail, [])
+    seal(fail)
+    cur = fail
+    match other
+        Fallback(x) =>
+            f := lower_value(x, Ty.Int) else
+                declare(name, Ty.Unknown, -1)
+                return
+            jump(join, [convert(f, Ty.Int, pos)])
+        Leave(st) =>
+            lower_stmt(st)
+            if not done()
+                problem(pos, "this `else` must leave: `return`, `break` or `continue`")
+        Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
+    seal(join)
+    cur = join
+    declare(name, Ty.Int, r)
+
 fn Lower.lower_stmt(mut self, s ast.Stmt)
     match s
         Let(name, pos, _, value, otherwise) =>
-            if otherwise != none
-                problem(pos, "`else` on a binding isn't in the native subset yet")
+            if other := otherwise
+                lower_let_else(name, pos, value, other)
                 return
             v := lower_value(value, none) else
                 # Reported; uses of the name stay quiet.
@@ -534,7 +592,18 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
     if v.ty.elem() == none or not is_place(e)
         return v.id
-    call("rt.list_copy", [v.id], v.ty)
+    copy_list(v)
+
+## A copy of the list `v`, deep through nested lists (own.val.1).
+fn Lower.copy_list(mut self, v Val) int
+    mut depth := 0
+    mut t := v.ty.elem() else Ty.Unknown
+    while t.elem() != none
+        depth += 1
+        t = t.elem() else Ty.Unknown
+    if depth == 0
+        return call("rt.list_copy", [v.id], v.ty)
+    call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int)], v.ty)
 
 fn is_place(e ast.Expr) bool
     match e
@@ -627,7 +696,7 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
             elem = e
             list = l.id
             if mutates(body, iter)
-                list = call("rt.list_copy", [l.id], l.ty)
+                list = copy_list(l)
             lo = konst(0, Ty.Int)
             hi = op("len", [list], Ty.Int)
     nvars += 1
@@ -769,6 +838,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             Val(id: konst(n, Ty.Int), ty: Ty.Int)
         Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
+        Bytes(_, pos) => unsupported(pos, "`bytes` literals")
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
         Bytes(_, pos) =>
             problem(pos, "`bytes` literals aren't in the native subset yet")
@@ -1037,9 +1107,9 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         v := lower_value(x, if elem.is_unknown() then none else elem)?
         if elem.is_unknown()
             elem = v.ty
-        if not is_number(elem)
+        if not is_number(elem) and elem != Ty.Str and elem.elem() == none
             return unsupported(pos, "a list of `{elem.name()}`")
-        vs.push(convert(v, elem, pos))
+        vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
     for v in vs
         call(push_fn(elem), [l, v], Ty.Unit)
@@ -1086,6 +1156,7 @@ fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
         "int" => Ty.Int
         "float" => Ty.Float
         "list" => Ty.List(Ty.Int)
+        "str" => Ty.Str
         _ => Ty.Unit
     mut i := inst(-1, "prim", vs)
     i.name = name
@@ -1107,7 +1178,16 @@ fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
                     Hole(x) =>
                         v := lower_value(x, none)?
                         out(v, ipos)?
-                    Fmt(_, _) => return unsupported(ipos, "format specifications")
+                    Fmt(x, spec) =>
+                        v := lower_value(x, none)?
+                        plain := spec.fill == none and spec.align == none and spec.width == none
+                        n := spec.precision else -1
+                        if not plain or spec.hex or n < 0 or not v.ty.is_float()
+                            return unsupported(
+                                ipos,
+                                "format specifications other than `.N` on a float",
+                            )
+                        call("rt.out_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Unit)
         _ =>
             v := lower_value(args[0].value, none)?
             out(v, pos)?
@@ -1135,6 +1215,17 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
     Val(id: -1, ty: Ty.Unit)
 
 fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    # std.env.1
+    if name == "args" and args.len() == 0 and is_module(recv, "env")
+        t := Ty.List(Ty.Str)
+        return Val(id: call("rt.args", [], t), ty: t)
+    if is_module(recv, "mem")
+        problems.push(Problem(
+            rule: "ffi.native.1",
+            pos: npos,
+            message: "`mem.{name}`: `ail build` can't link the C allocator yet (`ail run` can)",
+        ))
+        return none
     r := lower_value(recv, none)?
     mut vs := List[Val]()
     for a in args
@@ -1143,6 +1234,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         mut arg_want := r.ty
         if e := r.ty.elem()
             arg_want = if name == "push" then e else Ty.Int
+            if name == "join"
+                arg_want = Ty.Str
         vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
     match r.ty
         Int =>
@@ -1167,18 +1260,36 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if (name == "sqrt" or name == "abs" or name == "floor" or name == "ceil")
                 and vs.len() == 0
                 return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
+        Str =>
+            # type.str.3, type.str.5
+            if name == "chars" and vs.len() == 0
+                t := Ty.List(Ty.Str)
+                return Val(id: call("rt.str_chars", [r.id], t), ty: t)
+            if name == "len" and vs.len() == 0
+                return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
         List(e) =>
             if name == "len" and vs.len() == 0
                 return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
+            # type.coll.9
+            if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
+                return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
             if name == "push" and vs.len() == 1
                 mut el := e
                 if e.is_unknown()
                     el = vs[0].ty
                     retype(recv, Ty.List(el))
-                call(push_fn(el), [r.id, convert(vs[0], el, npos)], Ty.Unit)
+                # A list pushed from a place is copied: lists are values (ADR 0060).
+                item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
+                call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
                 return Val(id: -1, ty: Ty.Unit)
         _ => return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## Whether `e` names module `m` (not a local of that name).
+fn Lower.is_module(self, e ast.Expr, m str) bool
+    match e
+        Name(n, _) => n == m and lookup(n) == none
+        _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes
 ## the element type from here on.

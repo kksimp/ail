@@ -74,6 +74,7 @@ Design notes:
   [design/ir-architecture.md](design/ir-architecture.md): topics 16–19:
   compile-time constants, derive generators, compile-time reflection, and the
   compiler tiers.
+- [design/native-performance.md](design/native-performance.md): `ail build` output raced against C and Python, where the time goes, and the compiler's own speed (ADR 0390).
 - [design/program-measurements-r5.md](design/program-measurements-r5.md),
   [design/program-measurements-r8.md](design/program-measurements-r8.md): the
   agent-tool corpus against Python after rounds 5 and 8.
