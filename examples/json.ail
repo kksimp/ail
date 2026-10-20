@@ -94,9 +94,6 @@ struct Parser
     chars List[char]
     pos int
 
-fn Parser.new(text str) Parser
-    Parser(text.chars(), 0)
-
 fn Parser.fail_at(self, at int, msg str) ParseError
     lines := chars[..at].join("").split('\n')
     last := lines.last() else ""
@@ -279,7 +276,7 @@ fn Parser.parse_number(mut self) !Json
     Int(text.to_int() else return fail_at(start, "number out of range"))
 
 fn parse(text str) Json ! ParseError
-    mut p := Parser.new(text)
+    mut p := Parser(text.chars(), 0)
     p.parse_document()
 
 fn quote(s str) str
@@ -328,7 +325,7 @@ fn pretty(v Json, level int) str
                 return "\{}"
             lines := ["{pad}{quote(m.key)}: {pretty(m.value, level + 1)}" for m in members]
             "\{\n{lines.join(",\n")}\n{close}}"
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) => compact(v)
+        Null | Bool | Int | Float | Str => compact(v)
 
 enum Step
     Key(name str)
@@ -354,7 +351,7 @@ fn Json.get(self, key str) Json?
                 if m.key == key
                     return m.value
             none
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Arr(_) => none
+        Null | Bool | Int | Float | Str | Arr => none
 
 fn Json.at(self, i int) Json?
     match self
@@ -362,7 +359,7 @@ fn Json.at(self, i int) Json?
             if i < 0 or i >= items.len()
                 return none
             items[i]
-        Null | Bool(_) | Int(_) | Float(_) | Str(_) | Obj(_) => none
+        Null | Bool | Int | Float | Str | Obj => none
 
 fn query(doc Json, steps List[Step]) Json?
     mut current := doc
@@ -377,19 +374,13 @@ struct Stats
     max_depth int
     total float
 
-fn Stats.new() Stats
-    mut counts := {}
-    for kind in KINDS
-        counts[kind] = 0
-    Stats(counts, 0, 0)
-
 fn kind_of(v Json) str
     match v
-        Obj(_) => "object"
-        Arr(_) => "array"
-        Str(_) => "string"
-        Int(_) | Float(_) => "number"
-        Bool(_) => "boolean"
+        Obj => "object"
+        Arr => "array"
+        Str => "string"
+        Int | Float => "number"
+        Bool => "boolean"
         Null => "null"
 
 fn walk(v Json, depth int, mut stats Stats)
@@ -405,7 +396,7 @@ fn walk(v Json, depth int, mut stats Stats)
                 walk(item, depth + 1, mut stats)
         Int(n) => stats.total += n.to_float()
         Float(x) => stats.total += x
-        Null | Bool(_) | Str(_) => return
+        Null | Bool | Str => return
 
 fn main() !
     doc := parse(DOCUMENT)?
@@ -428,7 +419,7 @@ fn main() !
         else
             print("not found: {path}")
     print("== stats ==")
-    mut stats := Stats.new()
+    mut stats := Stats({kind: 0 for kind in KINDS}, 0, 0)
     walk(doc, 1, mut stats)
     for kind in KINDS
         print("{kind}: {stats.counts[kind]}")

@@ -56,7 +56,7 @@ fn total_added(lines List[str]) !int
         cmd := parse(line)? "reading \"{line}\""
         total += match cmd
             Add(_, qty) => qty
-            Remove(_) => 0
+            Remove => 0
             Show => 0
     total
 

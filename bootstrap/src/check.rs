@@ -4000,9 +4000,12 @@ impl<'p> Checker<'p> {
                 } else {
                     covered[v] = true;
                 }
-                // expr.match.6: one binding (or `_`) per field, in order.
+                // expr.match.6: one binding (or `_`) per field, in order;
+                // expr.match.10: a bare name matches any fields and binds none.
                 let fields = &decl.variants[v].fields;
-                let given = bindings.as_deref().unwrap_or(&[]);
+                let Some(given) = bindings.as_deref() else {
+                    return Vec::new();
+                };
                 if fields.len() != given.len() {
                     let shown: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
                     let help = if fields.is_empty() {

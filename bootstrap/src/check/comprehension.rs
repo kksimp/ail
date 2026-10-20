@@ -27,6 +27,8 @@ impl<'p> Checker<'p> {
             _ => (None, None),
         };
         let mark = self.locals.len();
+        // expr.comp.4: `continue` skips an element and `break` ends the comprehension.
+        self.loops += 1;
         for c in clauses {
             let t = self.iterable(&c.iter);
             if self.declare(&c.var, c.var_pos) {
@@ -36,8 +38,6 @@ impl<'p> Checker<'p> {
                 self.condition(cond);
             }
         }
-        // expr.comp.4: `continue` skips an element and `break` ends the comprehension.
-        self.loops += 1;
         let t = self.comp_part(elem, hint);
         let v = value.map(|v| self.comp_part(v, vhint));
         self.loops -= 1;

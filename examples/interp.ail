@@ -348,25 +348,25 @@ enum Value
 
 fn Value.type_name(self) str
     match self
-        Int(_) => "int"
-        Str(_) => "str"
-        Bool(_) => "bool"
+        Int => "int"
+        Str => "str"
+        Bool => "bool"
         Nil => "nil"
 
 fn Value.as_int(self) int?
     match self
         Int(n) => n
-        Str(_) | Bool(_) | Nil => none
+        Str | Bool | Nil => none
 
 fn Value.as_str(self) str?
     match self
         Str(s) => s
-        Int(_) | Bool(_) | Nil => none
+        Int | Bool | Nil => none
 
 fn Value.as_bool(self) bool?
     match self
         Bool(b) => b
-        Int(_) | Str(_) | Nil => none
+        Int | Str | Nil => none
 
 impl ToStr for Value
     fn to_str(self) str
