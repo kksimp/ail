@@ -49,8 +49,8 @@ proposal, not a decision.
    and the first native code for the hot loops the interpreter shows
    (`tools/perfbench/run.sh`); meanwhile a bytecode tier in the bootstrap
    (ADR 0359, in progress).
-3. **Registry and lockfile:** git dependencies, `ail.lock`, then a package
-   registry (OQ-049, the designer's call); in-house TLS for `std.net`
+3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
+   in-house TLS for `std.net`
    (ADR 0360, in progress).
 4. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
    atomic orderings (OQ-097).

@@ -195,15 +195,7 @@ ADR 0076; decide when a real program needs it.*
 **Resolved** by [ADR 0215](decisions/0215-str-slice-and-search-methods.md) (`slice`, `char_at`, `find`, `replace`, `to_lower`, `to_upper`).
 
 ## OQ-049 — A package registry and version ranges
-Dependencies come from a path or a pinned git commit
-([ADR 0231](decisions/0231-path-and-git-dependencies.md)). Options: (a) a
-central registry with names and semver ranges (`dep json 1.4`), resolved
-into `ail.lock` (recommended eventually: short `dep` lines and discovery for
-agents, but it needs hosting, accounts, a naming policy and a solver);
-(b) git URLs only, with tags as versions (no service to run; long URLs in
-every manifest); (c) a registry that only maps names to git URLs and commits
-(no solver; small service). Involves hosting and publishing, so it is the
-designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
+**Resolved** by [ADR 0383](decisions/0383-no-package-registry.md) (no registry; git URLs with tags as versions).
 
 ## OQ-050 — Unique values in generic code, sets and traits
 **Partly resolved:** `move self` receivers by
