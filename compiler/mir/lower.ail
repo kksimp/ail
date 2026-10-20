@@ -80,6 +80,8 @@ struct Lower
     borrowed Set[str]
     ## The generated `copy.T` functions asked for, by name.
     copy_tys Map[str, Ty]
+    ## `problems.len()` when the current function began.
+    fn_problems int
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -137,6 +139,7 @@ pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Modul
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
+        fn_problems: 0,
     )
     if r := rt
         l.declare_all(r, "rt.")
@@ -498,6 +501,7 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
 fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
     fname = name
     ret = rty
+    fn_problems = problems.len()
     blocks = []
     vals = []
     names = []
@@ -520,6 +524,9 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
 
 ## Finish the function begun with `begin_fn`: simplify, fold, verify.
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
+    # After a problem the MIR may be inconsistent; it is never built.
+    if problems.len() > fn_problems
+        return
     func := simplify(fold(simplify(Func(
         name: name,
         params: blocks[0].params,
@@ -1309,12 +1316,29 @@ fn out_fn(t Ty) str
         Str => "rt.out_str"
         List(e) =>
             match e
+                Int => "rt.out_list_int"
                 Float => "rt.out_list_float"
                 Bool => "rt.out_list_bool"
-                _ => "rt.out_list_int"
+                # Lists of strings and of lists: `rt.out_list_deep`.
+                _ => ""
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if e := v.ty.elem()
+        mut depth := 0
+        mut leaf := e
+        while leaf.elem() != none
+            depth += 1
+            leaf = leaf.elem() else Ty.Unknown
+        k := match leaf
+            Int => 0
+            Float => 1
+            Bool => 2
+            Str => 3
+            _ => -1
+        if k >= 0 and (depth > 0 or k == 3)
+            call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
+            return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
