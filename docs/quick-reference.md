@@ -14,6 +14,7 @@
 ./ail effects [--json] FILE.ail       # each function's inferred effects
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
+./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a

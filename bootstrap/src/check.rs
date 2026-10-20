@@ -149,6 +149,10 @@ pub struct Resolved {
     pub std: Std,
     /// Calls to the standard modules, by the position of the name (std.use.2).
     pub std_calls: HashMap<Pos, crate::stdlib::StdCall>,
+    /// The declaration a name, call, method, field or variant refers to, by
+    /// the use's position, as an `ail api` symbol id (api.sym.1, ADR 0151).
+    /// Trait calls are in `calls` and bare variants in `variants` instead.
+    pub symbols: HashMap<Pos, String>,
 }
 
 /// Names available without import (mod.main.3, ADR 0084).
@@ -2169,6 +2173,7 @@ impl<'p> Checker<'p> {
             return l.ty.clone();
         }
         if let Some(&i) = self.consts.get(n) {
+            self.resolved.symbols.insert(pos, format!("const:{n}"));
             return self.const_type(i);
         }
         if n == "self" {
@@ -2549,6 +2554,7 @@ impl<'p> Checker<'p> {
         }
         match self.types.get(n.as_str()).copied() {
             Some(Def::Struct(s)) => {
+                self.resolved.symbols.insert(npos, format!("type:{n}"));
                 let explicit = targs.map(|a| self.explicit_args(n, &self.struct_params[s].clone(), a, npos));
                 return self.struct_literal(s, explicit, args, npos, expect);
             }
@@ -2567,6 +2573,7 @@ impl<'p> Checker<'p> {
         }
         if let Some(&i) = self.fns.get(n.as_str()) {
             self.reject_test_call(i, npos);
+            self.resolved.symbols.insert(npos, format!("fn:{n}"));
             let sig = self.sigs[i].clone();
             let binds = match targs {
                 Some(a) => {
@@ -3151,6 +3158,7 @@ impl<'p> Checker<'p> {
             [Cand::Inherent(i)] => {
                 let sig = self.sigs[*i].clone();
                 let tn = self.type_name(&rt).unwrap_or_default();
+                self.resolved.symbols.insert(pos, format!("method:{tn}.{name}"));
                 match sig.receiver {
                     None => {
                         self.args_only(args);
@@ -3300,6 +3308,7 @@ impl<'p> Checker<'p> {
         if let Def::Enum(e) = def
             && let Some(v) = self.variant_index(e, name)
         {
+            self.resolved.symbols.insert(pos, format!("variant:{tn}.{name}"));
             let explicit = targs.map(|a| self.explicit_args(tn, &owner, a, pos));
             return self.variant_literal(e, v, explicit, args, pos, expect);
         }
@@ -3308,6 +3317,7 @@ impl<'p> Checker<'p> {
             self.error("expr.name.1", pos, format!("`{tn}` has no associated function `{name}`"));
             return Ty::Err;
         };
+        self.resolved.symbols.insert(pos, format!("method:{tn}.{name}"));
         let sig = self.sigs[i].clone();
         if sig.receiver.is_some() {
             self.args_only(args);
@@ -3379,6 +3389,7 @@ impl<'p> Checker<'p> {
             match def {
                 Def::Enum(e) => {
                     if let Some(v) = self.variant_index(e, name) {
+                        self.resolved.symbols.insert(pos, format!("variant:{tn}.{name}"));
                         let fields = &self.prog.enums[e].variants[v].fields;
                         if !fields.is_empty() {
                             let shown: Vec<String> = fields.iter().map(|f| format!("{}: ...", f.name)).collect();
@@ -3425,6 +3436,7 @@ impl<'p> Checker<'p> {
             Ty::Struct(s, args) => {
                 let decl = &self.prog.structs[*s];
                 if let Some(i) = decl.fields.iter().position(|f| f.name == name) {
+                    self.resolved.symbols.insert(pos, format!("field:{}.{name}", decl.name));
                     let binds: Vec<(usize, Ty)> =
                         self.struct_params[*s].iter().copied().zip(args.iter().cloned()).collect();
                     return subst(&self.field_types[*s][i], &binds);
@@ -3972,6 +3984,7 @@ impl<'p> Checker<'p> {
                     self.diags.push(d);
                     return Vec::new();
                 };
+                self.resolved.symbols.insert(*pos, format!("variant:{}.{name}", decl.name));
                 if *wildcard || covered[v] {
                     self.error("expr.match.5", *pos, format!("this arm can never match; `{name}` is already covered"));
                 } else {

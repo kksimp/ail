@@ -22,6 +22,7 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail effects [--json] FILE        # each function's inferred effects
 ./ail run --deny fs,proc FILE      # refuse a program that reaches fs or proc
 ./ail explain expr.bind.4          # a spec rule, its ADRs and an example (--json too)
+./ail api FILE                     # declarations as JSON (--pretty, --text, --symbols)
 ./ail selftest                     # the bootstrap's own tests
 ```
 
@@ -45,6 +46,8 @@ reported but don't stop a program from running.
 | `src/interp/stdlib.rs` | Runs the standard modules | `std.err.1`, `std.fs.1–7`, `std.env.1–4`, `std.io.1–4`, `std.proc.1`, `std.time.1–2` |
 | `src/diag.rs` | Text and JSON diagnostics (schema v1: spans, notes, fixes), errors and warnings | ADR 0002 (rule IDs), ADR 0024, ADR 0145 |
 | `src/explain.rs`, `build.rs` | `ail explain RULE`, from the spec embedded at build time | ADR 0146 |
+| `src/docs.rs` | Attaches `##` doc comments to declarations | `lex.comment.2`, `api.doc.1–2` |
+| `src/api.rs` | `ail api`: the outline, symbol ids and references ([semantic-api.md](../docs/design/semantic-api.md)) | `api.out.1–5`, `api.id.1–3`, `api.ref.1–2`, `api.text.1` |
 
 All errors in a file are reported in one pass, sorted by position.
 
@@ -110,6 +113,10 @@ All errors in a file are reported in one pass, sorted by position.
   carry context and a return trace, and `main` reports them; generic code
   runs on the values it gets, and trait methods dispatch on the value's
   type, so `any Trait` needs no boxing
+- **Tools:** `ail api` prints every declaration's signature, `##` doc
+  comment, position and symbol id (`fn:add`, `method:Point.shift`), with
+  `--symbols` every reference, and `--text` a compact outline
+  ([semantic-api.md](../docs/design/semantic-api.md))
 
 When `main` fails, the report on standard error is the error in its default
 form (`err.text.1`), each context message, and each location in the return

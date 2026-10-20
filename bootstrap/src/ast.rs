@@ -36,6 +36,9 @@ impl Use {
 pub struct ConstDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub value: Expr,
 }
 
@@ -61,6 +64,9 @@ pub struct GenericParam {
 pub struct TraitDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     /// Indexes into `Program::fns`.
     pub methods: Vec<usize>,
 }
@@ -84,6 +90,9 @@ pub struct ImplDecl {
 pub struct StructDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub is_error: bool,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
@@ -93,6 +102,9 @@ pub struct StructDecl {
 pub struct Field {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub ty: TypeRef,
 }
 
@@ -102,6 +114,9 @@ pub struct Field {
 pub struct EnumDecl {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub is_error: bool,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
@@ -112,6 +127,9 @@ pub struct EnumDecl {
 pub struct Variant {
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     pub fields: Vec<Field>,
 }
 
@@ -125,6 +143,9 @@ pub struct FnDecl {
     pub owner: Option<Owner>,
     pub name: String,
     pub pos: Pos,
+    /// The `##` comment just before the declaration (lex.comment.2); filled
+    /// by `docs::attach`.
+    pub doc: Option<String>,
     /// The function's own type parameters (gen.decl.1, gen.method.3).
     pub generics: Vec<GenericParam>,
     pub receiver: Option<Receiver>,

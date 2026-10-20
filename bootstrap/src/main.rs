@@ -3,11 +3,13 @@
 //! Exit status: 0 success, 1 the program failed or trapped (mod.main.2,
 //! err.trap.3), 2 the program was rejected or the command was invalid.
 
+mod api;
 mod ast;
 mod check;
 mod diag;
 mod explain;
 mod fasthash;
+mod docs;
 mod implicit_self;
 mod interp;
 mod lexer;
@@ -27,6 +29,8 @@ commands:
   test FILE     run the program's `@test` functions
   effects FILE  print each function's inferred effects (eff.infer.6)
   explain RULE  print a spec rule, its ADRs and an example
+  api FILE      print the program's declarations as JSON (--pretty:
+                indented; --text: an outline; --symbols: every reference)
   version       print the version
 
 options:
@@ -74,6 +78,7 @@ fn main() -> ExitCode {
         ["test", file] => run_tests(file, json),
         ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["explain", rule] => explain::run(rule, json),
+        ["api", rest @ ..] => api::command(rest, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
