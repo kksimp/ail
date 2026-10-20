@@ -29,9 +29,9 @@ did.
    (`tools/garlic/jsdom`).
 4. **Generators, async functions and promises** (in progress): symbols,
    iterators, `Promise` with a microtask queue, generators (`yield`,
-   `yield*`, `return`, `throw`), `async` functions and arrows, `await`, and
-   `for-of` that steps its iterator. Still to come: async generators,
-   `for await`, and a bytecode compiler for speed.
+   `yield*`, `return`, `throw`), `async` functions and arrows, `await`,
+   async generators, `for await`, and `for-of` that steps its iterator and
+   closes it on `break`. Still to come: a bytecode compiler for speed.
 5. **Later**: modules and BigInt.
 
 ## Layout
@@ -230,6 +230,12 @@ that records the scope and stack depth to unwind to, and `return`, `break`
 and `continue` leave through the `finally` blocks in the way, as completion
 records (§6.2.4). Each function object compiles once.
 
+An async generator keeps a queue of `next`, `return` and `throw` requests,
+each answered by a promise in order (§27.6.3); it runs while the front
+request waits, and stops at each `yield` (after awaiting its value) or
+`await`. `for await` over a sync iterable wraps it so each value is awaited
+(§27.1.4).
+
 A generator is an object of class `Generator` that holds its frame's id;
 `next`, `return` and `throw` resume the frame. An async function returns a
 promise at once and runs until its first `await`; each `await` resumes it
@@ -244,8 +250,9 @@ it comes later for speed, and these frames will move onto it).
 
 ## Not yet
 
-- Async generators and `for await`: a clear "not supported yet"
-  SyntaxError. Inside a generator or async function, `yield` and `await`
+- `yield*` in an async generator: a clear "not supported yet"
+  SyntaxError. Leaving a `for-of` by `return` or a throw doesn't close
+  its iterator yet (`break` does). Inside a generator or async function, `yield` and `await`
   can't yet appear in a destructuring target, a `class` body, a `with`
   statement, tagged templates, optional chains, `delete`, `++`/`--`
   operands, logical assignment, or a compound assignment to a computed
@@ -264,10 +271,11 @@ it comes later for speed, and these frames will move onto it).
 
 ## Testing
 
-- `testdata/syntax`: 16 hand-written scripts, one per area (literals,
+- `testdata/syntax`: 18 hand-written scripts, one per area (literals,
   templates, operators, ASI, declarations, functions, arrows, classes,
   objects, patterns, control flow, optional chaining, `new`, Annex B,
-  Unicode identifiers, regex context), each with its ESTree tree, and 56
+  Unicode identifiers, regex context, generators, `for await`), each with
+  its ESTree tree, and 57
   invalid scripts with their exact SyntaxError.
 - `testdata/test262-parser`: the tc39 [test262-parser-tests](https://github.com/tc39/test262-parser-tests)
   (commit `0e808c7`, 2021-05-27), scripts only, packed one test per line.
@@ -278,10 +286,10 @@ it comes later for speed, and these frames will move onto it).
   exception and why: an unsupported feature, a twin that is not the same
   script, a test made stale by a later edition, or a gap. A listed test that
   starts to behave is reported, so the list only shrinks.
-- `testdata/run`: 18 programs (operators, functions, classes, control flow,
+- `testdata/run`: 19 programs (operators, functions, classes, control flow,
   built-ins, numbers, JSON, collections, errors, strings, console layout,
   promises, symbols, generators, async functions, `await` positions,
-  `eval`, `Date` setters, assignment order),
+  `eval`, `Date` setters, assignment order, async generators),
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
 - `testdata/page`: 8 pages (tree, events, timers, forms, URL, a
