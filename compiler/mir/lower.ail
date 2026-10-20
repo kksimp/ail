@@ -375,12 +375,12 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                         if k := type_key(name)
                             return Ty.Struct(k)
                     none
-        FnType(params, ret) =>
+        FnType(fparams, fret) =>
             mut ps := List[Ty]()
-            for p in params
+            for p in fparams
                 ps.push(type_of(p)?)
             mut r := Ty.Unit
-            if rt := ret
+            if rt := fret
                 r = type_of(rt)?
             Ty.Fn(params: ps, ret: r)
         _ => none
