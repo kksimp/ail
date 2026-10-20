@@ -48,7 +48,7 @@ proposal, not a decision.
    [ir-architecture.md](design/ir-architecture.md) (AST, HIR, MIR, machine IR)
    and the first native code for the hot loops the interpreter shows
    (`tools/perfbench/run.sh`); meanwhile a bytecode tier in the bootstrap
-   (ADR 0359, in progress; slice 1 of 4 is ADR 0361).
+   (ADR 0359, in progress; slices 1–3 of 4 are ADRs 0361–0363).
 3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
    in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); follow-ups:
    hardware AES-GCM and proxy support.

@@ -92,7 +92,8 @@ The register form is the only measured option near ADR 0359's 2–3x.
 - Slice 1 results (Linux x86-64, [interpreter-performance.md](../design/interpreter-performance.md)):
   `loops` 1.79x fewer instructions and 0.62x of CPython's time (was 1.04x);
   its collatz section 2.55x; `interp`, `json` and `sheet` gain little until
-  method calls, structs, `match` and interpolation compile (slice 3).
+  method calls, structs, `match` and interpolation compile (slice 3,
+  [ADR 0363](0363-bytecode-tier-methods-and-data.md)).
 - Every example, test case, corpus program and package prints the same bytes
   with and without the tier; slice 2 makes that check part of `./ail selftest`.
 - Two evaluators must stay in step; the hand-off keeps the second one small.
