@@ -30,7 +30,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Deterministic mode** | `ail run --deterministic`: denies `clock`, `random`, `proc` and `net` so a program gives the same output for the same inputs (`eff.det.1–3`, ADR 0207). |
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
-| **Channel** | A bounded queue between tasks, `Channel[T](capacity)`: `send` waits while it is full, `recv` waits while it is empty and gives `none` once it is closed and empty (ADR 0100, ADR 0188). |
+| **Channel** | A bounded queue between tasks, `Channel[T](capacity)`: `send` waits while it is full, `recv` waits while it is empty and gives `none` once it is closed and empty; `for v in ch` receives until then (ADR 0100, ADR 0188, ADR 0300). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
@@ -95,7 +95,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
 | **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, ADR 0262, [diagnostics-audit.md](design/diagnostics-audit.md)). |
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
-| **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `lock`/`unlock` bracket a read-modify-write (ADR 0189). |
+| **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
 | **One-line `if`** | `if c then a else b`: the single-line form of an `if` with one condition and an `else`; `then` is a keyword only there (ADR 0280, `expr.if.8`). |
 | **Or-pattern** | `p1 | p2` in a `match` arm: matches when any alternative does; binds no names (ADR 0138). |
@@ -104,6 +104,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Package** | The code under one package root: its root module and the modules below it, optionally described by an `ail.pkg` manifest (ADRs 0153, 0230). |
 | **Package root** | The directory import paths are relative to: the directory given to `ail run DIR`, or the directory of the file given to `ail run FILE` (ADR 0153). |
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
+| **`par for` comprehension** | `[f(x) par for x in xs]`: a list whose elements are computed on the thread pool, in order, with the sequential result (`conc.par.12`, ADR 0302). |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
 | **Probe** | A one-to-three statement program that feeds edge values (extremes, zero, empty, non-ASCII) to an operation that may trap; a trap is correct, an interpreter panic is the finding (ADR 0269). |
@@ -167,6 +168,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |
 | **Whole-program optimisation** | Optimising across all modules at once (specialisation, devirtualisation, cross-module constant propagation). See OQ-017. |
 | **Window host** | In the bootstrap, the main thread that owns `std.ui`'s window and serves the interpreter thread's requests, because macOS allows windows only on the main thread (ADR 0178). |
+| **`with` block** | `with m as mut x` and a block: holds mutex `m`, with its value in `x`, and stores `x` back however the block ends; a trap keeps the old value (`conc.share.6`, ADR 0301). |
 | **Work stealing** | A scheduler in which each worker thread has its own queue of work and idle workers take work from the others' queues; the runtime uses one such pool for tasks and parallel loops (ADR 0238). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |
 | **x86-64-v3** | x86-64 microarchitecture level including AVX2, FMA and BMI1/2. AIL's x86 baseline (ADR 0005). |

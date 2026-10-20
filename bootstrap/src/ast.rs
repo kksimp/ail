@@ -408,12 +408,22 @@ pub enum Stmt {
     },
     /// `defer S` (own.defer.1); `pos` is the `defer`'s.
     Defer(Box<Stmt>, Pos),
+    /// `with m as mut x`: hold mutex `m` for the block, with its value in
+    /// `x`, written back when the block ends (conc.share.6); `pos` is the
+    /// `with`'s.
+    With {
+        mutex: Expr,
+        var: String,
+        var_pos: Pos,
+        body: Block,
+        pos: Pos,
+    },
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
@@ -648,6 +658,8 @@ pub enum CompKind {
 /// filter (expr.comp.2).
 #[derive(Debug)]
 pub struct CompFor {
+    /// Written `par for` (conc.par.12).
+    pub par: bool,
     pub var: String,
     pub var_pos: Pos,
     pub iter: Expr,

@@ -1197,6 +1197,7 @@ impl Parser {
                 Some(Stmt::While { cond, body, pos })
             }
             Tok::Kw("for") => self.for_loop(false, pos),
+            Tok::Kw("with") => self.with_stmt(pos),
             // conc.par.5: `par for` asserts that the iterations are independent.
             Tok::Kw("par") => {
                 self.bump();
@@ -1315,7 +1316,12 @@ impl Parser {
     /// `for` (expr.comp.2).
     fn comp_clauses(&mut self) -> Option<Vec<CompFor>> {
         let mut clauses = Vec::new();
-        while self.eat_kw("for") {
+        loop {
+            // conc.par.12: `[e par for x in xs]` computes the elements on the pool.
+            let par = self.at_comp_for() && self.eat_kw("par");
+            if !self.eat_kw("for") {
+                break;
+            }
             if self.at_kw("mut") {
                 let pos = self.pos();
                 self.error_help(
@@ -1333,9 +1339,37 @@ impl Parser {
             }
             let iter = self.range()?;
             let cond = if self.eat_kw("if") { Some(self.expression()?) } else { None };
-            clauses.push(CompFor { var, var_pos, iter, cond });
+            clauses.push(CompFor { par, var, var_pos, iter, cond });
         }
         Some(clauses)
+    }
+
+    /// At `for`, or `par for`, starting a comprehension clause (expr.comp.2, conc.par.12).
+    fn at_comp_for(&self) -> bool {
+        self.at_kw("for") || (self.at_kw("par") && matches!(self.peek_at(1), Tok::Kw("for")))
+    }
+
+    /// `with m as mut x` and its block (conc.share.6), at `with`.
+    fn with_stmt(&mut self, pos: Pos) -> Option<Stmt> {
+        self.bump();
+        let mutex = self.range()?;
+        if !self.eat_kw("as") {
+            self.unexpected("`as mut NAME` after the mutex", "conc.share.6");
+            return None;
+        }
+        if !self.eat_kw("mut") {
+            let at = self.pos();
+            self.error_help(
+                "conc.share.6",
+                at,
+                "a `with` block writes its variable back to the mutex, so the variable is `mut`",
+                "write `with m as mut x`; to read the value once, use `m.get()`",
+            );
+            return None;
+        }
+        let (var, var_pos) = self.name("a variable after `as mut`", "conc.share.6")?;
+        let body = self.block("the `with` header", "conc.share.6")?;
+        Some(Stmt::With { mutex, var, var_pos, body, pos })
     }
 
     /// `value else d` or `value else return ...` (err.else.6), the loosest
@@ -1724,7 +1758,7 @@ impl Parser {
                 let mut elems = Vec::new();
                 while !self.at_sym("]") {
                     elems.push(self.expression()?);
-                    if elems.len() == 1 && self.at_kw("for") {
+                    if elems.len() == 1 && self.at_comp_for() {
                         let elem = Box::new(elems.pop()?);
                         let clauses = self.comp_clauses()?;
                         self.expect_sym("]", "`]` after the comprehension", "expr.comp.1")?;
@@ -1746,7 +1780,7 @@ impl Parser {
                 let first = self.expression()?;
                 if self.eat_sym(":") {
                     let value = self.expression()?;
-                    if self.at_kw("for") {
+                    if self.at_comp_for() {
                         let clauses = self.comp_clauses()?;
                         self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
                         let (elem, value) = (Box::new(first), Some(Box::new(value)));
@@ -1761,7 +1795,7 @@ impl Parser {
                     self.expect_sym("}", "`}` or `,` in the map", "type.coll.2")?;
                     return Some(Expr::Map(pairs, pos));
                 }
-                if self.at_kw("for") {
+                if self.at_comp_for() {
                     let clauses = self.comp_clauses()?;
                     self.expect_sym("}", "`}` after the comprehension", "expr.comp.1")?;
                     return Some(Expr::Comp { kind: CompKind::Set, elem: Box::new(first), value: None, clauses, pos });
