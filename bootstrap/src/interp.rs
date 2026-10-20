@@ -2153,6 +2153,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = match self.eval(operand, env)? {
                     Value::Float(x) => return Ok(Value::Float(-x)),
                     Value::Num(k, bits) => return negate(k, bits, *pos),
+                    Value::Tensor(t) => {
+                        return match t.neg() {
+                            Ok(r) => Ok(Value::Tensor(Rc::new(r))),
+                            Err(f) => Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        };
+                    }
                     v => v.int(),
                 };
                 match v.checked_neg() {

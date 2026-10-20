@@ -4363,6 +4363,10 @@ impl<'p> Checker<'p> {
         if self.reject_unhandled(&t, operand.pos()) {
             return Ty::Err;
         }
+        // std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
+        if op == UnOp::Neg && self.tensor_elem(&t).is_some() {
+            return t;
+        }
         if op == UnOp::Neg && t == Ty::Float {
             return Ty::Float;
         }

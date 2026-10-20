@@ -1873,6 +1873,11 @@ impl<'a, W: Write> Interp<'a, W> {
                     let v = match take!(*src) {
                         Value::Float(x) => Value::Float(-x),
                         Value::Num(k, bits) => negate(k, bits, *pos)?,
+                        // std.tensor.14: elementwise on a tensor.
+                        Value::Tensor(t) => match t.neg() {
+                            Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+                            Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        },
                         v => {
                             let v = v.int();
                             match v.checked_neg() {
