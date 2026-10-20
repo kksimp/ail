@@ -1093,7 +1093,6 @@ of the same shape and element type. A `float` is negated exactly, so `-0.0`
 is a result. An `int` element that is the least `int` traps as in
 std.tensor.6. *(ADR 0508)*
 
-```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 **std.tensor.15** — `t[i]` (an `int` `i`) is the tensor of `t`'s rows after
 the first, with that first axis dropped: a 1-D tensor's `t[i]` has shape
 `[]`. `t[lo..hi]` and `t[lo..=hi]` (a missing bound is the start or the end)
@@ -1129,7 +1128,7 @@ away from zero to an `int`, giving a `Tensor[int]` of the same shape. A NaN,
 an infinity or a value outside `int` traps. On a `Tensor[int]` it is a
 compile-time error. *(ADR 0523)*
 
-```ail
+```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
     print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
@@ -1138,6 +1137,20 @@ fn main()
     print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
     print(a.map(|x| x * 2.0).sum())   # 20.0
     print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32
+```
+
+```ail rules=std.tensor.15,std.tensor.16,std.tensor.17,std.tensor.18,std.tensor.19
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    print(a[1])                    # tensor.from([3.0, 4.0])
+    print(a[0..2].sum())           # 10.0
+    print(a + tensor.from([10.0, 20.0]))   # broadcast over the last axis
+    img := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], [3, 3])
+    print(img.conv2d(tensor.from([1.0, 0.0, 0.0, -1.0], [2, 2])))
+    scores := tensor.from([0.1, 0.9, 0.4, 0.7, 0.2, 0.3], [2, 3])
+    print(scores.argmax(1))        # tensor.from([1, 0])
+    print(tensor.from([-1.5, 0.5, 2.5]).clamp(0.0, 1.0))
+    print(tensor.from([2.5, -2.5, 0.49]).round())
 ```
 
 ## Examples
