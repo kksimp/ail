@@ -1,0 +1,7 @@
+use std.regex
+
+fn main()
+    re := regex.compile("a") else return
+    print(regex.search(re, "a"))
+    print(regex.find(re))
+    print(regex.is_match("a", "a"))

@@ -1,0 +1,19 @@
+fn grade(score int) str
+    match score
+        90..=100 => "A"
+        80..90 => "B"
+        0..80 => "C"
+        _ => "?"
+
+fn kind(c char) str
+    match c
+        'a'..='z' => "lower"
+        'A'..='Z' => "upper"
+        '0'..='9' | '_' => "word"
+        _ => "other"
+
+fn main()
+    for s in [100, 95, 89, 80, 79, 0, -1, 101]
+        print("{s} {grade(s)}")
+    for c in "aZ5_ !".chars()
+        print(kind(c))

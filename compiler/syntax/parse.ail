@@ -1668,6 +1668,10 @@ fn Parser.match_expr(mut self) ast.Expr?
 
 fn Parser.arm(mut self) ast.Arm?
     pat := pattern()?
+    # expr.match.11: `pattern if cond =>`.
+    mut guard := absent[ast.Expr]()
+    if eat_kw("if")
+        guard = expression_plain()?
     if not eat_sym("=>")
         if at_sym(":") or at_sym("->")
             error_fix("expr.match.1", here(), "arms are written `pattern => result`")
@@ -1677,13 +1681,13 @@ fn Parser.arm(mut self) ast.Arm?
             return none
     if at_newline()
         body := block("`=>`", "expr.match.1")?
-        return ast.Arm(pat: pat, body: body)
+        return ast.Arm(pat: pat, guard: guard, body: body)
     # expr.match.9: one statement on the arm's line.
     s := statement_inner()?
     if not after_block() and not eat_newline()
         unexpected("end of line after the arm", "expr.match.1")
         return none
-    ast.Arm(pat: pat, body: [s])
+    ast.Arm(pat: pat, guard: guard, body: [s])
 
 ## A pattern, or several joined by `|` (expr.match.8).
 fn Parser.pattern(mut self) ast.Pattern?
@@ -1696,8 +1700,40 @@ fn Parser.pattern(mut self) ast.Pattern?
         alts.push(single_pattern()?)
     ast.Pattern.Alt(alts: alts, pos: pos)
 
-## `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+## One alternative: a literal or a `lo..hi` / `lo..=hi` range of integer or
+## character literals (expr.match.12), or see `plain_pattern`.
 fn Parser.single_pattern(mut self) ast.Pattern?
+    pos := here()
+    lo := plain_pattern()?
+    inclusive := at_sym("..=")
+    if not inclusive and not at_sym("..")
+        return lo
+    mut lo_lit := ast.Literal.BoolLit(false)
+    match lo
+        Literal(value, _) =>
+            match value
+                IntLit(_) | CharLit(_) => lo_lit = value
+                StrLit(_) | BoolLit(_) =>
+                    diag("expr.match.12", pos)
+                    return none
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) =>
+            diag("expr.match.12", pos)
+            return none
+    i += 1
+    hpos := here()
+    hi := plain_pattern()?
+    match hi
+        Literal(value, _) =>
+            match value
+                IntLit(_) | CharLit(_) =>
+                    return ast.Pattern.Range(lo: lo_lit, hi: value, inclusive: inclusive, pos: pos)
+                StrLit(_) | BoolLit(_) => i += 0
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) => i += 0
+    diag("expr.match.12", hpos)
+    none
+
+## `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+fn Parser.plain_pattern(mut self) ast.Pattern?
     pos := here()
     match peek()
         Ident(n) =>

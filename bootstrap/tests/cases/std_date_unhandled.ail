@@ -1,0 +1,9 @@
+## std.date.7, std.date.14: an unknown zone and bad text are errors to handle,
+## and a duration is an int, not a string.
+use std.time.date
+
+fn main()
+    t := date.at(0, "Mars/Base")
+    p := date.parse_iso("2026-10-20T00:00Z") else return
+    print(p.add_ms("1h"))
+    print(t)

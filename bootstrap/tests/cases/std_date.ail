@@ -1,0 +1,98 @@
+## std.date.1-14: calendar dates, zones, ISO 8601 and `format`.
+use std.time.date
+
+fn show(text str, zone str) str
+    if zone == ""
+        d := date.parse_iso(text) else err
+            return "error: {err}"
+        return d.iso()
+    d := date.parse_in(text, zone) else err
+        return "error: {err}"
+    d.iso()
+
+fn show_at(ms int, zone str) str
+    d := date.at(ms, zone) else err
+        return "error: {err}"
+    d.iso()
+
+fn ny(local str) str
+    show(local, "America/New_York")
+
+fn main()
+    # Leap years and month lengths.
+    print([date.is_leap(2000), date.is_leap(1900), date.is_leap(2024), date.is_leap(2100)])
+    print([
+        date.days_in_month(2024, 2),
+        date.days_in_month(2025, 2),
+        date.days_in_month(2025, 4),
+        date.days_in_month(2025, 12),
+    ])
+    print(date.Date.new(2025, 2, 29))
+    print(date.Date.new(2024, 2, 29))
+    # Day numbers and weekdays.
+    d := date.Date.new(2000, 3, 1) else return
+    print("{d.days()} {d.weekday()} {d.yday()} {date.Date.from_days(-1).iso()}")
+    # Months and years clamp to the last day.
+    jan := date.Date.new(2026, 1, 31) else return
+    print([
+        jan.add_months(1).iso(),
+        jan.add_months(13).iso(),
+        jan.add_months(-2).iso(),
+        jan.add_days(30).iso(),
+    ])
+    leap_day := date.Date.new(2024, 2, 29) else return
+    print([leap_day.add_years(1).iso(), leap_day.add_years(4).iso(), leap_day.add_years(-1).iso()])
+    print(jan.since(leap_day))
+    print(leap_day < jan)
+    # Instants.
+    t := date.utc(1_700_000_000_000)
+    print(t.iso())
+    print(t.format("%A %e %B %Y, %I:%M:%S %p (%a %b %j) %z %:z %Z %s %% %q"))
+    print(date.utc(-1).iso())
+    print(date.utc(1_700_000_000_123).iso())
+    # ISO 8601 round trips and offsets.
+    for text in [
+        "2026-10-20T17:01:52Z",
+        "2026-10-20T13:01:52.5-04:00",
+        "2026-10-20 17:01+05:30",
+        "2026-10-20T17:01:52.123456+0000",
+    ]
+        print(show(text, ""))
+    p := date.parse_iso("2026-10-20T13:01:52-04:00") else return
+    utc := p.in_zone("UTC") else return
+    print("{p.unix_ms()} {p.offset} {p.zone} {utc.iso()}")
+    for text in [
+        "2026-10-20",
+        "2026-10-20T17:01:52",
+        "2026-02-30T00:00Z",
+        "2026-10-20T25:00Z",
+        "2026-10-20T10:00:60Z",
+        "nope",
+        "2026-10-20T10:00Q",
+    ]
+        print(show(text, ""))
+    print(show_at(0, "Mars/Base"))
+    # New York: spring forward 2026-03-08 and fall back 2026-11-01.
+    for ms in [1_772_953_199_000, 1_772_953_200_000, 1_793_512_799_000, 1_793_512_800_000]
+        z := date.at(ms, "America/New_York") else return
+        print(z.format("%Y-%m-%d %H:%M:%S %z"))
+    print(ny("2026-03-08T02:30"))
+    print(ny("2026-11-01T01:30"))
+    print(ny("2026-07-04T12:00"))
+    print(ny("2026-01-04T12:00"))
+    # Wall-clock arithmetic across a clock change: 23 hours, not 24.
+    before := date.parse_in("2026-03-07T12:00", "America/New_York") else return
+    after := before.add_days(1)
+    print("{after.iso()} {after.since(before) / date.HOUR} {before.add_ms(date.DAY).iso()}")
+    print(before.add_months(1).iso())
+    # Sydney is ahead, with summer in January; Kolkata has no DST.
+    for zone in ["Australia/Sydney", "Asia/Kolkata", "Europe/Berlin"]
+        for ms in [1_768_478_400_000, 1_784_116_800_000]
+            z := date.at(ms, zone) else return
+            print("{zone} {z.iso()}")
+    # A time zone changes the fields, not the instant.
+    n := date.parse_iso("2026-10-20T17:01:52Z") else return
+    k := n.in_zone("Asia/Kolkata") else return
+    print("{k.iso()} {k.unix_ms() == n.unix_ms()} {k == n} {n.before(k.add_ms(1))}")
+    print(k.format("%H:%M %Z"))
+    print(date.parse_date("2026-10-20") else date.Date.from_days(0))

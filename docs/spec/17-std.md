@@ -3,7 +3,9 @@
 Chapter key: `std`
 
 > **Status:** Drafted (partial). Specified: importing the standard modules,
-> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time`, `std.time.date`, `std.tz` and `std.ui`. Not yet
+> and `std.compress`, `std.fs`, `std.env`, `std.hash`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.tensor`, `std.time` and `std.ui`. Not yet
+> and `std.fs`, `std.env`, `std.io`, `std.net`, `std.path`, `std.proc`, `std.random`, `std.regex` (in [std-regex.md](std-regex.md)), `std.tensor`, `std.time` and `std.ui`. Not yet
 > designed: the rest of the standard library, and capability effects
 > (plan §3.2), which another lane adds.
 
@@ -14,7 +16,7 @@ failures are values (ADR 0157). There is no string-typed shell.
 
 **std.use.1** — `use std.NAME` imports the standard module `NAME`, available
 under the name `NAME`, or under `d` with `use std.NAME as d` (`mod.use.1`).
-The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time` and `ui`. Importing
+The standard modules are `env`, `fs`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time` and `ui`. Importing
 `std` itself, a submodule of a standard module, or any other `std.NAME` is a
 compile-time error that lists the modules. *(ADR 0157)*
 
@@ -185,6 +187,88 @@ fn main()
     print(path.join("examples", "data"))       # examples/data
 ```
 
+## Hashing: `std.hash`
+
+**std.hash.1** — `std.hash` works on values only, so its functions have no
+effects (`eff.infer.4`). Each takes `str` and hashes its UTF-8 bytes; when
+the `bytes` type lands the same functions take `bytes` too (ADR 0442).
+
+**std.hash.2** — `sha256(s str) str`, `sha384(s str) str` and
+`sha512(s str) str` return the digest of FIPS 180-4 as lower-case hex.
+`hmac_sha256(key str, s str) str` returns the HMAC of RFC 2104 and RFC 4231
+as lower-case hex. *(ADR 0442)*
+
+**std.hash.3** — `crc32(s str) int` returns the CRC-32 of RFC 1952
+(polynomial 0xEDB88320) as an `int` from 0 to 2^32 - 1. *(ADR 0445)*
+
+**std.hash.4** — `hash64(s str) int` is a fast 64-bit hash for tables and
+checksums, not for security. Its value for a given input is the same on
+every platform and version, and may be any `int`. *(ADR 0444)*
+
+```ail
+use std.hash
+
+fn main()
+    print(hash.sha256("abc"))    # ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    print(hash.crc32("123456789"))   # 3421780262
+```
+
+## Compression: `std.compress`
+
+**std.compress.1** — Binary data is a `List[int]` of values 0 to 255 until
+the `bytes` type lands (ADR 0443). `deflate(s str) List[int]` and
+`gzip(s str) List[int]` compress the UTF-8 bytes of `s` at a fixed level (6)
+into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952). They
+never fail, and the same input gives the same output on every platform.
+They have no effects.
+
+**std.compress.2** — `inflate(data List[int]) str ! compress.CompressError`
+and `gunzip(data List[int]) str ! compress.CompressError` reverse them.
+`CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
+data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
+CRC-32 or size mismatch), `too_big` (std.compress.4), `invalid_utf8` (the
+result is not text), `unsafe_path`, `unsupported`, or an I/O kind of
+`std.err.1` for file functions. *(ADR 0443)*
+
+**std.compress.3** — `gunzip` accepts the optional header fields of
+RFC 1952 and several members in a row, and checks every member's CRC-32 and
+size. `gzip` writes no timestamp or name. *(ADR 0445)*
+
+**std.compress.4** — A decompression whose output would pass 2^30 bytes
+fails with kind `too_big` before it allocates more. *(ADR 0445)*
+
+**std.compress.5** — `gzip_file(src str, dst str)`,
+`gunzip_file(src str, dst str)`, `zip_dir(dir str, dst str)` and
+`unzip(archive str, dir str)` return `Unit ! compress.CompressError` and
+have the effects `fs` and `io`. `zip_dir` stores every file under `dir`
+(symbolic links skipped) with `/`-separated relative names sorted by name,
+a fixed 1980-01-01 timestamp, and each file stored or deflated, whichever is
+smaller; an empty directory is an entry ending in `/`. The archive is
+deterministic. No zip64: more than 65535 files or any size over 4 GiB fails
+with `too_big`. `unzip` creates `dir`, checks every CRC-32, and fails with
+`unsafe_path`, before writing anything, when any name is absolute, has a
+`..`, `.` or empty component, or contains `\`, `:` or a NUL. Encrypted
+entries and methods other than store and deflate fail with `unsupported`.
+*(ADR 0446)*
+
+**std.compress.7** — `zlib(s str) List[int]` and
+`unzlib(data List[int]) str ! compress.CompressError` use the zlib wrapper of
+RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
+streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
+and `unsupported` for a preset dictionary. *(ADR 0443)*
+
+**std.compress.6** — Output is read by the system `gzip` and `unzip` and
+their output is read back; the project's tests check this when the tools
+exist and say so when they don't. *(ADR 0445)*
+
+```ail
+use std.compress
+
+fn main() !
+    z := compress.gzip("abc abc abc abc")
+    print(compress.gunzip(z)?)
+```
+
 ## Standard input and output: `std.io`
 
 **std.io.1** — `read_line() str?` reads one line from standard input,
@@ -253,11 +337,61 @@ fn main() !
     print(r.out)
 ```
 
+**std.proc.4** — `start(cmd str, args List[str], timeout_ms int?) Child !
+ProcError` starts the program as `run` does (`std.proc.1`) and returns at once
+with a `proc.Child`, `unique struct Child { pid int, stdin Channel[str], out
+Channel[str], err Channel[str] }`. (`spawn` is a keyword, so the function is
+`start`.) `timeout_ms` may be left off; a process still running after that
+many milliseconds is killed (`std.proc.6`); a negative value traps. A process
+that can't start is a `ProcError`, a cancelled task starts none (kind
+`cancelled`, `conc.cancel.2`). *(ADRs 0424–0425)*
+
+**std.proc.5** — The streams of a child are channels. `c.out` and `c.err`
+hold the lines the child writes to standard output and standard error, in
+order, without the line end (`\n` or `\r\n`; a last line with no end
+counts), with bytes that aren't UTF-8 as U+FFFD. Each is closed when the
+stream ends, so `recv` gives `none`, `for line in c.out` ends, and
+`task.select` (`conc.select.1`) can wait on both. A child that writes more
+than a task reads is never blocked: lines queue without a limit. `c.stdin`
+takes text: `c.stdin.send(text)` writes it to the child's standard input
+at once, without waiting, and `c.stdin.close()` ends the input (a child that
+reads until the end of its input needs the `close`). Sending to a child that
+has exited is not an error. All three are `Channel[str]`, so a task can be
+passed `c.out` and read it while another task writes `c.stdin`. *(ADR 0425)*
+
+**std.proc.6** — `wait(move c Child) int ! ProcError` waits for the child to
+exit and returns its status as `run` does (`std.proc.1`). It fails with
+`ProcError` of kind `timed_out` when the time limit of `start` killed the
+child, and of kind `cancelled` (after killing the child) in a cancelled task.
+While it waits, other tasks run, so a task can write the child's input or read
+its output meanwhile. Lines the child wrote before it exited stay readable
+from `out` and `err`. *(ADR 0428)*
+
+**std.proc.7** — A `Child` is a unique value (`own.uniq.1`): it can't be
+copied, and `wait` and `kill` take it with `move` (`own.move.2`), so a child
+is waited or killed once. `kill(move c Child) int` ends the child at once
+(with `SIGKILL`; `TerminateProcess` on Windows), waits for it and returns its
+status (137 on Unix). A child that is neither waited nor killed when the
+program ends is killed then, so no program leaves a process running. *(ADR 0425)*
+
+```ail
+use std.proc
+
+fn main() !
+    c := proc.start("sort", [])?
+    c.stdin.send("b\na\n")
+    c.stdin.close()
+    for line in c.out
+        print(line)
+    print(proc.wait(move c)?)
+```
+
 ## Network: `std.net`
 
 **std.net.1** — Every function of `std.net` has the effects `net` and
 `io` (`eff.infer.4`), so `--deny net`, a package's capability grants and
-`--deterministic` (`eff.det.1`) cover it. *(ADR 0283)*
+`--deterministic` (`eff.det.1`) cover it; `serve` and `listen` add `net.serve`
+(`std.net.14`). *(ADR 0283, ADR 0422)*
 
 **std.net.2** — `get(url str) Response ! NetError` sends an HTTP/1.1 `GET`
 to an `http://` or `https://` URL (`std.net.5`)
@@ -276,10 +410,14 @@ the response as `get` does, without following redirects. *(ADR 0283)*
 
 **std.net.4** — A failure is `error struct NetError { url str, kind str,
 message str }`: the URL given, a short kind, and a sentence for people.
-`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`), `tls`
-(the TLS handshake or connection failed, `std.net.5`), `not_found` (the
-host has no address), `refused`, `timed_out`, `protocol` (a malformed
-response, or too many redirects) or `other`. *(ADR 0283, ADR 0369)*
+`kind` is `bad_url` (not `http://` or `https://HOST[:PORT][/PATH]`, or not
+an address `HOST:PORT`), `bad_request` (a method, header name or header value
+the request or response may not carry, `std.net.6`), `tls` (the TLS handshake
+or connection failed, `std.net.5`), `not_found` (the host has no address),
+`refused`, `timed_out`, `closed` (the connection or server was closed, or the
+waiting task was cancelled, `std.net.9`), `bind` (the address is in use or
+not permitted, `std.net.9`), `protocol` (a malformed response, or too many
+redirects) or `other`. *(ADR 0283, ADR 0369, ADR 0418, ADR 0419)*
 
 **std.net.5** — An `https` URL (default port 443) is fetched over TLS 1.3.
 The server's certificate chain **MUST** lead to a trusted root, be within
@@ -302,6 +440,137 @@ fn main() !
     print("{r.status} {r.headers["content-type"]}")
 ```
 
+**std.net.6** — `request(method str, url str, opts Options) Response ! NetError`
+sends any method with options, where `struct Options { headers Map[str, str],
+query Map[str, str], body str, timeout_ms int, max_redirects int }`.
+`options()` returns the defaults: no headers, no query, an empty body, a
+30000 ms timeout and 5 redirects; write `mut o := net.options()` and set
+fields. The method is made uppercase and must be an HTTP token. `headers`
+are sent after the defaults `Host`, `User-Agent: ail` and `Accept: */*`, and
+replace a default of the same name (case-insensitively); `Connection`,
+`Content-Length` and `Transfer-Encoding` are the client's own and are
+ignored. A header name must be an HTTP token and a value must not contain
+CR, LF or NUL: otherwise the request fails with kind `bad_request` before
+anything is sent. `query` is appended to the URL, percent-encoded, after any
+query the URL has. `body` is sent with a `Content-Length` (always for `POST`,
+`PUT` and `PATCH`). `timeout_ms` bounds connecting and each read and write,
+and must be at least 1; `max_redirects` must be at least 0 (otherwise the
+program traps). `get(url)` and `post(url, body, content_type)` are
+`request` with the defaults. *(ADR 0418)*
+
+**std.net.7** — Redirects (`std.net.2`) are followed only for `GET` and
+`HEAD`, at most `max_redirects` times; with `max_redirects` 0 the redirect
+response itself is returned, and one more redirect than allowed fails with
+kind `protocol`. When a redirect leaves the scheme, host or port it started
+at, the headers `Authorization` and `Cookie` are dropped from the requests
+that follow. Response bodies are read whole and returned as `str`: streaming
+bodies are deferred until `bytes` (lane 123) and incremental reads can be
+designed together, and a request that needs one uses a `Conn` (`std.net.12`)
+and writes the HTTP itself. *(ADR 0418)*
+
+**std.net.8** — A network call waits cooperatively. In a program with
+tasks, a call that must wait for the network (connecting, reading, writing,
+`accept`) lets the other ready tasks run, so a client and a server in one
+program, or tasks that serve and ask, make progress. Without tasks it waits
+and times out the same way. A wait ends with kind `closed` when its task is
+cancelled (`conc.cancel.1`) or the program is shutting down. The set of
+tasks that run, and the order, is the scheduler's (`conc.task.*`, ADR 0186),
+not the network's. *(ADR 0420)*
+
+**std.net.9** — `serve(addr str) Server ! NetError` listens for HTTP on
+`HOST:PORT` (port 0 picks a free one) and returns a `Server`; failing to bind
+is kind `bind`. `srv.addr() str` is the address it listens on, with the real
+port. `srv.accept() Exchange ! NetError` waits for the next complete
+request, from whichever connection finishes sending first, so a slow client
+doesn't hold up others, and any number of tasks may call it on one server (a
+pool of workers). `srv.close()` stops listening: every waiting `accept`
+fails with kind `closed`, connections still sending a request are dropped,
+and an `Exchange` accepted earlier can still be answered (a graceful stop).
+`struct Exchange { request Request, handle int }` and `struct Request {
+method str, path str, query Map[str, str], headers Map[str, str], body str,
+peer str }`. A handler form `serve(addr, handler)` with `handler fn(Request)
+Response` follows function values (ADR 0419); until then a server is a
+loop over `accept`, usually in tasks. *(ADR 0419)*
+
+**std.net.10** — The server accepts only well-formed HTTP/1.0 and HTTP/1.1
+requests and answers the rest itself, with a plain-text body, without
+showing them to the program: `400` for a malformed request line or header
+(including whitespace before a colon, a folded line, a missing `Host` in
+HTTP/1.1, a non-numeric or repeated `Content-Length`, both `Content-Length`
+and `Transfer-Encoding`, or a bad chunk), `413` for a body over 16 MiB,
+`431` for a head over 64 KiB, `408` when a connection takes more than 10
+seconds to send a whole request, `501` for a transfer coding other than
+`chunked`, and `505` for another HTTP version. `Expect: 100-continue` is
+answered with `100 Continue`. `Request.path` is the target before `?`, as
+sent; `query` is the rest, split at `&` and `=`, with `%XX` and `+`
+decoded (a repeated key keeps its last value); header names are lowercase
+and a repeated header's values are joined with `, `; `body` is the decoded
+body as text, bytes that aren't UTF-8 as U+FFFD; `peer` is the client's
+address. *(ADR 0419)*
+
+**std.net.11** — `ex.respond(r Response) ! NetError` sends the response and
+closes the connection: the server sends `Connection: close` and does not
+keep connections alive. The status must be 100 to 599; header names must be
+tokens and values must not contain CR, LF or NUL; otherwise `respond` fails
+with kind `bad_request` and the exchange stays open to be answered again.
+`Content-Length`, `Connection` and `Transfer-Encoding` in `r.headers` are
+ignored (the server frames the response). A body is sent with a
+`Content-Type` of `text/plain; charset=utf-8` unless `r.headers` has one;
+`1xx`, `204` and `304` responses have no body; a reply to `HEAD` has the
+headers a `GET` would have and no body. Answering twice, or after the
+server's peer is gone, fails with kind `other` or `closed`. An exchange that
+is never answered keeps its connection until the program ends. *(ADR 0419)*
+
+**std.net.12** — `listen(addr str) Listener ! NetError` and `connect(host
+str, port int) Conn ! NetError` are raw TCP. `l.accept() Conn ! NetError`
+(any number of tasks may wait), `l.addr() str` and `l.close()` match
+`Server`. A `Conn` has `c.read(max int) str ! NetError`: waits for at
+least one byte and returns up to `max` bytes as text, never splitting a
+character across two reads (so it may return up to three bytes more), and
+`""` at the end of the stream; `c.read_line() str? ! NetError`: a line
+without its `\n` or `\r\n`, or absent at the end of the stream;
+`c.write(text str) ! NetError`; `c.set_timeout(ms int)` (default 30000):
+how long a read, write or connect may make no progress before kind
+`timed_out`; `c.peer() str`; and `c.close()`. A `Conn` and a `Server`
+handle are used from one task at a time (`Server.accept` excepted). After
+`close`, every operation fails with kind `closed`. Text only until `bytes`
+(lane 123) lands; then `read_bytes` and `write_bytes` join. *(ADR 0421)*
+
+**std.net.13** — `connect_tls(host str, port int) Conn ! NetError` connects
+and runs the TLS 1.3 handshake of `std.net.5` for `host`, with the same
+certificate rules, and returns a `Conn` that reads and writes the
+decrypted stream. Failures are kind `tls`, or the transport's kind during
+the handshake. There is no TLS server. *(ADR 0421, ADR 0360)*
+
+**std.net.14** — Serving needs a capability of its own. `serve` and
+`listen` have the effects `net`, `net.serve` and `io`; every other `std.net`
+function and the methods of `Server`, `Exchange`, `Listener` and `Conn` have
+`net` and `io`. `--deny net.serve` refuses a program that can start a
+server and still lets it be a client; `--deny net` and `--deterministic`
+refuse both, and a package's `caps` list names `net.serve` separately
+(`eff.cap.4–5`). *(ADR 0422)*
+
+**std.net.15** — Targets: Linux x86-64 and macOS ARM64 run the same code
+over the platform's sockets. On Windows the sockets are the Rust standard
+library's (Winsock); the code uses nothing else, and it is untested there
+(ADR 0004, lane 153). *(ADR 0423)*
+
+```ail
+use std.net
+
+fn answer(srv net.Server) !
+    ex := srv.accept()?
+    q := ex.request.query.get("name") else "world"
+    ex.respond(net.Response(status: 200, headers: {}, body: "hello {q}"))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn answer(srv)
+    r := net.get("http://{srv.addr()}/?name=ail")?
+    print(r.body)
+    t.wait()?
+```
+
 ## Clock: `std.time`
 
 **std.time.1** — `now_ms() int` returns the time in milliseconds since
@@ -309,6 +578,102 @@ fn main() !
 
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+## Calendar: `std.time.date`
+
+A standard module written in AIL (`use std.time.date`, ADR 0447). A
+**duration** is an `int` of milliseconds; the constants `date.SEC`, `MIN`,
+`HOUR` and `DAY` name the usual ones. A **zone** is a `str`: `"UTC"` (or
+`"Z"`), a fixed offset such as `"+05:30"` (`±HH`, `±HHMM` or `±HH:MM`), or an
+IANA name such as `"America/New_York"` read from the platform's tz database
+(`std.tz`, ADR 0448).
+
+**std.date.1** — `Date(year, month, day)` is a day of the proleptic Gregorian
+calendar. `Date.new(y, m, d)` is `none` unless the day exists.
+`is_leap(y)` and `days_in_month(y, m)` follow the Gregorian rules. A `Date`
+compares by year, then month, then day, and prints as its `iso()` text.
+
+**std.date.2** — `d.days()` is the number of days since 1970-01-01, negative
+before it; `Date.from_days(n)` is its inverse.
+
+**std.date.3** — `d.weekday()` is 1 for Monday to 7 for Sunday; `d.yday()`
+is 1 for January 1.
+
+**std.date.4** — `d.add_days(n)` and `a.since(b)` (days from `b` to `a`) are
+exact for any `n`.
+
+**std.date.5** — `d.add_months(n)` moves the month and keeps the day, except
+that a day the target month lacks becomes that month's last day (January 31
+plus one month is February 28 or 29). `d.add_years(n)` is `add_months(12 * n)`,
+so February 29 becomes February 28 in a common year. *(ADR 0449)*
+
+**std.date.6** — `DateTime` is an instant seen in a zone: `date`, `hour`,
+`minute`, `second`, `ms`, `offset` (seconds east of UTC at that instant) and
+`zone`. `==` compares these fields, so the same instant in two zones is not
+equal; `a.unix_ms() == b.unix_ms()` and `a.before(b)` compare instants.
+
+**std.date.7** — `date.utc(ms)` and `date.at(ms, zone)` give the instant `ms`
+milliseconds after 1970-01-01T00:00:00Z; `at` fails with `DateError` for an
+unknown zone. `dt.in_zone(zone)` is the same instant in another zone. Reading
+a local time in a zone (`parse_in`, `add_days`, `add_months`, `add_years`)
+resolves it to an instant: a local time that happens twice (the clock goes
+back) takes the first, and one that is skipped (the clock goes forward) takes
+the offset in force before the change, so it lands just after the gap.
+*(ADR 0449)*
+
+**std.date.8** — `dt.unix_ms()`, `a.before(b)` and `a.since(b)` (milliseconds
+from `b` to `a`) work on instants.
+
+**std.date.9** — `dt.iso()` is `YYYY-MM-DDTHH:MM:SS`, then `.mmm` unless the
+milliseconds are zero, then `Z` for offset 0 or `±HH:MM`. `d.iso()` is
+`YYYY-MM-DD`. Years below 1000 are padded to four digits. *(ADR 0450)*
+
+**std.date.10** — `dt.format(pattern)` replaces these tokens and copies the
+rest: `%Y` year, `%y` two-digit year, `%m` month, `%d` day, `%e` day padded
+with a space, `%j` day of year, `%H` hour, `%I` 12-hour, `%p` AM or PM, `%M`
+minute, `%S` second, `%f` milliseconds, `%a` and `%A` weekday name, `%b` and
+`%B` month name (English), `%z` `+0530`, `%:z` `+05:30`, `%Z` the zone text,
+`%s` Unix seconds, `%%` a percent sign. An unknown token such as `%q` is kept
+as written. *(ADR 0451)*
+
+**std.date.11** — `date.now()` is the current instant in UTC and
+`date.now_local()` the current instant in the system zone (`tz.system()`, UTC
+when that zone isn't installed). Both read the clock, so `--deterministic`
+rejects a program that reaches them (`eff.det.1`); the rest of the module is
+pure.
+
+**std.date.12** — `dt.add_ms(n)` adds elapsed time. `dt.add_days(n)`,
+`add_months(n)` and `add_years(n)` keep the wall-clock time in the same zone
+(std.date.7), so across a clock change a day may last 23 or 25 hours.
+
+**std.date.13** — `date.parse_date(text)` reads `YYYY-MM-DD`.
+
+**std.date.14** — `date.parse_iso(text)` reads `YYYY-MM-DD` and `T` (or a
+space) and `HH:MM[:SS[.fraction]]` and an offset `Z`, `±HH`, `±HHMM` or
+`±HH:MM`; digits of the fraction past milliseconds are dropped. The result is
+in the text's own offset. Text with no offset is an error; `date.parse_in(text,
+zone)` reads it in `zone` instead (an offset in the text still wins). Seconds
+go to 59: leap seconds are not supported. *(ADR 0450)*
+
+**std.date.15** — Refused text, zones and dates fail with `DateError(text,
+why)`, which displays as `why: \`text\``.
+
+## Zones: `std.tz`
+
+**std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
+zone `zone` at the instant `secs` (seconds since the epoch), or `none` when the
+zone isn't installed, the name is empty or unsafe (it may hold only letters,
+digits and `/ _ + -`, no `..`, no leading `/`). It reads TZif files (RFC 9636)
+from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
+POSIX rule for instants after its last transition. It has the effects `fs` and
+`env`. *(ADR 0448)*
+
+**std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
+else the zone `/etc/localtime` links to, else `"UTC"`.
+
+**std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
+every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
+lands; UTC and fixed offsets work everywhere.
 
 ## Randomness: `std.random`
 
@@ -639,6 +1004,11 @@ last bit may differ between operating systems. Each element is computed by
 the same scalar code on every ISA, so std.tensor.5's vector paths don't
 apply to them.
 These methods on a `Tensor[int]` are a compile-time error. *(ADR 0507)*
+
+**std.tensor.14** — `-t` on a tensor negates each element and gives a tensor
+of the same shape and element type. A `float` is negated exactly, so `-0.0`
+is a result. An `int` element that is the least `int` traps as in
+std.tensor.6. *(ADR 0508)*
 
 ```ail
 fn main()

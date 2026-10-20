@@ -66,6 +66,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if self.tracing & super::trace::EFFECTS != 0 {
             self.trace_effect(module, f, &values, pos);
         }
+        if matches!(module, "hash" | "compress") {
+            return Ok(self.codec_call(module, f, &values, pos));
+        }
         let str_arg = |i: usize| match &values[i] {
             Value::Str(s) => s.clone(),
             other => unreachable!("checked: str, found {other:?}"),
@@ -208,6 +211,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     return stop("std.io.4", pos, format!("exit status {code} is outside 0 to 255"));
                 }
                 self.flush(pos)?;
+                super::spawn::reap_all();
                 std::process::exit(code as i32);
             }
             ("proc", "run") => {
@@ -256,13 +260,123 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            ("proc", "start") => {
+                let cmd = str_arg(0);
+                let Value::List(list) = &values[1] else { unreachable!("checked: List[str]") };
+                let argv: Vec<String> = list
+                    .iter()
+                    .map(|v| match v {
+                        Value::Str(s) => s.to_string(),
+                        other => unreachable!("checked: str, found {other:?}"),
+                    })
+                    .collect();
+                let timeout = match values.get(2) {
+                    Some(Value::Int(ms)) if *ms < 0 => {
+                        return stop("std.proc.4", pos, format!("can't time out after {ms} milliseconds"));
+                    }
+                    Some(Value::Int(ms)) => Some(*ms as u64),
+                    _ => None,
+                };
+                self.flush(pos)?;
+                let failed = |this: &Self, kind: &str| {
+                    let s = this.structs["proc.ProcError"];
+                    fail(Value::Struct(s, Rc::new(vec![Value::Str(cmd.clone()), text(kind)])), pos)
+                };
+                if self.cancelled() {
+                    return Ok(failed(self, "cancelled"));
+                }
+                match super::spawn::start(&cmd, &argv, timeout) {
+                    Ok(c) => {
+                        let stdin = self.child_chan(None, Some(c.stdin));
+                        let out = self.child_chan(Some(c.out), None);
+                        let err = self.child_chan(Some(c.err), None);
+                        let s = self.structs["proc.Child"];
+                        Value::Struct(s, Rc::new(vec![Value::Int(i64::from(c.pid)), stdin, out, err]))
+                    }
+                    Err(kind) => failed(self, kind),
+                }
+            }
+            ("proc", "wait") => {
+                let Value::Struct(_, fields) = &values[0] else { unreachable!("checked: a Child") };
+                let pid = fields[0].int() as u32;
+                // std.proc.6: other tasks run while the child does.
+                let ended = loop {
+                    if let Some(e) = super::spawn::try_wait(pid) {
+                        break e;
+                    }
+                    if self.cancelled() {
+                        let e = super::spawn::kill(pid);
+                        let cmd = e.map_or_else(String::new, |e| e.cmd);
+                        let s = self.structs["proc.ProcError"];
+                        return Ok(fail(Value::Struct(s, Rc::new(vec![Value::Str(cmd.into()), text("cancelled")])), pos));
+                    }
+                    self.yield_turn(pos)?;
+                };
+                if ended.timed_out {
+                    let s = self.structs["proc.ProcError"];
+                    return Ok(fail(Value::Struct(s, Rc::new(vec![Value::Str(ended.cmd.into()), text("timed_out")])), pos));
+                }
+                Value::Int(exit_status(&ended.status))
+            }
+            ("proc", "kill") => {
+                let Value::Struct(_, fields) = &values[0] else { unreachable!("checked: a Child") };
+                // Already ended and waited: killing it again is not an error.
+                Value::Int(super::spawn::kill(fields[0].int() as u32).map_or(-1, |e| exit_status(&e.status)))
+            }
+            ("task", "select") => {
+                let Value::List(list) = &values[0] else { unreachable!("checked: List[Channel]") };
+                let chans: Vec<usize> = list
+                    .iter()
+                    .map(|v| match v {
+                        Value::Handle(super::tasks::Handle::Channel(c)) => *c,
+                        other => unreachable!("checked: a channel, found {other:?}"),
+                    })
+                    .collect();
+                return self.select(&chans, pos);
+            }
             ("proc", "which") => super::osext::which(&str_arg(0)).map_or(Value::None, text),
-            ("net", "get" | "post") => {
-                let url = str_arg(0);
-                let result = if f == "get" {
-                    super::net::get(&url)
-                } else {
-                    super::net::post(&url, &str_arg(1), &str_arg(2))
+            ("net", "serve") => self.net_serve(&str_arg(0), pos),
+            ("net", "listen") => self.net_listen(&str_arg(0), pos),
+            ("net", "connect" | "connect_tls") => self.net_connect(&str_arg(0), values[1].int(), f == "connect_tls", pos),
+            ("net", "options") => {
+                let s = self.structs["net.Options"];
+                let empty = || Value::Map(Rc::new(Table::default()));
+                let fields = vec![
+                    empty(),
+                    empty(),
+                    text(""),
+                    Value::Int(super::net::TIMEOUT.as_millis() as i64),
+                    Value::Int(super::net::MAX_REDIRECTS as i64),
+                ];
+                Value::Struct(s, Rc::new(fields))
+            }
+            ("net", "get" | "post" | "request") => {
+                let url = str_arg(if f == "request" { 1 } else { 0 });
+                super::netsock::set_yielder(self.yielder());
+                let result = match f {
+                    "get" => super::net::get(&url),
+                    "post" => super::net::post(&url, &str_arg(1), &str_arg(2)),
+                    _ => {
+                        let Value::Struct(_, o) = &values[2] else { unreachable!("checked: net.Options") };
+                        let Value::Str(body) = &o[2] else { unreachable!("checked: str") };
+                        let (timeout_ms, redirects) = (o[3].int(), o[4].int());
+                        if timeout_ms <= 0 || redirects < 0 {
+                            return stop(
+                                "std.net.6",
+                                pos,
+                                format!("`timeout_ms` is at least 1 and `max_redirects` at least 0, not {timeout_ms} and {redirects}"),
+                            );
+                        }
+                        let opts = super::net::Opts {
+                            headers: super::netsock::options_pairs(&o[0]),
+                            query: super::netsock::options_pairs(&o[1]),
+                            body: body.to_string(),
+                            content_type: None,
+                            timeout: std::time::Duration::from_millis(timeout_ms as u64),
+                            max_redirects: redirects as usize,
+                        };
+                        super::net::request(&str_arg(0), &url, &opts)
+                    }
                 };
                 match result {
                     Ok(r) => {
@@ -279,6 +393,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                 }
             }
+            ("regex", _) => return self.regex_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());
                 if lo > hi {
@@ -295,6 +410,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
                 Value::Int(now.map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)))
             }
+            ("tz", "offset") => super::tz::offset(&str_arg(0), values[1].int()).map_or(Value::None, Value::Int),
+            ("tz", "system") => text(super::tz::system()),
             ("time", "sleep_ms") => {
                 let ms = values[0].int();
                 if ms < 0 {
