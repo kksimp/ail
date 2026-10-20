@@ -63,4 +63,7 @@ AI agents: read [AGENTS.md](AGENTS.md) first.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 with a Runtime Library Exception. See [LICENSE](LICENSE):
+the toolchain, its sources and docs are Apache-2.0; code the toolchain
+embeds into the programs you compile carries no attribution requirement
+(ADR 0510).

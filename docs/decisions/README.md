@@ -372,3 +372,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
+| [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
