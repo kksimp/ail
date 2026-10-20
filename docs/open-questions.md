@@ -250,3 +250,57 @@ agents, but it needs hosting, accounts, a naming policy and a solver);
 every manifest); (c) a registry that only maps names to git URLs and commits
 (no solver; small service). Involves hosting and publishing, so it is the
 designer's call (AGENTS.md escalation criterion 4). *Owner: designer.*
+
+## OQ-091 — Field attributes for derive generators
+A `ToJson` derive (ADR 0227) wants per-field options (`@json("user_id")`,
+skip a field). Today an unknown attribute is an error (`test.attr.1`), and
+`FieldInfo` (ADR 0229) has no attributes. Options: (a) a trait declares the
+attribute names its generator reads (`@derive(derive_json, attrs: [json])`),
+and `FieldInfo` gains `attrs`; unknown names stay errors (recommended: still
+one place that says what an attribute means, and typos are caught);
+(b) any `@name(...)` on a field is allowed and passed through (shortest, but
+a typo is silently ignored); (c) no field options; a type that needs them
+writes the `impl` by hand. *Owner: AI under ADR 0076.*
+
+## OQ-092 — Type information in constants and compile-time assertions
+`TypeInfo` reaches only derive generators (`refl.info.2`). A compile-time
+check such as "every variant of `Cmd` has a help line" needs it in a
+constant. Options: (a) a prelude `type_info[T]()` callable only in
+compile-time code, plus `assert` in constants as a compile error
+(recommended when a use appears: small, and still no run-time reflection);
+(b) only through derives (status quo); (c) Zig-style `@typeInfo` anywhere at
+compile time (rejected in ADR 0225 and ADR 0229). *Owner: AI under ADR 0076.*
+
+## OQ-093 — Generating items other than an impl body
+Generated code is limited to the methods of the deriving `impl`
+(`ct.gen.1`). Bindings generated from a schema, or a type per table, would
+need generators that add types or functions to a module. Options: (a) defer
+until a real use appears (recommended: C headers already have ADR 0103, and
+every current need is an impl); (b) a module-level `@generate(f)` whose items
+appear in `ail api --expanded` like derives. *Owner: AI under ADR 0076.*
+
+## OQ-094 — Downcasting `any Trait`
+`refl.run.1` gives no way to recover the concrete type of an `any Trait`
+value. Options: (a) none (recommended for now: an enum is the checked way to
+hold one of several known types, and `match` is exhaustive); (b) a checked
+`x as T?` returning `none` on a mismatch (needs a type tag per value, which
+`any Trait` already has as its method table); (c) a trait method the author
+writes. *Owner: designer (it changes what `any Trait` promises).*
+
+## OQ-095 — Compile-time evaluation limits
+`ct.eval.3` sets 100,000,000 steps and 1 GiB per constant or derive.
+Options: (a) keep these and let a package manifest raise the step limit
+(recommended: a constant that needs more is rare, and the limit is
+deterministic); (b) a per-program total budget instead of per item (bounds
+the whole build, but one large constant starves the rest); (c) no memory
+limit (simpler, but a runaway allocation takes the machine down). *Owner: AI
+under ADR 0076, measured once the evaluator counts steps.*
+
+## OQ-096 — Showing built-in derives in `ail api --expanded`
+`trait.derive.1`'s `Eq`, `Ord` and `ToStr` derives are specified as if a
+prelude generator wrote them, but the bootstrap implements them natively.
+Options: (a) `--expanded` prints their equivalent AIL text from a fixed
+template (recommended: one rule for every derive, and an agent sees what
+`cmp` compares); (b) list them by name only, like automatic implementations
+(cheapest); (c) write the prelude generators in AIL and drop the native code
+(slower in the interpreter). *Owner: AI under ADR 0076.*

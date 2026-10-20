@@ -63,6 +63,8 @@ followed (ADR 0240, `std.ui.10–13`), and the editor's window front end got
 tabs, a Ctrl-P file picker, mouse selection, wheel scrolling, the system
 clipboard and F5/F6 runs (ADR 0241).
 
+Lane 37 (ADRs 0222–0229) designed topics 16–19: four compiler tiers (AST, HIR, MIR, machine IR), constants computed at compile time by calling compile-time-safe functions (implemented: `ct.const.1–3`), derive generators whose output `ail api --expanded` shows, and compile-time-only reflection.
+
 ## Design topics
 
 The 28 topics that must be resolved before implementation (founding brief §22).
@@ -87,10 +89,10 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 | 13 | Package management | D (partial: manifest, path/git dependencies, capability grants, lockfile; registry open, OQ-049); I+T (path dependencies, grants) | [0230](decisions/0230-package-manifest-ail-pkg.md), [0231](decisions/0231-path-and-git-dependencies.md), [0232](decisions/0232-capabilities-per-dependency.md), [0233](decisions/0233-lockfile-and-reproducible-builds.md) | `mod.pkg.*`, `eff.cap.4–5` |
 | 14 | FFI | D (core) + Q | [0103](decisions/0103-c-header-import.md), [0104](decisions/0104-c-calls-unsafe.md), [0105](decisions/0105-libc-only-with-c.md) | `ffi.*` |
 | 15 | Unsafe semantics | D (core) + Q | [0102](decisions/0102-unsafe-blocks.md), [0106](decisions/0106-unsafe-operations.md) | `unsafe.*` |
-| 16 | Reflection | — | | |
-| 17 | Metaprogramming | — | | |
-| 18 | Compile-time execution | — | | |
-| 19 | AST/IR architecture | — | | |
+| 16 | Reflection | D (partial) + Q | [0229](decisions/0229-compile-time-reflection-only.md) | `refl.*` ([16](spec/16-reflection.md)); [reflection.md](design/reflection.md) |
+| 17 | Metaprogramming | D (partial) + Q | [0227](decisions/0227-derive-generators.md), [0228](decisions/0228-generated-code-is-visible-hir.md) | `ct.derive.*`, `ct.gen.*` ([15](spec/15-compile-time.md)); [metaprogramming.md](design/metaprogramming.md) |
+| 18 | Compile-time execution | D (partial) + Q; I+T (`ct.const.1–3`) | [0225](decisions/0225-constants-call-compile-time-safe-functions.md), [0226](decisions/0226-compile-time-limits-determinism-and-caching.md) | `ct.const.*`, `ct.eval.*` ([15](spec/15-compile-time.md)); [compile-time-execution.md](design/compile-time-execution.md) |
+| 19 | AST/IR architecture | D (partial) + Q | [0222](decisions/0222-four-compiler-representations.md), [0223](decisions/0223-hir-is-the-versioned-api-shape.md), [0224](decisions/0224-incremental-cache-keys.md) | [ir-architecture.md](design/ir-architecture.md) |
 | 20 | AI semantic API | D (timing, diagnostics v1, explain, holes, effects, `ail api`) + Q; I+T (`ail api` outline, ids, references, doc comments, diagnostics v1, `ail explain`, `todo` holes, effects, `@pure`, `--deny`, `ail fix`) | [0024](decisions/0024-semantic-api-from-stage-2.md), [0145](decisions/0145-diagnostics-schema-v1.md), [0146](decisions/0146-ail-explain.md), [0147](decisions/0147-typed-holes-todo.md), [0150](decisions/0150-ail-api-outline.md), [0151](decisions/0151-stable-symbol-ids-and-references.md), [0152](decisions/0152-doc-comment-attachment.md), [0163](decisions/0163-inferred-effect-sets.md), [0164](decisions/0164-pure-functions.md), [0165](decisions/0165-capability-denial.md), [0202](decisions/0202-more-machine-applicable-fixes.md)–[0205](decisions/0205-related-notes-on-duplicates.md) | `expr.hole.*`, `eff.*`; [semantic-api.md](design/semantic-api.md) |
 | 21 | Standard library architecture | D (collections, strings, print) + Q | [0088](decisions/0088-entry-point-and-print.md), [0089](decisions/0089-strings.md), [0090](decisions/0090-collections.md), [0116](decisions/0116-core-library-basics.md), [0124](decisions/0124-string-split-and-to-int.md), [0131](decisions/0131-maps-and-sets.md), [0134](decisions/0134-characters.md), [0135](decisions/0135-string-literals-and-methods.md), [0136](decisions/0136-list-methods-and-slices.md), [0137](decisions/0137-integer-methods-and-min-max.md), [0143](decisions/0143-empty-literals-typed-by-use.md), [0157](decisions/0157-standard-os-modules.md), [0158](decisions/0158-standard-io-errors.md), [0159](decisions/0159-program-arguments.md), [0160](decisions/0160-process-runs.md); I+T (standard modules `std.fs`, `env`, `io`, `proc`, `time`), [0177](decisions/0177-std-ui-text-grid-window.md), [0179](decisions/0179-key-events-ctrl-chords.md) | `type.str.*`, `type.coll.*`, `std.*` |
 | 22 | Runtime architecture | D (partial) + Q | [0009](decisions/0009-custom-tooling-policy.md), [0020](decisions/0020-linux-no-libc.md), [0026](decisions/0026-hardware-feature-acceleration.md) | |
@@ -122,4 +124,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 
 ## Open questions
 
-See [open-questions.md](open-questions.md) (OQ-001 to OQ-049; 043, 044, 045, 046, 047 and 048 are resolved).
+See [open-questions.md](open-questions.md) (OQ-001 to OQ-049, OQ-060, OQ-071, OQ-072 and OQ-091 to OQ-096; 043, 044, 045, 046, 047 and 048 are resolved).

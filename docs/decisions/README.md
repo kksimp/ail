@@ -220,3 +220,11 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0231](0231-path-and-git-dependencies.md) | Dependencies come from a path or a pinned git commit, under one global name; a registry waits for the designer *(delegated)* | Accepted | 2026-10-20 |
 | [0232](0232-capabilities-per-dependency.md) | The manifest grants each dependency its capabilities, checked at compile time (resolves OQ-045) *(delegated)* | Accepted | 2026-10-20 |
 | [0233](0233-lockfile-and-reproducible-builds.md) | `ail.lock` pins every git dependency by commit and content hash; cache keys include grants *(delegated)* | Accepted | 2026-10-20 |
+| [0222](0222-four-compiler-representations.md) | The compiler has four representations: AST, HIR, MIR and machine IR *(delegated)* | Accepted | 2026-10-20 |
+| [0223](0223-hir-is-the-versioned-api-shape.md) | The HIR's printed shape is the versioned API; MIR stays internal *(delegated)* | Accepted | 2026-10-20 |
+| [0224](0224-incremental-cache-keys.md) | Incremental queries are keyed by stable ids and fingerprinted without spans *(delegated)* | Accepted | 2026-10-20 |
+| [0225](0225-constants-call-compile-time-safe-functions.md) | Constants may call compile-time-safe functions, computed with the interpreter's semantics (amends 0132) *(delegated)* | Accepted | 2026-10-20 |
+| [0226](0226-compile-time-limits-determinism-and-caching.md) | Compile-time evaluation has step and memory limits, is deterministic, and is cached by what it ran *(delegated)* | Accepted | 2026-10-20 |
+| [0227](0227-derive-generators.md) | A trait may name a derive generator: a compile-time function from `TypeInfo` to AIL source *(delegated)* | Accepted | 2026-10-20 |
+| [0228](0228-generated-code-is-visible-hir.md) | Generated code is ordinary HIR with a provenance link, shown by `ail api --expanded` *(delegated)* | Accepted | 2026-10-20 |
+| [0229](0229-compile-time-reflection-only.md) | Reflection is compile-time only: generators receive a `TypeInfo` value *(delegated)* | Accepted | 2026-10-20 |
