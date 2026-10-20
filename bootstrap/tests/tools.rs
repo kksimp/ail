@@ -44,7 +44,7 @@ fn editor_replaces_in_files() {
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     let preview = screen(&[]);
-    for want in ["replace `half` with `halve`: 4 lines in 2 files", " a.ail:12:10: x := half(4)? → x := halve(4)?", " b.ail:2:11: print(half(2)) → print(halve(2))"] {
+    for want in ["replace `half` with `halve`: 4 lines in 2 files", " a.ail:12:10: x := half(4)? -> x := halve(4)?", " b.ail:2:11: print(half(2)) -> print(halve(2))"] {
         assert!(preview.contains(want), "preview lacks {want:?}:\n{preview}");
     }
     let applied = screen(&["--key=ctrl+enter"]);
