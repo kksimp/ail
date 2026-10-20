@@ -149,7 +149,8 @@ fn main() -> ExitCode {
     };
     // ADR 0332: `check`, `api` and `effects` make one pass over the program
     // and exit, so they use the front-end allocator.
-    if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) {
+    // `AIL_SYSTEM_ALLOC=1` keeps the system allocator, to compare the two.
+    if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
         ALLOC.enable();
     }
     match rest.as_slice() {
