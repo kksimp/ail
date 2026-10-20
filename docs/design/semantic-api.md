@@ -151,9 +151,7 @@ A method declared `fn Type.name` sits under its type when the file declares
 that type, otherwise at the top level. Types are written as in source
 (`List[any Shape]`, `Size?`, `int ! ParseError`).
 
-**api.out.4** — `effects` lists the effects a function performs (plan §3).
-Until effects land it is always `[]`; the key is present so consumers don't
-change when it fills.
+**api.out.4** — `effects` lists the effects the function performs, sorted, from the inferred effect set (`eff.infer.*`, [ADR 0163](../decisions/0163-inferred-effect-sets.md)): `fail`, `io`, `mutates`, `spawn`, `unsafe` and the capabilities `fs`, `env`, `proc`, `clock`, `net`. `ail effects FILE` prints the same sets on their own.
 
 **api.out.5** — A program with errors has no outline: `ail api` reports the
 diagnostics as `ail check` would (with `--json`, as JSON lines) and exits 2.

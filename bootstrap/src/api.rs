@@ -86,7 +86,8 @@ pub fn outline(path: &str, src: &str, symbols: bool, form: Form) -> Result<Strin
         return Err(diags);
     }
     docs::attach(&mut prog, src);
-    let api = Api::new(&prog);
+    let effects = check::effects::effects_of(&prog, &resolved);
+    let api = Api::new(&prog, effects);
     if form == Form::Text {
         return Ok(api.text());
     }
@@ -214,10 +215,12 @@ struct Api<'p> {
     prog: &'p Program,
     /// The id of each function, by index into `Program::fns` (api.id.1-2).
     fn_ids: Vec<String>,
+    /// Each function's checked effect set, by the effects lane's id (api.out.4).
+    effects: std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>,
 }
 
 impl<'p> Api<'p> {
-    fn new(prog: &'p Program) -> Self {
+    fn new(prog: &'p Program, effects: std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>) -> Self {
         let mut fn_ids: Vec<String> = prog.fns.iter().map(|f| fn_id(prog, f, false)).collect();
         // api.id.2: an `impl` method whose plain id is taken also names its trait.
         let mut seen: HashMap<String, usize> = HashMap::new();
@@ -229,7 +232,7 @@ impl<'p> Api<'p> {
                 fn_ids[i] = fn_id(prog, f, true);
             }
         }
-        Api { prog, fn_ids }
+        Api { prog, fn_ids, effects }
     }
 
     /// Every declaration of the program (not the prelude), nested: fields,
@@ -364,7 +367,7 @@ impl<'p> Api<'p> {
         }
         extra.push(("params", Json::Arr(params)));
         extra.push(("returns", Json::opt(f.ret.as_ref().map(type_text))));
-        extra.push(("effects", Json::Arr(effects(f))));
+        extra.push(("effects", Json::Arr(self.effects(f))));
         if matches!(f.within, Within::Trait(_)) {
             extra.push(("default", Json::Bool(f.body.is_some())));
         }
@@ -404,11 +407,13 @@ impl<'p> Api<'p> {
     }
 }
 
-/// The effects a function performs (plan §3). Always empty until the
-/// effects lane lands; this is its hook (api.out.4).
-// TODO(lane 06, effects and capabilities): fill from the checked effect set.
-fn effects(_f: &FnDecl) -> Vec<Json> {
-    Vec::new()
+impl<'p> Api<'p> {
+    /// The effects a function performs (api.out.4, eff.infer.1), from the
+    /// checked effect set, sorted.
+    fn effects(&self, f: &FnDecl) -> Vec<Json> {
+        let id = check::effects::fn_id(self.prog, f);
+        self.effects.get(&id).map(|set| set.iter().map(|e| Json::Str(e.to_string())).collect()).unwrap_or_default()
+    }
 }
 
 /// `fn:name`, `method:Type.name`, `method:Trait.name`, or with `qualified`,
@@ -774,10 +779,10 @@ impl<'p> Refs<'p> {
 
     fn expr(&mut self, e: &Expr) {
         match e {
-            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {}
+            Expr::Str(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) | Expr::Hole(_) => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
-                    if let InterpPart::Expr(e) = p {
+                    if let InterpPart::Expr(e) | InterpPart::Fmt(e, _) = p {
                         self.expr(e);
                     }
                 }
