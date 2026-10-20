@@ -340,3 +340,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0347](0347-watch-shows-collection-writes.md) | `--watch` shows writes to a collection's elements *(delegated)* | Accepted | 2026-10-20 |
 | [0353](0353-editor-live-problems-and-reviewable-replace.md) | Editor problems list refreshes while shown; replace preview accepts or skips rows *(delegated)* | Accepted | 2026-10-20 |
 | [0354](0354-editor-tests-on-save.md) | Editor tests on save (Ctrl-Shift-U) with counts in the status line *(delegated)* | Accepted | 2026-10-20 |
+| [0355](0355-fetch-git-dependencies-with-system-git.md) | Fetch git dependencies with the system `git` into a read-only cache *(delegated)* | Accepted | 2026-10-20 |
+| [0356](0356-ail-lock-pins-commits.md) | `ail.lock` pins each git dependency to a commit; `run` and `test` write it *(delegated)* | Accepted | 2026-10-20 |
+| [0357](0357-ail-pkg-update.md) | `ail pkg update [NAME...]` re-resolves git dependencies *(delegated)* | Accepted | 2026-10-20 |

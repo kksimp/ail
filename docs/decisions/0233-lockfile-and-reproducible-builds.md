@@ -1,10 +1,10 @@
 # 0233. `ail.lock` pins every git dependency by commit and content hash; cache keys include grants
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [0356](0356-ail-lock-pins-commits.md) (no `sum`; implemented)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** 13 — Package management; 27 — Build system
-- **Spec rules:** none yet (designed, not implemented)
+- **Spec rules:** `mod.pkg.8` (with ADR 0356)
 - **Design:** [packages.md](../design/packages.md#versions-git-dependencies-and-the-lockfile-design-not-implemented)
 
 ## Context
