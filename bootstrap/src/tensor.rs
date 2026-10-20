@@ -132,22 +132,96 @@ impl Tensor {
         })
     }
 
-    /// std.tensor.4: elementwise `+` (`mul`: `false`) or `*` (`true`).
-    pub fn zip(&self, other: &Tensor, mul: bool) -> Result<Tensor, Fault> {
-        self.same_shape(other, if mul { "mul" } else { "add" })?;
+    /// std.tensor.4, std.tensor.10: elementwise `op`.
+    pub fn zip(&self, other: &Tensor, op: Op) -> Result<Tensor, Fault> {
+        self.same_shape(other, op.name())?;
         let data = match (&self.data, &other.data) {
-            (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, mul)),
+            (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, op)),
             (Data::I(a), Data::I(b)) => {
                 let mut out = Vec::with_capacity(a.len());
                 for (x, y) in a.iter().zip(b) {
-                    let r = if mul { x.checked_mul(*y) } else { x.checked_add(*y) };
-                    out.push(r.ok_or_else(overflow)?);
+                    out.push(op.i(*x, *y).ok_or_else(overflow)?);
                 }
                 Data::I(out)
             }
             _ => unreachable!("checked: one element type"),
         };
         Ok(Tensor { shape: self.shape.clone(), data })
+    }
+
+    /// std.tensor.10: `t op s` (`left`: `false`) or `s op t` (`true`),
+    /// the scalar `s` taken with every element.
+    pub fn with_scalar(&self, s: Scalar, op: Op, left: bool) -> Result<Tensor, Fault> {
+        let data = match (&self.data, s) {
+            (Data::F(a), Scalar::F(s)) => Data::F(scalar_f64(a, s, op, left)),
+            (Data::I(a), Scalar::I(s)) => {
+                let mut out = Vec::with_capacity(a.len());
+                for &x in a {
+                    let r = if left { op.i(s, x) } else { op.i(x, s) };
+                    out.push(r.ok_or_else(overflow)?);
+                }
+                Data::I(out)
+            }
+            _ => unreachable!("checked: the scalar has the element type"),
+        };
+        Ok(Tensor { shape: self.shape.clone(), data })
+    }
+
+    /// std.tensor.12: the transpose of a 2-D tensor.
+    pub fn transpose(&self) -> Result<Tensor, Fault> {
+        let &[m, n] = self.shape.as_slice() else {
+            return fault("std.tensor.12", format!("`transpose` needs a 2-D tensor, but the shape is {:?}", self.shape));
+        };
+        let data = match &self.data {
+            Data::F(v) => Data::F(transpose(v, m, n)),
+            Data::I(v) => Data::I(transpose(v, m, n)),
+        };
+        Ok(Tensor { shape: vec![n, m], data })
+    }
+
+    /// The sizes around `axis`: (before, along, after), and the shape
+    /// without it (std.tensor.11).
+    fn split(&self, axis: Option<i64>, what: &str) -> Result<(usize, usize, usize, Vec<usize>), Fault> {
+        let Some(axis) = axis else {
+            return Ok((1, self.len(), 1, Vec::new()));
+        };
+        let rank = self.shape.len();
+        let Some(a) = usize::try_from(axis).ok().filter(|&a| a < rank) else {
+            return fault(
+                "std.tensor.11",
+                format!("`{what}({axis})` on a tensor of shape {:?}: the axis must be from 0 to {}", self.shape, rank as i64 - 1),
+            );
+        };
+        let before = self.shape[..a].iter().product();
+        let after = self.shape[a + 1..].iter().product();
+        let mut shape = self.shape.clone();
+        shape.remove(a);
+        Ok((before, self.shape[a], after, shape))
+    }
+
+    /// std.tensor.11: `sum`, `max` or `mean` over `axis`, or over every
+    /// element when `axis` is `None` (a tensor of shape `[]`).
+    pub fn reduce(&self, kind: Reduce, axis: Option<i64>) -> Result<Tensor, Fault> {
+        let what = kind.name();
+        let (before, n, after, shape) = self.split(axis, what)?;
+        if n == 0 && kind != Reduce::Sum && before * after > 0 {
+            return fault("std.tensor.11", format!("`{what}` of an empty axis of a tensor of shape {:?}", self.shape));
+        }
+        let data = match (&self.data, kind) {
+            (Data::F(v), Reduce::Sum) => Data::F(sum_axis(v, before, n, after)),
+            (Data::F(v), Reduce::Max) => Data::F(max_axis(v, before, n, after)),
+            (Data::F(v), Reduce::Mean) => {
+                let mut s = sum_axis(v, before, n, after);
+                for x in &mut s {
+                    *x /= n as f64;
+                }
+                Data::F(s)
+            }
+            (Data::I(v), Reduce::Sum) => Data::I(sum_axis_i64(v, before, n, after)?),
+            (Data::I(v), Reduce::Max) => Data::I(max_axis_i64(v, before, n, after)),
+            (Data::I(_), Reduce::Mean) => unreachable!("checked: `mean` is on `float` tensors"),
+        };
+        Ok(Tensor { shape, data })
     }
 
     /// std.tensor.7: the matrix product of `m x k` and `k x n` tensors.
@@ -173,6 +247,47 @@ impl Tensor {
         };
         Ok(Tensor { shape: vec![m, n], data })
     }
+}
+
+/// An elementwise operator (std.tensor.4, std.tensor.10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+}
+
+impl Op {
+    fn name(self) -> &'static str {
+        match self {
+            Op::Add => "add",
+            Op::Sub => "-",
+            Op::Mul => "mul",
+        }
+    }
+
+    fn f(self, x: f64, y: f64) -> f64 {
+        match self {
+            Op::Add => x + y,
+            Op::Sub => x - y,
+            Op::Mul => x * y,
+        }
+    }
+
+    fn i(self, x: i64, y: i64) -> Option<i64> {
+        match self {
+            Op::Add => x.checked_add(y),
+            Op::Sub => x.checked_sub(y),
+            Op::Mul => x.checked_mul(y),
+        }
+    }
+}
+
+/// A scalar operand of an operator (std.tensor.10).
+#[derive(Clone, Copy, Debug)]
+pub enum Scalar {
+    F(f64),
+    I(i64),
 }
 
 /// The result of `sum` or `dot`.
@@ -231,16 +346,158 @@ pub fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
-pub fn zip_f64(a: &[f64], b: &[f64], mul: bool) -> Vec<f64> {
+pub fn zip_f64(a: &[f64], b: &[f64], op: Op) -> Vec<f64> {
     let mut out = vec![0.0; a.len()];
     match isa() {
         #[cfg(target_arch = "x86_64")]
         // SAFETY: `isa` saw AVX2.
-        Isa::Avx2 => unsafe { x86::zip(a, b, &mut out, mul) },
+        Isa::Avx2 => unsafe { x86::zip(a, b, &mut out, op) },
         #[cfg(target_arch = "aarch64")]
         // SAFETY: `isa` saw NEON.
-        Isa::Neon => unsafe { arm::zip(a, b, &mut out, mul) },
-        _ => scalar::zip(a, b, &mut out, mul),
+        Isa::Neon => unsafe { arm::zip(a, b, &mut out, op) },
+        _ => scalar::zip(a, b, &mut out, op),
+    }
+    out
+}
+
+/// `a op s`, or `s op a` when `left` (std.tensor.10).
+pub fn scalar_f64(a: &[f64], s: f64, op: Op, left: bool) -> Vec<f64> {
+    let mut out = vec![0.0; a.len()];
+    match isa() {
+        #[cfg(target_arch = "x86_64")]
+        // SAFETY: `isa` saw AVX2.
+        Isa::Avx2 => unsafe { x86::with_scalar(a, s, &mut out, op, left) },
+        #[cfg(target_arch = "aarch64")]
+        // SAFETY: `isa` saw NEON.
+        Isa::Neon => unsafe { arm::with_scalar(a, s, &mut out, op, left) },
+        _ => scalar::with_scalar(a, s, &mut out, op, left),
+    }
+    out
+}
+
+/// `m[i] = if b[i] > m[i] then b[i] else m[i]`: IEEE `>`, so a NaN never
+/// replaces the running maximum, and ties keep the earlier element
+/// (std.tensor.11).
+fn max_into(m: &mut [f64], b: &[f64]) {
+    match isa() {
+        #[cfg(target_arch = "x86_64")]
+        // SAFETY: `isa` saw AVX2.
+        Isa::Avx2 => unsafe { x86::max_into(m, b) },
+        #[cfg(target_arch = "aarch64")]
+        // SAFETY: `isa` saw NEON.
+        Isa::Neon => unsafe { arm::max_into(m, b) },
+        _ => scalar::max_into(m, b),
+    }
+}
+
+/// `c += b`, elementwise. `axpy` with 1.0 is exact: `1.0 * b` is `b`.
+fn add_into(c: &mut [f64], b: &[f64]) {
+    axpy(c, 1.0, b);
+}
+
+/// What `reduce` computes (std.tensor.11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reduce {
+    Sum,
+    Max,
+    Mean,
+}
+
+impl Reduce {
+    fn name(self) -> &'static str {
+        match self {
+            Reduce::Sum => "sum",
+            Reduce::Max => "max",
+            Reduce::Mean => "mean",
+        }
+    }
+}
+
+/// std.tensor.11: each of the `before * after` results sums its `n`
+/// elements, `after` apart, in std.tensor.5's order. When `after` is 1
+/// they are contiguous and `sum_f64` adds them; otherwise the partial
+/// sums are rows of `after` results, added a whole row at a time, which
+/// is the same order element by element.
+fn sum_axis(v: &[f64], before: usize, n: usize, after: usize) -> Vec<f64> {
+    if after == 1 {
+        return (0..before).map(|o| sum_f64(&v[o * n..(o + 1) * n])).collect();
+    }
+    let mut out = Vec::with_capacity(before * after);
+    let body = n / LANES * LANES;
+    let mut acc = vec![0.0; LANES * after];
+    for o in 0..before {
+        let row = |i: usize| &v[(o * n + i) * after..(o * n + i + 1) * after];
+        acc.fill(0.0);
+        for i in 0..body {
+            let l = i % LANES;
+            add_into(&mut acc[l * after..(l + 1) * after], row(i));
+        }
+        let mut half = LANES / 2;
+        while half > 0 {
+            let (lo, hi) = acc.split_at_mut(half * after);
+            for l in 0..half {
+                add_into(&mut lo[l * after..(l + 1) * after], &hi[l * after..(l + 1) * after]);
+            }
+            half /= 2;
+        }
+        let s = &mut acc[..after];
+        for i in body..n {
+            add_into(s, row(i));
+        }
+        out.extend_from_slice(s);
+    }
+    out
+}
+
+/// std.tensor.11: the maximum of each `n` elements, `after` apart, the
+/// first element then each later one in order.
+fn max_axis(v: &[f64], before: usize, n: usize, after: usize) -> Vec<f64> {
+    let mut out = Vec::with_capacity(before * after);
+    for o in 0..before {
+        let row = |i: usize| &v[(o * n + i) * after..(o * n + i + 1) * after];
+        let start = out.len();
+        out.extend_from_slice(row(0));
+        for i in 1..n {
+            max_into(&mut out[start..], row(i));
+        }
+    }
+    out
+}
+
+fn sum_axis_i64(v: &[i64], before: usize, n: usize, after: usize) -> Result<Vec<i64>, Fault> {
+    let mut out = Vec::with_capacity(before * after);
+    for o in 0..before {
+        for j in 0..after {
+            out.push(sum_i64((0..n).map(|i| v[(o * n + i) * after + j]))?);
+        }
+    }
+    Ok(out)
+}
+
+fn max_axis_i64(v: &[i64], before: usize, n: usize, after: usize) -> Vec<i64> {
+    let mut out = Vec::with_capacity(before * after);
+    for o in 0..before {
+        for j in 0..after {
+            out.push((0..n).map(|i| v[(o * n + i) * after + j]).max().expect("checked: `n` > 0"));
+        }
+    }
+    out
+}
+
+/// The `n x m` transpose of an `m x n` matrix, in 32 x 32 tiles so both
+/// sides stay in cache (std.tensor.12). It moves values, so every target
+/// gives the same result.
+fn transpose<T: Copy + Default>(v: &[T], m: usize, n: usize) -> Vec<T> {
+    const TILE: usize = 32;
+    let mut out = vec![T::default(); m * n];
+    for i0 in (0..m).step_by(TILE) {
+        for j0 in (0..n).step_by(TILE) {
+            for i in i0..(i0 + TILE).min(m) {
+                for j in j0..(j0 + TILE).min(n) {
+                    out[j * m + i] = v[i * n + j];
+                }
+            }
+        }
     }
     out
 }
@@ -313,7 +570,7 @@ fn matmul_i64(a: &[i64], b: &[i64], m: usize, k: usize, n: usize) -> Result<Vec<
 /// The reference kernels: what the vector ones compute, operation for
 /// operation (std.tensor.5).
 mod scalar {
-    use super::{LANES, combine};
+    use super::{LANES, Op, combine};
 
     pub fn sum(v: &[f64]) -> f64 {
         let mut acc = [0.0; LANES];
@@ -345,9 +602,23 @@ mod scalar {
         s
     }
 
-    pub fn zip(a: &[f64], b: &[f64], out: &mut [f64], mul: bool) {
+    pub fn zip(a: &[f64], b: &[f64], out: &mut [f64], op: Op) {
         for i in 0..a.len() {
-            out[i] = if mul { a[i] * b[i] } else { a[i] + b[i] };
+            out[i] = op.f(a[i], b[i]);
+        }
+    }
+
+    pub fn with_scalar(a: &[f64], s: f64, out: &mut [f64], op: Op, left: bool) {
+        for i in 0..a.len() {
+            out[i] = if left { op.f(s, a[i]) } else { op.f(a[i], s) };
+        }
+    }
+
+    pub fn max_into(m: &mut [f64], b: &[f64]) {
+        for (m, &b) in m.iter_mut().zip(b) {
+            if b > *m {
+                *m = b;
+            }
         }
     }
 
@@ -360,7 +631,7 @@ mod scalar {
 
 #[cfg(target_arch = "x86_64")]
 mod x86 {
-    use super::{LANES, combine};
+    use super::{LANES, Op, combine};
     use std::arch::x86_64::*;
 
     const REGS: usize = LANES / 4;
@@ -407,7 +678,16 @@ mod x86 {
     }
 
     #[target_feature(enable = "avx2")]
-    pub unsafe fn zip(a: &[f64], b: &[f64], out: &mut [f64], mul: bool) {
+    fn apply(op: Op, x: __m256d, y: __m256d) -> __m256d {
+        match op {
+            Op::Add => _mm256_add_pd(x, y),
+            Op::Sub => _mm256_sub_pd(x, y),
+            Op::Mul => _mm256_mul_pd(x, y),
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    pub unsafe fn zip(a: &[f64], b: &[f64], out: &mut [f64], op: Op) {
         let body = a.len() / 4 * 4;
         let (pa, pb, po) = (a.as_ptr(), b.as_ptr(), out.as_mut_ptr());
         let mut i = 0;
@@ -415,12 +695,52 @@ mod x86 {
             // SAFETY: `i + 4 <= body`, and all three slices have equal lengths.
             unsafe {
                 let (x, y) = (_mm256_loadu_pd(pa.add(i)), _mm256_loadu_pd(pb.add(i)));
-                _mm256_storeu_pd(po.add(i), if mul { _mm256_mul_pd(x, y) } else { _mm256_add_pd(x, y) });
+                _mm256_storeu_pd(po.add(i), apply(op, x, y));
             }
             i += 4;
         }
         for i in body..a.len() {
-            out[i] = if mul { a[i] * b[i] } else { a[i] + b[i] };
+            out[i] = op.f(a[i], b[i]);
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    pub unsafe fn with_scalar(a: &[f64], s: f64, out: &mut [f64], op: Op, left: bool) {
+        let body = a.len() / 4 * 4;
+        let (pa, po) = (a.as_ptr(), out.as_mut_ptr());
+        let ss = _mm256_set1_pd(s);
+        let mut i = 0;
+        while i < body {
+            // SAFETY: `i + 4 <= body`, and `out` is as long as `a`.
+            unsafe {
+                let x = _mm256_loadu_pd(pa.add(i));
+                _mm256_storeu_pd(po.add(i), if left { apply(op, ss, x) } else { apply(op, x, ss) });
+            }
+            i += 4;
+        }
+        for i in body..a.len() {
+            out[i] = if left { op.f(s, a[i]) } else { op.f(a[i], s) };
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    pub unsafe fn max_into(m: &mut [f64], b: &[f64]) {
+        let body = m.len() / 4 * 4;
+        let (pm, pb) = (m.as_mut_ptr(), b.as_ptr());
+        let mut i = 0;
+        while i < body {
+            // SAFETY: `i + 4 <= body`, and `b` is as long as `m`.
+            unsafe {
+                let (x, y) = (_mm256_loadu_pd(pm.add(i)), _mm256_loadu_pd(pb.add(i)));
+                let gt = _mm256_cmp_pd::<_CMP_GT_OQ>(y, x);
+                _mm256_storeu_pd(pm.add(i), _mm256_blendv_pd(x, y, gt));
+            }
+            i += 4;
+        }
+        for i in body..m.len() {
+            if b[i] > m[i] {
+                m[i] = b[i];
+            }
         }
     }
 
@@ -457,7 +777,7 @@ mod x86 {
 
 #[cfg(target_arch = "aarch64")]
 mod arm {
-    use super::{LANES, combine};
+    use super::{LANES, Op, combine};
     use std::arch::aarch64::*;
 
     const REGS: usize = LANES / 2;
@@ -504,7 +824,16 @@ mod arm {
     }
 
     #[target_feature(enable = "neon")]
-    pub unsafe fn zip(a: &[f64], b: &[f64], out: &mut [f64], mul: bool) {
+    fn apply(op: Op, x: float64x2_t, y: float64x2_t) -> float64x2_t {
+        match op {
+            Op::Add => vaddq_f64(x, y),
+            Op::Sub => vsubq_f64(x, y),
+            Op::Mul => vmulq_f64(x, y),
+        }
+    }
+
+    #[target_feature(enable = "neon")]
+    pub unsafe fn zip(a: &[f64], b: &[f64], out: &mut [f64], op: Op) {
         let body = a.len() / 2 * 2;
         let (pa, pb, po) = (a.as_ptr(), b.as_ptr(), out.as_mut_ptr());
         let mut i = 0;
@@ -512,12 +841,51 @@ mod arm {
             // SAFETY: `i + 2 <= body`, and all three slices have equal lengths.
             unsafe {
                 let (x, y) = (vld1q_f64(pa.add(i)), vld1q_f64(pb.add(i)));
-                vst1q_f64(po.add(i), if mul { vmulq_f64(x, y) } else { vaddq_f64(x, y) });
+                vst1q_f64(po.add(i), apply(op, x, y));
             }
             i += 2;
         }
         for i in body..a.len() {
-            out[i] = if mul { a[i] * b[i] } else { a[i] + b[i] };
+            out[i] = op.f(a[i], b[i]);
+        }
+    }
+
+    #[target_feature(enable = "neon")]
+    pub unsafe fn with_scalar(a: &[f64], s: f64, out: &mut [f64], op: Op, left: bool) {
+        let body = a.len() / 2 * 2;
+        let (pa, po) = (a.as_ptr(), out.as_mut_ptr());
+        let ss = vdupq_n_f64(s);
+        let mut i = 0;
+        while i < body {
+            // SAFETY: `i + 2 <= body`, and `out` is as long as `a`.
+            unsafe {
+                let x = vld1q_f64(pa.add(i));
+                vst1q_f64(po.add(i), if left { apply(op, ss, x) } else { apply(op, x, ss) });
+            }
+            i += 2;
+        }
+        for i in body..a.len() {
+            out[i] = if left { op.f(s, a[i]) } else { op.f(a[i], s) };
+        }
+    }
+
+    #[target_feature(enable = "neon")]
+    pub unsafe fn max_into(m: &mut [f64], b: &[f64]) {
+        let body = m.len() / 2 * 2;
+        let (pm, pb) = (m.as_mut_ptr(), b.as_ptr());
+        let mut i = 0;
+        while i < body {
+            // SAFETY: `i + 2 <= body`, and `b` is as long as `m`.
+            unsafe {
+                let (x, y) = (vld1q_f64(pm.add(i)), vld1q_f64(pb.add(i)));
+                vst1q_f64(pm.add(i), vbslq_f64(vcgtq_f64(y, x), y, x));
+            }
+            i += 2;
+        }
+        for i in body..m.len() {
+            if b[i] > m[i] {
+                m[i] = b[i];
+            }
         }
     }
 
@@ -565,9 +933,58 @@ mod tests {
             let (a, b) = (data(n), data(n + 3)[3..].to_vec());
             assert_eq!(sum_f64(&a).to_bits(), scalar::sum(&a).to_bits(), "sum {n}");
             assert_eq!(dot_f64(&a, &b).to_bits(), scalar::dot(&a, &b).to_bits(), "dot {n}");
-            let mut out = vec![0.0; n];
-            scalar::zip(&a, &b, &mut out, true);
-            assert_eq!(zip_f64(&a, &b, true), out, "mul {n}");
+            for op in [Op::Add, Op::Sub, Op::Mul] {
+                let mut out = vec![0.0; n];
+                scalar::zip(&a, &b, &mut out, op);
+                assert_eq!(zip_f64(&a, &b, op), out, "{op:?} {n}");
+                for left in [false, true] {
+                    scalar::with_scalar(&a, 0.37, &mut out, op, left);
+                    assert_eq!(scalar_f64(&a, 0.37, op, left), out, "{op:?} scalar {n}");
+                }
+            }
+            let mut m = a.clone();
+            max_into(&mut m, &b);
+            let mut want = a.clone();
+            scalar::max_into(&mut want, &b);
+            assert_eq!(m, want, "max {n}");
+        }
+    }
+
+    #[test]
+    fn axis_reductions_use_the_one_order() {
+        for shape in [[2, 37, 3], [1, 16, 5], [3, 5, 1], [4, 1, 2], [2, 100, 9]] {
+            let [before, n, after] = shape;
+            let v = data(before * n * after);
+            let mut v2 = v.clone();
+            v2[1] = f64::NAN;
+            let (s, m) = (sum_axis(&v, before, n, after), max_axis(&v2, before, n, after));
+            for o in 0..before {
+                for j in 0..after {
+                    let col = |w: &[f64]| (0..n).map(|i| w[(o * n + i) * after + j]).collect::<Vec<f64>>();
+                    assert_eq!(s[o * after + j].to_bits(), scalar::sum(&col(&v)).to_bits(), "sum {shape:?}");
+                    let c = col(&v2);
+                    let mut want = c[0];
+                    for &x in &c[1..] {
+                        if x > want {
+                            want = x;
+                        }
+                    }
+                    assert_eq!(m[o * after + j].to_bits(), want.to_bits(), "max {shape:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn transpose_moves_every_element() {
+        for (m, n) in [(1, 1), (3, 70), (33, 65)] {
+            let v: Vec<i64> = (0..(m * n) as i64).collect();
+            let t = transpose(&v, m, n);
+            for i in 0..m {
+                for j in 0..n {
+                    assert_eq!(t[j * m + i], v[i * n + j]);
+                }
+            }
         }
     }
 

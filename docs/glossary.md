@@ -142,7 +142,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
-| **Tensor** | `tensor.Tensor[T]`: a value holding a shape and a contiguous buffer of `int` or `float`, whose methods run as vector kernels (`std.tensor.*`, ADRs 0328–0330). |
+| **Tensor** | `tensor.Tensor[T]`: a value holding a shape and a contiguous buffer of `int` or `float`, whose methods and `+ - *` operators run as vector kernels (`std.tensor.*`, ADRs 0328–0330, 0344–0345). |
+| **Axis reduction** | `t.sum(axis)`, `t.max(axis)`, `t.mean(axis)`: a tensor reduced along one axis, whose shape drops that axis (`std.tensor.11`, ADR 0345). |
 | **Target** | An OS + ISA combination the compiler generates code for, e.g. `linux-arm64`. See spec `plat.target.1`. |
 | **Task** | A function call running concurrently, started by `spawn f(x)`. Its handle, `Task[T]`, must be consumed once by `.wait()` or `g.add(t)` (ADRs 0095-0096, 0187). |
 | **Task group** | `TaskGroup()`, which owns tasks that return nothing and waits for them when its block ends, or at `wait_all()` (ADR 0096, ADR 0187). |

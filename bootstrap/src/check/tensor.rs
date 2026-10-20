@@ -101,12 +101,25 @@ impl<'p> Checker<'p> {
         if m == "map" {
             return Some(self.tensor_map(rt, &elem, args, pos));
         }
+        if m == "mean" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.11",
+                pos,
+                "`mean` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).mean()`",
+            );
+            return Some(Ty::Err);
+        }
         let t = rt.clone();
         let (params, ret) = match m {
             "shape" => (vec![], Ty::List(Box::new(Ty::Int))),
             "len" => (vec![], Ty::Int),
             "to_list" => (vec![], Ty::List(Box::new(elem))),
-            "sum" => (vec![], elem),
+            // std.tensor.11: over every element, or over one axis.
+            "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
+            "sum" | "max" | "mean" => (vec![Ty::Int], t),
+            "transpose" => (vec![], t),
             "dot" => (vec![t], elem),
             "add" | "mul" | "matmul" => (vec![t.clone()], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
@@ -149,6 +162,51 @@ impl<'p> Checker<'p> {
                 Ty::Err
             }
         }
+    }
+
+    /// type.num.10 for std.tensor.10: an `int` literal `scalar` beside a
+    /// `Tensor[float]` `t` is a `float`.
+    pub(super) fn float_tensor_scalar(&mut self, t: &Ty, st: &Ty, scalar: &Expr) -> bool {
+        *st == Ty::Int && self.tensor_elem(t) == Some(Ty::Float) && self.float_literal(scalar)
+    }
+
+    /// std.tensor.10: `+`, `-` and `*` with a tensor operand: two tensors
+    /// of one element type, or a tensor and a scalar of its element type,
+    /// either side. `None` when neither operand is a tensor.
+    pub(super) fn tensor_operator(&mut self, sym: &str, arith: bool, lt: &Ty, rt: &Ty, pos: Pos) -> Option<Ty> {
+        let (le, re) = (self.tensor_elem(lt), self.tensor_elem(rt));
+        if le.is_none() && re.is_none() {
+            return None;
+        }
+        if !arith || !matches!(sym, "+" | "-" | "*") {
+            if arith {
+                let help = match sym {
+                    "/" => "divide each element with `t.map(|x| x / d)`",
+                    _ => "use `t.map(|x| ...)`",
+                };
+                self.error_help("std.tensor.10", pos, format!("`{sym}` is not defined for tensors"), help);
+                return Some(Ty::Err);
+            }
+            return None;
+        }
+        let ok = match (&le, &re) {
+            (Some(a), Some(b)) => a == b,
+            (Some(e), None) => e == rt,
+            (None, Some(e)) => e == lt,
+            (None, None) => false,
+        };
+        if ok {
+            return Some(if le.is_some() { lt.clone() } else { rt.clone() });
+        }
+        let msg = format!("`{sym}` needs two tensors of one element type, or a tensor and a scalar of its element type, found {} and {}", self.show(lt), self.show(rt));
+        let other = if le.is_some() { rt } else { lt };
+        let help = match (&le, &re) {
+            (Some(_), Some(_)) => "convert one with `t.map(|x| x.to_float())`",
+            _ if matches!(other, Ty::Int | Ty::Float) => "convert the number to the element type: `x.to_float()` or `x.to_int()`",
+            _ => "a tensor combines with a tensor or a number of its element type",
+        };
+        self.error_help("std.tensor.10", pos, msg, help);
+        Some(Ty::Err)
     }
 
     /// std.tensor.1: a tensor has no fields; `None` for other receivers.
