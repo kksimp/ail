@@ -47,14 +47,25 @@ The block is 19% fewer tokens, well over the 2% threshold of ADR 0076.
 
 ## Decision
 
-Ship Option A now as the runtime primitive: it works for child streams and
-channels on both tiers, and a block form would lower to it. The block form
-(Option B) is decided by token count and follows in the next slice with its
-own ADR (0429), because it touches the parser and the AIL front end.
-`select` blocks index and `closed` semantics will match this rule.
+Option A, final. The block is 19% shorter in the one construct it covers,
+but ADR 0076 counts a difference "confined to rare constructs" as a tie:
+3 of the 65 corpus and example programs use a channel at all, and a
+multi-way wait is a fraction of those. On the tie, criterion 2 (AI
+understanding) and the cost of change decide: a library function adds no
+syntax for a model to learn, and no second parser (the Rust one and the
+self-hosted one in `compiler/syntax/`) to keep in step. `task.select` ships
+and a `select` block is rejected, not deferred. A later lane may revisit it
+if multi-way waits become common in the agent corpus (re-measure then).
+
+## Rationale
+
+Tokens are a tie by ADR 0076, so AI understanding decides: one function with
+one rule (`conc.select.1`) against a statement form with arms, a `closed`
+arm and its own scoping.
 
 ## Consequences
 
 - `task.select` has no effects (it reads the running task's state), like
   `task.cancelled`.
 - Stale waiter entries on the other channels are removed on return.
+- ADR 0429 is not used.
