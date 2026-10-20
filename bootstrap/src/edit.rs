@@ -1,6 +1,7 @@
-//! `ail edit PATH [--dry-run] [--diff] [--if-clean] [--json] < EDITS`:
-//! structured edits by declaration id (edit.op.1-8, ADR 0397). EDITS is a
-//! JSON list of operations; they apply in order to the file or package at
+//! `ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS`:
+//! structured edits by declaration id (edit.op.1-7, ADRs 0397, 0399). EDITS
+//! are compact hunks under declaration names (edit.in.3) or a JSON list of
+//! operations; they apply in order to the file or package at
 //! PATH, every changed file is formatted, the program is checked, and the
 //! answer is the diagnostics of the new state. Cheaper and safer than
 //! rewriting a file: the agent names what to change, not where.
@@ -11,15 +12,21 @@ use std::process::ExitCode;
 
 use crate::diag::json_str;
 
-pub const USAGE: &str = "usage: ail edit PATH [--dry-run] [--diff] [--if-clean] [--json] < EDITS.json\n\
-EDITS is a JSON list; each item has an \"op\":\n\
+pub const USAGE: &str = "usage: ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS\n\
+EDITS are hunks: an id line, then lines starting with `-` (remove), `+` (add) or a space (keep):\n\
+  average                                 one `-` and one `+` line: a whole line, or else a unique part of one\n\
+  -total / xs.len()                       `+` lines are indented like the line they replace\n\
+  +if xs.len() == 0 { 0 } else { total / xs.len() }\n\
+  rename OLD NEW                          the declaration and every reference\n\
+or a JSON list; each item has an \"op\":\n\
   {\"op\":\"replace_body\",\"id\":\"fn:f\",\"body\":\"x + 1\"}       the lines after the signature (contracts stay)\n\
   {\"op\":\"replace\",\"id\":\"type:P\",\"text\":\"struct P\\n    x int\"} the whole declaration, doc comment included\n\
   {\"op\":\"insert\",\"text\":\"fn g() int\\n    1\",\"after\":\"fn:f\"}  or \"before\":ID; neither: the end of the file\n\
   {\"op\":\"delete\",\"id\":\"fn:old\"}\n\
   {\"op\":\"rename\",\"id\":\"fn:f\",\"to\":\"g\"}                  the declaration and every reference\n\
   {\"op\":\"import\",\"module\":\"std.fs\"}                    adds `use std.fs` if missing\n\
-In a package, ids may carry the module (fn:geo.origin) and \"file\" picks the file for insert and import.\n";
+In a package, ids may carry the module (fn:geo.origin) and \"file\" picks the file for insert and import.\n\
+A bare name (average, P.m) stands for the one declaration with that name. --test runs `ail test PATH` after a clean edit.\n";
 
 /// A JSON value from the edit list (edit.in.1).
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +48,11 @@ impl J {
     }
 
     fn str(&self, key: &str) -> Option<&str> {
-        match self.get(key)? {
+        self.get(key)?.as_str()
+    }
+
+    fn as_str(&self) -> Option<&str> {
+        match self {
             J::Str(s) => Some(s),
             _ => None,
         }
@@ -338,7 +349,9 @@ impl Work {
         for (f, src) in &self.files {
             let module = self.module(f);
             for d in decls(src) {
-                if d.id == id || (!module.is_empty() && qualified(&d.id, &module) == id) {
+                // edit.id.3: a bare name stands for `kind:name`.
+                let bare = |d_id: &str| !id.contains(':') && d_id.split_once(':').is_some_and(|(_, n)| n == id);
+                if d.id == id || bare(&d.id) || (!module.is_empty() && (qualified(&d.id, &module) == id || bare(&qualified(&d.id, &module)))) {
                     hits.push((f.clone(), d));
                 }
             }
@@ -398,7 +411,120 @@ fn splice(src: &str, from: usize, to: usize, new: &[String]) -> String {
     lines.join("\n")
 }
 
-/// Apply one operation (edit.op.1-6).
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+/// Apply a hunk (edit.op.7) to lines `from..to` of `src`: the `-` and context
+/// lines are found by their trimmed text, and `+` lines are indented like the
+/// first line found. One `-` and one `+` line that match no whole line
+/// replace a unique part of one.
+fn hunk(src: &str, from: usize, to: usize, lines: &[&str]) -> Result<String, String> {
+    let file: Vec<&str> = src.split('\n').collect();
+    let scope = &file[from..to.min(file.len())];
+    let text = |l: &str| l.get(1..).unwrap_or("").to_string();
+    let minus: Vec<&&str> = lines.iter().filter(|l| l.starts_with('-')).collect();
+    let plus: Vec<&&str> = lines.iter().filter(|l| l.starts_with('+')).collect();
+    let old: Vec<String> = lines.iter().filter(|l| !l.starts_with('+')).map(|l| text(l).trim().to_string()).collect();
+    if old.is_empty() {
+        return Err("a hunk needs a `-` or context line to find its place".into());
+    }
+    if let ([m], [p]) = (minus.as_slice(), plus.as_slice())
+        && lines.len() == 2
+        && !scope.iter().any(|l| l.trim() == old[0])
+    {
+        let (part, new) = (text(m).trim().to_string(), text(p).trim().to_string());
+        let hits: Vec<(usize, usize)> =
+            scope.iter().enumerate().flat_map(|(i, l)| l.match_indices(part.as_str()).map(move |(at, _)| (i, at))).collect();
+        return match hits.as_slice() {
+            [(i, at)] => {
+                let line = scope[*i];
+                let changed = format!("{}{new}{}", &line[..*at], &line[at + part.len()..]);
+                Ok(splice(src, from + i, from + i + 1, &[changed]))
+            }
+            [] => Err(format!("`{part}` is not found")),
+            _ => Err(format!("`{part}` occurs {} times; quote more of its line", hits.len())),
+        };
+    }
+    let at: Vec<usize> = (0..=scope.len().saturating_sub(old.len()))
+        .filter(|&i| scope.len() >= old.len() && scope[i..i + old.len()].iter().zip(&old).all(|(l, o)| l.trim() == o))
+        .collect();
+    let i = match at.as_slice() {
+        [i] => *i,
+        [] => return Err(format!("the lines `{}` are not found", old.join("` / `"))),
+        _ => return Err(format!("the `-` and context lines match {} places; add a context line", at.len())),
+    };
+    let first_old = lines.iter().find(|l| !l.starts_with('+')).map(|l| text(l)).unwrap_or_default();
+    let shift = indent_of(scope[i]) as i64 - indent_of(&first_old) as i64;
+    let mut new = Vec::new();
+    let mut k = i;
+    for l in lines {
+        let t = text(l);
+        match l.as_bytes().first() {
+            Some(b'+') if t.trim().is_empty() => new.push(String::new()),
+            Some(b'+') => {
+                let ind = (indent_of(&t) as i64 + shift).max(0) as usize;
+                new.push(format!("{}{}", " ".repeat(ind), t.trim_start()));
+            }
+            Some(b'-') => k += 1,
+            _ => {
+                new.push(scope[k].to_string());
+                k += 1;
+            }
+        }
+    }
+    Ok(splice(src, from + i, from + k, &new))
+}
+
+/// The compact form of the edits (edit.in.3): hunks under an id line, and
+/// `rename OLD NEW` lines.
+fn parse_compact(input: &str) -> Result<Vec<J>, String> {
+    let mut ops = Vec::new();
+    let mut cur: Option<(Option<String>, Vec<String>)> = None;
+    let flush = |cur: Option<(Option<String>, Vec<String>)>, ops: &mut Vec<J>| -> Result<(), String> {
+        let Some((id, lines)) = cur else { return Ok(()) };
+        if lines.is_empty() {
+            return Err(format!("`{}` has no `-`, `+` or context lines (edit.in.3)", id.unwrap_or_default()));
+        }
+        let mut kv = vec![("op".to_string(), J::Str("hunk".into()))];
+        if let Some(id) = id {
+            kv.push(("id".into(), J::Str(id)));
+        }
+        kv.push(("lines".into(), J::Arr(lines.into_iter().map(J::Str).collect())));
+        ops.push(J::Obj(kv));
+        Ok(())
+    };
+    for (n, line) in input.lines().enumerate() {
+        match line.as_bytes().first() {
+            None => {}
+            Some(b'-' | b'+' | b' ') => cur.get_or_insert((None, Vec::new())).1.push(line.to_string()),
+            _ => {
+                flush(cur.take(), &mut ops)?;
+                match line.split_whitespace().collect::<Vec<_>>().as_slice() {
+                    ["rename", id, to] => ops.push(J::Obj(vec![
+                        ("op".into(), J::Str("rename".into())),
+                        ("id".into(), J::Str(id.to_string())),
+                        ("to".into(), J::Str(to.to_string())),
+                    ])),
+                    [id] => cur = Some((Some(id.trim_end_matches(':').to_string()), Vec::new())),
+                    _ => {
+                        return Err(format!(
+                            "line {}: expected an id, `rename OLD NEW`, or a line starting with `-`, `+` or a space (edit.in.3)",
+                            n + 1
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    flush(cur, &mut ops)?;
+    if ops.is_empty() {
+        return Err("no edits (edit.in.3)".into());
+    }
+    Ok(ops)
+}
+
+/// Apply one operation (edit.op.1-7).
 fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
     let kind = op.str("op").ok_or("each edit needs an \"op\" (edit.in.1)")?;
     let need = |k: &str| op.str(k).ok_or(format!("`{kind}` needs \"{k}\" (edit.in.1)"));
@@ -456,6 +582,27 @@ fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
             let new = splice(&work.files[&f], d.start, d.end, &[]);
             work.files.insert(f, new);
         }
+        // edit.op.7: lines found by their text inside one declaration (or the file), then replaced.
+        "hunk" => {
+            let lines: Vec<&str> = match op.get("lines") {
+                Some(J::Arr(xs)) => xs.iter().filter_map(|x| x.as_str()).collect(),
+                _ => return Err("`hunk` needs \"lines\" (edit.in.1)".into()),
+            };
+            let (f, from, to, place) = match op.str("id") {
+                Some(id) => {
+                    let (f, d) = work.find(id)?;
+                    (f, d.start, d.end, format!("`{}`", d.id))
+                }
+                None => {
+                    let f = work.target(op)?;
+                    let n = work.files[&f].split('\n').count();
+                    let place = f.display().to_string();
+                    (f, 0, n, place)
+                }
+            };
+            let new = hunk(&work.files[&f], from, to, &lines).map_err(|e| format!("{e} in {place} (edit.op.7)"))?;
+            work.files.insert(f, new);
+        }
         // edit.op.5: through the references of `ail api --symbols`.
         "rename" => rename(work, need("id")?, need("to")?, path)?,
         // edit.op.6
@@ -490,17 +637,26 @@ fn rename(work: &mut Work, id: &str, to: &str, path: &str) -> Result<(), String>
     if to.is_empty() || !to.chars().all(|c| c.is_alphanumeric() || c == '_') || to.starts_with(|c: char| c.is_ascii_digit()) {
         return Err(format!("`{to}` is not a name (edit.op.5)"));
     }
+    // edit.id.3: a bare name becomes the id it stands for.
+    let full;
+    let id = if id.contains(':') {
+        id
+    } else {
+        full = work.find(id)?.1.id;
+        full.as_str()
+    };
     let (df, line, col, old) = declared_at(work, id)?;
     // Write the working copy where the loader reads it, then put the files back.
     let saved = save(work)?;
     let result = (|| {
         let (prog, diags) = crate::modules::load(path)?;
         let (diags, resolved) = if diags.is_empty() { crate::check::check(&prog) } else { (diags, Default::default()) };
-        if diags.iter().any(|d| !d.warning) {
+        // As in `check_quietly`: a single file needs no `main`.
+        let single = !Path::new(path).is_dir();
+        if let Some(d) = diags.iter().find(|d| !d.warning && !(single && d.rule == "mod.main.1")) {
             return Err(format!(
                 "a rename needs a program that checks; first error: {} [{}] (edit.op.5)",
-                diags.iter().find(|d| !d.warning).map_or("", |d| d.message.as_str()),
-                diags.iter().find(|d| !d.warning).map_or("", |d| d.rule)
+                d.message, d.rule
             ));
         }
         Ok(crate::api::references(&prog, &resolved, Path::new(path).is_dir()))
@@ -619,13 +775,14 @@ fn restore(saved: Saved) {
 }
 
 pub fn command(args: &[&str], json: bool) -> ExitCode {
-    let (mut dry, mut show_diff, mut if_clean) = (false, false, false);
+    let (mut dry, mut show_diff, mut if_clean, mut test) = (false, false, false, false);
     let mut paths = Vec::new();
     for a in args {
         match *a {
             "--dry-run" => dry = true,
             "--diff" => show_diff = true,
             "--if-clean" => if_clean = true,
+            "--test" => test = true,
             a if a.starts_with("--") => {
                 eprint!("error: unknown option `{a}`\n{USAGE}");
                 return ExitCode::from(2);
@@ -642,7 +799,20 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         eprintln!("error: can't read the edits from standard input: {e}");
         return ExitCode::from(2);
     }
-    let ops = match parse_json(&input) {
+    // edit.in.3: input that doesn't start with `[` or `{` is the compact form.
+    let compact = !matches!(input.trim_start().as_bytes().first(), Some(b'[' | b'{'));
+    let parsed = if compact {
+        match parse_compact(&input) {
+            Ok(ops) => Ok(J::Arr(ops)),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    } else {
+        parse_json(&input)
+    };
+    let ops = match parsed {
         Ok(J::Arr(xs)) => xs,
         Ok(o @ J::Obj(_)) => vec![o],
         Ok(_) => {
@@ -732,17 +902,31 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             files.join(",")
         );
     } else {
-        println!(
-            "{verb} {} file{} with {} edit{}; {errors} error{}, {warnings} warning{}",
-            changed.len(),
-            if changed.len() == 1 { "" } else { "s" },
-            ops.len(),
-            if ops.len() == 1 { "" } else { "s" },
-            if errors == 1 { "" } else { "s" },
-            if warnings == 1 { "" } else { "s" }
-        );
+        // edit.out.2: warnings are counted only when there are some.
+        let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
+        let warned = if warnings > 0 { format!(", {}", plural(warnings, "warning")) } else { String::new() };
+        println!("{verb} {}; {}{warned}", plural(changed.len(), "file"), plural(errors, "error"));
     }
-    if errors > 0 { ExitCode::from(2) } else { ExitCode::SUCCESS }
+    if errors > 0 {
+        return ExitCode::from(2);
+    }
+    // edit.out.4: `--test` runs the tests of the edited file.
+    if test && kept {
+        let Ok(exe) = std::env::current_exe() else { return ExitCode::from(2) };
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg("test").arg(path);
+        if json {
+            cmd.arg("--json");
+        }
+        return match cmd.status() {
+            Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
+            Err(e) => {
+                eprintln!("error: can't run the tests: {e}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    ExitCode::SUCCESS
 }
 
 /// Load and check `path` without reporting; a file without `main` is fine.
