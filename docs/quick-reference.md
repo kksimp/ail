@@ -16,6 +16,7 @@
 ./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
 ./ail explain RULE           # what a rule ID means, with its ADRs and an example
 ./ail api --text FILE.ail    # declarations and ## docs, no bodies (JSON without --text)
+./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
@@ -39,6 +40,11 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 - A statement ends at the end of its line, unless the line ends inside
   `(`, `[` or `{`, or after a binary operator or a comma.
 - `#` starts a comment. `##` starts a doc comment.
+- Write the layout `ail fmt` writes ([formatting.md](design/formatting.md)):
+  one space around binary operators and after `,` and `:`; none inside
+  brackets, around `.` and `..`, or before a call's `(`; lines up to 100
+  characters, with a longer list split one element per line plus a trailing
+  comma; one blank line between multi-line top-level declarations.
 
 ## Functions
 

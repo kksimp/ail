@@ -10,6 +10,7 @@ mod diag;
 mod explain;
 mod fasthash;
 mod docs;
+mod fmt;
 mod implicit_self;
 mod interp;
 mod lexer;
@@ -34,6 +35,8 @@ commands:
   explain RULE  print a spec rule, its ADRs and an example
   api FILE      print the program's declarations as JSON (--pretty:
                 indented; --text: an outline; --symbols: every reference)
+  fmt PATH...   rewrite files (directories: every .ail file) in canonical layout;
+                --check: exit 1 with a diff if any would change; --stdout: print instead
   version       print the version
 
 options:
@@ -82,6 +85,7 @@ fn main() -> ExitCode {
         ["effects", file] if deny.is_empty() => effects_file(file, json),
         ["explain", rule] => explain::run(rule, json),
         ["api", rest @ ..] => api::command(rest, json),
+        ["fmt", paths @ ..] if !paths.is_empty() => fmt::command(paths, json),
         ["version"] | ["--version"] => {
             println!("ail {} (bootstrap interpreter)", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS

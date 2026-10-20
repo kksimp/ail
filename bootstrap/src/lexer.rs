@@ -139,7 +139,22 @@ pub struct Token {
 const UNIT: usize = 4;
 
 pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
-    let mut lx = Lexer { tokens: Vec::new(), diags: Vec::new(), open: Vec::new(), in_interp: 0 };
+    let (tokens, diags, _) = lex_with_comments(src);
+    (tokens, diags)
+}
+
+/// A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
+/// The parser never sees comments; the formatter keeps them (ADR 0169).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Comment {
+    pub pos: Pos,
+    pub text: String,
+}
+
+/// `lex`, plus a side table of every comment in source order. The token
+/// stream is exactly the one `lex` returns.
+pub fn lex_with_comments(src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
+    let mut lx = Lexer { tokens: Vec::new(), diags: Vec::new(), open: Vec::new(), in_interp: 0, comments: Vec::new() };
     let mut indents = vec![0usize];
     let mut continuing = false; // previous line ended in a way that continues the statement
     let lines: Vec<Vec<char>> =
@@ -155,6 +170,7 @@ pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         let lead = line.iter().take_while(|c| **c == ' ' || **c == '\t').count();
         let rest_is_blank = line[lead..].is_empty() || line[lead] == '#';
         if rest_is_blank {
+            lx.comment(line, lead, line_no);
             li += 1;
             continue; // blank and comment-only lines don't affect blocks (lex.block note)
         }
@@ -234,7 +250,7 @@ pub fn lex(src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         lx.push(Tok::Dedent, end);
     }
     lx.push(Tok::Eof, end);
-    (lx.tokens, lx.diags)
+    (lx.tokens, lx.diags, lx.comments)
 }
 
 struct Lexer {
@@ -244,11 +260,21 @@ struct Lexer {
     open: Vec<(char, Pos)>,
     /// Depth of string interpolation being lexed.
     in_interp: usize,
+    /// Comments, for the formatter (`lex_with_comments`).
+    comments: Vec<Comment>,
 }
 
 impl Lexer {
     fn push(&mut self, tok: Tok, pos: Pos) {
         self.tokens.push(Token { tok, pos });
+    }
+
+    /// Record the comment at `line[at..]`, if there is one.
+    fn comment(&mut self, line: &[char], at: usize, line_no: usize) {
+        if line.get(at) == Some(&'#') {
+            let text: String = line[at..].iter().collect();
+            self.comments.push(Comment { pos: Pos { line: line_no, col: at + 1 }, text: text.trim_end().to_string() });
+        }
     }
 
     /// Stand-in for a literal that was reported as an error, so the parser
@@ -305,7 +331,11 @@ impl Lexer {
                     ));
                     i += 1;
                 }
-                '#' => break, // comment to end of line (lex.comment.1, lex.comment.2)
+                '#' => {
+                    // comment to end of line (lex.comment.1, lex.comment.2)
+                    self.comment(line, i, line_no);
+                    break;
+                }
                 '"' if starts_triple(line, i) => {
                     if self.in_interp > 0 {
                         self.diags.push(Diagnostic::new(

@@ -1,10 +1,26 @@
 # type.str.7: trim (Unicode White_Space), lines, chars.
 fn main()
     # trim removes leading and trailing is_space characters
-    print(["  hi  ".trim(), "\t\n hi \r\n".trim(), "hi".trim(), "".trim(), "   ".trim(), " a b ".trim()])
-    print(["\u{a0}\u{2003}x\u{3000}".trim(), "\u{85}x\u{2028}".trim(), "\u{1680}\u{202f}\u{205f}x".trim()])
+    print([
+        "  hi  ".trim(),
+        "\t\n hi \r\n".trim(),
+        "hi".trim(),
+        "".trim(),
+        "   ".trim(),
+        " a b ".trim(),
+    ])
+    print([
+        "\u{a0}\u{2003}x\u{3000}".trim(),
+        "\u{85}x\u{2028}".trim(),
+        "\u{1680}\u{202f}\u{205f}x".trim(),
+    ])
     # not White_Space: zero width space, BOM, the C0 separators, the Mongolian vowel separator
-    print(["\u{200b}x\u{200b}".trim().chars().len(), "\u{feff}x".trim().chars().len(), "\u{1c}x\u{1f}".trim().chars().len(), "\u{180e}x".trim().chars().len()])
+    print([
+        "\u{200b}x\u{200b}".trim().chars().len(),
+        "\u{feff}x".trim().chars().len(),
+        "\u{1c}x\u{1f}".trim().chars().len(),
+        "\u{180e}x".trim().chars().len(),
+    ])
     print(["\u{b}\u{c}x\u{b}\u{c}".trim(), "é ".trim(), " é".trim(), "😀 ".trim()])
     print("  inner  space  ".trim())
     # lines: split on \n, drop one trailing empty piece, strip a \r before each \n

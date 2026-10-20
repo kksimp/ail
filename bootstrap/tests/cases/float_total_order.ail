@@ -68,7 +68,15 @@ fn main()
     print([1.0] < [1.0, nan])
     print([-0.0] <= [0.0])
     print([0.0] < [-0.0])
-    rs := [R(k: nan, tag: "a"), R(k: 1.0, tag: "b"), R(k: nan, tag: "c"), R(k: -0.0, tag: "d"), R(k: 0.0, tag: "e"), R(k: -inf, tag: "f"), R(k: 0.0, tag: "a")]
+    rs := [
+        R(k: nan, tag: "a"),
+        R(k: 1.0, tag: "b"),
+        R(k: nan, tag: "c"),
+        R(k: -0.0, tag: "d"),
+        R(k: 0.0, tag: "e"),
+        R(k: -inf, tag: "f"),
+        R(k: 0.0, tag: "a"),
+    ]
     print(rs.sorted())
     print(rs.min())
     print(rs.max())
@@ -81,7 +89,14 @@ fn main()
     print(R(k: nan, tag: "x") == R(k: nan, tag: "x"))
     print(R(k: nan, tag: "x").cmp(R(k: nan, tag: "x")))
     # a custom cmp on a float field: equal keys keep their order, min/max take the first
-    ws := [W(k: nan, tag: "a"), W(k: 1.0, tag: "b"), W(k: nan, tag: "c"), W(k: -0.0, tag: "d"), W(k: 0.0, tag: "e"), W(k: -0.0, tag: "f")]
+    ws := [
+        W(k: nan, tag: "a"),
+        W(k: 1.0, tag: "b"),
+        W(k: nan, tag: "c"),
+        W(k: -0.0, tag: "d"),
+        W(k: 0.0, tag: "e"),
+        W(k: -0.0, tag: "f"),
+    ]
     print(ws.sorted())
     print(ws.max())
     print(ws.min())
