@@ -411,6 +411,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
+| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
+| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
 | [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
