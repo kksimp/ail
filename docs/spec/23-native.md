@@ -24,7 +24,7 @@ invariants, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
 on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
 value), `while`, `for` over a range or a list, `break`, `continue`,
-`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
+`return`, calls, list comprehensions, slices `xs[a..b]`, struct construction, fields (`x.f`, `x.f = v`, and bare
 field names in a method), method calls, `print` of numbers, strings and
 lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
@@ -32,7 +32,7 @@ lists of them or an interpolation of them (with
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
 and the bit operations of expr.bit.1. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393)*
+*(ADRs 0384, 0390, 0392, 0393, 0394)*
 
 ```ail
 fn steps(n int) int

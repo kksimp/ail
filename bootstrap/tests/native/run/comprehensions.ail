@@ -1,0 +1,18 @@
+# List comprehensions (ADR 0394): filters, nested clauses, structs, and a
+# trap inside one.
+struct P
+    x int
+
+fn main()
+    xs := [i * i for i in 0..10 if i % 2 == 0]
+    print(xs)
+    ps := [P(x: k) for k in xs]
+    print([p.x + 1 for p in ps])
+    print([[i, j] for i in 0..3 for j in 0..i])
+    fs := [x.to_float() / 2.0 for x in xs]
+    print(fs)
+    e := [k for k in 0..0]
+    mut n := List[int]()
+    n = [k * 2 for k in xs]
+    print(n.len())
+    print(xs[[1, 2][5]])
