@@ -1,0 +1,14 @@
+# Structs outside the native subset are reported, all at once (ADR 0392).
+struct Box[T]
+    item T
+
+struct Checked
+    n int
+    invariant n >= 0
+
+struct Point
+    x int
+
+fn main()
+    p := Point(x: 1)
+    print(p)

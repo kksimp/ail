@@ -1,0 +1,19 @@
+# Modules (ADR 0393): imports with `as`, qualified structs, methods,
+# functions and constants, a nested module, and a trap in another file.
+use modgeo as geo
+use modutil.num as n
+
+fn main()
+    p := geo.Point(x: 3, y: 4)
+    print(p.dist2())
+    print(geo.SCALE * n.twice(p.x))
+    mut s := geo.Shape.unit()
+    s.grow(2)
+    print(s.side)
+    print(helper(5))
+    print(geo.area(s))
+
+fn helper(k int) int
+    k * LOCAL
+
+LOCAL := 7

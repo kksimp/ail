@@ -18,7 +18,7 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 | Linux x86-64 | ELF | rdi rsi rdx rcx r8 r9 | xmm0-7 | rax, xmm0 | 16-byte aligned at call |
 | Linux ARM64 | ELF | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
 | macOS ARM64 | Mach-O | x0-x7 | d0-d7 | x0, d0 | 16-byte aligned |
-| Windows x86-64 | PE | stub, `plat.win.1` | | | not built yet |
+| Windows x86-64 | PE | Win64: rcx rdx r8 r9, 32-byte shadow space (ADR 0598) | xmm0-3 | rax, xmm0 | 16-byte aligned at call |
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
@@ -73,10 +73,36 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
-**Heap object header.** None in this revision. A collector (ADR 0012's ladder)
-needs type information; the plan is a second ABI revision with an 8-byte word
-before each object, and the allocator already returns 16-byte aligned
-addresses with 8 bytes of slack for it (ADR 0407).
+**Heap object header** (ADR 0392). Objects allocated with `rt.obj_new(size,
+kind)` have an 8-byte word just before the address the program holds, so a
+pointer is to the first field:
+
+```text
+-8   u64  header  bits 0-7 kind, bit 8 mark, bits 16-63 size in bytes
++0        fields  `size` bytes
+```
+
+| kind | object |
+|---:|---|
+| 1 | string |
+| 2 | list header |
+| 3 | list data |
+| 4 | struct |
+| 5 | enum payload |
+| 6 | closure |
+| 7 | map |
+| 8 | set |
+| 9 | bytes |
+| 10 | boxed optional or result |
+
+Strings and lists don't carry the header yet; lane 171 moves every
+allocation to `rt.obj_new` with the collector.
+
+**Struct object** (ADR 0392): one 8-byte slot per field, in declaration
+order (a `float` as its bits, a `bool` as 0 or 1, a string, list or struct
+as a pointer). A struct is a value: reading one from a place to bind,
+store, push or return it copies it, deeply through the lists and structs
+it holds (a generated `copy.T` function); fields change in place.
 
 ## 3. Entry and exit
 

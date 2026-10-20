@@ -535,8 +535,7 @@ fails with kind `closed`, connections still sending a request are dropped,
 and an `Exchange` accepted earlier can still be answered (a graceful stop).
 `struct Exchange { request Request, handle int }` and `struct Request {
 method str, path str, query Map[str, str], headers Map[str, str], body str,
-peer str }`. A handler form `serve(addr, handler)` with `handler fn(Request)
-Response` follows function values (ADR 0419); until then a server is a
+peer str }`. The handler form is `std.net.http` (`std.net.18`); otherwise a server is a
 loop over `accept`, usually in tasks. *(ADR 0419)*
 
 **std.net.10** — The server accepts only well-formed HTTP/1.0 and HTTP/1.1
@@ -618,6 +617,41 @@ library's (Winsock); the code uses nothing else, and it is untested there
 - `Conn.read_bytes(max int) bytes ! NetError` waits for at least one byte and
   returns up to `max`, empty at the end of the stream; it fails as `read`
   does, and `Conn.write_bytes(data bytes) ! NetError` writes all of `data`.
+
+**std.net.17** — Repeated headers. `Response` and `RawResponse` have a last
+field `all_headers Map[str, List[str]]`: each header name in lowercase with
+every value it arrived with, one by one and in order (a `Set-Cookie` whose
+`Expires` holds a comma stays whole); `headers` still joins them with `, `
+(`std.net.2`). `net.Response(...)` may leave `all_headers` out: it is then
+empty. When a server answers with `ex.respond(r)`, each name in
+`r.all_headers` is sent once per value in place of its entry in `r.headers`,
+which is how to send several `Set-Cookie` headers. *(ADR 0418)*
+
+**std.net.18** — The handler form. `use std.net.http` gives
+`http.serve(addr str, handler fn(net.Request) net.Response) ! net.NetError`,
+which listens on `addr` and answers every request with `handler`, and
+`http.run(srv net.Server, handler) !`, which does the same on a server the
+program holds and returns when `srv.close()` has stopped it. Four tasks
+answer requests at once, each one at a time; a handler is a declared
+function (`conc.task.*`, function values), and a client that goes away
+before its answer is not a failure. *(ADR 0419)*
+
+```ail rules=std.net.17,std.net.18
+use std.net
+use std.net.http
+
+fn page(r net.Request) net.Response
+    cookies := {"set-cookie": ["a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT", "b=2"]}
+    net.Response(status: 200, headers: {}, body: "hi {r.path}", all_headers: cookies)
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, page)
+    r := net.get("http://{srv.addr()}/x")?
+    print("{r.body} {r.all_headers["set-cookie"].len()} {r.headers["set-cookie"]}")
+    srv.close()
+    t.wait()?
+```
 
 ```ail
 use std.net
