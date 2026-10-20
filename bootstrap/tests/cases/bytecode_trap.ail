@@ -1,0 +1,13 @@
+# A trap inside a compiled loop carries the walker's rule, position and
+# locals (ADR 0361).
+
+fn spread(n int) int
+    mut total := 0
+    for i in 0..n
+        gap := 3 - i
+        total += 12 / gap
+    total
+
+fn main()
+    print(spread(3))
+    print(spread(5))

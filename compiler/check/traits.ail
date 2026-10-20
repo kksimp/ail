@@ -1,0 +1,439 @@
+## `impl` blocks and which types implement which traits (ADR 0377), as in
+## `bootstrap/src/check/traits.rs` (trait.impl.1-6, trait.auto.1-5,
+## trait.std.2, trait.super.2, trait.derive.1).
+use ast
+
+fn no_str() str?
+    none
+
+fn impl_key(tr int, con str) str
+    "{tr}:{con}"
+
+## Resolve each `impl` block's trait and type, and register it.
+fn Checker.collect_impls(mut self)
+    for imp in prog.impls
+        tr := trait_named(imp.trait_name, imp.trait_pos, "trait.impl.1")
+        target_name := imp.target.name
+        mut con := no_str()
+        mut declared := List[int]()
+        if target_name == "int" or target_name == "i64"
+            con = "int"
+        elif target_name == "float" or target_name == "f64"
+            con = "float"
+        elif target_name == "str" or target_name == "char" or target_name == "bool"
+            con = target_name
+        elif target_name == "List"
+            con = "list"
+            declared = [list_param]
+        elif d := types.get(target_name)
+            match d
+                DStruct(s) =>
+                    con = "s{s}"
+                    declared = struct_params[s]
+                DEnum(e) =>
+                    con = "e{e}"
+                    declared = enum_params[e]
+        elif traits.contains(target_name)
+            err_help(
+                "trait.impl.1",
+                imp.target.pos,
+                "`{target_name}` is a trait; `impl Trait for Type` names a type after `for`",
+                "write the type that implements the trait",
+            )
+        else
+            unknown_type(target_name, imp.target.pos)
+        params := owner_params(imp.target, declared)
+        args := [Ty.Param(p) for p in params]
+        mut target := Ty.Unknown
+        if c := con
+            target = match c
+                "int" => Ty.Int
+                "float" => Ty.Float
+                "str" => Ty.Str
+                "char" => Ty.Char
+                "bool" => Ty.Bool
+                "list" => Ty.ListOf(args[0])
+                _ =>
+                    n := c.slice(1, c.len()).to_int() else 0
+                    if c.starts_with("s") then Ty.Struct(n, args) else Ty.Enum(n, args)
+        if tr != none and tr == std_hash
+            err_help(
+                "trait.auto.5",
+                imp.pos,
+                "`Hash` can't be implemented: every type whose `==` is automatic is `Hash` already",
+                "remove this `impl`; custom hashing isn't designed yet (OQ-042)",
+            )
+            impl_info.push(ImplInfo(tr: none, target: Ty.Unknown, params: []))
+            continue
+        if t := tr
+            if c := con
+                mut built_in_type := true
+                index := c.slice(1, c.len()).to_int() else 0
+                if c.starts_with("s")
+                    built_in_type = is_prelude_line(prog.structs[index].pos.line)
+                elif c.starts_with("e")
+                    built_in_type = is_prelude_line(prog.enums[index].pos.line)
+                if is_prelude_line(prog.traits[t].pos.line)
+                    and built_in_type
+                    and not is_prelude_line(imp.pos.line)
+                    err(
+                        "trait.impl.4",
+                        imp.pos,
+                        "`{imp.trait_name}` and `{target_name}` are both built in, so this program can't implement one for the other",
+                    )
+                elif other := impl_of.get(impl_key(t, c))
+                    err_help(
+                        "trait.impl.6",
+                        imp.pos,
+                        "`{target_name}` already implements `{imp.trait_name}`",
+                        "see line {prog.impls[other].pos.line}; a type implements a trait at most once",
+                    )
+                else
+                    impl_of[impl_key(t, c)] = impl_info.len()
+        impl_info.push(ImplInfo(tr: tr, target: target, params: params))
+
+## The function index of trait `tr`'s method `n`.
+fn Checker.trait_method(self, tr int, n str) int?
+    for m in prog.traits[tr].methods
+        if prog.fns[m].name == n
+            return m
+    none
+
+## Whether `t` implements trait `tr` (trait.impl.1, trait.auto.1-2,
+## trait.std.2-4, trait.any.5, gen.bound.2).
+fn Checker.implements(self, t Ty, tr int) bool
+    mut seen := List[str]()
+    implements_in(t, tr, mut seen)
+
+fn Checker.implements_in(self, t Ty, tr int, mut seen List[str]) bool
+    if tr == std_to_str
+        return match t
+            Unit => false
+            Res => false
+            _ => true
+    eq := std_eq
+    match t
+        Unknown => return true
+        Never => return true
+        Unit => return false
+        Res => return false
+        Param(p) =>
+            for b in tparams[p].bounds
+                if provides(b, tr) or (tr == eq and (b == std_ord or b == std_hash))
+                    return true
+            return false
+        AnyOf(a) => return a == tr and whole_trait_through_any(tr)
+        RefOf => return tr == eq
+        Num(k) => return tr == eq or tr == std_ord or (tr == std_hash and k != "f32")
+        Union => return tr == eq or tr == std_hash
+        Opt(inner) => return (tr == eq or tr == std_hash) and implements_in(inner, tr, mut seen)
+        MapOf(k, v) => return tr == eq and implements_in(
+            k,
+            eq,
+            mut seen,
+        ) and implements_in(v, eq, mut seen)
+        SetOf(e) => return tr == eq and implements_in(e, eq, mut seen)
+        _ => tr == tr
+    con := con_of(t) else return false
+    if i := impl_of.get(impl_key(tr, con))
+        return impl_applies(i, t, con, mut seen)
+    if tr == eq
+        return auto_derives(t, con, eq, mut seen)
+    if tr == std_hash
+        return not custom_eq(t) and t != Ty.Float and auto_derives(t, con, std_hash, mut seen)
+    if tr == std_ord
+        return match t
+            Int => true
+            Float => true
+            Str => true
+            Char => true
+            ListOf(e) => implements_in(e, tr, mut seen)
+            _ => false
+    false
+
+## Whether `impl` block `i` covers `t`: its type arguments satisfy the
+## block's bounds (gen.method.2).
+fn Checker.impl_applies(self, i int, t Ty, con str, mut seen List[str]) bool
+    tr := impl_info[i].tr else return true
+    key := impl_key(tr, con)
+    if seen.contains(key)
+        return true
+    seen.push(key)
+    args := args_of(t)
+    params := impl_info[i].params
+    mut ok := true
+    for k in 0..params.len().min(args.len())
+        for b in tparams[params[k]].bounds
+            if ok and not implements_in(args[k], b, mut seen)
+                ok = false
+    seen.pop()
+    ok
+
+## Whether `t` has an `impl Eq` with its own `fn eq` (not a derived one).
+fn Checker.custom_eq(self, t Ty) bool
+    match t
+        Struct => custom_eq_con(t)
+        Enum => custom_eq_con(t)
+        _ => false
+
+fn Checker.custom_eq_con(self, t Ty) bool
+    con := con_of(t) else return false
+    i := impl_of.get(impl_key(std_eq, con)) else return false
+    prog.impls[i].methods.len() > 0
+
+## Structural `==` (trait.auto.1) or hashing (trait.auto.5): every part
+## implements `tr`.
+fn Checker.auto_derives(self, t Ty, con str, tr int, mut seen List[str]) bool
+    match t
+        Int => return true
+        Bool => return true
+        Str => return true
+        Char => return true
+        Float => return tr == std_eq
+        ListOf(e) => return implements_in(e, tr, mut seen)
+        Struct => tr == tr
+        Enum => tr == tr
+        _ => return false
+    key := impl_key(tr, con)
+    if seen.contains(key)
+        return true
+    seen.push(key)
+    mut ok := true
+    for f in field_types_of(t)
+        if ok and not implements_in(f, tr, mut seen)
+            ok = false
+    seen.pop()
+    ok
+
+## The types of every field of a struct, or every variant of an enum, with
+## its type arguments filled in.
+fn Checker.field_types_of(self, t Ty) List[Ty]
+    match t
+        Struct(s, args) =>
+            if s >= field_types.len()
+                return []
+            subst_all(field_types[s], binds_of(struct_params[s], args))
+        Enum(e, args) =>
+            if e >= variant_types.len()
+                return []
+            mut all := List[Ty]()
+            for v in variant_types[e]
+                all.extend(v)
+            subst_all(all, binds_of(enum_params[e], args))
+        _ => []
+
+fn binds_of(params List[int], args List[Ty]) List[Bind]
+    [Bind(param: params[k], ty: args[k]) for k in 0..params.len().min(args.len())]
+
+## Why `t` isn't `Hash` (trait.auto.5), naming the part that isn't.
+fn Checker.hash_cause(self, t Ty) str
+    match t
+        Float => "`float` isn't `Hash`, since NaN isn't equal to itself"
+        Num(k) =>
+            if k
+                == "f32" then "`f32` isn't `Hash`, since NaN isn't equal to itself" else "{show(t)} isn't `Hash`"
+        MapOf => "maps and sets aren't `Hash`"
+        SetOf => "maps and sets aren't `Hash`"
+        AnyOf => "`any` values aren't `Hash`"
+        Param(p) => "add the constraint where `{tparams[p].name}` is declared, e.g. `[{tparams[p].name} Hash]`"
+        ListOf(e) => hash_cause(e)
+        Opt(e) => hash_cause(e)
+        Struct => hash_cause_of_parts(t)
+        Enum => hash_cause_of_parts(t)
+        _ => "{show(t)} isn't `Hash`"
+
+fn Checker.hash_cause_of_parts(self, t Ty) str
+    n := type_name_of(t) else ""
+    if custom_eq(t)
+        return "`{n}` has its own `fn eq`, and custom hashing isn't designed yet (OQ-042)"
+    for f in field_types_of(t)
+        if not implements(f, std_hash)
+            return "`{n}` has a part of type {show(f)}: {hash_cause(f)}"
+    "{show(t)} isn't `Hash`"
+
+## Whether method `f` of trait `tr` can be called through `any`: `Self`
+## appears only as its receiver (trait.any.4).
+fn Checker.callable_through_any(self, tr int, f int) bool
+    p := trait_self[tr]
+    sig := sigs[f]
+    if mentions(sig.ret, p)
+        return false
+    for q in sig.params
+        if mentions(q.ty, p)
+            return false
+    true
+
+## Whether every method of `tr` can be called through `any` (trait.any.5).
+fn Checker.whole_trait_through_any(self, tr int) bool
+    for m in prog.traits[tr].methods
+        if m >= sigs.len() or not callable_through_any(tr, m)
+            return false
+    true
+
+## Help for a type that doesn't implement a trait it needs.
+fn Checker.how_to_implement(self, t Ty, tr int) str?
+    trait_name := prog.traits[tr].name
+    match t
+        Param(p) => return "add the constraint where `{tparams[p].name}` is declared, e.g. `[{tparams[p].name} {trait_name}]`"
+        _ => tr == tr
+    if tr == std_hash
+        return hash_cause(t)
+    match t
+        Struct(s, _) =>
+            if tr == std_eq
+                return "{show(t)} has a field that can't be compared with `==`"
+            if is_prelude_line(prog.structs[s].pos.line) then none else impl_help(t, tr)
+        Enum(e, _) =>
+            if tr == std_eq
+                return "{show(t)} has a field that can't be compared with `==`"
+            if is_prelude_line(prog.enums[e].pos.line) then none else impl_help(t, tr)
+        _ => none
+
+fn Checker.impl_help(self, t Ty, tr int) str
+    tn := type_name_of(t) else ""
+    if tr == std_ord
+        return "add `impl Ord for {tn}`; with no methods, it compares field by field"
+    "add `impl {prog.traits[tr].name} for {tn}` with the trait's methods indented below"
+
+## `fn name(self, other Self) bool`, with `Self` replaced, for messages.
+fn Checker.sig_text(self, f int, sig Sig) str
+    decl := prog.fns[f]
+    mut parts := List[str]()
+    if m := sig.receiver
+        parts.push(if m then "mut self" else "self")
+    for k in 0..decl.params.len().min(sig.params.len())
+        p := sig.params[k]
+        mark := if p.mutable then "mut " else ""
+        parts.push("{mark}{decl.params[k].name} {ty_name(p.ty)}")
+    ret := if sig.ret == Ty.Unit then "" else " {ty_name(sig.ret)}"
+    "fn {decl.name}({parts.join(", ")}){ret}"
+
+## A signature with `binds` substituted in its parameters and result.
+fn sig_subst(s Sig, binds List[Bind]) Sig
+    mut out := s
+    out.params = [SigParam(mutable: p.mutable, ty: subst(p.ty, binds)) for p in s.params]
+    out.ret = subst(s.ret, binds)
+    out
+
+## Check each `impl` block against its trait (trait.impl.3, trait.impl.5,
+## trait.derive.1, trait.std.2, trait.super.2).
+fn Checker.check_impls(mut self)
+    for i in 0..prog.impls.len()
+        imp := prog.impls[i]
+        tr := impl_info[i].tr else continue
+        target := impl_info[i].target
+        decl := prog.traits[tr]
+        binds := [Bind(param: trait_self[tr], ty: target)]
+        mut defined := List[str]()
+        for m in imp.methods
+            f := prog.fns[m]
+            if defined.contains(f.name)
+                err("mod.unit.1", f.pos, "`{f.name}` is defined more than once in this `impl`")
+                continue
+            defined.push(f.name)
+            t := trait_method(tr, f.name) else
+                names := [prog.fns[k].name for k in decl.methods]
+                mut d := new_diag("trait.impl.5", f.pos, "`{decl.name}` has no method `{f.name}`")
+                d = if s := suggest(f.name, names)
+                    d.did_you_mean(s)
+                else
+                    d.with_help("a method that isn't part of the trait is declared on its own: `fn {imp.target.name}.{f.name}(...)`")
+                diags.push(d)
+                continue
+            want := sig_subst(sigs[t], binds)
+            got := sigs[m]
+            mut matches := want.receiver == got.receiver and want.params.len() == got.params.len()
+            if matches
+                for k in 0..want.params.len()
+                    if want.params[k].mutable != got.params[k].mutable or not same(
+                        want.params[k].ty,
+                        got.params[k].ty,
+                    )
+                        matches = false
+            matches = matches and same_result(want.ret, got.ret)
+            if not matches
+                err_help(
+                    "trait.impl.3",
+                    f.pos,
+                    "`{f.name}` doesn't match its declaration in `{decl.name}`",
+                    "write `{sig_text(t, want)}`",
+                )
+        built_in := is_prelude_line(decl.pos.line)
+        by_generator := decl.derive != none and (imp.methods.len() == 0 or decl.methods.len() == 0)
+        if by_generator
+            defined = defined
+        elif built_in and imp.methods.len() == 0
+            check_derived(i, tr, target)
+        else
+            missing := [
+                m
+                for m in decl.methods if prog.fns[m].body == none
+                    and not defined.contains(prog.fns[m].name)
+            ]
+            if missing.len() > 0
+                names := [prog.fns[m].name for m in missing]
+                shown := ["`{sig_text(m, sig_subst(sigs[m], binds))}`" for m in missing]
+                derive := if built_in then "; or remove every method to derive it" else ""
+                err_help(
+                    "trait.impl.3",
+                    imp.pos,
+                    "`impl {decl.name} for {imp.target.name}` is missing {list_names(names)}",
+                    "add {shown.join(", ")} to the block{derive}",
+                )
+        if tr == std_ord and not implements(target, std_eq)
+            err(
+                "trait.std.2",
+                imp.pos,
+                "{show(target)} implements `Ord`, so it must also support `==`",
+            )
+        for s in supers[tr]
+            if (tr == std_ord and s == std_eq) or implements(target, s)
+                continue
+            tn := decl.name
+            sn := prog.traits[s].name
+            err_help(
+                "trait.super.2",
+                imp.pos,
+                "{show(target)} implements `{tn}`, which requires `{sn}`, but it doesn't implement `{sn}`",
+                "add `impl {sn} for {imp.target.name}`",
+            )
+
+## Two result types are the same, including their error sets.
+fn Checker.same_result(self, a Ty, b Ty) bool
+    match a
+        Res(x, ea) =>
+            match b
+                Res(y, eb) => same(x, y) and sort_errors(errs_of(ea)) == sort_errors(errs_of(eb))
+                _ => same(a, b)
+        _ => same(a, b)
+
+## An empty `impl` of a standard trait derives it: every field's type must
+## implement the trait (trait.derive.1).
+fn Checker.check_derived(mut self, i int, tr int, target Ty)
+    imp := prog.impls[i]
+    mut names := List[str]()
+    mut tys := List[Ty]()
+    match target
+        Struct(s, args) =>
+            binds := binds_of(struct_params[s], args)
+            for k in 0..prog.structs[s].fields.len()
+                names.push(prog.structs[s].fields[k].name)
+                tys.push(subst(field_types[s][k], binds))
+        Enum(e, args) =>
+            binds := binds_of(enum_params[e], args)
+            for v in 0..prog.enums[e].variants.len()
+                variant := prog.enums[e].variants[v]
+                for k in 0..variant.fields.len()
+                    names.push("{variant.name}.{variant.fields[k].name}")
+                    tys.push(subst(variant_types[e][v][k], binds))
+        _ => return
+    trait_name := prog.traits[tr].name
+    for k in 0..names.len()
+        t := tys[k]
+        if not implements(t, tr)
+            text := "`{trait_name}` can't be derived for `{imp.target.name}`: the field `{names[k]}` is {show(t)}, which doesn't implement `{trait_name}`"
+            hint := how_to_implement(
+                t,
+                tr,
+            ) else "define the trait's methods in this `impl` instead of deriving `{trait_name}`"
+            err_help("trait.derive.1", imp.pos, text, hint)

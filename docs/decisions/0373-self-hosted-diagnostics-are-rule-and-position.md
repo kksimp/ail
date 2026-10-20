@@ -20,7 +20,8 @@ about 2.5 minutes for the corpus, mostly checking `compiler/syntax/` again.
 ### Option A — rule and position now, one run over the corpus (chosen)
 `Diag` holds the rule, the position, and, for a diagnostic with a fix, the
 message, which `gram.rec.1` needs to merge a repeated mistake on one line.
-`compiler/selfhost.ail tokens|parse FILE...` takes every file, with a line
+`ail run compiler tokens|parse FILE...` (the driver `compiler/main.ail`)
+takes every file, with a line
 `== FILE` before each output.
 - **Pros:** the comparison is exact where the dumps are; the selftest
   runs both stages over 770 files in about 20 s.

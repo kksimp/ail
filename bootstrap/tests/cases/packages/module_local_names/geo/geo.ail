@@ -1,0 +1,5 @@
+## A module's locals may reuse the names of the root module's items
+## (expr.bind.5): they meet only their own module's.
+pub fn twice(x int) int
+    p := x * 2
+    p

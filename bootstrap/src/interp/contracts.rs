@@ -27,6 +27,11 @@ pub fn set_enabled(on: bool) {
     ENABLED.store(on, AtomicOrdering::Relaxed);
 }
 
+/// Whether contracts are checked at all (contract.run.3).
+pub(super) fn enabled() -> bool {
+    ENABLED.load(AtomicOrdering::Relaxed)
+}
+
 /// Whether `f`'s contracts are checked on this call (contract.run.1-3).
 #[inline]
 pub(super) fn active(f: &FnDecl) -> bool {
