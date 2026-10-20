@@ -42,6 +42,16 @@ it is every whole-word match in the buffer, labelled "every whole word in
 this file". Enter applies it as one undo step; Esc cancels; a keyword or a
 non-word is refused. Renames are within the open buffer.
 
+### Amendment (2026-10-20)
+
+The editor had two F2 paths: this one in the window's Workspace, and an
+`ail api --refs` one in the Editor (lane 12, headless only). They are now
+one Editor path: the semantic set comes from `ail api --refs FILE L C`,
+which also covers locals and parameters, with this ADR's whole-word
+fallback, prompt and refusals. The prompt is on the status line, so the
+headless `--print` mode and its smoke test exercise the same code as the
+window.
+
 ## Consequences
 
 - When `ail api` reports locals and cross-file references, the fallback

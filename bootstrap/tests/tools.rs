@@ -53,7 +53,10 @@ fn editor_drives_the_real_semantic_api() {
     let definition = screen(&["--at=12:11", "--key=f12"]);
     assert!(definition.contains("Ln 11, Col 5"), "F12:\n{definition}");
     let rename = screen(&["--at=10:5", "--key=f2", "--type=t", "--key=enter"]);
-    assert!(rename.contains("total := add(pt.x, pt.y)"), "F2:\n{rename}");
+    assert!(rename.contains("total := add(pt.x, pt.y)") && rename.contains("| renamed 3 `p`"), "F2:\n{rename}");
+    // With the file broken `--refs` can't answer, so F2 falls back to words.
+    let by_word = screen(&["--at=10:5", "--type=(", "--key=f2", "--type=t", "--key=enter"]);
+    assert!(by_word.contains("total := add(pt.x, pt.y)") && !by_word.contains("Ln 10, Col 5"), "F2 by word:\n{by_word}");
     let squeeze = ["--at=7:6", "--key=delete", "--key=right", "--key=delete"];
     let squeezed = screen(&squeeze);
     assert!(squeezed.contains("  7     a+b\n"), "squeeze:\n{squeezed}");
