@@ -392,3 +392,16 @@ functions plus explicit state) or add closures as a later language feature
 with their own ADR. Recommendation: keep the rule until a program shows the
 need; the AI-first measurement (ADR 0076) is tokens per handler, and the
 named form costs few.
+
+## OQ-122 — What `t[i][j]` on a one-dimensional tensor means
+
+`std.tensor.15` gives `t[i]` the tensor of the rows after the first, so a
+one-dimensional `t[i]` is a tensor with no axes (ADR 0328). The checker
+accepts `t[0][1]` and the program prints a 0-dimensional tensor, with no
+error. Round two's mistakes corpus (ADR 0646) caught it. Options: (a) keep
+the spec and make a second index on a 0-dimensional tensor a compile-time
+error (`expr.index.*`, a new rule); (b) make `t[i]` on a one-dimensional
+tensor an element, which changes std.tensor.15. Recommendation: (a), since
+the spec's shape rule stays true and an agent gets a diagnostic at the second
+index. The decision belongs to the designer, because it changes a spec rule
+(std.tensor.15). The corpus omits the program until then (ADR 0647).

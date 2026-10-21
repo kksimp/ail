@@ -1,0 +1,6 @@
+use std.time.date
+
+fn main()
+    d := date.strptime("2026-10-20", "%Y-%m-%d") else e
+        return
+    print(d.days())

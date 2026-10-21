@@ -1,0 +1,6 @@
+use std.time.date
+
+fn main()
+    today := date.Date(2026, 10, 21)
+    later := today + timedelta(days=1)
+    print(later.days())
