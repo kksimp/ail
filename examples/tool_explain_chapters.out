@@ -8,7 +8,7 @@ edit 17 0
 eff 15 0
 err 40 5
 explain 6 0
-expr 64 14
+expr 64 16
 ffi 12 0
 fix 9 0
 gen 14 0
@@ -23,10 +23,10 @@ refl 4 0
 replay 10 0
 run 4 0
 snap 6 0
-std 177 0
+std 177 1
 test 23 0
 trace 17 0
 trait 43 3
-type 105 8
+type 105 10
 unsafe 16 0
-all 852 43
+all 852 48
