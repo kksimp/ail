@@ -316,6 +316,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         caught: 0,
         cur_fn: 0,
         track: false,
+        allow_wildcards: false,
         fn_name: String::new(),
         fn_head: Pos { line: 0, col: 0 },
     };
@@ -523,6 +524,8 @@ struct Checker<'p> {
     /// are being recorded (the final pass only, err.paths.1).
     cur_fn: usize,
     track: bool,
+    /// The function being checked has `@allow("expr.match.3")` (gram.attr.5).
+    allow_wildcards: bool,
     /// Name and header line of the function being checked (err.fix.1).
     fn_name: String,
     fn_head: Pos,
@@ -1509,13 +1512,15 @@ impl<'p> Checker<'p> {
             "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
         };
         self.error_help("err.use.1", pos, "this can fail, and the failure isn't handled", help);
+        // err.fix.1: where the failure sits, in a statement, a binding or an argument.
+        self.try_fix_at(t, pos);
         true
     }
 
     /// fix.edit.3: offer `?` after a statement-level fallible call when this
     /// function's error type already admits its errors. Adds the fix to the
     /// `err.use.1` diagnostic just reported.
-    fn try_fix(&mut self, t: &Ty, e: &Expr) {
+    fn try_fix_at(&mut self, t: &Ty, at: Pos) {
         let Ty::Res(_, errs) = t else { return };
         let errors = self.errs_of(errs);
         let admits = match &self.ret {
@@ -1525,17 +1530,14 @@ impl<'p> Checker<'p> {
         };
         // err.fix.1: a function that can't fail yet can be made to.
         let sig = if admits { None } else { self.signature_fix(&errors) };
-        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
-        if !matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
-            return;
-        }
+        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1" && d.fixes.is_empty()) else { return };
         if admits {
             d.fixes.push(Fix {
                 title: "pass the error on with `?`".into(),
-                edits: vec![Edit::at_line_end(e.pos(), "?")],
+                edits: vec![Edit::after_expr(at, "?")],
             });
         } else if let Some((title, edit)) = sig {
-            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::at_line_end(e.pos(), "?")] });
+            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::after_expr(at, "?")] });
         }
     }
 
@@ -1669,6 +1671,7 @@ impl<'p> Checker<'p> {
             Some((f.pos, !f.params.is_empty(), st.fields.iter().map(|x| x.name.clone()).collect()))
         });
         self.cur_fn = idx;
+        self.allow_wildcards = f.attrs.iter().any(|a| a.name == "allow" && a.arg.as_deref() == Some("expr.match.3"));
         self.fn_name = f.name.clone();
         self.fn_head = f.pos;
         if f.receiver.is_some() {
@@ -1754,9 +1757,6 @@ impl<'p> Checker<'p> {
             }
             // err.use.1: a failure can't be discarded.
             if (!last || !need) && matches!(s, Stmt::Expr(_)) && self.reject_unhandled(&ty, s.pos()) {
-                if let Stmt::Expr(e) = s {
-                    self.try_fix(&ty, e);
-                }
                 ty = Ty::Err;
             }
         }
@@ -1796,7 +1796,6 @@ impl<'p> Checker<'p> {
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => {
-                        self.try_fix(&vt, value);
                         Self::ok_type(&vt)
                     }
                     None => vt,
@@ -4215,6 +4214,9 @@ impl<'p> Checker<'p> {
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
+        if let Some(t) = self.output_method(&rt, name, pos, args) {
+            return t;
+        }
         if let Some(t) = self.ptr_method(&rt, name, pos, args, expect) {
             return t;
         }
@@ -4836,7 +4838,7 @@ impl<'p> Checker<'p> {
     }
 
     /// Which types support which operators (type.num.5, type.str.3,
-    /// trait.op.1, trait.op.3, expr.cmp.1, trait.std.1-2).
+    /// trait.op.1, trait.op.2, trait.op.3, expr.cmp.1, trait.std.1-2).
     fn operator(&mut self, op: BinOp, lt: &Ty, rt: &Ty, pos: Pos) -> Ty {
         let sym = op.symbol();
         let fail = if op.is_arithmetic() { Ty::Err } else { Ty::Bool };
@@ -5329,14 +5331,16 @@ impl<'p> Checker<'p> {
                     .filter(|(_, c)| !**c)
                     .map(|(v, _)| v.name.as_str())
                     .collect();
-                self.diags.push(
-                    Diagnostic::warning(
-                        "expr.match.3",
+                if !self.allow_wildcards {
+                    self.diags.push(
+                        Diagnostic::warning(
+                            "expr.match.3",
                         *pos,
-                        format!("`_` covers {}, so a variant added later won't be flagged here", list_names(&hidden)),
-                    )
-                    .help("list the variants instead of `_`"),
-                );
+                            format!("`_` covers {}, so a variant added later won't be flagged here", list_names(&hidden)),
+                        )
+                        .help("list the variants instead of `_`, or mark the function `@allow(\"expr.match.3\")`"),
+                    );
+                }
                 *wildcard = true;
                 Vec::new()
             }

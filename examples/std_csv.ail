@@ -1,0 +1,16 @@
+## std.csv in an agent task: read a sales export with quoted fields, keep the
+## rows that sold more than 10 units, and write them back as CSV.
+##   ./ail run examples/std_csv.ail
+
+use std.csv
+
+fn main() !
+    text := "region,product,units\nnorth,\"bolts, steel\",24\nsouth,washers,5\nnorth,nuts,11\neast,\"gear \"\"XL\"\"\",12\n"
+    recs := csv.records(text)?
+    mut big := []
+    for r in recs
+        units := r["units"].to_int() else 0
+        if units > 10
+            big.push(r)
+    print(csv.write_records(["region", "product", "units"], big))
+    print("{big.len()} of {recs.len()} rows")

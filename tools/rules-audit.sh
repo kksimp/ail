@@ -3,16 +3,23 @@
 #
 #   tools/rules-audit.sh
 #
-# Checks four things and exits 1 when any is not empty:
+# Checks six things and exits 1 when any is not empty:
 #   1. cited but not in the spec: a rule ID named in a comment or a string
 #      literal of bootstrap/src or compiler/ that docs/spec/ does not define;
 #   2. spec rules never cited: a rule in docs/spec/ that no comment or string
-#      literal in bootstrap/src or compiler/ names (`[removed in ...]` rules
-#      are skipped; they stay in place by the spec README, rule 2);
+#      literal in bootstrap/src or compiler/ names (`[removed in ...]`
+#      rules are skipped; they stay in place by the spec README, rule 2;
+#      `[definitional]` rules describe the language and need no code);
 #   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
 #      literal (a diagnostic's rule) that `ail explain` cannot explain;
 #   4. `ail explain` entries with no example: a rule whose explanation has no
-#      `example` (checked through `ail explain RULE --json`).
+#      `example` (checked through `ail explain RULE --json`);
+#   5. std functions with no spec mention: a function in the MODULES table of
+#      bootstrap/src/stdlib.rs that docs/spec/ never names (tools/card-spec-audit.py,
+#      ADR 0698);
+#   6. test cases: duplicate programs (same program modulo names, same
+#      companion files) and diagnostic cases with no `.rules` file
+#      (tools/cases-audit.py, ADR 0725).
 #
 # Ranges such as `eff.cap.4-5` count as citations of each ID in the range.
 # Self-setting-up (ADR 0071): the first `./ail explain` builds the bootstrap
@@ -60,11 +67,15 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
             spec.setdefault(m.group(1), path.name)
             if "[removed in" in line:
                 removed.add(m.group(1))
+            # `[definitional]`: a rule that describes the language, not a behaviour the code has to implement.
+            if "[definitional]" in line:
+                removed.add(m.group(1))
 
 # 2. Citations in code: comments name rules, string literals emit them.
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
-sources = list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "compiler").rglob("*.ail"))
+sources = (list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail"))
+           + [root / "bootstrap" / "tests" / "explain_coverage.rs"] + list((root / "compiler").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -76,6 +87,8 @@ for path in sources:
             for m in RULE.finditer(comment):
                 for rule in expand(m):
                     cited.setdefault(rule, set()).add(rel)
+        if path.name == "explain_coverage.rs":
+            continue  # a test whose string literals are deliberately bad rule IDs; its comments are read above
         for m in QUOTED.finditer(line):
             cited.setdefault(m.group(1), set()).add(rel)
             emitted.setdefault(m.group(1), set()).add(rel)
@@ -111,9 +124,23 @@ report(
 no_example = []
 for rule in sorted(explained):
     out = subprocess.run([str(ail), "explain", rule, "--json"], capture_output=True, text=True, check=True).stdout
-    if json.loads(out).get("example") in (None, ""):
+    entry = json.loads(out)
+    # A worked example (error=RULE, printed as `rejected`) replaces the nearest
+    # plain example in the JSON, so both count (ADR 0670).
+    if entry.get("example") in (None, "") and entry.get("rejected") in (None, ""):
         no_example.append(rule)
 report("4. `ail explain` entries with no example", [f"{r}  ({spec.get(r, '?')})" for r in no_example])
+
+# 5. The std functions against the spec (ADR 0698).
+audit = subprocess.run(
+    [sys.executable, "-I", str(root / "tools" / "card-spec-audit.py"), str(root)],
+    capture_output=True, text=True, check=False,
+)
+report("5. std functions with no spec mention", [l.removeprefix("no spec mention: ") for l in audit.stdout.splitlines() if l.startswith("no spec mention: ")])
+
+# 6. The test cases (ADR 0725): duplicates and missing .rules.
+cases = subprocess.run([sys.executable, "-I", str(root / "tools" / "cases-audit.py"), str(root)], capture_output=True, text=True, check=False)
+report("6. test cases: duplicates or missing .rules", [l.strip() for l in cases.stdout.splitlines()[1:]])
 
 print(f"rules in spec: {len(spec)}; explained: {len(explained)}; findings: {problems}")
 sys.exit(1 if problems else 0)

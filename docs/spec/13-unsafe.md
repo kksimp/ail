@@ -61,8 +61,38 @@ fn main()
 
 *(ADR 0106)*
 
+```ail error=unsafe.op.1
+use std.mem
+
+fn main()
+    xs := mem.alloc(4, 0)
+    print("ok")
+```
+
+```ail
+use std.mem
+
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0)
+        print("ok")
+```
+
 **unsafe.op.2** — Creating or copying a raw pointer value is not an unsafe
 operation. *(ADR 0106)*
+
+```ail rules=unsafe.op.2
+use std.mem
+
+fn null_ptr() *u8
+    unsafe
+        return mem.null()
+
+fn main()
+    q := null_ptr()
+    r := q
+    print(r.is_null())
+```
 
 ## Raw pointers and memory
 

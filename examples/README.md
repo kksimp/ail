@@ -41,6 +41,11 @@ with `./ail fmt`.
 | `matrix.ail` | Agent-style matrix script: integer matrix product, transpose and row sums with `std.tensor`. |
 | `backup.ail` | Agent-style backup check: archive a config directory with system `tar`, list it, remove it. |
 | `csv2json.ail` | Agent-style converter: the sales CSV as a JSON array, numbers as JSON numbers. |
+| `std_csv.ail` | `std.csv`: read a sales export with quoted fields, filter rows, write them back as CSV. |
+| `std_args.ail` | `std.args`: a switch, an option, a positional and the rest of the words, with generated usage. |
+| `std_log.ail` | `std.log`: leveled messages on standard error, filtered by `LOG_LEVEL`. |
+| `std_math.ail` | `std.math` float methods: distances, a root-mean-square, decibels and an angle. |
+| `std_regex_groups.ail` | `regex.group_all`: one group's text from every match. |
 | `hexdump.ail` | Agent-style byte inspector: a file as offset-addressed hex rows of 16 bytes. |
 | `logwatch.ail` | Agent-style log watcher: pull `code=` and `user=` out of each ERROR line. |
 | `perms.ail` | Agent-style permission checker: a Unix mode as one number, each permission a bit (`bit_and`). |

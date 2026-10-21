@@ -34,3 +34,8 @@ Each data argument now accepts `bytes` or `str` (checker rule `std.hash.1`); dig
 
 - When `bytes` merges, the parameters widen to `str | bytes` and a `digest` variant returning `bytes` can be added; no call changes meaning.
 - SHA-256 runs at about 160 MB/s in software (SHA-NI and ARMv8 SHA2 instructions are a follow-up).
+
+## Rejected alternatives
+
+- Waiting for `bytes` before hashing (option B): rejected because it would block the lane and the drag-race programs that hash text. The `bytes` overloads were added later.
+- Digests as `List[int]` (option C): rejected because 32 to 64 list elements cost more to print or compare than hex, which is the form every tool prints.

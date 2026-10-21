@@ -271,8 +271,51 @@ known enum type, its variants MAY be written without qualification
 (`Circle(r)`). Elsewhere they MUST be qualified with the enum name
 (`Shape.Circle(r)`). *(ADR 0057)*
 
+```ail error=type.enum.3
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    c := Circle(2)
+    print(area(c))
+```
+
+```ail
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Circle(2)))
+```
+
 **type.enum.4** — The canonical form omits the qualification wherever
 `type.enum.3` permits it. *(ADR 0057)*
+
+```ail rules=type.enum.4
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Shape.Circle(2)))
+```
 
 **type.enum.5** — An enum's variant names MUST be distinct. *(ADR 0117)*
 
@@ -280,9 +323,23 @@ known enum type, its variants MAY be written without qualification
 (`type.struct.3–4`, `type.struct.7`): `Circle(r: 1.0)`, or `Circle(1.0)`.
 *(ADR 0123, ADR 0142)*
 
+```ail rules=type.enum.6
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Rect(w: 2, h: 3)))
+```
+
 ## Optional types
 
-**type.opt.1** — AIL has no null value. *(ADR 0048)*
+**type.opt.1** — [definitional] AIL has no null value. *(ADR 0048)*
 
 **type.opt.2** — `T?` denotes an optional value of type `T`. It is exactly
 equivalent to `Option[T]`. *(ADR 0048)*
@@ -403,6 +460,11 @@ fn half(n int) int?
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 
+```ail rules=type.bool.1
+fn main()
+    print(true and not false)
+```
+
 ## Strings and characters
 
 **type.str.1** — `str` is the type of immutable UTF-8 text. `char` is the type
@@ -497,6 +559,18 @@ fn main()
     print("[{"  x ".trim_end()}]")          # [  x]
     print("abababa".count("aba"))           # 2
     print("a/b/c".rfind("/"))               # 3
+```
+
+**type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
+
+**type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
+*(ADR 0630)*
+
+```ail rules=type.str.19,type.coll.20
+fn main()
+    print("".is_empty())                    # true
+    print([1].is_empty())                   # false
+    print({"a": 1}.is_empty())              # false
 ```
 
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index

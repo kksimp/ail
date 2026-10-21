@@ -1,0 +1,49 @@
+# compiler: ast
+
+## ast
+```
+pub struct ast.Pos  ## A source position: line and column, from 1.
+pub struct ast.Ident  ## A name and where it is written.
+pub struct ast.Program
+pub struct ast.SourceFile  ## One source file of a package: its lines are numbered from `base + 1`.
+pub struct ast.Grant  ## `caps LIST` on a manifest line (eff.cap.4-5).
+pub struct ast.Generated  ## The methods a derive generator wrote for one `impl` (ct.gen.1-4).
+pub struct ast.Use  ## `use a.b.c`, or `use a.b.c as d` (mod.use.1).
+pub struct ast.ConstDecl  ## `NAME := expr` at the top level (mod.const.1).
+pub struct ast.GenericParam  ## `T`, or `T Bound + Bound` (gen.decl.1, gen.bound.1).
+pub struct ast.TraitDecl
+pub struct ast.ImplDecl
+pub struct ast.StructDecl
+pub struct ast.Field
+pub struct ast.EnumDecl
+pub struct ast.Variant
+pub struct ast.FnDecl
+pub struct ast.Extern  ## Where an `extern c fn` lives; `none` is the process itself.
+pub struct ast.Contract  ## `requires COND`, `ensures COND` or `invariant COND` (contract.decl.1-2).
+pub struct ast.Old  ## An `old(e)` of an `ensures`: the hidden name it reads and `e`.
+pub struct ast.Attr  ## `@name` or `@name("arg")` (gram.attr.1-3).
+pub enum ast.Within  ## Where a function is declared.
+pub struct ast.Owner  ## The type a method belongs to, or a trait's functions' trait.
+pub struct ast.Receiver  ## `self`, `mut self` or `move self`.
+pub struct ast.Param
+pub struct ast.TypeRef  ## A type as written.
+pub enum ast.TypeShape
+pub enum ast.Stmt
+pub enum ast.Else  ## The `else` part of `x := e else ...` (err.else.1-3).
+pub enum ast.BinOp
+pub enum ast.UnOp
+pub enum ast.Expr
+pub struct ast.MapEntry
+pub struct ast.Branch  ## One `if`/`elif` condition and its block.
+pub enum ast.CompKind
+pub struct ast.CompFor
+pub enum ast.Cond  ## A `bool` condition, or a binding `name := e` (expr.if.5).
+pub enum ast.InterpPart
+pub struct ast.FormatSpec  ## `{expr:spec}` (lex.str.7).
+pub struct ast.Arg  ## A call argument (own.param.2, own.move.2, type.struct.3, expr.key.1).
+pub struct ast.Arm
+pub enum ast.Pattern
+pub enum ast.Literal
+```
+
+trimmed to fit 2000 tokens (~782); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

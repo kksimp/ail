@@ -91,7 +91,10 @@ pub fn quote(field str) str
 pub fn write(rows List[List[str]]) str
     mut out := ""
     for row in rows
-        line := [quote(f) for f in row].join(",")
+        mut line := [quote(f) for f in row].join(",")
+        # A row of one empty field must not be a blank line, which `parse` skips (std.csv.3).
+        if line == ""
+            line = "\"\""
         out = "{out}{line}\n"
     out
 

@@ -253,10 +253,10 @@ fn os_str_cmp(a int, b int) int
         x := load8(a + 16 + i)
         y := load8(b + 16 + i)
         if x != y
-            return if x < y then - 1 else 1
+            return if x < y then -1 else 1
     if na == nb
         return 0
-    if na < nb then - 1 else 1
+    if na < nb then -1 else 1
 
 # ---- std.fs ----
 

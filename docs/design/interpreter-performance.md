@@ -391,3 +391,39 @@ arguments no longer take generic paths or hand off to the walker. Geometric
 mean over the eight compute programs: 1.85x of CPython before, 1.33x after
 (nbody 2.59x to 1.31x, mandelbrot 3.07x to 1.08x, binarytrees 3.80x to 2.70x,
 sieve 2.56x to 1.94x); the table is in the ADR. Agent programs are unchanged.
+
+[ADR 0619](../decisions/0619-bytecode-calls-loops-and-fusion.md) cuts the
+per-instruction and per-call overhead (lean calls, loop shapes, fused
+`push`/`len`, `a[i][k]`, `xs[i+k]`, op-assign and numeric methods, cold arms
+moved out of the dispatch loop): geometric mean 1.87x of CPython at the batch
+head, 0.95x now (nbody 0.97x, mandelbrot 0.92x, fannkuch 0.94x, spectralnorm
+0.74x, collatz 0.38x, sieve 1.13x, matmul 1.31x, binarytrees 1.92x). What is
+left is the cost of reading a local: the walker's environment is a vector of
+(name, value) pairs behind a pointer, so every local read reloads its length
+and bounds-checks it. A frame with locals in the register file, or audited
+unchecked access (about 12% fewer instructions, measured), would remove that.
+
+## examples/build: the day-1 regression did not reproduce (lane 240)
+
+The day-1 report had `examples/build` at 0.375 s on main d5ecde9 and 0.734 s on
+the batch head 7fb2a39. Measured on the shared box in this lane:
+
+| binary | wall (median of 5) | user CPU (median of 5) | bytecode counters |
+|---|---:|---:|---|
+| d5ecde9 | 0.39 s, then 1.13 s later in the session | 0.88–0.95 s | 3,743 instructions, 254 hand-offs, 93.2% native |
+| 00ecdbc7 | — | 0.89–0.92 s | not run |
+| 7fb2a39 (batch head) | 0.70 s, then 1.15 s later | 0.87–0.93 s | 3,743 instructions, 254 hand-offs, 93.2% native |
+
+- The wall-clock numbers moved by about 3x within one session with no code change,
+  so they reflect load on the shared machine. Real and user time were 2.3:1 early in
+  the session and about 1:1 later, which is load, not code.
+- User CPU time differs by about 2% between main and the head, inside the spread.
+- Bytecode counters are identical, so the example does the same work at both commits.
+- A bisect over the 89 first-parent merges gave no valid culprit: 8be8cee0 and
+  192f321a do not build (an unclosed brace in `parser.rs`, fixed at 00ecdbc7), so
+  the search had no buildable good/bad pair below index 2. That result is not used.
+
+To settle it, time `examples/build.ail` on a quiet machine (the designer's Mac gate,
+or `tools/bench/run.sh` with wall and user time both recorded), at main and at the
+batch head, and compare the counters. If the 2x returns on a quiet machine, bisect
+again with `git bisect` on buildable commits only.

@@ -31,3 +31,8 @@
   Clang may be used as a differential-testing oracle for layouts (ADR 0010).
 - How header search paths and per-target headers are configured comes with
   the build system and cross-compilation (ADR 0031).
+
+## Rejected alternatives
+
+- Manual declarations only: signatures drift and contain mistakes, and the AI API (brief section 17) would lack real types and docs. Rejected.
+- Header import only: blocks quick one-off declarations, so manual `extern c fn` stays.
