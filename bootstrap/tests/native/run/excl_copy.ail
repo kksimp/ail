@@ -35,3 +35,20 @@ fn main()
     print(t.left.n)
     mut y := Box(n: 2, tag: "y")
     print(pair(y, mut y).n)
+    recv_cases()
+
+fn Box.peek(self, mut other Box) int
+    other.n += 100
+    self.n
+
+fn Box.fold(mut self, other Box) int
+    self.n += 7
+    other.n
+
+fn recv_cases()
+    mut b := Box(n: 1, tag: "b")
+    print(b.peek(mut b))
+    print(b.n)
+    mut c := Box(n: 1, tag: "c")
+    print(c.fold(c))
+    print(c.n)

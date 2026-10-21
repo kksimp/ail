@@ -46,3 +46,49 @@ fn Lower.shield_arg(mut self, args List[ast.Arg], i int, v Val) int
         if overlaps_mut(args, i)
             return copy_value(v)
     v.id
+
+## A method call's receiver, as `struct_call` sees it.
+struct Recv
+    path List[str]
+    mutable bool
+
+## Record that `f`, declared as `key`, takes `mut self`.
+fn Lower.note_mut_self(mut self, f ast.FnDecl, key str)
+    if r := f.receiver
+        if r.mutable
+            traits.mut_self.add(key)
+
+## Note the receiver expression of the call of method `key` about to be lowered.
+fn Lower.set_receiver(mut self, recv ast.Expr, key str)
+    traits.recv_path = place_path(recv) else []
+    traits.recv_mut = traits.mut_self.contains(key)
+
+## The noted receiver, cleared so a call nested in an argument doesn't see it.
+fn Lower.take_receiver(mut self) Recv
+    r := Recv(path: traits.recv_path, mutable: traits.recv_mut)
+    traits.recv_path = []
+    traits.recv_mut = false
+    r
+
+## The receiver's value, copied first when it is read-only and a `mut`
+## argument may overlap it.
+fn Lower.shield_recv(mut self, rcv Recv, args List[ast.Arg], v Val) int
+    if rcv.mutable or rcv.path.len() == 0
+        return v.id
+    if needs_copy(v.ty) or v.ty.is_coll()
+        for a in args
+            if a.mutable
+                if theirs := place_path(a.value)
+                    if paths_overlap(rcv.path, theirs)
+                        return copy_value(v)
+    v.id
+
+## `shield_arg` for a call with a receiver: a read-only argument is also
+## copied when it may overlap a `mut self` receiver.
+fn Lower.shield_arg_on(mut self, rcv Recv, args List[ast.Arg], i int, v Val) int
+    if rcv.mutable and rcv.path.len() > 0 and not args[i].mutable
+        if needs_copy(v.ty) or v.ty.is_coll()
+            if mine := place_path(args[i].value)
+                if paths_overlap(rcv.path, mine)
+                    return copy_value(v)
+    shield_arg(args, i, v)

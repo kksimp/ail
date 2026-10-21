@@ -82,6 +82,9 @@ pub fn mir.is_wait_call(e ast.Expr) bool
 pub struct mir.Traits
     impls Map[str, List[str]]
     dispatch Map[str, List[str]]
+    mut_self Set[str]
+    recv_path List[str]
+    recv_mut bool
 pub fn mir.new_traits() mir.Traits
 pub enum mir.Ty
     Int
@@ -190,4 +193,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1913); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1931); dropped: private items, doc comments

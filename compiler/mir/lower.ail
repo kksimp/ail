@@ -505,6 +505,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             Ty.Unknown
         rty = t
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+    note_mut_self(f, fn_key(f, pre))
     if can_fail
         if r := f.ret
             fn_errs[fn_key(f, pre)] = error_ty_of(r)
@@ -1840,8 +1841,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     if r.ty.is_tensor()
         return lower_tensor_method(r, name, npos, args)
     if s := struct_name(r.ty)
+        set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)
+        set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
     if t := any_of(r.ty)
         return any_call(t, r, name, args, npos)

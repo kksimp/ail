@@ -203,6 +203,7 @@ fn Lower.self_value(mut self) int
 
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    rcv := take_receiver()
     if not sigs.contains(key)
         instance_method(key)
     if bad.contains(key)
@@ -218,7 +219,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv
-        vs.push(r.id)
+        vs.push(shield_recv(rcv, args, r))
     if args.len() + vs.len() != sig.params.len()
         return unsupported(
             pos,
@@ -230,7 +231,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
             return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
         v := lower_value(a.value, t)?
-        vs.push(shield_arg(args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
+        vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
     Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
 
