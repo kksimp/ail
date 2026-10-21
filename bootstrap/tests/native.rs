@@ -300,3 +300,25 @@ fn run_limits_stop_arm64_programs_under_qemu() {
         None => eprintln!("skipped: no qemu-aarch64 emulator"),
     }
 }
+
+/// Every runtime source parses as AIL (gram.*): the self-hosted pipeline
+/// compiles `compiler/rt/native` on its own, and `ail fmt --check DIR` skips
+/// files with syntax errors, so a foreign token there (`&` for `bit_and`)
+/// used to vanish silently and drop the rest of its statement from the
+/// native code. Naming each file makes `fmt --check` report it (fmt.safe).
+#[test]
+fn runtime_sources_parse() {
+    let dir = root().join("compiler/rt/native");
+    let mut bad = Vec::new();
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().is_some_and(|x| x == "ail") {
+            let out = Command::new(env!("CARGO_BIN_EXE_ail")).args(["fmt", "--check"]).arg(&p).output().unwrap();
+            if out.status.code() == Some(2) {
+                bad.push(format!("{}: {}", p.display(), String::from_utf8_lossy(&out.stderr)));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "runtime sources with syntax errors:\n{}", bad.join("\n"));
+}
+

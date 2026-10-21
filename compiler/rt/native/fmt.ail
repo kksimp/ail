@@ -31,7 +31,7 @@ fn sb_reset()
 fn sb_grow()
     cap := load64(global(SB_CAP))
     ncap := if cap == 0 then 256 else cap * 2
-    p := alloc(ncap, KIND_BYTES)
+    p := alloc_raw(ncap, KIND_BYTES)
     n := load64(global(SB_LEN))
     if n > 0
         copy_bytes(p, load64(global(SB_PTR)), n)
