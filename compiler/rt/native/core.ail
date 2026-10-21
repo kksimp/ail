@@ -69,7 +69,7 @@ fn init(argc int, argv int)
 ## How much of the main stack a program may use: its size limit
 ## (`RLIMIT_STACK`, 3) less the reserve, capped at 1 GiB.
 fn stack_use() int
-    p := alloc(16)
+    p := alloc(16, KIND_ATOMIC)
     t := target()
     if t == 2
         syscall(194, 3, p, 0, 0, 0, 0)
