@@ -194,6 +194,10 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
             Map(k, v) =>
                 kt = k
                 vt = v
+            Set(_) =>
+                # `{}` is the empty set where a set is expected (type.coll.13).
+                if entries.len() == 0
+                    return lower_set_lit([], pos, want)
             _ => kt = kt
     if entries.len() == 0 and kt.is_unknown()
         return pending_table()
