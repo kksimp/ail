@@ -1,0 +1,6 @@
+# std.tensor.7: matmul needs two 2-D tensors.
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0])
+    b := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    print(b.matmul(b))
+    print(a.matmul(b))

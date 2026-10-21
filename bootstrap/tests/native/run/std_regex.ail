@@ -1,0 +1,37 @@
+## std.regex natively (ADR 0819): the engine is an AIL module compiled with the program.
+use std.regex
+
+fn show(pat str, text str)
+    re := regex.compile(pat) else err
+        print("{pat}: {err.kind} at {err.at} ({err.rule})")
+        return
+    print("{pat}: {regex.is_match(re, text)}")
+    m := regex.find(re, text) else
+        print("  no match")
+        return
+    print("  {m.start}..{m.end} {m.text}")
+
+fn main() !
+    show("a+b", "xaab")
+    show(r"\d{4}-\d\d", "on 2026-10-21 or 2027-01-02")
+    show("(?i)hello", "Say HeLLo")
+    show("^abc$", "abc")
+    show(r"\bfox\b", "a fox jumps")
+    show("é+", "caféé")
+    show("(a", "x")
+    show("a**", "x")
+    show(r"\p{Lu}\p{Ll}+", "ab Cde")
+    show("a|ab", "ab")
+    digits := regex.compile("[0-9]+")?
+    for m in regex.find_all(digits, "a1 b22 c333")
+        print("{m.start}-{m.end}={m.text}")
+    print(regex.replace(digits, "a1 b22 c333", "<$0>"))
+    print(regex.replace_first(digits, "a1 b22 c333", "#"))
+    pair := regex.compile(r"(?P<k>\w+)=(?P<v>\d+)")?
+    print(regex.replace(pair, "x=1, yy=22", r"${v}:$k"))
+    print(regex.group_all(pair, "x=1, yy=22", 2))
+    print(regex.split(regex.compile(r"\s*,\s*")?, "a , b,c ,d"))
+    print(regex.escape("1+1=2 (really?)"))
+    lazy := regex.compile("<.+?>")?
+    print(regex.find_all(lazy, "<a><b>").len())
+    print(pair.is_match("k=9"))

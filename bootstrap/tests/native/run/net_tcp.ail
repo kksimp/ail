@@ -1,0 +1,58 @@
+# std.net.12: raw TCP over loopback in one task. Everything printed is the
+# same under `ail run`; ports and peers vary, so they are not printed.
+use std.net
+
+fn port_of(addr str) int
+    parts := addr.split(":")
+    n := parts[1].to_int() else 0
+    n
+
+fn connect_kind(host str, port int) str
+    c := net.connect(host, port) else err
+        return err.kind
+    c.close()
+    "ok"
+
+fn listen_kind(addr str) str
+    l := net.listen(addr) else err
+        return err.kind
+    l.close()
+    "ok"
+
+fn main() ! net.NetError
+    l := net.listen("127.0.0.1:0")?
+    port := port_of(l.addr())
+    print(l.addr().starts_with("127.0.0.1:"))
+    c := net.connect("127.0.0.1", port)?
+    s := l.accept()?
+    c.write("hello\r\nworld\nrest")?
+    first := s.read_line()? else "none"
+    print(first)
+    second := s.read_line()? else "none"
+    print(second)
+    print(s.read(100)?)
+    s.write("héllo wörld")?
+    # Three bytes at a time never split a character.
+    print(c.read(3)?)
+    print(c.read(4)?)
+    print(c.read(100)?)
+    # A read with nothing to read times out.
+    c.set_timeout(30)
+    t := c.read(10) else err
+        print("read: {err.kind}")
+        ""
+    # The end of the stream.
+    s.close()
+    print(c.read(10)?.len())
+    d := c.read_line()? else "end"
+    print(d)
+    c.close()
+    c.write("x") else err
+        print("write: {err.kind}")
+    # Failures.
+    print("connect: {connect_kind("127.0.0.1", 1)}")
+    print("listen: {listen_kind("127.0.0.1:{port}")}")
+    print("listen: {listen_kind("nonsense")}")
+    print("connect: {connect_kind("no-such-host.invalid", 80)}")
+    print("connect: {connect_kind("localhost", 1)}")
+    l.close()

@@ -444,6 +444,65 @@ fn main()
         b""
     print(data.len())
 ```
+**std.compress.9** — DEFLATE failures: `inflate` (and the DEFLATE part of
+`gunzip`, `unzlib` and `unzip`) fails with kind `corrupt` and exactly one of
+these messages: `unexpected end of compressed data`, `invalid block type`,
+`stored block length check failed`, `too many length or distance codes`,
+`over-subscribed Huffman code`, `invalid Huffman code`, `repeat with no
+previous length`, `code length repeat overruns the table`, `block has no
+end-of-block code`, `invalid length symbol`, `invalid distance symbol`,
+`distance reaches before the start of the output`, or `extra bytes after the
+end of the compressed data`. *(ADR 0784)*
+
+```ail rules=std.compress.9
+use std.compress
+
+fn main()
+    a := compress.inflate(b"\x07") else err
+        print("{err.kind}: {err.message}")   # corrupt: invalid block type
+        b""
+    b := compress.inflate(b"\x01") else err
+        print("{err.kind}: {err.message}")   # corrupt: unexpected end of compressed data
+        b""
+    print(a.len() + b.len())
+```
+
+**std.compress.10** — Wrapper failures: besides `std.compress.8`, `gunzip`
+fails with `corrupt` and `unknown gzip compression method`, `reserved gzip
+flags set`, `truncated gzip header` or `truncated gzip trailer`, and with
+`checksum` and `gzip CRC-32 mismatch` or `gzip size mismatch`. `unzlib`
+fails with `corrupt` and `not zlib data` or `truncated zlib trailer`, with
+`checksum` and `zlib Adler-32 mismatch`, and with `unsupported` and `zlib
+preset dictionaries are not supported`. *(ADR 0784)*
+
+```ail rules=std.compress.10
+use std.compress
+
+fn main()
+    z := compress.unzlib(b"x\x9c\x03\x00\x00\x00\x00\x02") else err
+        print("{err.kind}: {err.message}")   # checksum: zlib Adler-32 mismatch
+        b""
+    print(z.len())
+```
+
+**std.compress.11** — Zip failures: `unzip` fails with `corrupt` and `not a
+zip archive`, `truncated zip data`, `bad zip central directory`, `bad zip
+local header` or `zip name is not UTF-8`; with `unsafe_path` and `unsafe
+name in archive: NAME` (`std.compress.5`); with `unsupported` and
+`encrypted zip entries are not supported` or `zip method N is not
+supported`; with `checksum` and `zip CRC-32 or size mismatch in NAME`; and
+with `too_big` and `output exceeds the size limit`, `archive expands past
+the size limit`, `more than 65535 files; zip64 is not supported` or `over 4
+GiB; zip64 is not supported` (`std.compress.4`). *(ADR 0784)*
+
+```ail norun rules=std.compress.11
+use std.compress
+
+fn main()
+    compress.unzip("notes.txt", "out") else err
+        print("{err.kind}: {err.message}")   # corrupt: not a zip archive
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
@@ -987,6 +1046,23 @@ and decodes nothing. *(ADR 0717)*
 **std.net.27** — connection, DNS and timeout failures: A host that doesn't resolve, or an address with no address, fails with kind `not_found`; a refused or reset connection fails with `refused` or `closed`; a request past `connect_ms` or `total_ms` fails with `timed_out`. A `timeout_ms` or `max_redirects` out of range traps. *(ADR 0637)*
 
 **std.net.28** — HTTP shape failures: more than `max_redirects` redirects fails with kind `protocol`, and a body that does not decode under its `Content-Encoding` fails with kind `protocol` (std.net.26). *(ADR 0717)*
+
+**std.net.29** — Request input failures: a URL that is not `http://` or `https://HOST[:PORT][/PATH]` fails with kind `bad_url`; a method that is not an HTTP token, or a header name or value that `std.net.6` forbids, fails with kind `bad_request`. Both fail before any connection is opened. *(ADR 0784)*
+
+```ail rules=std.net.29
+use std.net
+
+fn main()
+    a := net.get("ftp://example.com") else err
+        print(err.kind)   # bad_url
+        net.Response(status: 0, body: "", headers: {})
+    mut o := net.options()
+    o.headers["a b"] = "x"
+    b := net.request("GET", "http://localhost:1/", o) else err
+        print(err.kind)   # bad_request
+        net.Response(status: 0, body: "", headers: {})
+    print(a.status + b.status)
+```
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
@@ -1964,8 +2040,9 @@ compile-time error. *(ADR 0523)*
 (`+ - * /`, unary `-`, and `relu()`, `sigmoid()`, `tanh()` with no arguments)
 over names and float literals may run as one pass over the elements. The
 result is the same as the unfused calls, element by element, including traps
-and NaN, and the tree walker and the bytecode tier agree. A chain whose
-inputs don't share one shape, or that has a non-`float` input, runs unfused.
+and NaN, and the tree walker and the bytecode tier agree. A chain over
+`f32` tensors runs the same operations at `f32` (std.tensor.21). A chain whose
+inputs don't share one shape, or that has an `int` input, runs unfused.
 Fusion is not visible in the program. *(ADR 0524)*
 
 ```ail rules=std.tensor.20

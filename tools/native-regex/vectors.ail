@@ -1,0 +1,77 @@
+## Runs a vector file through std.regex and prints what each line gives, so
+## `ail run` and a native build can be compared byte for byte (lane 232).
+## The file is `bootstrap/tests/regex/vectors.txt` or a fuzz file in the same
+## format (see tools/native-regex/README.md):
+##   ail run tools/native-regex/vectors.ail FILE
+use std.regex
+
+## The text of a vector with its escapes (\n \t \r \f \v \a \\) resolved.
+fn unescape(s str) str
+    mut out := ""
+    cs := s.chars()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if c != '\\' or i >= cs.len()
+            out = "{out}{c}"
+            continue
+        e := cs[i]
+        i += 1
+        if e == 'n'
+            out = "{out}\n"
+        elif e == 't'
+            out = "{out}\t"
+        elif e == 'r'
+            out = "{out}\r"
+        elif e == 'f'
+            out = "{out}\u{c}"
+        elif e == 'v'
+            out = "{out}\u{b}"
+        elif e == 'a'
+            out = "{out}\u{7}"
+        else
+            out = "{out}{e}"
+    out
+
+## One line of the output for the search form `PATTERN TEXT RESULT`: the span and
+## its text. Capture groups are compared through `REPLACE` templates until
+## `regex.captures` builds natively (`List[str?]` fields).
+fn search(re regex.Regex, text str) str
+    found := regex.find(re, text) else
+        return "-"
+    "{found.start}-{found.end}|{found.text}"
+
+fn replace_line(first bool, re regex.Regex, text str, rep str) str
+    if first
+        return regex.replace_first(re, text, rep)
+    regex.replace(re, text, rep)
+
+fn main() !
+    file := env.args().first() else "bootstrap/tests/regex/vectors.txt"
+    for line in fs.read_text(file)?.lines()
+        if line == "" or line.starts_with("#")
+            continue
+        f := line.split("\t")
+        kind := f[0]
+        pat := if kind == "ALL"
+            or kind == "REPLACE"
+            or kind == "REPLACE_FIRST"
+            or kind == "SPLIT"
+            or kind == "ERR" then f[1] else f[0]
+        re := regex.compile(pat) else err
+            print("{kind} {pat} -> compile: {err.kind} {err.at} {err.rule} {err.message}")
+            continue
+        if kind == "ERR"
+            print("ERR {pat} -> compiled")
+        elif kind == "ALL"
+            text := unescape(f[2])
+            spans := [m.start for m in regex.find_all(re, text)]
+            ends := [m.end for m in regex.find_all(re, text)]
+            print("ALL {f[1]} {f[2]} -> {spans} {ends}")
+        elif kind == "REPLACE" or kind == "REPLACE_FIRST"
+            print("{kind} {f[1]} {f[2]} -> {replace_line(kind == "REPLACE_FIRST", re, unescape(f[2]), f[3])}")
+        elif kind == "SPLIT"
+            print("SPLIT {f[1]} {f[2]} -> {regex.split(re, unescape(f[2]))}")
+        else
+            print("{f[0]} {f[1]} -> {search(re, unescape(f[1]))}")

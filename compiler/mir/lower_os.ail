@@ -36,6 +36,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, true)
         "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
+        "fs.walk" => os_fn("rt.fs_walk", [s], Ty.List(s), true)
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
         "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
@@ -66,7 +67,7 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "net"]
         if is_module(recv, m)
             return m
     ""
@@ -76,6 +77,8 @@ fn Lower.os_fails(self, recv ast.Expr, name str) bool
     m := os_module(recv)
     if m == ""
         return false
+    if m == "net"
+        return net_module_fails(name)
     f := os_lookup(m, name) else return false
     f.fails
 
@@ -84,6 +87,8 @@ fn Lower.os_fails(self, recv ast.Expr, name str) bool
 fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
     if m == "io" and name == "eprint"
         return lower_eprint(args, npos)
+    if m == "net"
+        return lower_net_module(name, npos, args)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"

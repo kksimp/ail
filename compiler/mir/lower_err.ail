@@ -244,7 +244,12 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s := callee_sig(n) else return false
                     s.fails
                 _ => false
-        Method(recv, name, _, _) => os_fails(recv, name) or method_fails(recv, name)
+        Method(
+            recv,
+            name,
+            _,
+            _,
+        ) => os_fails(recv, name) or method_fails(recv, name) or net_fails(recv, name)
         _ => false
 
 ## The signature key of `x.name(...)` when `x` is an imported module or a local
@@ -266,7 +271,16 @@ fn Lower.method_returns_error(self, recv ast.Expr, name str) bool
     s := sigs.get(key) else return false
     returns_error(s)
 
+## Whether `x.name(...)` is a method of a `net.Conn` or `net.Listener` that
+## can fail.
+fn Lower.net_fails(self, recv ast.Expr, name str) bool
+    key := method_key(recv, name) else return false
+    net_method_fails(key)
+
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
+    if m := module_name(recv)
+        s := sigs.get("{m}.{name}") else return false
+        return s.fails
     key := method_key(recv, name) else return false
     s := sigs.get(key) else return false
     s.fails
@@ -462,6 +476,9 @@ fn Lower.lower_handle(mut self, value ast.Expr, other ast.Else)
 ## Record the names of the error structs and enums (err.decl.1). They are
 ## ordinary structs and enums; `err_msgs` marks them as error types.
 fn Lower.declare_errors(mut self, prog ast.Program)
+    err_msgs[IO_ERROR] = ""
+    err_msgs[PROC_ERROR] = ""
+    err_msgs[NET_ERROR] = ""
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""
@@ -580,7 +597,16 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
+            if os_fails(recv, name)
+                m := os_module(recv)
+                if m == "net"
+                    return Ty.Struct(NET_ERROR)
+                return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
+            if m := module_name(recv)
+                return fn_errs.get("{m}.{name}") else Ty.Unknown
             key := method_key(recv, name) else return Ty.Unknown
+            if net_method_fails(key)
+                return Ty.Struct(NET_ERROR)
             fn_errs.get(key) else Ty.Unknown
         _ => Ty.Unknown
 

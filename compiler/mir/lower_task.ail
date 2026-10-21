@@ -290,7 +290,7 @@ fn scan_block(mut sc ParScan, body List[ast.Stmt], depth int)
     for s in body
         scan_stmt(mut sc, s, depth)
 
-fn bump(mut m Map[str, int], key str)
+fn count_up(mut m Map[str, int], key str)
     mut n := 1
     if prev := m.get(key)
         n = prev + 1
@@ -310,7 +310,7 @@ fn scan_stmt(mut sc ParScan, s ast.Stmt, depth int)
                 Name(n, _) =>
                     sc.names.add(n)
                     if is_add(op) and depth == 0
-                        bump(mut sc.adds, n)
+                        count_up(mut sc.adds, n)
                     else
                         sc.other.add(n)
                 Index(r, i, _) =>
@@ -347,7 +347,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
         Int | Float | Bool | Str => return
         Name(n, _) =>
             sc.names.add(n)
-            bump(mut sc.reads, n)
+            count_up(mut sc.reads, n)
         Interp(parts, _) =>
             for p in parts
                 match p

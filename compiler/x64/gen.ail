@@ -44,7 +44,8 @@ struct Stub
     site int
     op str
     ## 1: the result overwrote `a`, which is result - b (an add); 2: result + b
-    ## (a sub). The stub undoes it before reporting.
+    ## (a sub); 3: the second operand was overwritten by a sum with the first,
+    ## a constant. The stub undoes it before reporting.
     undo int
 
 struct Gen
@@ -752,6 +753,22 @@ fn Gen.arith(mut self, i mir.Inst)
             stubs[stubs.len() - 1].undo = if i.op == "add" then 1 else 2
             a.jcc(CC_O, l)
         return
+    # An unchecked sum is one `lea`, whatever the result's register (it
+    # reads both operands before it writes).
+    if i.op == "add" and i.site < 0 and is_reg(loc[x])
+        if k := ky
+            a.lea(d, at(loc[x], k))
+            put_gpr(i.dst, d)
+            return
+        if is_reg(loc[y])
+            a.lea(d, at_index(loc[x], loc[y], 1, 0))
+            put_gpr(i.dst, d)
+            return
+    if i.op == "sub" and i.site < 0 and is_reg(loc[x])
+        if k := ky
+            a.lea(d, at(loc[x], 0 - k))
+            put_gpr(i.dst, d)
+            return
     # Into the result's register when that leaves `x` and `y` intact.
     mut r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
     # An unchecked `n * k` writes its result over `n`: `imul d, n, k` allows it.
@@ -759,6 +776,14 @@ fn Gen.arith(mut self, i mir.Inst)
         r = d
     # `3 * n`: the constant goes second; the stub still reports `x OP y`.
     kx := imm32(x)
+    # `1 + n` into `n`'s own register: the stub recovers `n` from the sum.
+    if ky == none and kx != none and i.op == "add" and d == loc[y]
+        a.alu_ri("add", d, kx else 0)
+        if i.site >= 0
+            l := stub(0, x, y, i.site, sym)
+            stubs[stubs.len() - 1].undo = 3
+            a.jcc(CC_O, l)
+        return
     if ky == none and kx != none and i.op != "sub"
         k := kx else 0
         if i.op == "mul"
@@ -1290,6 +1315,8 @@ fn Gen.gen_stubs(mut self)
             a.alu_rr("sub", RSI, RDX)
         elif s.undo == 2
             a.alu_rr("add", RSI, RDX)
+        elif s.undo == 3
+            a.alu_rr("sub", RDX, RSI)
         if s.kind == 3
             # The list's length.
             a.mov_rm(RDX, at(RDX, 0))
