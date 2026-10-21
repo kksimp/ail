@@ -89,6 +89,13 @@ type: a constant is an immutable value copied into the program. *(ADR 0225)*
 the program's text. It reaches no capability (`ct.const.2`), and map and set
 iteration follow insertion order (`type.map.1`, `type.map.5`). *(ADR 0226)*
 
+```ail rules=ct.eval.1
+LIMIT := 2 * 3
+
+fn main()
+    print(LIMIT)
+```
+
 **ct.eval.2** — Compile-time evaluation has exactly the semantics of run
 time, including overflow traps and float arithmetic. Because every target is
 64-bit and little-endian (`plat.endian.1`, `plat.ptr.*`), the value doesn't

@@ -18,8 +18,32 @@ take type parameters in brackets after their name: `fn largest[T Ord](...)`,
 (`Stack[int]`), except where `gen.method.1` and `gen.infer.1` allow them to be
 left out. *(ADR 0041, ADR 0128)*
 
+```ail rules=gen.decl.1
+fn pick[T Ord](a T, b T) T
+    a.max(b)
+
+fn main()
+    print(pick(1, 2))
+```
+
 **gen.decl.2** — A type parameter MUST NOT reuse the name of a type, a trait,
 or another type parameter in scope. *(ADR 0128)*
+
+```ail error=gen.decl.2
+struct Box[Box]
+    v int
+
+fn main()
+    print(1)
+```
+
+```ail
+struct Box[T]
+    v T
+
+fn main()
+    print(Box(v: 1).v)
+```
 
 ## Constraints
 
@@ -49,9 +73,37 @@ fn largest[T Ord](items List[T]) T
 constraints. The diagnostic names the type and the trait it doesn't
 implement. *(ADR 0129)*
 
+```ail error=gen.bound.3
+struct Foo
+    v int
+
+fn pick[T Ord](a T) T
+    a
+
+fn main()
+    print(pick[Foo](Foo(v: 1)).v)
+```
+
+```ail
+fn pick[T Ord](a T) T
+    a
+
+fn main()
+    print(pick[int](1))
+```
+
 **gen.bound.4** — The constraints declared on a generic type's parameters
 apply wherever the type is used, and are assumed in its methods and `impl`
 blocks. *(ADR 0128)*
+
+```ail rules=gen.bound.4
+struct Top[T Ord]
+    v T
+
+fn main()
+    t := Top(v: 3)
+    print(t.v)
+```
 
 ## Methods on generic types
 
@@ -88,9 +140,25 @@ the arguments and, failing that, from the expected type. If any remains
 unknown, it is a compile-time error, and the diagnostic SHOULD suggest
 explicit type arguments. *(ADR 0129)*
 
+```ail rules=gen.infer.1
+fn pick[T Ord](a T, b T) T
+    a.max(b)
+
+fn main()
+    print(pick(1, 2))
+```
+
 **gen.infer.2** — Explicit type arguments are written in brackets after the
 name of a generic function or type: `parse[int](s)`, `Stack[int].new()`,
 `Pair[int, str](first: 1, second: "a")`. *(ADR 0041, ADR 0129)*
+
+```ail rules=gen.infer.2
+fn pick[T Ord](a T, b T) T
+    a.max(b)
+
+fn main()
+    print(pick[int](1, 2))
+```
 
 ## Anonymous generic parameters
 
@@ -98,9 +166,45 @@ name of a generic function or type: `parse[int](s)`, `Stack[int].new()`,
 anonymous type parameter constrained by that trait: `fn draw(s Shape)` is
 equivalent to `fn draw[T Shape](s T)`. *(ADR 0078)*
 
+```ail rules=gen.anon.1
+trait Shape
+    fn area(self) float
+
+struct Sq
+    s float
+
+impl Shape for Sq
+    fn area(self) float
+        self.s
+
+fn draw(s Shape) float
+    s.area()
+
+fn main()
+    print(draw(Sq(s: 2.0)))
+```
+
 **gen.anon.2** — The canonical form uses the anonymous form when the type
 parameter would be referenced exactly once, and the named form otherwise.
 *(ADR 0078)*
+
+```ail rules=gen.anon.2
+trait Shape
+    fn area(self) float
+
+struct Sq
+    s float
+
+impl Shape for Sq
+    fn area(self) float
+        self.s
+
+fn draw(s Shape) float
+    s.area()
+
+fn main()
+    print(draw(Sq(s: 2.0)))
+```
 
 ## Compilation
 
@@ -108,3 +212,12 @@ parameter would be referenced exactly once, and the named form otherwise.
 instance is specialised or shares code with other instances. The
 implementation chooses per instance and MUST report its choices in the
 performance report. *(ADR 0080)*
+
+```ail rules=gen.impl.1
+fn pick[T Ord](a T, b T) T
+    a.max(b)
+
+fn main()
+    print(pick(1, 2))
+    print(pick(1.5, 2.5))
+```
