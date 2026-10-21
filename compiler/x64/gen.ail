@@ -65,6 +65,11 @@ struct Gen
     ## Globals whose address only loads and stores use: the access is
     ## `[rip + globals + 8k]` and the `lea` is skipped (ADR 0623).
     globs Map[int, int]
+    ## Shrink-wrapping (ADR 0625): the block that saves the callee-saved
+    ## registers (-1: the prologue does), and the blocks whose returns
+    ## restore them.
+    wrap int
+    region List[bool]
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
@@ -92,7 +97,7 @@ pub fn generate(m mir.Module) codegen.Image
     img
 
 fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
-    f := codegen.split_edges(f0)
+    f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]
@@ -133,6 +138,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
         frame: 0,
         caller_used: codegen.caller_used(al, registers()),
         globs: globs,
+        wrap: al.wrap,
+        region: al.region,
     )
     for r in al.saved
         if r >= codegen.FLOAT_BASE
@@ -162,8 +169,9 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
 fn Gen.prologue(mut self, slots int)
     a.push(RBP)
     a.mov_rr(RBP, RSP)
-    for r in saved_ints
-        a.push(r)
+    if wrap < 0
+        for r in saved_ints
+            a.push(r)
     # Saved vector registers sit just below the pushed ones, spill slots
     # below them.
     ints := 8 * saved_ints.len()
@@ -172,21 +180,43 @@ fn Gen.prologue(mut self, slots int)
     while (size + ints) % 16 != 0
         size += 8
     frame = size
+    # Shrink-wrapped, the saved integer registers have their place in the
+    # frame, where the pushes would have put them.
+    if wrap >= 0
+        size += ints
     if size > 0
         a.alu_ri("sub", RSP, size)
-    for j in 0..saved_floats.len()
-        a.vmovsd_mr(at(RBP, 0 - ints - 8 * (j + 1)), saved_floats[j] - codegen.FLOAT_BASE)
+    if wrap < 0
+        save_registers(true)
 
-fn Gen.epilogue(mut self)
+## Save or restore the callee-saved registers: the integer ones at
+## `rbp - 8 * (j + 1)` (where a push puts them), the vector ones below.
+fn Gen.save_registers(mut self, out bool)
     ints := 8 * saved_ints.len()
+    if wrap >= 0
+        for j in 0..saved_ints.len()
+            if out
+                a.mov_mr(at(RBP, 0 - 8 * (j + 1)), saved_ints[j])
+            else
+                a.mov_rm(saved_ints[j], at(RBP, 0 - 8 * (j + 1)))
     for j in 0..saved_floats.len()
-        a.vmovsd_rm(saved_floats[j] - codegen.FLOAT_BASE, at(RBP, 0 - ints - 8 * (j + 1)))
-    if saved_ints.len() > 0
-        a.lea(RSP, at(RBP, 0 - ints))
-        mut i := saved_ints.len() - 1
-        while i >= 0
-            a.pop(saved_ints[i])
-            i -= 1
+        if out
+            a.vmovsd_mr(at(RBP, 0 - ints - 8 * (j + 1)), saved_floats[j] - codegen.FLOAT_BASE)
+        else
+            a.vmovsd_rm(saved_floats[j] - codegen.FLOAT_BASE, at(RBP, 0 - ints - 8 * (j + 1)))
+
+fn Gen.epilogue(mut self, block int)
+    ints := 8 * saved_ints.len()
+    if wrap < 0
+        save_registers(false)
+        if saved_ints.len() > 0
+            a.lea(RSP, at(RBP, 0 - ints))
+            mut i := saved_ints.len() - 1
+            while i >= 0
+                a.pop(saved_ints[i])
+                i -= 1
+    elif region[block]
+        save_registers(false)
     a.mov_rr(RSP, RBP)
     a.pop(RBP)
     a.ret()
@@ -389,6 +419,8 @@ fn Gen.gen_block(mut self, b int)
             if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0 and imm(mask.args[0]) == none
                 if imm32(mask.args[1]) != none or loc[mask.args[1]] >= 0
                     masked = fused - 1
+    if b == wrap
+        save_registers(true)
     for k in 0..n
         if k == fused or k == masked
             continue
@@ -433,7 +465,7 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(codegen.FLOAT_BASE, t.value)])
                 else
                     parallel([move_of(RAX, t.value)])
-            epilogue()
+            epilogue(b)
         _ => a.ud2()
 
 ## Whether block `to` is only a comparison and a branch: a jump to it is

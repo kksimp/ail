@@ -1,0 +1,44 @@
+# A function that returns early before any call keeps the callee-saved
+# registers untouched on that path and saves them where the calls start
+# (ADR 0625); both paths, floats across calls, and a loop in the called part
+# must give the interpreter's results.
+fn depth(xs List[int], i int) int
+    if xs[i] < 0
+        return 1
+    1 + depth(xs, xs[i])
+
+fn weigh(xs List[int], w List[float], i int) float
+    if xs[i] < 0
+        return w[i]
+    mut total := w[i]
+    mut k := 0
+    while k < 3
+        total += weigh(xs, w, xs[i]) * 0.5
+        k += 1
+    total
+
+fn count(n int) int
+    if n <= 1
+        return n
+    count(n - 1) + count(n - 2)
+
+fn classify(a int, b int, c int) int
+    if a == 0
+        return 100
+    x := count(a)
+    y := count(b)
+    if x > y
+        return x - y + c
+    y - x + c * 2
+
+fn main()
+    xs := [1, 2, 3, 4, -1]
+    print(depth(xs, 0))
+    print(depth(xs, 4))
+    w := [1.5, 2.5, 3.5, 4.5, 5.5]
+    print(weigh(xs, w, 0))
+    print(weigh(xs, w, 4))
+    print(count(15))
+    print(classify(0, 5, 1))
+    print(classify(9, 5, 1))
+    print(classify(4, 8, 3))
