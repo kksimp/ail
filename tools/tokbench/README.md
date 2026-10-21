@@ -48,13 +48,14 @@ The budgets are in one place, the `BUDGETS` table at the top of `tokbench.py`:
 | Page | Budget | Source |
 |---|---:|---|
 | `docs/language-card.md` | 8,000 | [ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md) |
-| `docs/quick-reference.md` | 12,518 | no ADR in the tree sets it yet |
+| `docs/quick-reference.md` | 12,518 | [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md) |
 
-The mean rule is the one the coordinator set for this check. ADR 0276 states the
-card budget per tokenizer ("on every tokbench tokenizer"), and the mean is looser,
-so a card that passes the mean can still fail a single tokenizer. ADR 0703 is about
-`ail api --card` trimming levels and does not state a budget. Change a budget only
-here, and cite its source next to it.
+The mean rule is [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md).
+ADR 0276 stated the card budget per tokenizer ("on every tokbench tokenizer"); the
+mean is looser, so a card that passes the mean can still fail one tokenizer. ADR 0703
+is about `ail api --card` trimming levels and does not state a budget. Change a budget
+only here, and cite its ADR next to it. Any quick-reference addition is paid for by a
+trim in the same change (ADR 0817).
 
 ### Optional: the current Claude tokenizer
 
