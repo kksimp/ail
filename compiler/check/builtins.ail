@@ -537,11 +537,15 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
             err("expr.call.2", expr_pos(a.value), "`{n}` takes a `str` or a `char`, not {show(t)}")
         if args.len() == 2
             lt := expr(args[1].value, none, true)
-            if lt != Ty.Int
-                and lt != Ty.Unknown
-                and lt != Ty.Never
-                and not reject_unhandled(lt, expr_pos(args[1].value))
-                err("expr.call.2", expr_pos(args[1].value), "the limit of `split` is an `int`, not {show(lt)}")
+            if lt != Ty.Int and lt != Ty.Unknown and lt != Ty.Never and not reject_unhandled(
+                lt,
+                expr_pos(args[1].value),
+            )
+                err(
+                    "expr.call.2",
+                    expr_pos(args[1].value),
+                    "the limit of `split` is an `int`, not {show(lt)}",
+                )
         return b.ret
     if n == "get" and args.len() == 2 and is_map_ty(rt)
         args_only(args)
