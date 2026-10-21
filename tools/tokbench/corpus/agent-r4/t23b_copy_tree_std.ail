@@ -1,2 +1,0 @@
-fn main() !
-    fs.copy("src", "backup")?

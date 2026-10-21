@@ -3,7 +3,8 @@ use std.time.date
 
 fn main() !
     today := date.parse_date("2026-10-21")?
-    text := fs.read_text("{path.dir(env.program())}/agent-data/dates.txt")? "reading dates"
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/dates.txt")? "reading dates"
     for line in text.lines()
         left := date.parse_date(line)?.since(today)
         if left < 0
