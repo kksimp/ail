@@ -1,3 +1,4 @@
+//! TLS causes: std.tls.1 (handshake and records) and std.tls.3 (protocol and roots).
 //! An in-house TLS 1.3 client (RFC 8446; ADR 0360, ADR 0367). Client side
 //! only: X25519 key share; TLS_CHACHA20_POLY1305_SHA256,
 //! TLS_AES_128_GCM_SHA256 and TLS_AES_256_GCM_SHA384; no client

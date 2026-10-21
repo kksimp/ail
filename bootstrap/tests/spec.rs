@@ -70,7 +70,15 @@ struct Block {
 }
 
 /// Chapters changed by the batch: every rule in them needs a runnable example.
-const BATCH_CHAPTERS: [&str; 5] = ["04-types.md", "05-expressions.md", "17-std.md", "18-effects.md", "22-tools.md"];
+const BATCH_CHAPTERS: [&str; 7] = [
+    "04-types.md",
+    "05-expressions.md",
+    "15-compile-time.md",
+    "16-reflection.md",
+    "17-std.md",
+    "18-effects.md",
+    "22-tools.md",
+];
 
 fn blocks(dir: Option<&Path>, extra: &[&Path]) -> Result<Vec<Block>, String> {
     let mut chapters: Vec<PathBuf> = dir.map_or(Vec::new(), |d| fs::read_dir(d).unwrap().map(|e| e.unwrap().path()).collect());

@@ -6,5 +6,5 @@ impl ToJson for U
 impl FromJson for U
 
 fn main() !
-    users := List[U].from_json(parse_json(fs.read_text(env.args()[0])?)?)?
-    print([U(name: u.name, age: u.age + 1) for u in users if u.age > 18].to_json().to_text())
+    users := load_json[List[U]](env.args()[0])?
+    print_json([U(name: u.name, age: u.age + 1) for u in users if u.age > 18])
