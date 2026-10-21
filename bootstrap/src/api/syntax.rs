@@ -155,7 +155,7 @@ impl J {
         match self {
             J::Null => out.push_str("null"),
             J::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-            J::Num(n) => out.push_str(&crate::interp::float_text(*n)),
+            J::Num(n) => out.push_str(&crate::interp::json_number_text(*n)),
             J::Str(s) => quote(s, out),
             J::Arr(items) => {
                 out.push('[');

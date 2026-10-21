@@ -46,7 +46,7 @@ mod trace;
 pub use bytecode::set_enabled as set_bytecode;
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
-pub use json::install as install_native_json;
+pub use json::{install as install_native_json, number_text as json_number_text};
 pub use stdlib::set_program;
 pub use tasks::{schedule_seed, set_schedule};
 mod prop;

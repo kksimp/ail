@@ -1,0 +1,9 @@
+# json.print.3: whole numbers print as integers, other numbers as floats
+fn main()
+    for text in ["3", "3.0", "-0", "-7.0", "2.5", "1e14", "1e15", "1e300", "0.1"]
+        if v := parse_json(text)
+            print("{text} -> {v.to_text()}")
+        else err
+            print("{text} failed: {err.message}")
+    print(Json.Num(4.0).to_text())
+    print(Json.Arr([Json.Num(1.0), Json.Num(1.5)]).to_text())

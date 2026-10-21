@@ -31,6 +31,18 @@ Measured on Linux x86-64, `json_roundtrip` (build + `to_text` + parse):
 | whole program | 1.99 s | 0.27 s |
 | CPython twin | 0.09 s | |
 
+`tools/bench/run.sh --before <batch head> --runs 3` over all programs: every
+group's geometric mean is unchanged (agent 1.00, examples 1.02), because no
+other program parses large JSON; the gain is on JSON-heavy work like the
+round trip above.
+
+Number printing follows JSON's single number type (json.print.3, with lane
+192's ADR 0631): a whole `Num` below 1e15 prints as an integer, so
+`S(n: 3).to_json()` gives `{"n":3}`. The prelude `json_number` and the
+native `print` share the rule; `bootstrap/tests/cases/json_whole_numbers`
+pins it. A derived `to_json` test whose expected output had `2.0` now
+reads `2`.
+
 `./ail selftest` passes, including the `json_*` and `derive_json_*` cases.
 
 ## Rejected alternatives

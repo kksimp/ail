@@ -29,8 +29,12 @@ All errors report the first problem found. *(ADR 0161, ADR 0162)*
 **json.print.1** — `Json.to_text(self) str` gives compact text: no spaces,
 members in document order, `"`, `\`, `\n`, `\r`, `\t`, `\b`, `\f` escaped by
 name, other control characters as `\u00XX`, everything else as itself. A
-number prints as the `float` does (`1.0`, `2.5`). The same value always gives
+number prints as in **json.print.3**. The same value always gives
 the same text. *(ADR 0161)*
+
+**json.print.3** — A whole `Num` with magnitude below 1e15 prints as an
+integer (`3`, `-0` prints `0`); any other finite `Num` prints as the `float`
+does (`2.5`, `1e+300`). JSON has one number type. *(ADR 0658, ADR 0631)*
 
 **json.parse.2** — A number whose value doesn't fit a finite `float`
 (`1e999`) fails with the message `number out of range` at its first

@@ -332,6 +332,12 @@ impl Parser<'_> {
     }
 }
 
+/// A finite number as JSON text (json.print.3): whole numbers below 1e15 as
+/// integers, others as the `float` prints.
+pub fn number_text(n: f64) -> String {
+    if n.fract() == 0.0 && n.abs() < 1e15 { (n as i64).to_string() } else { float_text(n) }
+}
+
 /// `json_quote`: the string in double quotes with JSON escapes (json.print.1).
 fn quote(s: &str, out: &mut String) {
     out.push('"');
@@ -364,7 +370,7 @@ fn print(v: &Value, out: &mut String, room: usize) -> bool {
         NUM => {
             let Value::Float(n) = fields[0] else { unreachable!("Num holds a float") };
             if n.is_finite() {
-                out.push_str(&float_text(n));
+                out.push_str(&number_text(n));
             } else {
                 out.push_str("null");
             }

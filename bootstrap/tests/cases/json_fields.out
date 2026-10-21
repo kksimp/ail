@@ -5,4 +5,4 @@ false
 none
 none
 none
-{"id":"t1","hours":2.0,"done":true,"tags":["a"],"owner":"kim"}
+{"id":"t1","hours":2,"done":true,"tags":["a"],"owner":"kim"}
