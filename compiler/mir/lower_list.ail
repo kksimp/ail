@@ -28,6 +28,7 @@ fn is_list_edit(name str) bool
         or name == "first"
         or name == "last"
         or name == "index_of"
+        or is_list_build(name)
         or is_set_op(name)
 
 ## Bytes of one element of a list of `e`.
@@ -55,6 +56,8 @@ fn Lower.lower_list_edit(
 ) Val?
     size := konst(elem_bytes(e), Ty.Int)
     unit := Val(id: -1, ty: Ty.Unit)
+    if is_list_build(name)
+        return lower_list_build(r, e, name, npos, vs)
     if structural(e) and tuple_list_method(name)
         return tuple_list_edit(r, e, name, npos, vs)
     if name == "extend" and vs.len() == 1

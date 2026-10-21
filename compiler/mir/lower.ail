@@ -396,7 +396,7 @@ fn Lower.lower_rt(mut self, r ast.Program)
         while scanned < funcs.len()
             for blk in funcs[scanned].blocks
                 for i in blk.insts
-                    if i.op == "call" and decls.contains(i.name)
+                    if (i.op == "call" or i.op == "fnaddr") and decls.contains(i.name)
                         queue.push(i.name)
                     # Code the generator calls or takes the address of: the
                     # thread entry points (native-abi.md §10, §11).

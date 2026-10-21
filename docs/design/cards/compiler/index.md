@@ -8,3 +8,9 @@ mir  322 items
 obj  58 items
 syntax  100 items
 x64  74 items
+check  304 items
+codegen  39 items
+mir  274 items
+obj  53 items
+syntax  99 items
+x64  69 items
