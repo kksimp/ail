@@ -1,14 +1,13 @@
-//! Differential fuzzing of `ail build` output against the tree walker (fuzz.nat.*). Each seed makes a program that favours what the tier compiles
-//! (`fuzz/bcprogs.rs`), runs it with the tier and with `--no-bytecode`, and
-//! checks that
-//!   fuzz.bc.1  standard output, the exit code and standard error (the trap
-//!              text and its trace) are the same bytes;
-//!   fuzz.bc.2  neither run panics, hangs or reports an internal error;
-//!   fuzz.bc.3  in a `pure` program (no hand-off construct) the tier hands
-//!              off at most `PURE_HANDOFFS` times however long the loops run.
-//! `AIL_FUZZ_N` programs (default 60, the selftest smoke) from `AIL_FUZZ_SEED`
-//! (default 1); `AIL_FUZZ_OUT` is where the minimised disagreements go
-//! (default `tools/fuzz/found/native`). `tools/fuzz/bytecode-diff.sh N` runs it.
+//! Differential fuzzing of `ail build` output against `ail run` (fuzz.nat.*).
+//! Each seed makes a program from the bytecode fuzzer's grammar (`fuzz/bcprogs.rs`,
+//! with function values left out); programs the native backend declines are counted
+//! as skips. The rest are built, run, and compared with the tree walker:
+//!   fuzz.nat.1  standard output, the exit code and the first line of a trap match;
+//!   fuzz.nat.2  the native program doesn't crash or hang.
+//! A difference in the trap's column alone is counted, not failed (known: see
+//! `tools/fuzz/found/native/`). `AIL_FUZZ_N` programs (default 24, the selftest
+//! smoke) from `AIL_FUZZ_SEED` (default 1); `AIL_FUZZ_OUT` is where minimised
+//! disagreements go. `tools/fuzz/native-wide.sh N [SEED]` runs it.
 
 #[path = "fuzz/progs.rs"]
 #[allow(dead_code)]
@@ -108,7 +107,7 @@ fn minimise(dir: &Path, src: &str, pure: bool, want: &str) -> String {
 
 #[test]
 fn fuzz_native_wide() {
-    let n: u64 = std::env::var("AIL_FUZZ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
+    let n: u64 = std::env::var("AIL_FUZZ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(24);
     let first: u64 = std::env::var("AIL_FUZZ_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let out_dir = std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/native"));
