@@ -74,6 +74,15 @@ fn add(a i32, b i32) i32
 literals, a comma MAY follow the last element. The canonical form has one only
 when the list spans several lines. *(ADR 0118)*
 
+```ail rules=gram.list.1
+fn main()
+    xs := [
+        1,
+        2,
+    ]
+    print(xs.len())
+```
+
 ## Generic arguments
 
 **gram.generic.1** — Generic type parameters and type arguments are enclosed

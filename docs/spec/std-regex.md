@@ -115,47 +115,177 @@ fn main()
 **std.regex.11** — `kind` is `unclosed_group` when a `(` has no `)`; `at` is
 the `(`. Add the `)`, or write `\(` for a literal. *(ADR 0439)*
 
+```ail rules=std.regex.11
+use std.regex
+
+fn main()
+    r := regex.compile(r"(ab") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.12** — `kind` is `unopened_group` when a `)` has no `(`; `at` is
 the `)`. Remove it, or write `\)`. *(ADR 0439)*
 
+```ail rules=std.regex.12
+use std.regex
+
+fn main()
+    r := regex.compile(r"ab)") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.13** — `kind` is `unclosed_class` when a `[` has no `]`; `at` is the
 `[`. Add the `]`, or write `\[`. *(ADR 0439)*
+
+```ail rules=std.regex.13
+use std.regex
+
+fn main()
+    r := regex.compile(r"[ab") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
 
 **std.regex.14** — `kind` is `bad_escape` for a `\` that does not start an
 escape of `std.regex.3`: a trailing `\`, `\q` and other letters, `\x` without
 hex digits, or a code that is not a character. Write `\\` for a backslash.
 *(ADR 0439)*
 
+```ail rules=std.regex.14
+use std.regex
+
+fn main()
+    r := regex.compile(r"a\q") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.15** — `kind` is `bad_repeat` for a count above 1000, a count
 whose lower bound is above its upper, or a repetition that follows another
 (`a**`, `a{2}{3}`). Group the first with `(?:...)`. *(ADR 0439)*
+
+```ail rules=std.regex.15
+use std.regex
+
+fn main()
+    r := regex.compile(r"a**") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
 
 **std.regex.16** — `kind` is `nothing_to_repeat` for a `*`, `+` or `?` with no
 expression before it, such as at the start of the pattern or after `|` or
 `(`. *(ADR 0439)*
 
+```ail rules=std.regex.16
+use std.regex
+
+fn main()
+    r := regex.compile(r"*a") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.17** — `kind` is `bad_range` for a class range that runs backwards
 (`[z-a]`) or ends in a set (`[a-\d]`). *(ADR 0439)*
+
+```ail rules=std.regex.17
+use std.regex
+
+fn main()
+    r := regex.compile(r"[z-a]") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
 
 **std.regex.18** — `kind` is `bad_class` for a `[[:name:]]` or `\p{Name}` that
 is not in the list of `std.regex.10`. The message lists the supported names.
 *(ADR 0439)*
 
+```ail rules=std.regex.18
+use std.regex
+
+fn main()
+    r := regex.compile(r"[[:nope:]]") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.19** — `kind` is `bad_group_name` for a group name that is empty,
 starts with a digit, has a character other than letters, digits and `_`, is
 not closed by `>`, or is used by two groups. *(ADR 0439)*
 
+```ail rules=std.regex.19
+use std.regex
+
+fn main()
+    r := regex.compile(r"(?P<1a>x)") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.20** — `kind` is `bad_flag` for a flag other than `i`, `s` and
 `m`. *(ADR 0439)*
+
+```ail rules=std.regex.20
+use std.regex
+
+fn main()
+    r := regex.compile(r"(?x)a") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
 
 **std.regex.21** — `kind` is `unsupported` for backreferences (`\1`,
 `(?P=name)`) and lookaround (`(?=`, `(?!`, `(?<=`, `(?<!`). They cannot be
 matched in time proportional to the text, which is `std.regex.4`'s promise.
 Match the shape with groups and test the result in AIL instead. *(ADR 0438)*
 
+```ail rules=std.regex.21
+use std.regex
+
+fn main()
+    r := regex.compile(r"(a)\1") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
+
 **std.regex.22** — `kind` is `too_large` for a pattern over the limits of
 `std.regex.3`. Use smaller counts or fewer nested counted groups. *(ADR 0439)*
+
+```ail rules=std.regex.22
+use std.regex
+
+fn main()
+    r := regex.compile(r"((a{100}){100}){100}") else err
+        print(err.kind)
+        return
+    print(regex.find(r, "x"))
+```
 
 **std.regex.23** — A `RegexError` has `pattern`, `at` (the 0-based character
 offset in the pattern), `kind` (the short names of `std.regex.11`–`22`),
 `rule` (the rule that explains the kind) and `message`. *(ADR 0440)*
+
+```ail rules=std.regex.23
+use std.regex
+
+fn main()
+    r := regex.compile(r"(ab") else err
+        print(err.rule)
+        return
+    print(regex.find(r, "x"))
+```

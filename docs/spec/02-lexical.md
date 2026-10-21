@@ -15,8 +15,26 @@ false fn for if impl in invariant match move mut none not or par pub ref require
 return self spawn struct todo trait true unique unsafe use while with`.
 *(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305)*
 
+```ail error=lex.kw.1
+fn main()
+    fn := 1
+    print(fn)
+```
+
+```ail
+fn main()
+    count := 1
+    print(count)
+```
+
 **lex.kw.2** — `c` is not reserved. It has its FFI meaning only directly
 after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*
+
+```ail rules=lex.kw.2
+fn main()
+    c := 1
+    print(c)
+```
 
 ## Names
 
@@ -25,6 +43,12 @@ property) or `_`, and continues with letters, ASCII digits `0`–`9` and `_`:
 the characters for which `char.is_alpha()` and `char.is_alnum()` are true
 (`type.char.2`). A name that is a keyword is the keyword (`lex.kw.1`).
 *(ADR 0372)*
+
+```ail rules=lex.name.1
+fn main()
+    ça := 1
+    print(ça)
+```
 
 ## Blocks
 
@@ -36,13 +60,41 @@ structure: it doesn't open or close a block, and `lex.block.2–4` don't apply
 to its indentation (`lex.str.3` rule 4 governs it instead). *(ADR 0033,
 ADR 0135)*
 
+```ail rules=lex.block.1
+fn main()
+    if true
+        print(1)
+```
+
 **lex.block.2** — The indentation unit is exactly four space characters
 (U+0020). Every line's indentation MUST be a whole number of units.
 *(ADR 0033, ADR 0040)*
 
+```ail error=lex.block.2
+fn main()
+  print(1)
+```
+
+```ail
+fn main()
+    print(1)
+```
+
 **lex.block.3** — Indentation that is not a whole multiple of the unit, or
 that increases by more than one unit at a time, is a compile-time error.
 *(ADR 0033)*
+
+```ail error=lex.block.3
+fn main()
+    if true
+            print(1)
+```
+
+```ail
+fn main()
+    if true
+        print(1)
+```
 
 **lex.block.4** — A tab character (U+0009) MUST NOT appear in a line's
 indentation. *(ADR 0040)*
@@ -50,10 +102,26 @@ indentation. *(ADR 0040)*
 > **Note:** blank lines and comment-only lines do not affect block structure.
 > The exact rule will be given with the comment syntax.
 
+```ail error=lex.block.4
+fn main()
+	print(1)
+```
+
+```ail
+fn main()
+    print(1)
+```
+
 ## Statements
 
 **lex.stmt.1** — A newline ends a statement, except as provided by
 `lex.stmt.2`. *(ADR 0034)*
+
+```ail rules=lex.stmt.1
+fn main()
+    x := 1
+    print(x)
+```
 
 **lex.stmt.2** — A newline does not end a statement when it occurs:
 1. inside an unclosed `(`, `[` or `{`,
@@ -68,11 +136,35 @@ indentation. *(ADR 0040)*
 The next line is then a continuation of the same statement. Continuation lines
 do not open or close blocks. *(ADR 0034, ADR 0135)*
 
+```ail error=lex.stmt.2
+fn main()
+    print(f(1) 
+```
+
+```ail
+fn main()
+    x := 1 +
+        2
+    print(x)
+```
+
 **lex.stmt.3** — AIL has no statement-terminator token. *(ADR 0034)*
 
 > **Rationale:** semicolons cost up to ~5% more tokens with no semantic
 > benefit once lines and indentation carry structure. See
 > [syntax-measurements-r1.md](../design/syntax-measurements-r1.md).
+
+```ail error=lex.stmt.3
+fn main()
+    x := 1;
+    print(x)
+```
+
+```ail
+fn main()
+    x := 1
+    print(x)
+```
 
 ## Comments
 

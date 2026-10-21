@@ -257,14 +257,71 @@ known enum type, its variants MAY be written without qualification
 (`Circle(r)`). Elsewhere they MUST be qualified with the enum name
 (`Shape.Circle(r)`). *(ADR 0057)*
 
+```ail error=type.enum.3
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    c := Circle(2)
+    print(area(c))
+```
+
+```ail
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Circle(2)))
+```
+
 **type.enum.4** — The canonical form omits the qualification wherever
 `type.enum.3` permits it. *(ADR 0057)*
+
+```ail rules=type.enum.4
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Shape.Circle(2)))
+```
 
 **type.enum.5** — An enum's variant names MUST be distinct. *(ADR 0117)*
 
 **type.enum.6** — A variant with data is constructed like a struct literal
 (`type.struct.3–4`, `type.struct.7`): `Circle(r: 1.0)`, or `Circle(1.0)`.
 *(ADR 0123, ADR 0142)*
+
+```ail rules=type.enum.6
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Rect(w: 2, h: 3)))
+```
 
 ## Optional types
 
@@ -388,6 +445,11 @@ fn half(n int) int?
 
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
+
+```ail rules=type.bool.1
+fn main()
+    print(true and not false)
+```
 
 ## Strings and characters
 
