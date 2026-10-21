@@ -237,7 +237,7 @@ imports lane 178 adds; Linux keeps raw syscalls.
 zeroed payload bytes with the header word before them; `rt.alloc_raw(n, kind)`
 skips the zeroing for blocks the caller fills before reading. `rt.init` reserves up
 to 16 GiB of address space (`mmap`, no-reserve; the size halves until it is
-accepted), cut into 16 KiB pages with a page table (free, small page of class
+accepted), cut into 16,448-byte pages with a page table (free, small page of class
 c, first or later page of a large span). Blocks up to 8192 bytes, header
 included, come from 36 size classes (16 to 256 in steps of 16, then four per
 doubling) with free lists; larger objects take whole pages. Failure to get
@@ -245,7 +245,7 @@ memory traps `run.limit.2`.
 
 The collector (`compiler/rt/native/gc.ail`) is stop-the-world mark and sweep,
 run from `alloc` when the bytes allocated since the last collection exceed
-`max(8 MiB, live bytes)`. Roots: the stack from the stack pointer to the
+`max(16 MiB, 2 x live bytes)`. Roots: the stack from the stack pointer to the
 `argv` address saved by `rt.init`, the callee-saved registers (primitive
 `gc_regs`), and the global slots, all read as possible pointers, interior
 pointers included. Objects are scanned by kind (list headers: the data

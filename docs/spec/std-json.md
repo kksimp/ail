@@ -31,6 +31,53 @@ fn main()
 
 ## Parsing and printing
 
+**json.err.2** — A `parse_json` failure in the shape of the text fails with
+`JsonError` and `message` `unexpected character 'C'`, `unexpected end of input`,
+`extra data after value`, `expected ':' after object key` or `trailing comma`. `at`
+is the character where the parser stopped. *(ADR 0783)*
+
+**json.err.3** — A failure inside a string fails with `JsonError` and `message`
+`unterminated string`, `control character in string`, `invalid escape '\C'`,
+`invalid unicode escape` or `unpaired surrogate escape`. `at` is the backslash or
+the opening quote. *(ADR 0783)*
+
+**json.err.4** — A malformed number fails with `JsonError` and `message` `invalid
+number`; a number too large for a float fails with `number out of range`. *(ADR 0783)*
+
+```ail rules=json.err.2
+fn why(text str) str
+    j := parse_json(text) else err
+        return "{err.at}: {err.message}"
+    return "ok {j.kind()}"
+
+fn main()
+    print(why("[1,]"))     # 2: trailing comma
+    print(why("[1] 2"))    # 4: extra data after value
+    print(why("@"))        # 0: unexpected character '@'
+```
+
+```ail rules=json.err.3
+fn why(text str) str
+    j := parse_json(text) else err
+        return "{err.at}: {err.message}"
+    return "ok {j.kind()}"
+
+fn main()
+    print(why("\"abc"))       # 0: unterminated string
+    print(why("\"a\\qb\""))  # 2: invalid escape '\q'
+```
+
+```ail rules=json.err.4
+fn why(text str) str
+    j := parse_json(text) else err
+        return "{err.at}: {err.message}"
+    return "ok {j.kind()}"
+
+fn main()
+    print(why("-"))      # 0: invalid number
+    print(why("1e999")) # 0: number out of range
+```
+
 **json.parse.1** — `parse_json(text str) Json ! JsonError` parses exactly one
 RFC 8259 document with optional surrounding whitespace. It fails on trailing
 data, trailing commas, leading zeros, unescaped control characters,
@@ -162,6 +209,35 @@ so a log with some broken lines still gives the good ones. *(ADR 0732)*
 fn main()
     docs := parse_json_lines("1\nnot json\n\"two\"\n")
     print(docs.len())                     # 2
+```
+
+**json.load.1** — `load_json[T FromJson](path str) T ! JsonError` reads the file at
+`path` and decodes it as a `T` (`T.from_json(parse_json(text)?)?`, so a `List[U]`
+of derived structs works). A file that can't be read fails with a `JsonError`
+whose `message` is the path, a colon and the I/O kind (`not_found`), and whose
+`at` is -1. It is read like the derives, when the program names it. *(ADR 0774)*
+
+**json.load.2** — `print_json[T ToJson](v T)` prints `v.to_json().to_text()` and a
+newline. *(ADR 0774)*
+
+```ail rules=json.load.1,json.load.2
+struct U
+    name str
+    age int
+
+impl ToJson for U
+impl FromJson for U
+
+fn main() !
+    path := "json_load_spec.tmp"
+    fs.write_text(path, "[\{\"name\": \"al\", \"age\": 30}]")?
+    users := load_json[List[U]](path)?
+    print_json(users)                     # [{"name":"al","age":30}]
+    fs.remove(path)?
+    gone := load_json[U](path) else err
+        print(err.message)                # json_load_spec.tmp: not_found
+        users[0]
+    print_json(gone)
 ```
 
 **json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the

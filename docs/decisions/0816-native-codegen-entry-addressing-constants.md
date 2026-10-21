@@ -24,12 +24,25 @@ moves.
    when that register is allocatable and free (`Target.int_args`,
    `float_args`; both ISAs). Hints still win, since a move inside a loop
    costs more than one at entry.
+2. **Scaled addressing.** `fold_prim_addresses` (MIR, `addr.ail`, run on
+   every function including the runtime) folds `base + k` and
+   `base + i * 8` (bytes: `base + i`) into the `load64`, `load8`, `loadf` and
+   `store` primitives when the `add` and `mul` have no other use. The
+   primitive then takes `base` (and `i`), with `imm` the offset, or
+   `offset * 16 + log2(scale)` when indexed. Only forms both ISAs have: an
+   offset 0 to 32760 (a multiple of 8 for words), scale 8 for words and
+   floats, 1 for bytes; x86-64 uses `[base + i*8 + k]`, ARM64
+   `ldr x, [base, i, lsl 3]` (with one `add` when there is also an offset).
+   Also: an unchecked `n * k` on x86-64 writes over `n` (`imul d, n, k`),
+   and on ARM64 an unchecked `n * 2^k` is one `lsl` instead of a constant
+   load and a `mul`.
 
-Instructions executed, before → after: wordfreq 254.6M → 240.9M, binarytrees
-412.2M → 399.5M, fannkuch 284.6M → 274.8M, sieve 128.8M → 125.6M, fasta
-81.3M → 79.6M; collatz, spectralnorm and matmul unchanged, and L1 data
-misses on matmul (9,813,919 → 9,813,921) and fannkuch (1,247,171 →
-1,247,169) unchanged.
+Instructions executed, before → after items 1 and 2 together: wordfreq
+254.6M → 214.4M, binarytrees 412.2M → 368.3M, fannkuch 284.6M → 261.3M,
+fasta 81.3M → 72.5M, sieve 128.8M → 124.4M, matmul 117.0M → 116.6M; collatz
+and spectralnorm unchanged. Item 1 alone: wordfreq 240.9M, binarytrees
+399.5M, fannkuch 274.8M. L1 data misses on matmul (9,813,919 → 9,813,745)
+and fannkuch (1,247,171 → 1,247,781) are unchanged.
 
 ## Consequences
 
@@ -39,7 +52,32 @@ misses on matmul (9,813,919 → 9,813,921) and fannkuch (1,247,171 →
 
 ## Rejected alternatives
 
+- **Strength-reducing `n * 3` and `n * 24` to `lea`/shift pairs.** The
+  `imul` is one instruction and the pair is two; the win would be latency
+  only, with a second code path on each ISA.
+- **Indexed forms with scale 1 for words on ARM64.** `ldr x, [n, m]` exists
+  but the assembler only has the scaled `lsl 3` form; a scale of 1 on words
+  is rare (a byte offset into a word array).
+
 - **Preferring the arrival register over a hint.** A hint is a move on a
   loop edge or at a call; the arrival move happens once per call.
 - **Fixing the pool order** (putting `rdi` before `rsi`). It would work for
   two parameters and swap again for three.
+- **Hoisting loop-invariant wide constants into the preheader (tried,
+  dropped).** A MIR pass moved every `const` that needs a 64-bit immediate
+  out of call-free loops and kept it in a register (`name = "held"`, not
+  rebuilt by the code generators). On x86-64 it removed nothing in the
+  perfbench programs: the `movabs` instructions inside loops are the
+  division-by-constant multipliers (`0xcccccccccccccccd`), which
+  `magic_divide` emits itself, and `imul r/m` needs the multiplier in `rax`,
+  so holding it in another register only changes `movabs rax, K` into
+  `mov rax, r`. The remaining case is the hash multiplier in `rt.map_hash`
+  and `rt.map_hash_str`; there the held constant took one of the few
+  caller-saved registers, the leaf function then saved and restored two
+  callee-saved registers, and wordfreq got worse (214.4M to 217.4M
+  instructions) because the loops run about once per word. Without trip
+  counts the pass cannot tell these cases apart. The case that would pay is
+  ARM64, where a division multiplier costs `movz` plus three `movk` and
+  `smulh` takes it in a register; that needs the multiplier as an extra
+  argument of `div`/`rem` and a Mac measurement, so it is left until
+  there is a way to measure ARM64 instruction counts.

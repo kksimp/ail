@@ -3,9 +3,7 @@ fn main() !
     mut offset := 0
     while offset < data.len()
         end := if offset + 16 < data.len() then offset + 16 else data.len()
-        row := ["{b:0>2x}" for b in data[offset..end]]
-        text := row.join(" ")
-        print("{offset:>6}  {text}")
+        print("{offset:>6}  {data[offset..end].hex(" ")}")
         offset += 16
     n := data.len()
     print("{n} bytes")

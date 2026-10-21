@@ -65,6 +65,7 @@ pub struct NetFail {
     pub message: String,
 }
 
+// Every failure built here is a std.net.27 (connection, DNS, timeout) or std.net.28 (HTTP shape) cause.
 fn fail(url: &str, kind: &'static str, message: impl Into<String>) -> NetFail {
     NetFail { url: url.to_string(), kind, message: message.into() }
 }

@@ -1,0 +1,30 @@
+## json.load.1-2: `load_json[T](path)` reads a file as a `T`, `print_json(v)` prints a value as JSON.
+struct U
+    name str
+    age int
+
+impl ToJson for U
+impl FromJson for U
+
+fn main() !
+    path := "json_load_print_case.tmp"
+    fs.write_text(path, "[\{\"name\": \"al\", \"age\": 30}, \{\"name\": \"bo\", \"age\": 9}]")?
+    users := load_json[List[U]](path)?
+    print_json([U(name: u.name, age: u.age + 1) for u in users if u.age > 18])
+    print_json(users.len())
+    print_json("done")
+    fs.write_text(path, "[1, 2")?
+    bad := load_json[List[U]](path) else err
+        print("bad file: {err.message}")
+        []
+    print_json(bad.len())
+    fs.write_text(path, "\{\"name\": \"x\"}")?
+    one := load_json[U](path) else err
+        print("bad shape: {err.message}")
+        U(name: "none", age: 0)
+    print_json(one)
+    fs.remove(path)?
+    gone := load_json[U](path) else err
+        print("missing: {err.message}")
+        U(name: "", age: 0)
+    print_json(gone)
