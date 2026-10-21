@@ -1,0 +1,17 @@
+## A producer task sends squares down a bounded channel and closes it; main
+## receives them until the channel is closed and empty, then sums them.
+##   ./ail run examples/chan_pipe.ail
+
+fn produce(ch Channel[int], n int)
+    for i in 0..n
+        ch.send(i * i)
+    ch.close()
+
+fn main() !
+    ch := Channel[int](4)
+    worker := spawn produce(ch, 10)
+    mut total := 0
+    for v in ch
+        total += v
+    worker.wait()?
+    print("sum of squares 0..10: {total}")
