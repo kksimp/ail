@@ -1,0 +1,4 @@
+fn main()
+    mut ages := {"kaleb": 30}
+    ages.remove("kaleb")
+    print(ages.len())

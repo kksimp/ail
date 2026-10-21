@@ -1,6 +1,6 @@
-{"id":"t1","hours":1.5,"count":3.0,"done":false,"tags":["ops","db"],"note":null,"level":"High","owner":{"name":"ann"}}
+{"id":"t1","hours":1.5,"count":3,"done":false,"tags":["ops","db"],"note":null,"level":"High","owner":{"name":"ann"}}
 true
-{"kind":"Circle","r":2.0,"label":"a"}
+{"kind":"Circle","r":2,"label":"a"}
 "Dot"
 id: expected a string, found number
 missing hours

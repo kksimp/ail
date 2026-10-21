@@ -47,3 +47,9 @@ linear scan.
 - A spilled value lives in its slot everywhere, so spills cost a load per use;
   measured spill counts belong in `docs/design/native-performance.md`.
 - The allocator takes a `Target` (four register lists), so ARM64 reuses it.
+
+## Rejected alternatives
+
+- Graph colouring (Chaitin-Briggs): rejected for now. It allocates better in dense code, but an interference graph and coalescing are about three times the code, and the drag-race loops already fit in registers. Left as a later tier.
+- Second-chance binpacking or interval splitting: rejected for size; worth it once measured spills justify it.
+- SSA-based colouring (Hack): rejected because it needs the parallel-copy machinery at every block parameter, which linear scan's hints mostly avoid, with no gain at this size.

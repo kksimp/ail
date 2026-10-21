@@ -98,6 +98,8 @@ fn jobs() -> Vec<Vec<Vec<String>>> {
 /// Run one side of a command line, or say that it ran past `LIMIT`.
 fn run(job: &[String], walker: bool) -> Result<Output, String> {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ail"));
+    // A program that starts `./ail` itself gets this binary, not one the wrapper rebuilt mid-run.
+    cmd.env("AIL_BINARY", env!("CARGO_BIN_EXE_ail"));
     cmd.arg(&job[0]);
     if walker {
         cmd.arg("--no-bytecode");

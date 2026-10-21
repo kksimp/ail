@@ -15,8 +15,8 @@ returns, block parameters and the allocator, which are lane 120's files.
 
 ## Decision
 
-`T?` is **one register**: 0 is `none`. A `str`, a list or a struct is its own pointer
-(never 0). An `int`, `float` or `bool` is boxed: a pointer to 8 bytes
+`T?` is **one register**: 0 is `none`. A `str`, a list, a struct or an enum with fields is its own pointer
+(never 0). An `int`, `float`, `bool` or fieldless enum is boxed: a pointer to 8 bytes
 (`rt.box`, `rt.boxf`, `rt.box_bool`; read with `rt.unbox*`). No `T??`.
 MIR gets the type `Opt(T)`; the lowering is `compiler/mir/lower_err.ail`.
 

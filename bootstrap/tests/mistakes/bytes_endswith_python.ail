@@ -1,0 +1,4 @@
+fn main()
+    name := b"report.txt"
+    if name.endswith(b".txt")
+        print("text")

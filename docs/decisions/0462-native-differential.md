@@ -45,3 +45,7 @@ slow one, and the interpreter is the permanent oracle ([ADR 0032](0032-keep-rust
   build costs about 1.3 s because the backend runs on the interpreter.
 - Lane 120 compares `bootstrap/tests/cases` and `examples` in `cases.rs`; this
   test covers what no one wrote by hand. The pure generator grows with the subset.
+
+## Rejected alternatives
+
+- A separate native test suite (option B): rejected because it means two lists to keep in step, and programs the suite forgets go untested.

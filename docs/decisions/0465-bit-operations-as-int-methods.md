@@ -88,3 +88,8 @@ designer decision for operators would be an amendment of ADR 0077.
   both signs), `bit_shift_range.ail` (trap `expr.bit.2`) and
   `bit_bool_operand.ail` (negative: `bool` has no `bit_and`).
 - Rejected alternatives are recorded above.
+
+## Rejected alternatives
+
+- Fixed operators `& | ^ ~ << >>` (option B): rejected for now. Operators save 8% to 23% on bit-only code, but bit code is a rare construct, so the whole-program gain is a tie under ADR 0076. The operator form would also amend the fixed operator set of ADR 0077, and `<<` and `>>` need a precedence decision. The table is kept so the designer can revisit it.
+- Function-style `bit_and(a, b)` (option C): rejected because the receiver-first method form is already how `int` works (`n.abs()`).

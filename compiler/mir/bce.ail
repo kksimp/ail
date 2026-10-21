@@ -8,6 +8,10 @@
 ## trap names the same line, with the same message, as before. Loads of
 ## `xs[k]` that no store or call can change are hoisted into the guard.
 ##
+## Rules: native.bce.1-3 (the removed checks and the unobservable capacity),
+## native.bce.7-9 (computed starts and steps, and index arithmetic bounded by a
+## constant; ADR 0622). native.bce.5-6 are cited where they are tested below.
+##
 ## What may change a list's length or elements inside the loop is a call
 ## that gets the list (or one that holds it: a list of lists), a `push`, and
 ## a `set` on it. A value fetched from a list is treated as a part of that
@@ -38,6 +42,10 @@ pub struct Versioned
 
 ## Calls above this many `push`es of a list per iteration aren't sized for.
 MAX_PER := 8
+
+## Indexes that arithmetic bounds are only tested against a list's length up
+## to this value.
+MAX_REACH := 16777216
 
 pub fn bce(f Func, reserve bool, grow_only bool) Func
     mut g := f
@@ -131,6 +139,7 @@ GROWS := [
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",
+    "rt.list_join_chars",
     "rt.list_reserve",
     "rt.list_rows_min",
     "rt.list_new_for",
@@ -196,6 +205,8 @@ fn reserve_lists(f Func) Func
     mut sized := Set[int]()
     for lp in loops
         c := counted(f, defs, lp) else continue
+        if c.step >= 0
+            continue
         if c.q >= 0
             continue
         mut lists := List[int]()
@@ -531,6 +542,13 @@ fn version(
                     hoists.push(Hoist(dst: i.dst, y: y, c: ci, fresh: -1))
                     hidx[i.dst] = hoists.len() - 1
                     grew = true
+    # Checked arithmetic that can't overflow if the fixed operands are small.
+    mut fx := [false for _ in 0..nv]
+    for v in 0..nv
+        fx[v] = defs[v].block >= 0 and fixed(defs, inl, hidx, v)
+    pr := prove(f, defs, lp, c, rpo(f), fx)
+    # The highest index that the loop's arithmetic bounds, per list.
+    mut reach := Map[int, int]()
     # The accesses that can lose their checks, and what that takes.
     mut needs := List[Need]()
     mut relax := Set[str]()
@@ -576,6 +594,15 @@ fn version(
                 needs.push(Need(kind: "inv", x: x, arg: idx))
                 relax.add("{b}:{k}")
                 continue
+            if lw := pr.lows.get(idx)
+                hg := pr.highs[idx]
+                if lw >= 0 and hg <= MAX_REACH and inl[defs[idx].block]
+                    # `xs[b * 7 + k]` with `b` below a constant: the list
+                    # needs to be longer than the largest index (ADR 0622).
+                    if not reach.contains(x) or reach[x] < hg
+                        reach[x] = hg
+                    relax.add("{b}:{k}")
+                    continue
             a := inst_of(f, defs, idx) else continue
             if a.op != "add" or a.args[0] != c.p or not inl[defs[idx].block]
                 continue
@@ -584,15 +611,12 @@ fn version(
                 needs.push(Need(kind: "off", x: x, arg: off))
                 relax.add("{b}:{k}")
                 relax.add("{defs[idx].block}:{defs[idx].at}")
-    # Checked arithmetic that can't overflow if the fixed operands are small.
-    mut fx := [false for _ in 0..nv]
-    for v in 0..nv
-        fx[v] = defs[v].block >= 0 and fixed(defs, inl, hidx, v)
-    pr := prove(f, defs, lp, c, rpo(f), fx)
+    for x in reach.keys()
+        needs.push(Need(kind: "const", x: x, arg: reach[x]))
     # Worth the guard on the operands: two checks, or one in a loop that is
     # versioned anyway.
     versioned := needs.len() > 0 or hoists.len() > 0 or roomy.len() > 0
-    use_ranges := pr.sites.len() >= 2 or (pr.sites.len() == 1 and versioned)
+    use_ranges := pr.sites.len() >= 2 or (pr.sites.len() == 1 and versioned) or reach.len() > 0
     if use_ranges
         for key in pr.sites
             relax.add(key)
@@ -639,6 +663,16 @@ fn version(
         ranged: Set[int](),
     )
     hd := inst_of(f, defs, c.bound)
+    if cst(f, defs, c.lo) == none
+        # The start was computed before the loop: not negative, and small.
+        if gd.zero < 0
+            gd.zero = gd.konst(0)
+        gd.check(gd.emit("ge", [c.lo, gd.zero], Ty.Bool))
+        gd.within(c.lo)
+    if c.step >= 0
+        # A step computed before the loop: at least 1, and small.
+        gd.check(gd.emit("ge", [c.step, gd.konst(1)], Ty.Bool))
+        gd.within(c.step)
     for h in 0..hoists.len()
         y := fresh_of(hoists, hidx, hoists[h].y)
         ci := fresh_of(hoists, hidx, hoists[h].c)

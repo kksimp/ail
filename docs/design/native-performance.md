@@ -136,8 +136,9 @@ what `ail build` buys.
 | fasta | 0.118 | 0.017 | 0.005 | 0.007 | 0.226 | 0.08 | 7x |
 | race_smoke | 0.104 | 0.010 | 0.004 | 0.005 | 0.183 | 0.05 | 10x |
 
-`loops`, `wordfreq` and the tensor programs are outside the native subset
-(maps, interpolation into a value, comprehensions, `std.tensor`).
+`wordfreq` builds natively since ADR 0568 (see below). `loops` needs string
+interpolation into a value, and the tensor programs need comprehensions and
+`std.tensor`; they are outside the native subset.
 
 ## Where the time goes against C
 
@@ -185,6 +186,24 @@ out by a dominating bound, inline `push`, inlining of leaf functions. Left:
 4. **Division by a power of two** as a shift with a sign fix (collatz).
 5. Cache the runtime's machine code (compile time).
 
+## Maps: `wordfreq` (ADRs 0568–0569)
+
+`Map[str, int]` counts 10 million words from a 12-word list (best of 3,
+seconds; Linux x86-64, same VM): native 0.359, `gcc -O2` 0.055, CPython
+1.876, so native is 5.2x faster than Python and 6.5x slower than C. Each
+iteration hashes the key twice (`get`, then the assignment) and compares it
+by pointer, then bytes. A cached hash in the string object, a combined
+find-or-insert, and keeping `map_find` and `map_set` inline are the next
+steps. At the `.args` size (1 million words) the run takes 0.07 s and
+prints the interpreter's bytes on x86-64 and on ARM64 under qemu.
+
+**Remembered entry (follow-up).** A table keeps the last key it found or added
+and its entry, so the assignment after `get(k)` skips the hash and the probe
+(a rebuild, removal or copy forgets it). 10 million words: 0.341 s -> 0.260 s
+(gcc -O2 0.055 s, CPython 1.9 s). Still open: a cached hash in the string
+object (needs a spare word; agree the layout with the strings and GC lanes),
+and inlining `map_find` and `map_set` into the caller.
+
 ## Pushes with room, sized lists, loop rotation (ADR 0611)
 
 fannkuch at N = 9, instructions: 274M → 218M (gcc -O2: 103M); wall 0.58 s →
@@ -199,3 +218,25 @@ the 8 to 10 instructions per swap against gcc's 6.
 matmul at 400: 1,106M → 979M instructions (callgrind), 0.128 s → 0.098 s on
 this VM. `rt.list_rows_min(b)` runs once before the outermost loop nest that
 leaves `b` alone; the inner loop's guard tests `j` against it.
+
+## Computed starts, steps and constant-bound indexes (ADRs 0622-0624)
+
+Lane 191. Loops with a start computed before them (`for j in i + 1..5`) and
+loops adding an unchanging `s` are versioned like counted loops; index
+arithmetic bounded by a constant loop bound (`xs[b * 7 + k]`, `b < 5`) is
+checked once against the list's length; `not` branches flip; bit operations
+and constant shifts compute in place; spills are chosen by loop-weighted
+use. Instructions retired (`valgrind --tool=lackey`, reduced sizes):
+
+| program | before | after |
+|---|---:|---:|
+| nbody 100000 | 163.0M | 104.7M |
+| sieve 3000000 | 117.8M | 91.3M |
+| collatz 100000 | 173.2M | 119.4M |
+| spectralnorm 200 | 46.7M | 37.1M |
+| fannkuch 8 | 22.4M | 21.7M |
+| matmul 150 | 49.8M | 49.6M |
+
+nbody wall: 0.176 s to 0.117 s (gcc -O2 0.085 s; 2.08x to 1.37x). What is
+left in fannkuch and binarytrees is values live across calls: x86-64 has
+five callee-saved registers, so loop-carried scalars spill.

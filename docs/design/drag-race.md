@@ -49,3 +49,30 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 - `native` is `ail build FILE -o OUT`; a program outside the native subset reads `build` (native.subset.1). The `-` in a ratio means one side has no number.
 - `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.
 - Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.
+
+## Agent programs
+
+String, map, JSON and output programs (`tools/perfbench/agent/`, lane 201), run
+with `tools/perfbench/run.sh --native --c --python --programs FILE`. Only the
+programs that build natively have a native number; the rest wait on queued
+work (maps on #180, `.to_int()` on strings, native `Json`).
+
+| program | ail min | native min | gcc min | python min | native/gcc | native/python |
+|---|---|---|---|---|---|---|
+| print_many | 0.230 | 0.037 | 0.071 | 0.346 | 0.53 | 0.11 |
+| lines_split | | build | | | | |
+| json_roundtrip | | build | | | | |
+| map_ops | | build | | | | |
+
+`print_many` was 0.077 s native before ADR 0734 (integer text), 0.026 s after,
+measured alone; the table row is from the shared race harness run on a loaded machine.
+
+## Day 2 refresh (lane 252, 2026-10-21)
+
+Commit `bd982d24`. Intel Xeon @ 2.10 GHz, 4 logical cores, Linux 6.18. `tools/perfbench/run.sh 7 --all`, minimum of 7 runs, wall seconds. clang 18.1.3, gcc 13.3.0 -O2, CPython 3.13.16.
+
+Native against C: collatz 1.58x clang, nbody 1.00x, spectralnorm 0.60x, fannkuch 2.04x, binarytrees 3.20x, matmul 2.50x, sieve 1.38x, race_smoke 1.25x. Two programs no longer build natively, because `.join()` on `List[char]` is outside the native subset: mandelbrot and fasta (lane 241 is bisecting). wordfreq builds natively but runs 25x slower than C.
+
+`tasks` printed different output from its Python twin (DIFF) and has no ratio.
+
+Full tables, and the day-1 comparison: the day-2 report `/mnt/project-files/reports/day2-benchmarks.md`. The `tools/bench/run.sh` token and before/after tables were not rerun in this refresh.

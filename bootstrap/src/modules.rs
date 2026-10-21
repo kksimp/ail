@@ -244,7 +244,11 @@ fn scan_uses(tokens: &[Token]) -> Vec<Vec<String>> {
                         _ => break,
                     }
                 }
-                out.push(path);
+                // A `use` with no name (`use`, `use 5`) has no path to load; the
+                // parser reports it as mod.use.1 (lane diag-checker-fixes).
+                if !path.is_empty() {
+                    out.push(path);
+                }
             }
             _ => {}
         }
@@ -370,9 +374,14 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
             edges.push((module.clone(), found.module.clone(), u.path[0].1));
             Some(Target::Module(found.module))
         } else {
+            let std_names = crate::stdlib::module_names();
+            let std_help = crate::check::suggest(&dotted, &std_names)
+                .map(|s| format!("did you mean `{s}`? The standard module `std.{s}` needs no `use` (std.use.4)"));
             diags.push(
                 Diagnostic::new("mod.use.4", u.path[0].1, format!("there is no module `{dotted}`"))
-                    .help(format!("a module is a directory of `.ail` files; expected `{}`", found.dir.display())),
+                    .help(std_help.unwrap_or_else(|| {
+                        "a module is a directory of `.ail` files; the standard modules need no `use` and are named `regex`, `fs`, `net`, `time` and so on (std.use.4)".to_string()
+                    })),
             );
             None
         };
@@ -618,6 +627,11 @@ impl Cx<'_> {
                 names.sort();
                 if let Some(s) = crate::check::suggest(item, &names) {
                     d = d.help(format!("did you mean `{alias}.{s}`?"));
+                } else if names.is_empty() {
+                    d = d.help(format!("module `{m}` has no public items"));
+                } else {
+                    let list: Vec<String> = names.iter().take(12).map(|n| format!("`{alias}.{n}`")).collect();
+                    d = d.help(format!("the module's items include {}", list.join(", ")));
                 }
                 self.diags.push(d);
             }

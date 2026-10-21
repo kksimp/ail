@@ -38,7 +38,7 @@ impl Describe for Fault
         kind: TypeKind.Struct,
         is_error: false,
         params: List[str](),
-        fields: [FieldInfo(name: "x", type_text: "int", public: false)],
+        fields: [FieldInfo(name: "x", type_text: "int", public: false, doc: "")],
         variants: List[VariantInfo](),
     )
     assert_eq(

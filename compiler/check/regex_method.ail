@@ -1,0 +1,46 @@
+## Methods on `regex.Regex` (spec std.regex.25, ADR 0749), as
+## `check/regex_method.rs`: `re.is_match(s)` is `regex.is_match(re, s)`, and
+## so for `find`, `find_all`, `captures`, `replace`, `replace_first` and
+## `split`. A method is the function with the regex first, so the two forms
+## always agree.
+use ast
+
+## The methods of `regex.Regex`, sorted.
+REGEX_METHODS := ["captures", "find", "find_all", "is_match", "replace", "replace_first", "split"]
+
+## `recv.n(args)` where `recv` is a `regex.Regex`.
+fn Checker.regex_method(
+    mut self,
+    recv ast.Expr,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    if not REGEX_METHODS.contains(n)
+        args_only(args)
+        mut d := new_diag("std.regex.25", at, "`regex.Regex` has no method `{n}`")
+        if s := suggest(n, REGEX_METHODS)
+            d = d.did_you_mean(s)
+        else
+            d = d.with_help("its methods are {list_names(REGEX_METHODS)}")
+        diags.push(d)
+        return Ty.Unknown
+    # std.regex.9: text in, text out, so no effects (effects.ail).
+    regex_methods.add(pos_key(at))
+    std_any.add(pos_key(at))
+    text := Ty.Str
+    mut params := [text]
+    mut ret := Ty.Bool
+    if n == "find"
+        ret = Ty.Opt(std_named("regex.Match"))
+    elif n == "find_all"
+        ret = Ty.ListOf(std_named("regex.Match"))
+    elif n == "captures"
+        ret = Ty.Opt(std_named("regex.Captures"))
+    elif n == "replace" or n == "replace_first"
+        params = [text, text]
+        ret = Ty.Str
+    elif n == "split"
+        ret = Ty.ListOf(Ty.Str)
+    check_call("regex.Regex.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)

@@ -565,6 +565,16 @@ impl Lexer {
                     );
                     i += 1;
                 }
+                // expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
+                '<' | '>' if line.get(i + 1) == Some(&c) => {
+                    let (op, method) = if c == '<' { ("<<", "shl") } else { (">>", "shr") };
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, format!("AIL has no `{op}`"))
+                            .help(format!("shifts are methods: `a.{method}(k)`, `k` in `0..=63` (expr.bit.1)"))
+                            .fix(format!("write `.{method}`"), vec![crate::fix::bit::operator(pos, op, method)]),
+                    );
+                    i += 2;
+                }
                 '&' if line.get(i + 1) != Some(&'&') => {
                     self.diags.push(
                         Diagnostic::new("gram.foreign.1", pos, "AIL has no `&`")
@@ -611,11 +621,26 @@ impl Lexer {
                             i += 1;
                         }
                         None if c == '~' => {
-                            self.diags.push(
-                                Diagnostic::new("gram.foreign.1", pos, "AIL has no `~`")
-                                    .help("bitwise not is a method: `a.bit_not()` (expr.bit.1)"),
-                            );
+                            // expr.bit.1: `~a` is `a.bit_not()` when the operand is one name, not
+                            // followed by `.`, `(` or `[` (which would bind to the call instead).
+                            let word: String =
+                                line[i + 1..].iter().take_while(|c| c.is_ascii_alphanumeric() || **c == '_').collect();
+                            let after = line.get(i + 1 + word.chars().count()).copied();
+                            let atom = !word.is_empty()
+                                && !word.starts_with(|c: char| c.is_ascii_digit())
+                                && !matches!(after, Some('.' | '(' | '['));
+                            let mut d = Diagnostic::new("gram.foreign.1", pos, "AIL has no `~`")
+                                .help("bitwise not is a method: `a.bit_not()` (expr.bit.1)");
+                            if atom {
+                                let end = Pos { line: line_no, col: i + 2 + word.chars().count() };
+                                d = d.fix(
+                                    "write `.bit_not()`",
+                                    vec![Edit::span(pos, end, format!("{word}.bit_not()"))],
+                                );
+                            }
+                            // The name after `~` is lexed as usual, so the token stream is unchanged.
                             i += 1;
+                            self.diags.push(d);
                         }
                         None => {
                             self.unsupported(pos, &format!("the `{c}` symbol"), "chapter 05");
@@ -1383,6 +1408,17 @@ mod tests {
         // One line, and quotes at the end of the text.
         assert_eq!(toks(r#"r"""say "hi"""""#)[0], Tok::Str("say \"hi\"".into()));
         assert_eq!(toks(r#""""a\tb""""#)[0], Tok::Str("a\tb".into()));
+    }
+
+    #[test]
+    fn bit_not_fix_only_for_a_plain_name() {
+        let fix = |src: &str| {
+            let (_, diags) = crate::modules::load_src("t.ail", src);
+            diags.iter().find(|d| d.rule == "gram.foreign.1").map(|d| d.fixes.len())
+        };
+        assert_eq!(fix("fn main()\n    print(~a)\n"), Some(1));
+        assert_eq!(fix("fn main()\n    print(~a.b)\n"), Some(0));
+        assert_eq!(fix("fn main()\n    print(~(a))\n"), Some(0));
     }
 
     #[test]

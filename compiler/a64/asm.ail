@@ -1,4 +1,4 @@
-## An ARMv8.2-A (A64) encoder: every instruction the code generator emits,
+## An ARMv8.2-A (plat.isa.2) (A64) encoder: every instruction the code generator emits,
 ## as 32-bit little-endian words (ADR 0388). Registers are numbered 0-31;
 ## 31 is `sp` or `xzr` as the instruction defines. Vector registers `d0`-`d31`
 ## are numbered 0-31 too: an instruction's operand kinds are fixed.
@@ -112,7 +112,7 @@ pub fn Asm.mov_ri(mut self, d int, v int)
 fn rrr(base int, d int, n int, m int) int
     base + m * 65536 + n * 32 + d
 
-## `add`, `sub`, `adds`, `subs`, `and`, `orr`, `eor` with registers.
+## `add`, `sub`, `adds`, `subs`, `and`, `ands`, `orr`, `eor` with registers.
 pub fn Asm.alu_rr(mut self, op str, d int, n int, m int)
     base := match op
         "add" => 2332033024
@@ -121,6 +121,7 @@ pub fn Asm.alu_rr(mut self, op str, d int, n int, m int)
         "subs" => 3942645760
         "and" => 2315255808
         "orr" => 2852126720
+        "ands" => 3925868544
         _ => 3388997632
     word(rrr(base, d, n, m))
 
@@ -135,6 +136,10 @@ pub fn Asm.alu_ri(mut self, op str, d int, n int, imm int)
 
 pub fn Asm.cmp_rr(mut self, n int, m int)
     alu_rr("subs", XZR, n, m)
+
+## `tst n, m`: the flags of `n & m`.
+pub fn Asm.tst_rr(mut self, n int, m int)
+    alu_rr("ands", XZR, n, m)
 
 pub fn Asm.cmp_ri(mut self, n int, imm int)
     alu_ri("subs", XZR, n, imm)
@@ -327,6 +332,9 @@ pub fn Asm.b_cond(mut self, cond int, l int)
 pub fn Asm.bl(mut self, sym str)
     fixups.push(Fixup(at: code.len(), kind: "b26", label: -1, sym: sym))
     word(2483027968)
+
+pub fn Asm.blr(mut self, r int)
+    word(3594452992 + r * 32)
 
 pub fn Asm.ret(mut self)
     word(3596551104)

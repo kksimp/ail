@@ -1,0 +1,7 @@
+fn main() !
+    re := regex.compile(r"ERROR (\d+)")?
+    mut n := 0
+    for l in fs.read_text(env.args()[0])?.lines()
+        if re.is_match(l)
+            n += 1
+    print(n)

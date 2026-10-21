@@ -1,0 +1,28 @@
+# Float and bool values and keys; `values()` and `keys()` are lists in insertion order (type.map.6).
+fn main()
+    mut prices := Map[str, float]()
+    prices["tea"] = 2.5
+    prices["milk"] = 0.99
+    prices["tea"] += 0.25
+    prices["rice"] += 1.5
+    print(prices)
+    print(prices.values())
+    mut total := 0.0
+    for p in prices.values()
+        total += p
+    print(total)
+    mut seen := Map[int, bool]()
+    for i in 0..10
+        seen[i * 3 % 7] = i % 2 == 0
+    print(seen)
+    print(seen.values())
+    print(seen.keys())
+    mut by := Map[bool, int]()
+    by[true] = 1
+    by[false] = 2
+    print(by)
+    print(by.keys())
+    d := prices.get("none") else 0.0
+    print(d)
+    e := prices.get("tea") else 0.0
+    print(e)

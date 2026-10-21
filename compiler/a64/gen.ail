@@ -90,6 +90,11 @@ struct Gen
     sp_shift int
     ## Caller-saved registers in use, which a `push`'s slow path saves.
     caller_used List[int]
+    ## Shrink-wrapping (ADR 0625): the block that saves the callee-saved
+    ## registers (-1: the prologue does), and the blocks whose returns
+    ## restore them.
+    wrap int
+    region List[bool]
 
 ## Generate the whole program for `os`: the entry, then each function.
 pub fn generate(m mir.Module, os int) codegen.Image
@@ -125,7 +130,7 @@ fn add_code(mut img codegen.Image, a Asm, name str)
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: fx.kind, sym: fx.sym, tail: 0))
 
 fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
-    f := codegen.split_edges(f0)
+    f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]
@@ -155,6 +160,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         slots: al.slots,
         frame: 0,
         sp_shift: 0,
+        wrap: al.wrap,
+        region: al.region,
     )
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
     g.prologue()
@@ -188,8 +195,9 @@ fn Gen.prologue(mut self)
     if 8 * (saved.len() + slots) > 32760
         unreachable("a64: frame of {frame} bytes is too large")
     adjust_sp("sub", frame)
-    for k in 0..saved.len()
-        save(saved[k], 8 * k, true)
+    if wrap < 0
+        for k in 0..saved.len()
+            save(saved[k], 8 * k, true)
 
 fn Gen.save(mut self, r int, off int, store bool)
     if r >= FB
@@ -202,9 +210,10 @@ fn Gen.save(mut self, r int, off int, store bool)
     else
         a.ldr(r, SP, off)
 
-fn Gen.epilogue(mut self)
-    for k in 0..saved.len()
-        save(saved[k], 8 * k, false)
+fn Gen.epilogue(mut self, block int)
+    if wrap < 0 or region[block]
+        for k in 0..saved.len()
+            save(saved[k], 8 * k, false)
     a.mov_rr(SP, FP)
     a.pop_pair(FP, LR)
     a.ret()
@@ -239,6 +248,8 @@ fn Gen.gpr(mut self, v int, scratch int) int
         a.mov_ri(scratch, i.imm)
     elif i.op == "str"
         a.adr_sym(scratch, "d:s{i.imm}")
+    elif i.op == "fnaddr"
+        a.adr_sym(scratch, i.name)
     else
         unreachable("value v{v} has no location")
     scratch
@@ -296,6 +307,8 @@ fn Gen.move_of(self, dst int, v int) Move
         return Move(dst: dst, src: -1, imm: i.imm, sym: "", float: fl)
     if i.op == "str"
         return Move(dst: dst, src: -1, imm: 0, sym: "d:s{i.imm}", float: fl)
+    if i.op == "fnaddr"
+        return Move(dst: dst, src: -1, imm: 0, sym: i.name, float: fl)
     if i.op == "fconst"
         return Move(dst: dst, src: -1, imm: codegen.f64_bits(i.fimm), sym: "", float: fl)
     Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
@@ -339,6 +352,9 @@ fn Gen.emit_move(mut self, mv Move)
             a.ldr_d(x, SP, slot(mv.src))
         if is_slot(mv.dst)
             a.str_d(x, SP, slot(mv.dst))
+        return
+    if is_slot(mv.dst) and is_reg(mv.src)
+        a.str(mv.src, SP, slot(mv.dst))
         return
     r := if is_reg(mv.dst) then mv.dst else S0
     if mv.src < 0
@@ -386,8 +402,19 @@ fn Gen.gen_block(mut self, b int)
         last := blk.insts[n - 1]
         if last.dst == blk.term.cond and uses[last.dst] == 1 and cond_of(last.op) >= 0
             fused = n - 1
+    # `x & m == 0` (or `!= 0`) as a branch condition is one `tst` (ADR 0623).
+    mut masked := -1
+    if fused > 0
+        cmp := blk.insts[fused]
+        mask := blk.insts[fused - 1]
+        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.args[0] == mask.dst
+            if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0
+                masked = fused - 1
+    if b == wrap
+        for k in 0..saved.len()
+            save(saved[k], 8 * k, true)
     for k in 0..n
-        if k != fused
+        if k != fused and k != masked
             gen_inst(blk.insts[k])
     t := blk.term
     match t.kind
@@ -399,14 +426,22 @@ fn Gen.gen_block(mut self, b int)
                 if rotates(to)
                     # The loop test again here, instead of a jump back to it.
                     h := f.blocks[to]
-                    branch_to(compare(h.insts[0]), h.term.targets[0], h.term.targets[1])
+                    branch_to(
+                        compare(h.insts[h.insts.len() - 1]),
+                        h.term.targets[0],
+                        h.term.targets[1],
+                    )
                 else
                     a.b(blabels[to])
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
             mut cc := NE
-            if fused >= 0
+            if masked >= 0
+                bt := blk.insts[masked]
+                a.tst_rr(gpr(bt.args[0], S0), gpr(bt.args[1], S1))
+                cc = cond_of(blk.insts[fused].op)
+            elif fused >= 0
                 cc = compare(blk.insts[fused])
             else
                 a.cmp_ri(gpr(t.cond, S0), 0)
@@ -417,7 +452,7 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(FB, t.value)])
                 else
                     parallel([move_of(0, t.value)])
-            epilogue()
+            epilogue(b)
         _ => a.brk()
 
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the
@@ -435,9 +470,14 @@ fn Gen.branch_to(mut self, cc int, yes int, no int)
 ## on the way round a loop (loop rotation, ADR 0611).
 fn Gen.rotates(self, to int) bool
     h := f.blocks[to]
-    if h.term.kind != "branch" or h.insts.len() != 1
+    n := h.insts.len()
+    if h.term.kind != "branch" or n == 0
         return false
-    last := h.insts[0]
+    # Constants rebuilt at each use cost nothing to repeat.
+    for k in 0..n - 1
+        if not codegen.is_remat(h.insts[k])
+            return false
+    last := h.insts[n - 1]
     last.dst == h.term.cond and uses[last.dst] == 1 and cond_of(last.op) >= 0
 
 ## The condition that means a comparison is true, or -1. After `fcmp`, these
@@ -581,6 +621,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.mov_rr(d, S1)
             put_gpr(i.dst, d)
         "call" => call(i)
+        "icall" => call_out(i)
+        "utrap" => a.b(stub(14, i.args[0], i.args[0], i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
@@ -656,6 +698,10 @@ fn Gen.divide(mut self, i mir.Inst)
     x := i.args[0]
     y := i.args[1]
     sym := if i.op == "div" then "/" else "%"
+    if k := imm(y)
+        if k > 2 and k < 2147483648 and k.bit_and(k - 1) != 0
+            magic_divide(i, k)
+            return
     ra := gpr(x, S0)
     rb := gpr(y, S1)
     d := out_checked(i.dst, i)
@@ -679,6 +725,26 @@ fn Gen.divide(mut self, i mir.Inst)
         a.bind(done)
     else
         a.sdiv(d, ra, rb)
+    put_gpr(i.dst, d)
+
+## Division and remainder by a constant `k` (not a power of two) with a high
+## multiply (`codegen.div_magic`), not `sdiv`.
+fn Gen.magic_divide(mut self, i mir.Inst, k int)
+    ra := gpr(i.args[0], S0)
+    mg := codegen.div_magic(k)
+    a.mov_ri(S1, mg[0])
+    a.smulh(S2, ra, S1)
+    a.alu_rr("add", S2, S2, ra)
+    if mg[1] > 0
+        a.shift_ri("asr", S2, S2, mg[1])
+    a.shift_ri("lsr", S1, ra, 63)
+    a.alu_rr("add", S2, S2, S1)
+    d := out_gpr(i.dst, S1)
+    if i.op == "div"
+        a.mov_rr(d, S2)
+    else
+        a.mov_ri(S1, k)
+        a.msub(d, S2, S1, ra)
     put_gpr(i.dst, d)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
@@ -764,9 +830,15 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
+    # A call through a value (`icall`) takes the callee first, into the scratch register
+    # that moves don't use (a float constant goes through `S0`).
+    indirect := i.op == "icall"
     mut extra := List[int]()
-    for v in i.args
-        if f.vals[v].is_float()
+    for k in 0..i.args.len()
+        v := i.args[k]
+        if indirect and k == 0
+            moves.push(move_of(S2, v))
+        elif f.vals[v].is_float()
             moves.push(move_of(FB + nf, v))
             nf += 1
         elif ni < INT_ARGS
@@ -783,7 +855,10 @@ fn Gen.call_out(mut self, i mir.Inst)
         for k in 0..extra.len()
             a.str(gpr(extra[k], S0), SP, 8 * k)
     parallel(moves)
-    a.bl(i.name)
+    if indirect
+        a.blr(S2)
+    else
+        a.bl(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
         img.calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
@@ -835,6 +910,18 @@ fn Gen.prim(mut self, i mir.Inst)
             k := imm(i.args[0]) else 0
             if k > 0
                 a.alu_ri("add", d, d, 8 * k)
+            put_gpr(i.dst, d)
+        "globals_end" =>
+            d := out_gpr(i.dst, S1)
+            a.adr_sym(d, "globals")
+            a.alu_ri("add", d, d, 8 * m.globals_used())
+            put_gpr(i.dst, d)
+        "gc_regs" =>
+            b := gpr(i.args[0], S0)
+            for k in 0..10
+                a.str(19 + k, b, 8 * k)
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, SP)
             put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)
@@ -932,9 +1019,16 @@ fn Gen.list_set(mut self, i mir.Inst)
 ## the index's register, or -1 with a constant index's element number.
 fn Gen.indexed_at(mut self, i mir.Inst) int
     if k := imm(i.args[1])
-        if k >= 0 and k < 4095
-            return -1 - k
-    gpr(i.args[1], S1)
+        if k + i.elem_off() >= 0 and k + i.elem_off() < 4095
+            return -1 - k - i.elem_off()
+    x := gpr(i.args[1], S1)
+    if i.elem_off() > 0
+        a.alu_ri("add", S1, x, i.elem_off())
+        return S1
+    if i.elem_off() < 0
+        a.alu_ri("sub", S1, x, 0 - i.elem_off())
+        return S1
+    x
 
 fn Gen.indexed_load(mut self, i mir.Inst)
     base := gpr(i.args[0], S0)

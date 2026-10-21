@@ -1,0 +1,4 @@
+fn main()
+    mut data := b"ab"
+    data.append(99)
+    print(data.len())

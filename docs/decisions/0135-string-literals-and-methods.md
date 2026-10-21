@@ -87,7 +87,7 @@ Kotlin's `contains(Char)`).
    literal. `r` must be immediately followed by `"` (`r "x"` is the name `r`,
    then a string).
 
-```ail
+```ail fragment
 a := """
     a
     b
@@ -135,7 +135,7 @@ e := r""""bad \u12G4""""  # "bad \u12G4"
     and other control characters (Cc) as `\u{hex}` (lowercase, no padding).
     Everything else is written as is, including `{` and the other quote.
 
-```ail
+```ail excerpt
 "a,b".split(',')                          # ["a", "b"]
 "+-*/".contains(c)                        # c is a char
 "a\nb\n".lines()                          # ["a", "b"]

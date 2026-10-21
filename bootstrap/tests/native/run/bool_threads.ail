@@ -1,0 +1,29 @@
+# `a or b`, `a and b` and `not` in conditions branch directly (ADR 0623); the
+# right side runs only when the left leaves the result open.
+fn noisy(name str, v bool) bool
+    print("eval {name}")
+    v
+
+fn pick(a int, b int, c int) int
+    if a == 0 or b > c
+        return 1
+    if a > 5 and not (b == c) and c != 0
+        return 2
+    3
+
+fn main()
+    print(pick(0, 1, 2))
+    print(pick(1, 5, 2))
+    print(pick(7, 1, 2))
+    print(pick(7, 2, 2))
+    print(pick(7, 1, 0))
+    if noisy("a", false) or noisy("b", true) and not noisy("c", false)
+        print("yes")
+    if noisy("d", true) or noisy("e", true)
+        print("yes again")
+    mut n := 0
+    mut done := false
+    while not done
+        n += 1
+        done = n >= 3 or n == 7
+    print(n)
