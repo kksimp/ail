@@ -107,6 +107,7 @@ impl<'p> Checker<'p> {
             TypeKind::Ref(_) => Some("ref".to_string()),
             TypeKind::Ptr(_) => Some("a raw pointer".to_string()),
             TypeKind::Fn { .. } => Some("fn".to_string()),
+            TypeKind::Tuple(elems) => elems.iter().find_map(|e| self.ungeneratable(e, seen)),
             TypeKind::Named { name, args } => match name.as_str() {
                 "int" | "i64" | "float" | "f64" | "str" | "bytes" | "char" | "bool" if args.is_empty() => None,
                 "List" | "Set" | "Map" => args.iter().find_map(|a| self.ungeneratable(a, seen)),

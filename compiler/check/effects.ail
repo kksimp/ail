@@ -473,6 +473,7 @@ fn Walked.stmt(mut self, prog ast.Program, fx Facts, s ast.Stmt)
             if e := v
                 expr(prog, fx, e)
         Eval(e) => expr(prog, fx, e)
+        LetTuple(_, value, _) => expr(prog, fx, value)
         Handle(value, o) =>
             expr(prog, fx, value)
             otherwise(prog, fx, o)
@@ -512,6 +513,9 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
             for x in items
                 expr(prog, fx, x)
         SetLit(items, _) =>
+            for x in items
+                expr(prog, fx, x)
+        TupleLit(items, _) =>
             for x in items
                 expr(prog, fx, x)
         Comp(_, elem, value, clauses, _) =>

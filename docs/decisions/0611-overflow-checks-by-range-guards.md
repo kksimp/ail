@@ -56,7 +56,7 @@ register before the `imul`, and `cmp r, 0`.
    then store and bump the length with no full-list test or runtime call.
    New MIR op `cap`; `imm` 1 on a `push` call means room is guaranteed.
 8. **Lists sized where they are made.** If the list is `list_new(0)` and the
-   loop's bound is known at that point, `rt.list_new_for(lo, hi, per)` makes
+   loop's bound is known at that point, `rt.list_new_for(lo, hi, per, size)` (`size` added by ADR 0816) makes
    it with room for the loop instead of making it 4 wide, then regrowing
    in `list_reserve`; the reserve call is dropped when the list is made in
    the loop's preheader.

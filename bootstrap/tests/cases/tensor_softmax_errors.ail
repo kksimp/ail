@@ -1,0 +1,2 @@
+fn main()
+    print(tensor.from([1, 2]).softmax())

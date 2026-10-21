@@ -11,7 +11,7 @@ use crate::num::Num;
 use crate::stdlib::{StdCall, TENSOR_METHODS};
 
 impl<'p> Checker<'p> {
-    fn tensor_ty(&self, elem: Ty) -> Ty {
+    pub(super) fn tensor_ty(&self, elem: Ty) -> Ty {
         match self.types.get("tensor.Tensor") {
             Some(Def::Struct(s)) => Ty::Struct(*s, vec![elem]),
             _ => unreachable!("std/types.ail declares `Tensor`"),
@@ -156,10 +156,26 @@ impl<'p> Checker<'p> {
             );
             return Some(Ty::Err);
         }
+        if m == "top2" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.23",
+                pos,
+                "`top2` is on `float` tensors, and this one holds `int`",
+                "use `argmax` for the best index of an `int` tensor",
+            );
+            return Some(Ty::Err);
+        }
         if matches!(m, "relu" | "sigmoid" | "tanh") && elem == Ty::Int {
             self.args_only(args);
             let msg = format!("`{m}` is on `float` tensors, and this one holds `int`");
             self.error_help("std.tensor.13", pos, msg, format!("convert first: `t.map(|x| x.to_float()).{m}()`"));
+            return Some(Ty::Err);
+        }
+        if m == "softmax" && elem == Ty::Int {
+            self.args_only(args);
+            let msg = "`softmax` is on `float` tensors, and this one holds `int`";
+            self.error_help("std.tensor.24", pos, msg, "convert first: `t.map(|x| x.to_float()).softmax()`");
             return Some(Ty::Err);
         }
         let t = rt.clone();
@@ -174,13 +190,15 @@ impl<'p> Checker<'p> {
             "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
             "sum" | "max" | "mean" => (vec![Ty::Int], t),
             "transpose" => (vec![], t),
+            // std.tensor.23: (best index, second index, margin) along an axis.
+            "top2" => (vec![Ty::Int], Ty::Tuple(vec![self.tensor_ty(Ty::Int), self.tensor_ty(Ty::Int), t.clone()])),
             "round" => (vec![], self.tensor_ty(Ty::Int)),
             "argmax" | "argmin" if args.is_empty() => (vec![], Ty::Int),
             "argmax" | "argmin" => (vec![Ty::Int], self.tensor_ty(Ty::Int)),
             "clamp" => (vec![bound.clone(), bound], t),
             "dot" => (vec![t], elem),
             "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
-            "relu" | "sigmoid" | "tanh" => (vec![], t),
+            "relu" | "sigmoid" | "tanh" | "softmax" => (vec![], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),
         };
