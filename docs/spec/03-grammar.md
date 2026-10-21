@@ -167,7 +167,7 @@ by the mistakes corpus (`bootstrap/tests/mistakes/`).
 
 ```ail error=gram.syntax.1
 fn main()
-    while := 1          # `while` is a keyword, so this line doesn't parse
+    x := 1 +            # an operator with nothing after it doesn't parse
 ```
 
 ```ail error=gram.foreign.1 rules=gram.rec.1
