@@ -1037,6 +1037,7 @@ impl<'p> Checker<'p> {
             }),
             Expr::Unary { operand, .. } => self.constant_expr(operand),
             // A constant is shared by the whole program, so it can't hold a cell.
+            // ct.const.4: a constant's value can't contain a `ref` cell (the ref part of the rule).
             Expr::Ref { pos, .. } => self.error_help(
                 "mod.const.2",
                 *pos,
@@ -1434,6 +1435,8 @@ impl<'p> Checker<'p> {
                     );
                 }
             }
+            // type.opt.8: a `T?` doesn't convert to a `T??`. The help below still names type.opt.7;
+            // see docs/design/rule-coverage.md.
             (Ty::Opt(w), Ty::Opt(_)) if matches!(**w, Ty::Opt(_)) => self.error_help(
                 rule,
                 pos,

@@ -82,6 +82,26 @@ A block that cannot run because it uses names outside its own snippet keeps
   - *Possible mis-citation:* `check.rs` reports the nested-optional error with `type.opt.7`; spec `type.opt.8` describes that rule. The owner should decide which ID the diagnostic carries.
 
 Check 1 (cited but not in the spec) has three pre-existing entries that lane 207 did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`bootstrap/src/interp/tz.rs`).
+## Check 2 after lane 244 (2026-10-21)
+
+Lane 207's "not implemented" entry for `native.bce.1`-`4` was stale: `compiler/mir/bce.ail`
+implements the bounds-check removal (ADR 0577, 0578, 0622). Lane 244 cites what each
+implementation covers, and checks the rest by running the tools:
+
+- **Cited now (10):** `native.bce.1`, `2`, `3`, `7`, `8`, `9` (the header of `bce.ail`);
+  `api.pkg.4` (`api.rs`, the single-file keys); `ct.const.4` (`check.rs`, the `ref` part);
+  `type.opt.8` (`check.rs`; its help still names `type.opt.7`, which the owner should fix);
+  `type.num.4` (`fmt.rs`; `ail fmt` keeps `i64` as written, checked by running it).
+- **Confirmed not implemented (4):** `type.enum.4` and `gen.anon.2` (`ail fmt` keeps
+  `Shape.Circle` and `[T Ord]` as written, checked by running it); `err.type.4` (lane 223
+  marks its example `skip=bootstrap`); `err.type.3` (no check found).
+- **Still unlocated (6):** `conc.race.1`, `gram.help.2`, `native.bce.4` (overflow-check
+  removal), `own.borrow.1`, `type.num.3`, `unsafe.op.2`.
+
+The audit counts a rule as cited only from code, so the not-implemented rules keep check 2
+failing until the designer decides how to record them: either the audit reads this file
+for exemptions, or the rules are implemented.
+
 ## Spec examples by chapter (lane 223, ADR 0498)
 `spec.rs` counts a rule as covered when a spec fence cites it (`rules=`,
 `error=`, or `skip=bootstrap rules=`). Before lane 223, chapters 01, 02 and 03

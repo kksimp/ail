@@ -188,6 +188,7 @@ enum PackageFailure {
 /// is prefixed with its module (`fn:net.get`, `type:ui.Window`), and it gains
 /// `module` and `file` keys after the single-file ones; `line` counts from
 /// the top of its own file. `--symbols` adds `references` with a `file` key.
+/// The single-file forms and their JSON are unchanged (api.pkg.4).
 fn package_outline(dir: &str, symbols: bool, form: Form) -> Result<String, PackageFailure> {
     let (mut prog, mut diags) = modules::load(dir).map_err(PackageFailure::Message)?;
     let mut resolved = Resolved::default();
