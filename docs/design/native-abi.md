@@ -148,6 +148,23 @@ The entry array is in insertion order, which is iteration order
 (type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
 A set uses the same layout and ignores the value word.
 
+**Socket object** (`net.Conn`, `net.Listener`; ADR 0830; `compiler/rt/native/net.ail`).
+A `Conn` or `Listener` value is a struct (kind 4) of one `int` field: an index
+into a list of socket objects that global slot 40 keeps alive.
+
+```text
++0   i64  fd       descriptor, -1 once closed
++8   u64  timeout  milliseconds a read, write or connect may wait
++16  ptr  buf      read buffer (pointer-free), or 0
++24  u64  pos      first unread byte in buf
++32  u64  len      bytes in buf
++40  u64  flags    1 end of stream seen
++48  ptr  peer     string: peer address of a Conn
++56  u64  kind     0 connection, 1 listener
++64  ptr  addr     string: bound address of a Listener
++72  u64  cap      size of buf
+```
+
 **Enum values** (ADR 0602, lane 179). An enum none of whose variants has
 fields is an `i64`, the variant's index in declaration order. Any other enum
 is a pointer to an **enum object** (heap kind 5, immutable, shared, never
@@ -259,7 +276,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
