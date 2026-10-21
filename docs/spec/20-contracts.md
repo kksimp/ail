@@ -308,3 +308,82 @@ impl Shape for Sq
 fn main()
     print(Sq.area(Sq(side: 2)))
 ```
+
+## Checked examples for the rules without one
+
+Each block is checked; the blocks marked `norun` trap on purpose, so they are not run (contract.ens.1, contract.inv.2, contract.inv.3).
+
+```ail norun rules=contract.ens.1
+fn half(n int) int
+    ensures result * 2 == n
+    n / 2
+
+fn main()
+    print(half(8))
+    print(half(7))
+```
+
+```ail rules=contract.inv.1
+struct Range
+    lo int
+    hi int
+    invariant lo <= hi
+
+fn main()
+    r := Range(lo: 1, hi: 5)
+    print(r.hi - r.lo)
+```
+
+```ail norun rules=contract.inv.2
+struct Range
+    lo int
+    hi int
+    invariant lo <= hi
+
+fn main()
+    r := Range(lo: 5, hi: 1)
+    print(r.hi)
+```
+
+```ail norun rules=contract.inv.3
+struct Counter
+    n int
+    invariant n >= 0
+
+fn Counter.drop_to(mut self, k int)
+    self.n = k - 10
+
+fn main()
+    mut c := Counter(n: 3)
+    c.drop_to(2)
+    print(c.n)
+```
+
+```ail rules=contract.inh.1,contract.inh.2,contract.inh.3
+trait Sized
+    fn size(self) int
+        ensures result >= 0
+
+struct Box
+    w int
+
+impl Sized for Box
+    fn size(self) int
+        ensures result < 100
+        self.w * self.w
+
+fn main()
+    print(Box(w: 4).size())
+```
+
+```ail rules=contract.run.2
+fn fact(n int) int
+    requires n >= 0
+    ensures n == 0 or result == n * fact(n - 1)
+    if n <= 1
+        return 1
+    n * fact(n - 1)
+
+fn main()
+    print(fact(5))
+```
