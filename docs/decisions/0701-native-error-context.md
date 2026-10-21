@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture
 - **Spec rules:** err.ctx.1, err.ctx.2, err.ctx.3, err.prop.5
-- **Builds on:** [ADR 0574](0574-native-optionals-and-results.md)
+- **Builds on:** [ADR 0574](0574-native-optional-layout.md)
 
 ## Context
 
