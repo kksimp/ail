@@ -26,6 +26,13 @@ fn net_module_lookup(name str) NetFn?
         "connect" => net_fn("rt.net_connect", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
         "get" => net_fn("rt.net_get", [Ty.Str], Ty.Struct(NET_RESPONSE), true)
         "post" => net_fn("rt.net_post", [Ty.Str, Ty.Str, Ty.Str], Ty.Struct(NET_RESPONSE), true)
+        "request" => net_fn(
+            "rt.net_request",
+            [Ty.Str, Ty.Str, Ty.Struct(NET_OPTIONS)],
+            Ty.Struct(NET_RESPONSE),
+            true,
+        )
+        "options" => net_fn("rt.net_options", [], Ty.Struct(NET_OPTIONS), false)
         _ => none
 
 ## `T.NAME` for a method of `net.Conn` or `net.Listener`.
@@ -57,7 +64,13 @@ fn net_module_fails(name str) bool
 fn Lower.lower_net_module(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
     f := net_module_lookup(name) else
         return unsupported(npos, "`net.{name}`")
-    net_call(f, [], args, npos)
+    if name == "request"
+        # The traps of its options (std.net.6, std.net.19) print the call's
+        # position, so the runtime gets their texts.
+        t6 := trap_texts("std.net.6", npos)
+        t19 := trap_texts("std.net.19", npos)
+        return net_call(f, [], args, npos, [t6[0], t19[0], t6[1]])
+    net_call(f, [], args, npos, [])
 
 ## `x.NAME(...)` on a `net.Conn` or `net.Listener`, from `struct_call`.
 fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
@@ -65,10 +78,11 @@ fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos 
         return unsupported(pos, "calling `{key}`")
     r := recv else return unsupported(pos, "calling `{key}`")
     # The handle is the struct's one field.
-    net_call(f, [load(r.id, 0, Ty.Int)], args, pos)
+    net_call(f, [load(r.id, 0, Ty.Int)], args, pos, [])
 
-## Emit the call of `f` with the leading values `lead` and `args`.
-fn Lower.net_call(mut self, f NetFn, lead List[int], args List[ast.Arg], pos ast.Pos) Val?
+## Emit the call of `f` with the leading values `lead`, `args`, and the
+## trailing values `after`.
+fn Lower.net_call(mut self, f NetFn, lead List[int], args List[ast.Arg], pos ast.Pos, after List[int]) Val?
     if args.len() != f.params.len()
         return unsupported(pos, "this call")
     mut vs := lead
@@ -78,6 +92,8 @@ fn Lower.net_call(mut self, f NetFn, lead List[int], args List[ast.Arg], pos ast
             return unsupported(pos, "labelled arguments")
         v := lower_value(a.value, f.params[i])?
         vs.push(convert(v, f.params[i], expr_pos(a.value)))
+    for v in after
+        vs.push(v)
     if f.fails
         vs.push(trace_line(pos))
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)

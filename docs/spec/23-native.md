@@ -95,7 +95,7 @@ readable yet, and on macOS the program traps at `proc.run`); raw TCP (std.net.12
 `net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
 `close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
 per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
-fails with kind `tls`, and `Accept-Encoding`, `net.request`, its options and connection pooling are not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
+fails with kind `tls`, and `Accept-Encoding` and connection pooling are not built), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
 other host fails with kind `not_found`, as there is no DNS client yet), no TLS, a wait does not let other tasks run, the
 `bytes` forms are not built, and a message's wording may differ from the interpreter's (the `kind` is the same); and the standard
 modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,

@@ -82,3 +82,25 @@ A client and a server cannot share one native program until native tasks
 exist, so the check is `tools/native-net/check.sh`: a scripted server
 (`server.py`) and `http_client.ail`, whose output `ail run`, the x86-64
 executable and the ARM64 executable under qemu must print identically.
+
+## Update: `net.request` and `net.Options` (slice 2b)
+
+`net.options()` builds the `net.Options` struct (eight words: `headers`,
+`query`, `body`, `timeout_ms`, `max_redirects`, `data`, `connect_ms`,
+`total_ms`), and `net.request(method, url, opts)` runs the same exchange as
+`net.get` with the options applied, as the interpreter does: the method is
+uppercased and must be a token; header names must be tokens and values must
+hold no CR, LF or NUL (`bad_request`); `query` is percent-encoded and
+appended before any fragment; `Authorization` and `Cookie` are dropped when a
+redirect changes origin; a `Transfer-Encoding: chunked` header sends the body in
+chunks of at most 8 KiB; the client sets `Connection`, `Content-Length` and
+`Transfer-Encoding` itself. A `timeout_ms` below 1 or `max_redirects` below 0
+traps with `std.net.6`, and a negative `connect_ms` or `total_ms` with
+`std.net.19`, at the call.
+
+Limits: `total_ms` is validated but not enforced (the native runtime has no
+clock yet), `data` is a placeholder because `bytes` is not in the native
+subset (so `request_bytes` is not built), and there is no pooling or
+`Accept-Encoding`. `tools/native-net/http_request.ail` and
+`bootstrap/tests/native/run/net_request_*.ail` compare all of it to the
+interpreter.
