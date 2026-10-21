@@ -533,3 +533,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind` *(delegated)* | Accepted | 2026-10-21 |
+| [0711](0711-tool-driving-agent-programs.md) | Agent programs that drive AIL's own tools: the twin calls the same tool, output is byte-identical, fixtures are committed (round 5) *(delegated)* | Accepted | 2026-10-21 |
