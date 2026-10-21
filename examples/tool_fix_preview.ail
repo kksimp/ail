@@ -8,8 +8,7 @@ fn main() !
     for name in ["bad_type.ail", "bad_name.ail"]
         r := proc.run("{here}/../ail", ["fix", "--dry-run", "{data}/{name}"])? "previewing {name}"
         mut errors := 0
-        both := "{r.out}{r.err}"
-        for line in both.lines()
+        for line in r.text().lines()
             if line.contains("error[")
                 errors += 1
         last := r.out.lines().last() else ""

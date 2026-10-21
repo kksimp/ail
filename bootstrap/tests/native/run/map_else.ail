@@ -1,0 +1,21 @@
+# `m.get(k) else ...` as a binding and as an operand (err.else.1-2).
+fn lookup(m Map[str, int], k str) int
+    v := m.get(k) else return -1
+    v * 2
+
+fn main()
+    mut m := Map[str, int]()
+    m["a"] = 5
+    print(lookup(m, "a"))
+    print(lookup(m, "b"))
+    counts := {1: 1}
+    mut seen := Map[int, int]()
+    for i in 0..50
+        k := i % 7
+        seen[k] = (seen.get(k) else 0) + 1
+    print(seen)
+    for i in 0..3
+        x := counts.get(i) else continue
+        print("found {i} {x}")
+    n := counts.get(1) else 0
+    print(n)

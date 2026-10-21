@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated the native self-compile lanes on 2026-10-20)
 - **Topic:** 23 — Compiler architecture
 - **Spec rules:** [native.subset.1](../spec/23-native.md), mod.const.1, own.val.1
+- **Supersedes:** [ADR 0570](0570-native-constant-lists.md)
 - **Builds on:** [ADR 0384](0384-mir-shape-and-native-subset.md) (constants inlined when they are constant expressions), [ADR 0602](0602-native-enum-layout.md)
 
 ## Context

@@ -617,6 +617,8 @@ fn read_head(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Result<Head
     }
     let status: i64 = parts
         .next()
+        // std.net.4: a status code is exactly three digits (RFC 9112 4); `20`, `+200` and `-1` are malformed.
+        .filter(|s| s.len() == 3 && s.bytes().all(|b| b.is_ascii_digit()))
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| protocol(format!("no status code in `{status_line}`")))?;
     let mut headers: Vec<(String, String)> = Vec::new();
@@ -662,6 +664,55 @@ fn read_head(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Result<Head
 /// The parts of a pooled connection that travel with a body being read.
 type IdleParts = ((bool, String, u16), Limits, TcpStream, Duration);
 
+/// One read of a body in `frame` from `r`: up to `max` bytes and the frame
+/// that remains (`Frame::None` once the body has ended).
+fn read_step(r: &mut impl BufRead, frame: Frame, max: usize) -> Result<(Vec<u8>, Frame), Bad> {
+    let io = |e: std::io::Error| (connect_kind(&e), e.to_string());
+    let mut out = Vec::new();
+    let frame = match frame {
+        Frame::None => Frame::None,
+        Frame::Length(left) => {
+            out.resize(max.min(left), 0);
+            let n = r.read(&mut out).map_err(io)?;
+            if n == 0 {
+                return Err(("closed", "the connection ended before the whole body arrived".to_string()));
+            }
+            out.truncate(n);
+            if n == left { Frame::None } else { Frame::Length(left - n) }
+        }
+        Frame::Chunked { mut left } => {
+            if left == 0 {
+                let size_line = read_line(r)?;
+                let size_text = size_line.split(';').next().unwrap_or("").trim();
+                left = usize::from_str_radix(size_text, 16).map_err(|_| protocol(format!("bad chunk size `{size_line}`")))?;
+                if left == 0 {
+                    // Trailers, up to the blank line.
+                    while !read_line(r)?.is_empty() {}
+                    return Ok((out, Frame::None));
+                }
+            }
+            out.resize(max.min(left), 0);
+            let n = r.read(&mut out).map_err(io)?;
+            if n == 0 {
+                return Err(("closed", "the connection ended inside a chunk".to_string()));
+            }
+            out.truncate(n);
+            left -= n;
+            if left == 0 {
+                read_line(r)?;
+            }
+            Frame::Chunked { left }
+        }
+        Frame::ToEof => {
+            out.resize(max, 0);
+            let n = r.read(&mut out).map_err(io)?;
+            out.truncate(n);
+            if n == 0 { Frame::None } else { Frame::ToEof }
+        }
+    };
+    Ok((out, frame))
+}
+
 /// A response body being read in pieces (std.net.25). When it has been read
 /// to its end on a connection that can carry another request, the connection
 /// goes back to the pool; dropped earlier, the connection is closed.
@@ -676,54 +727,9 @@ impl Streaming {
     /// Up to `max` bytes of the body; none at its end.
     pub fn read_some(&mut self, max: usize) -> Result<Vec<u8>, Bad> {
         let Some(r) = self.r.as_mut() else { return Ok(Vec::new()) };
-        let io = |e: std::io::Error| (connect_kind(&e), e.to_string());
-        let mut out = Vec::new();
-        match self.frame {
-            Frame::None => {}
-            Frame::Length(left) => {
-                out.resize(max.min(left), 0);
-                let n = r.read(&mut out).map_err(io)?;
-                if n == 0 {
-                    return Err(("closed", "the connection ended before the whole body arrived".to_string()));
-                }
-                out.truncate(n);
-                self.frame = if n == left { Frame::None } else { Frame::Length(left - n) };
-            }
-            Frame::Chunked { mut left } => {
-                if left == 0 {
-                    let size_line = read_line(r)?;
-                    let size_text = size_line.split(';').next().unwrap_or("").trim();
-                    left = usize::from_str_radix(size_text, 16).map_err(|_| protocol(format!("bad chunk size `{size_line}`")))?;
-                    if left == 0 {
-                        // Trailers, up to the blank line.
-                        while !read_line(r)?.is_empty() {}
-                        self.frame = Frame::None;
-                        self.finish();
-                        return Ok(out);
-                    }
-                }
-                out.resize(max.min(left), 0);
-                let n = r.read(&mut out).map_err(io)?;
-                if n == 0 {
-                    return Err(("closed", "the connection ended inside a chunk".to_string()));
-                }
-                out.truncate(n);
-                left -= n;
-                if left == 0 {
-                    read_line(r)?;
-                }
-                self.frame = Frame::Chunked { left };
-            }
-            Frame::ToEof => {
-                out.resize(max, 0);
-                let n = r.read(&mut out).map_err(io)?;
-                out.truncate(n);
-                if n == 0 {
-                    self.frame = Frame::None;
-                }
-            }
-        }
-        if self.frame == Frame::None && self.r.is_some() {
+        let (out, frame) = read_step(r, self.frame, max)?;
+        self.frame = frame;
+        if self.frame == Frame::None {
             self.finish();
         }
         Ok(out)
@@ -786,6 +792,31 @@ fn read_frame_all(r: &mut impl BufRead, frame: Frame) -> Result<Vec<u8>, Bad> {
 mod tests {
     use super::*;
 
+    /// std.net.26: each bad body names its encoding and the decoder's reason.
+    #[test]
+    fn decode_errors_name_the_reason() {
+        let mk = |enc: &str, body: Vec<u8>| Response {
+            status: 200,
+            headers: vec![("content-encoding".into(), enc.into())],
+            all: vec![],
+            body,
+        };
+        let gz = crate::codec::gzip::gzip(b"hello world hello world", 6);
+        let cases = [
+            ("gzip", gz[..gz.len() - 4].to_vec(), "a body that says it is gzip is not: truncated gzip trailer"),
+            ("gzip", b"not gzip at all".to_vec(), "a body that says it is gzip is not: not gzip data"),
+            (
+                "deflate",
+                vec![0x78, 0x9c, 0xf3, 0x48],
+                "a body that says it is deflate is not: unexpected end of compressed data",
+            ),
+        ];
+        for (enc, body, want) in cases {
+            let mut r = mk(enc, body);
+            assert_eq!(decode_body("http://h/x", &mut r).err().unwrap().message, want);
+        }
+    }
+
     #[test]
     fn urls() {
         let t = parse_url("http://example.com:8080/a/b?q=1#frag").ok().unwrap();
@@ -808,5 +839,25 @@ mod tests {
         assert_eq!(r.status, 200);
         assert_eq!(r.body, b"Wikipedia");
         assert_eq!(r.headers[1], ("x-a".to_string(), "1, 2".to_string()));
+    }
+
+    #[test]
+    fn body_steps_report_a_connection_that_ends_early() {
+        // std.net.25: a chunk announced as 5 bytes with only 2 sent.
+        let mut r = BufReader::new("5\r\nab".as_bytes());
+        let (got, frame) = read_step(&mut r, Frame::Chunked { left: 0 }, 64).ok().unwrap();
+        assert_eq!((got.as_slice(), frame), (&b"ab"[..], Frame::Chunked { left: 3 }));
+        let err = read_step(&mut r, frame, 64).err().unwrap();
+        assert_eq!(err, ("closed", "the connection ended inside a chunk".to_string()));
+        // A length body that stops short.
+        let mut r = BufReader::new("abc".as_bytes());
+        let (_, frame) = read_step(&mut r, Frame::Length(5), 64).ok().unwrap();
+        let err = read_step(&mut r, frame, 64).err().unwrap();
+        assert_eq!(err, ("closed", "the connection ended before the whole body arrived".to_string()));
+        // A whole chunked body ends in `Frame::None`.
+        let mut r = BufReader::new("2\r\nhi\r\n0\r\n\r\n".as_bytes());
+        let (a, f) = read_step(&mut r, Frame::Chunked { left: 0 }, 64).ok().unwrap();
+        let (b, f) = read_step(&mut r, f, 64).ok().unwrap();
+        assert_eq!((a.as_slice(), b.len(), f), (&b"hi"[..], 0, Frame::None));
     }
 }

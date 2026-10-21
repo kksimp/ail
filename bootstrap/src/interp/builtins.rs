@@ -89,13 +89,21 @@ pub(super) struct Table {
     keys: Vec<Option<Value>>,
     /// Parallel to `keys` for a map; empty for a set.
     vals: Vec<Value>,
+    /// Text and integer keys, the common ones, are looked up without
+    /// building a `Key` (ADR 0738); other keys go through `index`.
+    strs: HashMap<Rc<str>, usize>,
+    ints: HashMap<i64, usize>,
     index: HashMap<Key, usize>,
 }
 
 impl Table {
     /// The slot of `k`, if it is a key.
     pub fn get(&self, k: &Value) -> Option<usize> {
-        self.index.get(&Key::of(k)).copied()
+        match k {
+            Value::Str(t) => self.strs.get(&**t).copied(),
+            Value::Int(n) | Value::Num(_, n) => self.ints.get(n).copied(),
+            _ => self.index.get(&Key::of(k)).copied(),
+        }
     }
 
     pub fn val(&self, i: usize) -> &Value {
@@ -132,7 +140,18 @@ impl Table {
             }
             return i;
         }
-        self.index.insert(Key::of(&k), self.keys.len());
+        let slot = self.keys.len();
+        match &k {
+            Value::Str(t) => {
+                self.strs.insert(t.clone(), slot);
+            }
+            Value::Int(n) | Value::Num(_, n) => {
+                self.ints.insert(*n, slot);
+            }
+            _ => {
+                self.index.insert(Key::of(&k), slot);
+            }
+        }
         self.keys.push(Some(k));
         if let Some(v) = v {
             self.vals.push(v);
@@ -143,11 +162,15 @@ impl Table {
     /// Remove a key, returning its value (for a map) if it was there. The
     /// others keep their order (type.map.1).
     pub fn remove(&mut self, k: &Value) -> Option<Option<Value>> {
-        let i = self.index.remove(&Key::of(k))?;
+        let i = match k {
+            Value::Str(t) => self.strs.remove(&**t),
+            Value::Int(n) | Value::Num(_, n) => self.ints.remove(n),
+            _ => self.index.remove(&Key::of(k)),
+        }?;
         self.keys[i] = None;
         let v = if self.vals.is_empty() { None } else { Some(std::mem::replace(&mut self.vals[i], Value::Unit)) };
-        let gaps = self.keys.len() - self.index.len();
-        if gaps > 16 && gaps > self.index.len() {
+        let gaps = self.keys.len() - self.len();
+        if gaps > 16 && gaps > self.len() {
             self.compact();
         }
         Some(v)
@@ -157,6 +180,8 @@ impl Table {
         let map = !self.vals.is_empty();
         let (keys, vals) = (std::mem::take(&mut self.keys), std::mem::take(&mut self.vals));
         self.index.clear();
+        self.strs.clear();
+        self.ints.clear();
         let mut vals = vals.into_iter();
         for k in keys {
             let v = if map { vals.next() } else { None };
@@ -167,7 +192,7 @@ impl Table {
     }
 
     pub fn len(&self) -> usize {
-        self.index.len()
+        self.index.len() + self.strs.len() + self.ints.len()
     }
 }
 
@@ -388,6 +413,8 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Float(x) => float_method(x, name, a, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
+                // type.coll.20: `is_empty` is `len() == 0`.
+                "is_empty" => Value::Bool(items.is_empty()),
                 "last" => opt(items.last().cloned()),
                 "first" => opt(items.first().cloned()),
                 // type.coll.15: the first `n` elements, or all of them.
@@ -455,11 +482,20 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 "join" => {
                     let Value::Str(sep) = &a[0] else { unreachable!("checked: str") };
-                    let mut parts = Vec::with_capacity(items.len());
-                    for x in items.iter() {
-                        parts.push(self.text(x, pos)?);
+                    // One buffer: strings and chars are appended as they are,
+                    // others through their text form.
+                    let mut out = String::new();
+                    for (i, x) in items.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(sep);
+                        }
+                        match x {
+                            Value::Str(t) => out.push_str(t),
+                            Value::Char(c) => out.push(*c),
+                            other => out.push_str(&self.text(other, pos)?),
+                        }
                     }
-                    s(parts.join(sep))
+                    s(out)
                 }
                 "sum" => match items.first() {
                     Some(Value::Num(k, _)) if k.is_float() => {
@@ -519,14 +555,29 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             Value::Map(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                // type.coll.20
+                "is_empty" => Value::Bool(t.len() == 0),
                 "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
+                // std.count.2: the `n` keys with the largest values, ties in insertion order.
+                "top" => {
+                    let Value::Int(count) = a[0] else { unreachable!("checked: an int count") };
+                    let mut pairs: Vec<(i64, Value)> = t
+                        .entries()
+                        .map(|(k, v)| (if let Value::Int(c) = v { *c } else { 0 }, k.clone()))
+                        .collect();
+                    pairs.sort_by(|x, y| y.0.cmp(&x.0));
+                    let keys = pairs.into_iter().take(count.max(0) as usize).map(|(_, k)| k).collect();
+                    Value::List(Rc::new(keys))
+                }
                 "keys" => Value::List(Rc::new(t.key_list())),
                 "values" => Value::List(Rc::new(t.val_list())),
                 _ => unreachable!("checked: Map.{name}"),
             },
             Value::Set(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                // type.coll.20
+                "is_empty" => Value::Bool(t.len() == 0),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
                 "sorted" => Value::List(Rc::new(self.sorted(t.key_list(), pos)?)),
                 "union" | "intersect" | "difference" => set_op(name, t.keys(), &a[0]),
@@ -551,11 +602,39 @@ impl<'a, W: Write> Interp<'a, W> {
         };
         Ok(match name {
             "split" => {
-                let sep = arg_str(0);
+                // The separator is borrowed, and a one-character one is searched
+                // for as a character (no substring searcher).
+                let mut one = [0u8; 4];
+                let sep: &str = match &a[0] {
+                    Value::Str(t) => t,
+                    Value::Char(c) => c.encode_utf8(&mut one),
+                    other => unreachable!("checked: str, found {other:?}"),
+                };
                 if sep.is_empty() {
                     return trap("type.str.4", pos, "`split` needs a non-empty separator".into());
                 }
-                Value::List(Rc::new(text.split(&*sep).map(s).collect()))
+                // type.str.4: with a limit, at most that many pieces; the last keeps the rest.
+                if a.len() == 2 {
+                    let limit = a[1].int();
+                    if limit < 1 {
+                        return trap("type.str.4", pos, format!("the limit of `split` must be at least 1, not {limit}"));
+                    }
+                    return Ok(Value::List(Rc::new(text.splitn(limit as usize, sep).map(s).collect())));
+                }
+                let mut chars = sep.chars();
+                let parts: Vec<Value> = match (chars.next(), chars.next()) {
+                    // Counting an ASCII separator is a vectorised byte scan, and
+                    // sizes the list once instead of growing it.
+                    (Some(c), None) if c.is_ascii() => {
+                        let n = text.bytes().filter(|&b| b == c as u8).count() + 1;
+                        let mut parts = Vec::with_capacity(n);
+                        parts.extend(text.split(c).map(s));
+                        parts
+                    }
+                    (Some(c), None) => text.split(c).map(s).collect(),
+                    _ => text.split(sep).map(s).collect(),
+                };
+                Value::List(Rc::new(parts))
             }
             "to_int" => {
                 let digits = text.strip_prefix('-').unwrap_or(text);
@@ -569,9 +648,15 @@ impl<'a, W: Write> Interp<'a, W> {
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
             // type.str.12: `len` counts characters; `byte_len` counts bytes.
             "len" => Value::Int(text.chars().count() as i64),
+            // type.str.19: `is_empty` is `len() == 0`.
+            "is_empty" => Value::Bool(text.is_empty()),
             "byte_len" => Value::Int(text.len() as i64),
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
-            "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
+            "lines" => {
+                let mut parts = Vec::with_capacity(text.bytes().filter(|&b| b == b'\n').count() + 1);
+                parts.extend(text.lines().map(s));
+                Value::List(Rc::new(parts))
+            }
             "trim" => s(text.trim()),
             "trim_start" => s(text.trim_start()),
             "trim_end" => s(text.trim_end()),

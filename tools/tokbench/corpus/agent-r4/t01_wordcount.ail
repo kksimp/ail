@@ -1,4 +1,4 @@
 fn main() !
     counts := fs.read_text(env.args()[0])?.words().counts()
-    for w in counts.keys().sorted(by: |k| -counts[k]).take(3)
+    for w in counts.top(3)
         print("{w} {counts[w]}")

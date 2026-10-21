@@ -23,7 +23,7 @@ fn passing_and_failing_tests_match_the_interpreter() {
     assert!(out.contains("match bootstrap/tests/native_test/mixed.ail::adds (native pass, interpreter pass)"), "{out}");
     assert!(out.contains("match bootstrap/tests/native_test/mixed.ail::fails_on_purpose (native fail, interpreter fail)"), "{out}");
     assert!(out.contains("assertion failed at line 14"), "the failure names the original line: {out}");
-    assert!(out.contains("not-native bootstrap/tests/native_test/mixed.ail::uses_a_map"), "{out}");
+    assert!(out.contains("not-native bootstrap/tests/native_test/mixed.ail::uses_defer"), "{out}");
     assert!(out.contains("skipped bootstrap/tests/native_test/mixed.ail::holds_for_all"), "{out}");
 }
 

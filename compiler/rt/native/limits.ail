@@ -9,13 +9,11 @@
 ## and `--max-memory` baked in below. A `for` loop is not a safepoint, and
 ## neither is recursion that never allocates.
 ##
-## Global slots 46-47 and 49-51 and 55 are this file's.
+## Global slots 45-47, 50 and 55 are this file's.
 
 LIM_TS := 46
 LIM_MS := 47
-LIM_START := 49
 LIM_CAP := 50
-LIM_USED := 51
 LIM_DEADLINE := 55
 LIM_TICK := 45
 
@@ -61,7 +59,7 @@ fn limits_init()
     if mb > 0
         store64(global(LIM_CAP), mb * 1048576)
     if ms > 0
-        store64(global(LIM_TS), alloc(16))
+        store64(global(LIM_TS), alloc(16, KIND_BYTES))
         store64(global(LIM_MS), ms)
         store64(global(LIM_DEADLINE), lim_now() + ms * 1000000)
         store64(global(LIM_TICK), 256)
@@ -73,7 +71,7 @@ fn lim_now() int
     if t == 2
         # gettimeofday on macOS: seconds, then microseconds in 32 bits.
         syscall(116, p, 0, 0, 0, 0, 0)
-        return load64(p) * 1000000000 + (load64(p + 8) & 4294967295) * 1000
+        return load64(p) * 1000000000 + load64(p + 8).bit_and(4294967295) * 1000
     syscall(if t == 0 then 228 else 113, 1, p, 0, 0, 0, 0)
     load64(p) * 1000000000 + load64(p + 8)
 
@@ -99,19 +97,24 @@ fn limits_check()
         flush_to(2)
         sys_exit(1)
 
-## Called by `alloc` before it maps a chunk for `size` more bytes: the bytes
-## of the earlier chunks that were used, plus `size`, against the cap.
-fn limits_chunk(size int)
-    next := load64(global(HEAP_NEXT))
-    if next != 0
-        store64(global(LIM_USED), load64(global(LIM_USED)) + next - load64(global(LIM_START)))
+## Called by the heap before it takes pages that would bring it to `bytes`
+## (pages in use, free ones included) against the cap. Returns whether the
+## cap is exceeded; the heap collects and asks again before giving up.
+fn limits_over(bytes int) bool
     cap := load64(global(LIM_CAP))
-    if cap > 0 and load64(global(LIM_USED)) + size > cap
-        flush()
-        out_str("trap[run.limit.2]: run used more than --max-memory ")
-        out_int(cap / 1048576)
-        out_str(" MB (raise it, or find what grows)\n")
-        flush_to(2)
-        sys_exit(1)
+    cap > 0 and bytes > cap
+
+## The trap for a cap that a collection didn't bring the heap under.
+fn limits_trap()
+    cap := load64(global(LIM_CAP))
+    flush()
+    out_str("trap[run.limit.2]: run used more than --max-memory ")
+    out_int(cap / 1048576)
+    out_str(" MB (raise it, or find what grows)\n")
+    flush_to(2)
+    sys_exit(1)
+
+## Called when the heap takes pages: the time limit is checked too.
+fn limits_pages()
     if load64(global(LIM_DEADLINE)) != 0
         limits_check()

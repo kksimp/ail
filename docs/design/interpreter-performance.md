@@ -402,3 +402,83 @@ left is the cost of reading a local: the walker's environment is a vector of
 (name, value) pairs behind a pointer, so every local read reloads its length
 and bounds-checks it. A frame with locals in the register file, or audited
 unchecked access (about 12% fewer instructions, measured), would remove that.
+
+## examples/build: the day-1 regression did not reproduce (lane 240)
+
+The day-1 report had `examples/build` at 0.375 s on main d5ecde9 and 0.734 s on
+the batch head 7fb2a39. Measured on the shared box in this lane:
+
+| binary | wall (median of 5) | user CPU (median of 5) | bytecode counters |
+|---|---:|---:|---|
+| d5ecde9 | 0.39 s, then 1.13 s later in the session | 0.88–0.95 s | 3,743 instructions, 254 hand-offs, 93.2% native |
+| 00ecdbc7 | — | 0.89–0.92 s | not run |
+| 7fb2a39 (batch head) | 0.70 s, then 1.15 s later | 0.87–0.93 s | 3,743 instructions, 254 hand-offs, 93.2% native |
+
+- The wall-clock numbers moved by about 3x within one session with no code change,
+  so they reflect load on the shared machine. Real and user time were 2.3:1 early in
+  the session and about 1:1 later, which is load, not code.
+- User CPU time differs by about 2% between main and the head, inside the spread.
+- Bytecode counters are identical, so the example does the same work at both commits.
+- A bisect over the 89 first-parent merges gave no valid culprit: 8be8cee0 and
+  192f321a do not build (an unclosed brace in `parser.rs`, fixed at 00ecdbc7), so
+  the search had no buildable good/bad pair below index 2. That result is not used.
+
+To settle it, time `examples/build.ail` on a quiet machine (the designer's Mac gate,
+or `tools/bench/run.sh` with wall and user time both recorded), at main and at the
+batch head, and compare the counters. If the 2x returns on a quiet machine, bisect
+again with `git bisect` on buildable commits only.
+See also the [flat enum and struct value proposal](flat-enum-struct-value.md) (measured ceiling about 11% on json_roundtrip, none on binarytrees).
+## Lane 190 step 3 (ADR 0620)
+`ps[i].step(dt)` (a `mut self` method on a list element) is one instruction
+that moves the element into the call and back; field `op=` on `self` and an
+`else` nested in a receiver no longer hand off. The struct benchmark went from
+0.132 s to 0.096 s (CPython 0.075 s) with 0 hand-offs. Calls through deeper
+places (`a.b[i].m()`) and `ref` cells still run on the walker.
+
+Step 3b (ADR 0620): `mut self` calls on a field path of a local and calls through a
+function-value local run on the tier too (0 hand-offs in a loop doing both).
+## Day 2 table (2026-10-21)
+Date: 2026-10-21. Linux x86-64, 14 cores. Median of 5 wall-clock runs of
+`ail run PROGRAM ARGS` (release build; includes start-up and the check pass)
+against `python3 -I PROGRAM.py ARGS`. Sizes come from `NAME.args`. Day 1 is
+main at 65a42826 (#223). Day 2 is the post-gate head bd982d2. Both binaries
+were built from clean worktrees. Other lanes were timing native programs on the
+same box during some runs, hence medians. Harness: `tools/perfbench/wall.sh OLD NEW [N]`;
+`tools/perfbench/instr.sh` gives callgrind instruction counts (load-independent; the last two columns), so lane 235's timing on the same box does not affect them.
+| Program | CPython s | Day 1 s | Day 2 s | Day 2 vs day 1 | Day 2 / CPython | Instr: day 2 / day 1 | Instr: day 2 / CPython |
+|---|---|---|---|---|---|---|---|
+| binarytrees | 0.447 | 1.753 | 0.690 | 2.54x faster | 1.54 | 0.51 | 1.45 |
+| collatz | 0.814 | 0.358 | 0.289 | 1.24x faster | 0.36 | 0.92 | 0.39 |
+| fannkuch | 0.691 | 0.986 | 0.648 | 1.52x faster | 0.94 | 0.73 | 1.11 |
+| fasta | 0.112 | 0.157 | 0.105 | 1.50x faster | 0.94 | 0.68 | 0.78 |
+| json_roundtrip | 0.101 | 2.003 | 0.262 | 7.65x faster | 2.59 | 0.07 | 1.87 |
+| lines_split | 0.286 | 0.400 | 0.382 | 1.05x faster | 1.34 | 0.93 | 1.00 |
+| mandelbrot | 0.239 | 0.607 | 0.171 | 3.55x faster | 0.72 | 0.48 | 1.17 |
+| map_ops | 0.107 | 0.136 | 0.122 | 1.11x faster | 1.14 | 0.89 | 0.73 |
+| matmul | 0.402 | 0.792 | 0.477 | 1.66x faster | 1.19 | 0.66 | 0.86 |
+| nbody | 0.292 | 0.846 | 0.245 | 3.45x faster | 0.84 | 0.42 | 1.02 |
+| print_many | 0.169 | 0.157 | 0.125 | 1.26x faster | 0.74 | 1.01 | 0.69 |
+| sieve | 0.533 | 1.128 | 0.602 | 1.87x faster | 1.13 | 0.52 | 0.77 |
+| spectralnorm | 0.386 | 0.680 | 0.398 | 1.71x faster | 1.03 | 0.63 | 0.81 |
+| tensor (native kernel) | 0.365 | 0.014 | 0.014 | 1.00x faster | 0.04 | 1.00 | 0.02 |
+| tensor_loops | 0.345 | 0.711 | 0.285 | 2.49x faster | 0.83 | 0.46 | 0.89 |
+| tensor_ops (native kernel) | 0.216 | 0.046 | 0.036 | 1.28x faster | 0.17 | 1.00 | 0.14 |
+| tensor_ops_loops | 0.195 | 0.503 | 0.370 | 1.36x faster | 1.90 | 0.83 | 1.64 |
+| wordfreq | 0.137 | 0.279 | 0.169 | 1.65x faster | 1.23 | 0.75 | 0.95 |
+| **geo mean, all 18** | | | | 1.79x faster | 0.79 | 0.62 | 0.68 |
+| **geo mean, without the 2 native-kernel rows (16)** | | | | 1.90x faster | 1.05 | 0.58 | 0.94 |
+Ratios below 1.00 mean AIL is faster (or executes fewer instructions) than CPython. Instruction counts and wall time disagree where CPython's C loops retire more instructions per second than the interpreter's (mandelbrot, nbody, fannkuch), so wall time is the headline.
+### Reading it
+- Day 2 is faster than day 1 on 17 of 18 programs (tensor is unchanged at 14 ms), 1.79x geo mean over all 18. The biggest
+  gains are json_roundtrip (7.7x: one text allocation per string, ADR 0739),
+  mandelbrot (3.6x), nbody (3.5x), binarytrees (2.5x) and tensor_loops (2.5x).
+- Headline: without the two native-kernel rows (tensor, tensor_ops, which compare a native kernel against Python loops) the interpreter is **1.90x faster than day 1 and at 1.05x CPython's wall time** (parity, 5% slower; 0.94x by instruction count). With all 18 rows it reads 0.79, which the native-kernel rows flatter.
+- Faster than CPython by wall time on 7 of the 16 comparable programs (collatz, mandelbrot, nbody, tensor_loops, print_many, fasta, fannkuch); spectralnorm is within 3%.
+- Still slower than CPython: json_roundtrip 2.6x, tensor_ops_loops 1.9x,
+  binarytrees 1.5x, lines_split 1.3x, wordfreq 1.2x, matmul 1.2x, sieve 1.1x,
+  map_ops 1.1x. json_roundtrip is value building and binarytrees is the call path
+  (see [flat-enum-struct-value.md](flat-enum-struct-value.md): the measured ceiling of flat values is about 11% on
+  json_roundtrip and zero on binarytrees, whose gap is the instruction loop in
+  `bytecode.rs`).
+- Day 1 numbers are not the README's (2026-10-20, 2.6 s for binarytrees): this
+  run re-timed day 1 on this machine, so every column shares one box.

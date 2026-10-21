@@ -1,0 +1,45 @@
+struct Inner
+    n int
+    log List[int]
+
+fn Inner.grow(mut self, d int) int
+    self.n += d
+    self.log.push(d)
+    self.n
+
+struct Outer
+    inner Inner
+    tag int
+
+struct Wrap
+    o Outer
+
+fn twice(x int) int
+    x * 2
+
+fn plus(x int, y int) int
+    x + y
+
+fn apply(f fn(int) int, i int) int
+    f(i) + f(i + 1)
+
+fn apply2(g fn(int, int) int, a int, b int) int
+    g(a, b)
+
+fn main()
+    mut o := Outer(inner: Inner(n: 0, log: []), tag: 1)
+    mut t := 0
+    f := twice
+    for i in 0..5
+        t += f(i)
+        t += o.inner.grow(i)
+    print("{t} {o.inner.n} {o.inner.log.len()}")
+    copy := o
+    o.inner.grow(100)
+    print("{copy.inner.n} {o.inner.n}")
+    mut w := Wrap(o: o)
+    w.o.inner.grow(1)
+    print("{w.o.inner.n} {o.inner.n}")
+    print("{apply(twice, 3)} {apply2(plus, 4, 5)}")
+    g := plus
+    print("{g(1, f(2))}")

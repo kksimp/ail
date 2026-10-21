@@ -1,0 +1,14 @@
+error struct Bad
+    why str
+
+fn load(n int) int ! Bad
+    if n == 0
+        return Bad(why: "zero")
+    n
+
+fn total(a int) int ! Bad
+    y := 1 + load(a)  # the failure is an operand
+    y * load(a)
+
+fn main() ! Bad
+    print(total(2)?)

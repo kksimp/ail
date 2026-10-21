@@ -22,7 +22,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "open", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
-    ("path", &["base", "dir", "ext", "join"]),
+    ("path", &["base", "dir", "ext", "join", "stem"]),
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("regex", &["captures", "compile", "escape", "find", "find_all", "group_all", "is_match", "replace", "replace_first", "split"]),
@@ -59,6 +59,7 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Server", "addr", "net.Server.addr"),
     ("Server", "close", "net.Server.close"),
     ("Server", "shutdown", "net.Server.shutdown"),
+    ("Request", "stop", "net.Request.stop"),
     ("Exchange", "respond", "net.Exchange.respond"),
     ("Exchange", "respond_bytes", "net.Exchange.respond_bytes"),
     ("Listener", "accept", "net.Listener.accept"),
@@ -76,12 +77,15 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Conn", "write_bytes", "net.Conn.write_bytes"),
 ];
 
+/// The methods of `proc.Output` (std.proc.9), sorted. Neither changes its receiver.
+pub const OUTPUT_METHODS: &[&str] = &["ok", "text"];
+
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
     &[
         "add", "argmax", "argmin", "clamp", "conv2d", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu",
-        "reshape", "round", "shape", "sigmoid", "sum", "tanh", "to_list", "transpose",
+        "reshape", "round", "shape", "sigmoid", "sum", "tanh", "to_f32", "to_float", "to_list", "transpose",
     ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
@@ -96,6 +100,8 @@ pub enum StdCall {
     Method(&'static str),
     /// `t.m(...)` on a `tensor.Tensor` (std.tensor.3-8): the method's name.
     Tensor(&'static str),
+    /// `o.m()` on a `proc.Output` (std.proc.9-10): the method's name.
+    Output(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
     /// `p.m(...)` on a raw pointer (unsafe.ptr.3-5): the method's name and
@@ -295,6 +301,16 @@ pub fn path_ext(p: &str) -> String {
     match base.rfind('.') {
         Some(i) if i > 0 => base[i + 1..].into(),
         _ => String::new(),
+    }
+}
+
+/// std.path.5: the base name without its extension (the text before its last
+/// `.`; a leading `.` doesn't count).
+pub fn path_stem(p: &str) -> String {
+    let base = path_split(p).1;
+    match base.rfind('.') {
+        Some(i) if i > 0 => base[..i].into(),
+        _ => base.into(),
     }
 }
 

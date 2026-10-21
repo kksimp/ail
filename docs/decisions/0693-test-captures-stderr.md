@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; lane 215, night run)
 - **Topic:** Testing (lane 215)
 - **Spec rules:** extends `test.run.2` in [docs/spec/19-testing.md](../spec/19-testing.md)
-- **Confirms:** [ADR 0167](0167-ail-test.md) (tests capture what they print)
+- **Confirms:** [ADR 0167](0167-test-functions-and-ail-test.md) (tests capture what they print)
 
 ## Context
 

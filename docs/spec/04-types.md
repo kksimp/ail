@@ -486,7 +486,10 @@ and `!=`; `str` equality compares UTF-8 bytes. `str` also supports `<`, `<=`,
 **type.str.4** — `s.split(sep)` returns a `List[str]` of the pieces of `s`
 between occurrences of `sep`, keeping empty pieces, so `n` occurrences give
 `n + 1` pieces. An empty `sep` traps. `sep` is a `str` or a `char`
-(`type.str.6`). *(ADR 0124, ADR 0135)*
+(`type.str.6`). `s.split(sep, limit)` makes at most `limit` pieces and the
+last keeps the rest of `s`, so `"a=b=c".split("=", 2)` is `["a", "b=c"]`;
+`limit` is an `int` of at least 1, otherwise it traps. *(ADR 0124, ADR 0135,
+ADR 0758)*
 
 **type.str.5** — `s.to_int()` returns an `int?`. It holds the value of `s`
 when `s` is an optional `-` followed by one or more decimal digits and the
@@ -559,6 +562,18 @@ fn main()
     print("[{"  x ".trim_end()}]")          # [  x]
     print("abababa".count("aba"))           # 2
     print("a/b/c".rfind("/"))               # 3
+```
+
+**type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
+
+**type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
+*(ADR 0630)*
+
+```ail rules=type.str.19,type.coll.20
+fn main()
+    print("".is_empty())                    # true
+    print([1].is_empty())                   # false
+    print({"a": 1}.is_empty())              # false
 ```
 
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
@@ -1294,6 +1309,7 @@ fn main()
     parts := "a,,b".split(",")
     print(parts.len())                            # 3: empty pieces are kept
     print("a/b/c".split('/').len())               # 3: a char separator
+    print("k=v=w".split("=", 2))                  # ["k", "v=w"]: at most 2 pieces
     print("-42".to_int())                         # -42
     print("4x".to_int())                          # none
     print("x".to_int() else 0)                    # 0

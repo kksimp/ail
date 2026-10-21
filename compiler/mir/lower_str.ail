@@ -6,13 +6,15 @@
 ## prints the interpreter's trap byte for byte.
 use ast
 
-## `'x'` (lex.char.1): the scalar value, as a `char`.
+## `'x'` (type.char.1): the scalar value, as a `char`.
 fn Lower.lower_char(mut self, text str) Val
     Val(id: konst(text.chars()[0].code(), Ty.Char), ty: Ty.Char)
 
-## `"a{x}b"` as a value (lex.str.5): the pieces' text, joined.
+## `"a{x}b"` as a value (lex.str.5): the pieces' text, joined. Up to six
+## pieces become one `rt.str_catN` call (one allocation); more are joined
+## five at a time onto what is built so far (ADR 0768).
 fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) Val?
-    mut acc := -1
+    mut pieces := List[int]()
     for p in parts
         mut piece := -1
         match p
@@ -27,9 +29,19 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
                 f := fmt_text(v, spec, expr_pos(x))?
                 piece = f.id
         if piece >= 0
-            acc = if acc < 0 then piece else call("rt.str_cat", [acc, piece], Ty.Str)
-    if acc < 0
-        acc = str_value("")
+            pieces.push(piece)
+    if pieces.len() == 0
+        return Val(id: str_value(""), ty: Ty.Str)
+    mut acc := pieces[0]
+    mut at := 1
+    while at < pieces.len()
+        take := if pieces.len() - at < 5 then pieces.len() - at else 5
+        mut args := [acc]
+        for k in 0..take
+            args.push(pieces[at + k])
+        name := if take == 1 then "rt.str_cat" else "rt.str_cat{take + 1}"
+        acc = call(name, args, Ty.Str)
+        at += take
     Val(id: acc, ty: Ty.Str)
 
 ## The text form of a value (type.str.3), as a `str` value.

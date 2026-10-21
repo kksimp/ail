@@ -118,10 +118,14 @@ are followed. *(ADR 0281)*
 directory, replacing a file at `to`. *(ADR 0281)*
 
 **std.fs.12** — `copy(from str, to str) ! IoError` copies the file `from`
-to `to`, replacing a file there. A directory `from` fails with `is_dir`;
-nothing copies a tree. For `rename` and `copy`, a failure's `path` is
-`from` when `from` is missing (or, for `copy`, a directory), else `to`.
-*(ADR 0281)*
+to `to`, replacing a file there. When `from` is a directory, `copy` copies
+the tree: `to` and its parents are made when missing, files already there are
+replaced, other files there are kept, and entries are copied in name order.
+A symbolic link is copied as the file it points to; a link to a directory
+fails with `other` at that path, and so does copying a directory into itself.
+A file at `to` fails with `exists`. For `rename` and `copy`, a failure's
+`path` is `from` when `from` is missing, else the path that failed.
+*(ADR 0281, ADR 0751)*
 
 **std.fs.13** — `read_bytes(path str) bytes ! IoError` reads the whole file
 as `bytes`, whatever it holds. It fails as `read_text` does, and never because
@@ -228,7 +232,12 @@ separator or `a` is empty; on Windows also when `b` starts with a drive and
 a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
 *(ADR 0253, ADR 0504)*
 
-```ail rules=std.path.1,std.path.2,std.path.3,std.path.4
+**std.path.5** — `stem(p str) str` is `base(p)` without its extension: the
+text before the last `.`, or all of `base(p)` when there is none or the only
+`.` is the first character (`stem("a/archive.tar.gz")` is `archive.tar`).
+*(ADR 0630)*
+
+```ail rules=std.path.1,std.path.2,std.path.3,std.path.4,std.path.5
 use std.path
 
 fn main()
@@ -236,6 +245,7 @@ fn main()
     print(path.base("examples/logscan.ail"))   # logscan.ail
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
+    print(path.stem("archive.tar.gz"))         # archive.tar
 ```
 
 ## Hashing: `std.hash`
@@ -493,6 +503,41 @@ fn main() !
     print("{r.status} {r.out.len()}")
 ```
 
+**std.proc.9** — `Output` (the result of `proc.run`) has the methods `text()`
+and `ok()`, and no others. Each takes no arguments, and neither changes the
+value: a call with an argument, or an unknown name, is an error. *(ADR 0733)*
+
+**std.proc.10** — `o.text() str` is the standard output followed by the standard
+error, with nothing between them. `o.ok() bool` is `o.status == 0`. *(ADR 0733)*
+
+```ail rules=std.proc.9,std.proc.10
+use std.proc
+
+fn main() !
+    r := proc.run("echo", ["hello"])?
+    print(r.ok())                         # true
+    print(r.text().len() > 0)             # true
+```
+
+## Counting: `Map[K, int]`
+
+**std.count.1** — `m[k] += 1` adds one to the count at `k`, and starts the count
+at zero when `k` is absent. The receiver must be `mut`, and the map's values must
+be `int`. *(ADR 0732)*
+
+**std.count.2** — `m.top(n int) List[K]` is the `n` keys with the largest counts,
+largest first. Keys with equal counts keep their insertion order. A count of zero
+or less gives `[]`. `m` is not changed. *(ADR 0732)*
+
+```ail rules=std.count.1,std.count.2
+fn main()
+    mut counts := Map[str, int]()
+    for word in ["b", "a", "b", "c", "b", "a"]
+        counts[word] += 1
+    print(counts.top(2))                  # ["b", "a"]
+    print(counts.top(0))                  # []
+```
+
 ## Memory for C: `std.mem`
 
 **std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new
@@ -693,8 +738,9 @@ library's (Winsock); the code uses nothing else, and it is untested there
   stays a `str`, the same bytes with each invalid UTF-8 sequence as U+FFFD.
 - `Options` has a last field `data bytes`, empty from `options()`. A request
   sends `data` as its body when it isn't empty, and `body` otherwise.
-- `Request` has a last field `data bytes`: the body the server received, as
-  it arrived (`body` is its lossy text).
+- `Request` has a field `data bytes`: the body the server received, as
+  it arrived (`body` is its lossy text), and a last field `server int`, the
+  handle `req.stop()` uses (`http.serve.1`).
 - `ex.respond_bytes(status int, headers Map[str, str], data bytes) !
   NetError` answers an `Exchange` with `data` as the body; it checks the
   status and headers as `respond` does.
@@ -1117,7 +1163,8 @@ field. A row whose field count differs from the header's is a `CsvError`.
 **std.csv.3** — `quote(field str) str` wraps a field in double quotes, and
 doubles the quotes inside it, when it holds a comma, a quote or a line break;
 otherwise it returns the field. `write(rows List[List[str]]) str` quotes each
-field and ends each row with `\n`. *(ADR 0626)*
+field and ends each row with `\n`; a row of one empty field is written as
+`""`, because a blank line is no row. *(ADR 0626)*
 
 **std.csv.4** — `write_records(header List[str], recs List[Map[str, str]])
 str` writes the header and then each map's values in header order; a key a map
@@ -1573,6 +1620,33 @@ fn main()
     print((a * b + a).relu())     # tensor.from([5.0, 0.0, 0.0, 1.5], [2, 2])
     print(-(a - b) / b)           # tensor.from([0.75, 1.25, 4.0, 0.75], [2, 2])
     print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
+```
+
+**std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
+the methods and operators of `Tensor[float]`, and each result is rounded to
+`f32` once: the operations are single-precision IEEE operations, and `sum`,
+`dot`, `max`, `mean` and `matmul` accumulate in `f32` in the order of
+std.tensor.5, on every path. A `float` scalar in an expression is rounded to
+`f32` at the boundary. `tensor.from(xs, shape)` and `tensor.zeros(shape)` build
+a `Tensor[f32]` when the expected type is one; `xs` is a `List[float]`, rounded
+element by element. A `Tensor[f32]` and a `Tensor[float]` in one expression are
+a compile-time error. `to_list()` gives a `List[float]`. *(ADR 0796, ADR 0797)*
+
+**std.tensor.22** — `t.to_f32()` rounds each element of a `Tensor[float]` to
+`f32`, and `t.to_float()` widens each element of a `Tensor[f32]` exactly to
+`float`. Either on the other element type, or on an `int` tensor, is a
+compile-time error. *(ADR 0798)*
+
+```ail rules=std.tensor.21,std.tensor.22
+fn half() tensor.Tensor[f32]
+    tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+
+fn main()
+    a := half()
+    print(a * 2.0 + a)             # tensor.from([3.0, 6.0, 9.0, 12.0], [2, 2]).to_f32()
+    print(a.to_list())             # [1.0, 2.0, 3.0, 4.0]
+    print(a.to_float().sum())      # 10.0
+    print(a.map(|x| x * x).sum())  # 30.0
 ```
 
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14

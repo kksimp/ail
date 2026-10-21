@@ -56,7 +56,7 @@ fn pause(idle: &mut u32) -> io::Result<()> {
     if gone {
         return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "the task was cancelled"));
     }
-    std::thread::sleep(Duration::from_micros(50u64 << (*idle).min(5)));
+    std::thread::sleep(Duration::from_micros(50u64 << (*idle).min(3)));
     *idle += 1;
     Ok(())
 }
@@ -605,6 +605,7 @@ fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_o
     if !has_type && !body.is_empty() && !no_body {
         out.push_str("Content-Type: text/plain; charset=utf-8\r\n");
     }
+    // http.serve.3: a response is framed by Content-Length, never chunked (std.net.11).
     if !(status / 100 == 1 || status == 204) {
         out.push_str(&format!("Content-Length: {}\r\n", if no_body { 0 } else { body.len() }));
     }
@@ -954,7 +955,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 close(id);
                 Value::Unit
             }
-            "Server.shutdown" => {
+            "Server.shutdown" | "Request.stop" => {
+                // http.serve.1: `stop` is `shutdown` on the request's server.
                 // std.net.24: stop listening and drop idle connections; requests
                 // already arriving are still answered.
                 if let Some(Slot::Server(s)) = sockets().get_mut(id as usize) {
@@ -987,6 +989,7 @@ impl<'a, W: Write> Interp<'a, W> {
                                     text(String::from_utf8_lossy(&req.body).into_owned()),
                                     text(peer),
                                     super::bytes::bytes_value(req.body.clone()),
+                                    Value::Int(id),
                                 ]),
                             );
                             return Ok(Value::Struct(self.structs["net.Exchange"], Rc::new(vec![request, Value::Int(slot)])));
@@ -1201,7 +1204,11 @@ mod tests {
         assert!(parse_body(&h, &raw[..raw.len() - 4]).unwrap().is_none());
         let bad = b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n";
         let h = parse_head(bad).unwrap().unwrap();
-        assert_eq!(parse_body(&h, bad).unwrap_err().0, 400);
+        assert_eq!(parse_body(&h, bad).unwrap_err(), (400, "a bad chunk size"));
+        // The chunk's data must end in a line break before the next size.
+        let no_break = b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWikiXX\r\n0\r\n\r\n";
+        let h = parse_head(no_break).unwrap().unwrap();
+        assert_eq!(parse_body(&h, no_break).unwrap_err(), (400, "a chunk is not followed by a line break"));
     }
 
     #[test]

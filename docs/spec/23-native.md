@@ -18,6 +18,35 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
+function is a free function or a method of a struct (no generics or
+contracts), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
+invariants, and lists of those and of lists, using
+locals, constants whose values are literals, other constants and operators
+on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
+value), `while`, `for` over a range or a list, `break`, `continue`,
+`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
+field names in a method), method calls, `print` of numbers, strings and
+lists of them or an interpolation of them (with
+`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
+`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
+methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
+construct is reported at its position under this rule, all of them at once,
+`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, and `unreachable(message)` (err.model.2), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
+position under this rule, all of them at once, and nothing is built.
+*(ADRs 0384, 0390, 0392, 0393)*
+and the bit operations of expr.bit.1. Also: format specifications on numbers,
+`bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
+`.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
+`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`,
+`fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
+`env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
+`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
+call that can fail is in the subset only as the value of `else` with a
+fallback value, a statement that leaves, or a block without a binding
+(err.else.1-2); `else err` and `?` are not yet. Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is
+reported at its position under this rule, all of them at once, and nothing
+is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
 function is a free function or a method of a struct or enum (no generics or
 contracts), in the root module or a module it imports (mod.unit.1-5), over
 `int`, `float`, `bool`, `char`, `str`, structs and enums without generics or
@@ -38,17 +67,32 @@ without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
-`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, in functions with at most eight
+`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys (`Map[K, V]()`,
+`Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
+`contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
+that are lists of constants, `join` on lists of strings or characters, and the
+list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
+statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
+`float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
+and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
+sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
-`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
-(std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
+`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
+`path.base`, `path.ext`, `path.stem` and `path.join`
+(std.fs, std.env, std.io, std.time, std.path); on Linux, `proc.run` (with
+`input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
+`Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
+(std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
+readable yet, and on macOS the program traps at `proc.run`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0574-0576, 0580, 0582, 0591, 0592, 0602–0604)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
 
 ```ail
 fn steps(n int) int
@@ -218,13 +262,42 @@ treated as a counted loop where that start is tested, before the loop, to be
 at least 0 and at most 2^30; otherwise the loop with its checks runs.
 *(ADR 0622)*
 
+```ail rules=native.bce.7
+fn main()
+    xs := [1, 2, 3, 4]
+    mut total := 0
+    mut i := 1
+    while i < 3
+        total += xs[i]
+        i += 1
+    print(total)
+```
+
 **native.bce.8** — The check on `xs[e]` may be removed where the arithmetic of
 the loop bounds `e` between 0 and a constant `hi`, from a constant loop bound
 and operands tested before the loop, and `xs` is longer than `hi`. *(ADR 0622)*
 
+```ail rules=native.bce.8
+fn main()
+    xs := [1, 2, 3]
+    mut total := 0
+    for i in 0..xs.len()
+        total += xs[i] + xs[i]
+    print(total)
+```
+
 **native.bce.9** — A loop that adds an unchanging `s` to its induction value
 is treated as a counted loop where `s` is tested, before the loop, to be
 between 1 and 2^30. *(ADR 0622)*
+
+```ail rules=native.bce.9
+fn main()
+    mut total := 0
+    mut s := 2
+    for i in 0..4
+        total += i + s
+    print(total)
+```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
@@ -246,3 +319,91 @@ test; the report says so. A property test, which takes arguments, is skipped.
 or fail), `DIFF` (they disagree), `not-native` or `skipped`, and the command
 ends with the counts. The exit status is 1 if any test is `DIFF`, otherwise 0.
 `--json` writes one object per test and a final summary. *(ADR 0679)*
+
+```ail rules=native.bce.9
+fn main()
+    mut total := 0
+    mut s := 2
+    for i in 0..4
+        total += i + s
+    print(total)
+```
+**native.test.5** — A file inside a package (a directory under an `ail.pkg`) is
+built in a staging directory that holds the package's other module directories
+and the rewritten copy as the root module's only file, so its `use` lines
+resolve. A package that has a dependency (`dep NAME path DIR`) isn't staged
+yet: the dependency's own imports resolve against the wrong root, and its tests
+are reported as not in the native subset yet. *(ADR 0679)*
+
+## Checked examples for the native rules
+
+Each block runs `ail test --native` or `ail build` with the options on its fence. The rules below have no observable output the harness can check (a Windows image, the cache, a backend fault, a package staging run), so their blocks are `norun`: checked, not run (native.build.2, native.build.4, native.build.5, native.test.5).
+
+```ail tool=test,--native,FILE expect=match rules=native.str.1,native.test.1
+@test fn strings()
+    s := "hello"
+    assert(s.len() == 5)
+    assert("{3:>4}" == "   3")
+    assert("ab" < "b")
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--native,FILE expect=assertion rules=native.test.2
+@test fn wrong()
+    assert(1 == 2)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--native,FILE expect=not-native rules=native.test.3
+fn first[T](xs List[T]) T
+    xs[0]
+
+@test fn picks()
+    assert(first([1, 2]) == 1)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--native,--json,FILE expect=summary rules=native.test.4
+@test fn strings()
+    s := "hello"
+    assert(s.len() == 5)
+    assert("{3:>4}" == "   3")
+    assert("ab" < "b")
+
+fn main()
+    print("ok")
+```
+
+```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
+fn first[T](xs List[T]) T
+    xs[0]
+
+fn main()
+    print(first([1, 2]))
+```
+
+```ail norun rules=native.build.2
+fn main()
+    print("ok")
+```
+
+```ail norun rules=native.build.4
+fn main()
+    print("ok")
+```
+
+```ail norun rules=native.build.5
+fn main()
+    print("ok")
+```
+
+```ail norun rules=native.test.5
+fn main()
+    print("ok")
+```

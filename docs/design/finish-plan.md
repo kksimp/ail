@@ -5,7 +5,7 @@ finishes AIL the fastest, most efficient way: the most token-efficient
 language, beating C and Python where it matters, with AI-first features the
 AI itself wants. Phases: **build out, test, fix, test again, drag race**
 against C and Python. Lane budget: up to 2 large, 10 medium and 15 small lanes
-lanes at once. The integrator is the Fable thread; this document is its
+lanes at once. The integrator is the coordinating thread; this document is its
 plan, and the briefs are in the project files (`lanes/120-…`).
 
 ## 1. Where we are (main at ae1ca19)

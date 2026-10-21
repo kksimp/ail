@@ -288,62 +288,37 @@ limit (simpler, but a runaway allocation takes the machine down). *Owner: AI
 under ADR 0076, measured once the evaluator counts steps.*
 
 ## OQ-096 — Showing built-in derives in `ail api --expanded`
-**Resolved** by [ADR 0309](decisions/0309-api-expanded-output.md): option (b),
-`"derived_by": "built-in"`; template text would show code that doesn't run.
-`trait.derive.1`'s `Eq`, `Ord` and `ToStr` derives are specified as if a
-prelude generator wrote them, but the bootstrap implements them natively.
-Options: (a) `--expanded` prints their equivalent AIL text from a fixed
-template (recommended: one rule for every derive, and an agent sees what
-`cmp` compares); (b) list them by name only, like automatic implementations
-(cheapest); (c) write the prelude generators in AIL and drop the native code
-(slower in the interpreter). *Owner: AI under ADR 0076.*
+
+**Resolved** by [ADR 0309](decisions/0309-api-expanded-output.md): option (b), `"derived_by": "built-in"`.
 
 ## OQ-097 — Weaker atomic orderings, cancel trees, and send under cancellation
-*Resolved:* orderings by [ADR 0352](decisions/0352-weaker-atomic-orderings.md)
-(a trailing `order:` argument); cancel trees and a cancelled `send` by
-[ADR 0351](decisions/0351-cancel-trees-and-cancelled-send.md) (the whole
-tree; the value is dropped and `send` returns).
+
+*Resolved:* orderings by [ADR 0352](decisions/0352-weaker-atomic-orderings.md); cancel trees and a cancelled `send` by [ADR 0351](decisions/0351-cancel-trees-and-cancelled-send.md).
 
 ## OQ-113 — A matrix product operator
 **Resolved** by [ADR 0382](decisions/0382-no-matrix-product-operator.md) (keep `a.matmul(b)`).
 
 ## OQ-114 — A mutable local that starts as `none`
 
-**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
-(option a: a `mut` local that starts as `none` takes its type from its first
-assignment, type.opt.9).
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md) (option a).
 
 ## OQ-115 — `if c then x else none` where `x` is a plain `T`
 
-**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
-(option a: the `if` has type `T?`, type.opt.10).
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md) (option a).
 
 ## OQ-116 — Locals named like an item of their module
 
-**Resolved** by [ADR 0469](decisions/0469-locals-may-shadow-functions.md)
-(option a: a local may shadow a function; a call of it in the local's block is
-expr.call.1).
+**Resolved** by [ADR 0469](decisions/0469-locals-may-shadow-functions.md) (option a).
 
 ## OQ-117 — `if` as an operand
 
-**Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md)
-(option a: an `if` operand is written in parentheses, expr.if.8).
+**Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md) (option a).
 
 ## OQ-118 — Which transcendental functions the language and the native backend need
 
-**Answered** by the designer on 2026-10-21: the full `std.math` set (`sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`, `cbrt`) as float methods, with a stated tolerance. The ADR is pending: lane 184 writes it and adds the link here.
+**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full `std.math` set, within one ulp of the platform's libm (option c, the designer's choice on 2026-10-21).
 
-The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
-or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
-(`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
-`exp` and `tanh`, through the platform's libm, so they already differ in the
-last bit between operating systems. A bit-exact match of libm across hosts
-isn't possible, so any new function needs a stated tolerance.
-**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full
-set (option c, chosen by the designer on 2026-10-21), within one unit in the
-last place of the platform's libm.
-
-## OQ-172 — Unicode tables for the native `char` predicates and case mapping
+## OQ-125 — Unicode tables for the native `char` predicates and case mapping
 
 **Resolved** by [ADR 0567](decisions/0567-native-text-of-numbers-and-unicode-tables.md)
 (option a: range tables generated from the interpreter by
@@ -423,24 +398,44 @@ could take for a conversion. Recommendation: (a) until a larger corpus shows
 the cost; the saving is small and the rule is simpler. Decided by the
 integrator with a measurement, not by this lane.
 ## OQ-124 — Pairs: tuples, `zip`, `enumerate` and map `items`
-AIL has no tuple or pair type. Agent code reaches for `zip(a, b)`,
-`enumerate(xs)` and `m.items()` (lane 192's std-parity twins, round 4).
-A two-variable `for i, x in xs` alone was measured in
-[ADR 0675](decisions/0675-round-4-syntax-candidates.md): 46 tokens on a
-23,004-token corpus (0.2%), a tie, so it is not proposed by itself. Pairs
-change the type model (value semantics, patterns, `==`, map keys,
-`type.*` rules), so the designer decides.
-- **a.** No pairs. Loop over indexes or `keys()`; use structs for paired
-  data. Nothing changes; agents keep writing `for i in 0..xs.len()`.
-- **b.** Anonymous tuples `(a, b)` with `.0`/`.1` and destructuring in
-  `let`, `for` and `match`; then `zip`, `enumerate`, `m.items()` are library
-  methods. Largest benefit (also two results from one call), largest
-  surface: the card grows and every checker, formatter and native pass sees a
-  new type.
-- **c.** Only `for i, x in xs` and `for k, v in m` as loop syntax: no new
-  type, covers the common case, but `zip` still cannot exist and the card
-  grows for 0.2%.
-Recommendation: **a** until a program needs paired data in more than a
-loop; if the designer wants parity with Python here, **b** and not **c**,
-because **c** pays syntax for the smallest slice. Measure b with the 40-program
-corpus first.
+Resolved by [ADR 0791](decisions/0791-tuples.md): full tuples.
+
+## OQ-135 — Spec rules that need a tool the bootstrap doesn't have (lane 238)
+
+Lane 238 implemented the rules of the lane 223 and lane 225 lists that a checker or interpreter change could carry (own.ref.2, trait.op.2, ct.const.4, err.type.3, ct.eval.3's step limit, ADRs 0741–0743). Six remain, each because the rule names something that doesn't exist yet. The spec is unchanged.
+
+| Rule | What's missing | Options | Recommendation |
+|---|---|---|---|
+| `gen.anon.2`, `type.enum.4` | They define a *canonical form* that rewrites tokens (`fn f[T Shape](s T)` to `fn f(s Shape)`, `Shape.Circle(r)` to `Circle(r)`). `ail fmt` only changes whitespace and refuses output whose tokens differ (fmt.safe, ADR 0169); `type.enum.4` also needs expected types. | (a) an `ail fix` rewrite with a lint-style diagnostic (new rule IDs); (b) let `ail fmt` rewrite tokens; (c) reword the rules as advice | (a): `ail fix` already rewrites tokens from checker information, and fmt.safe stays true. |
+| `err.type.4` | Matching on an inferred error set (OQ-029, "not designed yet"). | Decide OQ-029 first. | Wait for OQ-029. |
+| `ct.eval.4` | A MAY rule (reuse of compile-time results); nothing observable to test. | (a) implement with the build cache (lane 200); (b) keep it untested | (a) once `ail build` has its cache; no work before. |
+| `own.copy.1` | The "performance report" (ADR 0026) doesn't exist in any tool, so there is nothing to list copy sites in. | (a) a new `ail effects --copies FILE` listing each site where a list, map, set or struct is copied by assignment, argument or return; (b) wait for the report | (a), as the first line of the report: it follows the existing `--parallel` listing. |
+| `plat.isa.3` | A native start-up check of the CPU level needs the code generator's entry sequence (`compiler/mir/lower.ail`, the merge queue's critical path) or a start-up stub in the object writers. | (a) a stub in `compiler/obj/` that runs `cpuid` before `main`, x86-64 only (ARM64's baseline is checked by the OS); (b) wait for the queue to empty | (a) after the queue empties, so it lands without conflicts. |
+
+## OQ-136 — A typed buffer for `mem.alloc` and C strings (day-3 brief)
+
+Raw FFI code is the most expensive shape in the corpus. In `ffi_buffers`, each
+buffer is an `extern` declaration, a `mem.alloc`/`free` pair, an `unsafe`
+block and index arithmetic on raw pointers. Measured on 079c6d8 (five-tokenizer
+mean): `ffi_buffers` 366.2 tokens against 254.2 for the Python ctypes twin
+(+112.0); `ffi_libc` 208.8 against 189.4 (+19.4). Both are rare constructs:
+they sum to 131.4 tokens on a 23,004-token corpus (0.6%), so under
+[ADR 0076](decisions/0076-delegated-decisions.md) the token criterion is close
+to a tie. The Python side is itself library ceremony (ctypes), so the gap is a
+ceiling, not a target. Not yet measured: a prototype of any option below.
+
+- **a.** Keep `mem.alloc`/`free` and `mem.cstr` as they are. Nothing changes;
+  FFI programs stay about 45% longer than the twin.
+- **b.** A typed buffer `mem.buffer[int](n)` with bounds-checked indexing, `len()`,
+  and release at scope end (no `free` pair), plus the C-string helpers in c.
+  Largest saving on `ffi_buffers`; largest surface: a new `std.mem` type,
+  spec rules for ownership and bounds, and checker and native parity for each.
+- **c.** Only C-string helpers: `mem.cstr(s)` and `cstr.text()` (no new buffer
+  type). Covers the `ffi_libc` gap and the `from_cstr` lines; `ffi_buffers`
+  keeps its raw pointer code.
+
+Recommendation: **a** now, because the gap sits in rare constructs and the
+criteria tie. Revisit with **c** when a third program needs C strings, and
+measure **b** with a prototype of `ffi_buffers` before adding a new type to the
+card. Both options change the card, so the designer should decide the
+ownership rule for **b** (release at scope end versus an explicit `free`).

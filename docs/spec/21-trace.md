@@ -175,6 +175,18 @@ events, the list ends with `{"api":1,"trace":"dropped","count":N}` (text:
 `trace: N more events dropped`). Tracing never changes a test's result.
 *(ADR 0326)*
 
+```ail tool=test,--trace=calls,--trace-limit,2,FILE status=1 expect=dropped rules=trace.test.2
+fn step(n int) int
+    n + 1
+
+@test
+fn counts()
+    mut n := 0
+    for i in 0..5
+        n = step(n)
+    assert_eq(n, 99)
+```
+
 ## Trap snapshots
 
 **trace.snap.1** — A trap that ends `ail run` (err.trap.3) is reported with
@@ -284,12 +296,69 @@ fn main()
     print(1)
 ```
 
+## Checked examples for the run and value rules
+
+Each block runs `ail run` with the options on its fence (trace.run.1-5, trace.val.2).
+
+```ail tool=run,--trace=calls,FILE expect=call rules=trace.run.1
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+```
+
+```ail tool=run,--trace=calls,FILE expect=returned rules=trace.run.2
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+```
+
+```ail tool=run,--trace=effects,FILE expect=effect rules=trace.run.3
+use std.time
+
+fn main()
+    t := time.now_ms()
+    print(t > 0)
+```
+
+```ail tool=run,--trace=calls,--trace-limit,2,FILE expect=dropped rules=trace.run.4
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+    print(double(4))
+```
+
+```ail tool=run,--trace=all,FILE expect=done rules=trace.run.5
+fn main()
+    print("done")
+```
+
+```ail tool=run,--trace=calls,FILE expect=… rules=trace.val.2
+fn describe(s str) int
+    s.len()
+
+fn main()
+    print(describe("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"))
+```
 **run.limit.5** — A native executable (`ail build`) reads the environment at
 start: `AIL_TIMEOUT_MS` and `AIL_MAX_MEMORY_MB`, each a positive whole number.
 `ail build --timeout MS --max-memory MB` bakes in defaults that the
 environment overrides. An invalid value ends the program with exit code 2
 before `main` runs. With neither set, the program is not checked. Windows
 executables have no native build yet. *(ADR 0728)*
+
+```ail tool=build,--timeout,1000,FILE rules=run.limit.5
+fn main()
+    print("hello")
+```
 
 **run.limit.6** — A native program that goes past a limit prints its
 output so far, then `trap[run.limit.1]` or `trap[run.limit.2]` with the same
@@ -301,3 +370,11 @@ the heap takes a chunk. A `while` loop also checks it, but only in an executable
 built with `--timeout` (ADR 0727); so without that, a loop that never allocates is not stopped. The
 limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
+
+```ail tool=build,--max-memory,16,FILE rules=run.limit.6
+fn main()
+    print("start")
+    mut xs := [0]
+    for i in 0..100000000
+        xs.push(i)
+```

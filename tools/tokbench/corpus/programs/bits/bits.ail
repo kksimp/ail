@@ -2,19 +2,11 @@ READ := 1.shl(2)
 WRITE := 1.shl(1)
 EXEC := 1.shl(0)
 fn mode_text(mode int) str
-    r := if mode.bit_and(READ) != 0
-        "r"
-    else
-        "-"
-    w := if mode.bit_and(WRITE) != 0
-        "w"
-    else
-        "-"
-    x := if mode.bit_and(EXEC) != 0
-        "x"
-    else
-        "-"
+    r := if mode.bit_and(READ) != 0 then "r" else "-"
+    w := if mode.bit_and(WRITE) != 0 then "w" else "-"
+    x := if mode.bit_and(EXEC) != 0 then "x" else "-"
     "{r}{w}{x}"
+
 fn count_bits(n int) int
     mut left := n
     mut count := 0

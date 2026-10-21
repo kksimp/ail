@@ -48,8 +48,11 @@ fn main()
 **json.print.1** — `Json.to_text(self) str` gives compact text: no spaces,
 members in document order, `"`, `\`, `\n`, `\r`, `\t`, `\b`, `\f` escaped by
 name, other control characters as `\u00XX`, everything else as itself. A
-number prints as the `float` does (`1.0`, `2.5`). The same value always gives
-the same text. *(ADR 0161)*
+number prints as the `float` does (`2.5`), except that a whole number of
+magnitude below 1e15 prints without a fraction (`3`, `-12`, `0`; the sign of
+a zero is dropped), so an `int` field derived through `ToJson` reads back
+as an integer in other languages. The same value always gives the same text.
+*(ADR 0161, ADR 0631)*
 
 ```ail rules=json.print.1
 fn main()
@@ -87,6 +90,17 @@ payload of the matching variant, and `none` for any other. They chain with
 `?` in a function that returns an optional, or before an `else`
 (`err.prop.4`). *(ADR 0161)*
 
+```ail rules=json.query.1
+fn main()
+    doc := parse_json("\{\"id\": \"t1\"}") else return
+    id := doc.get("id") else return
+    print(id.as_str() else "none")
+    gone := doc.get("missing") else
+        print("no member")
+        return
+    print(gone.as_str())
+```
+
 **json.query.2** — `j.str(key)`, `j.num(key)`, `j.bool(key)` and
 `j.arr(key)` are `j.get(key)?.as_str()` and so on: member `key` when it holds
 that variant, and `none` otherwise. *(ADR 0254)*
@@ -95,13 +109,13 @@ that variant, and `none` otherwise. *(ADR 0254)*
 value of the first member named `key`, or adds the member at the end. It traps
 (`err.model.2`) unless `j` is an object. *(ADR 0254)*
 
-```ail
+```ail rules=json.query.2,json.query.3
 fn main()
     mut doc := parse_json("\{\"id\": \"t1\", \"hours\": 2}") else return
     print(doc.str("id"))       # t1
     print(doc.str("hours"))    # none
     doc.set("done", Json.Bool(true))
-    print(doc.to_text())       # {"id":"t1","hours":2.0,"done":true}
+    print(doc.to_text())       # {"id":"t1","hours":2,"done":true}
 ```
 
 **json.query.4** — `j.as_int()` is the number when it has no fraction, and
@@ -124,6 +138,32 @@ fn main()
 
 ## Derives
 
+**json.query.5** — `j.text(key str, default str) str` is the text of member
+`key` when it holds a string, and `default` otherwise: when the member is missing,
+or holds another kind. It never fails. *(ADR 0732)*
+
+**json.query.6** — `j.flag(key str, default bool) bool` is the same for a bool
+member: `j.bool(key)` or `default`. *(ADR 0732)*
+
+```ail rules=json.query.5,json.query.6
+fn main() !
+    doc := parse_json("\{\"name\": \"ada\", \"admin\": true}")?
+    print(doc.text("name", "anon"))       # ada
+    print(doc.text("email", "none"))      # none
+    print(doc.flag("admin", false))       # true
+    print(doc.flag("active", false))      # false
+```
+
+**json.lines.1** — `parse_json_lines(text str) List[Json]` is each line of `text`
+that parses as one JSON document, in order. A line that doesn't parse is skipped,
+so a log with some broken lines still gives the good ones. *(ADR 0732)*
+
+```ail rules=json.lines.1
+fn main()
+    docs := parse_json_lines("1\nnot json\n\"two\"\n")
+    print(docs.len())                     # 2
+```
+
 **json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the
 generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
 `Json` and `List[T ToJson]` implement it. A derived struct gives an object of
@@ -139,7 +179,8 @@ bounds on the `impl`: `impl ToJson for Pair[A ToJson, B ToJson]`.
 `fn from_json(j Json) Self ! JsonError` (`trait.assoc.1`); its generator
 `derive_from_json` fills an empty `impl` with it, and `str`, `int`,
 `float`, `bool`, `Json` and `List[T FromJson]` implement it. It is called as
-`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`). A
+`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`); a
+list is read with `List[U].from_json(j)` (ADR 0748). A
 struct reads each field from the member of its name with `need` and the
 `need_*` of its type, so a missing or mistyped member fails with its
 message; a field of another type `U` calls `U.from_json`, which `U` derives
@@ -159,7 +200,7 @@ the document root: `missing items[2].kind` for a missing member, and
 `Box` `` for the others. `e.under(part)`, with `part` a member name or
 `[i]`, puts a `JsonError` under one more step of its path. *(ADR 0343)*
 
-```ail
+```ail rules=json.derive.1,json.derive.2,json.derive.3
 struct Item
     id str
     hours float

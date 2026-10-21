@@ -1,0 +1,261 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## List methods that edit or search a list (type.coll.9, type.coll.11,
+## type.coll.14; ADR 0605). Lists are the objects of native-abi.md §2:
+## +0 len, +8 cap, +16 data. `size` is an element's bytes: 8, or 1 for a
+## `List[bool]`.
+
+fn list_get_word(data int, size int, i int) int
+    if size == 1
+        return load8(data + i)
+    load64(data + 8 * i)
+
+fn list_set_word(data int, size int, i int, w int)
+    if size == 1
+        store8(data + i, w)
+    else
+        store64(data + 8 * i, w)
+
+## `xs.extend(ys)`.
+fn list_extend(xs List[int], ys List[int], size int)
+    p := list_addr(xs)
+    q := list_addr(ys)
+    n := load64(p)
+    k := load64(q)
+    while n + k > load64(p + 8)
+        list_grow(p, size)
+    copy_bytes(load64(p + 16) + size * n, load64(q + 16), size * k)
+    store64(p, n + k)
+
+## `xs.remove_at(i)`, the index already checked.
+fn list_remove_at(xs List[int], i int, size int)
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    for j in i..n - 1
+        list_set_word(data, size, j, list_get_word(data, size, j + 1))
+    store64(p, n - 1)
+
+## `xs.insert(i, w)`, the index already checked (`0 <= i <= len`).
+fn list_insert(xs List[int], i int, w int, size int)
+    p := list_addr(xs)
+    n := load64(p)
+    if n == load64(p + 8)
+        list_grow(p, size)
+    data := load64(p + 16)
+    mut j := n
+    while j > i
+        list_set_word(data, size, j, list_get_word(data, size, j - 1))
+        j -= 1
+    list_set_word(data, size, i, w)
+    store64(p, n + 1)
+
+fn list_clear(xs List[int])
+    store64(list_addr(xs), 0)
+
+## `xs.pop()` after the caller has seen the list is not empty.
+fn list_drop_last(xs List[int])
+    p := list_addr(xs)
+    store64(p, load64(p) - 1)
+
+fn list_reverse(xs List[int], size int)
+    p := list_addr(xs)
+    data := load64(p + 16)
+    mut i := 0
+    mut j := load64(p) - 1
+    while i < j
+        a := list_get_word(data, size, i)
+        list_set_word(data, size, i, list_get_word(data, size, j))
+        list_set_word(data, size, j, a)
+        i += 1
+        j -= 1
+
+fn list_str_eq(a int, b int) bool
+    if a == b
+        return true
+    n := load64(a)
+    if n != load64(b)
+        return false
+    for i in 0..n
+        if load8(a + 16 + i) != load8(b + 16 + i)
+            return false
+    true
+
+## Equality of two stored words: `kind` 0 integers and bools, 1 strings,
+## 2 floats (IEEE: `nan` is unequal to itself, `-0.0` equals `0.0`).
+fn list_word_eq(kind int, a int, b int) bool
+    if kind == 1
+        return list_str_eq(a, b)
+    if kind == 2
+        return bits_float(a) == bits_float(b)
+    a == b
+
+## `xs.contains(w)`.
+fn list_contains(xs List[int], w int, kind int, size int) bool
+    p := list_addr(xs)
+    data := load64(p + 16)
+    for i in 0..load64(p)
+        if list_word_eq(kind, list_get_word(data, size, i), w)
+            return true
+    false
+
+## Whether `a` sorts before `b`: `kind` 0 integers, 1 strings (bytes), 2 floats
+## (type.num.11: `nan` last).
+fn list_word_lt(kind int, a int, b int) bool
+    if kind == 1
+        na := load64(a)
+        nb := load64(b)
+        n := if na < nb then na else nb
+        for i in 0..n
+            x := load8(a + 16 + i)
+            y := load8(b + 16 + i)
+            if x != y
+                return x < y
+        return na < nb
+    if kind == 2
+        x := bits_float(a)
+        y := bits_float(b)
+        if x != x
+            return false
+        if y != y
+            return true
+        return x < y
+    a < b
+
+## `xs.sort()`: a stable merge sort of the words.
+fn list_sort(xs List[int], kind int)
+    p := list_addr(xs)
+    n := load64(p)
+    if n < 2
+        return
+    mut src := load64(p + 16)
+    mut dst := alloc_raw(8 * n, KIND_LDATA)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut k := lo
+            while a < mid and b < hi
+                if list_word_lt(kind, load64(src + 8 * b), load64(src + 8 * a))
+                    store64(dst + 8 * k, load64(src + 8 * b))
+                    b += 1
+                else
+                    store64(dst + 8 * k, load64(src + 8 * a))
+                    a += 1
+                k += 1
+            while a < mid
+                store64(dst + 8 * k, load64(src + 8 * a))
+                a += 1
+                k += 1
+            while b < hi
+                store64(dst + 8 * k, load64(src + 8 * b))
+                b += 1
+                k += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    # The sorted words are in `src`; the list's own data may be `dst`.
+    if src != load64(p + 16)
+        copy_bytes(load64(p + 16), src, 8 * n)
+
+## `xs == ys`: the same length and equal elements (`kind` as for `list_contains`).
+fn list_eq(xs List[int], ys List[int], kind int, size int) bool
+    p := list_addr(xs)
+    q := list_addr(ys)
+    n := load64(p)
+    if n != load64(q)
+        return false
+    a := load64(p + 16)
+    b := load64(q + 16)
+    for i in 0..n
+        if not list_word_eq(kind, list_get_word(a, size, i), list_get_word(b, size, i))
+            return false
+    true
+
+## `xs.index_of(x)`: the index of the first equal element, or -1 (type.coll.9).
+fn list_index_of(xs List[int], w int, kind int, size int) int
+    p := list_addr(xs)
+    data := load64(p + 16)
+    for i in 0..load64(p)
+        if list_word_eq(kind, list_get_word(data, size, i), w)
+            return i
+    -1
+
+## `xs.min()` and `xs.max()` (type.coll.11): the index of the first least
+## (`greatest` 0) or first greatest element, or -1 for an empty list.
+fn list_extreme(xs List[int], kind int, greatest int) int
+    p := list_addr(xs)
+    n := load64(p)
+    if n == 0
+        return -1
+    data := load64(p + 16)
+    mut best := 0
+    for i in 1..n
+        a := load64(data + 8 * i)
+        b := load64(data + 8 * best)
+        if greatest == 0
+            if list_word_lt(kind, a, b)
+                best = i
+        elif list_word_lt(kind, b, a)
+            best = i
+    best
+
+## `xs.swap(i, j)` for indexes already checked (type.coll.7).
+fn list_swap(xs List[int], i int, j int, size int)
+    data := load64(list_addr(xs) + 16)
+    a := list_get_word(data, size, i)
+    list_set_word(data, size, i, list_get_word(data, size, j))
+    list_set_word(data, size, j, a)
+
+## `xs.sum()` of integers (type.coll.12): left to right, trapping on overflow.
+## `head` and `tail` are the trap's first line and excerpt.
+fn list_sum_int(xs List[int], head str, tail str) int
+    p := list_addr(xs)
+    data := load64(p + 16)
+    mut s := 0
+    for i in 0..load64(p)
+        v := load64(data + 8 * i)
+        t := s + v
+        if (v >= 0 and t < s) or (v < 0 and t > s)
+            flush()
+            out_str(head)
+            out_str("`sum` overflows `int`\n")
+            out_str(tail)
+            flush_to(2)
+            sys_exit(1)
+        s = t
+    s
+
+## The fixed summation tree of a float list (type.coll.12), over `lo..hi`.
+fn list_sum_tree(data int, lo int, hi int) float
+    n := hi - lo
+    if n <= 32
+        mut p0 := 0.0
+        mut p1 := 0.0
+        mut p2 := 0.0
+        mut p3 := 0.0
+        for i in 0..n
+            v := bits_float(load64(data + 8 * (lo + i)))
+            k := i % 4
+            if k == 0
+                p0 += v
+            elif k == 1
+                p1 += v
+            elif k == 2
+                p2 += v
+            else
+                p3 += v
+        return (p0 + p1) + (p2 + p3)
+    m := 32 * ((n + 63) / 64)
+    list_sum_tree(data, lo, lo + m) + list_sum_tree(data, lo + m, hi)
+
+fn list_sum_float(xs List[int]) float
+    p := list_addr(xs)
+    list_sum_tree(load64(p + 16), 0, load64(p))

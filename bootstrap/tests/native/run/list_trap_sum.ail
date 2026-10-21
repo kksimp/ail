@@ -1,0 +1,4 @@
+# expr.arith.1: sum traps when a partial sum overflows.
+fn main()
+    xs := [9223372036854775807, 1]
+    print(xs.sum())

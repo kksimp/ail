@@ -11,7 +11,7 @@
 ## `io_read_line` return the string, or 0 for `none`.
 ##
 ## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). Windows
-## (`plat.win.1`) has no native target yet: its calls are not built.
+## (`plat.target.1`, Tier 1) has no native target yet: its calls are not built.
 
 # Global slots 32-47 are this file's (native-abi.md §2 lists the ranges).
 OS_OK := 32
@@ -165,7 +165,7 @@ fn os_fail_errno(r int)
 fn os_scratch(off int) int
     mut a := load64(global(OS_AREA))
     if a == 0
-        a = alloc(OS_AREA_SIZE)
+        a = alloc(OS_AREA_SIZE, KIND_BYTES)
         store64(global(OS_AREA), a)
     a + off
 
@@ -376,7 +376,10 @@ fn os_fs_list_dir(path str) List[int]
     if p == 0
         os_fail_kind(K_NOT_FOUND)
         return out
-    fd := os_open(p, 0, 0)
+    # O_DIRECTORY (Linux x86-64 0o200000, Linux ARM64 0o40000, macOS 0x100000),
+    # so a regular file fails here with ENOTDIR on every
+    # platform (XNU's getdirentries64 would say EINVAL, which is `other`).
+    fd := os_open(p, os_pick(65536, 16384, 1048576), 0)
     if fd < 0
         os_fail_errno(fd)
         return out
@@ -635,7 +638,7 @@ fn os_in_fill() bool
     flush()
     mut b := load64(global(IN_BUF))
     if b == 0
-        b = alloc(OS_IN_SIZE)
+        b = alloc(OS_IN_SIZE, KIND_BYTES)
         store64(global(IN_BUF), b)
     while true
         r := os_read(0, b, OS_IN_SIZE)

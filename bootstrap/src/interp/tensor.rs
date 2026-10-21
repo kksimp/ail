@@ -5,11 +5,12 @@
 use std::io::Write;
 use std::rc::Rc;
 
-use super::{Env, Flow, Interp, Trap, Value, float_text};
+use super::{Env, Flow, Interp, Trap, Value, float_text, float_text32};
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
 use crate::ast::BinOp;
 use crate::fuse::{self, FOp, Input};
+use crate::num::Num;
 use crate::tensor::{Activation, Data, Fault, Op, Reduce, Scalar, Sum, Tensor};
 
 fn trapped(f: Fault, pos: Pos) -> super::Exit {
@@ -25,13 +26,27 @@ fn ints(v: &Value) -> Vec<i64> {
 
 /// A `List[int]` or `List[float]` as a tensor's elements; an empty list
 /// is `float` unless `int` was expected.
-fn elements(v: &Value, int: bool) -> Data {
+fn elements(v: &Value, int: bool, f32: bool) -> Data {
     let Value::List(xs) = v else { unreachable!("checked: a list, found {v:?}") };
     match xs.first() {
         Some(Value::Int(_)) => Data::I(xs.iter().map(Value::int).collect()),
+        Some(_) if f32 => Data::F32(xs.iter().map(|x| x.float() as f32).collect()),
         Some(_) => Data::F(xs.iter().map(Value::float).collect()),
         None if int => Data::I(Vec::new()),
+        None if f32 => Data::F32(Vec::new()),
         None => Data::F(Vec::new()),
+    }
+}
+
+/// The `f32` value of an element (std.tensor.21).
+fn f32_value(x: f32) -> Value {
+    Value::Num(Num::F32, Num::f32_bits(x))
+}
+
+fn f32_of(v: &Value) -> f32 {
+    match v {
+        Value::Num(Num::F32, bits) => Num::f32_of(*bits),
+        other => unreachable!("checked: an f32, found {other:?}"),
     }
 }
 
@@ -39,8 +54,10 @@ fn list_of(xs: impl Iterator<Item = Value>) -> Value {
     Value::List(Rc::new(xs.collect()))
 }
 
-fn sum_value(s: Sum) -> Value {
+/// A reduction's value; an `f32` tensor's is an `f32` (exact in `f64`).
+fn sum_value(s: Sum, f32: bool) -> Value {
     match s {
+        Sum::F(x) if f32 => f32_value(x as f32),
         Sum::F(x) => Value::Float(x),
         Sum::I(n) => Value::Int(n),
     }
@@ -55,17 +72,25 @@ impl<'a, W: Write> Interp<'a, W> {
             values.push(self.eval(&a.value, env)?);
         }
         let int = self.int_tensor_at(pos);
+        let f32 = self.resolved.f32_tensors.contains(&pos);
         let t = match f {
             "zeros" => {
                 let shape = Tensor::shape_of(&ints(&values[0]), None).map_err(|e| trapped(e, pos))?;
                 let n = shape.iter().product();
-                let data = if int { Data::I(vec![0; n]) } else { Data::F(vec![0.0; n]) };
+                let data = if int {
+                    Data::I(vec![0; n])
+                } else if f32 {
+                    Data::F32(vec![0.0; n])
+                } else {
+                    Data::F(vec![0.0; n])
+                };
                 Tensor { shape, data }
             }
             _ => {
-                let data = elements(&values[0], int);
+                let data = elements(&values[0], int, f32);
                 let n = match &data {
                     Data::F(v) => v.len(),
+                    Data::F32(v) => v.len(),
                     Data::I(v) => v.len(),
                 };
                 let shape = match values.get(1) {
@@ -165,6 +190,18 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// `t.m(args)` (std.tensor.3-8).
+    /// `o.text()` and `o.ok()` on a `proc.Output` (std.proc.10).
+    pub(super) fn output_method(&mut self, m: &str, recv: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        let Value::Struct(_, fields) = self.eval(recv, env)? else { unreachable!("checked: a proc.Output") };
+        let (Value::Int(status), Value::Str(out), Value::Str(err)) = (&fields[0], &fields[1], &fields[2]) else {
+            unreachable!("checked: a proc.Output has an int status and two strings")
+        };
+        Ok(match m {
+            "ok" => Value::Bool(*status == 0),
+            _ => Value::Str(Rc::from(format!("{out}{err}").as_str())),
+        })
+    }
+
     pub(super) fn tensor_method(
         &mut self,
         m: &str,
@@ -174,6 +211,7 @@ impl<'a, W: Write> Interp<'a, W> {
         env: &mut Env<'a>,
     ) -> Flow<Value> {
         let Value::Tensor(t) = self.eval(recv, env)? else { unreachable!("checked: a tensor") };
+        let f32 = t.is_f32();
         if m == "map" {
             return self.tensor_map(&t, &args[0], env);
         }
@@ -191,9 +229,10 @@ impl<'a, W: Write> Interp<'a, W> {
             "len" => Value::Int(t.len() as i64),
             "to_list" => match &t.data {
                 Data::F(v) => list_of(v.iter().map(|&x| Value::Float(x))),
+                Data::F32(v) => list_of(v.iter().map(|&x| Value::Float(f64::from(x)))),
                 Data::I(v) => list_of(v.iter().map(|&x| Value::Int(x))),
             },
-            "sum" if other.is_none() => sum_value(t.sum().map_err(|e| trapped(e, pos))?),
+            "sum" if other.is_none() => sum_value(t.sum().map_err(|e| trapped(e, pos))?, f32),
             "sum" | "max" | "mean" => {
                 let kind = match m {
                     "sum" => Reduce::Sum,
@@ -204,6 +243,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 match (other, r.data) {
                     (Some(_), data) => Value::Tensor(Rc::new(Tensor { shape: r.shape, data })),
                     (None, Data::F(v)) => Value::Float(v[0]),
+                    (None, Data::F32(v)) => f32_value(v[0]),
                     (None, Data::I(v)) => Value::Int(v[0]),
                 }
             }
@@ -214,7 +254,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 match (other, r.data) {
                     (Some(_), data) => Value::Tensor(Rc::new(Tensor { shape: r.shape, data })),
                     (None, Data::I(v)) => Value::Int(v[0]),
-                    (None, Data::F(_)) => unreachable!("arg_reduce gives `int`"),
+                    (None, _) => unreachable!("arg_reduce gives `int`"),
                 }
             }
             "clamp" => {
@@ -225,12 +265,15 @@ impl<'a, W: Write> Interp<'a, W> {
                 let Some(Value::Float(lo)) = other else { unreachable!("checked: a float bound") };
                 wrap(t.clamp(lo, hi))?
             }
-            "dot" => sum_value(t.dot(&tensor_arg()).map_err(|e| trapped(e, pos))?),
+            "dot" => sum_value(t.dot(&tensor_arg()).map_err(|e| trapped(e, pos))?, f32),
+            "to_f32" => wrap(t.to_f32())?,
+            "to_float" => wrap(t.to_float())?,
             "add" => wrap(t.zip(&tensor_arg(), Op::Add))?,
             "mul" => wrap(t.zip(&tensor_arg(), Op::Mul))?,
             "matmul" => wrap(t.matmul(&tensor_arg()))?,
             "conv2d" => wrap(t.conv2d(&tensor_arg()))?,
             "item" => match t.item().map_err(|e| trapped(e, pos))? {
+                Scalar::F(x) if f32 => f32_value(x as f32),
                 Scalar::F(x) => Value::Float(x),
                 Scalar::I(n) => Value::Int(n),
             },
@@ -278,6 +321,7 @@ impl<'a, W: Write> Interp<'a, W> {
         for i in 0..n {
             let x = match &t.data {
                 Data::F(v) => Value::Float(v[i]),
+                Data::F32(v) => f32_value(v[i]),
                 Data::I(v) => Value::Int(v[i]),
             };
             env.push((var.as_str(), x));
@@ -287,6 +331,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let data = match out.first() {
             Some(Value::Int(_)) => Data::I(out.iter().map(Value::int).collect()),
+            Some(Value::Num(Num::F32, _)) => Data::F32(out.iter().map(f32_of).collect()),
             Some(_) => Data::F(out.iter().map(Value::float).collect()),
             None => t.data.clone(),
         };
@@ -298,14 +343,17 @@ impl<'a, W: Write> Interp<'a, W> {
     pub(super) fn tensor_text(&self, t: &Tensor, _pos: Pos) -> Result<String, Trap> {
         let items: Vec<String> = match &t.data {
             Data::F(v) => v.iter().map(|&x| float_text(x)).collect(),
+            Data::F32(v) => v.iter().map(|&x| float_text32(x)).collect(),
             Data::I(v) => v.iter().map(i64::to_string).collect(),
         };
         let list = format!("[{}]", items.join(", "));
+        // An `f32` tensor's text rebuilds it with `to_f32()` (std.tensor.21).
+        let conv = if t.is_f32() { ".to_f32()" } else { "" };
         Ok(if t.shape.len() == 1 {
-            format!("tensor.from({list})")
+            format!("tensor.from({list}){conv}")
         } else {
             let dims: Vec<String> = t.shape.iter().map(usize::to_string).collect();
-            format!("tensor.from({list}, [{}])", dims.join(", "))
+            format!("tensor.from({list}, [{}]){conv}", dims.join(", "))
         })
     }
 }

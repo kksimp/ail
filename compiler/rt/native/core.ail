@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## The native runtime's core (native-abi.md, ADRs 0404-0408, 0387): system
-## calls, the bump allocator, buffered output, lists of numbers, and traps.
+## calls, the allocator (`heap.ail`), buffered output, lists of numbers, and traps.
 ## Written in the native subset over the primitives of `prim.ail`, and
 ## compiled by the backend into every executable. The algorithms follow
 ## lane 122's machine model in `compiler/rt/rt.ail`.
@@ -10,9 +10,6 @@
 # Global slots.
 OUT_BUF := 0
 OUT_LEN := 1
-HEAP_NEXT := 2
-HEAP_END := 3
-CHUNK := 4
 ARGC := 5
 ARGV := 6
 PARSE_OK := 7
@@ -47,7 +44,7 @@ fn sys_mmap(n int) int
     flags := if t == 2 then 4098 else 34
     syscall(k, 0, n, 3, flags, -1, 0)
 
-# ---- memory (ADR 0407) ----
+# ---- memory (ADR 0562) ----
 
 ## Called by the entry with the process's argument count and vector.
 fn init(argc int, argv int)
@@ -55,29 +52,8 @@ fn init(argc int, argv int)
     store64(global(ARGV), argv)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
-    store64(global(CHUNK), 1048576)
+    heap_init(argv)
     limits_init()
-
-## `n` zeroed bytes, 16-byte aligned, never freed.
-fn alloc(n int) int
-    size := (n + 15) / 16 * 16
-    tick := load64(global(LIM_TICK))
-    if tick != 0
-        limits_tick(tick)
-    mut p := load64(global(HEAP_NEXT))
-    if p == 0 or p + size > load64(global(HEAP_END))
-        mut chunk := load64(global(CHUNK))
-        if chunk < size
-            chunk = size
-        limits_chunk(size)
-        p = sys_mmap(chunk)
-        if p < 0
-            fail(1, 0, 0)
-        store64(global(LIM_START), p)
-        store64(global(HEAP_END), p + chunk)
-        store64(global(CHUNK), chunk * 2)
-    store64(global(HEAP_NEXT), p + size)
-    p
 
 fn copy_bytes(dst int, src int, n int)
     mut i := 0
@@ -144,7 +120,7 @@ fn out_str(s str)
 
 ## A string object of `n` bytes, uninitialised, with `chars` characters.
 fn str_new(n int, chars int) int
-    p := alloc(16 + n)
+    p := alloc_raw(16 + n, KIND_STR)
     store64(p, n)
     store64(p + 8, chars)
     p
@@ -179,29 +155,90 @@ fn list_join(xs List[int], sep str) str
         at += load64(e)
     str_at(r)
 
+## UTF-8 bytes of the scalar value `c`.
+fn char_width(c int) int
+    if c < 128
+        return 1
+    if c < 2048
+        return 2
+    if c < 65536
+        return 3
+    4
+
+## Write the UTF-8 of `c` at `p`; the address after it.
+fn char_put(p int, c int) int
+    w := char_width(c)
+    if w == 1
+        store8(p, c)
+    elif w == 2
+        store8(p, 192 + c / 64)
+        store8(p + 1, 128 + c % 64)
+    elif w == 3
+        store8(p, 224 + c / 4096)
+        store8(p + 1, 128 + c / 64 % 64)
+        store8(p + 2, 128 + c % 64)
+    else
+        store8(p, 240 + c / 262144)
+        store8(p + 1, 128 + c / 4096 % 64)
+        store8(p + 2, 128 + c / 64 % 64)
+        store8(p + 3, 128 + c % 64)
+    p + w
+
+## `xs.join(sep)` for a list of characters (type.coll.9).
+fn list_join_chars(xs List[int], sep str) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    mut n := 0
+    for i in 0..k
+        n += char_width(load64(items + 8 * i))
+    if k > 1
+        n += (k - 1) * load64(sp)
+    chars := if k > 1 then k + (k - 1) * load64(sp + 8) else k
+    r := str_new(n, chars)
+    mut at := r + 16
+    for i in 0..k
+        if i > 0
+            copy_bytes(at, sp + 16, load64(sp))
+            at += load64(sp)
+        at = char_put(at, load64(items + 8 * i))
+    str_at(r)
+
 fn out_nl()
     out_byte(10)
     if line_buffered()
         flush()
 
-## Decimal, working on negative remainders so the smallest `int` needs no
-## negation.
-fn out_int(n int)
-    if n == 0
-        out_byte(48)
-        return
+## Decimal `n` written at address `at`, which has 48 bytes to use (24 for the
+## window, 24 read past it); the count of bytes. It works on negative remainders so the smallest `int` needs no
+## negation. The digits are produced from the end of that window, one
+## division by 10 each, then moved down to `at` in three 8-byte pieces (the
+## bytes after the number are scratch).
+fn write_int(at int, n int) int
+    mut v := if n < 0 then n else 0 - n
+    mut q := at + 23
+    store8(q, 48 - v % 10)
+    v = v / 10
+    while v != 0
+        q -= 1
+        r := v / 10
+        store8(q, 48 + r * 10 - v)
+        v = r
     if n < 0
-        out_byte(45)
-    mut v := n
-    mut scale := 1
-    while v / 10 != 0
-        v = v / 10
-        scale *= 10
-    v = n
-    while scale > 0
-        d := v / scale % 10
-        out_byte(48 + d.abs())
-        scale = scale / 10
+        q -= 1
+        store8(q, 45)
+    store64(at, load64(q))
+    store64(at + 8, load64(q + 8))
+    store64(at + 16, load64(q + 16))
+    at + 24 - q
+
+fn out_int(n int)
+    mut used := load64(global(OUT_LEN))
+    if OUT_CAP - used < 48
+        flush()
+        used = 0
+    store64(global(OUT_LEN), used + write_int(load64(global(OUT_BUF)) + used, n))
 
 fn out_bool(b bool)
     if b
@@ -342,23 +379,27 @@ fn list_slice(xs List[int], lo int, hi int, size int) List[int]
     store64(q, n)
     list_at(q)
 
-## A heap object of `size` bytes after its header word (native-abi.md §2):
-## bits 0-7 the kind, 16-63 the size. The pointer is to the first byte
-## after the header.
+## A heap object of `size` bytes with its header word (native-abi.md §2);
+## the pointer is to the first byte after the header.
 fn obj_new(size int, kind int) int
-    p := alloc(size + 8)
-    store64(p, kind + size.shl(16))
-    p + 8
+    alloc(size, kind)
 
 # ---- lists (native-abi.md §2) ----
+
+## The kind of a list's element block: a `List[bool]`'s holds no pointers.
+fn data_kind(size int) int
+    if size == 1
+        KIND_ATOMIC
+    else
+        KIND_LDATA
 
 ## A list object with room for `cap` elements: +0 len, +8 cap, +16 data.
 ## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
 fn list_alloc(cap int, size int) List[int]
-    p := alloc(24)
+    p := alloc(24, KIND_LIST)
     c := if cap < 4 then 4 else cap
     store64(p + 8, c)
-    store64(p + 16, alloc(size * c))
+    store64(p + 16, alloc_raw(size * c, data_kind(size)))
     list_at(p)
 
 fn list_new(cap int) List[int]
@@ -376,7 +417,7 @@ fn list_new_for(lo int, hi int, per int) List[int]
 
 fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
-    data := alloc(size * cap)
+    data := alloc_raw(size * cap, data_kind(size))
     copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
     store64(p + 16, data)
@@ -394,7 +435,7 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     need := load64(p) + want * per
     if need <= load64(p + 8)
         return
-    data := alloc(size * need)
+    data := alloc_raw(size * need, data_kind(size))
     copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, need)
     store64(p + 16, data)
@@ -557,6 +598,12 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_int(b)
         out_str(" is out of bounds for a list of length ")
         out_int(load64(global(TRAP_LEN)))
+    elif kind == 8
+        # `xs.insert(a, x)` on a list of length `b` (type.coll.4).
+        out_str("insert index ")
+        out_int(a)
+        out_str(" is out of bounds for a list of length ")
+        out_int(b)
     elif kind == 9
         # io.exit(a) outside 0 to 255 (std.io.4)
         out_str("exit status ")
@@ -567,6 +614,10 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 14
+        # `unreachable(message)` (err.model.2): `a` is the message
+        out_str("unreachable: ")
+        out_str(str_at(a))
     out_byte(10)
     out_str(tail)
     flush_to(2)

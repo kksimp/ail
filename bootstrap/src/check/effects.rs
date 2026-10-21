@@ -80,7 +80,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             (&["get", "post", "request", "get_bytes", "post_bytes", "request_bytes", "options", "connect", "connect_tls"], &["net", "io"])
         }
         // std.path.1: text only, so no effects.
-        "path" => (&["base", "dir", "ext", "join"], &[]),
+        "path" => (&["base", "dir", "ext", "join", "stem"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         // std.regex.1: text in, text out, so no effects.
         "regex" => (
@@ -696,6 +696,10 @@ impl<'p, 'r> Walker<'p, 'r> {
                     for e in ["net", "io"] {
                         self.add(e, (*m).to_string());
                     }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && m.starts_with("regex.")
+                {
+                    // std.regex.9: text in, text out, so no effects.
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && let Some(effects) = std_effects("ui", "Window")
                 {

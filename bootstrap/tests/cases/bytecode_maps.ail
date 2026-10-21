@@ -1,0 +1,27 @@
+# Maps and lists on the bytecode tier (ADR 0619): get, contains, len, set and
+# `op=` with a missing key, the length of a constant list, negative literals.
+
+WORDS := ["a", "b", "c"]
+
+fn main()
+    mut counts := Map[str, int]()
+    for w in ["a", "b", "a", "c", "a"]
+        counts[w] += 1
+    c := counts.get("a") else 0
+    d := counts.get("z") else -1
+    print("{counts} {c} {d} {counts.len()} {counts.contains("b")} {counts.contains("q")}")
+    mut seen := Map[int, str]()
+    seen[3] = "x"
+    seen[3] = "y"
+    seen[-4] = "z"
+    print("{seen} {seen.len()}")
+    mut fl := Map[str, float]()
+    fl["p"] += 1.5
+    fl["p"] *= 2.0
+    print("{fl}")
+    print("{WORDS.len()} {-1} {-2.5} {3 - -4}")
+    n := WORDS.len()
+    mut total := 0
+    for i in 0..n * 2
+        total += i
+    print("{total}")

@@ -60,7 +60,7 @@ consistent (`conc.atomic.1`) unless `order:` says otherwise
 indivisible step and returns the value from before. An add whose result
 would leave `int` traps and leaves the cell unchanged. *(ADR 0320)*
 
-```ail
+```ail rules=conc.atomic.3,conc.atomic.5
 fn count(hits Atomic[int], n int)
     for _ in 0..n
         hits.add(1)
@@ -85,7 +85,7 @@ the loop reports that trap instead of running again in order
 ordering effect may still run on its own thread (`conc.par.10`).
 *(ADR 0320)*
 
-```ail
+```ail rules=conc.atomic.6
 fn main()
     total := Atomic(0)
     par for i in 0..1000
@@ -103,7 +103,7 @@ five. A `cas` that fails reads with the read half of its ordering
 (`Relaxed` for `Release`, `Acquire` for `AcqRel`). The orderings mean what
 they mean in the C++20 memory model. *(ADR 0352)*
 
-```ail
+```ail rules=conc.atomic.2,conc.atomic.7
 fn publish(data Atomic[int], ready Atomic[bool])
     data.store(42, order: Relaxed)
     ready.store(true, order: Release)   # data is visible to an Acquire load that sees true
@@ -140,7 +140,7 @@ a compile-time error. *(ADR 0096)*
 result. If the task trapped, `wait()` fails with a `Trapped` error carrying
 the trap's diagnostic. *(ADR 0096, ADR 0047)*
 
-```ail
+```ail rules=conc.task.1,conc.task.6
 struct Profile
     id int
 
@@ -190,7 +190,7 @@ the group ends, it waits for the tasks not yet waited; if one of them
 trapped, that trap ends the owner's task too, since nothing else would
 report it. *(ADR 0187)*
 
-```ail
+```ail rules=conc.task.4,conc.task.8
 fn work(id int)
     print("work {id}")
 
@@ -232,7 +232,7 @@ doesn't wait for room: it drops `v` and returns. A send with room still
 queues the value, and a send on a closed channel still traps
 (`conc.share.4`). *(ADR 0351)*
 
-```ail
+```ail rules=conc.cancel.1,conc.cancel.4
 fn worker(jobs Channel[int])
     for v in jobs
         print("got {v}")
@@ -291,7 +291,7 @@ closes it; closing it again traps. A channel, like a mutex, is a handle:
 copies of it, and copies passed to tasks, are the same channel.
 *(ADR 0188)*
 
-```ail
+```ail rules=conc.share.3,conc.share.4
 fn produce(out Channel[int])
     for i in 1..=3
         out.send(i)
@@ -315,7 +315,7 @@ releases it. Other tasks' `get`, `set`, `swap` and `lock` wait while it is
 held. `lock` while already holding it, `unlock` without holding it, and a
 task that ends while holding it each trap. *(ADR 0189)*
 
-```ail
+```ail rules=conc.race.1,conc.share.2,conc.share.5
 fn add(m Mutex[int], n int)
     x := m.lock()
     m.unlock(x + n)
@@ -340,7 +340,7 @@ it had before the block. The block MUST NOT name `m` again. A `with` whose
 `m` isn't a `Mutex`, a `with m as x` without `mut`, and a use of `m` in the
 block are compile-time errors. `with` is reserved (`lex.kw.1`). *(ADR 0301)*
 
-```ail
+```ail rules=conc.share.6
 fn add(m Mutex[int], n int)
     with m as mut x
         x += n
@@ -370,7 +370,7 @@ and open, so a channel nobody closes makes the loop wait for ever, which is
 a deadlock once no other task can run (`conc.task.7`). A `break` leaves the
 values not yet received in the channel. *(ADR 0300)*
 
-```ail
+```ail rules=conc.share.7
 fn produce(out Channel[int])
     for i in 1..=3
         out.send(i)
@@ -393,7 +393,7 @@ a child's `out`, `err` (`std.proc.5`) and ordinary channels of one element
 type. Other tasks run while it waits; when none can, it is a deadlock
 (`conc.task.7`) unless a child's stream could still wake it. *(ADR 0427)*
 
-```ail norun
+```ail norun rules=conc.select.1
 # norun: the order of the two streams depends on how the child's writes race, so
 # the output differs between runs; the example is checked, not compared.
 use std.proc
@@ -448,7 +448,7 @@ accumulators combine in a fixed order; a sum overflows, and traps, exactly
 where the sequential sum would. A float accumulator is not allowed: float
 `+` isn't associative. *(ADR 0236)*
 
-```ail
+```ail rules=conc.par.2,conc.par.3,conc.par.4
 fn main()
     mut squares := [0, 0, 0, 0]
     mut total := 0
@@ -517,7 +517,7 @@ runs in order from its first iteration. Because the body has no effect, the
 result, and the trap if any, is the sequential one (`conc.par.1`). A body on
 the pool can't block on another task: it has no handle. *(ADR 0274)*
 
-```ail
+```ail rules=conc.par.1,conc.par.7,conc.par.8,conc.par.11
 fn main()
     mut squares := List[int]()
     for _ in 0..64
@@ -541,7 +541,7 @@ can't copy, makes it compute the elements in order (`conc.par.11`). A short
 list, one thread, or `--deterministic`, computes them in order.
 *(ADR 0302)*
 
-```ail
+```ail rules=conc.par.12
 fn square(x int) int
     x * x
 
@@ -559,4 +559,126 @@ fn show(x int) int
 fn main()
     ys := [show(x) par for x in [1, 2, 3]]
     print(ys)
+```
+
+## Runnable examples for the rules above
+
+The rules without an example in the sections above are checked here. Each
+block runs on the bootstrap; the `norun` ones show a trap or a command line
+the gate can't run.
+
+```ail rules=conc.atomic.1,conc.atomic.4
+fn main()
+    a := Atomic(5)
+    print(a.cas(5, 7))
+    print(a.load())
+    a.store(9)
+    print(a.load())
+    print(a.cas(5, 1))
+```
+
+```ail rules=conc.task.2,conc.task.3,conc.task.9
+fn wait_for(ch Channel[int]) int
+    v := ch.recv() else 0
+    v * 10
+
+fn main() !
+    ch := Channel[int](1)
+    t := spawn wait_for(ch)
+    ch.send(4)
+    print(t.wait()?)
+```
+
+```ail norun rules=conc.task.7
+fn main() !
+    ch := Channel[int](1)
+    print(ch.recv() else 0)
+```
+
+```ail rules=conc.par.10,conc.par.9
+fn busy(n int) int
+    mut total := 0
+    for i in 0..n
+        total += i
+    total
+
+fn main() !
+    a := spawn busy(10)
+    b := spawn busy(20)
+    print(a.wait()? + b.wait()?)
+```
+
+```ail rules=conc.cancel.2
+fn work(ch Channel[int]) int ! Cancelled
+    v := ch.recv() else 0
+    task.check()?
+    v
+
+fn main()
+    ch := Channel[int](1)
+    t := spawn work(ch)
+    t.cancel()
+    ch.send(5)
+    print(t.wait() else -1)
+```
+
+```ail rules=conc.cancel.3
+fn inner(ch Channel[int])
+    v := ch.recv() else 0
+    print("inner cancelled: {task.cancelled()}")
+
+fn outer(ch Channel[int])
+    t := spawn inner(ch)
+    t.wait() else return
+
+fn main() !
+    ch := Channel[int](1)
+    g := TaskGroup()
+    g.add(spawn outer(ch))
+    g.cancel()
+    g.wait_all()?
+    print("done")
+```
+
+```ail rules=conc.share.1
+fn bump(xs List[int]) int
+    mut xs2 := xs
+    xs2.push(9)
+    xs2.len()
+
+fn main() !
+    xs := [1, 2]
+    t := spawn bump(xs)
+    print(t.wait()?)
+    print(xs.len())
+```
+
+```ail tool=effects,--parallel,FILE expect=parallel rules=conc.par.6
+fn main()
+    mut total := 0
+    for i in 0..10
+        total += i
+    par for i in 0..10
+        total += i
+    print(total)
+```
+
+```ail norun rules=conc.mm.1
+fn main()
+    a := Atomic(0)
+    a.store(1, order: Release)
+    print(a.load(order: Acquire))
+```
+
+```ail norun rules=conc.sched.1,conc.sched.2
+# norun: the gate runs no test. Run this with `ail test --schedule=random:7`;
+# a failing run prints the seed (conc.sched.2).
+fn take(ch Channel[int]) int
+    ch.recv() else 0
+
+fn main() !
+    ch := Channel[int](1)
+    t := spawn take(ch)
+    ch.send(4)
+    print(t.wait()?)
 ```

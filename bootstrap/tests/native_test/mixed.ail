@@ -16,9 +16,9 @@ fn fails_on_purpose()
         5,
     )
 
-@test fn uses_a_map()
-    m := {"a": 1}
-    assert_eq(m.len(), 1)
+@test fn uses_defer()
+    defer print(1)
+    assert_eq(add(1, 1), 2)
 
 @test fn holds_for_all(a int, b int)
     assert_eq(add(a, b), add(b, a))

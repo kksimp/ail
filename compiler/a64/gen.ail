@@ -244,6 +244,8 @@ fn Gen.gpr(mut self, v int, scratch int) int
         a.mov_ri(scratch, i.imm)
     elif i.op == "str"
         a.adr_sym(scratch, "d:s{i.imm}")
+    elif i.op == "fnaddr"
+        a.adr_sym(scratch, i.name)
     else
         unreachable("value v{v} has no location")
     scratch
@@ -301,6 +303,8 @@ fn Gen.move_of(self, dst int, v int) Move
         return Move(dst: dst, src: -1, imm: i.imm, sym: "", float: fl)
     if i.op == "str"
         return Move(dst: dst, src: -1, imm: 0, sym: "d:s{i.imm}", float: fl)
+    if i.op == "fnaddr"
+        return Move(dst: dst, src: -1, imm: 0, sym: i.name, float: fl)
     if i.op == "fconst"
         return Move(dst: dst, src: -1, imm: codegen.f64_bits(i.fimm), sym: "", float: fl)
     Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
@@ -613,6 +617,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.mov_rr(d, S1)
             put_gpr(i.dst, d)
         "call" => call(i)
+        "icall" => call_out(i)
+        "utrap" => a.b(stub(14, i.args[0], i.args[0], i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
@@ -820,9 +826,15 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
+    # A call through a value (`icall`) takes the callee first, into the scratch register
+    # that moves don't use (a float constant goes through `S0`).
+    indirect := i.op == "icall"
     mut extra := List[int]()
-    for v in i.args
-        if f.vals[v].is_float()
+    for k in 0..i.args.len()
+        v := i.args[k]
+        if indirect and k == 0
+            moves.push(move_of(S2, v))
+        elif f.vals[v].is_float()
             moves.push(move_of(FB + nf, v))
             nf += 1
         elif ni < INT_ARGS
@@ -839,7 +851,10 @@ fn Gen.call_out(mut self, i mir.Inst)
         for k in 0..extra.len()
             a.str(gpr(extra[k], S0), SP, 8 * k)
     parallel(moves)
-    a.bl(i.name)
+    if indirect
+        a.blr(S2)
+    else
+        a.bl(i.name)
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0
@@ -888,6 +903,18 @@ fn Gen.prim(mut self, i mir.Inst)
             k := imm(i.args[0]) else 0
             if k > 0
                 a.alu_ri("add", d, d, 8 * k)
+            put_gpr(i.dst, d)
+        "globals_end" =>
+            d := out_gpr(i.dst, S1)
+            a.adr_sym(d, "globals")
+            a.alu_ri("add", d, d, 8 * m.globals_used())
+            put_gpr(i.dst, d)
+        "gc_regs" =>
+            b := gpr(i.args[0], S0)
+            for k in 0..10
+                a.str(19 + k, b, 8 * k)
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, SP)
             put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)

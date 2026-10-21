@@ -8,8 +8,8 @@ fn label(p Point) str
     "{p.x}"
 
 fn main()
-    names := {"a": 1}
-    s := "n = {names.len()}"
+    defer print(1)
+    s := "n = {1}"
     print(s)
     print("ab".find("b"))
     print('c'.to_digit(10))

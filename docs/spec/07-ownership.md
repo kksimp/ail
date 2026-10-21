@@ -200,6 +200,18 @@ duration of the call. It cannot be stored in a value, captured beyond the
 call, or returned. Storing or returning a parameter stores or returns a value.
 *(ADR 0062)*
 
+```ail rules=own.borrow.1
+struct Holder
+    text str
+
+fn keep(s str) Holder
+    Holder(text: s)
+
+fn main()
+    h := keep("hi")
+    print(h.text)
+```
+
 **own.borrow.2** — [definitional] The language has no lifetime parameters or lifetime
 annotations. *(ADR 0062)*
 
@@ -402,4 +414,321 @@ moved before the block ends. *(ADR 0191)*
 defer print("second")
 defer print("first")
 print("body")
+```
+
+## Runnable examples for the rules above
+
+Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
+report the named rule; the diagnostic that the bootstrap reports is named in
+the comment where it differs from the rule ID. Runs that print show their
+output in the comments.
+
+```ail rules=own.val.1
+fn main()
+    mut a := [1, 2]
+    mut b := a          # an independent value: pushing to b doesn't change a
+    b.push(3)
+    print(a)            # [1, 2]
+    print(b)            # [1, 2, 3]
+```
+
+```ail norun rules=own.val.2
+fn main()
+    # The storage sharing an implementation may use is invisible: own.val.1 shows the behaviour.
+    print("values are independent")
+```
+
+```ail rules=own.place.1
+fn main()
+    mut xs := [1]
+    xs[0] = 5           # an element of a local is a place
+    print(xs[0])        # 5
+```
+
+```ail error=own.param.1 rules=own.param.1
+fn f(x int) int
+    x = 2               # a parameter without `mut` is read-only
+    x
+```
+
+```ail rules=own.param.2
+fn bump(mut n int)
+    n = n + 1           # a `mut` parameter's changes are visible to the caller
+fn main()
+    mut k := 1
+    bump(mut k)
+    print(k)            # 2
+```
+
+```ail error=own.excl.2 rules=own.excl.1
+fn two(mut a int, mut b int)
+    a = b
+
+fn main()
+    mut x := 0
+    two(mut x, mut x)   # the same place as two `mut` arguments
+    print(x)
+```
+
+```ail error=own.excl.2 rules=own.excl.2
+fn two(mut a int, mut b int)
+    a = 1
+
+fn main()
+    mut x := 0
+    two(mut x, mut x)   # statically certain overlap: a compile-time error
+```
+
+```ail norun rules=own.excl.3
+fn two(mut a int, mut b int)
+    a = 1
+    b = 2
+
+fn main()
+    mut x := [0, 0]
+    i := 1
+    j := 1
+    two(mut x[i], mut x[j])   # the indexes are equal only at run time: the call traps
+```
+
+```ail rules=own.excl.4
+fn f(a int, mut b int) int
+    b = a
+    b
+
+fn main()
+    mut x := 1
+    print(f(x, mut x))  # the read-only argument is a copy made before the call: 1
+```
+
+```ail rules=own.excl.5
+fn main()
+    mut xs := [1, 2]
+    for mut x in xs
+        x = x + 1       # changes go through `x` only
+    print(xs)           # [2, 3]
+```
+
+```ail rules=own.copy.1
+fn main()
+    xs := [1]
+    ys := xs            # a copy is made here; the compiler reports the site
+    print(ys.len())     # 1
+```
+
+```ail rules=own.move.1
+fn take(move xs List[int]) int
+    xs.len()
+
+fn main()
+    a := [1, 2]
+    print(take(move a)) # 2
+```
+
+```ail error=own.move.3 rules=own.move.3
+fn take(move xs List[int]) int
+    xs.len()
+
+fn outer(xs List[int]) int
+    take(move xs)       # a parameter without `move` belongs to the caller
+```
+
+```ail error=own.move.2 rules=own.move.4
+fn take(move xs List[int]) int
+    xs.len()
+
+fn main()
+    a := [1]
+    print(take(move a))
+    print(a.len())      # used on a path after the move
+```
+
+```ail error=own.move.2 rules=own.move.5
+fn take(move n int) int
+    n + 1
+
+fn main()
+    k := 4
+    print(take(move k))
+    print(k)            # an integer moved is moved: it can't be used afterwards
+```
+
+```ail rules=own.borrow.1
+fn first(xs List[int]) int
+    xs[0]               # the access to xs lasts only for this call
+
+fn main()
+    print(first([7, 8])) # 7
+```
+
+```ail norun rules=own.borrow.2
+fn main()
+    # The language has no lifetime parameters: a borrow is the call it is passed to.
+    print("no lifetimes")
+```
+
+```ail rules=own.ref.1
+fn main()
+    a := ref [1]
+    b := a              # copies of a ref share one cell
+    b.push(2)
+    print(a.len())      # 2
+```
+
+```ail error=own.ref.2 rules=own.ref.2
+struct C
+    n int
+
+fn bump(c ref C) int
+    c.n += 1
+    c.n
+
+fn main()
+    c := ref C(n: 0)
+    t := spawn bump(c)      # a `ref` can't go to another task
+    t.wait() else 0
+```
+
+```ail rules=own.ref.3
+struct Pt
+    x int
+
+fn main()
+    c := ref Pt(x: 3)
+    print(c.x)          # 3: no explicit dereference
+```
+
+```ail rules=own.ref.4
+fn main()
+    c := ref [1]        # an immutable binding ...
+    c.push(2)           # ... can still change the cell
+    print(c.len())      # 2
+```
+
+```ail rules=own.ref.5
+fn main()
+    c := ref 7          # a new cell holding 7
+    print(c)            # ref 7
+```
+
+```ail rules=own.ref.6
+fn main()
+    a := ref 1
+    b := a
+    print(a == b)       # true: the same cell
+```
+
+```ail norun rules=own.ref.7
+struct C
+    n int
+
+fn C.take(mut self, other ref C)
+    other.n = 5             # another copy of the cell, used during the `mut` access: traps
+    self.n = 1
+
+fn main()
+    a := ref C(n: 0)
+    b := a
+    a.take(b)
+```
+
+```ail rules=own.uniq.1
+unique struct Tok
+    id int
+
+fn main()
+    t := Tok(id: 1)
+    print(t.id)         # 1
+```
+
+```ail error=own.move.2 rules=own.uniq.2
+unique struct Tok
+    id int
+
+fn use_it(move t Tok) int
+    t.id
+
+fn main()
+    t := Tok(id: 1)
+    print(use_it(move t))
+    print(t.id)         # moved: the later use is an error
+```
+
+```ail rules=own.uniq.3
+unique struct File
+    name str
+
+impl Drop for File
+    fn drop(mut self)
+        print("closed {self.name}")
+
+fn main()
+    f := File(name: "a")
+    print("open")       # open, then closed a: drop runs when the scope exits
+```
+
+```ail rules=own.uniq.4,own.uniq.7
+unique struct Tok
+    id int
+
+impl Drop for Tok
+    fn drop(mut self)
+        print("drop {self.id}")
+
+fn main()
+    a := Tok(id: 1)
+    b := Tok(id: 2)
+    print("end")        # end, drop 2, drop 1: reverse order of declaration
+```
+
+```ail rules=own.uniq.6
+unique struct File
+    name str
+
+impl Drop for File
+    fn drop(mut self)
+        print("closed {self.name}")
+
+fn main()
+    f := File(name: "b")
+    print(f.name)       # b, then closed b
+```
+
+```ail rules=own.uniq.8
+unique struct Tok
+    id int
+
+fn main()
+    xs := [Tok(id: 1)]  # a list of a unique type is itself unique
+    print(xs.len())     # 1
+```
+
+```ail rules=own.uniq.9
+unique struct Tok
+    id int
+
+fn main()
+    mut xs := [Tok(id: 1)]
+    t := Tok(id: 2)
+    xs.push(move t)     # push takes ownership of the value
+    print(xs.len())     # 2
+```
+
+```ail rules=own.defer.1
+fn main()
+    defer print("bye")  # runs when the block exits
+    print("hi")         # hi, then bye
+```
+
+```ail rules=own.defer.2
+fn main()
+    defer print("one")
+    defer print("two")  # deferred in reverse order: two, then one
+    print("body")
+```
+
+```ail error=own.defer.3 rules=own.defer.3
+fn main()
+    defer return        # a deferred statement is a call or an assignment
+    print(1)
 ```

@@ -13,7 +13,7 @@ compared each function of the seven corpus programs with its Python twin. The
 largest gaps that a language change can close were loops that build a
 collection: AIL wrote
 
-```ail fragment
+```ail excerpt
 mut parts := []
 for item in items
     parts.push(compact(item))

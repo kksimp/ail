@@ -1,0 +1,33 @@
+# Short-lived lists across many collections; every kept list stays intact
+# (rt heap and collector, ADR 0562).
+
+fn fill(n int, seed int) List[int]
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(seed * 31 + i)
+    xs
+
+fn sum(xs List[int]) int
+    mut t := 0
+    for x in xs
+        t += x
+    t
+
+fn main()
+    mut keep := List[List[int]]()
+    mut dropped := 0
+    for round in 0..6000
+        xs := fill(1000, round)
+        if round % 50 == 0
+            keep.push(xs)
+        else
+            dropped += xs.len()
+    print(dropped)
+    print(keep.len())
+    mut total := 0
+    for k in keep
+        total += sum(k)
+    print(total)
+    for k in 0..keep.len()
+        if keep[k][0] != k * 50 * 31 or keep[k][999] != k * 50 * 31 + 999
+            print("corrupt {k}")

@@ -1,0 +1,8 @@
+fn main() !
+    mut cfg := Map[str, str]()
+    for line in fs.read_text("app.conf")?.lines()
+        l := line.trim()
+        if l != "" and not l.starts_with("#")
+            k, _, v := l.partition("=")
+            cfg[k.trim()] = v.trim()
+    print(cfg.get("port") else "8080")

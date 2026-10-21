@@ -40,6 +40,6 @@ for name in sorted(os.listdir(DATA)):
         if not isinstance(rule, str):
             continue
         counts[rule] = counts.get(rule, 0) + 1
-for rule in sorted(counts, key=lambda m: (-counts[m], m)):
+for rule in sorted(counts, key=lambda m: -counts[m]):
     print(f"{counts[rule]} {rule}")
 print(f"{len(counts)} distinct rules")

@@ -20,6 +20,7 @@ selftest is the merge gate, so this list is for the designer's check on Windows.
 
 - Paths and drives: `std.path` and glob handle `C:\` (ADR 0504).
 - Process lookup: `std.proc.run` tries `PATHEXT` for bare names (ADR 0505).
+- Native `proc.run` and `proc.which` (ADR 0770): Linux only, by `clone` and `execve`. There is no Windows or macOS native arm yet (a macOS program traps `native.subset.1`), so there is no step for the designer here.
 - TLS root certificates: the Windows ROOT store (`bootstrap/src/net/x509/roots.rs`).
 - Random bytes: a Windows branch (`bootstrap/src/net/crypto/rand.rs`).
 - Console text: Rust's standard library writes console output as UTF-16 (`WriteConsoleW`), so no change is needed.
@@ -32,3 +33,6 @@ selftest is the merge gate, so this list is for the designer's check on Windows.
 - Sockets, HTTP/1.1 keep-alive (ADRs 0637, 0639): the client pool and server keep-alive use only `std::net::TcpStream` and a non-blocking `peek`, which Rust implements with `MSG_PEEK` on Winsock; untested on Windows. Step to add when run: `.\ail.ps1 run bootstrap\tests\cases\std_net_keepalive.ail` should print `reused: true` first, and `std_net_jar.ail`, `std_net_timeouts.ail` should match their `.out` files.
 - Sockets, HTTP/1.1 keep-alive and streaming bodies (ADRs 0637, 0639, 0716): the client pool and server keep-alive use only `std::net::TcpStream` and a non-blocking `peek`, which Rust implements with `MSG_PEEK` on Winsock; untested on Windows. Step to add when run: `.\ail.ps1 run bootstrap\tests\cases\std_net_keepalive.ail` should print `reused: true` first, and `std_net_jar.ail`, `std_net_timeouts.ail` should match their `.out` files.
 - Sockets, HTTP/1.1 keep-alive and streaming bodies (ADRs 0637, 0639, 0716, 0717): the client pool and server keep-alive use only `std::net::TcpStream` and a non-blocking `peek`, which Rust implements with `MSG_PEEK` on Winsock; untested on Windows. Step to add when run: `.\ail.ps1 run bootstrap\tests\cases\std_net_keepalive.ail` should print `reused: true` first, and `std_net_jar.ail`, `std_net_timeouts.ail` should match their `.out` files.
+- `http.serve_dir` and `req.stop()` (ADRs 0754–0755): AIL over `fs` and `net`, no platform code; untested on Windows. Step to add when run: `.\ail.ps1 run bootstrap\tests\cases\http_serve_dir.ail` should match its `.out` file.
+- `fs.copy` on a directory (ADR 0751): Rust `std::fs::copy` and `read_dir` per file, untested on Windows. Step to add when run: `.\ail.ps1 run bootstrap\tests\cases\fs_copy_tree.ail` should match `fs_copy_tree.out` (it uses `%TEMP%`).
+- Allocator (ADR 0737): `ail run` and `ail test` reserve one 16 GiB `MAP_NORESERVE` region on Unix and serve blocks up to 1 KiB from per-thread free lists; on Windows the reservation is skipped and the system allocator is used (untested there).
