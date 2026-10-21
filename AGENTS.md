@@ -156,6 +156,7 @@ tools/
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
   native-coverage/        which native subset constructs block the examples
+  native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
   perfbench/              drag-race programs: AIL, C and Python twins
