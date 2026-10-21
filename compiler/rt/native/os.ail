@@ -376,8 +376,7 @@ fn os_fs_list_dir(path str) List[int]
     if p == 0
         os_fail_kind(K_NOT_FOUND)
         return out
-    # O_DIRECTORY (Linux x86-64 0o200000, Linux ARM64 0o40000, macOS 0x100000),
-    # so a regular file fails here with ENOTDIR on every
+    # O_DIRECTORY (Linux x86-64 0o200000, Linux ARM64 0o40000, macOS 0x100000), so a regular file fails here with ENOTDIR on every
     # platform (XNU's getdirentries64 would say EINVAL, which is `other`).
     fd := os_open(p, os_pick(65536, 16384, 1048576), 0)
     if fd < 0
