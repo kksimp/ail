@@ -248,6 +248,7 @@ fn build(ms int, zone str) DateTime
 
 fn known(zone str) DateError?
     if zone_offset(zone, 0) == none
+        # std.date.20: a zone name the zone data doesn't know.
         return DateError(text: zone, why: "unknown zone")
     none
 
@@ -416,6 +417,7 @@ fn digits(text str, p int, n int) int?
             return none
     seg.to_int()
 
+# The causes are std.date.17 (the date), 18 (the time), 19 (the offset) and 20 (the zone).
 fn bad(text str, why str) DateError
     DateError(text: text, why: why)
 
@@ -452,6 +454,7 @@ fn parse_with(text str, zone str) DateTime ! DateError
     sep := part(text, 10, 11)
     if sep != "T" and sep != " "
         return bad(text, "expected `T` between the date and the time")
+    # std.date.18: the time part, after the date.
     hh := digits(text, 11, 2) else return bad(text, "expected a 2-digit hour")
     mm := digits(text, 14, 2) else return bad(text, "expected a 2-digit minute")
     if part(text, 13, 14) != ":" or hh > 23 or mm > 59
@@ -484,5 +487,6 @@ fn parse_with(text str, zone str) DateTime ! DateError
             return bad(text, "no offset (write Z or +HH:MM, or use parse_in)")
         secs := resolve(local, zone) else return bad(text, "unknown zone")
         return build(secs * 1000 + frac, zone)
+    # std.date.19: the offset.
     off := fixed_offset(rest) else return bad(text, "expected Z, +HH:MM or -HH:MM after the time")
     build((local - off) * 1000 + frac, if off == 0 then "UTC" else fixed_name(off))

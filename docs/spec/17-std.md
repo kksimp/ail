@@ -1296,6 +1296,76 @@ fn main()
         date.Date(year: 2000, month: 1, day: 1)
     print(d.days())
 ```
+
+**std.date.17** — The shape of the date fails with `DateError` and why
+`expected YYYY-MM-DD`, `expected a 4-digit year`, `expected a 2-digit month` or
+`expected a 2-digit day`, for `parse_date` and for the date part of `parse_iso`.
+*(ADR 0783)*
+
+**std.date.18** — The time part of `parse_iso` fails with why `expected \`T\`
+between the date and the time`, `expected a time after the date`, `expected a
+2-digit hour`, `expected a 2-digit minute`, `expected HH:MM`, `expected a 2-digit
+second`, `expected digits after \`.\``, or `seconds go to 59 (leap seconds
+aren't supported)`. *(ADR 0783)*
+
+**std.date.19** — The offset fails with why `no offset (write Z or +HH:MM, or use
+parse_in)` when a `parse_iso` text has none, and `expected Z, +HH:MM or -HH:MM
+after the time` when it is malformed. *(ADR 0783)*
+
+**std.date.20** — A zone name the zone data doesn't know fails with why `unknown
+zone` and the name as the text, for `date.at` and for a `parse_in` zone.
+*(ADR 0783)*
+
+```ail rules=std.date.17
+use std.time.date
+
+fn date_why(text str) str
+    d := date.parse_date(text) else err
+        return err.why
+    return "ok {d.iso()}"
+
+fn main()
+    print(date_why("2026-2-3"))    # expected YYYY-MM-DD
+    print(date_why("2026-02-30"))  # no such day
+```
+
+```ail rules=std.date.18
+use std.time.date
+
+fn iso_why(text str) str
+    t := date.parse_iso(text) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(iso_why("2026-01-02 1:00"))   # expected a time after the date
+    print(iso_why("2026-01-02T10:61Z")) # expected HH:MM
+```
+
+```ail rules=std.date.19
+use std.time.date
+
+fn iso_why(text str) str
+    t := date.parse_iso(text) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(iso_why("2026-01-02T10:00"))    # no offset (write Z or +HH:MM, or use parse_in)
+    print(iso_why("2026-01-02T10:00+5"))  # expected Z, +HH:MM or -HH:MM after the time
+```
+
+```ail rules=std.date.20
+use std.time.date
+
+fn zone_why(zone str) str
+    t := date.at(0, zone) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(zone_why("Mars/Base"))  # unknown zone
+```
 ## Zones: `std.tz`
 
 **std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
