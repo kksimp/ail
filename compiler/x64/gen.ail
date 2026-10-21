@@ -62,6 +62,14 @@ struct Gen
     frame int
     ## Caller-saved registers in use, which a `push`'s slow path saves.
     caller_used List[int]
+    ## Globals whose address only loads and stores use: the access is
+    ## `[rip + globals + 8k]` and the `lea` is skipped (ADR 0623).
+    globs Map[int, int]
+    ## Shrink-wrapping (ADR 0625): the block that saves the callee-saved
+    ## registers (-1: the prologue does), and the blocks whose returns
+    ## restore them.
+    wrap int
+    region List[bool]
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
@@ -89,7 +97,7 @@ pub fn generate(m mir.Module) codegen.Image
     img
 
 fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
-    f := codegen.split_edges(f0)
+    f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]
@@ -101,6 +109,18 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    mut globs := Map[int, int]()
+    mut addr_uses := [0 for _ in 0..f.vals.len()]
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "prim"
+                and (i.name == "load64" or i.name == "load8" or i.name == "loadf" or i.name == "store64" or i.name == "store8" or i.name == "storef")
+                addr_uses[i.args[0]] += 1
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "prim" and i.name == "global" and remat[i.args[0]].op == "const"
+                if addr_uses[i.dst] == uses[i.dst] and uses[i.dst] > 0
+                    globs[i.dst] = remat[i.args[0]].imm
     mut g := Gen(
         a: new_asm(),
         img: img,
@@ -117,6 +137,9 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
         slot_base: 0,
         frame: 0,
         caller_used: codegen.caller_used(al, registers()),
+        globs: globs,
+        wrap: al.wrap,
+        region: al.region,
     )
     for r in al.saved
         if r >= codegen.FLOAT_BASE
@@ -146,8 +169,9 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
 fn Gen.prologue(mut self, slots int)
     a.push(RBP)
     a.mov_rr(RBP, RSP)
-    for r in saved_ints
-        a.push(r)
+    if wrap < 0
+        for r in saved_ints
+            a.push(r)
     # Saved vector registers sit just below the pushed ones, spill slots
     # below them.
     ints := 8 * saved_ints.len()
@@ -156,21 +180,43 @@ fn Gen.prologue(mut self, slots int)
     while (size + ints) % 16 != 0
         size += 8
     frame = size
+    # Shrink-wrapped, the saved integer registers have their place in the
+    # frame, where the pushes would have put them.
+    if wrap >= 0
+        size += ints
     if size > 0
         a.alu_ri("sub", RSP, size)
-    for j in 0..saved_floats.len()
-        a.vmovsd_mr(at(RBP, 0 - ints - 8 * (j + 1)), saved_floats[j] - codegen.FLOAT_BASE)
+    if wrap < 0
+        save_registers(true)
 
-fn Gen.epilogue(mut self)
+## Save or restore the callee-saved registers: the integer ones at
+## `rbp - 8 * (j + 1)` (where a push puts them), the vector ones below.
+fn Gen.save_registers(mut self, out bool)
     ints := 8 * saved_ints.len()
+    if wrap >= 0
+        for j in 0..saved_ints.len()
+            if out
+                a.mov_mr(at(RBP, 0 - 8 * (j + 1)), saved_ints[j])
+            else
+                a.mov_rm(saved_ints[j], at(RBP, 0 - 8 * (j + 1)))
     for j in 0..saved_floats.len()
-        a.vmovsd_rm(saved_floats[j] - codegen.FLOAT_BASE, at(RBP, 0 - ints - 8 * (j + 1)))
-    if saved_ints.len() > 0
-        a.lea(RSP, at(RBP, 0 - ints))
-        mut i := saved_ints.len() - 1
-        while i >= 0
-            a.pop(saved_ints[i])
-            i -= 1
+        if out
+            a.vmovsd_mr(at(RBP, 0 - ints - 8 * (j + 1)), saved_floats[j] - codegen.FLOAT_BASE)
+        else
+            a.vmovsd_rm(saved_floats[j] - codegen.FLOAT_BASE, at(RBP, 0 - ints - 8 * (j + 1)))
+
+fn Gen.epilogue(mut self, block int)
+    ints := 8 * saved_ints.len()
+    if wrap < 0
+        save_registers(false)
+        if saved_ints.len() > 0
+            a.lea(RSP, at(RBP, 0 - ints))
+            mut i := saved_ints.len() - 1
+            while i >= 0
+                a.pop(saved_ints[i])
+                i -= 1
+    elif region[block]
+        save_registers(false)
     a.mov_rr(RSP, RBP)
     a.pop(RBP)
     a.ret()
@@ -373,6 +419,8 @@ fn Gen.gen_block(mut self, b int)
             if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0 and imm(mask.args[0]) == none
                 if imm32(mask.args[1]) != none or loc[mask.args[1]] >= 0
                     masked = fused - 1
+    if b == wrap
+        save_registers(true)
     for k in 0..n
         if k == fused or k == masked
             continue
@@ -417,7 +465,7 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(codegen.FLOAT_BASE, t.value)])
                 else
                     parallel([move_of(RAX, t.value)])
-            epilogue()
+            epilogue(b)
         _ => a.ud2()
 
 ## Whether block `to` is only a comparison and a branch: a jump to it is
@@ -749,6 +797,9 @@ fn Gen.divide(mut self, i mir.Inst)
         if k > 0 and power_of_two(k) >= 0
             shift_divide(i, power_of_two(k))
             return
+        if k > 2 and k < 2147483648
+            magic_divide(i, k)
+            return
         a.mov_ri(S1, k)
     else
         rb := gpr(y, S1)
@@ -814,6 +865,27 @@ fn Gen.shift_divide(mut self, i mir.Inst, k int)
     a.shift_ri("shl", S1, k)
     a.mov_rr(RAX, x)
     a.alu_rr("sub", RAX, S1)
+    put_gpr(i.dst, RAX)
+
+## Division and remainder by a constant `k` with a high multiply
+## (`codegen.div_magic`), not `idiv`.
+fn Gen.magic_divide(mut self, i mir.Inst, k int)
+    x := gpr(i.args[0], S0)
+    mg := codegen.div_magic(k)
+    a.mov_ri(RAX, mg[0])
+    a.imul1(x)
+    a.alu_rr("add", RDX, x)
+    if mg[1] > 0
+        a.shift_ri("sar", RDX, mg[1])
+    a.mov_rr(RAX, x)
+    a.shift_ri("shr", RAX, 63)
+    a.alu_rr("add", RDX, RAX)
+    if i.op == "div"
+        put_gpr(i.dst, RDX)
+        return
+    a.imul_rri(RDX, RDX, k)
+    a.mov_rr(RAX, x)
+    a.alu_rr("sub", RAX, RDX)
     put_gpr(i.dst, RAX)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
@@ -931,35 +1003,43 @@ fn Gen.call_out(mut self, i mir.Inst)
         else
             put_gpr(i.dst, RAX)
 
+## The memory a load or store prim addresses.
+fn Gen.address(mut self, v int) Mem
+    if globs.contains(v)
+        return at_sym("globals", 8 * globs[v])
+    at(gpr(v, S0), 0)
+
 fn Gen.prim(mut self, i mir.Inst)
     match i.name
         "load64" =>
-            r := gpr(i.args[0], S0)
+            mem := address(i.args[0])
             d := out_gpr(i.dst, S1)
-            a.mov_rm(d, at(r, 0))
+            a.mov_rm(d, mem)
             put_gpr(i.dst, d)
         "load8" =>
-            r := gpr(i.args[0], S0)
+            mem := address(i.args[0])
             d := out_gpr(i.dst, S1)
-            a.movzx8_rm(d, at(r, 0))
+            a.movzx8_rm(d, mem)
             put_gpr(i.dst, d)
         "loadf" =>
-            r := gpr(i.args[0], S0)
+            mem := address(i.args[0])
             d := out_xmm(i.dst, X0)
-            a.vmovsd_rm(d, at(r, 0))
+            a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            a.mov_mr(at(gpr(i.args[0], S0), 0), gpr(i.args[1], S1))
+            a.mov_mr(address(i.args[0]), gpr(i.args[1], S1))
         "store8" =>
-            a.mov8_mr(at(gpr(i.args[0], S0), 0), gpr(i.args[1], S1))
+            a.mov8_mr(address(i.args[0]), gpr(i.args[1], S1))
         "storef" =>
-            a.vmovsd_mr(at(gpr(i.args[0], S0), 0), xmm(i.args[1], X0))
+            a.vmovsd_mr(address(i.args[0]), xmm(i.args[1], X0))
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
             parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])
             a.syscall()
             put_gpr(i.dst, RAX)
         "global" =>
+            if globs.contains(i.dst)
+                return
             d := out_gpr(i.dst, S1)
             k := imm(i.args[0]) else 0
             a.lea(d, at_sym("globals", 8 * k))

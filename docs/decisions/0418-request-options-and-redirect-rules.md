@@ -71,3 +71,11 @@ server-side `Response(status:, headers:, body:)` costs no extra tokens. A
 required field would have added `all_headers: {}` to every reply. Rejected: a
 method needing hidden state (no place to keep it), and a list of pairs (a
 second shape next to `headers`). Asked for by the Garlic browser thread.
+
+## Rejected alternatives
+
+- Named optional parameters on `get` and `post` (option B): rejected for now, because named arguments were undecided (lane 130) and an optional-parameter mechanism would be a language change for a library need.
+- A builder (`net.req("GET", url).header(..).send()`) (option C): rejected because it costs more tokens than option A for any request with two options, and needs a mutable builder type for a one-shot call.
+- Headers as a list of pairs (option D): rejected because the response is a `Map`, which would give two shapes for the same thing. The later addendum also rejected a list of pairs for `all_headers`.
+- Streaming bodies now: deferred, because a streaming `Response` needs `bytes` (lane 123) and a read loop in the type, and designing it first would fix a shape that `bytes` should decide.
+- A method holding hidden state for repeated headers (addendum): rejected because there is no place to keep the state.

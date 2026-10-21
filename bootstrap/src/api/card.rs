@@ -23,15 +23,16 @@ pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n"
 /// The default budget in estimated tokens (api.card.3, ADR 0311).
 pub const DEFAULT_BUDGET: usize = 4000;
 
-/// How much of the card is left, from everything (0) to module names (5).
-const LEVELS: usize = 5;
+/// How much of the card is left, from everything (0) to module names (6).
+const LEVELS: usize = 6;
 
 /// What each level drops, for the card's last line (api.card.3).
 const DROPPED: [&str; LEVELS] = [
     "private items",
     "doc comments",
     "parameter names",
-    "fields, variants, contracts and test names",
+    "members, contracts and examples (docs past their first sentence)",
+    "fields, variants and test names",
     "signatures (names only)",
 ];
 
@@ -125,14 +126,21 @@ struct Card {
 /// estimated tokens, as Markdown or JSON (api.card.1-2).
 pub fn card(path: &str, budget: usize, json: bool) -> Result<String, Failure> {
     let built = build(path)?;
+    // api.card.3 (ADR 0703): the richest level within the budget. The levels are
+    // not nested (the first-sentence level keeps docs that a level after it
+    // drops), so the first level that fits is not always the fullest one.
+    let mut best: Option<(usize, String)> = None;
     for level in 0..=LEVELS {
         let out = render(&built, level, json, budget);
         let tokens = estimate_tokens(&out);
-        if tokens <= budget || level == LEVELS {
+        if level == LEVELS && best.is_none() {
             return Ok(out);
         }
+        if tokens <= budget && best.as_ref().is_none_or(|(t, _)| tokens > *t) {
+            best = Some((tokens, out));
+        }
     }
-    unreachable!("the last level returns")
+    Ok(best.map(|(_, out)| out).unwrap_or_else(|| render(&built, LEVELS, json, budget)))
 }
 
 fn build(path: &str) -> Result<Card, Failure> {
@@ -322,9 +330,19 @@ fn first_line(doc: &str) -> &str {
     doc.lines().next().unwrap_or("").trim()
 }
 
+/// The first sentence of a doc comment: its first line, cut after the first
+/// `. ` (api.card.3, ADR 0703).
+fn first_sentence(doc: &str) -> &str {
+    let line = first_line(doc);
+    match line.find(". ") {
+        Some(i) => &line[..=i],
+        None => line,
+    }
+}
+
 fn line(e: &Entry, level: usize, indent: &str, out: &mut String) {
     let vis = if e.public { "pub " } else { "" };
-    if level >= 5 {
+    if level >= 6 {
         writeln!(out, "{indent}{} {}", e.kind, e.name).unwrap();
         return;
     }
@@ -336,6 +354,10 @@ fn line(e: &Entry, level: usize, indent: &str, out: &mut String) {
         && let Some(d) = &e.doc
     {
         write!(out, "  ## {}", first_line(d)).unwrap();
+    } else if level == 4
+        && let Some(d) = &e.doc
+    {
+        write!(out, "  ## {}", first_sentence(d)).unwrap();
     }
     out.push('\n');
     if level < 4 {
@@ -368,7 +390,7 @@ fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize) -> Stri
             writeln!(out, "    {l}").unwrap();
         }
     }
-    if !card.examples.is_empty() {
+    if !card.examples.is_empty() && level < 4 {
         writeln!(out, "examples:").unwrap();
         for (f, d) in &card.examples {
             if d.is_empty() || level >= 2 { writeln!(out, "    {f}") } else { writeln!(out, "    {f}  ## {d}") }.unwrap();
@@ -376,7 +398,7 @@ fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize) -> Stri
     }
     for m in &card.modules {
         let es = shown(m, level);
-        if level >= 5 {
+        if level >= 6 {
             writeln!(out, "\n## {} ({} items)", module_title(m), m.entries.len()).unwrap();
             continue;
         }
@@ -429,10 +451,12 @@ fn entry_json(e: &Entry, level: usize) -> Json {
         ("line", Json::Int(e.line as i64)),
         ("col", Json::Int(e.col as i64)),
     ];
-    if level < 5 {
+    if level < 6 {
         kvs.push(("signature", Json::Str(signature(e, level).to_string())));
         if level < 2 {
             kvs.push(("doc", Json::opt(e.doc.as_deref().map(|d| first_line(d).to_string()))));
+        } else if level == 4 {
+            kvs.push(("doc", Json::opt(e.doc.as_deref().map(|d| first_sentence(d).to_string()))));
         }
         if !e.effects.is_empty() {
             kvs.push(("effects", Json::Arr(e.effects.iter().cloned().map(Json::Str).collect())));
@@ -458,7 +482,7 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize) -> St
         .modules
         .iter()
         .map(|m| {
-            let items = if level >= 5 { Vec::new() } else { shown(m, level).into_iter().map(|e| entry_json(e, level)).collect() };
+            let items = if level >= 6 { Vec::new() } else { shown(m, level).into_iter().map(|e| entry_json(e, level)).collect() };
             Json::Obj(vec![
                 ("module", Json::Str(m.name.clone())),
                 ("count", Json::Int(m.entries.len() as i64)),
@@ -469,6 +493,7 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize) -> St
     let examples = card
         .examples
         .iter()
+        .filter(|_| level < 4)
         .map(|(f, d)| Json::Obj(vec![("file", Json::Str(f.clone())), ("doc", Json::Str(if level >= 2 { String::new() } else { d.clone() }))]))
         .collect();
     let top = vec![

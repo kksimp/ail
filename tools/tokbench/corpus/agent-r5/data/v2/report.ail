@@ -1,0 +1,2 @@
+fn total(xs List[int]) int
+    xs.sum()

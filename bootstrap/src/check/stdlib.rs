@@ -280,6 +280,10 @@ impl<'p> Checker<'p> {
             ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
             ("mem", "null") => (vec![], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("net", "options") => (vec![], std_ty("net.Options")),
+            ("net", "open") => (
+                vec![Str, Str, std_ty("net.Options")],
+                Ty::Res(Box::new(std_ty("net.Body")), Errs::Set(vec![std_ty("net.NetError")])),
+            ),
             ("net", "serve" | "listen" | "connect" | "connect_tls") => {
                 let (params, ok) = match f {
                     "serve" => (vec![Str], "net.Server"),
@@ -295,6 +299,7 @@ impl<'p> Checker<'p> {
             ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
             ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
             ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "group_all") => (vec![std_ty("regex.Regex"), Str, Int], list(Str)),
             ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
             ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
             ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),
