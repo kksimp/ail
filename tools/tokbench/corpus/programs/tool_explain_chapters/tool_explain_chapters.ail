@@ -1,7 +1,8 @@
 
 fn main() !
     here := path.dir(env.program())
-    r := proc.run("{here}/../ail", ["explain", "--json"])? "listing rules"
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    r := proc.run(ail, ["explain", "--json"])? "listing rules"
     doc := parse_json(r.out)? "reading the rule list"
     rules := doc.arr("rules") else []
     mut total := Map[str, int]()

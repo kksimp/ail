@@ -20,6 +20,7 @@ selftest is the merge gate, so this list is for the designer's check on Windows.
 
 - Paths and drives: `std.path` and glob handle `C:\` (ADR 0504).
 - Process lookup: `std.proc.run` tries `PATHEXT` for bare names (ADR 0505).
+- Native `proc.run` and `proc.which` (ADR 0770): Linux only, by `clone` and `execve`. There is no Windows or macOS native arm yet (a macOS program traps `native.subset.1`), so there is no step for the designer here.
 - TLS root certificates: the Windows ROOT store (`bootstrap/src/net/x509/roots.rs`).
 - Random bytes: a Windows branch (`bootstrap/src/net/crypto/rand.rs`).
 - Console text: Rust's standard library writes console output as UTF-16 (`WriteConsoleW`), so no change is needed.

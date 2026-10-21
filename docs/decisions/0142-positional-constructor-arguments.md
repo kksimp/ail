@@ -42,7 +42,7 @@ Mean of five tokenizers on the three programs (14,802.8 tokens today):
    a type error. Two fields whose types are type parameters count as the
    same type. Otherwise it's a compile-time error whose help names the fields.
 
-```ail
+```ail excerpt
 error struct ParseError
     line int
     col int
