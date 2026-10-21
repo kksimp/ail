@@ -129,6 +129,27 @@ fn opt_comparable(a Ty, b Ty) bool
     y := b.opt_inner() else b
     same_ty(x, y)
 
+## Printing a `T?`: `none`, or the value as a plain `T`.
+fn Lower.out_opt(mut self, v Val, pos ast.Pos) Val?
+    inner := v.ty.opt_inner() else return unsupported(pos, "printing a `{v.ty.name()}`")
+    if inner.is_unknown()
+        return unsupported(pos, "printing a `{v.ty.name()}`")
+    absent := new_block()
+    present := new_block()
+    join := new_block()
+    branch(op("eq", [v.id, konst(0, Ty.Int)], Ty.Bool), absent, [], present, [])
+    seal(absent)
+    cur = absent
+    call("rt.out_str", [str_value("none")], Ty.Unit)
+    jump(join, [])
+    seal(present)
+    cur = present
+    out(unwrap(v), pos)?
+    jump(join, [])
+    seal(join)
+    cur = join
+    Val(id: -1, ty: Ty.Unit)
+
 ## `a == b` (`negate` false) or `a != b` where one side or both are optionals:
 ## a `none` equals only a `none`, and two present values compare as plain ones.
 fn Lower.opt_compare(mut self, negate bool, a Val, b Val, pos ast.Pos) Val

@@ -11,5 +11,5 @@ fn main()
     defer print(1)
     s := "n = {1}"
     print(s)
-    print("ab".find("b"))
-    print('c'.to_digit(10))
+    m := {"a": 1}
+    print(m == {"a": 1})

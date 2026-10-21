@@ -1762,6 +1762,8 @@ fn out_fn(t Ty) str
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
     if tensor_f32(v.ty)
         return unsupported(pos, "printing a `Tensor[f32]`")
+    if v.ty.opt_inner() != none
+        return out_opt(v, pos)
     if v.ty.is_coll()
         return out_coll(v, pos)
     if e := v.ty.elem()
