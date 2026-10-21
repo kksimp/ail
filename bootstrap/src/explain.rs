@@ -18,6 +18,27 @@ rule for the full text. Rewrite the code without the construct, or wait for the 
 /// `tests/explain_coverage.rs` keeps it equal to what the corpora produce.
 const FIXABLE: &str = include_str!("fixable.txt");
 
+/// The constructs outside the native subset and their owners (ADR 0746), read
+/// here, by `tools/native-coverage/coverage.py` and by the selftest in
+/// `tests/native_subset_table.rs`: one list.
+const SUBSET_CONSTRUCTS: &str = include_str!("../../docs/design/native-subset-constructs.md");
+
+/// The rule whose explanation lists those constructs (ADR 0746).
+const SUBSET_RULE: &str = "native.subset.1";
+
+/// The rows of the constructs table: (construct, wording, owner).
+pub fn subset_constructs() -> Vec<(String, String, String)> {
+    SUBSET_CONSTRUCTS
+        .lines()
+        .filter(|l| l.starts_with('|'))
+        .filter_map(|l| {
+            let cells: Vec<&str> = l.trim().trim_matches('|').split('|').map(str::trim).collect();
+            let data = cells.len() == 3 && cells[0] != "Construct" && !cells[0].starts_with("---");
+            data.then(|| (cells[0].to_string(), cells[1].to_string(), cells[2].to_string()))
+        })
+        .collect()
+}
+
 /// Does `ail fix` repair diagnostics of `rule` (in some context)?
 pub fn fixable(rule: &str) -> bool {
     FIXABLE.lines().any(|l| l == rule)
@@ -338,11 +359,18 @@ pub fn run(rule: &str, json: bool) -> ExitCode {
 fn to_text(e: &Explanation) -> String {
     let file = e.file.strip_prefix("docs/spec/").unwrap_or(&e.file);
     let mut s = format!("{} ({file}:{})\n{}\n", e.rule, e.line, shorten(&e.text));
+    if e.rule == SUBSET_RULE {
+        // ADR 0746: the constructs the native backend does not take yet, with the owner of each.
+        s.push_str("\noutside the subset:\n");
+        for (construct, _wording, owner) in subset_constructs() {
+            let _ = writeln!(s, "  {construct}: {owner}");
+        }
+    }
     // A worked example (rejected and repaired) is printed whole: the repair
-    // may be on any line. A plain example is cut.
-    for (label, code, cut) in
-        [("example", &e.example, true), ("rejected example", &e.rejected, false), ("repaired", &e.fixed, false)]
-    {
+    // may be on any line. A plain example is cut. The subset rule's table
+    // (ADR 0746) takes the place of its example.
+    let example = if e.rule == SUBSET_RULE { None } else { e.example.clone() };
+    for (label, code, cut) in [("example", &example, true), ("rejected example", &e.rejected, false), ("repaired", &e.fixed, false)] {
         if let Some(x) = code {
             let _ = write!(s, "\n{label}:\n");
             let keep = if cut { EXAMPLE_LINES } else { usize::MAX };

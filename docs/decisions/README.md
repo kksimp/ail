@@ -578,3 +578,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0725](0725-test-cases-audit.md) | Test-case audit: one audit script, a duplicate removed, one-theme cases split *(delegated)* | Accepted | 2026-10-21 |
 | [0748](0748-list-from-json-as-an-associated-call.md) | `List[T].from_json(j)`: associated calls on builtin generic types *(delegated)* | Accepted | 2026-10-21 |
 | [0742](0742-compile-time-step-limit.md) | A statement-count limit on computing constants (ct.eval.3) *(delegated)* | Accepted | 2026-10-21 |
+| [0746](0746-native-subset-constructs-table.md) | One table of native-subset constructs, with owners *(delegated)* | Accepted | 2026-10-21 |
