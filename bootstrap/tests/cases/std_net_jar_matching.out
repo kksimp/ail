@@ -1,0 +1,12 @@
+b=2 /x
+a=1 /
+l=3 /
+s=4 /
+n=5 /
+b,a,l,s,n
+n
+b,a,l,n
+b,a,l,s,n
+5
+4
+a,l,s,n

@@ -23,6 +23,7 @@ TENSOR_METHODS := [
     "round",
     "shape",
     "sigmoid",
+    "softmax",
     "sum",
     "tanh",
     "to_f32",
@@ -182,6 +183,15 @@ fn Checker.tensor_method(
             at,
             "`{n}` is on `float` tensors, and this one holds `int`",
             "convert first: `t.map(|x| x.to_float()).{n}()`",
+        )
+        return Ty.Unknown
+    if n == "softmax" and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.24",
+            at,
+            "`softmax` is on `float` tensors, and this one holds `int`",
+            "convert first: `t.map(|x| x.to_float()).softmax()`",
         )
         return Ty.Unknown
     mut params := List[Ty]()

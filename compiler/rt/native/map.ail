@@ -51,8 +51,8 @@ fn map_hash_str(s int) int
         i += 8
     if i < n
         h = h.bit_xor(load64(s + 16 + i).bit_and(1.shl(8 * (n - i)) - 1)) * -7046029254386353131
-    h = h.bit_xor(h.shr(32))
-    h.bit_and(4611686018427387903)
+    h = h.bit_xor(h.shr(32)) * -7046029254386353131
+    h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
 
 fn map_hash(kind int, k int) int
     if kind == 1

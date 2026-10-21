@@ -286,6 +286,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "relu" => wrap(t.activate(Activation::Relu))?,
             "sigmoid" => wrap(t.activate(Activation::Sigmoid))?,
             "tanh" => wrap(t.activate(Activation::Tanh))?,
+            "softmax" => wrap(t.softmax())?,
             "reshape" => {
                 let shape = ints(other.as_ref().expect("checked: a shape"));
                 let shape = Tensor::shape_of(&shape, Some(t.len())).map_err(|e| trapped(e, pos))?;
