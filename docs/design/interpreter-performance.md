@@ -381,3 +381,13 @@ With `--watch total` (before = walker, the only option before this ADR):
 
 The gain under `--watch` is smaller than without it, because the watched
 assignments and mutating calls are the walker's own code.
+
+
+## Typed fast paths (lane 190)
+
+[ADR 0618](../decisions/0618-bytecode-typed-fast-paths.md): float operators,
+list element updates, `push`/`len`, `list[i] op= expr` and calls with `mut`
+arguments no longer take generic paths or hand off to the walker. Geometric
+mean over the eight compute programs: 1.85x of CPython before, 1.33x after
+(nbody 2.59x to 1.31x, mandelbrot 3.07x to 1.08x, binarytrees 3.80x to 2.70x,
+sieve 2.56x to 1.94x); the table is in the ADR. Agent programs are unchanged.
