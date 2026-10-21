@@ -568,3 +568,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0729](0729-api-diff-command.md) | `ail api --diff`: the public API change between two versions *(delegated)* | Accepted | 2026-10-21 |
 | [0730](0730-api-diff-breaking-rules.md) | What `ail api --diff` marks as breaking *(delegated)* | Accepted | 2026-10-21 |
 | [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |
+| [0734](0734-native-integer-text.md) | Native integer text: digits written from the end, one division by 10 each *(delegated)* | Accepted | 2026-10-21 |
