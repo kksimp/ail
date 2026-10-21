@@ -502,25 +502,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0568](0568-native-map-and-set-layout.md) | Native `Map` and `Set`: one insertion-ordered table with a hash index *(delegated)* | Accepted | 2026-10-20 |
 | [0569](0569-native-map-lowering.md) | Lowering `Map` and `Set` operations to runtime calls, with the interpreter's trap *(delegated)* | Accepted | 2026-10-20 |
 | [0570](0570-native-constant-lists.md) | Constant lists are built once, on first use, in a global slot *(delegated)* | Superseded by 0604 | 2026-10-20 |
-| [0438](0438-regex-engine-is-a-pike-vm.md) | `std.regex` is a linear-time Pike VM, without backreferences or lookaround *(delegated)* | Accepted | 2026-10-20 |
-| [0439](0439-regex-syntax-is-the-re2-subset.md) | `std.regex` syntax is the RE2 subset; Unicode classes are a documented subset *(delegated)* | Accepted | 2026-10-20 |
-| [0440](0440-regex-api-is-module-functions-and-values.md) | `std.regex` API: module functions over a `Regex` value; no `re"..."` literal yet *(delegated)* | Accepted | 2026-10-20 |
-| [0441](0441-regex-iteration-replace-and-split-rules.md) | `find_all`, `replace` and `split` rules for empty matches *(delegated)* | Accepted | 2026-10-20 |
-| [0412](0412-bytes-type.md) | `bytes` is an immutable value type of `u8` *(delegated)* | Accepted | 2026-10-20 |
-| [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
-| [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
-| [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
-| [0599](0599-native-threads-and-task-pool.md) | Native threads: `clone` and futex on Linux, one pool, replacement workers *(delegated)* | Accepted | 2026-10-20 |
-| [0600](0600-native-atomics.md) | Native atomics: sequentially consistent cells, LSE on ARM64, `add` as a compare-and-swap loop *(delegated)* | Accepted | 2026-10-20 |
-| [0601](0601-native-par-for.md) | Native `par for`: the body becomes a chunk function with exact accumulators *(delegated)* | Accepted | 2026-10-20 |
-| [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
-| [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
-| [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
-| [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
-| [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |
-| [0492](0492-bench-automation.md) | One command produces the before/after benchmark table for tokens and speed (`tools/bench/run.sh`) *(delegated)* | Accepted | 2026-10-20 |
-| [0416](0416-net-bodies-as-bytes.md) | `std.net` bodies as `bytes`: new functions and last fields, `body` stays `str` *(delegated)* | Accepted | 2026-10-20 |
-| [0417](0417-proc-run-bytes.md) | `proc.run_bytes`: bytes in, bytes out, `Output` unchanged *(delegated)* | Accepted | 2026-10-20 |
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
@@ -531,6 +512,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0592](0592-std-math-float-methods.md) | Transcendental float methods (`sin`…`cbrt`), with a one-ulp bound (Designer) | Accepted | 2026-10-21 |
 | [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
 | [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
+| [0599](0599-native-threads-and-task-pool.md) | Native threads: `clone` and futex on Linux, one pool, replacement workers *(delegated)* | Accepted | 2026-10-20 |
+| [0600](0600-native-atomics.md) | Native atomics: sequentially consistent cells, LSE on ARM64, `add` as a compare-and-swap loop *(delegated)* | Accepted | 2026-10-20 |
+| [0601](0601-native-par-for.md) | Native `par for`: the body becomes a chunk function with exact accumulators *(delegated)* | Accepted | 2026-10-20 |
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
