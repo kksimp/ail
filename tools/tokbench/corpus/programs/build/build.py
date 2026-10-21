@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -34,7 +35,7 @@ def count(found, severity):
 def main():
     errors = warnings = 0
     for path in sorted((ROOT / "examples").glob("*.ail")):
-        r = subprocess.run([ROOT / "ail", "check", "--json", path], capture_output=True, text=True)
+        r = subprocess.run([shutil.which("ail") or str(ROOT / "ail"), "check", "--json", path], capture_output=True, text=True)
         found = parse_findings(r.stderr)
         errors += count(found, "error")
         warnings += count(found, "warning")
