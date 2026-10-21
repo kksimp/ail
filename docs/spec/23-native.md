@@ -69,7 +69,7 @@ typed when the function names one error type, a failing
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
-`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys (`Map[K, V]()`,
+`Map[K, V]` and `Set[T]` over `int`, `bool`, `char` and `str` keys (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
 `Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants

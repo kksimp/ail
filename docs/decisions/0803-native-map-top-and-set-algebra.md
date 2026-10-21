@@ -35,6 +35,15 @@ Runtime calls in `compiler/rt/native/map.ail`, lowered in
 Reported under native.subset.1: `top` on other key or count types, set algebra
 on `bool` or other element types.
 
+## Addendum: `char` keys and values
+
+A `Map` or `Set` may be keyed by `char`, and a map's values may be `char`.
+Characters are stored as code points; they hash and compare as integers, and
+print quoted with the escapes of `trait.auto.2` (`'\n'`, `'\''`). Table kind
+4 and scalar print kind 4 mean `char`. Sets and lists of `char` take
+`sorted`, `union`, `intersect` and `difference`; `Map[char, int]` takes `top`.
+No `lower.ail` change.
+
 ## Consequences
 
 - `map_top` builds natively and matches its `.out`.
