@@ -1,11 +1,17 @@
-//! The native example programs (`examples/native_*.ail`, lane 186): each one
-//! builds with `ail build` and its executable prints exactly `NAME.out`, the
-//! output of `ail run` on the same file (native.build.1). The examples are
-//! checked by the interpreter in `cases.rs`; this test checks the executables.
+//! The example programs the native backend builds: each one must build with
+//! `ail build` and print exactly `NAME.out`, the output of `ail run` on the
+//! same file (native.build.1). The examples are checked by the interpreter in
+//! `cases.rs`; this test checks the executables. The set is `native_*` plus
+//! `NATIVE_EXTRA`, the examples the backend takes today. Others stop at a
+//! construct not in the native subset (native.subset.1) and join this list
+//! when the backend takes them.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Examples without a `native_` name that the native backend builds today.
+const NATIVE_EXTRA: [&str; 7] = ["bits", "gradebook", "hello", "parallel", "perms", "route", "std_math"];
 
 // native.build.1, native.build.3
 #[test]
@@ -16,10 +22,13 @@ fn native_examples_print_their_expected_output() {
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "ail"))
-        .filter(|p| p.file_stem().is_some_and(|s| s.to_string_lossy().starts_with("native_")))
+        .filter(|p| {
+            let stem = p.file_stem().unwrap().to_string_lossy();
+            stem.starts_with("native_") || NATIVE_EXTRA.contains(&stem.as_ref())
+        })
         .collect();
     cases.sort();
-    assert!(!cases.is_empty(), "no examples/native_*.ail found");
+    assert!(cases.len() >= NATIVE_EXTRA.len() + 5, "examples/native_*.ail and NATIVE_EXTRA not all found");
     let tmp = std::env::temp_dir().join(format!("ail-native-examples-{}", std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
     let mut failures = Vec::new();

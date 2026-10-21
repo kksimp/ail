@@ -1,0 +1,1 @@
+bootstrap/tests/native/fn_values_subset.ail:5:11: error[native.subset.1]: not in the native subset yet: a list of `fn(int) int`
