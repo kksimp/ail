@@ -1,0 +1,5 @@
+## std.time.2: a negative sleep traps.
+use std.time
+
+fn main()
+    time.sleep_ms(-1)
