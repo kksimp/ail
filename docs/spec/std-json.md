@@ -164,6 +164,34 @@ fn main()
     print(docs.len())                     # 2
 ```
 
+**json.load.1** — `load_json[T FromJson](path str) T ! JsonError` reads the file at
+`path` and decodes it as a `T` (`T.from_json(parse_json(text)?)?`, so a `List[U]`
+of derived structs works). A file that can't be read fails with a `JsonError`
+whose `message` is the path, a colon and the I/O kind (`not_found`), and whose
+`at` is -1. It is read like the derives, when the program names it. *(ADR 0774)*
+
+**json.load.2** — `print_json[T ToJson](v T)` prints `v.to_json().to_text()` and a
+newline. *(ADR 0774)*
+
+```ail rules=json.load.1,json.load.2
+struct U
+    name str
+    age int
+
+impl ToJson for U
+impl FromJson for U
+
+fn main() !
+    fs.write_text("json_load_spec.tmp", "[\{\"name\": \"al\", \"age\": 30}]")?
+    users := load_json[List[U]]("json_load_spec.tmp")?
+    print_json(users)                     # [{"name":"al","age":30}]
+    fs.remove("json_load_spec.tmp")?
+    gone := load_json[U]("json_load_spec.tmp") else err
+        print(err.message)                # json_load_spec.tmp: not_found
+        users[0]
+    print_json(gone)
+```
+
 **json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the
 generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
 `Json` and `List[T ToJson]` implement it. A derived struct gives an object of
