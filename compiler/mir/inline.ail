@@ -82,7 +82,7 @@ fn inline_call(f Func, b int, at int, callee Func) Func
     for k in at + 1..g.blocks[b].insts.len()
         tail.push(g.blocks[b].insts[k])
     cont := Block(
-        params: if call.dst >= 0 then[call.dst] else [],
+        params: if call.dst >= 0 then [call.dst] else [],
         insts: tail,
         term: g.blocks[b].term,
     )
@@ -101,7 +101,7 @@ fn inline_call(f Func, b int, at int, callee Func) Func
         t := blk.term
         mut nt := t
         if t.kind == "return"
-            nt = jump_to(rest, if t.value >= 0 then[t.value + nv] else [])
+            nt = jump_to(rest, if t.value >= 0 then [t.value + nv] else [])
         else
             nt.cond = if t.cond >= 0 then t.cond + nv else -1
             nt.targets = [x + nb for x in t.targets]

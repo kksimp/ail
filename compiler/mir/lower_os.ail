@@ -121,7 +121,7 @@ fn Lower.lower_os_or_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos)
         res = new_value(f.ret, "")
         blocks[join].params.push(res)
     fail := new_block()
-    branch(ok, join, if f.ret.is_unit() then[] else [r.id], fail, [])
+    branch(ok, join, if f.ret.is_unit() then [] else [r.id], fail, [])
     seal(fail)
     cur = fail
     match other
