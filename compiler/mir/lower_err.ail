@@ -498,6 +498,8 @@ fn Lower.chain_try(self, e ast.Expr) bool
         Member(r, _, _) => receiver_try(r)
         Method(r, _, _, _) => receiver_try(r)
         Index(r, _, _) => receiver_try(r)
+        Binary(_, a, b, _) => chain_try(a) or chain_try(b)
+        Unary(_, x, _) => chain_try(x)
         _ => false
 
 fn Lower.receiver_try(self, e ast.Expr) bool
