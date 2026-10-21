@@ -633,3 +633,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0831](0831-tensor-from-fn.md) | `tensor.from_fn(shape, \|i\| e)` (AI, delegated) | Accepted | 2026-10-21 |
 | [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
 | [0777](0777-args-from-struct.md) | `Opts.parse(...)`: command-line options derived from a struct *(delegated)* | Accepted | 2026-10-21 |
+| [0812](0812-fix-ternary.md) | `ail fix` writes `c ? a : b` as `if c then a else b` *(delegated)* | Accepted | 2026-10-21 |
