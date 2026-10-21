@@ -552,6 +552,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or is_enum(e)
                         or is_shared_opt(e)
                         or e.is_coll()
+                        or e.is_ref()
                         return Ty.List(e)
                     none
                 "Atomic" =>
@@ -577,6 +578,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                             return Ty.Enum(k)
                     none
         AnyTrait(name) => any_type(name)
+        RefTo(inner) => ref_type(inner)
         TupleType(elems) => tuple_type_of(elems)
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
@@ -1435,7 +1437,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             want,
         )
         OrElse(x, other, pos) => lower_or_else(x, other, pos)
-        NewRef(_, pos) => unsupported(pos, "`ref`")
+        NewRef(x, pos) => lower_new_ref(x, pos, want)
         TupleLit(items, pos) => lower_tuple_lit(items, pos, want)
 
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
@@ -1607,6 +1609,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not is_shared_opt(elem)
             and not is_pending_opt(elem)
             and not elem.is_coll()
+            and not elem.is_ref()
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
@@ -1827,7 +1830,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
-    r := lower_value(recv, none)?
+    r := deref(lower_value(recv, none)?)
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none

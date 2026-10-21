@@ -41,6 +41,9 @@ pub enum Ty
     Tuple(elems List[Ty])
     ## `any T`: a box with a tag and a value (ADR 0616).
     Any(trait_name str)
+    ## `ref S` of a struct: the struct object itself, shared and never copied
+    ## (own.ref.1, ADR 0067).
+    Ref(inner Ty)
     Unknown
     Unit
     ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
@@ -55,6 +58,11 @@ pub enum Ty
 pub fn Ty.is_fn(self) bool
     match self
         Fn => true
+        _ => false
+
+pub fn Ty.is_ref(self) bool
+    match self
+        Ref => true
         _ => false
 
 pub fn Ty.is_float(self) bool
@@ -115,6 +123,7 @@ pub fn Ty.name(self) str
         Struct(n) => n
         Enum(n) => n
         Any(t) => "any {t}"
+        Ref(t) => "ref {t.name()}"
         Unknown => "?"
         Unit => "unit"
         Atomic(e) => "Atomic[{e.name()}]"

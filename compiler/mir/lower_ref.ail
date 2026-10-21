@@ -1,0 +1,35 @@
+## `ref S` in the native subset (own.ref.1-6, ADR 0067): a shared, mutable
+## cell holding a struct. The cell is the struct object itself, so a `ref S`
+## is the object's pointer: copies of the reference share it, field and
+## method access apply to it without a dereference (own.ref.3), `ref e`
+## builds a new object from a copy of `e` (own.ref.5), and `==` compares the
+## pointers (own.ref.6). A `ref` of anything but a struct isn't in the subset
+## yet.
+
+use ast
+
+## `ref T` for a struct `T`.
+fn Lower.ref_type(mut self, inner ast.TypeRef) Ty?
+    t := type_of(inner)?
+    match t
+        Struct => Ty.Ref(t)
+        _ => none
+
+## The struct a `ref` value holds, as a value of the struct's own type: the
+## same pointer, for field and method access.
+fn deref(v Val) Val
+    match v.ty
+        Ref(t) => Val(id: v.id, ty: t)
+        _ => v
+
+## `ref e`: a new object holding a copy of `e`.
+fn Lower.lower_new_ref(mut self, value ast.Expr, pos ast.Pos, want Ty?) Val?
+    mut inner := Ty.Unknown
+    if w := want
+        match w
+            Ref(t) => inner = t
+            _ => inner = Ty.Unknown
+    v := lower_value(value, if inner.is_unknown() then none else inner)?
+    match v.ty
+        Struct => Val(id: copy_value(v), ty: Ty.Ref(v.ty))
+        _ => unsupported(pos, "`ref` of a `{v.ty.name()}`")
