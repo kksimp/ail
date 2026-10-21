@@ -15,8 +15,7 @@ fn is_key_ty(t Ty) bool
     t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char
 
 fn is_value_ty(t Ty) bool
-    is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll()
-    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t)
+    is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t) or t.is_ref()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
@@ -105,6 +104,29 @@ fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     seal(found)
     cur = found
     jump(join, [some(Val(id: entry_value(e, vt), ty: vt)).id])
+    seal(missing)
+    cur = missing
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: t)
+
+## `m.remove(k)` as a value: the removed value, or `none` (type.map.5).
+fn Lower.map_remove_value(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
+    t := opt_of(vt) else return unsupported(pos, "`.remove(k)` on a map of `{vt.name()}`")
+    e := call("rt.map_find", [m.id, k], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    held := some(Val(id: entry_value(e, vt), ty: vt)).id
+    call("rt.map_remove", [m.id, k], Ty.Unit)
+    jump(join, [held])
     seal(missing)
     cur = missing
     jump(join, [konst(0, t)])
@@ -399,8 +421,10 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                     ty: Ty.Bool,
                 )
             if name == "remove" and vs.len() == 1
-                # The removed value is an optional: only the statement form.
-                call("rt.map_remove", [r.id, convert(vs[0], kt, npos)], Ty.Unit)
+                kid := convert(vs[0], kt, npos)
+                if not is_statement(npos)
+                    return map_remove_value(r, kid, vt, npos)
+                call("rt.map_remove", [r.id, kid], Ty.Unit)
                 return Val(id: -1, ty: Ty.Unit)
             if name == "top" and vs.len() == 1 and vt == Ty.Int and kt != Ty.Bool
                 n := convert(vs[0], Ty.Int, npos)

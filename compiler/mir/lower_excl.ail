@@ -47,6 +47,18 @@ fn Lower.shield_arg(mut self, args List[ast.Arg], i int, v Val) int
             return copy_value(v)
     v.id
 
+## Note that statement `e` is a call whose value nobody uses, when it is a
+## method call.
+fn Lower.note_statement(mut self, e ast.Expr)
+    match e
+        Method(_, _, p, _) => traits.stmt_pos = p
+        _ => traits.stmt_pos = none
+
+## Whether the method call at `p` is a whole statement.
+fn Lower.is_statement(self, p ast.Pos) bool
+    q := traits.stmt_pos else return false
+    q.line == p.line and q.col == p.col
+
 ## A method call's receiver, as `struct_call` sees it.
 struct Recv
     path List[str]

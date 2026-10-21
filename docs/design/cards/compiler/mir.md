@@ -85,6 +85,7 @@ pub struct mir.Traits
     mut_self Set[str]
     recv_path List[str]
     recv_mut bool
+    stmt_pos ast.Pos?
 pub fn mir.new_traits() mir.Traits
 pub enum mir.Ty
     Int
@@ -195,4 +196,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1952); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1959); dropped: private items, doc comments
