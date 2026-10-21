@@ -76,7 +76,8 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```
 
 `data` is separate so `push` can grow without moving the header the caller
-holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
+holds. A full list grows to 16 elements if it has fewer than 8, else doubles
+(ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
