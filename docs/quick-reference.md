@@ -30,7 +30,7 @@ span and, where the fix is obvious, `fixes` to apply by line and column.
 
 ```ail
 fn area(w int, h int) int
-    todo     # warning: hole: expected `int`; in scope: `h int`, `w int`
+    todo     # warning: expected `int`; in scope: `h`, `w`
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -154,12 +154,9 @@ fn area(s Shape) int
     match s
         Circle(r) => 3 * r * r
         Rect(w, _) => w * w       # `_` skips a field
-
-fn round(s Shape) bool
-    match s
-        Circle => true            # bare: any fields, binds none
-        Rect => false
 ```
+
+A bare variant pattern matches any fields and binds none (`Circle => true`).
 
 ## Absence and errors
 
@@ -206,7 +203,7 @@ fn main() !                                 # main can fail; the error is report
   also works on optionals and in `elif`.
 - `else` works in expressions: `Min => nums.min() else 0`, `(m.get(k) else 0) + 1`,
   `for x in j.arr("items") else []`.
-- - `?` on an optional works in a function returning an optional, or before an
+- `?` on an optional works in a function returning an optional, or before an
   `else` that catches the `none`: `j.get("u")?.str("name") else "?"`.
 - Inferred-error functions and tests: `?` on `none` fails with the prelude error
   `Absent`, with context: `text.to_int()? "port {text}"`. `T ! E` needs `else`.
@@ -295,7 +292,6 @@ fn main()
     scene := Scene(shapes: [c, Square(side: 3)])
     for sh in scene.shapes
         print(sh.describe())
-    print(Version(major: 1, minor: 9) < Version(major: 2, minor: 0))
     print(bigger(c, Square(side: 1)))
     print(Shape.area(c))             # the qualified form of `c.area()`
 ```
@@ -652,7 +648,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
 | `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
-| `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
+| `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; or `impl FromArgs for Opts` (`bool` switch, `T?` option, else positional, `##` help): `Opts.parse("tool", "about", env.args())?`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
 | `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
 | `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |

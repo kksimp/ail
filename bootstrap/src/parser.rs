@@ -53,6 +53,9 @@ const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson", "load_json", "print_j
 
 /// Names of the optional `derive` prelude module: what a derive generator
 /// receives (refl.info.1, ADR 0306).
+/// Its `argsderive` part: `FromArgs` and its generator (std.args.7, ADR 0777).
+const ARGS_DERIVE_NAMES: &[&str] = &["FromArgs", "ArgsFailure"];
+
 const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveError"];
 
 /// The always-read prelude, plus the `json` module (after its `## @module`
@@ -65,7 +68,8 @@ fn prelude_text(tokens: &[Token]) -> String {
     let (core, rest) = PRELUDE.split_once("## @module json\n").expect("prelude has a json module");
     let (json, rest) = rest.split_once("## @module jsonderive\n").expect("prelude has a jsonderive module");
     let (json_derive, rest) = rest.split_once("## @module default\n").expect("prelude has a default module");
-    let (default, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
+    let (default, rest) = rest.split_once("## @module argsderive\n").expect("prelude has an argsderive module");
+    let (args_derive, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
     let wants = |names: &[&str]| {
         let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
         let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
@@ -86,7 +90,11 @@ fn prelude_text(tokens: &[Token]) -> String {
     if want_default {
         text.push_str(default);
     }
-    if want_json_derive || want_default || at_derive || wants(DERIVE_NAMES) {
+    let want_args = wants(ARGS_DERIVE_NAMES);
+    if want_args {
+        text.push_str(args_derive);
+    }
+    if want_json_derive || want_default || want_args || at_derive || wants(DERIVE_NAMES) {
         text.push_str(derive);
     }
     text
