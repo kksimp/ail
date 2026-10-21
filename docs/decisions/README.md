@@ -402,6 +402,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0647](0647-round-two-diagnostics-help-and-anchors.md) | Diagnostics for round-two mistakes: help texts, fix anchors, and rules for `<<`, tuples, `case` and open ranges *(delegated)* | Accepted | 2026-10-21 |
 | [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
 | [0625](0625-address-folding.md) | Address folding for unchecked `base[y + k]` accesses, and callee-saved registers saved where the calls start (shrink-wrapping) *(delegated)* | Accepted | 2026-10-21 |
+| [0562](0562-native-heap-size-classes-and-header.md) | Native heap: reserved region, 16 KiB pages, size-class free lists, header word *(delegated)* | Accepted | 2026-10-20 |
+| [0563](0563-conservative-mark-sweep-collector.md) | The first native collector is conservative on the stack and registers, precise by kind inside objects *(delegated)* | Accepted | 2026-10-20 |
+| [0564](0564-collection-trigger-and-sweep.md) | Collection trigger, sweep and measurements *(delegated)* | Accepted | 2026-10-20 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
@@ -576,3 +579,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
+| [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
+| [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |

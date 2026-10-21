@@ -1,6 +1,6 @@
 # 0407. Bump allocator over mmap, no object header, collector later
 
-- **Status:** Accepted
+- **Status:** Superseded by [0562](0562-native-heap-size-classes-and-header.md) (the allocator; the zeroed-memory contract stands)
 - **Date:** 2026-10-20
 - **Decided by: AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)**
 - **Topic:** Native runtime and ABI (lane 122)

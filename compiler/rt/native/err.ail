@@ -13,17 +13,17 @@ TRACE := 9
 # ---- optionals ----
 
 fn box(v int) int
-    p := alloc(8)
+    p := alloc(8, KIND_ATOMIC)
     store64(p, v)
     p
 
 fn box_bool(b bool) int
-    p := alloc(8)
+    p := alloc(8, KIND_ATOMIC)
     store64(p, if b then 1 else 0)
     p
 
 fn boxf(x float) int
-    p := alloc(8)
+    p := alloc(8, KIND_ATOMIC)
     storef(p, x)
     p
 
