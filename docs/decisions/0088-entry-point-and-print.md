@@ -37,3 +37,8 @@ fn main()
   APIs (to be designed), not `main`'s signature.
 - "Text form" requires a standard formatting trait. Its name is set with the
   standard library.
+
+## Rejected alternatives
+
+- `io.print` for the common case: 13% more tokens than the prelude `print` (corpus `p1_print` 10.8 against 12.2). Rejected on token usage.
+- A separate `println` next to `print`: nearly ties on tokens, so AI understanding decides. One printing function whose common case needs no suffix wins; writing without a newline is left to the `io` module.

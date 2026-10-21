@@ -1,0 +1,5 @@
+use std.time.date
+
+fn main()
+    d := date.today()
+    print(d.days())

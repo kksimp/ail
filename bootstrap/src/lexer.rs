@@ -565,6 +565,16 @@ impl Lexer {
                     );
                     i += 1;
                 }
+                // expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
+                '<' | '>' if line.get(i + 1) == Some(&c) => {
+                    let (op, method) = if c == '<' { ("<<", "shl") } else { (">>", "shr") };
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, format!("AIL has no `{op}`"))
+                            .help(format!("shifts are methods: `a.{method}(k)`, `k` in `0..=63` (expr.bit.1)"))
+                            .fix(format!("write `.{method}`"), vec![crate::fix::bit::operator(pos, op, method)]),
+                    );
+                    i += 2;
+                }
                 '&' if line.get(i + 1) != Some(&'&') => {
                     self.diags.push(
                         Diagnostic::new("gram.foreign.1", pos, "AIL has no `&`")

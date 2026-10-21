@@ -1,0 +1,6 @@
+use std.net
+
+fn main()
+    r := net.get("https://example.com") else e
+        return
+    print(r.json())

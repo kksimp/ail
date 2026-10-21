@@ -40,7 +40,11 @@ pub fn decl_word(word: &str) -> Option<Word> {
         "interface" | "protocol" => {
             w("AIL has no `interface`", "a set of methods a type provides is a `trait`", Fix::Replace("trait"))
         }
-        "import" => w("AIL imports with `use`", "write `use std.fs`", Fix::Replace("use")),
+        "import" => w(
+            "AIL imports with `use`",
+            "write `use` and a module name; the standard modules need no `use` (std.use.4)",
+            Fix::Replace("use"),
+        ),
         "async" => w(
             "AIL has no `async`",
             "tasks are colorless: start any function with `spawn f(x)` and wait with `t.wait()`",
@@ -120,6 +124,7 @@ pub fn call_hint(name: &str, args: usize) -> Option<CallHint> {
     let h = |template, example, help| Some(CallHint { template, example, help });
     match (name, args) {
         ("len" | "length" | "size", 1) => h("$r1.len()", "xs.len()", "`len` is a method: write `xs.len()`"),
+        ("bytes", 1) => h("bytes.zeros($1)", "bytes.zeros(n)", "`n` zero bytes are `bytes.zeros(n)`"),
         ("str" | "string" | "toString", 1) => {
             h("\"{$1}\"", "\"{n}\"", "interpolate to get text: `\"{n}\"`, or write `n.to_str()`")
         }

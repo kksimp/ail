@@ -1,0 +1,5 @@
+fn retries(n float) int
+    n + 1
+
+fn main()
+    print("ok")

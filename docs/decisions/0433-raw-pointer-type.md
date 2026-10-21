@@ -40,3 +40,8 @@ language (offsets are an unsafe operation of ADR 0435). It is `Eq`, not
 ## Consequences
 - `TypeKind::Ptr`, `Ty::Ptr` and the AIL `PtrTo`/`PtrOf` carry it.
 - Reads, writes and offsets arrive with ADR 0435.
+
+## Rejected alternatives
+
+- One untyped `ptr` type (option B): rejected because reads and writes would need a type at every use, and typed pointers catch a `*float` passed where `*u8` is expected.
+- Pointers as `int` (option C): rejected because it erases the safe and unsafe line of ADR 0106, since any `int` would become dereferenceable, and makes `unsafe.op.2` meaningless.
