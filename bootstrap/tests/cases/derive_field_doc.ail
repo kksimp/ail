@@ -1,0 +1,20 @@
+## FieldInfo carries a field's `##` doc comment (refl.info.1, ct.derive.5).
+@derive(derive_help) trait Help
+    fn help(self) str
+
+fn derive_help(t TypeInfo) str ! DeriveError
+    lines := ["{f.name}={f.doc.replace("\n", " ")}" for f in t.fields]
+    "fn help(self) str\n    \"{lines.join("|")}\"\n"
+
+struct Opts
+    ## Input file.
+    ## Read once.
+    path str
+    verbose bool
+    ## Worker count
+    jobs int
+
+impl Help for Opts
+
+fn main()
+    print(Opts(path: "a", verbose: false, jobs: 1).help())
