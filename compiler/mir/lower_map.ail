@@ -295,7 +295,9 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
 
 fn Lower.is_get_call(self, e ast.Expr) bool
     match e
-        Method(r, n, _, a) => n == "get" and a.len() == 1 and not self.is_module(r, "env")
+        Method(r, n, _, a) => n == "get"
+            and a.len() == 1
+            and not (self.is_module(r, "env") or self.is_module(r, "net"))
         _ => false
 
 # ---- methods ----
