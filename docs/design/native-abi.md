@@ -481,3 +481,15 @@ Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
 multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
 0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
 fdlibm's, which uses `rt.float_expm1`).
+
+Step 4 (`Tensor[f32]`): element kind 2. An element is still a `float` word, but
+it always holds a value already rounded to `f32`; `f32_round` (a primitive:
+round to single precision and widen back, `vcvtsd2ss` and `vcvtss2sd` on
+x86-64, `fcvt s,d` and `fcvt d,s` on ARM64) is applied after every operation.
+One rounding of the double-precision result is the correctly rounded
+single-precision result for `+ - * /` (a double has more than twice an `f32`'s
+precision), so the values are the interpreter's `f32` kernels'.
+`rt.tensor_to_f32` and `rt.tensor_to_float` convert. A `Tensor[f32]` has type
+`Ty.Tensor(Ty.F32)`; there is no scalar `f32` yet, so `sum`, `dot`, `max`,
+`mean`, `item`, printing and the text form of a `Tensor[f32]` are
+`native.subset.1` problems, and `to_list` gives a `List[float]`.

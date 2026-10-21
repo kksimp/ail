@@ -40,6 +40,20 @@ one contiguous row-major buffer of `int`, `float` or `f32` elements.
    `matmul` and the activations; the remaining `tensor_*` programs; `f32`;
    SIMD and parallel `matmul`.
 
+## Amendment, 2026-10-21: how `f32` landed
+
+`Tensor[f32]` keeps the layout above: element kind 2, one word per element,
+the word a `float` already rounded to `f32`. One new primitive, `f32_round`,
+rounds a `float` to single precision and widens it back (two conversion
+instructions on each architecture), and the kernels apply it after every
+operation. This needs no scalar `f32` type, no packed layout and no new
+arithmetic instructions, and gives the interpreter's values exactly (for
+`+ - * /` the double-precision result rounded once is the correctly rounded
+single-precision one). Measured on the NumPy-comparison programs, the scalar
+native kernels are *slower* than the interpreter's AVX2 and threaded ones
+(`f32_matmul` 0.23 s against 0.084 s, `f32_chain` 0.46 s against 0.33 s), so
+the SIMD step is what makes the native column worth having.
+
 ## Rejected alternatives
 
 - **Tensors as lists of lists.** Copying and indexing costs, and the shape and
