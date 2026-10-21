@@ -173,6 +173,10 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
         if name == "to_list"
             l := Ty.List(e)
             return Val(id: call("rt.tensor_to_list", [r.id], l), ty: l)
+        # std.tensor.13: the checker rejects these on `int` tensors.
+        if (name == "relu" or name == "sigmoid") and e == Ty.Float
+            kind := konst(if name == "relu" then 0 else 1, Ty.Int)
+            return Val(id: call("rt.tensor_activate", [r.id, kind], r.ty), ty: r.ty)
         if name == "transpose"
             msg := call("rt.tensor_transpose_fault", [r.id], Ty.Int)
             tensor_trap_if(msg, "std.tensor.12", npos)
@@ -191,10 +195,17 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
         if name == "sum" or name == "max" or name == "mean"
             kind := if name == "sum" then 0 else if name == "max" then 1 else 2
             return tensor_reduce(r, kind, args[0], npos)
-        if name == "add" or name == "mul" or name == "dot"
+        if name == "add" or name == "mul" or name == "dot" or name == "matmul"
             b := lower_value(args[0].value, r.ty)?
             if not same_ty(b.ty, r.ty)
                 return unsupported(npos, "`.{name}()` with a `{b.ty.name()}`")
+            if name == "matmul"
+                msg := call("rt.tensor_matmul_fault", [r.id, b.id], Ty.Int)
+                tensor_trap_if(msg, "std.tensor.7", npos)
+                t := call("rt.tensor_matmul", [r.id, b.id], r.ty)
+                if e == Ty.Int
+                    tensor_overflow_if_zero(t, npos)
+                return Val(id: t, ty: r.ty)
             if name == "dot"
                 msg := call("rt.tensor_dot_fault", [r.id, b.id], Ty.Int)
                 tensor_trap_if(msg, "std.tensor.4", npos)
