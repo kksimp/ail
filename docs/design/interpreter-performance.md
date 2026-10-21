@@ -480,3 +480,5 @@ Ratios below 1.00 in the last column mean AIL is faster than CPython.
 - Day 1 numbers are not the README's (2026-10-20, 2.6 s for binarytrees): this
   run re-timed day 1 on this machine, so every column shares one box.
 
+
+See also the [flat enum and struct value proposal](flat-enum-struct-value.md) (measured ceiling about 11% on json_roundtrip, none on binarytrees).
