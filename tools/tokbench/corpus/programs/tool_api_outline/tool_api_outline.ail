@@ -1,0 +1,11 @@
+
+fn main() !
+    here := path.dir(env.program())
+    file := "{here}/../tools/tokbench/corpus/agent-r5/data/effects.ail"
+    r := proc.run("{here}/../ail", ["api", "--text", file])? "outlining"
+    mut functions := 0
+    for line in r.out.lines()
+        if line.contains("fn ")
+            functions += 1
+            print(line.trim())
+    print("{functions} functions")

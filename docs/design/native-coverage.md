@@ -39,7 +39,6 @@ Every native.subset.1 problem counts once. `first` counts the programs whose fir
 | ? on a Expr | 21 | 0 | not in the native subset yet: `?` on a `Expr` |
 | a comprehension whose element type isn't known | 20 | 1 | not in the native subset yet: a comprehension whose element type isn't known |
 | calling parse_json | 20 | 4 | not in the native subset yet: calling `parse_json` |
-| ? with a context message | 19 | 2 | not in the native subset yet: `?` with a context message |
 | .to_int() on str | 19 | 2 | not in the native subset yet: `.to_int()` on `str` |
 | Channel[...] | 18 | 1 | not in the native subset yet: `Channel[...]` |
 | `…` parameter `…` of a number type isn't in the native subset yet | 18 | 5 | `mut` parameter `n` of a number type isn't in the native subset yet |

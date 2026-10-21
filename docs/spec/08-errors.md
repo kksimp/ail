@@ -532,6 +532,12 @@ cfg := parse(text)? "parsing config file"
 **err.trap.1** — A trap stops the task in which it occurs. Deferred cleanup in
 that task runs. The trap cannot be intercepted within that task. *(ADR 0047)*
 
+```ail norun rules=err.trap.1
+fn main()
+    xs := [1]
+    print(xs[3])
+```
+
 **err.trap.2** — The task that spawned or awaits a trapped task MUST be able
 to observe a *trapped* outcome. That outcome includes the trap kind, the
 source location, a stack trace and, where applicable, the spec rule ID.
@@ -540,6 +546,12 @@ source location, a stack trace and, where applicable, the spec rule ID.
 **err.trap.3** — A trap in the program's main task, or one that nothing
 observes up to the main task, terminates the program with the diagnostic and
 a non-zero exit status. *(ADR 0047)*
+
+```ail norun rules=err.trap.3
+fn main()
+    xs := [1]
+    print(xs[3])
+```
 
 ## Tooling
 
@@ -554,6 +566,19 @@ changes an explicit error type. *(ADR 0285)*
 `fails_with` list: the names of the error types it can fail with, sorted and
 without duplicates. For an inferred set (`err.type.2`) it is the inferred set,
 and `ail api --text` spells it out as `fails with A | B`. *(ADR 0287)*
+
+```ail tool=api,FILE expect="fails_with":["Bad"] rules=err.api.1
+error enum Bad
+    Oops "oops"
+
+fn parse(n int) int ! Bad
+    if n < 0
+        return Oops
+    n
+
+fn main() !
+    print(parse(1)?)
+```
 
 **err.paths.1** — `ail check --errors FILE` prints, as JSON, every function in
 the file that can fail or touches a failure, with its `fails_with` list and its

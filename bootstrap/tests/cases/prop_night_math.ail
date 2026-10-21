@@ -1,0 +1,49 @@
+## Property tests for std.math identities (lane 211, ADR 0592). Run with
+## `ail test`. Each identity holds within a few ulp; the tolerance is 4 ulp
+## of the larger side, or 4e-16 absolute near zero.
+
+fn close(a float, b float) bool
+    d := (a - b).abs()
+    scale := if a.abs() > b.abs() then a.abs() else b.abs()
+    d <= 4.0 * 2.220446049250313e-16 * scale + 4.0e-16
+
+fn bounded(x float) float
+    if x > 1.0e6
+        return 1.0e6
+    if x < -1.0e6
+        return -1.0e6
+    x
+
+@test fn sin_squared_plus_cos_squared_is_one(x float)
+    t := bounded(x)
+    s := t.sin()
+    c := t.cos()
+    assert(close(s * s + c * c, 1.0))
+
+@test fn exp_of_ln_is_identity(x float)
+    t := bounded(x).abs() + 1.0e-300
+    assert(close(t.ln().exp(), t))
+
+@test fn hypot_is_symmetric(x float, y float)
+    a := bounded(x)
+    b := bounded(y)
+    assert_eq(a.hypot(b), b.hypot(a))
+
+@test fn atan2_quadrant_signs(x float, y float)
+    a := bounded(x)
+    b := bounded(y)
+    if a > 0.0 and b > 0.0
+        assert(b.atan2(a) > 0.0 and b.atan2(a) < 1.5707963267948968)
+    if a < 0.0 and b > 0.0
+        assert(b.atan2(a) > 1.5707963267948968)
+
+## C99 Annex F special values that std.math must keep (lane 211, ADR 0592).
+@test fn special_values_follow_annex_f()
+    inf := 1.0 / 0.0
+    nan := inf - inf
+    zero := 0.0
+    assert(inf.exp() == inf)
+    assert((-inf).exp() == zero)
+    assert(zero.ln() == -inf)
+    assert(inf.hypot(nan) == inf)
+    assert(zero.atan2(zero) == zero)

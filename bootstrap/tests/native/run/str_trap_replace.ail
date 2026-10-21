@@ -1,0 +1,5 @@
+# An empty text to find traps (type.str.14).
+fn main()
+    print("aXb".replace("X", "-"))
+    from := ""
+    print("aXb".replace(from, "-"))

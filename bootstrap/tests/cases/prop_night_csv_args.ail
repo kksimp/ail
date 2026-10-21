@@ -1,0 +1,35 @@
+## Property tests for std.csv and std.args (lane 211, ADR 0685). Run with
+## `ail test`. Round trips and flag order are checked; bad input must give
+## an error value, never a trap.
+use std.csv
+use std.args
+
+@test fn csv_round_trip_any_fields(a str, b str, c str)
+    rows := [[a, b], [c, a]]
+    back := csv.parse(csv.write(rows)) else return
+    assert_eq(back, rows)
+
+@test fn csv_quote_round_trip(field str)
+    text := csv.write([[field, "x"]])
+    back := csv.parse(text) else return
+    assert_eq(back, [[field, "x"]])
+
+@test fn args_flag_order_does_not_matter(out str, file str)
+    if out.starts_with("-") or file.starts_with("-") or out == "" or file == ""
+        return
+    spec := [
+        args.flag("verbose", "v", "more output"),
+        args.opt("out", "o", "where", "a.txt"),
+        args.pos("input", "file"),
+    ]
+    a := args.parse("t", "about", spec, ["--verbose", "--out", out, file]) else return
+    b := args.parse("t", "about", spec, ["--out", out, "--verbose", file]) else return
+    assert_eq(a.flag("verbose"), true)
+    assert_eq(b.flag("verbose"), true)
+    assert_eq(a.get("out"), out)
+    assert_eq(b.get("out"), out)
+    assert_eq(a.get("input"), file)
+
+@test fn args_bad_words_are_errors_not_traps(w1 str, w2 str)
+    spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "where", "a.txt")]
+    _ := args.parse("t", "about", spec, [w1, w2]) else return
