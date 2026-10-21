@@ -91,10 +91,15 @@ TOKEN := Token(id: 1)       # a `unique` value can't be copied into every use
 
 fn main()
     print(1)
+```
+
 ```ail error=mod.const.2 rules=ct.const.4
 struct Box2
     v int
+
 BOX := ref Box2(v: 1)
+
+fn main()
     print(BOX.v)
 ```
 
