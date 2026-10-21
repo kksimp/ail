@@ -113,10 +113,8 @@ pub(super) const LIST_METHODS: &[&str] =
         "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference", "chunks",
         "windows", "counts", "flatten", "is_empty",
     ];
-pub(super) const MAP_METHODS: &[&str] = &["len", "is_empty", "get", "contains", "remove", "keys", "values"];
+pub(super) const MAP_METHODS: &[&str] = &["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"];
 pub(super) const SET_METHODS: &[&str] = &["len", "is_empty", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
-pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values", "top"];
-pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
 
 /// `to_i8` ... `to_f32`: the sized type a conversion method names (type.num.15).
 fn convert(name: &str) -> Option<Num> {
