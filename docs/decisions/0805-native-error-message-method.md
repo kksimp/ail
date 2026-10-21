@@ -22,7 +22,16 @@ method, as `Name.to_str`, with bare field names meaning `self.field` and an
 
 Printing and interpolating a struct or enum value that has a `to_str` method
 call it (`display_call`), so `print(err)` and `"{err}"` give the display text
-(type.str.3). Other structs still cannot be printed.
+(type.str.3). An error struct with no message prints in its default form,
+`Name(field: value, ...)` (trait.auto.2), for fields of `int`, `float`, `bool`
+and `str`; strings are quoted by `rt.str_quoted`. Other structs still cannot be
+printed.
+
+A function whose result is an error type (`fn fail(self, m str) JsonError`)
+is an error constructor: `return fail(...)` in a function that can fail
+leaves with that value, and calling one is an ordinary call elsewhere. A
+method of a local struct or enum value (`x.need_str()`) can fail like a
+function can, so `?` and `else` apply to it.
 
 ## Rejected alternatives
 
