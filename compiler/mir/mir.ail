@@ -43,7 +43,7 @@ pub enum Ty
     Unit
     ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
     Atomic(elem Ty)
-    ## `Channel[T]` (std.conc.chan): a pointer to the channel's record.
+    ## `Channel[str]`: a pointer to the channel's record (ADR 0599).
     Chan(elem Ty)
     ## A function value: the address of a declared function (ADR 0573).
     Fn(params List[Ty], ret Ty)

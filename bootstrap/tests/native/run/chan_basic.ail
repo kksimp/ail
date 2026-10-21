@@ -1,0 +1,39 @@
+# conc.share.3-4, conc.share.7: a bounded channel between tasks; `for` and
+# `recv` end when the channel is closed and empty (ADR 0599).
+fn produce(out Channel[str], tag str, n int)
+    for i in 1..=n
+        out.send("{tag}{i}")
+
+fn squares(jobs Channel[str], done Channel[str])
+    for j in jobs
+        done.send("<{j}>")
+    done.close()
+
+fn main() !
+    ch := Channel[str](2)
+    a := spawn produce(ch, "a", 5)
+    for _ in 0..5
+        print(ch.recv() else "none")
+    a.wait()?
+    jobs := Channel[str](1)
+    done := Channel[str](8)
+    w := spawn squares(jobs, done)
+    for i in 0..6
+        jobs.send("j{i}")
+    jobs.close()
+    mut seen := 0
+    while true
+        v := done.recv() else break
+        print(v)
+        seen += 1
+    w.wait()?
+    print(seen)
+    c := Channel[str](4)
+    c.send("p")
+    c.send("q")
+    c.close()
+    for v in c
+        print(v)
+        break
+    print(c.recv() else "none")
+    print(c.recv() else "none")

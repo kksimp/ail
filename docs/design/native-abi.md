@@ -287,7 +287,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 16-24). Each slot is a
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 16-24, channels 25-27). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -538,6 +538,13 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
   word idle workers sleep on, live, blocked and idle counts, the target, and
   the task each worker runs.
 - **Atomic cell:** 8 bytes, heap kind 11.
+- **Allocation fast path under threads:** the fast path tests against heap state word 24 (`H_FASTLIM`), which equals the collection threshold while there is one thread and is 0 once the pool exists, so every allocation then takes the locked path with no extra test.
+- **Channel record** (`chan.ail`, heap kind 13; a `Channel[str]` is its
+  address): 0 lock word, 1 capacity, 2 count, 3 head, 4 closed, 5 ring
+  pointer (string pointers), 6 source (nonzero for a channel fed from outside:
+  `chan_pump`, `chan_source_send` and `chan_source_close` then take over),
+  7 wake word (futex), 8 ring capacity, 9 id (`Channel#N`). Globals 25–27:
+  the change counter `select` sleeps on, how many sleep, channels made.
 
 **With the collector (lane 171).** The collector is conservative and assumes
 every other thread is at a call; a worker in a loop that never allocates is
@@ -563,7 +570,7 @@ not. As built, a threaded program works like this:
 Heap kinds: 11 (`KIND_ATOMIC`, no pointers) is an atomic cell; 12 is a task
 record and 13 an environment or group record (every word may be a pointer).
 `str` formatting keeps one text builder per thread in the pool block
-(`fmt.ail`, `sb_cell`). A trap inside the allocator (a run limit) releases its
+(`fmt.ail`, `sb_base`). A trap inside the allocator (a run limit) releases its
 lock before the task ends. What is still shared and not thread-safe: the error
 slot (`rt.err_set`), `PARSE_OK` and the OS layer's result slots (`os.ail`), so
 tasks must not use fallible calls or the file and environment functions at
