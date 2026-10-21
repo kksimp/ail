@@ -578,3 +578,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
+| [0770](0770-native-proc-run.md) | Native `proc.run` and `proc.which` on Linux: `clone`, `execve`, pipes and `ppoll`, optional trailing parameters, the `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
