@@ -1469,6 +1469,34 @@ lacks writes as an empty field. *(ADR 0626)*
 An unterminated quote and a record of the wrong width are its causes.
 *(ADR 0626)*
 
+**std.csv.6** — A quoted field with no closing quote before the end of the text
+fails with `CsvError` and why `unterminated quote`, at the row where it starts.
+*(ADR 0783)*
+
+**std.csv.7** — A record whose field count differs from the header's fails with
+`CsvError` and why `N fields, the header has M`, where `row` is that record's row.
+*(ADR 0783)*
+
+```ail rules=std.csv.6
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\n\"ann,3\n") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 2)
+        []
+    print(recs.len())
+```
+
+```ail rules=std.csv.7
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
+
 ```ail rules=std.csv.2,std.csv.5
 use std.csv
 
