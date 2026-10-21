@@ -726,8 +726,13 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         _ => unreachable("x64: no code for `{i.op}`")
 
 fn Gen.arith(mut self, i mir.Inst)
-    x := i.args[0]
-    y := i.args[1]
+    mut x := i.args[0]
+    mut y := i.args[1]
+    # An unchecked `add` or `mul` whose result takes the second operand's
+    # register works in place with the operands swapped.
+    if i.site < 0 and i.op != "sub" and loc[y] == loc[i.dst] and loc[x] != loc[y] and is_reg(loc[y])
+        x = i.args[1]
+        y = i.args[0]
     sym := match i.op
         "add" => "+"
         "sub" => "-"
