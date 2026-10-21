@@ -1,0 +1,4 @@
+fn main()
+    path := "/tmp/a.txt"
+    if path.starts_with("/tmp")
+        print("tmp")

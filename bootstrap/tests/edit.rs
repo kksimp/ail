@@ -1,4 +1,4 @@
-//! `ail edit PATH < EDITS` (edit.in.1-2, edit.id.1-2, edit.op.1-6, edit.out.1-3, ADR 0397).
+//! `ail edit PATH < EDITS` (edit.in.1-3, edit.id.1-3, edit.op.1-7, edit.out.1-4, ADRs 0397, 0399).
 
 use std::fs;
 use std::io::Write;
@@ -50,7 +50,7 @@ fn every_op() {
     ]"###;
     let out = edit(&f, &[], ops);
     assert_eq!(out.status.code(), Some(0), "{}{}", text(&out.stdout), text(&out.stderr));
-    assert_eq!(text(&out.stdout), "edited 1 file with 8 edits; 0 errors, 0 warnings\n");
+    assert_eq!(text(&out.stdout), "edited 1 file; 0 errors\n");
     let want = "use std.fs\n\nstruct Pt\n    xx int\n\nfn Pt.shift(mut self, d int)\n    xx += d\n\n## Adds.\nfn plus(a int, b int) int\n    requires a >= 0\n    a + b + 0\n\n## Twice.\nfn twice(n int) int\n    plus(n, n)\n\nfn main()\n    mut p := Pt(xx: twice(2))\n    p.shift(plus(3, 4))\n    print(p)\n";
     assert_eq!(fs::read_to_string(&f).unwrap(), want);
 }
@@ -79,7 +79,7 @@ fn diagnostics_and_dry_runs() {
     let out = edit(&f, &["--if-clean"], broken);
     assert_eq!(out.status.code(), Some(2));
     assert!(text(&out.stderr).contains("error[expr.name.1]: unknown name `nope`"), "{}", text(&out.stderr));
-    assert!(text(&out.stdout).starts_with("not written (--if-clean) 1 file with 1 edit; 1 error"), "{}", text(&out.stdout));
+    assert!(text(&out.stdout).starts_with("not written (--if-clean) 1 file; 1 error"), "{}", text(&out.stdout));
     assert_eq!(fs::read_to_string(&f).unwrap(), SRC);
     let out = edit(&f, &["--dry-run", "--json"], r#"[{"op":"delete","id":"fn:old"}]"#);
     let o = text(&out.stdout);
@@ -103,4 +103,42 @@ fn package_rename() {
     assert_eq!(out.status.code(), Some(0), "{}{}", text(&out.stdout), text(&out.stderr));
     assert_eq!(fs::read_to_string(d.join("geo/shapes.ail")).unwrap(), "pub fn zero() int\n    0\n");
     assert_eq!(fs::read_to_string(d.join("main.ail")).unwrap(), "use geo\n\nfn main()\n    print(geo.zero())\n");
+}
+
+const AVG: &str = "fn average(xs List[int]) int\n    mut total := 0\n    for x in xs\n        total += x\n    total / xs.len()\n\n@test fn empty_is_zero()\n    assert_eq(average([]), 0)\n";
+
+/// edit.in.3, edit.id.3, edit.op.7, edit.out.4: a compact hunk under a bare
+/// name, `+` lines written at column 0, then the tests.
+#[test]
+fn compact_hunks() {
+    let d = dir("compact");
+    let f = d.join("avg.ail");
+    fs::write(&f, AVG).unwrap();
+    let out = edit(&f, &["--test"], "average\n+if xs.len() == 0\n+    return 0\n mut total := 0\n");
+    assert_eq!(out.status.code(), Some(0), "{}{}", text(&out.stdout), text(&out.stderr));
+    assert_eq!(text(&out.stdout), "edited 1 file; 0 errors\nok empty_is_zero\n1 passed, 0 failed\n");
+    assert!(fs::read_to_string(&f).unwrap().starts_with("fn average(xs List[int]) int\n    if xs.len() == 0\n        return 0\n    mut total"));
+    // One `-` and one `+` line that match no whole line replace a unique part of one.
+    let out = edit(&f, &[], "fn:average\n-total / xs.len()\n+total / xs.len().max(1)\n");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(fs::read_to_string(&f).unwrap().contains("    total / xs.len().max(1)\n"));
+    let out = edit(&f, &[], "average\n-total\n+sum\n");
+    assert_eq!(out.status.code(), Some(2));
+    assert!(text(&out.stderr).contains("`total` occurs 3 times; quote more of its line in `fn:average` (edit.op.7)"), "{}", text(&out.stderr));
+    let out = edit(&f, &[], "average\n-nothing here\n+x\n");
+    assert!(text(&out.stderr).contains("`nothing here` is not found"), "{}", text(&out.stderr));
+}
+
+/// edit.in.3: `rename OLD NEW` and lines that are neither.
+#[test]
+fn compact_rename_and_errors() {
+    let d = dir("compact_rename");
+    let f = d.join("avg.ail");
+    fs::write(&f, AVG).unwrap();
+    let out = edit(&f, &[], "rename average mean\n");
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    assert!(fs::read_to_string(&f).unwrap().contains("assert_eq(mean([]), 0)"));
+    let out = edit(&f, &[], "mean is wrong\n");
+    assert_eq!(out.status.code(), Some(2));
+    assert!(text(&out.stderr).contains("line 1: expected an id"), "{}", text(&out.stderr));
 }

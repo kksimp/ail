@@ -1,0 +1,6 @@
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn main()
+    inc := lambda x: x + 1
+    print(apply(inc, 3))

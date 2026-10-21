@@ -6,6 +6,7 @@
 mod api;
 mod ast;
 mod build;
+mod build_cache;
 mod budget;
 mod bump;
 mod check;
@@ -13,6 +14,7 @@ mod derive;
 mod diag;
 mod explain;
 mod fasthash;
+mod fuse;
 mod doctest;
 mod edit;
 mod docs;
@@ -24,6 +26,7 @@ mod named_args;
 mod interp;
 mod lexer;
 mod modules;
+mod native_test;
 mod codec;
 mod net;
 mod num;
@@ -54,6 +57,9 @@ commands:
                 --cases N (default 100) and --seed S set a property's inputs;
                 --update [--dry-run]: rewrite failing `assert_eq(x, LITERAL)`
                 literals, `# =>` lines and FILE's `.out`, showing the diff (snap.update.1)
+  test --native [PATH...]
+                build each `@test` function natively, run it, and compare with
+                the interpreter; PATH is a file or directory (native.test.1)
   effects FILE  print each function's inferred effects (eff.infer.6);
                 --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
@@ -122,8 +128,10 @@ options:
 #[global_allocator]
 static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
 
-/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
-const STACK_BYTES: usize = 256 * 1024 * 1024;
+/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first. A
+/// debug build spends about 50 KB of Rust stack per AIL call, so MAX_DEPTH
+/// calls need over 500 MB there. The pages are only mapped as they are used.
+const STACK_BYTES: usize = 1024 * 1024 * 1024;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -173,6 +181,11 @@ fn main() -> ExitCode {
         .map(String::as_str)
         .filter(|a| *a != "--json" && *a != "--no-contracts" && *a != "--no-bytecode")
         .collect();
+    // native.test.1: `ail test --native [PATH...]` compares native builds with the interpreter.
+    if rest.first() == Some(&"test") && rest.contains(&"--native") {
+        let paths: Vec<&str> = rest[1..].iter().copied().filter(|a| *a != "--native").collect();
+        return native_test::command(&paths, json);
+    }
     // `ail test` owns `--cases` and `--seed` (test.prop.3); `ail run` owns
     // `--seed` and `--deterministic` (std.random.3, eff.det.1).
     let mut flags: Vec<&str> = Vec::new();
@@ -613,7 +626,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         .spawn(move || {
             let outcomes = interp::run_tests(&program, &resolved, cases, seed)
                 .into_iter()
-                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop, o.snapshot, o.trace))
+                .map(|o| (o.name, o.pos, o.failure, o.output, o.errput, o.prop, o.snapshot, o.trace))
                 .collect::<Vec<_>>();
             // test.cover.1: what the tests ran, read once they are all done.
             let cover = coverage.map(|_| interp::limits::report(&program, &cover_map));
@@ -639,8 +652,8 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         let Some(t) = doc_tests.iter().find(|t| t.fn_name == o.0) else { continue };
         // test.doc.2-3: report under the example's name, at its own line.
         o.0 = t.name.clone();
-        o.5 = None; // the example is generated code; its frame would name `doc_example_N`
-        o.6.clear();
+        o.6 = None; // the example is generated code; its frame would name `doc_example_N`
+        o.7.clear();
         if o.2.is_none() {
             o.2 = doctest::check_output(t, &o.3);
             o.1 = diag::Pos { line: t.line(), col: 1 };
@@ -658,7 +671,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
     }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;
-    for (name, pos, failure, output, prop, snapshot, trace) in &outcomes {
+    for (name, pos, failure, output, errput, prop, snapshot, trace) in &outcomes {
         if json {
             let (status, message) = match failure {
                 Some(m) => ("fail", m.as_str()),
@@ -707,6 +720,10 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
                     }
                     for line in output.lines() {
                         println!("  | {line}");
+                    }
+                    // test.run.2: standard error is shown after standard output, marked `!`.
+                    for line in errput.lines() {
+                        println!("  ! {line}");
                     }
                 }
             }

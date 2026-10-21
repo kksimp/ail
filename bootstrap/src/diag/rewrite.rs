@@ -146,7 +146,7 @@ impl Edit {
     /// Rewrite `l op r` around the operator `op` at `pos`; `text` is a
     /// template: `$l` `$r` are the operands as written, `$lp` `$rp` as pieces
     /// of one string, `$f` the left string with its one `%d` or `%s` replaced
-    /// by the right operand.
+    /// by the right operand (fix.edit.6).
     pub fn operands(pos: Pos, op: &str, template: impl Into<String>) -> Self {
         Edit { pos, end: pos, old: Some(op.into()), anchor: Anchor::Operands, text: template.into() }
     }

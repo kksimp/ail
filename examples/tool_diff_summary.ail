@@ -1,0 +1,23 @@
+## Agent task: after a change, summarize what `ail diff` reports for each
+## edited module: declarations added, removed and changed.
+##   ./ail run examples/tool_diff_summary.ail
+
+fn main() !
+    here := path.dir(env.program())
+    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    for name in ["scale.ail", "report.ail"]
+        r := proc.run("{here}/../ail", [
+            "diff",
+            "--json",
+            "{data}/v1/{name}",
+            "{data}/v2/{name}",
+        ])? "diffing {name}"
+        for line in r.out.lines()
+            d := parse_json(line) else continue
+            summary := d.bool("summary") else false
+            if summary
+                added := d.int("added") else 0
+                removed := d.int("removed") else 0
+                changed := d.int("changed") else 0
+                tests := d.int("tests_changed") else 0
+                print("{name}: added {added}, removed {removed}, changed {changed}, tests changed {tests}")

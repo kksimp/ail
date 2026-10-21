@@ -1,0 +1,43 @@
+# Division and remainder by a constant that isn't a power of two are a
+# multiply and shifts (native.arith.1); every sign, the extremes, and many
+# divisors must match `ail run`.
+fn probe(x int) int
+    x / 3
+        + x % 3 * 7
+        + x / 5 -
+        x % 7
+        + x / 10
+        + x / 139968
+        + x % 139968
+        + x / 1000000007 -
+        x % 1000000007
+        + x / 2147483647
+        + x % 2147483647
+        + x / 6 -
+        x % 12
+        + x / 641
+        + x % 65537
+
+fn main()
+    mut h := 0
+    mut x := 1
+    for i in 0..200
+        h = (h * 31 + probe(x).bit_and(1048575)).bit_and(36028797018963967)
+        h = (h * 31 + probe(0 - x).bit_and(1048575)).bit_and(36028797018963967)
+        x = x.bit_xor(x.shl(13))
+        x = x.bit_xor(x.shr(7))
+        x = x.bit_xor(x.shl(17))
+        if i % 3 == 0
+            x = x / 4099
+    print(h)
+    for v in [0, 1, -1, 2, -2, 3, -3, 4, 5, 6, 7, 9223372036854775807, -9223372036854775807]
+        print(probe(v))
+        print(v / 3)
+        print(v % 3)
+        print(v / 2147483647)
+        print(v % 100)
+    mn := -9223372036854775807 - 1
+    print(mn / 3)
+    print(mn % 3)
+    print(mn / 139968)
+    print(mn % 139968)

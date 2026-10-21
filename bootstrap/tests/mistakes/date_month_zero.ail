@@ -1,0 +1,5 @@
+use std.time.date
+
+fn main()
+    d := date.Date(2026, 0, 20)
+    print(d.days())

@@ -1,0 +1,9 @@
+struct Point
+    x int
+    y int
+
+fn mk(n int) Point
+    Point(x: n, y: n + 1)
+
+fn main()
+    print(mk(2).y)

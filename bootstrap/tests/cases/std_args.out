@@ -1,0 +1,15 @@
+false a.txt in.txt []
+true b.txt in.txt ["x", "y"]
+false c.txt -weird ["z"]
+error: unknown option --nope
+error: --out needs a value
+error: missing INPUT
+usage: tool [--verbose] [--out] INPUT [MORE...]
+does things
+
+  -v, --verbose         more output
+  -o, --out V           where to write (default a.txt)
+  INPUT                 file to read
+  MORE                  extra files
+  -h, --help            show this help
+

@@ -115,10 +115,10 @@ fn Lower.copy_coll(mut self, v Val) int
 ## The trap's first line and source excerpt as string values, as the code
 ## generator builds them for a checked operation.
 fn Lower.trap_texts(mut self, rule str, pos ast.Pos) List[int]
-    path := if file < file_paths.len() then file_paths[file] else ""
-    src_lines := if file < file_texts.len() then file_texts[file] else []
-    head := "{path}:{pos.line}:{pos.col}: trap[{rule}]: "
-    line := if pos.line >= 1 and pos.line <= src_lines.len() then src_lines[pos.line - 1] else ""
+    where := if file < file_paths.len() then file_paths[file] else ""
+    text := if file < src_lines.len() then src_lines[file] else []
+    head := "{where}:{pos.line}:{pos.col}: trap[{rule}]: "
+    line := if pos.line >= 1 and pos.line <= text.len() then text[pos.line - 1] else ""
     gutter := "{pos.line}"
     mut pad := List[str]()
     chars := line.chars()
@@ -397,38 +397,3 @@ fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
         Set(e) => call("rt.out_set", [v.id, konst(scalar_kind(e), Ty.Int)], Ty.Unit)
         _ => return unsupported(pos, "printing a `{v.ty.name()}`")
     Val(id: -1, ty: Ty.Unit)
-
-# ---- list constants ----
-
-## The first global slot for a constant list; the runtime uses 0-7 (ADR 0570).
-CONST_SLOT_BASE := 16
-CONST_SLOTS := 48
-
-## A constant whose value is a list literal is built once, on first use,
-## and kept in a global slot (ADR 0570); a use binding it copies it.
-fn Lower.cached_const(mut self, key str, c ast.Expr) Val?
-    mut slot := const_slots.get(key) else -1
-    if slot < 0
-        if const_slots.len() >= CONST_SLOTS
-            return lower_expr(c, none)
-        slot = CONST_SLOT_BASE + const_slots.len()
-        const_slots[key] = slot
-    addr := rawop("global", [konst(slot, Ty.Int)], Ty.Int)
-    p := rawop("load64", [addr], Ty.Int)
-    ready := op("ne", [p, konst(0, Ty.Int)], Ty.Bool)
-    build := new_block()
-    join := new_block()
-    r := new_value(Ty.Unknown, "")
-    blocks[join].params.push(r)
-    branch(ready, join, [p], build, [])
-    seal(build)
-    cur = build
-    v := lower_expr(c, none)?
-    rawop("store64", [addr, v.id], Ty.Unit)
-    # The slot's type is known only now.
-    vals[p] = v.ty
-    vals[r] = v.ty
-    jump(join, [v.id])
-    seal(join)
-    cur = join
-    Val(id: r, ty: v.ty)

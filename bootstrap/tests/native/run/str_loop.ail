@@ -1,0 +1,29 @@
+# Many strings built in loops: allocation keeps working past the first
+# heap chunk, and comparison and joining agree with the interpreter.
+fn main()
+    mut total := 0
+    mut longest := ""
+    mut smallest := "~"
+    for i in 0..30000
+        s := "item-{i}-{i * 3}"
+        total += s.len()
+        if s > longest
+            longest = s
+        if s < smallest
+            smallest = s
+    print(total)
+    print(longest)
+    print(smallest)
+    mut words := List[str]()
+    for i in 0..2000
+        words.push("w{i % 7}")
+    text := words.join(" ")
+    print(text.len())
+    parts := text.split(" ")
+    print(parts.len())
+    mut sevens := 0
+    for p in parts
+        if p == "w3"
+            sevens += 1
+    print(sevens)
+    print(text.replace("w3", "WWW").len())

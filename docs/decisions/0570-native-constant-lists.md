@@ -1,6 +1,6 @@
 # 0570. Constant lists are built once, on first use
 
-- **Status:** Accepted
+- **Status:** Superseded by [0604](0604-native-computed-constants.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture

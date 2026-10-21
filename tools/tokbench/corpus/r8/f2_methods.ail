@@ -5,7 +5,10 @@ struct Item
     price float
 
 fn main()
-    items := [Item(id: 255, name: "widget", qty: 3, price: 4.5), Item(id: 4096, name: "gadget", qty: 12, price: 19.999)]
+    items := [
+        Item(id: 255, name: "widget", qty: 3, price: 4.5),
+        Item(id: 4096, name: "gadget", qty: 12, price: 19.999),
+    ]
     print("{"name".pad_right(10, ' ')}{"qty".pad_left(5, ' ')}{"price".pad_left(10, ' ')}  id")
     mut total := 0.0
     for it in items

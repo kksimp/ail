@@ -1,0 +1,10 @@
+# The index is checked before the right side runs (expr.op.2, type.coll.4),
+# on the tier as on the walker (ADR 0618).
+
+fn big(n int) int
+    n * 4611686018427387904
+
+fn main()
+    mut xs := [1, 2, 3]
+    xs[7] += big(3)
+    print("{xs}")

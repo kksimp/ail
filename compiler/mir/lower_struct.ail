@@ -23,6 +23,8 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
             problem(s.pos, "struct `{s.name}`: invariants aren't in the native subset yet")
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
+        elif err_msgs.contains(s.name)
+            continue
         elif s.is_error
             problem(s.pos, "error struct `{s.name}` isn't in the native subset yet")
         else
@@ -179,7 +181,7 @@ fn Lower.copy_value(mut self, v Val) int
         return copy_list(v)
     name := "copy.{v.ty.name()}"
     if not sigs.contains(name)
-        sigs[name] = Sig(params: [v.ty], ret: v.ty)
+        sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
         copy_tys[name] = v.ty
     call(name, [v.id], v.ty)
 

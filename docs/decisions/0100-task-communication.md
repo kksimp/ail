@@ -27,3 +27,7 @@ is visible in its type.
 
 - Exact APIs (closing channels, `select` across channels, lock poisoning per
   ADR 0047) are designed with the standard library.
+
+## Rejected alternatives
+
+- Unsynchronised shared mutable state between tasks: rejected by the decision, since `ref` cells cannot cross task boundaries (ADR 0063) and data-race-free code is required (ADR 0025). The record gives no measured comparison. (reconstructed 2026-10-21.)

@@ -1,0 +1,16 @@
+## Agent task: preview the fixes `ail fix` would apply to the broken fixtures,
+## without writing anything, and summarize what remains.
+##   ./ail run examples/tool_fix_preview.ail
+
+fn main() !
+    here := path.dir(env.program())
+    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    for name in ["bad_type.ail", "bad_name.ail"]
+        r := proc.run("{here}/../ail", ["fix", "--dry-run", "{data}/{name}"])? "previewing {name}"
+        mut errors := 0
+        both := "{r.out}{r.err}"
+        for line in both.lines()
+            if line.contains("error[")
+                errors += 1
+        last := r.out.lines().last() else ""
+        print("{name}: {errors} error lines; {last}")

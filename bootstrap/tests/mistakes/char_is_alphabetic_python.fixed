@@ -1,0 +1,3 @@
+fn main()
+    c := 'a'
+    print(c.is_alpha())

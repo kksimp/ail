@@ -1,0 +1,4 @@
+fn main()
+    text := "a\nb"
+    for line in text.lines()
+        print(line)

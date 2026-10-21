@@ -15,6 +15,9 @@ Apache attribution terms (section 4) would otherwise reach those programs.
 Licensing is the designer's call (AGENTS.md, escalation criterion 4). The
 designer stated on 2026-10-20 that the project is "Apache 2.0 with a
 Runtime Exception".
+The exception wording in `LICENSE` was drafted by the AI and reviewed by
+the designer, who approved it on 2026-10-20 ("The license is good"), so it
+is the project's final text rather than a draft.
 
 ## Options considered
 
@@ -50,3 +53,8 @@ Apache-2.0).
   the lane rules say so.
 - The README's licence section and `AGENTS.md`'s escalation rule are the
   places a contributor sees this.
+
+## Rejected alternatives
+
+- Plain Apache 2.0 (option B): rejected because the attribution terms would reach every compiled program through the embedded runtime.
+- MIT or dual MIT/Apache (option C): rejected because it loses the patent grant, and it still has no runtime exception.

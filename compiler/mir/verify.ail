@@ -44,7 +44,7 @@ pub fn verify(f Func) List[str]
                 errs.push("{f.name}: b{b} passes {args.len()} values to b{t}, which has {params.len()} parameters")
                 continue
             for j in 0..args.len()
-                if f.vals[args[j]].name() != f.vals[params[j]].name()
+                if register_kind(f.vals[args[j]]) != register_kind(f.vals[params[j]])
                     errs.push("{f.name}: b{b} passes a {f.vals[args[j]].name()} to b{t}'s {f.vals[params[j]].name()}")
         if blk.term.kind == "branch" and blk.term.targets[0] == blk.term.targets[1]
             errs.push("{f.name}: b{b} branches twice to b{blk.term.targets[0]}")
@@ -52,6 +52,12 @@ pub fn verify(f Func) List[str]
             if f.ret.is_unit() != (blk.term.value < 0)
                 errs.push("{f.name}: b{b} returns the wrong kind of value")
     errs
+
+## The kind of register a value lives in: a `char` is an `int` (type.char.1).
+fn register_kind(t Ty) str
+    if t == Ty.Char
+        return "int"
+    t.name()
 
 fn check_use(
     f Func,
@@ -84,29 +90,72 @@ fn check_types(f Func, i Inst, mut errs List[str])
     if want == ""
         return
     for a in i.args
-        if f.vals[a].name() != want
+        # A `char` is an `int` in a register (type.char.1).
+        have := if f.vals[a] == Ty.Char then "int" else f.vals[a].name()
+        if have != want
             errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
 
-## `dom[b][d]`: block `d` dominates block `b` (the iterative data-flow
-## algorithm; MIR functions are small).
+## `dom[b][d]`: block `d` dominates block `b` (native.build.1, ADR 0656). Immediate dominators come
+## from the Cooper-Harvey-Kennedy iteration over the reverse postorder, then
+## each row is its immediate dominator's row plus the block itself, so a
+## function costs a few passes over its blocks and one list copy per block.
+## A block the entry can't reach has every `d` true, as the plain data-flow
+## formulation leaves it.
 pub fn dominators(f Func) List[List[bool]]
     n := f.blocks.len()
     mut preds := [List[int]() for _ in 0..n]
     for b in 0..n
         for t in f.blocks[b].term.targets
             preds[t].push(b)
-    mut dom := [[true for _c in 0..n] for _r in 0..n]
-    dom[0] = [d == 0 for d in 0..n]
+    # Postorder numbers by a depth-first walk from the entry.
+    mut post := [-1 for _ in 0..n]
+    mut order := List[int]()
+    mut seen := [false for _ in 0..n]
+    mut taken := [0 for _ in 0..n]
+    mut stack := [0]
+    seen[0] = true
+    while stack.len() > 0
+        b := stack[stack.len() - 1]
+        ts := f.blocks[b].term.targets
+        if taken[b] < ts.len()
+            t := ts[taken[b]]
+            taken[b] += 1
+            if not seen[t]
+                seen[t] = true
+                stack.push(t)
+        else
+            post[b] = order.len()
+            order.push(b)
+            stack.pop()
+    mut idom := [-1 for _ in 0..n]
+    idom[0] = 0
     mut changed := true
     while changed
         changed = false
-        for b in 1..n
-            mut next := [true for _ in 0..n]
+        for j in 1..order.len()
+            b := order[order.len() - 1 - j]
+            mut pick := -1
             for p in preds[b]
-                for d in 0..n
-                    next[d] = next[d] and dom[p][d]
-            next[b] = true
-            if next != dom[b]
-                dom[b] = next
+                if idom[p] >= 0
+                    if pick < 0
+                        pick = p
+                    else
+                        mut x := p
+                        mut y := pick
+                        while x != y
+                            while post[x] < post[y]
+                                x = idom[x]
+                            while post[y] < post[x]
+                                y = idom[y]
+                        pick = x
+            if idom[b] != pick
+                idom[b] = pick
                 changed = true
+    mut dom := [[true for _c in 0..n] for _r in 0..n]
+    dom[0] = [d == 0 for d in 0..n]
+    for j in 1..order.len()
+        b := order[order.len() - 1 - j]
+        mut row := dom[idom[b]]
+        row[b] = true
+        dom[b] = row
     dom

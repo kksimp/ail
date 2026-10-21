@@ -331,21 +331,116 @@ expr.call.1).
 
 ## OQ-118 — Which transcendental functions the language and the native backend need
 
+**Answered** by the designer on 2026-10-21: the full `std.math` set (`sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`, `cbrt`) as float methods, with a stated tolerance. The ADR is pending: lane 184 writes it and adds the link here.
+
 The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
 or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
 (`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
 `exp` and `tanh`, through the platform's libm, so they already differ in the
 last bit between operating systems. A bit-exact match of libm across hosts
 isn't possible, so any new function needs a stated tolerance.
+**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full
+set (option c, chosen by the designer on 2026-10-21), within one unit in the
+last place of the platform's libm.
 
-Options:
-- **a.** Add nothing now. The native compiler doesn't need these functions.
-  `sigmoid` and `tanh` stay interpreter-only until native tensors exist.
-- **b.** Add `exp` and `tanh` natively, within 1 ulp of the platform libm
-  (a new rule in `std.tensor.13`), so native tensors can run the activations.
-  Defer `sin`, `cos`, `atan2`, `pow` and the rest until a program needs them.
-- **c.** Add a full `std.math` (`sin` to `cbrt`) now, within 1 ulp, with an
-  algorithm from an Apache-2.0-compatible source and a NOTICE credit.
+## OQ-172 — Unicode tables for the native `char` predicates and case mapping
 
-Recommendation: **b.** It gives native tensors their activations without
-committing the language to a whole math library that no program yet calls.
+**Resolved** by [ADR 0567](decisions/0567-native-text-of-numbers-and-unicode-tables.md)
+(option a: range tables generated from the interpreter by
+`tools/native/gen_unicode.ail`).
+
+## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
+The designer asked (2026-10-20) whether a `pail` module could let developers
+write Python in the AIL editor while the code is really AIL, to help adoption.
+Not before the core language and the native toolchain are complete.
+- **a.** A Python-syntax front end that compiles directly: Python source in,
+  AIL semantics out. Every tool (`ail check`, `ail api`, diagnostics, the
+  card) would need a second syntax, and the parts of Python the semantics
+  can't express (untyped code, `eval`, monkey patching, shared-reference
+  aliasing where `b = a; b.append(1)` changes `a`, which AIL's mutable value
+  semantics forbids, ADRs 0060–0063) would have to be rejected with
+  Python-shaped diagnostics.
+- **b.** A one-way translator, `ail port app.py`, from typed Python to
+  readable AIL. Developers keep one language for the tooling and get an
+  on-ramp; the translator rejects the dynamic parts and the aliasing cases
+  with a message that names the AIL form. Precedents: Codon, Mojo and Nim
+  (each kept one language and offered a bridge).
+- **c.** Neither: AI agents already write AIL directly, and the editor's
+  cards and diagnostics are the on-ramp.
+Recommendation: **b.** One language in the tooling (the AI-first goal), a
+real on-ramp for Python developers, and no second syntax to keep in step
+with every rule. Decide after milestone 8; see the roadmap.
+## OQ-120 — Must a unique value be consumed, or does scope-end cleanup suffice?
+Lane 125 (streaming processes) kills a child process left running when the
+program ends (`std.proc.7`). A general rule that a unique value MUST be
+consumed (waited, closed, or moved) before its scope ends would replace that
+exit-time kill, but it changes `own.uniq.3` (ADR 0066, designer's decision):
+today a unique value's cleanup runs at scope end by any path, and nothing
+needs to be consumed. Task handles already must be waited (ADR 0096).
+- **a.** Keep scope-end cleanup (ADR 0066). A stray child is killed by its
+  `Drop`, as `std.proc.7` says. Nothing changes.
+- **b.** Require consumption for every unique value: a unique local that is
+  neither moved nor consumed is a compile-time error. Precise, but
+  every unique value then needs a consuming call, and `defer`-style cleanup
+  stops being automatic.
+- **c.** Require it only for handles declared with a marker (for example
+  `unique(consume)`), keeping ADR 0066 for the rest.
+Recommendation: **a.** The model stays affine, not linear, which is simpler
+for agents; the exit-time kill is the `Drop` of the child and needs no new
+rule. Reopen only if stray handles cause real bugs.
+## OQ-121 — Closures as `std.net.http` handlers
+`std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
+because AIL has no anonymous functions or captured variables (`type.fn.3`,
+ADR 0456). A handler that needs state (a counter, a store) has to reach it
+through a `ref` global or a struct method. The question is whether function
+values should grow captures. Options: keep the rule (handlers are named
+functions plus explicit state) or add closures as a later language feature
+with their own ADR. Recommendation: keep the rule until a program shows the
+need; the AI-first measurement (ADR 0076) is tokens per handler, and the
+named form costs few.
+
+## OQ-122 — What `t[i][j]` on a one-dimensional tensor means
+
+`std.tensor.15` gives `t[i]` the tensor of the rows after the first, so a
+one-dimensional `t[i]` is a tensor with no axes (ADR 0328). The checker
+accepts `t[0][1]` and the program prints a 0-dimensional tensor, with no
+error. Round two's mistakes corpus (ADR 0646) caught it. Options: (a) keep
+the spec and make a second index on a 0-dimensional tensor a compile-time
+error (`expr.index.*`, a new rule); (b) make `t[i]` on a one-dimensional
+tensor an element, which changes std.tensor.15. Recommendation: (a), since
+the spec's shape rule stays true and an agent gets a diagnostic at the second
+index. The decision belongs to the designer, because it changes a spec rule
+(std.tensor.15). The corpus omits the program until then (ADR 0647).
+## OQ-123 — Compare `bytes` with `str` directly?
+Round 4 ([measurements](design/program-measurements-agent-r4.md)) found
+`gz_check` and `frames` comparing a file's bytes with its text through
+`to_bytes()`, `text()` and `len()`. Options: (a) keep `==` between `bytes`
+and `str` a type error, and write `b.text() == s` (status quo, an extra call
+per comparison); (b) allow `bytes == str` as the UTF-8 comparison, with
+`bytes == bytes` unchanged. Pros of (b): about 3 tokens per comparison on the
+round-4 programs. Cons: two kinds of equality, and a mixed `==` that a reader
+could take for a conversion. Recommendation: (a) until a larger corpus shows
+the cost; the saving is small and the rule is simpler. Decided by the
+integrator with a measurement, not by this lane.
+## OQ-124 — Pairs: tuples, `zip`, `enumerate` and map `items`
+AIL has no tuple or pair type. Agent code reaches for `zip(a, b)`,
+`enumerate(xs)` and `m.items()` (lane 192's std-parity twins, round 4).
+A two-variable `for i, x in xs` alone was measured in
+[ADR 0675](decisions/0675-round-4-syntax-candidates.md): 46 tokens on a
+23,004-token corpus (0.2%), a tie, so it is not proposed by itself. Pairs
+change the type model (value semantics, patterns, `==`, map keys,
+`type.*` rules), so the designer decides.
+- **a.** No pairs. Loop over indexes or `keys()`; use structs for paired
+  data. Nothing changes; agents keep writing `for i in 0..xs.len()`.
+- **b.** Anonymous tuples `(a, b)` with `.0`/`.1` and destructuring in
+  `let`, `for` and `match`; then `zip`, `enumerate`, `m.items()` are library
+  methods. Largest benefit (also two results from one call), largest
+  surface: the card grows and every checker, formatter and native pass sees a
+  new type.
+- **c.** Only `for i, x in xs` and `for k, v in m` as loop syntax: no new
+  type, covers the common case, but `zip` still cannot exist and the card
+  grows for 0.2%.
+Recommendation: **a** until a program needs paired data in more than a
+loop; if the designer wants parity with Python here, **b** and not **c**,
+because **c** pays syntax for the smallest slice. Measure b with the 40-program
+corpus first.

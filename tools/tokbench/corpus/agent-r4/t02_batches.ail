@@ -1,0 +1,3 @@
+fn main()
+    for b in [i for i in 0..10].chunks(4)
+        print(b)

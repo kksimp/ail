@@ -1,0 +1,51 @@
+# Module constants computed at start-up (ADR 0604): lists, structs, enums,
+# calls, a constant naming one declared after it, and copies that keep
+# the constant unchanged (own.val.1).
+SQUARES := [0, 1, 4, 9, 16]
+PRIMES := [2, 3, 5, 7, SMALL]
+SMALL := 11
+ORIGIN := Point(x: 0, y: LIMIT)
+LIMIT := double(21)
+SHAPES := [Shape.Dot, Shape.Box(2), Shape.Box(LIMIT)]
+NAMES := ["a", "bc", "def"]
+NESTED := [[1, 2], PRIMES]
+
+struct Point
+    x int
+    y int
+
+enum Shape
+    Box(side int)
+    Dot
+
+fn double(n int) int
+    n * 2
+
+fn area(s Shape) int
+    match s
+        Box(n) => n * n
+        Dot => 0
+
+fn first_list() List[int]
+    NESTED[1]
+
+fn main()
+    print(PRIMES)
+    print(SQUARES[4])
+    print(LIMIT)
+    print(ORIGIN.y)
+    mut total := 0
+    for s in SHAPES
+        total += area(s)
+    print(total)
+    mut p := PRIMES
+    p.push(13)
+    print(p.len())
+    print(PRIMES.len())
+    mut q := first_list()
+    q[0] = 99
+    print(NESTED)
+    print(NAMES.join("-"))
+    mut o := ORIGIN
+    o.x = 5
+    print(ORIGIN.x)

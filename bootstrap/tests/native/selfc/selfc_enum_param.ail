@@ -1,0 +1,11 @@
+enum Ty
+    Int
+    Str
+
+fn code(t Ty) int
+    match t
+        Int => 1
+        Str => 2
+
+fn main()
+    print(code(Ty.Str))
