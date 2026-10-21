@@ -148,3 +148,87 @@ convention. *(ADR 0431, ADR 0004)*
 **ffi.link.1** — On Linux, a program that declares or imports no C functions
 MUST NOT depend on libc. A program that does is linked against the system
 libc. *(ADR 0105, ADR 0020)*
+
+## Runnable examples for the rules above
+
+```ail error=ffi.decl.2
+extern c fn abs(x i32) i32 = 3
+
+fn main()
+    print(1)
+```
+
+```ail error=ffi.decl.3
+extern c fn strlen(s str) int
+
+fn main()
+    print(1)
+```
+
+```ail error=ffi.call.1
+extern c fn abs(x i32) i32
+
+fn main()
+    print(abs(-5))
+```
+
+```ail rules=ffi.call.2,ffi.decl.2,ffi.link.1,ffi.map.1,ffi.map.2
+extern c fn abs(x i32) i32
+
+fn main()
+    unsafe
+        print(abs(-5))
+```
+
+```ail rules=ffi.map.1
+extern c "libm" fn hypot(a float, b float) float
+
+fn main()
+    unsafe
+        print(hypot(3.0, 4.0))
+```
+
+```ail norun rules=ffi.native.1
+# norun: `ail build` rejects the declaration; `ail check` and `ail run` accept it.
+extern c fn abs(x i32) i32
+
+fn main()
+    unsafe
+        print(abs(-5))
+```
+
+```ail norun rules=ffi.load.1
+# norun: the library is loaded at the first call and the trap names every file tried.
+extern c "nosuchlib_xyz" fn f() int
+
+fn main()
+    unsafe
+        print(f())
+```
+
+```ail norun rules=ffi.load.2
+# norun: the trap names the missing symbol at the call.
+extern c fn no_such_symbol_xyz() int
+
+fn main()
+    unsafe
+        print(no_such_symbol_xyz())
+```
+
+```ail norun rules=ffi.load.3
+# norun: on Windows the call traps as "not supported yet"; on Linux and macOS the library
+# "kernel32" can't be loaded, so the call traps too.
+extern c "kernel32" fn GetTickCount() i32
+
+fn main()
+    unsafe
+        print(GetTickCount())
+```
+
+```ail skip=bootstrap rules=ffi.decl.1
+use c "stdlib.h" as libc
+
+fn main()
+    unsafe
+        print(libc.abs(-5))
+```

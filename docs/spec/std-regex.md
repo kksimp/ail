@@ -99,7 +99,7 @@ than in the Unicode tables; any other name is `bad_class` (`std.regex.18`).
 `escape(s str) str` puts a `\` before every character that is special in a
 pattern. *(ADR 0439)*
 
-```ail
+```ail rules=std.regex.1,std.regex.2,std.regex.5,std.regex.7,std.regex.8
 use std.regex
 
 fn main()
@@ -111,6 +111,31 @@ fn main()
 ```
 
 ## Errors
+
+```ail rules=std.regex.3,std.regex.10
+use std.regex
+
+fn main()
+    word := regex.compile(r"(?i)[[:alpha:]]+\d") else return
+    print(regex.is_match(word, "ABC1"))    # true
+    print(regex.is_match(word, "1"))       # false
+    print(regex.escape("a.b"))             # a\.b
+```
+
+```ail rules=std.regex.4,std.regex.6,std.regex.9
+use std.regex
+
+fn main()
+    star := regex.compile("a*") else return
+    print(regex.find_all(star, "baaac").len())    # 3
+    lazy := regex.compile("a+?") else return
+    first := regex.find(lazy, "aaa") else return
+    print(first.end)                              # 1
+    alt := regex.compile("(a)|(b)") else return
+    m := regex.captures(alt, "b") else return
+    print(m.groups.len())                         # 3
+    print(m.named.len())                          # 0
+```
 
 **std.regex.11** — `kind` is `unclosed_group` when a `(` has no `)`; `at` is
 the `(`. Add the `)`, or write `\(` for a literal. *(ADR 0439)*
@@ -292,4 +317,18 @@ fn main()
         print(err.kind)
         return
     print(regex.group_all(re, "1a 2b", 2))
+```
+
+**std.regex.25** — The functions that take a regex first are also methods of
+`regex.Regex`: `re.is_match(text)`, `re.find(text)`, `re.find_all(text)`,
+`re.captures(text)`, `re.replace(text, with)`, `re.replace_first(text, with)`
+and `re.split(text)` mean `regex.NAME(re, ...)` and give the same result.
+Another method name is an error. *(ADR 0749)*
+```ail rules=std.regex.25
+use std.regex
+
+fn main() !
+    re := regex.compile(r"(\d+)-(\d+)")?
+    print(re.is_match("call 12-34"))        # true
+    print(re.replace("1-2", "$2-$1"))       # 2-1
 ```

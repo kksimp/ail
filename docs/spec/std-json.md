@@ -90,6 +90,17 @@ payload of the matching variant, and `none` for any other. They chain with
 `?` in a function that returns an optional, or before an `else`
 (`err.prop.4`). *(ADR 0161)*
 
+```ail rules=json.query.1
+fn main()
+    doc := parse_json("\{\"id\": \"t1\"}") else return
+    id := doc.get("id") else return
+    print(id.as_str() else "none")
+    gone := doc.get("missing") else
+        print("no member")
+        return
+    print(gone.as_str())
+```
+
 **json.query.2** — `j.str(key)`, `j.num(key)`, `j.bool(key)` and
 `j.arr(key)` are `j.get(key)?.as_str()` and so on: member `key` when it holds
 that variant, and `none` otherwise. *(ADR 0254)*
@@ -98,7 +109,7 @@ that variant, and `none` otherwise. *(ADR 0254)*
 value of the first member named `key`, or adds the member at the end. It traps
 (`err.model.2`) unless `j` is an object. *(ADR 0254)*
 
-```ail
+```ail rules=json.query.2,json.query.3
 fn main()
     mut doc := parse_json("\{\"id\": \"t1\", \"hours\": 2}") else return
     print(doc.str("id"))       # t1
@@ -189,7 +200,7 @@ the document root: `missing items[2].kind` for a missing member, and
 `Box` `` for the others. `e.under(part)`, with `part` a member name or
 `[i]`, puts a `JsonError` under one more step of its path. *(ADR 0343)*
 
-```ail
+```ail rules=json.derive.1,json.derive.2,json.derive.3
 struct Item
     id str
     hours float

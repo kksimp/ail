@@ -27,8 +27,12 @@ fn main() !
     fs.rename("{dir}/copy.txt", "{dir}/moved.txt")?
     print(fs.exists("{dir}/copy.txt"))
     print(fs.read_text("{dir}/moved.txt")?)
-    fs.copy("{dir}/src", "{dir}/x") else err
-        print(err)
+    fs.copy("{dir}/src", "{dir}/x")?
+    print(fs.walk("{dir}/x")?)
+    for q in fs.walk("{dir}/x")?
+        fs.remove(q)?
+    for d in ["deep", ""]
+        fs.remove("{dir}/x/{d}")?
     fs.rename("{dir}/none", "{dir}/y") else err
         print(err)
     gone := fs.metadata("{dir}/none") else err

@@ -7,80 +7,23 @@
 ## Running programs
 
 ```sh
-./ail run FILE.ail                 # check, then run; DIR runs a package
-./ail run FILE.ail a b             # words after FILE: env.args()
-./ail check --json FILE.ail        # diagnostics; each cites a rule ID
-./ail check --budget 500 DIR       # ~500 tokens, errors first, then `--from K`
-./ail build FILE.ail [-o OUT]      # native executable (see Native builds)
-./ail test [--json] FILE.ail       # `@test` functions; exit 0 if all pass
-./ail test --update [--dry-run] FILE.ail  # rewrite stale asserts, `# =>`, FILE.out
-./ail test --coverage[=lines] FILE.ail    # lines/functions run; =lines lists gaps
-./ail run --record r.json FILE.ail # record effects; `--replay r.json` repeats
-./ail run --timeout MS --max-memory MB --max-steps N FILE.ail  # traps run.limit.*
-./ail run --deterministic FILE.ail # deny clock, random, proc, net; one thread
-./ail run --parallel FILE.ail      # pool independent loops; AIL_THREADS=N
-./ail run --seed 42 FILE.ail       # seed std.random
-./ail run --no-bytecode FILE.ail   # tree walker only (the oracle)
-./ail run --deny fs,proc FILE.ail  # reject if main reaches fs or proc (or `all`)
-./ail run --trace FILE.ail         # calls, returns, effects on stderr (=calls, =effects; --trace-limit N)
-./ail run --watch n FILE.ail       # each assignment to `mut` n, with value and position
-./ail run --verbose FILE.ail       # a trap shows every frame (--json: one object)
-./ail effects [--json] FILE.ail    # each function's inferred effects; --parallel: loops
-./ail explain RULE                 # what a rule means, with ADRs and an example
-./ail explain                      # all rules; whether `ail fix` repairs them
-./ail api --text FILE.ail          # declarations and ## docs; `fails_with` lists errors
-./ail check --errors FILE.ail      # JSON: each function's error types and paths
-./ail api --card [--budget N] DIR|FILE  # whole program on one page (default 4,000 tokens)
-./ail api --card --index DIR       # one line per module; then `--module NAME`
-./ail api --type FILE.ail L C      # type at a position (also --locals, --refs)
-./ail api --expanded --text FILE   # code derives generate (ToJson, FromJson, @derive)
-./ail api --tokens FILE.ail        # lexer tokens; --ast: the parse as JSON (--program: with imports)
-./ail fix FILE.ail                 # apply fixes diagnostics carry; --dry-run: diff
-./ail diff OLD NEW                 # what changed by meaning (--rev HEAD FILE: git)
-./ail edit FILE.ail --test <<E     # hunks by declaration: `-old` / `+new`; fmt, check, tests
-./ail edit FILE.ail < E.json       # JSON ops by id: replace_body, replace, insert, delete, rename, import, hunk
-./ail fmt FILE.ail                 # canonical layout (--check: exit 1; --stdout)
-./ail run FILE.ail           # check, then run
-./ail run DIR                # a package: DIR's files are the root module
-./ail run FILE.ail a b       # words after FILE are the program's: env.args()
-./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail build FILE.ail [-o OUT] # native executable (see Native builds below)
-./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
-./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
-./ail run --record r.json FILE.ail      # write every effect's result; `--replay r.json` repeats the run exactly (`ail test --record` keeps failed tests)
-./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
-./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot
-./ail effects [--json] FILE.ail       # each function's inferred effects
-./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
-./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread
-./ail run --parallel FILE.ail      # also pool loops proven independent; AIL_THREADS=N sets the pool size
-./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
-./ail run --no-bytecode FILE.ail     # every function on the tree walker (the oracle), not the bytecode tier
-./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
-./ail explain RULE           # what a rule ID means, with its ADRs and an example
-./ail explain                # all rules, with chapter and whether `ail fix` repairs them
-./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
-./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
-./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
-./ail api --type FILE.ail L C   # type at a position (also --locals, --refs; `ail api DIR` and `--refs DIR FILE L C` cover a whole package)
-./ail api --expanded --text FILE.ail # also the code derives generated (ToJson, FromJson, @derive traits)
-./ail api --tokens FILE.ail  # the lexer's tokens, one per line; --ast: the parse as JSON (--program: with prelude and imports)
-./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
-./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
-./ail check --budget 500 DIR  # any command: ~500 tokens, errors first, then `[budget ...; continue with --from K]`
-./ail diff OLD NEW            # what changed by meaning: declarations, diagnostics, tests (--rev HEAD FILE: against git)
-./ail api --diff OLD NEW       # public API changes by id, `breaking:` marked (--rev HEAD PATH: against git)
-./ail edit FILE.ail --test <<E # hunks by declaration: a line `average`, then `-old` / `+new` lines (one pair: a unique part of a line); `rename f g`; fmt + check + tests
-./ail edit FILE.ail < E.json  # JSON ops by id: replace_body, replace, insert, delete, rename, import, hunk
-./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
-./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N; `ail test --trace` keeps a failing test's)
-./ail run --watch n FILE.ail # each assignment to `mut` variable n (and `push`, `pop`, `xs[i] = e`...), with value and position
-./ail run --verbose FILE.ail # a trap shows every frame's values (default: 10 lines; --json: one object)
+./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
+./ail check [--json] [--budget N [--from K]] FILE|DIR
+./ail build FILE.ail [-o OUT]       # native executable
+./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass
+./ail effects [--json] FILE.ail
+./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
+./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
+./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
+./ail diff OLD NEW                  # what changed by meaning
+./ail edit FILE.ail [--test] < EDITS
+./ail fmt [--check] FILE.ail
 ```
 
+Options for each command are in [semantic-api.md](design/semantic-api.md) and the spec chapter for it (`ail explain` names it).
+
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
-span and, where the fix is obvious, `fixes` to apply by line and column
-([semantic-api.md](design/semantic-api.md)).
+span and, where the fix is obvious, `fixes` to apply by line and column.
 
 `todo` marks code not yet written: it has the expected type; `ail check` warns
 (`expr.hole.1`) and running it traps (`expr.hole.2`).
@@ -105,16 +48,8 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
   `ail build` names the first one it meets (`error[native.subset.1]`).
 - A trap prints the same first line as `ail run` and exits 1.
 - Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
-- An unchanged program rebuilds from a cache in `~/.cache/ail/build` (about 0.03 s
-  instead of 1.5 s); `--no-cache` skips it (native.build.5).
+- An unchanged program rebuilds from `~/.cache/ail/build`; `--no-cache` skips it (native.build.5).
 - Guide: [design/native-guide.md](design/native-guide.md).
-- Covers free functions over numbers, strings, bools and lists: loops, calls,
-  `print`, `join`, `chars`, `env.args()` (native.subset.1). Structs, enums,
-  methods, traits, maps and generics are not built yet; `ail build` names the
-  first one it meets.
-- A trap prints `ail run`'s first line and exits 1. Targets: `--target
-  x86_64-linux`, `aarch64-linux`, `aarch64-macos`. Guide:
-  [design/native-guide.md](design/native-guide.md).
 
 ## Layout
 
@@ -503,17 +438,11 @@ out.push("a")
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
-Also: `xs.insert(i, x)`, `xs.remove_at(i)`, `xs.extend(ys)`, `xs.clear()`, `xs.reverse()`; `xs.pop()`, `xs.first()` and `xs.last()` (give `T?`), `xs.contains(x)`,
-`xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
-(a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
-`xs.sum()` (ints or floats), `xs.take(n)` (the first `n`, or fewer), `xs.chunks(n)` / `xs.windows(n)` (lists of lists), `xs.counts()` (`Map[T, int]`, first-seen order), `xss.flatten()`; `is_empty()` on strings, lists, maps and sets. Slices
-don't clamp, and negative indexes are errors: write `xs[xs.len() - 1]` or
-`xs.last()`.
 Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
 (`int?`, `none` when absent), `sorted()` (copy) and `sort()` (in place), `sum()`
 (ints or floats), `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
-`flatten()`. Slices don't clamp; negative indexes are errors: use `xs.last()`.
+`flatten()`; `is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
 Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
 `max`; stable, so sort by name first, then by count):
@@ -545,27 +474,12 @@ nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 Loop variables end with the comprehension. `?` and `return` leave the function;
 `break` ends the comprehension.
 
-Loops use every core automatically when their iterations are independent:
-no output or capability, no `break`/`return`/`?`, and writes only to the
-iteration's own locals, to `out[i]` in a `for i in a..b` loop, or to an
-`int` total with `+=`. Results are always the same as running in order, so
-float totals use `xs.sum()` (a fixed tree) rather than `+=`. When you know
-the iterations are independent but the checker can't see it (writes to
-`out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
-(it prints, or breaks out) is an error. A parallel map is a comprehension
-with `par for`: `lens := [steps(x) par for x in xs]` (one clause, a list;
-the element must not print, use a handle or write outside itself). To split
-work into parts, map over the part starts:
-`[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()`:
-
-```ail
-fn main()
-    perm := [1, 0]
-    mut out := [0, 0]
-    par for i in 0..2
-        out[perm[i]] = i * 10    # par asserts perm has no repeats
-    print(out)
-```
+Loops use every core automatically when their iterations are independent (no
+output, no `break`/`return`/`?`, writes only to their own locals, to `out[i]`,
+or to an `int` total with `+=`). Float totals use `xs.sum()`. `par for` forces
+a loop the checker can't prove (writes to `out[perm[i]]`); a parallel map is
+`[steps(x) par for x in xs]`, and `[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()`
+splits work into parts.
 
 ## Maps and sets
 
@@ -740,80 +654,40 @@ re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`).
 
 ## Files, processes and the system
 
-Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or
-item with the module's name hides it. Failures are values: `fs.IoError(path, kind)`,
-`proc.ProcError(cmd, kind)` (`kind`: `not_found`, `permission`, `exists`, `is_dir`,
-`not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`), `net.NetError(url, kind, message)`.
-
-```ail norun
-fn main() !
-    text := fs.read_text("in.txt")?          # str ! fs.IoError
-    fs.write_text("out.txt", text)?           # also append_text
-    names := fs.list_dir(".")?                # sorted names
-    srcs := fs.glob("src/**/*.ail")            # also fs.walk(dir)?: every file, sorted
-    r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
-    print("{r.status} {r.out} {r.err}")      # proc.Output
-    print("{r.ok()} {r.text()}")             # status is 0; out then err (std.proc.10)
-    s := proc.run("sort", [], text, 5000)?     # input, then a time limit (kind timed_out)
-    c := proc.start("make", [])?              # returns at once; c.stdin, c.out, c.err are Channel[str]
-    i := task.select([c.out, c.err])          # index of a channel with a value; none when all closed
-    for line in c.out                         # lines as they arrive; ends when the stream does
-        print(line)
-    print(proc.wait(move c)?)                 # status; `kill(move c)` ends it (a unique value)
-```
+Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or item with the module's name hides it. Failures are values: `fs.IoError(path, kind)`, `proc.ProcError(cmd, kind)` (`kind`: `not_found`, `permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`), `net.NetError(url, kind, message)`.
 
 | Module | Functions |
 |---|---|
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
+| `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
+| `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` and `glob` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)` (a directory copies its tree); all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
 | `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)` (`bytes` or `str` in); `gunzip(b)`, `inflate(b)`, `unzlib(b)`: `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)`: `! CompressError`, effects `fs`, `io`; others no effects |
 | `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)` (hex), `crc32(data) int`, `hash64(data) int` (data is `bytes` or `str`) (fast, not secure); no effects |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)` (a directory copies its tree); all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
-| `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `stem(p)` (base without the extension), `join(a, b)`; text only, no effects |
+| `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
-| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`); server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
-| `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }` (quotes, `\r\n`, blank lines skipped), `parse_sep(text, ';')`, `records(text) List[Map[str, str]]` (header row names the keys), `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
+| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError`, `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }`, `stdin.send(text)`, `stdin.close()` |
+| `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
 | `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
 | `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`, `o.connect_ms` and `o.total_ms` (0: no limit); `o.headers["Connection"] = "close"` opens a fresh connection, `"Transfer-Encoding": "chunked"` sends the body in chunks; connections are kept alive and reused); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?` and `j.request(method, url, o)?` send and keep cookies through redirects, `j.header(url)`, `j.set_cookie(url, line)`; server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`, `o.connect_ms` and `o.total_ms` (0: no limit); `o.headers["Connection"] = "close"` opens a fresh connection, `"Transfer-Encoding": "chunked"` sends the body in chunks; connections are kept alive and reused); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?` and `j.request(method, url, o)?` send and keep cookies through redirects, `j.header(url)`, `j.header_from(url, from_page, navigation)` (SameSite), `j.set_cookie(url, line)`; `srv.shutdown()` stops listening and still answers requests under way; server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`, `o.connect_ms` and `o.total_ms` (0: no limit); `o.headers["Connection"] = "close"` opens a fresh connection, `"Transfer-Encoding": "chunked"` sends the body in chunks; connections are kept alive and reused); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?` and `j.request(method, url, o)?` send and keep cookies through redirects, `j.header(url)`, `j.header_from(url, from_page, navigation)` (SameSite), `j.set_cookie(url, line)`; `b := net.open(method, url, o)?` reads a body in pieces (`b.status`, `b.headers`, `b.read_bytes(max)?` gives no bytes at the end, `b.close()`); `srv.shutdown()` stops listening and still answers requests under way; server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`, `o.connect_ms` and `o.total_ms` (0: no limit); `o.headers["Connection"] = "close"` opens a fresh connection, `"Transfer-Encoding": "chunked"` sends the body in chunks; connections are kept alive and reused); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?` and `j.request(method, url, o)?` send and keep cookies through redirects, `j.header(url)`, `j.header_from(url, from_page, navigation)` (SameSite), `j.set_cookie(url, line)`; gzip and deflate responses are decoded for you unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` reads a body in pieces (`b.status`, `b.headers`, `b.read_bytes(max)?` gives no bytes at the end, `b.close()`); `srv.shutdown()` stops listening and still answers requests under way; server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
-| `std.compress` | `gzip`, `deflate`, `zlib` (`bytes` or `str` in, `bytes` out); `gunzip`, `inflate`, `unzlib`: `! compress.CompressError { kind, message }`; `gzip_file`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` (effects `fs`, `io`); others have no effects |
-| `std.hash` | `sha256`, `sha384`, `sha512` (hex `str`); `hmac_sha256(key, data)` (hex); `crc32(data) int`; `hash64(data) int` (`bytes` or `str`; fast, not secure); no effects |
-| `std.fs` | `read_text`, `write_text`, `append_text` (`str`); `read_bytes`, `write_bytes`, `append_bytes` (`bytes`); `exists(p) bool`; `list_dir(p)` (sorted); `remove(p)` (file or empty dir); `make_dir(p)` (with parents); `walk(dir)` (files, any depth); `metadata(p)` (`size`, `modified_ms`, `is_dir`); `rename`, `copy`. All but `exists` are `! fs.IoError`. `glob(pat)` (`*` `?` `**`) never fails |
-| `std.env` | `args()`, `get(name) str?`, `vars() Map[str, str]`, `cwd()`, `program()`, `home() str?` |
-| `std.path` | `dir(p)` (`.` if none), `base`, `ext` (no dot), `join`; text only |
-| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! ProcError` (`status`, `out`, `err`); `run_bytes` (`RawOutput`, `bytes`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! ProcError` (`pid`, `stdin`, `out`, `err`; `stdin.send(text)`, `stdin.close()`); `wait(move c) int ! ProcError` (`timed_out`); `kill(move c) int` |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError` (`status`, `headers`, `body`; any status succeeds; `http://`, `https://` with TLS 1.3, failures kind `tls`); `get_bytes`, `post_bytes`, `request_bytes(method, url, opts)` (`net.RawResponse`: `status`, `headers`, `data`); `request(method, url, opts)` with `mut o := net.options()` (`headers`, `query`, `body`, `data`, `timeout_ms`, `max_redirects`); server: `net.serve(addr)?` (`addr()`, `close()`), `srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`, `data`), `ex.respond(net.Response(...))?`, `ex.respond_bytes(200, {}, data)?`; workers via `spawn`; raw TCP: `net.listen`, `net.connect`, `net.connect_tls`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]`; handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
-| `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }` (quotes, `\r\n`, blank lines skipped); `parse_sep(text, ';')`; `records(text) List[Map[str, str]]` (header names the keys); `write(rows)`; `write_records(header, recs)`; `quote(f)` |
-| `std.args` | `use std.args`; specs `args.flag(name, short, help)`, `args.opt(name, short, help, default)`, `args.pos(name, help)`, `args.rest(name, help)`; `a := args.parse(tool, about, specs, env.args())?` (`ArgsError { why, usage }`); `a.flag`, `a.get`, `a.rest`; `--help` prints usage, exits 0; `--out=V`, `-o V`, `--` |
-| `std.log` | `use std.log`; `debug`, `info`, `warn`, `err` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
+| `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
+| `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }` (quotes, `\r\n`, blank lines skipped), `parse_sep(text, ';')`, `records(text) List[Map[str, str]]` (header row names the keys), `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`, `o.connect_ms` and `o.total_ms` (0: no limit); `o.headers["Connection"] = "close"` opens a fresh connection, `"Transfer-Encoding": "chunked"` sends the body in chunks; connections are kept alive and reused); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?` and `j.request(method, url, o)?` send and keep cookies through redirects, `j.header(url)`, `j.header_from(url, from_page, navigation)` (SameSite), `j.set_cookie(url, line)`; gzip and deflate responses are decoded for you unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` reads a body in pieces (`b.status`, `b.headers`, `b.read_bytes(max)?` gives no bytes at the end, `b.close()`); `srv.shutdown()` stops listening and still answers requests under way; server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response`; `r.stop()` in a handler ends the server after its answer; `http.serve_dir(addr, dir)` / `http.run_dir(srv, dir)` serve files |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
-| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), linear time, no backreferences or lookaround; offsets in characters; write patterns as `r"..."` |
-| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `[]` for 1-D, read with `item()`), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; RE2 syntax (`\d`, `\p{L}`, `(?i)`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |
+| `std.tensor` | `from(xs)`, `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side; `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()` (float); `transpose()`, `matmul(b)`, `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap |
+| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b` (elementwise, or with a scalar on either side: `t * 2.0`); methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); the next seven are also methods: `re.is_match(s)` is `is_match(re, s)`; `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), linear time, no backreferences or lookaround; offsets in characters; write patterns as `r"..."` |
+| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t` (a chain of elementwise operators runs in one pass, same results); methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `t[i]` (rows; `[]` for 1-D, read with `item()`), `t[lo..hi]` (rows); `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
-| `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)` (offset required), `date.parse_in(text, zone)`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); zones `"UTC"`, `"+05:30"`, `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)` (months clamp), `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format("%Y-%m-%d %H:%M:%S %z")` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
-| `std.tz` | `offset(zone, secs) int?` (none for an unknown zone), `system() str`; effects `fs`, `env` |
-| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size()`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(..., ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar|Block|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers()`, `set_font_size(px)` (10 to 40), `font_size()`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`, `ORANGE`, `RED`, `WHITE`, `YELLOW` |
+| `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)`, `date.parse_in(text, zone)`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); zones `"UTC"`, `"+05:30"`, `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)`, `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format(p)` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
+| `std.tz` | `offset(zone, secs) int?`, `system() str`; effects `fs`, `env` |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size()`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(..., ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar\|Block\|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers()`, `set_font_size(px)` (10 to 40), `font_size()`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.RED` and nine others |
 | `std.ui.widgets` | `TextField`, `ListView` (fuzzy `filter`), `Button`, `Dialog`, `Pane`, `Tree`: `render(rect, theme) List[widgets.Run]`, `draw(mut w, rect, theme)`, `on_event(ev[, rect]) widgets.Action` (`Ignored`, `Changed`, `Submit`, `Cancel`); `widgets.Rect(col, row, cols, rows)`; `text_rows(runs, cols, rows)` prints a screen headless |
-
-A window is a grid of text cells: `put`, then `present`:
-
-```ail
-fn main()
-    mut w := ui.open("Demo", 40, 10) else return   # fails headless: kind "no_display"
-    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)
-    w.present()
-    while true
-        match w.next_event()
-            Key(key, ctrl, _, _) =>                # "a", "enter", "f1"; Ctrl-S is ("s", true)
-                if key == "escape"
-                    break
-            Close => break
-            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
-```
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; `http://` and `https://` (TLS 1.3, system roots or `SSL_CERT_FILE`; kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data`, `o.timeout_ms`, `o.max_redirects`, `o.connect_ms`, `o.total_ms`; `o.headers["Connection"] = "close"` opens a fresh connection; `"Transfer-Encoding": "chunked"` sends chunks; connections are kept alive); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?`, `j.request(method, url, o)?`, `j.header(url)`, `j.header_from(url, from_page, navigation)`, `j.set_cookie(url, line)`, `j.store(url, r)`, `j.value(url, name)`; gzip and deflate are decoded unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` (`net.Body`: `status`, `headers`, `read_bytes(max)?`, `close()`); server: `srv := net.serve(addr)?` (`addr()`, `close()`, `shutdown()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (repeated headers, e.g. `set-cookie`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
 
 ## Tests and assertions
 
@@ -831,11 +705,6 @@ A test with parameters is a **property**: `ail test` runs generated inputs
 (`--cases N`, default 100; `--seed S` replays) and shrinks a failure to the
 smallest input. Parameters: `int`, `float`, `bool`, `char`, `str`, `List`, `Map`,
 `Set`, optionals, and structs and enums of those.
-
-```ail fragment
-@test fn add_commutes(a int, b int)
-    assert_eq(a + b, b + a)
-```
 
 A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
 `# => text` after a `print` asserts its output:

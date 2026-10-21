@@ -298,3 +298,76 @@ and the rewritten copy as the root module's only file, so its `use` lines
 resolve. A package that has a dependency (`dep NAME path DIR`) isn't staged
 yet: the dependency's own imports resolve against the wrong root, and its tests
 are reported as not in the native subset yet. *(ADR 0679)*
+
+## Checked examples for the native rules
+
+Each block runs `ail test --native` or `ail build` with the options on its fence. The rules below have no observable output the harness can check (a Windows image, the cache, a backend fault, a package staging run), so their blocks are `norun`: checked, not run (native.build.2, native.build.4, native.build.5, native.test.5).
+
+```ail tool=test,--native,FILE expect=match rules=native.str.1,native.test.1
+@test fn strings()
+    s := "hello"
+    assert(s.len() == 5)
+    assert("{3:>4}" == "   3")
+    assert("ab" < "b")
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--native,FILE expect=assertion rules=native.test.2
+@test fn wrong()
+    assert(1 == 2)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--native,FILE expect=not-native rules=native.test.3
+fn first[T](xs List[T]) T
+    xs[0]
+
+@test fn picks()
+    assert(first([1, 2]) == 1)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--native,--json,FILE expect=summary rules=native.test.4
+@test fn strings()
+    s := "hello"
+    assert(s.len() == 5)
+    assert("{3:>4}" == "   3")
+    assert("ab" < "b")
+
+fn main()
+    print("ok")
+```
+
+```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
+fn first[T](xs List[T]) T
+    xs[0]
+
+fn main()
+    print(first([1, 2]))
+```
+
+```ail norun rules=native.build.2
+fn main()
+    print("ok")
+```
+
+```ail norun rules=native.build.4
+fn main()
+    print("ok")
+```
+
+```ail norun rules=native.build.5
+fn main()
+    print("ok")
+```
+
+```ail norun rules=native.test.5
+fn main()
+    print("ok")
+```

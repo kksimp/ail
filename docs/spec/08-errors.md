@@ -112,6 +112,9 @@ Inferred error sets (`err.type.2`, and bare `!`) are permitted only for
 functions that are not part of the package's public API. *(ADR 0046,
 ADR 0139)*
 
+```ail fixture=packages/pub_inferred_errors rules=err.type.3
+```
+
 **err.type.4** — An inferred error set is a closed union. Matching on it MUST
 be checked for exhaustiveness. *(ADR 0046)*
 

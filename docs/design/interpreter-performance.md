@@ -427,3 +427,13 @@ To settle it, time `examples/build.ail` on a quiet machine (the designer's Mac g
 or `tools/bench/run.sh` with wall and user time both recorded), at main and at the
 batch head, and compare the counters. If the 2x returns on a quiet machine, bisect
 again with `git bisect` on buildable commits only.
+See also the [flat enum and struct value proposal](flat-enum-struct-value.md) (measured ceiling about 11% on json_roundtrip, none on binarytrees).
+## Lane 190 step 3 (ADR 0620)
+`ps[i].step(dt)` (a `mut self` method on a list element) is one instruction
+that moves the element into the call and back; field `op=` on `self` and an
+`else` nested in a receiver no longer hand off. The struct benchmark went from
+0.132 s to 0.096 s (CPython 0.075 s) with 0 hand-offs. Calls through deeper
+places (`a.b[i].m()`) and `ref` cells still run on the walker.
+
+Step 3b (ADR 0620): `mut self` calls on a field path of a local and calls through a
+function-value local run on the tier too (0 hand-offs in a loop doing both).

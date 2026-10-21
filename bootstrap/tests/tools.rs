@@ -303,3 +303,27 @@ fn garlic_js_parses_and_runs_its_suites() {
         assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
     }
 }
+
+/// Garlic fetches pages from `http.serve_dir` (http.serve.2): the files of
+/// `tools/garlic/testdata` served by one AIL program, read by another.
+#[test]
+fn garlic_reads_a_page_from_serve_dir() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let mut server = ail().args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()]).current_dir(&root).spawn().unwrap();
+    let url = format!("http://{free}/index.html");
+    let garlic = tool("tools/garlic/garlic.ail");
+    // The server needs a moment to bind; Garlic reports a refused connection.
+    let mut text = String::new();
+    for _ in 0..50 {
+        let out = ail().args(["run", &garlic, "--width", "60", "--print", &url]).output().unwrap();
+        text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() && text.contains("# Garlic") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    server.kill().unwrap();
+    server.wait().unwrap();
+    assert!(text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n"), "garlic over serve_dir:\n{text}");
+}

@@ -1306,6 +1306,15 @@ impl Parser {
                 self.diags.push(d);
                 None
             }
+            Tok::Kw(k) if matches!(self.peek_at(1), Tok::Sym(":=")) && NOT_YET.iter().all(|(n, _)| *n != k) => {
+                self.error_help(
+                    "lex.kw.1",
+                    pos,
+                    format!("`{k}` is a keyword and can't be used as a name"),
+                    "choose a different name",
+                );
+                None
+            }
             Tok::Kw("while") => {
                 self.bump();
                 let cond = self.range()?;
@@ -1344,15 +1353,6 @@ impl Parser {
                 } else {
                     Some(Stmt::Return(Some(self.expression()?), pos))
                 }
-            }
-            Tok::Kw(k) if matches!(self.peek_at(1), Tok::Sym(":=")) && NOT_YET.iter().all(|(n, _)| *n != k) => {
-                self.error_help(
-                    "lex.kw.1",
-                    pos,
-                    format!("`{k}` is a keyword and can't be used as a name"),
-                    "choose a different name",
-                );
-                None
             }
             Tok::Kw(k @ ("elif" | "else")) => {
                 self.error_help(

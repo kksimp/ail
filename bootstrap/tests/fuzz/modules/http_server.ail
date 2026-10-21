@@ -1,4 +1,5 @@
 # fuzz-input: http
+# fuzz-net: yes
 # fuzz-needs: std.net
 # net.serve fed raw hostile requests over a socket: a malformed request is refused with an
 # error or a 4xx, never a crash or a hang; the server then still serves a good request.

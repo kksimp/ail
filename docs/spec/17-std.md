@@ -118,10 +118,14 @@ are followed. *(ADR 0281)*
 directory, replacing a file at `to`. *(ADR 0281)*
 
 **std.fs.12** — `copy(from str, to str) ! IoError` copies the file `from`
-to `to`, replacing a file there. A directory `from` fails with `is_dir`;
-nothing copies a tree. For `rename` and `copy`, a failure's `path` is
-`from` when `from` is missing (or, for `copy`, a directory), else `to`.
-*(ADR 0281)*
+to `to`, replacing a file there. When `from` is a directory, `copy` copies
+the tree: `to` and its parents are made when missing, files already there are
+replaced, other files there are kept, and entries are copied in name order.
+A symbolic link is copied as the file it points to; a link to a directory
+fails with `other` at that path, and so does copying a directory into itself.
+A file at `to` fails with `exists`. For `rename` and `copy`, a failure's
+`path` is `from` when `from` is missing, else the path that failed.
+*(ADR 0281, ADR 0751)*
 
 **std.fs.13** — `read_bytes(path str) bytes ! IoError` reads the whole file
 as `bytes`, whatever it holds. It fails as `read_text` does, and never because
@@ -734,8 +738,9 @@ library's (Winsock); the code uses nothing else, and it is untested there
   stays a `str`, the same bytes with each invalid UTF-8 sequence as U+FFFD.
 - `Options` has a last field `data bytes`, empty from `options()`. A request
   sends `data` as its body when it isn't empty, and `body` otherwise.
-- `Request` has a last field `data bytes`: the body the server received, as
-  it arrived (`body` is its lossy text).
+- `Request` has a field `data bytes`: the body the server received, as
+  it arrived (`body` is its lossy text), and a last field `server int`, the
+  handle `req.stop()` uses (`http.serve.1`).
 - `ex.respond_bytes(status int, headers Map[str, str], data bytes) !
   NetError` answers an `Exchange` with `data` as the body; it checks the
   status and headers as `respond` does.

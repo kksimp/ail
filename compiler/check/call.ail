@@ -878,6 +878,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
             if tn := sn.strip_prefix("net.")
                 if t := net_method(recv, tn, n, at, args, expect)
                     return t
+            if sn == "regex.Regex"
+                return regex_method(recv, n, at, args, expect)
             if sn == "tensor.Tensor"
                 return tensor_method(recv, rt, n, at, args, expect)
             if sn == "proc.Output"

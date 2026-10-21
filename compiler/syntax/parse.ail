@@ -1043,6 +1043,9 @@ fn Parser.statement_inner(mut self) ast.Stmt?
     if tag == "id" and (text == "let" or text == "var" or text == "const") and tag_at(1) == "id"
         diag("expr.bind.1", pos)
         return none
+    if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
+        diag("lex.kw.1", pos)
+        return none
     if tag == "kw" and text == "while"
         bump()
         cond := range()?
@@ -1077,9 +1080,6 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             return ast.Stmt.Return(value: none, pos: pos)
         value := expression()?
         return ast.Stmt.Return(value: value, pos: pos)
-    if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
-        diag("lex.kw.1", pos)
-        return none
     if tag == "kw" and (text == "elif" or text == "else")
         diag("expr.if.1", pos)
         return none

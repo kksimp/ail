@@ -1,0 +1,12 @@
+## std.regex.25: methods on a compiled regex equal the functions.
+fn main() !
+    re := regex.compile(r"(\d+)-(\d+)")?
+    print(re.is_match("call 12-34 now"))
+    print(re.find("call 12-34 now")?.text)
+    print(re.find_all("1-2 and 3-4").len())
+    c := re.captures("x 5-6") else return
+    print(c.groups)
+    print(re.replace("1-2 and 3-4", "$2-$1"))
+    print(re.replace_first("1-2 and 3-4", "<>"))
+    print(re.split("a1-2b3-4c"))
+    print(regex.is_match(re, "9-9") == re.is_match("9-9"))

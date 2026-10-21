@@ -233,6 +233,20 @@ enum Ins<'a> {
         t: u32,
         pos: Pos,
     },
+    /// Before the arguments of an `FnCall`: jumps to `t` (the walker's call) unless the local
+    /// holds a function value of `n` plain parameters (type.fn.3).
+    FnGuard {
+        slot: u32,
+        n: u32,
+        t: u32,
+    },
+    /// A call through the function value in a local, after `FnGuard` allowed it.
+    FnCall {
+        slot: u32,
+        dst: Opnd,
+        args: u32,
+        pos: Pos,
+    },
     /// A call of a function with no `mut` parameters; its arguments are in
     /// the registers from `args`.
     Call {
@@ -459,6 +473,27 @@ enum Ins<'a> {
         e: &'a Expr,
         dst: Opnd,
         exit: u32,
+    },
+    /// `xs[i].name(args)` where `name` takes `mut self`: when `xs` is a list local, `i` is in range
+    /// and the element is a struct with such a method, the element moves into the call and back
+    /// (type.val.4); anything else is the walker's call (ADR 0620).
+    ElemCall {
+        slot: u32,
+        ix: Opnd,
+        args: u32,
+        dst: Opnd,
+        pos: Pos,
+        check: u32,
+    },
+    /// Before the arguments of an `ElemCall`: the walker evaluates the receiver first, so the
+    /// index is checked here. Jumps to `t` (the walker's call) unless the call can run on the tier.
+    ElemGuard {
+        slot: u32,
+        ix: Opnd,
+        name: &'a str,
+        n: u32,
+        t: u32,
+        cache: Cell<Option<(usize, &'a FnDecl)>>,
     },
     /// The walker's `hit` before a statement or a `while` turn, with run
     /// limits or coverage on (run.limit.1-3, test.cover.1).
@@ -823,6 +858,17 @@ enum Built {
 /// Whether an expression has a `?`: inside `e else ...` one that finds
 /// `none` makes the whole value `none` (err.prop.4), which the walker's
 /// `else_value` handles.
+/// An index expression that may be evaluated twice: names, literals, arithmetic on them and `xs.len()`.
+fn pure_index(e: &Expr, _scope: &[&str]) -> bool {
+    match e {
+        Expr::Int(..) | Expr::Name(..) => true,
+        Expr::Binary { lhs, rhs, .. } => pure_index(lhs, _scope) && pure_index(rhs, _scope),
+        Expr::Unary { operand, .. } => pure_index(operand, _scope),
+        Expr::Method { recv, name, args, .. } => name == "len" && args.is_empty() && matches!(**recv, Expr::Name(..)),
+        _ => false,
+    }
+}
+
 fn has_try(e: &Expr) -> bool {
     match e {
         Expr::Try { .. } => true,
@@ -937,6 +983,8 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             | Ins::ListFast { done: x, .. }
             | Ins::NumFast { done: x, .. }
             | Ins::MethodGuard { t: x, .. }
+            | Ins::ElemGuard { t: x, .. }
+            | Ins::FnGuard { t: x, .. }
             | Ins::TraitGuard { t: x, .. }
             | Ins::ElseTest { t: x, .. }
             | Ins::IfNotStruct { t: x, .. }
@@ -1309,6 +1357,30 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             if let Some((what, fields)) = built {
                 return self.build(what, fields, args, dst);
             }
+        }
+        // type.fn.3: a call through a local holding a function value.
+        if let Some(ls) = self.local(n)
+            && !it.resolved.fn_values.is_empty()
+            && it.tracing & trace::WATCH == 0
+            && !matches!(callee, Expr::TypeArgs { .. })
+            && args.iter().all(|a| {
+                a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &it.resolved.moves)
+            })
+        {
+            let guard = self.emit(Ins::FnGuard { slot: ls, n: args.len() as u32, t: 0 });
+            let first = self.next_reg;
+            let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+            for (a, r) in args.iter().zip(regs) {
+                self.expr_to(&a.value, r);
+            }
+            self.emit(Ins::FnCall { slot: ls, dst, args: first, pos: callee.pos() });
+            let j = self.emit(Ins::Jump(0));
+            let general = self.here();
+            self.patch(guard, general);
+            self.delegate(e, dst);
+            let end = self.here();
+            self.patch(j, end);
+            return;
         }
         let plain = !matches!(
             n.as_str(),
@@ -1741,6 +1813,39 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             Expr::Name(n, p) if !r.moves.contains_key(p) => self.local(n),
             _ => None,
         };
+        // `xs[i].name(args)` with a `mut self` method: one instruction, the walker's call when it can't run.
+        if self.it.mutating.contains(name)
+            && path.is_empty()
+            && slot.is_none()
+            && self.it.tracing & trace::WATCH == 0
+            && let Expr::Index { recv: ir, index, .. } = recv
+            && let Expr::Name(ln, lp) = &**ir
+            && let Some(ls) = self.local(ln)
+            && !r.moves.contains_key(lp)
+            && !r.calls.contains_key(&pos)
+            && !r.assoc_calls.contains_key(&pos)
+            && !r.std_calls.contains_key(&pos)
+            && !r.type_args.contains_key(&pos)
+            && pure_index(index, &self.scope)
+            && args.iter().all(|a| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &r.moves))
+        {
+            let ix = self.reg();
+            self.expr_to(index, ix);
+            let guard = self.emit(Ins::ElemGuard { slot: ls, ix, name, n: args.len() as u32, t: 0, cache: Cell::new(None) });
+            let first = self.next_reg;
+            let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+            for (a, r) in args.iter().zip(regs) {
+                self.expr_to(&a.value, r);
+            }
+            self.emit(Ins::ElemCall { slot: ls, ix, args: first, dst, pos, check: guard });
+            let j = self.emit(Ins::Jump(0));
+            let general = self.here();
+            self.patch(guard, general);
+            self.delegate(e, dst);
+            let end = self.here();
+            self.patch(j, end);
+            return;
+        }
         // Any other receiver of a method that doesn't mutate it is evaluated
         // here, and the guard's fallback hands the walker its value.
         let mutating = self.it.mutating.contains(name);
@@ -2116,24 +2221,34 @@ impl<'a, W: Write> Interp<'a, W> {
         Some(v)
     }
 
+    /// The field of the local at `at` that `path` names, for a `mut self` receiver to move out of and back into.
+    fn place_mut<'e>(&self, env: &'e mut Env<'a>, at: usize, path: &[&str]) -> &'e mut Value {
+        let mut v = &mut env[at].1;
+        for name in path {
+            let Value::Struct(s, fields) = v else { unreachable!("checked by the guard") };
+            v = &mut Rc::make_mut(fields)[self.field_index(*s, name)];
+        }
+        v
+    }
+
     /// The user method a receiver of this type calls, when the tier can run it.
-    fn user_method(&self, is_enum: bool, index: usize, name: &str, path_len: usize) -> Option<&'a FnDecl> {
+    fn user_method(&self, is_enum: bool, index: usize, name: &str, place: bool) -> Option<&'a FnDecl> {
         let prog = self.prog;
         let type_name = if is_enum { &prog.enums[index].name } else { &prog.structs[index].name };
         let f = *self.methods.get(type_name.as_str())?.get(name)?;
-        let ok = f.params.iter().all(|p| !p.mutable) && (path_len == 0 || f.receiver.is_none_or(|r| !r.mutable));
+        let ok = f.params.iter().all(|p| !p.mutable) && (place || f.receiver.is_none_or(|r| !r.mutable));
         ok.then_some(f)
     }
 
     /// Whether `MethodRun` can make this call (ADR 0363), keeping the user
     /// method it calls in `cache`. A receiver that isn't a local's place
-    /// can't take `mut self`, so it counts as a path.
+    /// can't take `mut self`.
     #[inline]
     fn method_allowed(
         &self,
         recv: Option<&Value>,
         name: &str,
-        path_len: usize,
+        place: bool,
         cache: &Cell<Option<(bool, usize, &'a FnDecl)>>,
     ) -> bool {
         let (is_enum, index) = match recv {
@@ -2148,7 +2263,7 @@ impl<'a, W: Write> Interp<'a, W> {
         {
             return true;
         }
-        match self.user_method(is_enum, index, name, path_len) {
+        match self.user_method(is_enum, index, name, place) {
             Some(f) => {
                 cache.set(Some((is_enum, index, f)));
                 true
@@ -2255,11 +2370,11 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     // trait.method.3: a `mut self` receiver moves into the call and back.
                     if moved {
-                        callee[0].1 = std::mem::replace(&mut env[at].1, Value::Unit);
+                        callee[0].1 = std::mem::replace(self.place_mut(env, at, path), Value::Unit);
                     }
                     let result = self.run_body(f, &mut callee, *pos)?;
                     if moved {
-                        env[at].1 = std::mem::replace(&mut callee[0].1, Value::Unit);
+                        *self.place_mut(env, at, path) = std::mem::replace(&mut callee[0].1, Value::Unit);
                     }
                     callee.clear();
                     self.env_pool.push(callee);
@@ -2905,6 +3020,67 @@ match {
     }
 
     #[inline(never)]
+    fn op_elemcall(
+        &mut self,
+        code: &Code<'a>,
+        ins: &Ins<'a>,
+        env: &mut Env<'a>,
+        base: usize,
+        regs: &mut [Value],
+        pc: usize,
+    ) -> Flow<usize> {
+        let Ins::ElemCall { slot, ix, args, dst, pos, check } = ins else { unreachable!("ElemCall") };
+        let Ins::ElemGuard { cache, .. } = &code.ins[*check as usize] else { unreachable!("a guard") };
+        let Some((i, f)) = cache.get() else { unreachable!("set by the guard") };
+        let at = base + *slot as usize;
+        let first = *args as usize;
+        assign(&mut regs[(*ix & !KIND) as usize], Value::Unit);
+        let Value::List(items) = &mut env[at].1 else { unreachable!("checked by the guard") };
+        let me = std::mem::replace(&mut Rc::make_mut(items)[i], Value::Unit);
+        let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+        callee.push(("self", me));
+        for (k, p) in f.params.iter().enumerate() {
+            callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
+        }
+        let result = self.run_body(f, &mut callee, *pos)?;
+        if let Value::List(items) = &mut env[at].1 {
+            Rc::make_mut(items)[i] = std::mem::replace(&mut callee[0].1, Value::Unit);
+        }
+        callee.clear();
+        self.env_pool.push(callee);
+        put(*dst, result, env, base, regs);
+        Ok(pc + 1)
+    }
+
+    #[inline(never)]
+    fn op_elemguard(&mut self, ins: &Ins<'a>, env: &Env<'a>, base: usize, regs: &mut [Value], pc: usize) -> usize {
+        let Ins::ElemGuard { slot, ix, name, n, t, cache } = ins else { unreachable!("ElemGuard") };
+        let found = match (&env[base + *slot as usize].1, &regs[(*ix & !KIND) as usize]) {
+            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
+                Some((i, Value::Struct(s, _))) => self
+                    .methods
+                    .get(self.prog.structs[*s].name.as_str())
+                    .and_then(|m| m.get(*name))
+                    .copied()
+                    .filter(|f| {
+                        f.receiver.is_some_and(|r| r.mutable)
+                            && f.params.len() == *n as usize
+                            && f.params.iter().all(|p| !p.mutable)
+                    })
+                    .map(|f| (i, f)),
+                _ => None,
+            },
+            _ => None,
+        };
+        cache.set(found);
+        if found.is_some() {
+            pc + 1
+        } else {
+            *t as usize
+        }
+    }
+
+    #[inline(never)]
     #[allow(unused_variables, unused_mut, unused_macros)]
     fn op_expr(
         &mut self,
@@ -3163,6 +3339,34 @@ match {
                 }
                 Ins::Neg { .. } => {
                     pc = self.op_neg(code, ins, env, base, regs, pc)?;
+                }
+                Ins::FnGuard { slot, n, t } => {
+                    pc = match &env[base + *slot as usize].1 {
+                        Value::Fn(fi)
+                            if self.tracing == 0
+                                && let d = &self.prog.fns[*fi]
+                                && d.receiver.is_none()
+                                && d.params.len() == *n as usize
+                                && d.params.iter().all(|p| !p.mutable) =>
+                        {
+                            pc + 1
+                        }
+                        _ => *t as usize,
+                    };
+                }
+                Ins::FnCall { slot, dst, args, pos } => {
+                    pc += 1;
+                    let Value::Fn(fi) = env[base + *slot as usize].1 else { unreachable!("checked by the guard") };
+                    let f = &self.prog.fns[fi];
+                    let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                    for (k, p) in f.params.iter().enumerate() {
+                        let v = std::mem::replace(&mut regs[*args as usize + k], Value::Unit);
+                        callee.push((p.name.as_str(), v));
+                    }
+                    let result = self.run_call(f, &std::cell::OnceCell::new(), &mut callee, *pos)?;
+                    callee.clear();
+                    self.env_pool.push(callee);
+                    put(*dst, result, env, base, regs);
                 }
                 Ins::Call { f, dst, args, pos, code: cc } => {
                     pc += 1;
@@ -3467,9 +3671,9 @@ match {
                         continue;
                     }
                     let ok = if *recv & KIND == LOCAL {
-                        self.method_allowed(self.recv_at(env, base + *recv as usize, path), name, path.len(), cache)
+                        self.method_allowed(self.recv_at(env, base + *recv as usize, path), name, true, cache)
                     } else {
-                        self.method_allowed(Some(get!(*recv)), name, 1, cache)
+                        self.method_allowed(Some(get!(*recv)), name, false, cache)
                     };
                     pc = if ok { pc + 1 } else { *t as usize };
                 }
@@ -3485,6 +3689,12 @@ match {
                 }
                 Ins::MethodOn { .. } => {
                     pc = self.op_methodon(code, ins, env, base, regs, pc)?;
+                }
+                Ins::ElemGuard { .. } => {
+                    pc = self.op_elemguard(ins, env, base, regs, pc);
+                }
+                Ins::ElemCall { .. } => {
+                    pc = self.op_elemcall(code, ins, env, base, regs, pc)?;
                 }
                 Ins::Expr { .. } => {
                     pc = self.op_expr(code, ins, env, base, regs, pc)?;
