@@ -1,6 +1,6 @@
 {
  "date": "2026-10-21",
- "commit": "1832f8f6",
+ "commit": "c3172c65",
  "programs": [
   {
    "file": "bootstrap/tests/cases/absent_try.ail",
@@ -319,6 +319,17 @@
    "negative": true
   },
   {
+   "file": "bootstrap/tests/cases/bytes_hex_sep.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `bytes` literals"
+   ],
+   "first": "not in the native subset yet: `bytes` literals",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
    "file": "bootstrap/tests/cases/bytes_lex_errors.ail",
    "status": "check-rejected",
    "problems": [],
@@ -442,7 +453,9 @@
     "not in the native subset yet: set comprehensions",
     "not in the native subset yet: map comprehensions",
     "not in the native subset yet: a comprehension whose element type isn't known",
-    "not in the native subset yet: `bytes` literals"
+    "not in the native subset yet: `bytes` literals",
+    "not in the native subset yet: map comprehensions",
+    "not in the native subset yet: a comprehension whose element type isn't known"
    ],
    "first": "not in the native subset yet: set comprehensions",
    "detail": "",
@@ -2690,11 +2703,10 @@
    "file": "bootstrap/tests/cases/fuzz_csv_blank_row.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `?` on a `List[List[str]]`",
     "`records`: its result type isn't in the native subset yet",
     "parameter `recs`: its type isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: `?` on a `List[List[str]]`",
+   "first": "`records`: its result type isn't in the native subset yet",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3052,6 +3064,26 @@
     "not in the native subset yet: this expression"
    ],
    "first": "not in the native subset yet: this expression",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/json_load_print.ail",
+   "status": "not-subset",
+   "problems": [
+    "`load_json` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: calling `print_json`",
+    "not in the native subset yet: calling `print_json`",
+    "not in the native subset yet: calling `print_json`",
+    "`load_json` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: calling `print_json`",
+    "`load_json` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: calling `print_json`",
+    "`load_json` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: calling `print_json`"
+   ],
+   "first": "`load_json` isn't in the native subset yet (only locals, parameters and constants)",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3891,6 +3923,17 @@
   },
   {
    "file": "bootstrap/tests/cases/mem_alloc_negative.ail",
+   "status": "not-subset",
+   "problems": [
+    "`unsafe` blocks aren't in the native subset yet"
+   ],
+   "first": "`unsafe` blocks aren't in the native subset yet",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/mem_cast.ail",
    "status": "not-subset",
    "problems": [
     "`unsafe` blocks aren't in the native subset yet"
@@ -4761,22 +4804,18 @@
   },
   {
    "file": "bootstrap/tests/cases/std_args.ail",
-   "status": "not-subset",
-   "problems": [
-    "`else` on a `std.args.Args`, which is neither optional nor can fail"
-   ],
-   "first": "`else` on a `std.args.Args`, which is neither optional nor can fail",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_args_errors.ail",
-   "status": "not-subset",
-   "problems": [
-    "`else` on a `std.args.Args`, which is neither optional nor can fail"
-   ],
-   "first": "`else` on a `std.args.Args`, which is neither optional nor can fail",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4850,17 +4889,10 @@
    "file": "bootstrap/tests/cases/std_csv.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `?` on a `List[List[str]]`",
-    "not in the native subset yet: `?` on a `List[List[str]]`",
-    "not in the native subset yet: `?` on a `List[List[str]]`",
-    "not in the native subset yet: `?` on a `List[List[str]]`",
-    "not in the native subset yet: `?` on a `List[List[str]]`",
-    "not in the native subset yet: `?` on a `List[List[str]]`",
-    "`else` on a `List[List[str]]`, which is neither optional nor can fail",
     "`records`: its result type isn't in the native subset yet",
     "parameter `recs`: its type isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: `?` on a `List[List[str]]`",
+   "first": "`records`: its result type isn't in the native subset yet",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4869,44 +4901,16 @@
    "file": "bootstrap/tests/cases/std_date.ail",
    "status": "not-subset",
    "problems": [
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
     "not in the native subset yet: printing a `std.time.date.Date?`",
     "not in the native subset yet: printing a `std.time.date.Date?`",
     "`<` on `std.time.date.Date` isn't in the native subset yet",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
-    "`else` on a `std.time.date.Date`, which is neither optional nor can fail",
+    "not in the native subset yet: printing a `std.time.date.Date`",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "returning an error from a function that can't fail",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`"
+    "not in the native subset yet: `.to_int()` on `str`"
    ],
-   "first": "`else` on a `std.time.date.DateTime`, which is neither optional nor can fail",
+   "first": "not in the native subset yet: printing a `std.time.date.Date?`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4917,28 +4921,8 @@
    "problems": [
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "returning an error from a function that can't fail",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`"
+    "not in the native subset yet: `.to_int()` on `str`"
    ],
    "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
@@ -5090,6 +5074,18 @@
    "status": "built-match",
    "problems": [],
    "first": "",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/std_io_read_bytes.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `io.read_bytes`",
+    "not in the native subset yet: `io.read_bytes`"
+   ],
+   "first": "not in the native subset yet: `io.read_bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -7203,6 +7199,15 @@
    "negative": false
   },
   {
+   "file": "bootstrap/tests/cases/ui_clipboard.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ui_clipboard.ail:1:1: error[mod.main.1]: program has no `main` function",
+   "source": "cases",
+   "negative": false
+  },
+  {
    "file": "bootstrap/tests/cases/unhandled_failure.ail",
    "status": "check-rejected",
    "problems": [],
@@ -7322,36 +7327,12 @@
    "file": "examples/calendar.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `?` on a `std.time.date.Date`",
-    "not in the native subset yet: `?` on a `std.time.date.Date`",
-    "not in the native subset yet: `?` on a `std.time.date.DateTime`",
-    "not in the native subset yet: `?` on a `std.time.date.DateTime`",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "returning an error from a function that can't fail",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`"
+    "not in the native subset yet: `.to_int()` on `str`"
    ],
-   "first": "not in the native subset yet: `?` on a `std.time.date.Date`",
+   "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7499,34 +7480,12 @@
    "file": "examples/days_left.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `?` on a `std.time.date.Date`",
-    "not in the native subset yet: `?` on a `std.time.date.Date`",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "returning an error from a function that can't fail",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`"
+    "not in the native subset yet: `.to_int()` on `str`"
    ],
-   "first": "not in the native subset yet: `?` on a `std.time.date.Date`",
+   "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8087,33 +8046,12 @@
    "file": "examples/shift_dates.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `?` on a `std.time.date.Date`",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "returning an error from a function that can't fail",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.Date`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`",
-    "expected `std.time.date.DateTime`, found `std.time.date.DateError`"
+    "not in the native subset yet: `.to_int()` on `str`"
    ],
-   "first": "not in the native subset yet: `?` on a `std.time.date.Date`",
+   "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8134,11 +8072,9 @@
   },
   {
    "file": "examples/std_args.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `?` on a `std.args.Args`"
-   ],
-   "first": "not in the native subset yet: `?` on a `std.args.Args`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
