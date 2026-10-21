@@ -118,10 +118,14 @@ are followed. *(ADR 0281)*
 directory, replacing a file at `to`. *(ADR 0281)*
 
 **std.fs.12** — `copy(from str, to str) ! IoError` copies the file `from`
-to `to`, replacing a file there. A directory `from` fails with `is_dir`;
-nothing copies a tree. For `rename` and `copy`, a failure's `path` is
-`from` when `from` is missing (or, for `copy`, a directory), else `to`.
-*(ADR 0281)*
+to `to`, replacing a file there. When `from` is a directory, `copy` copies
+the tree: `to` and its parents are made when missing, files already there are
+replaced, other files there are kept, and entries are copied in name order.
+A symbolic link is copied as the file it points to; a link to a directory
+fails with `other` at that path, and so does copying a directory into itself.
+A file at `to` fails with `exists`. For `rename` and `copy`, a failure's
+`path` is `from` when `from` is missing, else the path that failed.
+*(ADR 0281, ADR 0751)*
 
 **std.fs.13** — `read_bytes(path str) bytes ! IoError` reads the whole file
 as `bytes`, whatever it holds. It fails as `read_text` does, and never because
