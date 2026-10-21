@@ -1,0 +1,14 @@
+## Agent task: get the outline of a file with `ail api --text` and keep only the
+## function lines, which is what an agent reads before opening a file.
+##   ./ail run examples/tool_api_outline.ail
+
+fn main() !
+    here := path.dir(env.program())
+    file := "{here}/../tools/tokbench/corpus/agent-r5/data/effects.ail"
+    r := proc.run("{here}/../ail", ["api", "--text", file])? "outlining"
+    mut functions := 0
+    for line in r.out.lines()
+        if line.contains("fn ")
+            functions += 1
+            print(line.trim())
+    print("{functions} functions")
