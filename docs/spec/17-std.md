@@ -1622,6 +1622,22 @@ fn main()
     print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
 ```
 
+**std.tensor.24** — `t.softmax()` on a `float` or `f32` tensor of at least one
+axis gives a tensor of the same shape in which each row along the last axis is
+`exp(x - m)` divided by the sum of the row's `exp(x - m)`, where `m` is the
+row's largest element. The sum runs in element order. A row that holds a NaN
+or an infinity gives NaN for that row. An empty last axis traps. An `f32`
+tensor is computed in `float` and rounded once, as std.tensor.21 does for the
+other activations. On a `Tensor[int]` it is a compile-time error. Fusion
+(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+
+```ail rules=std.tensor.24
+fn main()
+    print(tensor.from([0.0, 0.0]).softmax())    # tensor.from([0.5, 0.5])
+    a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
+    print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
+```
+
 **std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
 the methods and operators of `Tensor[float]`, and each result is rounded to
 `f32` once: the operations are single-precision IEEE operations, and `sum`,

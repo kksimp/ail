@@ -378,6 +378,31 @@ impl Tensor {
         Ok(Tensor { shape: self.shape.clone(), data })
     }
 
+    /// std.tensor.24: `softmax` along the last axis, one row at a time. Each
+    /// row is shifted by its largest element before `exp`, and the sum runs
+    /// in element order. A row holding a NaN or an infinity gives NaN.
+    pub fn softmax(&self) -> Result<Tensor, Fault> {
+        let Some(&n) = self.shape.last() else {
+            return fault("std.tensor.24", "`softmax` needs a tensor with at least one axis".to_string());
+        };
+        if matches!(self.data, Data::I(_)) {
+            return fault("std.tensor.24", "`softmax` is on `float` tensors, and this one holds `int`".to_string());
+        }
+        if n == 0 {
+            return fault("std.tensor.24", "`softmax` over an empty last axis".to_string());
+        }
+        let data = match &self.data {
+            Data::F(v) => Data::F(softmax_rows(v, n)),
+            // Computed in `f64` and rounded once, as `activate` does (std.tensor.21).
+            Data::F32(v) => {
+                let wide: Vec<f64> = v.iter().map(|&x| f64::from(x)).collect();
+                Data::F32(softmax_rows(&wide, n).into_iter().map(|x| x as f32).collect())
+            }
+            Data::I(_) => unreachable!("checked above"),
+        };
+        Ok(Tensor { shape: self.shape.clone(), data })
+    }
+
     /// std.tensor.12: the transpose of a 2-D tensor.
     pub fn transpose(&self) -> Result<Tensor, Fault> {
         let &[m, n] = self.shape.as_slice() else {
@@ -834,6 +859,18 @@ impl Reduce {
 /// they are contiguous and `sum_f64` adds them; otherwise the partial
 /// sums are rows of `after` results, added a whole row at a time, which
 /// is the same order element by element.
+/// std.tensor.24: `softmax` of each `n`-element row of `v`.
+fn softmax_rows(v: &[f64], n: usize) -> Vec<f64> {
+    let mut out = Vec::with_capacity(v.len());
+    for row in v.chunks(n) {
+        let top = row.iter().fold(f64::NEG_INFINITY, |a, &x| if x > a { x } else { a });
+        let exps: Vec<f64> = row.iter().map(|&x| (x - top).exp()).collect();
+        let total: f64 = exps.iter().sum();
+        out.extend(exps.into_iter().map(|e| e / total));
+    }
+    out
+}
+
 fn mean_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Vec<T> {
     let mut s = sum_axis(v, before, n, after);
     for x in &mut s {
