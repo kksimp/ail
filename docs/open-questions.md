@@ -288,60 +288,35 @@ limit (simpler, but a runaway allocation takes the machine down). *Owner: AI
 under ADR 0076, measured once the evaluator counts steps.*
 
 ## OQ-096 — Showing built-in derives in `ail api --expanded`
-**Resolved** by [ADR 0309](decisions/0309-api-expanded-output.md): option (b),
-`"derived_by": "built-in"`; template text would show code that doesn't run.
-`trait.derive.1`'s `Eq`, `Ord` and `ToStr` derives are specified as if a
-prelude generator wrote them, but the bootstrap implements them natively.
-Options: (a) `--expanded` prints their equivalent AIL text from a fixed
-template (recommended: one rule for every derive, and an agent sees what
-`cmp` compares); (b) list them by name only, like automatic implementations
-(cheapest); (c) write the prelude generators in AIL and drop the native code
-(slower in the interpreter). *Owner: AI under ADR 0076.*
+
+**Resolved** by [ADR 0309](decisions/0309-api-expanded-output.md): option (b), `"derived_by": "built-in"`.
 
 ## OQ-097 — Weaker atomic orderings, cancel trees, and send under cancellation
-*Resolved:* orderings by [ADR 0352](decisions/0352-weaker-atomic-orderings.md)
-(a trailing `order:` argument); cancel trees and a cancelled `send` by
-[ADR 0351](decisions/0351-cancel-trees-and-cancelled-send.md) (the whole
-tree; the value is dropped and `send` returns).
+
+*Resolved:* orderings by [ADR 0352](decisions/0352-weaker-atomic-orderings.md); cancel trees and a cancelled `send` by [ADR 0351](decisions/0351-cancel-trees-and-cancelled-send.md).
 
 ## OQ-113 — A matrix product operator
 **Resolved** by [ADR 0382](decisions/0382-no-matrix-product-operator.md) (keep `a.matmul(b)`).
 
 ## OQ-114 — A mutable local that starts as `none`
 
-**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
-(option a: a `mut` local that starts as `none` takes its type from its first
-assignment, type.opt.9).
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md) (option a).
 
 ## OQ-115 — `if c then x else none` where `x` is a plain `T`
 
-**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
-(option a: the `if` has type `T?`, type.opt.10).
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md) (option a).
 
 ## OQ-116 — Locals named like an item of their module
 
-**Resolved** by [ADR 0469](decisions/0469-locals-may-shadow-functions.md)
-(option a: a local may shadow a function; a call of it in the local's block is
-expr.call.1).
+**Resolved** by [ADR 0469](decisions/0469-locals-may-shadow-functions.md) (option a).
 
 ## OQ-117 — `if` as an operand
 
-**Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md)
-(option a: an `if` operand is written in parentheses, expr.if.8).
+**Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md) (option a).
 
 ## OQ-118 — Which transcendental functions the language and the native backend need
 
-**Answered** by the designer on 2026-10-21: the full `std.math` set (`sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`, `cbrt`) as float methods, with a stated tolerance. The ADR is pending: lane 184 writes it and adds the link here.
-
-The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
-or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
-(`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
-`exp` and `tanh`, through the platform's libm, so they already differ in the
-last bit between operating systems. A bit-exact match of libm across hosts
-isn't possible, so any new function needs a stated tolerance.
-**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full
-set (option c, chosen by the designer on 2026-10-21), within one unit in the
-last place of the platform's libm.
+**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full `std.math` set, within one ulp of the platform's libm (option c, the designer's choice on 2026-10-21).
 
 ## OQ-172 — Unicode tables for the native `char` predicates and case mapping
 
