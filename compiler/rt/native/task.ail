@@ -122,6 +122,7 @@ fn pool() int
         fail(1, 0, 0)
     store64(global(STACKS), stacks)
     store64(global(TASKS), q)
+    hset(H_FASTLIM, 0)
     store64(global(MULTI), 1)
     q
 

@@ -33,10 +33,14 @@ BASE := 1000000000
 fn sb_base() int
     if load64(global(MULTI)) == 0
         return global(SB_PTR)
+    sb_threaded()
+
+fn sb_threaded() int
     load64(global(TASKS)) + P_SB + 24 * thread_slot()
 
 fn sb_reset()
-    store64(sb_base() + 8, 0)
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    store64(c + 8, 0)
 
 fn sb_grow()
     c := sb_base()
@@ -50,7 +54,7 @@ fn sb_grow()
     store64(c + 16, ncap)
 
 fn sb_byte(b int)
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     n := load64(c + 8)
     if n == load64(c + 16)
         sb_grow()
@@ -59,12 +63,12 @@ fn sb_byte(b int)
 
 ## Room for `n` more bytes.
 fn sb_room(n int)
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     while load64(c + 8) + n > load64(c + 16)
         sb_grow()
 
 fn sb_bytes(p int, n int)
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     while load64(c + 8) + n > load64(c + 16)
         sb_grow()
     len := load64(c + 8)
@@ -101,7 +105,7 @@ fn utf8_chars(p int, n int) int
 
 ## The builder's text as a string object (its characters counted).
 fn sb_str() str
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     n := load64(c + 8)
     p := load64(c)
     s := str_new(n, utf8_chars(p, n))
@@ -115,24 +119,25 @@ fn sb_str() str
 # in between.
 
 fn sb_begin()
-    store64(sb_base() + 8, 0)
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    store64(c + 8, 0)
 
 fn sb_add_char(ch int)
     sb_room(4)
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     len := load64(c + 8)
     store64(c + 8, len + u8_put(load64(c) + len, ch))
 
 ## The builder's text to standard output.
 fn sb_out()
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     out_bytes(load64(c), load64(c + 8))
 
 # ---- integers ----
 
 ## Decimal, through `write_int`.
 fn put_int(n int)
-    c := sb_base()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
     while load64(c + 8) + 48 > load64(c + 16)
         sb_grow()
     len := load64(c + 8)

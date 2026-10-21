@@ -538,6 +538,7 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
   word idle workers sleep on, live, blocked and idle counts, the target, and
   the task each worker runs.
 - **Atomic cell:** 8 bytes, heap kind 11.
+- **Allocation fast path under threads:** the fast path tests against heap state word 24 (`H_FASTLIM`), which equals the collection threshold while there is one thread and is 0 once the pool exists, so every allocation then takes the locked path with no extra test.
 - **Channel record** (`chan.ail`, heap kind 13; a `Channel[str]` is its
   address): 0 lock word, 1 capacity, 2 count, 3 head, 4 closed, 5 ring
   pointer (string pointers), 6 source (nonzero for a channel fed from outside:
