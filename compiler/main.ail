@@ -100,13 +100,29 @@ fn runtime_with(dir str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
-    for name in ["prim.ail", "core.ail", "math.ail"]
-        texts.push(fs.read_text("{dir}/{name}")?)
+    mut names := ["prim.ail", "core.ail", "math.ail"]
     for name in fs.list_dir(dir)?.sorted()
-        if name.ends_with(".ail") and not ["prim.ail", "core.ail", "math.ail"].contains(name)
-            text := fs.read_text("{dir}/{name}")?
-            texts.push(text.replace("0 # BAKED_TIMEOUT_MS", ms).replace("0 # BAKED_MEMORY_MB", mb))
+        if name.ends_with(".ail") and not names.contains(name)
+            names.push(name)
+    for name in names
+        text := fs.read_text("{dir}/{name}")?
+        texts.push(text.replace("0 # BAKED_TIMEOUT_MS", ms).replace("0 # BAKED_MEMORY_MB", mb))
+        # A runtime file with a syntax error fails the build with the error
+        # shown, instead of compiling whatever the parser recovered to
+        # (a `&` once dropped the rest of its statement silently).
+        runtime_syntax("{dir}/{name}", text)
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
+
+## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
+fn runtime_syntax(path str, text str)
+    lexed := syntax.lex(text)
+    parsed := syntax.parse(lexed.tokens)
+    mut diags := lexed.diags
+    diags.extend(parsed.diags)
+    if diags.len() > 0
+        for d in diags
+            io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
+        io.exit(1)
 
 ## Parse a program and the modules it imports, and lower them to MIR
 ## (mod.unit.3-5, ADR 0393). `path` is a file, the root module by itself,
@@ -164,7 +180,7 @@ fn parse_source(module str, path str) !mir.Source
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     if diags.len() > 0
-        for d in diags
+        for d in syntax.one_per_line(diags)
             io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
         io.exit(1)
     mir.Source(module: module, path: path, text: text, prog: parsed.program)
