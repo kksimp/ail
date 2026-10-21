@@ -59,7 +59,7 @@ statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
 sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
 whose type is expected (a function result, argument or field), in functions with at most eight
-`float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); format specifications on
+`float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); the methods derive generators write (ct.gen.1, ADR 0807); the prelude's `Json` and `Default`, as far as the program reaches them (ADR 0808); format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,

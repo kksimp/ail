@@ -188,7 +188,12 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
                 if name.ends_with(".ail")
                     srcs.push(parse_source(imp, "{dir}/{name}")?)
         k += 1
-    m := mir.lower_package(srcs, rt) else err
+    derived := derived_sources()?
+    srcs.extend(derived.sources)
+    lazy := srcs.len()
+    if text := derived.prelude
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text(text)))
+    m := mir.lower_package_with(srcs, rt, lazy) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -214,10 +219,59 @@ fn std_file(std str, imp str) str
     if parts.len() == 1
         return "{std}/{parts[0]}/{parts[0]}.ail"
     "{std}/{parts.join("/")}.ail"
+## The methods derive generators wrote (ct.gen.1), which `ail build` puts
+## in the file named by `AIL_DERIVED` (ADR 0807): for each deriving `impl`,
+## a line `@@derive MODULE TYPE.TRAIT` (`-` for the root module), then the
+## generated text. Each text is a source `gen:impl:TYPE.TRAIT` of its
+## module whose functions are methods of `TYPE`. A last block `@@prelude`
+## is the prelude, for its JSON and `Default` modules (ADR 0808).
+fn derived_sources() !Derived
+    mut out := Derived(sources: [], prelude: none)
+    path := env.get("AIL_DERIVED") else return out
+    mut text := fs.read_text(path)?
+    parts := text.split("@@prelude\n")
+    if parts.len() > 1
+        out.prelude = parts[1]
+        text = parts[0]
+    mut lines := text.lines()
+    lines.push("@@derive")
+    mut head := List[str]()
+    mut body := List[str]()
+    for line in lines
+        if not line.starts_with("@@derive")
+            body.push(line)
+            continue
+        if head.len() == 3
+            out.sources.push(derived_source(head[1], head[2], body))
+        head = line.split(" ")
+        body = []
+    out
+
+## What `ail build` passes besides the program's files.
+struct Derived
+    sources List[mir.Source]
+    prelude str?
+
+## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
+## `module`, each `fn m` written `fn TYPE.m`, so lines stay where the
+## generator put them.
+fn derived_source(module str, label str, body List[str]) mir.Source
+    cut := label.split(".")
+    owner := cut[..cut.len() - 1].join(".")
+    mut lines := List[str]()
+    for l in body
+        if rest := l.strip_prefix("fn ")
+            lines.push("fn {owner}.{rest}")
+        else
+            lines.push(l)
+    parse_text(if module == "-" then "" else module, "gen:impl:{label}", "{lines.join("\n")}\n")
 
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
-    text := fs.read_text(path)?
+    parse_text(module, path, fs.read_text(path)?)
+
+## Text from `path`, parsed; syntax errors are printed and the run fails.
+fn parse_text(module str, path str, text str) mir.Source
     lexed := syntax.lex(text)
     parsed := syntax.parse(lexed.tokens)
     mut diags := lexed.diags

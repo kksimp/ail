@@ -43,10 +43,17 @@ treats generics dynamically, which a native backend can't.
    at run time: an instance's body calls the concrete type's method, and
    operators on a bound type (`x > best` under `Ord`) are those of the
    concrete type. The checker has already proved the bounds.
-6. **Not yet in the subset:** generic methods (`fn T.m[U]`), `any Trait`
-   values (dynamic dispatch), derived trait methods (`impl Ord for S` with
-   no body), and optionals of a type parameter (`T?`, with lane 175's
-   optionals).
+6. **Built-in types.** An `impl` for `int`, `float`, `bool` or `str` gives
+   methods keyed `int.m` (no module prefix: the types are everyone's), and
+   `impl Trait for List[T]` is instantiated per element type
+   (`List[int].m`), so `[1, 2].size()` and the generic code that calls it
+   work as for a struct. An associated call `T.f(...)` on a type parameter
+   (trait.assoc.1-2) calls the concrete type's `f`.
+7. **Not yet in the subset:** generic methods (`fn T.m[U]`), `any Trait`
+   values (dynamic dispatch, ADR 0616), built-in derives (`impl Ord for S`
+   with no body), and optionals of a type parameter (`T?`, with lane 175's
+   optionals). Generator derives (`ToJson`, `FromJson`, `Default`) reach
+   the backend as written methods (ADR 0807).
 
 ## Rejected alternatives
 
@@ -67,7 +74,7 @@ treats generics dynamically, which a native backend can't.
 ## Consequences
 
 - `tests/native/run/generic_fns.ail`, `generic_types.ail` and
-  `generic_traits.ail` match the interpreter on x86-64 and aarch64;
+  `generic_traits.ail` and `impl_builtin.ail` match the interpreter on x86-64 and aarch64;
   `tests/native/generics_out.ail` holds the edges.
 - Every new generic use costs a body's worth of code; a later size pass can
   share instances whose types have the same layout.
