@@ -228,6 +228,7 @@ fn list_sum_int(xs List[int], head str, tail str) int
             out_str(head)
             out_str("`sum` overflows `int`\n")
             out_str(tail)
+            trace_frames(tail)
             flush_to(2)
             sys_exit(1)
         s = t

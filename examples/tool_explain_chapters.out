@@ -26,8 +26,8 @@ run 6 0
 snap 6 0
 std 194 1
 test 23 0
-trace 17 0
+trace 19 0
 trait 43 3
 type 107 10
 unsafe 16 0
-all 895 50
+all 897 50

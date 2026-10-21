@@ -16,3 +16,10 @@ fn Lower.call_at(mut self, name str, args List[int], ty Ty, pos ast.Pos) int
         emit_void(i)
         return -1
     emit(i, ty)
+
+## The line of the stack for the function being lowered, to end a runtime
+## trap's source excerpt (trace.frame.1): `  at [FILE:]LINE:COL in NAME(..)`.
+fn Lower.trap_frame(self, pos ast.Pos) str
+    root := if file == 0 then "" else "{src_paths[file]}:"
+    dots := if blocks[0].params.len() > 0 then ".." else ""
+    "  at {root}{pos.line}:{pos.col} in {fname}({dots})\n"

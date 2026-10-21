@@ -124,7 +124,7 @@ fn Lower.trap_texts(mut self, rule str, pos ast.Pos) List[int]
     chars := line.chars()
     for c in 0..pos.col - 1
         pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
-    tail := "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n"
+    tail := "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n{trap_frame(pos)}"
     [str_value(head), str_value(tail)]
 
 ## The entry's value when `e` isn't 0, else `zero`, joined.

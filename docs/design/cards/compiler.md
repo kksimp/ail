@@ -183,6 +183,7 @@ pub fn codegen.is_push(mir.Inst) bool
 pub fn codegen.caller_used(codegen.Alloc, codegen.Target) List[int]
 pub fn codegen.allocate(mir.Func, codegen.Target) codegen.Alloc
 pub struct codegen.Reloc
+pub struct codegen.CallRow
 pub struct codegen.Image
 pub fn codegen.new_image() codegen.Image
 pub fn codegen.add_str(mut codegen.Image, str, str) [mutates]
@@ -191,6 +192,7 @@ pub fn codegen.align(mut List[int], int) [mutates]
 pub fn codegen.push64(mut List[int], int) [mutates]
 pub fn codegen.utf8(str) List[int]
 pub fn codegen.add_trap_texts(mut codegen.Image, mir.Module, int, str) [mutates]
+pub fn codegen.add_call_table(mut codegen.Image, mir.Module) [mutates]
 pub fn codegen.split_edges(mir.Func) mir.Func
 pub fn codegen.block_order(mir.Func) List[int]
 pub fn codegen.f64_bits(float) int
@@ -240,6 +242,10 @@ pub struct mir.Block
 pub struct mir.Func
 pub struct mir.Site
 pub struct mir.Module
+pub fn mir.call_pos(int, int, int) int
+pub fn mir.call_file(int) int
+pub fn mir.call_line(int) int
+pub fn mir.call_col(int) int
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
@@ -328,4 +334,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3626); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3708); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

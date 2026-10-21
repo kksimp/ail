@@ -126,6 +126,7 @@ pub struct mir.Site
     pub col int
     pub func str
     pub file int
+    pub from int
 pub struct mir.Module
     pub path str
     pub funcs List[mir.Func]
@@ -135,6 +136,10 @@ pub struct mir.Module
     pub files List[str]
     pub file_lines List[List[str]]
     pub fn mir.Module.globals_used(self) int
+pub fn mir.call_pos(file int, line int, col int) int
+pub fn mir.call_file(pos int) int
+pub fn mir.call_line(pos int) int
+pub fn mir.call_col(pos int) int
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
     pub sites Set[str]
@@ -150,4 +155,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1454); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1512); dropped: private items, doc comments

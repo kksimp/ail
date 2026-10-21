@@ -54,6 +54,10 @@ pub struct codegen.Reloc  ## A field of the code to patch once addresses are kno
     pub kind str
     pub sym str
     pub tail int
+pub struct codegen.CallRow  ## A user call: its return address (an offset in `code`), the position of
+    pub off int
+    pub pos int
+    pub func str
 pub struct codegen.Image
     pub code List[int]
     pub funcs Map[str, int]
@@ -62,6 +66,7 @@ pub struct codegen.Image
     pub data_syms Map[str, int]
     pub globals int  ## The size of the runtime's globals, in 8-byte slots.
     pub entry int  ## The entry point's offset in `code`.
+    pub calls List[codegen.CallRow]  ## Each user call, in address order (trace.frame.1).
 pub fn codegen.new_image() codegen.Image
 pub fn codegen.add_str(mut img codegen.Image, sym str, s str) [mutates]  ## A string object (native-abi.md §2) in the read-only data, once per symbol.
 pub fn codegen.add_f64(mut img codegen.Image, x float) str [mutates]  ## A float constant in the read-only data; gives its symbol.
@@ -69,6 +74,10 @@ pub fn codegen.align(mut bytes List[int], n int) [mutates]
 pub fn codegen.push64(mut bytes List[int], v int) [mutates]
 pub fn codegen.utf8(s str) List[int]  ## The UTF-8 bytes of a string.
 pub fn codegen.add_trap_texts(mut img codegen.Image, m mir.Module, k int, op str) [mutates]  ## The constant texts a trap stub passes to `rt.trap` (native-abi.md §7):
+pub fn codegen.add_call_table(mut img codegen.Image, m mir.Module) [mutates]  ## Append the call table the runtime reads to print a trap's stack
+fn codegen.add_text(mut out List[int], s str) [mutates]  ## A string object (native-abi.md §2) appended to `out`, padded to 8 bytes.
+fn codegen.frame_line(m mir.Module, site mir.Site) str  ## `  at [FILE:]LINE:COL in NAME(..)`: a frame at `site`.
+fn codegen.params_of(m mir.Module, name str) bool  ## Whether function `name` takes parameters (its frame prints `(..)`).
 pub fn codegen.split_edges(f mir.Func) mir.Func  ## Split each branch edge that passes arguments: the new block jumps to the
 fn codegen.thread_jumps(f mir.Func) mir.Func  ## Retarget each edge into an empty block that jumps on without arguments.
 fn codegen.is_forwarder(blk mir.Block) bool
