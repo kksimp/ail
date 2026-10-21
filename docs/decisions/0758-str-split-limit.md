@@ -28,7 +28,7 @@ already know, and no tuples.
 
 Twin t19 (`key=value` lines), tokbench mean of five tokenizers: the `find`
 and `slice` form 96.2, with `split("=", 2)` 89.6 (-6.6, -6.9%), Python 63.6.
-Language card: a clause on the existing `split` line, +15 tokens on the trimmed card (6,771 to 6,786; budget 8,000).
+Language card: a clause on the existing `split` line, +15 tokens on the trimmed card (6,780 to 6,795 with lane 238's lines; budget 8,000).
 
 ## Rejected alternatives
 
