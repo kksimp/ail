@@ -490,6 +490,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
 | [0797](0797-tensor-f32-rounding-and-text.md) | `Tensor[f32]` rounding, scalars and text form (AI, delegated) | Accepted | 2026-10-21 |
 | [0798](0798-tensor-f32-conversions.md) | `to_f32()` and `to_float()`; mixing and traces (AI, delegated) | Accepted | 2026-10-21 |
+| [0813](0813-tensor-top2-margin.md) | Tensor `top2`: best, second-best and margin along an axis (AI, delegated) | Accepted | 2026-10-21 |
 | [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
 | [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
 | [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
@@ -575,11 +576,13 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0739](0739-json-parse-builds-text-once.md) | The native JSON parser builds each text value once *(delegated)* | Accepted | 2026-10-21 |
 | [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
 | [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
+| [0759](0759-bytecode-tier-stalls-not-frames.md) | Bytecode tier: the cost left is stalls, not the frame layout; two frame redesigns measured and dropped *(delegated)* | Accepted | 2026-10-21 |
 | [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
 | [0757](0757-fuzz-math-special-values.md) | A fuzzer for `std.math` special values; the fuzz budget stays in the harness *(delegated)* | Accepted | 2026-10-21 |
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
 | [0802](0802-native-list-queries.md) | Native `sum`, `min`, `max`, `first`, `last`, `index_of`, `swap` on lists and `Set.sorted` *(delegated)* | Accepted | 2026-10-21 |
-| [0803](0803-native-map-top-and-set-algebra.md) | Native `Map.top` and set algebra (`union`, `intersect`, `difference`) *(delegated)* | Accepted | 2026-10-21 |
+| [0803](0803-native-map-top-and-set-algebra.md) | Native `Map.top`, set algebra (`union`, `intersect`, `difference`) and set and map comprehensions *(delegated)* | Accepted | 2026-10-21 |
+| [0818](0818-native-struct-and-enum-map-values.md) | Native maps with struct and enum values; copies of tables of structs are independent *(delegated)* | Accepted | 2026-10-21 |
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
 | [0772](0772-native-std-modules-in-ail.md) | Standard modules written in AIL compile natively as modules of the program, read from `bootstrap/src/std`; `std.log` builds *(delegated)* | Accepted | 2026-10-21 |
@@ -590,16 +593,30 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0786](0786-syntax-diagnostic-text-and-fmt-check.md) | The self-hosted front end prints diagnostic help and fixes; `fmt --check` fails on broken sources *(delegated)* | Accepted | 2026-10-21 |
 | [0771](0771-native-proc-output-methods.md) | Native `Output.ok()` and `Output.text()`: two inline lowerings on the registered `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
+| [0792](0792-tuple-syntax.md) | Tuple syntax: `(A, B)` types, `t.0` elements, `a, b := t`, `for k, v in m` *(delegated)* | Accepted | 2026-10-21 |
+| [0793](0793-tuple-patterns.md) | Tuple patterns in `match`; a bare name binds *(delegated)* | Accepted | 2026-10-21 |
+| [0794](0794-tuple-library-names.md) | `xs.enumerate()` and `zip(a, b)`; no `m.items()` or `m.pairs()` *(delegated)* | Accepted | 2026-10-21 |
+| [0795](0795-tuple-text-and-json.md) | Tuples as text and JSON: `(1, "a")` and arrays *(delegated)* | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
 | [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
 | [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
+| [0764](0764-comprehension-if-and-text-len.md) | `if` elements in comprehensions and `len` of text, maps, sets and bytes compile in the tier: -43% on a micro-benchmark *(delegated)* | Accepted | 2026-10-21 |
 | [0776](0776-fieldinfo-doc.md) | `FieldInfo.doc` carries a field's `##` comment (integrator choice) | Accepted | 2026-10-21 |
 | [0782](0782-fix-text-plus-chains.md) | `ail fix` joins text with interpolation across a `+` chain and around calls with strings *(delegated)* | Accepted | 2026-10-21 |
 | [0768](0768-native-string-scans-by-words.md) | Native strings: character counts and separator search a word at a time, interpolation joined in one allocation; `lines_split` -27% instructions *(delegated)* | Accepted | 2026-10-21 |
+| [0769](0769-map-hash-finalizer.md) | Native string hash: a second multiply as the finalizer, so keys that differ in their high bytes spread (50 to 1.75 probes) *(delegated)* | Accepted | 2026-10-21 |
 | [0814](0814-selftest-speed.md) | Selftest speed: native builds on four threads, then parallel test binaries, then one compiler load for many builds (AI, delegated ADR 0076, integrator-approved) | Accepted | 2026-10-21 |
 | [0809](0809-fix-contract-keywords.md) | `ail fix` moves `requires result` to `ensures` and unwraps `old()` in `requires` *(delegated)* | Accepted | 2026-10-21 |
+| [0817](0817-token-budgets-for-agent-pages.md) | Token budgets for the language card (8,000) and quick reference (12,518) on the five-tokenizer mean; quick-reference additions are paid for by a trim in the same PR; amends 0276 in part | Accepted | 2026-10-21 |
 | [0804](0804-native-error-values-are-structs-and-enums.md) | Native error values are ordinary structs and enums *(delegated)* | Accepted | 2026-10-21 |
 | [0805](0805-native-error-message-method.md) | The message of an error type is a method *(delegated)* | Accepted | 2026-10-21 |
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
 | [0815](0815-native-tensors.md) | Native tensors: a runtime object and kernels written in AIL *(delegated)* | Accepted | 2026-10-21 |
-| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
+| [0783](0783-std-error-families.md) | Std error families: a closed kind list per module, as spec rules | Accepted | 2026-10-21 |
+| [0774](0774-load-json-and-print-json.md) | `load_json[T](path)` and `print_json(v)` *(delegated)* | Accepted | 2026-10-21 |
+| [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
+| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
+| [0820](0820-driver-level-unsafe.md) | `unsafe driver` manifest level unlocks hardware access through `std.hw`; 64-bit targets only | Accepted | 2026-10-21 |
+| [0823](0823-lower-ail-feature-files.md) | `lower.ail` is a core plus feature files with one-line hooks: a native feature lives in its own `lower_*.ail` and adds at most one dispatch line and one state field *(delegated)* | Accepted | 2026-10-21 |
+| [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
+| [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |

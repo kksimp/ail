@@ -68,3 +68,46 @@ others unchanged. A bump-pointer fast path in the generated code itself, and a
 `list_new_for` that allocates header and first block together, are left until
 the code generator folds constant offsets into addressing: today the fast path
 spends most of its instructions on `add` and `imul` for addresses.
+
+## Cheaper collections for string-heavy programs (amendment, 2026-10-21)
+
+Lane 235's `lines_split` (200,000 log lines split into fields) spent about a
+quarter of its instructions in allocation and collection. Changes:
+
+- A small page's table entry holds the block size and the reciprocal
+  `ceil(2^32 / size)`, so the collector finds a block start with a multiply
+  instead of a division and a call.
+- The sweep makes one pass per page (clear marks, chain free blocks, count
+  live) instead of two.
+- The trigger is `max(16 MiB, 2 x live bytes)`: the heap grows to about three
+  times the live data before a collection, in exchange for fewer of them.
+- A small page is no longer zeroed when taken; a page that was used before is
+  marked dirty and zeroed block by block, only when a zeroed block is asked
+  for. Pages taken from the top of the heap are clean.
+- The fast path indexes its per-class slots with one shift.
+
+Measured with callgrind on a native `lines_split` (strings, `lines`, `split`;
+no map): 2.91 G to 2.23 G instructions (-23%), 0.265 s to 0.20 s. The
+collector went from about 600 M to 235 M instructions. The rest is the string
+functions and the address arithmetic in the generated code of `alloc` (about
+100 instructions per call), which lane 235's displacement folding should
+shrink. Resident size grows by the larger trigger: the 10 GB test runs in
+16 MiB (was 10), `binarytrees 20` in 80 MiB (was 61).
+
+### Baseline for tuning the trigger (2026-10-21)
+
+Trigger: a collection when bytes allocated since the last exceed
+`max(16 MiB, 2 x live bytes after the last)`, so the heap peaks near 3x live
+data. Resident size (Linux x86-64, `ru_maxrss`) with the earlier trigger
+`max(8 MiB, 1 x live)` against this one:
+
+| program | earlier | now |
+|---|---:|---:|
+| `binarytrees 20` | 61 MiB | 80 MiB |
+| 10 GB short-lived lists (`heavy/gc_10gb.ail`) | 10 MiB | 16 MiB |
+| native `lines`/`split` (200,000 lines) | 65 MiB | 60 MiB |
+
+Instructions on the `lines`/`split` program, cumulative: 2.91 G before this
+amendment; 2.56 G with the block-size lookup; 2.49 G with the 16 MiB minimum;
+2.37 G with 2x live; 2.23 G with the one-pass sweep, lazy page zeroing and
+the shift-indexed fast path.

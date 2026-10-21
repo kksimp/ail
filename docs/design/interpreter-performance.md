@@ -437,6 +437,14 @@ places (`a.b[i].m()`) and `ref` cells still run on the walker.
 
 Step 3b (ADR 0620): `mut self` calls on a field path of a local and calls through a
 function-value local run on the tier too (0 hand-offs in a loop doing both).
+## Frame redesign, measured (lane 190, day 3, ADR 0759)
+Locals and temporaries in one array, and calls as frames in one loop, were both built and are slower or
+equal; the kept changes are operator-specific instructions, a fused end of a `while` turn, branches kept as
+branches, and scalars written to their slot from registers (whole-`Value` moves through the stack stall the
+loads after them). Collatz, nbody and mandelbrot are 13-20% faster by wall time; instruction counts fall
+2-10% on seven of the eight. Sieve is memory-bound (32 bytes per `bool` element); binarytrees needs fewer
+steps per call. Numbers and rejected experiments are in the ADR.
+
 ## Day 2 table (2026-10-21)
 Date: 2026-10-21. Linux x86-64, 14 cores. Median of 5 wall-clock runs of
 `ail run PROGRAM ARGS` (release build; includes start-up and the check pass)

@@ -3,6 +3,7 @@
 ## mir
 ```
 pub fn mir.fold_addresses(f mir.Func) mir.Func
+pub fn mir.fold_prim_addresses(f mir.Func) mir.Func
 pub struct mir.Versioned
     pub f mir.Func
     pub header int
@@ -152,4 +153,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1476); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1494); dropped: private items, doc comments

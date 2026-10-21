@@ -1050,6 +1050,21 @@ impl Lexer {
     /// Integer or floating-point literal (lex.num.1-3).
     fn number(&mut self, line: &[char], start: usize, line_no: usize) -> usize {
         let pos = Pos { line: line_no, col: start + 1 };
+        // type.tuple.3: after a single `.`, digits are an element index, so
+        // `t.0.1` is two accesses rather than `t` and the float `0.1`.
+        let element = start > 0 && line[start - 1] == '.' && (start < 2 || line[start - 2] != '.');
+        if element {
+            let end = start + line[start..].iter().take_while(|c| c.is_ascii_digit()).count();
+            let digits: String = line[start..end].iter().collect();
+            match digits.parse::<i64>() {
+                Ok(v) => self.push(Tok::Int(v), pos),
+                Err(_) => {
+                    self.diags.push(Diagnostic::new("lex.num.3", pos, format!("integer literal `{digits}` doesn't fit in `int` (64-bit signed)")));
+                    self.placeholder(pos);
+                }
+            }
+            return end;
+        }
         if let Some(end) = float_end(line, start) {
             let text: String = line[start..end].iter().filter(|c| **c != '_').collect();
             match text.parse::<f64>() {

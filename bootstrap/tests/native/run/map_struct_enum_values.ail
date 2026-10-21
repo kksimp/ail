@@ -1,0 +1,66 @@
+# type.map.*: structs and enums as map values; copies stay independent (own.val.1).
+struct Point
+    x int
+    y int
+
+enum Def
+    Num(n int)
+    Name(s str)
+    Nothing
+
+enum Color
+    Red
+    Green
+
+struct Scope
+    vars Map[str, Def]
+
+fn clear(mut s Scope)
+    s.vars = {}
+    s.vars["k"] = Def.Num(1)
+
+fn main()
+    mut pts := Map[str, Point]()
+    pts["a"] = Point(x: 1, y: 2)
+    mut p := pts["a"]
+    p.x = 9
+    print(pts["a"].x)
+    print(p.x)
+    q := pts
+    mut r := q
+    r["a"] = Point(x: 5, y: 5)
+    print(q["a"].x)
+    mut defs := Map[str, Def]()
+    defs["n"] = Def.Num(3)
+    defs["s"] = Def.Name("hi")
+    defs["z"] = Def.Nothing
+    for k in defs.keys()
+        match defs[k]
+            Num(n) => print("{k}: num {n}")
+            Name(s) => print("{k}: name {s}")
+            Nothing => print("{k}: nothing")
+    mut cols := Map[int, Color]()
+    cols[1] = Color.Green
+    cols[2] = Color.Red
+    print(cols[1] == Color.Green)
+    var_ty := Map[str, Def]()
+    print(var_ty.len())
+    d := defs.get("n") else Def.Nothing
+    match d
+        Num(n) => print(n)
+        Name(_) => print(-1)
+        Nothing => print(-1)
+    mut lists := Map[str, List[Point]]()
+    lists.push("a", Point(x: 1, y: 1))
+    mut l2 := lists
+    l2.push("a", Point(x: 2, y: 2))
+    print(lists["a"].len())
+    print(l2["a"].len())
+    mut m3 := pts
+    m3["a"].x = 77
+    print(pts["a"].x)
+    print(m3["a"].x)
+    mut sc := Scope(vars: defs)
+    clear(mut sc)
+    print(sc.vars.len())
+    print(defs.len())
