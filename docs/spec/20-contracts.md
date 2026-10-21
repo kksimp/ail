@@ -291,3 +291,20 @@ trait's conditions as written under `"inherited_requires"` and
 prints them after the method's own, marked `(inherited)`. A struct's
 invariants are listed under `"invariants"`, and `--text` prints each as an
 `invariant` line under the struct. *(ADR 0303, ADR 0304, ADR 0305)*
+
+```ail tool=api,FILE expect=inherited_ensures rules=contract.api.2
+trait Shape
+    fn area(s Self) int
+        ensures result >= 0
+
+struct Sq
+    side int
+
+impl Shape for Sq
+    fn area(s Sq) int
+        ensures result >= 0
+        s.side * s.side
+
+fn main()
+    print(Sq.area(Sq(side: 2)))
+```

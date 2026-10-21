@@ -21,14 +21,42 @@ compile-time error. *(ADR 0097)*
 **mod.unit.2** — A module's import path is its directory path relative to the
 package root, with segments separated by `.`. *(ADR 0097)*
 
+```ail pkg=dir_path tool=run,DIR expect=9 rules=mod.unit.2
+```
+
 **mod.unit.3** — A single `.ail` file given directly to `ail run` forms a
 complete program by itself: it is the root module, and its sibling files are
 not part of it. It may import modules from subdirectories of its own
 directory (`mod.unit.5`). *(ADR 0101, ADR 0153)*
 
+```ail pkg=dir_path tool=run,FILE expect=9 rules=mod.unit.3
+```
+
 **mod.unit.4** — A method or associated function `fn T.name` is declared in
 the module that declares `T`. Writing `fn m.T.name` is a compile-time error.
 *(ADR 0155)*
+
+```ail error=mod.unit.4
+struct Point
+    x int
+
+fn m.Point.get(t Point) int
+    t.x
+
+fn main()
+    print(1)
+```
+
+```ail
+struct Point
+    x int
+
+fn Point.get(t Point) int
+    t.x
+
+fn main()
+    print(Point.get(Point(x: 1)))
+```
 
 **mod.unit.5** — `ail run DIR` runs the package rooted at `DIR`: the `.ail`
 files directly in `DIR` form the root module, which declares `main`.
