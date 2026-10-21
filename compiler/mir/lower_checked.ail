@@ -1,0 +1,72 @@
+## `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`
+## and `checked_neg` on an `int` (type.num.12): the result as an `int?`, `none`
+## on overflow or a zero divisor. Add, subtract and negate test the sign bits
+## inline; multiply, divide and remainder ask the runtime (`rt.checked_ok`).
+## The operation itself is the unchecked instruction, run only where the test
+## passed.
+use ast
+
+fn checked_code(name str) int
+    match name
+        "checked_add" => 0
+        "checked_sub" => 1
+        "checked_mul" => 2
+        "checked_div" => 3
+        "checked_rem" => 4
+        "checked_neg" => 5
+        _ => -1
+
+fn Lower.int_checked(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    code := checked_code(name)
+    if code < 0 or r.ty != Ty.Int
+        return none
+    if (code == 5) != (vs.len() == 0) or vs.len() > 1
+        return none
+    if vs.len() == 1 and vs[0].ty != Ty.Int
+        return none
+    a := r.id
+    b := if vs.len() == 1 then vs[0].id else a
+    zero := konst(0, Ty.Int)
+    mut ok := -1
+    mut s := -1
+    if code == 0
+        s = op("add", [a, b], Ty.Int)
+        ok = op(
+            "ge",
+            [op("band", [op("bxor", [a, s], Ty.Int), op("bxor", [b, s], Ty.Int)], Ty.Int), zero],
+            Ty.Bool,
+        )
+    elif code == 1
+        s = op("sub", [a, b], Ty.Int)
+        ok = op(
+            "ge",
+            [op("band", [op("bxor", [a, b], Ty.Int), op("bxor", [a, s], Ty.Int)], Ty.Int), zero],
+            Ty.Bool,
+        )
+    elif code == 5
+        s = op("neg", [a], Ty.Int)
+        ok = op("ne", [a, konst(-9223372036854775807 - 1, Ty.Int)], Ty.Bool)
+    else
+        ok = call("rt.checked_ok", [konst(code, Ty.Int), a, b], Ty.Bool)
+    t := Ty.Opt(Ty.Int)
+    yes := new_block()
+    no := new_block()
+    join := new_block()
+    res := new_value(t, "")
+    blocks[join].params.push(res)
+    branch(ok, yes, [], no, [])
+    seal(yes)
+    seal(no)
+    cur = yes
+    if code == 2
+        s = op("mul", [a, b], Ty.Int)
+    elif code == 3
+        s = op("div", [a, b], Ty.Int)
+    elif code == 4
+        s = call("rt.rem_safe", [a, b], Ty.Int)
+    jump(join, [some(Val(id: s, ty: Ty.Int)).id])
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: res, ty: t)
