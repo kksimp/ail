@@ -54,3 +54,7 @@ output. Names are English.
   the fields itself.
 - Adding a token later changes what a pattern with that `%x` prints, so each
   addition is recorded in a new ADR.
+
+## Rejected alternatives
+
+- Letter patterns such as `YYYY-MM-DD HH:mm:ss` (option B): rejected because `mm` is minutes and `MM` months, and `hh` and `HH` differ in the same way, a known source of bugs. Quoting literal letters also needs an escape syntax. The token saving is 10%, a tie under ADR 0076.

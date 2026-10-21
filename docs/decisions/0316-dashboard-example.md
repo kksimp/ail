@@ -23,3 +23,7 @@ the default the window and hang the tests on macOS.
 ## Consequences
 
 - `./ail run examples/dashboard.ail --window` is the interactive demo.
+
+## Rejected alternatives
+
+- A `--print` flag on the dashboard, with the window as the default: rejected because the default would then open a window, and on macOS that would hang the test run, since every example runs with no arguments.

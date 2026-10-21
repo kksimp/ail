@@ -1,0 +1,5 @@
+use std.regex
+
+fn main()
+    re := regex.compile("[0-9]+") else return
+    print(regex.find_all(re, "a1 b22"))

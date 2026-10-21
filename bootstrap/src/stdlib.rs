@@ -25,7 +25,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("path", &["base", "dir", "ext", "join"]),
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
-    ("regex", &["captures", "compile", "escape", "find", "find_all", "is_match", "replace", "replace_first", "split"]),
+    ("regex", &["captures", "compile", "escape", "find", "find_all", "group_all", "is_match", "replace", "replace_first", "split"]),
     ("tensor", &["from", "zeros"]),
     ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
@@ -162,6 +162,9 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
 const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.args", "<std>/args/args.ail", include_str!("std/args/args.ail")),
+    ("std.csv", "<std>/csv/csv.ail", include_str!("std/csv/csv.ail")),
+    ("std.log", "<std>/log/log.ail", include_str!("std/log/log.ail")),
     ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),
     ("std.net.jar", "<std>/net/jar.ail", include_str!("std/net/jar.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),

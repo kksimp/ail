@@ -59,6 +59,6 @@ it resolves at the deriving `impl` (`ct.gen.2`). *(ADR 0229)*
 
 ## Run time
 
-**refl.run.1** — There is no run-time reflection. No operation yields a
+**refl.run.1** — [definitional] There is no run-time reflection. No operation yields a
 value's type, type name, fields or variants at run time, and a value of
 `any Trait` can't be converted to its concrete type. *(ADR 0229)*

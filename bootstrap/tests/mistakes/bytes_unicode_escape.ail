@@ -1,0 +1,3 @@
+fn main()
+    s := b"caf\u{e9}"
+    print(s.len())

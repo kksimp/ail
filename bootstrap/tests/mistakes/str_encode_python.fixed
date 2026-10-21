@@ -1,0 +1,3 @@
+fn main()
+    data := "hello".to_bytes()
+    print(data.len())

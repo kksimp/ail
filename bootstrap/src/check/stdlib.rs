@@ -19,6 +19,7 @@ impl<'p> Checker<'p> {
         let mut seen: HashMap<(&str, &str), Pos> = HashMap::new();
         for u in &self.prog.uses {
             match u.path.as_slice() {
+                [(root, _), _] if root == "std" && stdlib::ail_module_path(&u.dotted()).is_some() => continue,
                 [(root, _), (module, mpos)] if root == "std" => {
                     if !stdlib::is_std_module(module) {
                         let names = stdlib::module_names();
@@ -143,6 +144,19 @@ impl<'p> Checker<'p> {
             self.args_only(args);
             let fns = stdlib::functions(module);
             let mut d = Diagnostic::new("std.use.2", pos, format!("module `{head}` has no function `{name}`"));
+            // Another library's name for the same function, with the same arguments.
+            let renamed = match (module, name) {
+                ("regex", "matches") => Some("is_match"),
+                ("regex", "findall") => Some("find_all"),
+                ("random", "randint") => Some("int"),
+                ("random", "random") => Some("float"),
+                _ => None,
+            };
+            if let Some(new) = renamed {
+                d = d.help(format!("write `{head}.{new}`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
+                self.diags.push(d);
+                return Some(Ty::Err);
+            }
             d = match suggest(name, fns) {
                 Some(s) => d.help(format!("did you mean `{head}.{s}`?")),
                 None => d.help(format!("`std.{module}` provides {}", list_names(fns))),
@@ -285,6 +299,7 @@ impl<'p> Checker<'p> {
             ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
             ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
             ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "group_all") => (vec![std_ty("regex.Regex"), Str, Int], list(Str)),
             ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
             ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
             ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),

@@ -266,20 +266,23 @@ fn Parser.peek(self) Tok
     tokens[i].tok
 
 fn Parser.peek_at(self, n int) Tok
-    tokens[(i + n).min(tokens.len() - 1)].tok
+    k := i + n
+    if k < tokens.len() then tokens[k].tok else tokens[tokens.len() - 1].tok
 
 fn Parser.tag_at(self, n int) str
     tok_tag(peek_at(n))
 
 ## The symbol `n` tokens ahead, or "".
 fn Parser.sym_at(self, n int) str
-    t := peek_at(n)
-    if tok_tag(t) == "sym" then tok_text(t) else ""
+    match peek_at(n)
+        Sym(s) => s
+        Ident(_) | Kw(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 ## The keyword `n` tokens ahead, or "".
 fn Parser.kw_at(self, n int) str
-    t := peek_at(n)
-    if tok_tag(t) == "kw" then tok_text(t) else ""
+    match peek_at(n)
+        Kw(w) => w
+        Ident(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 fn Parser.here(self) ast.Pos
     tokens[i].pos
@@ -1467,6 +1470,13 @@ fn Parser.call_args(mut self) List[ast.Arg]?
         if at_sym("|")
             diag("gram.foreign.1", here())
             return none
+        # `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
+        if at_sym("@")
+            diag("gram.foreign.1", here())
+            return none
+        if at_sym("=")
+            diag("expr.call.1", here())
+            return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
             break
@@ -1527,6 +1537,10 @@ fn Parser.primary(mut self) ast.Expr?
                 # expr.if.8: a parenthesised one-line `if` is an operand.
                 inner := if at_kw("if") then if_expr()? else range()?
                 inner2 := else_expr(inner)?
+                # AIL has no tuples: `(a, b)` is a list.
+                if at_sym(",")
+                    diag("gram.foreign.1", here())
+                    return none
                 expect_sym(")", "`)`", "gram.syntax.1")?
                 return inner2
             if s == "["
@@ -1743,7 +1757,12 @@ fn Parser.arm(mut self) ast.Arm?
             error_fix("expr.match.1", here(), "arms are written `pattern => result`")
             i += 1
         else
-            unexpected("`=>` after the pattern", "expr.match.1")
+            match pat
+                Variant(q, nm, _, cpos) if nm == "case" and q == none =>
+                    # AIL has no `case`: an arm is `pattern => result`.
+                    diag("expr.match.1", cpos)
+                _ =>
+                    unexpected("`=>` after the pattern", "expr.match.1")
             return none
     if at_newline()
         body := block("`=>`", "expr.match.1")?
@@ -1787,6 +1806,10 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             return none
     i += 1
     hpos := here()
+    # expr.match.12: a range needs both ends (`lo..=hi`).
+    if at_sym("=>") or at_sym(".") or at_kw("if")
+        diag("expr.match.12", hpos)
+        return none
     hi := plain_pattern()?
     match hi
         Literal(value, _) =>

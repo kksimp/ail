@@ -1,0 +1,4 @@
+mathx.ail combine doc=true fn combine(a int, b int) int
+mathx.ail scale doc=true fn scale(x int) int
+ok.ail add doc=true fn add(a int, b int) int
+ok.ail main doc=false fn main()

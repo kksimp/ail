@@ -52,3 +52,9 @@ Raw TCP: `Conn.read_bytes(max)` and `Conn.write_bytes(data)`, which
 - The client keeps the body as bytes inside the runtime and decodes it only
   for `Response`; a server's `Request.body` is the same bytes decoded.
 - `Child` streams (`std.proc.4`) are still lines of text.
+
+## Rejected alternatives
+
+- Changing `Response.body` to `bytes` (option B): rejected by the brief, since it breaks every `r.body` use and every `net.Response(body: "...")` literal.
+- Adding a required `data bytes` field to `Response` (option C): rejected because the server writes `net.Response(status:, headers:, body:)`, so a required field breaks all such code, and a default field is not a language feature. `respond_bytes` gives the server the same power.
+- A `text()` method on a bytes-bodied `Response` (option D): rejected because it needs `Response` to hold bytes. `bytes.text()` does the same on `RawResponse.data`.

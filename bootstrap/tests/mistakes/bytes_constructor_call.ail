@@ -1,0 +1,3 @@
+fn main()
+    buf := bytes(16)
+    print(buf.len())

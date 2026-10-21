@@ -32,3 +32,7 @@ of the text functions, and `--trace effects` records them under their own names.
 ## Consequences
 
 - `process` and `net` bodies as `bytes` follow in ADRs 0416–0417.
+
+## Rejected alternatives
+
+- One `read` and one `write` taking a mode or a type (option B): rejected because a mode argument or a generic return makes the type depend on a value, and two names are simpler to check and to explain.

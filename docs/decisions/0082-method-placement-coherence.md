@@ -32,3 +32,8 @@ rule makes "what can `x.f()` mean?" answerable from a single place.
   start strict on purpose.
 - Wrapping a foreign type to give it a foreign trait (the newtype pattern)
   becomes the standard workaround. The standard library should make it cheap.
+
+## Rejected alternatives
+
+- Implementations and methods anywhere, with no placement or coherence rule: rejected for starting strict. Rules 2 and 3 can be relaxed later without breaking code, so the strict start costs nothing now (record: Consequences).
+- Silently picking one method when `x.f()` names two candidates (an inherent method and a trait method, or two traits): rejected because "what can `x.f()` mean?" must have one answer from one place. The ambiguity error with qualified forms is the chosen rule. (reconstructed 2026-10-21: the record states the choice, not a debate.)

@@ -88,6 +88,20 @@ Ranked by how much more AIL spends than Python, on this round and the study:
 These are proposals for the integrator. They are not in `docs/open-questions.md`:
 each needs an option list and a measurement before it becomes an open question.
 
+## Syntax candidates, measured (lane 208)
+
+[ADR 0675](../decisions/0675-round-4-syntax-candidates.md) measured the syntax
+proposals on the 40 twinned programs. Proposal 3 (`task_sum`) needs no new
+syntax: `[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()` is
+111.2 tokens against 157.2 for four `spawn` handles, so `task_sum` is −31%
+against Python (162.2), and the round-4 total is 1,024.0 against 1,246.8
+(−17.9%). `examples/task_sum.ail` now uses it. A two-variable `for` saves 0.2%
+on the corpus and is rejected; pairs (`zip`, `enumerate`, `items`) go to
+[OQ-124](../open-questions.md). `regex_codes` loses 17.4 tokens (127.0 to
+109.6) by dropping the per-line loop and calling `regex.find_all` on the whole
+text, with `strip_prefix("code=")?` in place of `else "0"`; lane 204 owns that
+program and its library additions.
+
 ## Caveats
 
 - Ten programs, one author, one run. The twins are idiomatic Python, not the
@@ -97,3 +111,63 @@ each needs an option list and a measurement before it becomes an open question.
 - Run time is not measured here. Only output equality with the twins was checked.
 - Token counts are tokbench means. They are not per model, and the
   `claude-legacy` column is an older tokenizer.
+# Agent round 4: standard-library parity with Python (lane 192)
+Date: 2026-10-21. Twins in `tools/tokbench/corpus/agent-r4/` (`tNN_*.py` and
+`tNN_*.ail`), measured with `tools/tokbench/run.sh` (mean over the five
+tokenizers). Ten of the planned 25 tasks are written so far; the table is
+updated as more land. Before the lane's additions the same tasks needed
+hand-written loops (see the `csv_manual`/`args_manual` pairs below).
+## Result
+| task | Python | AIL | AIL vs Python |
+|---|---|---|---|
+| t01_wordcount | 42.4 | 57.0 | +34% |
+| t02_batches | 32.6 | 26.8 | -18% |
+| t03_table | 36.8 | 38.8 | +5% |
+| t04_csv_report | 37.2 | 53.6 | +44% |
+| t05_args | 71.0 | 95.4 | +34% |
+| t06_log | 24.8 | 22.6 | -9% |
+| t07_flatten | 25.2 | 18.0 | -29% |
+| t08_whitespace | 30.2 | 38.0 | +26% |
+| t09_group | 37.8 | 41.6 | +10% |
+| t10_retry | 85.2 | 84.8 | -0% |
+| **total** | 423.2 | 476.6 | +13% |
+By hand against the new modules (ADRs 0626, 0627):
+| task | by hand | with std | change |
+|---|---|---|---|
+| CSV quoted-column sum | 236.4 | 69.6 | -71% |
+| `[-v] [--out F] INPUT` | 240.0 | 113.0 | -53% |
+## Where AIL still costs more than Python
+- **Reading input.** `fs.read_text(env.args()[0])?` plus a `?` per fallible
+  call is the bulk of t01, t04 (+34%, +44%). Python's `open(...).read()`
+  has no error plumbing. This is the language's error-handling design, not a
+  library gap.
+- **`to_int() else 0`.** Python's `int(x)` raises; AIL needs a fallback.
+- **`most_common`.** t01 needs `keys().sorted(by: |k| -counts[k]).take(n)`.
+  A `counts().top(n)` is a candidate once tuples or pair structs exist.
+- **argparse (+34%).** The help text and typed options are in the std version;
+  Python's argparse has no `rest`.
+- **No `zip`, `enumerate`, `items()`**: these need tuples or two-variable
+  `for` (a language change, out of this lane's scope; recommendation: a
+  `for k, v in map` and `for i, x in xs.enumerate()` form, to be measured).
+## Added by this lane
+`std.csv`, `std.args`, `std.log` (ADRs 0626-0628); list `chunks`, `windows`,
+`counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`,
+`count`, `rfind` (ADR 0629). Language card 7,019 → 7,044 tokens (budget 8,000).
+
+## Round 4 after (lane 204, ADR 0667)
+
+Library fixes only. `regex.group_all` replaces the `find_all` + `strip_prefix`
+pattern in `regex_codes`; `gz_check` uses the existing `str.byte_len()`.
+Tokbench mean, five tokenizers, ten programs:
+
+| Program | Before | After | Change |
+| `regex_codes.ail` | 127.0 | 106.2 | -20.8 |
+| `gz_check.ail` | 110.6 | 108.6 | -2.0 |
+| other eight `.ail` and all ten `.py` | as above | unchanged | 0 |
+
+`regex_codes` against its Python twin (94.2): +35% before, +13% after. The
+|---|---|---|---|
+| `regex_codes.ail` | 127.0 | 115.2 | -11.8 |
+`regex_codes` against its Python twin (94.2): +35% before, +22% after. The
+`task_sum` gap is a syntax question and stays open. The `frames` gap is
+mostly `wire[at].to_int()` and is not changed here.

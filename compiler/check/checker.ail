@@ -893,6 +893,8 @@ fn Checker.check_uses(mut self)
             continue
         if u.path.len() == 2
             m := u.path[1]
+            if AIL_STD_MODULES.contains(dotted)
+                continue
             if not STD_MODULES.contains(m.name)
                 mut d := new_diag("std.use.1", m.pos, "there is no standard module `std.{m.name}`")
                 d = if s := suggest(m.name, STD_MODULES)

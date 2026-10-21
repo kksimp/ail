@@ -18,6 +18,8 @@ AGENT = {"logscan", "tasks", "build", "snapdiff", "csvreport", "scan", "tail", "
          "logwatch", "backup", "poller", "supervise", "report_dates", "hexdump", "route", "perms", "csv2json", "matrix",
          "digest_lines", "regex_codes", "redact_mail", "gz_check", "shift_dates", "days_left", "frames", "hex_base64",
          "task_sum", "chan_pipe"}
+# Round 5 (lane 224): every tool-driving program keeps its tests and blank lines, like its twin.
+AGENT_PREFIX = "tool_"
 
 
 def strip(src):
@@ -42,7 +44,7 @@ def main():
         f = src_dir / f"{d.name}.ail"
         if d.is_dir() and f.exists():
             src = f.read_text()
-            if d.name in AGENT:
+            if d.name in AGENT or d.name.startswith(AGENT_PREFIX):
                 text = "".join(l for l in src.splitlines(keepends=True) if not l.lstrip().startswith("#"))
             else:
                 text = strip(src)
