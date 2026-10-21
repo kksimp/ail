@@ -514,3 +514,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
 | [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
+| [0698](0698-card-spec-audit-for-std.md) | A std audit: every std function has a spec mention, checked by `tools/rules-audit.sh` *(delegated)* | Accepted | 2026-10-21 |
