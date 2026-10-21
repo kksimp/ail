@@ -611,15 +611,21 @@ fn json_members(fields List[FieldInfo], prefix str, indent str, first str) str
 ## An expression giving the `Json` of `e`, a `type_text`: lists and maps
 ## of values without `to_json` convert each element (json.derive.1).
 fn json_write(type_text str, e str, depth int) str
-    if inner := type_text.strip_suffix("?")
-        return "{e}?.to_json() else Json.Null"
     x := "x{depth}"
+    if inner := type_text.strip_suffix("?")
+        if json_tuple_parts(inner) != none
+            return "(if {x} := {e} then {json_write(inner, x, depth + 1)} else Json.Null)"
+        return "{e}?.to_json() else Json.Null"
+    # type.tuple.8: a tuple is an array of its elements.
+    if parts := json_tuple_parts(type_text)
+        items := [json_write(parts[i], "{e}.{i}", depth + 1) for i in 0..parts.len()]
+        return "Json.Arr([{items.join(", ")}])"
     if inner := type_text.strip_prefix("Map[str, ")
         elem := inner.slice(0, inner.chars().len() - 1)
         return "Json.Obj([JsonMember({x}, {json_write(elem, "{e}[{x}]", depth + 1)}) for {x} in {e}.keys()])"
     if inner := type_text.strip_prefix("List[")
         elem := inner.slice(0, inner.chars().len() - 1)
-        if elem.contains("[") or elem.ends_with("?")
+        if elem.contains("[") or elem.contains("(") or elem.ends_with("?")
             mut w := json_write(elem, x, depth + 1)
             if elem.ends_with("?")
                 w = "({w})"
@@ -688,6 +694,16 @@ fn json_read(type_text str, src str, dest str, path str, indent str, depth int) 
         return json_optional(inner, "{src}.non_null()", dest, path, indent, depth)
     y := "{dest}_y"
     deeper := "{indent}    "
+    # type.tuple.8: an array of exactly the tuple's elements.
+    if parts := json_tuple_parts(type_text)
+        a := "{dest}_a"
+        mut out := ["{indent}{a} := {src}.need_arr() {fail}"]
+        out.push("{indent}if {a}.len() != {parts.len()}\n{deeper}return JsonError(-1, \"expected {parts.len()} elements, found \{{a}.len()}\").under(\"{path}\")\n")
+        for i in 0..parts.len()
+            out.push(json_read(parts[i], "{a}[{i}]", "{dest}_{i}", "{path}[{i}]", indent, depth + 1)?)
+        names := ["{dest}_{i}" for i in 0..parts.len()]
+        out.push("{indent}{dest} := ({names.join(", ")})\n")
+        return out.join("")
     if inner := type_text.strip_prefix("List[")
         elem := inner.slice(0, inner.chars().len() - 1)
         a := "{dest}_a"
@@ -701,8 +717,29 @@ fn json_read(type_text str, src str, dest str, path str, indent str, depth int) 
         body := json_read(elem, "{m}.value", y, "{path}.\{{m}.key}", deeper, depth + 1)?
         return "{indent}{o} := {src}.need_obj() {fail}{indent}mut {dest} := Map[str, {elem}]()\n{indent}for {m} in {o}\n{body}{deeper}{dest}[{m}.key] = {y}\n"
     if type_text.contains("[") or type_text.contains(" ")
-        return DeriveError("it can't read the type `{type_text}`; it reads scalars, `Json`, `List[T]`, `Map[str, T]`, `T?` and types that derive `FromJson`")
+        return DeriveError("it can't read the type `{type_text}`; it reads scalars, `Json`, `List[T]`, `Map[str, T]`, `T?`, tuples and types that derive `FromJson`")
     "{indent}{dest} := {type_text}.from_json({src}) {fail}"
+
+## The element types of a tuple type text `(A, B)`, split at the commas
+## outside brackets (type.tuple.8), or `none` for another type.
+fn json_tuple_parts(type_text str) List[str]?
+    if not type_text.starts_with("(") or not type_text.ends_with(")")
+        return none
+    cs := type_text.chars()
+    mut parts := List[str]()
+    mut depth := 0
+    mut start := 1
+    for i in 1..cs.len() - 1
+        c := cs[i]
+        if c == '[' or c == '('
+            depth += 1
+        elif c == ']' or c == ')'
+            depth -= 1
+        elif c == ',' and depth == 0
+            parts.push(type_text.slice(start, i).trim())
+            start = i + 1
+    parts.push(type_text.slice(start, cs.len() - 1).trim())
+    parts
 
 ## Statements reading an optional `inner?` from the `Json?` expression `src`.
 fn json_optional(inner str, src str, dest str, path str, indent str, depth int) str ! DeriveError

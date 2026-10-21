@@ -81,7 +81,18 @@ n += 1           # also -= *= /= %=
 
 ## Types
 
-`int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
+`int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, tuples `(int, str)`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
+
+```ail fragment
+t := (1, "a")                  # an (int, str); prints (1, "a")
+n, s := t                      # `_` skips; `a, mut b := t`
+print(t.0)                     # t.0, t.1, ...
+match t
+    (0, _) => print("zero")
+    (k, w) => print("{k} {w}")
+```
+
+`==`, `<`, map keys and JSON (arrays) work elementwise.
 
 Constants are top-level `NAME := value`, computed at compile time. The
 value may call functions that do no I/O and use no capability
@@ -442,7 +453,8 @@ Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
 (`int?`, `none` when absent), `sorted()` (copy) and `sort()` (in place), `sum()`
 (ints or floats), `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
-`flatten()`; `is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
+`flatten()`, `enumerate()` (`for i, x in xs.enumerate()`), `zip(xs, ys)` (pairs, to the shorter);
+`is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
 Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
 `max`; stable, so sort by name first, then by count):
@@ -491,8 +503,8 @@ mut counts := {}                       # typed by first use: counts[w] += 1
 counts["x"] += 1
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
-for name in ages.keys()                # `for k in m` is an error; also values()
-    print("{name}: {ages[name]}")
+for name, age in ages                  # each entry as a pair; also keys(), values()
+    print("{name}: {age}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
 if seen.add("x")                       # true if it wasn't there
     print("new")

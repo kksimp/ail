@@ -1,0 +1,4 @@
+{"ail_record":1,"program":"/home/user/ail/bootstrap/../examples/../tools/tokbench/corpus/agent-r5/data/replay_fixture.ail","args":[],"seed":1792593437734927238,"limit":67108864}
+{"call":"env.program","line":3,"col":26,"result":"/home/user/ail/bootstrap/../examples/../tools/tokbench/corpus/agent-r5/data/replay_fixture.ail"}
+{"call":"fs.read_text","line":4,"col":16,"result":"## Adds two numbers.\nfn add(a int, b int) int\n    a + b\n\nfn main()\n    print(add(2, 3))\n"}
+{"call":"proc.run","line":6,"col":15,"result":{"struct":"proc.Output","fields":[0,"hello from echo\n",""]}}

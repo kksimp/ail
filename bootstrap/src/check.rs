@@ -38,6 +38,7 @@ mod privacy;
 mod testing;
 mod unsafety;
 mod traits;
+mod tuples;
 mod ui;
 
 use crate::fasthash::FastMap as HashMap;
@@ -103,6 +104,8 @@ pub enum Ty {
     Conc(conc::Conc, Box<Ty>),
     /// `fn(A, B) R`, a function value (type.fn.1); `Unit` when it has no result.
     Fn(Vec<Ty>, Box<Ty>),
+    /// `(A, B, ...)`, two or more elements (type.tuple.1).
+    Tuple(Vec<Ty>),
 }
 
 /// The error part of `T ! E`: an explicit set, or the inferred set of a
@@ -175,6 +178,8 @@ pub struct Resolved {
     pub impls: FastMap<(usize, Con), usize>,
     /// Empty `{}` literals that are sets rather than maps (type.coll.3).
     pub empty_sets: FastSet<Pos>,
+    /// Calls of the built-in `zip(a, b)` (type.tuple.9), by the name's position.
+    pub zips: FastSet<Pos>,
     /// `e?` on an optional, which passes on `none` (err.prop.2); every other
     /// `?` passes on only a failure, so a successful `none` stays a value.
     pub optional_try: FastSet<Pos>,
@@ -543,6 +548,7 @@ fn same(a: &Ty, b: &Ty) -> bool {
         (Ty::Struct(s, xs), Ty::Struct(t, ys)) | (Ty::Enum(s, xs), Ty::Enum(t, ys)) => {
             s == t && xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y))
         }
+        (Ty::Tuple(xs), Ty::Tuple(ys)) => xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| same(x, y)),
         _ => a == b,
     }
 }
@@ -554,7 +560,7 @@ fn has_err(t: &Ty) -> bool {
         Ty::List(x) | Ty::Opt(x) | Ty::Set(x) | Ty::Conc(_, x) => has_err(x),
         Ty::Map(k, v) => has_err(k) || has_err(v),
         Ty::Res(x, _) => has_err(x),
-        Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(has_err),
+        Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) | Ty::Tuple(xs) => xs.iter().any(has_err),
         Ty::Fn(ps, r) => ps.iter().any(has_err) || has_err(r),
         _ => false,
     }
@@ -1077,7 +1083,7 @@ impl<'p> Checker<'p> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.constant_expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().for_each(|x| self.constant_expr(x)),
             Expr::Map(pairs, _) => pairs.iter().for_each(|(k, v)| {
                 self.constant_expr(k);
                 self.constant_expr(v);
@@ -1218,6 +1224,13 @@ impl<'p> Checker<'p> {
                 let ps = params.iter().map(|p| self.resolve_type(p)).collect();
                 let r = ret.as_ref().map_or(Ty::Unit, |r| self.resolve_type(r));
                 return Ty::Fn(ps, Box::new(r));
+            }
+            TypeKind::Tuple(elems) => {
+                let ts: Vec<Ty> = elems.iter().map(|e| self.resolve_type(e)).collect();
+                for (t, e) in ts.iter().zip(elems) {
+                    self.no_unique(t, e.pos, "an element of a tuple");
+                }
+                return Ty::Tuple(ts);
             }
             TypeKind::Any(tr) => {
                 return match self.trait_named(tr, t.pos, "trait.any.1") {
@@ -1628,6 +1641,7 @@ impl<'p> Checker<'p> {
                 let ps: Vec<String> = ps.iter().map(|p| self.ty_name(p)).collect();
                 if **r == Ty::Unit { format!("fn({})", ps.join(", ")) } else { format!("fn({}) {}", ps.join(", "), self.ty_name(r)) }
             }
+            Ty::Tuple(xs) => format!("({})", xs.iter().map(|x| self.ty_name(x)).collect::<Vec<_>>().join(", ")),
         }
     }
 
@@ -1839,6 +1853,10 @@ impl<'p> Checker<'p> {
                 }
                 Ty::Unit
             }
+            Stmt::LetTuple { names, value, pos } => {
+                self.let_tuple(names, value, *pos);
+                Ty::Unit
+            }
             Stmt::Assign { target, op, value, pos } => {
                 self.assign(target, *op, value, *pos);
                 Ty::Unit
@@ -1856,9 +1874,10 @@ impl<'p> Checker<'p> {
                 Ty::Unit
             }
             Stmt::For { var, var_pos, mutable, iter, body, .. } => {
-                let elem = if *mutable { self.mut_iterable(iter, var, body) } else { self.iterable(iter) };
+                let elem = if *mutable { self.mut_iterable(iter, var, body) } else { self.iterable(iter, tuples::is_hidden(var)) };
                 let mark = self.locals.len();
-                if self.declare(var, *var_pos) {
+                // type.tuple.5: the hidden variable of `for a, b in xs` clashes only when the names do.
+                if tuples::is_hidden(var) || self.declare(var, *var_pos) {
                     self.locals.push(Local { name: var.clone(), ty: elem, mutable: *mutable, kind: Kind::LoopVar, decl: None });
                 }
                 self.loops += 1;
@@ -2310,7 +2329,7 @@ impl<'p> Checker<'p> {
     }
 
     /// The element type of a `for` loop's iterable (expr.loop.4).
-    fn iterable(&mut self, iter: &'p Expr) -> Ty {
+    fn iterable(&mut self, iter: &'p Expr, pairs: bool) -> Ty {
         if let Expr::Range { lo, hi, pos, .. } = iter {
             self.loop_range(lo.as_deref(), hi.as_deref(), *pos);
             return Ty::Int;
@@ -2327,9 +2346,11 @@ impl<'p> Checker<'p> {
             }
             Ty::Err => Ty::Err,
             t if self.reject_unhandled(&t, iter.pos()) => Ty::Err,
+            // type.tuple.5: `for k, v in m` takes each entry apart.
+            Ty::Map(k, v) if pairs => Ty::Tuple(vec![*k, *v]),
             Ty::Map(..) => {
-                let mut d = Diagnostic::new("type.map.5", iter.pos(), "`for` iterates a map's keys or values explicitly")
-                    .help("write `for k in m.keys()`, or `m.values()`");
+                let mut d = Diagnostic::new("type.map.5", iter.pos(), "`for` iterates a map's entries as `k, v`, or its keys or values")
+                    .help("write `for k, v in m`, `for k in m.keys()`, or `m.values()`");
                 if let Expr::Name(n, p) = iter {
                     d = d.fix("iterate the keys", vec![Edit::replace(*p, n.clone(), format!("{n}.keys()"))]);
                 }
@@ -2630,6 +2651,7 @@ impl<'p> Checker<'p> {
                 Some(Else::Block { body, .. }) => self.overlapping_use(target, body),
                 None => None,
             }),
+            Stmt::LetTuple { value, .. } => e(value),
             Stmt::Assign { target: t, value, .. } => e(t).or_else(|| e(value)),
             Stmt::While { cond, body, .. } => e(cond).or_else(|| self.overlapping_use(target, body)),
             Stmt::For { iter, body, .. } | Stmt::With { mutex: iter, body, .. } => {
@@ -2682,7 +2704,7 @@ impl<'p> Checker<'p> {
             Expr::Binary { lhs, rhs, .. } => e(lhs).or_else(|| e(rhs)),
             Expr::Range { lo, hi, .. } => lo.as_deref().and_then(e).or_else(|| hi.as_deref().and_then(e)),
             Expr::Map(pairs, _) => pairs.iter().find_map(|(k, v)| e(k).or_else(|| e(v))),
-            Expr::Set(items, _) => items.iter().find_map(e),
+            Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().find_map(e),
             Expr::Comp { elem, value, clauses, .. } => clauses
                 .iter()
                 .find_map(|c| e(&c.iter).or_else(|| c.cond.as_ref().and_then(e)))
@@ -2831,6 +2853,7 @@ impl<'p> Checker<'p> {
                 t
             }
             Expr::Set(items, pos) => self.set_literal(items, *pos, expect),
+            Expr::Tuple(items, _) => self.tuple_lit(items, expect),
             Expr::Comp { kind, elem, value, clauses, .. } => {
                 self.comprehension(*kind, elem, value.as_deref(), clauses, expect)
             }
@@ -3369,6 +3392,9 @@ impl<'p> Checker<'p> {
         }
         if n == "assert" || n == "assert_eq" {
             return self.assert_call(n, args, npos);
+        }
+        if n == "zip" && targs.is_none() && !self.fns.contains_key("zip") {
+            return self.zip_call(args, npos);
         }
         if let Some(t) = self.conc_constructor(n, targs, args, npos, expect) {
             return t;
@@ -4500,6 +4526,12 @@ impl<'p> Checker<'p> {
             d = d
                 .help("compare the value with `none`, e.g. `x != none`")
                 .fix("compare with `none`", vec![Edit::replace(dot, format!(".{name}()"), text)]);
+        } else if let (Ty::Map(..), "items" | "entries") = (rt, name) {
+            // type.tuple.5: a map iterates as its `(key, value)` pairs.
+            let dot = Pos { col: pos.col.saturating_sub(1), ..pos };
+            d = d
+                .help("a map iterates as its entries: `for k, v in m`")
+                .fix(format!("drop `.{name}()`"), vec![Edit::replace(dot, format!(".{name}()"), "")]);
         } else if let Some(new) = builtins::method_rename(rt, name) {
             d = d.help(format!("write `.{new}()`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
         } else if let Some(h) = builtins::method_help(rt, name) {
@@ -4583,6 +4615,9 @@ impl<'p> Checker<'p> {
             return Ty::Err;
         }
         if let Some(t) = self.tensor_field(&rt, name, pos) {
+            return t;
+        }
+        if let Some(t) = self.tuple_field(&rt, name, pos) {
             return t;
         }
         match &rt {
@@ -5090,6 +5125,7 @@ impl<'p> Checker<'p> {
         // An enum, or a type with literal patterns (expr.match.7).
         let (e, literal) = match st {
             Ty::Enum(e, ref args) => (Some((e, args.clone())), None),
+            Ty::Tuple(_) => (None, None),
             Ty::Int | Ty::Char | Ty::Str | Ty::Bool => (None, Some(st.clone())),
             Ty::Num(k) if !k.is_float() => (None, Some(st.clone())),
             Ty::Err => (None, None),
@@ -5117,15 +5153,18 @@ impl<'p> Checker<'p> {
             let kept = arm.guard.as_ref().map(|_| (covered.clone(), seen.clone(), wildcard, self.diags.len()));
             let bindings = match (&e, &literal, &arm.pat) {
                 (Some((e, args)), _, _) => self.pattern(*e, args, &arm.pat, &mut covered, &mut wildcard),
+                (_, _, _) if let Ty::Tuple(xs) = &st => self.tuple_arm(xs, &arm.pat, &mut wildcard),
                 (_, Some(t), _) => {
                     self.literal_pattern(t, &arm.pat, &mut seen, &mut wildcard);
-                    Vec::new()
+                    // type.tuple.6: a misplaced tuple pattern still binds its names.
+                    if let Pattern::Tuple(..) = &arm.pat { tuples::pattern_names(&arm.pat) } else { Vec::new() }
                 }
                 // The scrutinee was already reported: bind names quietly to
                 // avoid follow-on errors.
                 (None, None, Pattern::Variant { bindings: Some(names), .. }) => {
                     names.iter().map(|(n, p)| (n.clone(), *p, Ty::Err)).collect()
                 }
+                (None, None, p @ Pattern::Tuple(..)) => tuples::pattern_names(p),
                 _ => Vec::new(),
             };
             if let Some((c, sn, w, n)) = kept {
@@ -5175,6 +5214,18 @@ impl<'p> Checker<'p> {
                 }
                 self.diags.push(d);
             }
+        }
+        // type.tuple.6: a tuple match needs an arm that takes any tuple.
+        if let Ty::Tuple(_) = &st
+            && !wildcard
+        {
+            let mut d = Diagnostic::new("expr.match.2", pos, format!("this `match` on {} doesn't cover every value", self.show(&st)))
+                .help("add a `_` arm, or an arm of names and `_` such as `(a, _)`");
+            if let Some(last) = arms.last() {
+                let indent = " ".repeat(last.pat.pos().col - 1);
+                d = d.fix("add the missing arms, each a `todo`", vec![Edit::after_block(last.pat.pos(), format!("{indent}_ => todo\n"))]);
+            }
+            self.diags.push(d);
         }
         if let Some(t) = &literal {
             let both_bools = *t == Ty::Bool
@@ -5272,6 +5323,10 @@ impl<'p> Checker<'p> {
                     "a name in a pattern is a variant, not a variable: test the matched value with a guard, e.g. `_ if n > 0 =>`",
                 );
             }
+            Pattern::Tuple(_, pos) | Pattern::Bind(_, pos) => {
+                let msg = format!("a tuple pattern, but the value matched is {}", self.show(t));
+                self.error("type.tuple.6", *pos, msg);
+            }
             // expr.match.12: a range covers some values, never all, so it
             // marks nothing as seen.
             Pattern::Range { lo, hi, inclusive, pos } => {
@@ -5342,6 +5397,11 @@ impl<'p> Checker<'p> {
                     }
                 }
                 Vec::new()
+            }
+            Pattern::Tuple(_, pos) | Pattern::Bind(_, pos) => {
+                let msg = format!("a tuple pattern, but `{}` is an enum; match it with its variants", decl.name);
+                self.error("type.tuple.6", *pos, msg);
+                tuples::pattern_names(pat)
             }
             Pattern::Literal(_, pos) | Pattern::Range { pos, .. } => {
                 let msg = format!("`{}` is an enum; match it with its variants", decl.name);
@@ -5571,7 +5631,7 @@ fn breaks(body: &[Stmt]) -> bool {
             Expr::Method { recv, args, .. } => in_expr(recv) || args.iter().any(|a| in_expr(&a.value)),
             Expr::Field { recv, .. } => in_expr(recv),
             Expr::Index { recv, index, .. } => in_expr(recv) || in_expr(index),
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(in_expr),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().any(in_expr),
             Expr::Map(pairs, _) => pairs.iter().any(|(k, v)| in_expr(k) || in_expr(v)),
             Expr::Try { expr, .. } => in_expr(expr),
             Expr::Else { value, otherwise, .. } => in_expr(value) || in_else(otherwise),
@@ -5587,7 +5647,7 @@ fn breaks(body: &[Stmt]) -> bool {
     }
     body.iter().any(|s| match s {
         Stmt::Break(_) => true,
-        Stmt::Expr(e) | Stmt::Return(Some(e), _) => in_expr(e),
+        Stmt::Expr(e) | Stmt::Return(Some(e), _) | Stmt::LetTuple { value: e, .. } => in_expr(e),
         Stmt::Let { value, otherwise, .. } => in_expr(value) || otherwise.as_ref().is_some_and(in_else),
         Stmt::Handle { value, otherwise, .. } => in_expr(value) || in_else(otherwise),
         Stmt::Assign { target, value, .. } => in_expr(target) || in_expr(value),
@@ -5605,7 +5665,7 @@ fn may_be_same(a: &Ty, b: &Ty) -> bool {
             Ty::Param(_) => true,
             Ty::List(e) | Ty::Opt(e) | Ty::Set(e) | Ty::Conc(_, e) => has_param(e),
             Ty::Map(k, v) => has_param(k) || has_param(v),
-            Ty::Struct(_, args) | Ty::Enum(_, args) => args.iter().any(has_param),
+            Ty::Struct(_, args) | Ty::Enum(_, args) | Ty::Tuple(args) => args.iter().any(has_param),
             Ty::Fn(ps, r) => ps.iter().any(has_param) || has_param(r),
             _ => false,
         }

@@ -192,6 +192,7 @@ pub LIST_METHODS := [
     "counts",
     "flatten",
     "is_empty",
+    "enumerate",
 ]
 
 pub MAP_METHODS := ["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"]
@@ -411,6 +412,9 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Opt(e))
             if n == "take"
                 return read([Ty.Int], Ty.ListOf(e))
+            # type.tuple.9: each element with its index.
+            if n == "enumerate"
+                return read([], Ty.ListOf(Ty.Tuple([Ty.Int, e])))
             if n == "chunks" or n == "windows"
                 return read([Ty.Int], Ty.ListOf(Ty.ListOf(e)))
             if n == "flatten"

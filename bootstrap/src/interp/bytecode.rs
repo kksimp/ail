@@ -834,6 +834,7 @@ fn compilable(b: &Block) -> bool {
             Stmt::With { .. } | Stmt::Defer(..) | Stmt::Unsafe { .. } => false,
             Stmt::For { par: true, .. } => false,
             Stmt::Let { value, otherwise, .. } => expr(value) && otherwise.as_ref().is_none_or(other),
+            Stmt::LetTuple { value, .. } => expr(value),
             Stmt::Assign { target, value, .. } => expr(target) && expr(value),
             Stmt::While { cond, body, .. } => expr(cond) && compilable(body),
             Stmt::For { iter, body, .. } => expr(iter) && compilable(body),
@@ -1063,6 +1064,9 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         if let Stmt::Let { name, .. } = s {
             self.scope.push(name);
         }
+        if let Stmt::LetTuple { names, .. } = s {
+            self.scope.extend(names.iter().map(|b| b.name.as_str()));
+        }
     }
 
     /// Code that leaves the value of `e` in `dst`.
@@ -1162,9 +1166,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     let test = self.emit(Ins::Arm { src, pat: &arm.pat, t: 0 });
                     let mark = self.depth();
                     // expr.match.6: fields bind by position; `_` skips one.
-                    if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
-                        self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
-                    }
+                    bound_names(&arm.pat, &mut self.scope);
                     // expr.match.11: a false guard drops the bindings and tries the next arm.
                     let fails = arm.guard.as_ref().map(|g| self.cond_jump(g, false));
                     self.block(&arm.body, t);
@@ -2646,13 +2648,7 @@ match take!(*src) {
                 pc = *t as usize;
             } else {
                 pc += 1;
-                if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (pat, v) {
-                    for ((n, _), value) in names.iter().zip(fields.iter()) {
-                        if n != "_" {
-                            env.push((n.as_str(), value.clone()));
-                        }
-                    }
-                }
+                bind_pattern(pat, v, env);
             }
         
         Ok(pc)
@@ -3524,10 +3520,15 @@ match {
                             };
                             fields[i].clone()
                         }
+                        // type.tuple.3: `t.0`.
+                        Value::Tuple(xs) => xs[element_index(name)].clone(),
                         _ => {
                             let v = take!(*recv);
-                            let Value::Struct(s, fields) = deref(v, *pos)? else { unreachable!("checked: struct") };
-                            fields[self.field_index(s, name)].clone()
+                            match deref(v, *pos)? {
+                                Value::Struct(s, fields) => fields[self.field_index(s, name)].clone(),
+                                Value::Tuple(xs) => xs[element_index(name)].clone(),
+                                other => unreachable!("checked: struct, found {other:?}"),
+                            }
                         }
                     };
                     done(*recv, regs);
@@ -3748,6 +3749,8 @@ match {
                         regs[r] = Value::List(Rc::new(t.key_list()));
                     } else if let Value::Bytes(b) = &regs[r] {
                         regs[r] = Value::List(Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()));
+                    } else if let Value::Map(t) = &regs[r] {
+                        regs[r] = Value::List(Rc::new(entry_pairs(t)));
                     }
                     regs[(*idx & !KIND) as usize] = Value::Int(0);
                 }

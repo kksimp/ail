@@ -138,6 +138,7 @@ pub(super) enum Plain {
     Struct(usize, Vec<Plain>),
     Enum(usize, usize, Vec<Plain>),
     List(Vec<Plain>),
+    Tuple(Vec<Plain>),
     Map(Vec<(Plain, Plain)>),
     Set(Vec<Plain>),
     None,
@@ -154,7 +155,7 @@ impl Plain {
     fn has_atomic(&self) -> bool {
         match self {
             Plain::Atomic(_) => true,
-            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) => ps.iter().any(Plain::has_atomic),
+            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) | Plain::Tuple(ps) => ps.iter().any(Plain::has_atomic),
             Plain::Map(kvs) => kvs.iter().any(|(k, v)| k.has_atomic() || v.has_atomic()),
             Plain::Fail(e, _, _) => e.has_atomic(),
             _ => false,
@@ -178,6 +179,7 @@ fn plain(v: &Value) -> Option<Plain> {
         Value::Struct(s, fs) => Plain::Struct(*s, all(fs)?),
         Value::Enum(e, i, fs) => Plain::Enum(*e, *i, all(fs)?),
         Value::List(xs) => Plain::List(all(xs)?),
+        Value::Tuple(xs) => Plain::Tuple(all(xs)?),
         Value::Map(t) => Plain::Map(t.entries().map(|(k, v)| Some((plain(k)?, plain(v)?))).collect::<Option<_>>()?),
         Value::Set(t) => Plain::Set(t.keys().map(plain).collect::<Option<_>>()?),
         Value::None => Plain::None,
@@ -204,6 +206,7 @@ fn value(p: &Plain) -> Value {
         Plain::Struct(s, fs) => Value::Struct(*s, Rc::new(all(fs))),
         Plain::Enum(e, i, fs) => Value::Enum(*e, *i, Rc::new(all(fs))),
         Plain::List(xs) => Value::List(Rc::new(all(xs))),
+        Plain::Tuple(xs) => Value::Tuple(Rc::new(all(xs))),
         Plain::Map(kvs) => {
             let mut t = Table::default();
             for (k, v) in kvs {

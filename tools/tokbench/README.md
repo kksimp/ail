@@ -100,3 +100,7 @@ says which program changed and why, with its five-tokenizer mean before and afte
   - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
   - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
   Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
+- **2026-10-21, tuples (ADR 0791-0794)** (two twins; output checked byte-identical to the Python twin):
+  - `agent-r4/t12_sort_ties`: the people are `(name, age)` pairs sorted by the key `(-p.1, p.0)`, as the Python twin does, instead of a `struct P` and two `sorted` passes. 91.4 → 57.6.
+  - `agent-r4/t03_table`: the rows are `(str, int)` pairs taken apart by `for name, qty in rows`, as in Python. 38.8 → 35.2.
+  Total for the 25 std twins: 1,128.6 → 1,091.2 (−37.4), AIL against Python +13.9% → +10.1%. This change is the language's.

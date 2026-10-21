@@ -579,4 +579,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
+| [0792](0792-tuple-syntax.md) | Tuple syntax: `(A, B)` types, `t.0` elements, `a, b := t`, `for k, v in m` *(delegated)* | Accepted | 2026-10-21 |
+| [0793](0793-tuple-patterns.md) | Tuple patterns in `match`; a bare name binds *(delegated)* | Accepted | 2026-10-21 |
+| [0794](0794-tuple-library-names.md) | `xs.enumerate()` and `zip(a, b)`; no `m.items()` or `m.pairs()` *(delegated)* | Accepted | 2026-10-21 |
+| [0795](0795-tuple-text-and-json.md) | Tuples as text and JSON: `(1, "a")` and arrays *(delegated)* | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |

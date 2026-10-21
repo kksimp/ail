@@ -1,0 +1,5 @@
+{"ends":["a","b"],"pts":[[1,2.5],[3,4]],"w":[7,[true,"x"]]}
+Edge(ends: ("a", "b"), pts: [(1, 2.5), (3, 4.0)], w: (7, (true, "x")))
+true
+{"ends":["c","d"],"pts":[],"w":null}
+error JsonError(at: -1, message: "ends: expected 2 elements, found 1")

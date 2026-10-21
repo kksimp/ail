@@ -29,6 +29,7 @@ enum G {
     Opt(Box<G>),
     Struct(usize),
     Enum(usize),
+    Tuple(Vec<G>),
 }
 
 /// splitmix64: small, fast, and the same on every platform (test.prop.3).
@@ -67,6 +68,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn gen_of(&self, t: &TypeRef) -> G {
         match &t.kind {
             TypeKind::Optional(inner) => G::Opt(Box::new(self.gen_of(inner))),
+            TypeKind::Tuple(elems) => G::Tuple(elems.iter().map(|e| self.gen_of(e)).collect()),
             TypeKind::Named { name, args } => match name.as_str() {
                 "int" | "i64" => G::Int,
                 "float" | "f64" => G::Float,
@@ -154,6 +156,7 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Struct(i) => {
                 Value::Struct(*i, Rc::new(self.struct_gens(*i).iter().map(|g| self.generate(g, rng, size, depth + 1)).collect()))
             }
+            G::Tuple(gs) => Value::Tuple(Rc::new(gs.iter().map(|g| self.generate(g, rng, size, depth + 1)).collect())),
             G::Enum(e) => {
                 let n = self.prog.enums[*e].variants.len();
                 let v = if depth >= MAX_DEPTH { self.simplest_variant(*e) } else { rng.below(n as u64) as usize };
@@ -187,6 +190,7 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Opt(_) => Value::None,
             G::Struct(i) => Value::Struct(*i, Rc::new(self.struct_gens(*i).iter().map(|g| self.minimal(g)).collect())),
             G::Enum(e) => self.minimal_variant(*e, self.simplest_variant(*e)),
+            G::Tuple(gs) => Value::Tuple(Rc::new(gs.iter().map(|g| self.minimal(g)).collect())),
         }
     }
 
@@ -320,6 +324,15 @@ impl<'a, W: Write> Interp<'a, W> {
                         let mut d = (**fields).clone();
                         d[j] = s;
                         out.push(Value::Struct(*i, Rc::new(d)));
+                    }
+                }
+            }
+            (G::Tuple(gs), Value::Tuple(xs)) => {
+                for (j, x) in xs.iter().enumerate() {
+                    for s in self.shrinks(&gs[j], x) {
+                        let mut d = (**xs).clone();
+                        d[j] = s;
+                        out.push(Value::Tuple(Rc::new(d)));
                     }
                 }
             }
