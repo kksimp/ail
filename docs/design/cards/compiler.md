@@ -225,7 +225,7 @@ pub fn mir.lower_module(str, str, ast.Program, ast.Program?) mir.Module ! mir.Pr
 pub struct mir.Source
 pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(ast.Expr) ast.Pos
-pub mir.RT_GLOBALS := 16
+pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
 pub enum mir.Ty
