@@ -57,6 +57,37 @@ T_ARGS := 80
 
 ## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
 fn cores() int
+    n := env_threads()
+    if n > 0
+        return n
+    hw_cores()
+
+## `AIL_THREADS` as a whole number of 1 to `MAXW` (conc.par.9, ADR 0272); 0 when it is
+## unset or not a number, as in the interpreter, which then uses the hardware.
+fn env_threads() int
+    s := os_env_get("AIL_THREADS")
+    if not os_ok()
+        return 0
+    p := str_addr(s)
+    n := load64(p)
+    mut v := 0
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        if c < 48 or c > 57
+            return 0
+        if v < 1000
+            v = v * 10 + c - 48
+        i += 1
+    if n == 0
+        return 0
+    if v < 1
+        return 1
+    if v > MAXW
+        return MAXW
+    v
+
+fn hw_cores() int
     if target() == 2
         c := import_call("_sysconf", 58, 0, 0, 0)
         return if c < 1 then 1 else if c > 8 then 8 else c
