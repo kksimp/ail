@@ -303,6 +303,11 @@ fn fuzz_native_options() {
 }
 
 #[test]
+fn fuzz_native_enums() {
+    native_differential("enums", pure::enums, false);
+}
+
+#[test]
 fn fuzz_native_funcs() {
     native_differential("funcs", pure::funcs, false);
 }
@@ -404,6 +409,6 @@ fn dump_named() {
     if let Ok(v) = std::env::var("AIL_FUZZ_NAMED") {
         let (name, seed) = v.split_once(':').unwrap();
         let seed = seed.parse().unwrap();
-        print!("{}", match name { "strings" => pure::strings(seed), "maps" => pure::maps(seed), "options" => pure::options(seed), "funcs" => pure::funcs(seed), _ => pure::program(seed) });
+        print!("{}", match name { "strings" => pure::strings(seed), "maps" => pure::maps(seed), "options" => pure::options(seed), "funcs" => pure::funcs(seed), "enums" => pure::enums(seed), _ => pure::program(seed) });
     }
 }
