@@ -15,6 +15,25 @@ pub fn diag_lines(diags List[Diag], mut out List[str])
     for d in diags
         out.push("{d.pos.line}:{d.pos.col} diag {d.rule}")
 
+## One syntax diagnostic per line (gram.rec.1, ADR 0263): the leftmost one
+## on a line is kept and the others on that line are dropped. String errors
+## (lex.str.*) are independent and always kept, as in the Rust front end
+## (bootstrap/src/modules.rs, one_per_line).
+pub fn one_per_line(diags List[Diag]) List[Diag]
+    mut out := List[Diag]()
+    for d in diags
+        if d.rule.starts_with("lex.str.") or leftmost_on_line(diags, d)
+            out.push(d)
+    out
+
+fn leftmost_on_line(diags List[Diag], d Diag) bool
+    for e in diags
+        if e.rule.starts_with("lex.str.") or e.pos.line != d.pos.line
+            continue
+        if e.pos.col < d.pos.col
+            return false
+    true
+
 ## `LINE:COL KIND [VALUE]` (api.tok.2); an interpolated string lists its
 ## parts on the lines after it, each code part's tokens ending in `eof`,
 ## and then `end`.
