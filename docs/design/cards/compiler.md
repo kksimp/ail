@@ -274,6 +274,7 @@ pub fn syntax.diag_lines(List[syntax.Diag], mut List[str]) [mutates]
 pub fn syntax.one_per_line(List[syntax.Diag]) List[syntax.Diag]
 pub fn syntax.quote(str) str
 pub fn syntax.ast_text(syntax.Lexed, syntax.Parsed) str
+pub fn syntax.report_text(str, str, List[syntax.Diag]) str
 pub enum syntax.Tok
 pub enum syntax.Part
 pub struct syntax.Token
@@ -327,4 +328,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3603); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3626); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

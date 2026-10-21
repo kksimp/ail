@@ -1,0 +1,5 @@
+fn List.first_or(self, d int) int
+    d
+
+fn main()
+    print(1)

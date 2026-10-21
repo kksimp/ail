@@ -22,7 +22,11 @@ edit error ([ai-author-wishlist.md 3.1](../design/ai-author-wishlist.md)).
 2. The canonical formatter writes a trailing comma when the list spans several
    lines, and none when it fits on one line.
 
-```ail
+```ail fragment
+struct Student
+    name str
+    score int
+
 students := [
     Student(name: "Ada", score: 95),
     Student(name: "Linus", score: 82),

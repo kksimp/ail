@@ -909,8 +909,10 @@ pub fn command(args: &[&str], json: bool) -> std::process::ExitCode {
         let out = match format(&src) {
             Ok(out) => out,
             Err(Refusal::Rejected(mut diags)) => {
-                // A file found in a directory that doesn't parse (a negative test) is skipped.
-                if named {
+                // A file found in a directory that doesn't parse is skipped when it is a
+                // negative test (it has an expectation file). In check mode any other one
+                // fails the check, so a broken source file can't pass unnoticed.
+                if named || (check && !is_negative_test(&file)) {
                     eprintln!("error: {file} wasn't formatted because it has errors (fmt.safe)");
                     crate::diag::report(&mut diags, &file, &src, json);
                     failed = true;
@@ -938,7 +940,7 @@ pub fn command(args: &[&str], json: bool) -> std::process::ExitCode {
         }
     }
     if skipped > 0 {
-        eprintln!("note: skipped {skipped} file(s) that have lexical or syntax errors");
+        eprintln!("note: skipped {skipped} negative test file(s) that have lexical or syntax errors");
     }
     if failed {
         ExitCode::from(2)
@@ -1175,4 +1177,18 @@ mod tests {
         assert_eq!(d, "--- a.ail\n+++ a.ail (formatted)\n@@ -1,3 +1,3 @@\n x\n-y\n+Y\n z\n");
         assert_eq!(diff("a.ail", "x\n", "x\n"), "");
     }
+}
+
+/// A negative test: the file has an expectation beside it (`NAME.err`,
+/// `NAME.rules` or `NAME.trap`), or it is in a package case whose directory,
+/// or one of the two above it, has an `expected.*` file (a syntax error in
+/// it is what the test checks).
+fn is_negative_test(file: &str) -> bool {
+    let path = std::path::Path::new(file);
+    if ["err", "rules", "trap"].iter().any(|ext| path.with_extension(ext).is_file()) {
+        return true;
+    }
+    path.ancestors().skip(1).take(3).any(|dir| {
+        ["err", "rules", "trap"].iter().any(|ext| dir.join(format!("expected.{ext}")).is_file())
+    })
 }

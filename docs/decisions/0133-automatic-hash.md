@@ -66,7 +66,7 @@ others, since there is nothing a user could write in the `impl`.
 8. Hash values are never visible to programs: there's no `hash()` method.
    Output can't depend on the hash function.
 
-```ail
+```ail excerpt
 struct Pos
     col int
     row int
