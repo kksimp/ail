@@ -15,9 +15,9 @@ typed mistake reach combinations nobody wrote.
 ## Decision
 
 - `tools/fuzz/gen/gen.ail` (AIL) generates programs from a grammar: a fixed
-  prelude (struct, enum, error enum, fallible and optional helpers), 0-2 helper
+  prelude (struct, enum, error enum, fallible and optional helpers, generics, a trait, function values), 0-2 helper
   functions and a `main` of typed statements (bindings, loops, `if`, `match`,
-  `?`, optionals, `mut` calls). A quarter of the programs get one mistake of 19
+  `?`, optionals, `mut` calls). A quarter of the programs get one mistake of 42
   kinds at a random statement (wrong arity, missing `mut`, moved value reused,
   unhandled failure, unknown method or variant, bad `else`, and so on).
   Program `k` of a run uses seed `SEED+k`, so a run reproduces.
@@ -39,11 +39,26 @@ disagreements** (9,902 of 9,902 agree on rule, line, column and message). The
 other 98 are rejected by the parser before either checker runs. About a quarter
 carry a mistake.
 
+## Widened grammar
+
+Each slice added declarations, statements and mistake kinds to the generator,
+then ran about 2,000 programs (seeds 50000-83999, in four runs of 500):
+
+| Slice | Adds | Compared | Disagreements |
+|---|---|---|---|
+| generics | `Stack[T]`, `Pair[A, B]`, `largest[T Ord]`, bound and arity mistakes | 1,984 | 0 |
+| traits | trait with a default method, `impl`, `any Trait`, `[T Trait]`, bad impls | 1,989 | 0 |
+| function values | `fn(int) int` parameters and bindings, `mut` function as a value | 1,988 | 0 |
+| tasks | `spawn`/`wait`, `Atomic`, `Mutex`/`with`, `Channel`, `par for`, double wait | 1,991 | 0 |
+
+AIL has no closures yet (the language card says "no lambdas"), so the third
+slice covers function values. Modules need multi-file packages, which the driver
+doesn't generate yet.
+
 ## Limits
 
-The generator is small: no generics, traits, closures, modules or tasks. Zero
-disagreements measures agreement on this grammar only. Widen the grammar before
-reading more into it.
+Zero disagreements measures agreement on this grammar only. The generator has no
+modules, enums with payload mistakes beyond `Shape`, or string-heavy code.
 
 ## Rejected alternatives
 
