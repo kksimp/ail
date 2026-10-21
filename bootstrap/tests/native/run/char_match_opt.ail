@@ -1,0 +1,38 @@
+# expr.match.7: `match` on a `char` with literals, alternatives and ranges;
+# type.opt.3: `==` between an optional and a plain value or another optional.
+fn kind(c char) str
+    match c
+        'a' => "a"
+        'b' | 'c' => "b or c"
+        '0'..='9' => "digit"
+        'x'..'z' => "x or y"
+        _ => "other"
+
+fn first(s str) char?
+    cs := s.chars()
+    if cs.len() == 0
+        return none
+    cs[0]
+
+fn num(n int) int?
+    if n < 0
+        return none
+    n
+
+fn main()
+    for c in "abcz09xyz-".chars()
+        print(kind(c))
+    x := first("hello")
+    e := first("")
+    print(x == 'h')
+    print(x != 'h')
+    print(x == 'e')
+    print(e == 'h')
+    print(e != 'h')
+    print(e == e)
+    print(x == e)
+    print(x == first("hat"))
+    print(x == first("jam"))
+    print(num(3) == 3)
+    print(num(-1) == 3)
+    print(num(2) != num(2))

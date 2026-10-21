@@ -1,0 +1,7 @@
+# Tensors are collected: building many in a loop keeps memory bounded.
+fn main()
+    mut total := 0
+    for i in 0..200000
+        t := tensor.from([i, i + 1, i + 2, i + 3], [2, 2])
+        total += t.to_list()[3] + t.len()
+    print(total)
