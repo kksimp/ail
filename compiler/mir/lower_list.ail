@@ -271,6 +271,8 @@ fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
 ## `xs[i]`, `xs[a..b]`, and `m[k]` on a map.
 fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
     l := lower_value(recv, none)?
+    if l.ty == Ty.Bytes
+        return bytes_index(l, index, pos)
     if l.ty.is_coll()
         return lower_coll_index(l, index, pos)
     elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")

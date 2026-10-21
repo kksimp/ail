@@ -69,6 +69,8 @@ pub enum mir.Ty
     Float
     Bool
     Str
+    Bytes
+    Byte
     Char
     List(elem mir.Ty)
     Map(key mir.Ty, val mir.Ty)
@@ -159,3 +161,4 @@ pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
 trimmed to fit 2000 tokens (~1551); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1515); dropped: private items, doc comments

@@ -647,6 +647,19 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 12
+        # `b[a]` of `bytes` (type.bytes.3); `b` is the length.
+        out_str("index ")
+        out_int(a)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(b)
+    elif kind == 13
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(load64(global(TRAP_LEN)))
     elif kind == 14
         # `unreachable(message)` (err.model.2): `a` is the message
         out_str("unreachable: ")

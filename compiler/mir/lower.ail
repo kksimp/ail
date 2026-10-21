@@ -433,6 +433,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "float" => Ty.Float
                 "bool" => Ty.Bool
                 "str" => Ty.Str
+                "bytes" => Ty.Bytes
                 "char" => Ty.Char
                 "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Ty.Sized(name)
                 "List" =>
@@ -1189,7 +1190,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Int(text, pos) => lower_int_lit(text, pos, want)
         Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
-        Bytes(_, pos) => unsupported(pos, "`bytes` literals")
+        Bytes(hex, pos) => lower_bytes_lit(hex, pos)
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
         Name(name, pos) => lower_name(name, pos, want)
         Unary(o, operand, pos) => lower_unary(o, operand, pos, want)
@@ -1588,6 +1589,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         text := text_of(r, npos)?
         return Val(id: text, ty: Ty.Str)
     match r.ty
+        Bytes | Byte => return bytes_method(r, name, vs.len(), npos)
         Int | Sized(_) => return int_method(r, name, npos, vs)
         Float => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
