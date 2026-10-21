@@ -76,14 +76,14 @@ fn dir_worker(srv net.Server, root str)
         file_for(ex, root)
 
 ## Answers every request on `srv` with the files under `root` until `srv.close()`.
-pub fn run_dir(srv net.Server, root str) !
+pub fn run_dir(srv net.Server, root str) ! Trapped
     g := TaskGroup()
     for _ in 0..WORKERS
         g.add(spawn dir_worker(srv, root))
     g.wait_all()?
 
 ## Listens on `addr` and serves the files under `root`.
-pub fn serve_dir(addr str, root str) !
+pub fn serve_dir(addr str, root str) ! net.NetError | Trapped
     srv := net.serve(addr)?
     run_dir(srv, root)?
 
