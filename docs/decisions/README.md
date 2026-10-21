@@ -504,6 +504,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0577](0577-bounds-checks-in-counted-loops.md) | Bounds checks in counted loops: versioning with guards, hoisted loads, two-pointer loops *(delegated)* | Accepted | 2026-10-20 |
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
+| [0568](0568-native-map-and-set-layout.md) | Native `Map` and `Set`: one insertion-ordered table with a hash index *(delegated)* | Accepted | 2026-10-20 |
+| [0569](0569-native-map-lowering.md) | Lowering `Map` and `Set` operations to runtime calls, with the interpreter's trap *(delegated)* | Accepted | 2026-10-20 |
+| [0570](0570-native-constant-lists.md) | Constant lists are built once, on first use, in a global slot *(delegated)* | Superseded by 0604 | 2026-10-20 |
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |

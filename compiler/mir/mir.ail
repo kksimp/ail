@@ -15,6 +15,9 @@ pub enum Ty
     Char
     ## A list of numbers; `elem` is `Unknown` until the first use types it.
     List(elem Ty)
+    ## `Map[K, V]` and `Set[T]` (ADR 0568); `K` is `int`, `bool` or `str`.
+    Map(key Ty, val Ty)
+    Set(elem Ty)
     ## `T?`: a pointer, or 0 for `none`; a number is boxed (ADR 0574).
     Opt(inner Ty)
     ## A struct object (native-abi.md §2): one 8-byte slot per field.
@@ -46,6 +49,12 @@ pub fn Ty.elem(self) Ty?
         List(e) => e
         _ => none
 
+## A `Map` or a `Set`: a pointer to a table object (ADR 0568).
+pub fn Ty.is_coll(self) bool
+    match self
+        Map(_, _) | Set(_) => true
+        _ => false
+
 pub fn Ty.name(self) str
     match self
         Int => "int"
@@ -54,6 +63,8 @@ pub fn Ty.name(self) str
         Str => "str"
         Char => "char"
         List(e) => "List[{e.name()}]"
+        Map(k, v) => "Map[{k.name()}, {v.name()}]"
+        Set(e) => "Set[{e.name()}]"
         Opt(t) => "{t.name()}?"
         Struct(n) => n
         Enum(n) => n
