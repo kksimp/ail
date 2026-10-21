@@ -108,6 +108,9 @@ enum Value {
     Atomic(std::sync::Arc<atomic::Cell>),
     /// A declared function used as a value (type.fn.2), by index in the program.
     Fn(usize),
+    /// A tuple's elements (type.tuple.2): copies share them until one is
+    /// changed, as a struct's fields do.
+    Tuple(Rc<Vec<Value>>),
 }
 
 impl Clone for Value {
@@ -137,6 +140,7 @@ impl Clone for Value {
             Value::Tensor(t) => Value::Tensor(Rc::clone(t)),
             Value::Atomic(c) => Value::Atomic(std::sync::Arc::clone(c)),
             Value::Fn(f) => Value::Fn(*f),
+            Value::Tuple(xs) => Value::Tuple(Rc::clone(xs)),
         }
     }
 }
@@ -847,7 +851,7 @@ fn slot_in<'e>(root: &'e mut Value, path: &[Step], insert: bool) -> Result<&'e m
                     None => return trap("type.map.3", *pos, format!("the map has no key {}", key_text(k))),
                 }
             }
-            (Step::Field(i), Value::Struct(_, fields)) => &mut Rc::make_mut(fields)[*i],
+            (Step::Field(i), Value::Struct(_, fields) | Value::Tuple(fields)) => &mut Rc::make_mut(fields)[*i],
             (Step::Index(i, pos), Value::List(items)) => {
                 let items = Rc::make_mut(items);
                 let len = items.len();
@@ -889,7 +893,7 @@ fn peek_in<'e>(root: &'e Value, path: &[Step]) -> Result<&'e Value, Trap> {
     let mut v = root;
     for step in path {
         v = match (step, v) {
-            (Step::Field(i), Value::Struct(_, fields)) => &fields[*i],
+            (Step::Field(i), Value::Struct(_, fields) | Value::Tuple(fields)) => &fields[*i],
             (Step::Index(i, pos), Value::List(items)) => element(items, *i, *pos)?,
             (Step::Key(k, pos), Value::Map(t)) => map_value(t, k, || key_text(k), *pos)?,
             (_, other) => unreachable!("checked: place step {step:?} on {other:?}"),
@@ -923,6 +927,65 @@ fn quoted(text: &str, quote: char) -> String {
 }
 
 /// A key for a trap message: strings and characters quoted, as inside a value.
+/// The names a matching pattern binds, in order: a variant's fields by
+/// position, `_` skipping one (expr.match.6), and a tuple's elements
+/// (type.tuple.6).
+fn bind_pattern<'a>(pat: &'a Pattern, v: &Value, env: &mut Env<'a>) {
+    match (pat, v) {
+        (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) => {
+            for ((n, _), value) in names.iter().zip(fields.iter()) {
+                if n != "_" {
+                    env.push((n.as_str(), value.clone()));
+                }
+            }
+        }
+        (Pattern::Bind(n, _), v) => env.push((n.as_str(), v.clone())),
+        (Pattern::Tuple(ps, _), Value::Tuple(xs)) => {
+            for (p, x) in ps.iter().zip(xs.iter()) {
+                bind_pattern(p, x, env);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The names `bind_pattern` binds, in its order.
+fn bound_names<'a>(pat: &'a Pattern, out: &mut Vec<&'a str>) {
+    match pat {
+        Pattern::Variant { bindings: Some(names), .. } => {
+            out.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
+        }
+        Pattern::Bind(n, _) => out.push(n),
+        Pattern::Tuple(ps, _) => ps.iter().for_each(|p| bound_names(p, out)),
+        _ => {}
+    }
+}
+
+/// The index of a tuple element `t.0` (type.tuple.3), checked to be digits.
+fn element_index(name: &str) -> usize {
+    name.bytes().fold(0, |n, b| n * 10 + usize::from(b - b'0'))
+}
+
+/// Bind a comprehension clause's variable to `item`, and with `for a, b
+/// in xs` its parts too (type.tuple.5).
+fn push_clause<'a>(env: &mut Env<'a>, c: &'a CompFor, item: Value) {
+    if c.unpack.is_empty() {
+        env.push((&c.var, item));
+        return;
+    }
+    let Value::Tuple(parts) = &item else { unreachable!("checked: a tuple") };
+    let parts = Rc::clone(parts);
+    env.push((&c.var, item));
+    for (b, x) in c.unpack.iter().zip(parts.iter()) {
+        env.push((b.name.as_str(), x.clone()));
+    }
+}
+
+/// A map's entries as `(key, value)` tuples, in order (type.tuple.5).
+fn entry_pairs(t: &Table) -> Vec<Value> {
+    t.entries().map(|(k, v)| Value::Tuple(Rc::new(vec![k.clone(), v.clone()]))).collect()
+}
+
 fn key_text(k: &Value) -> String {
     let fields = |names: &[String], values: &[Value]| {
         if values.is_empty() {
@@ -942,6 +1005,7 @@ fn key_text(k: &Value) -> String {
         Value::None => "none".into(),
         Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
         Value::List(items) => format!("[{}]", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
+        Value::Tuple(items) => format!("({})", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
         Value::Struct(s, values) => NAMES.with(|n| {
             let (name, names) = &n.borrow().structs[*s];
             format!("{name}{}", fields(names, values))
@@ -1443,6 +1507,14 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.trace_watch(name, env, *pos);
                 }
             }
+            // type.tuple.4: one binding per element, `_` included.
+            Stmt::LetTuple { names, value, .. } => {
+                let v = self.eval(value, env)?;
+                let Value::Tuple(parts) = v else { unreachable!("checked: a tuple") };
+                for (b, x) in names.iter().zip(Rc::unwrap_or_clone(parts)) {
+                    env.push((b.name.as_str(), x));
+                }
+            }
             Stmt::Assign { target, op, value, pos } => self.assign(target, *op, value, *pos, env)?,
             Stmt::While { cond, body, pos } => {
                 while self.cond(cond, env)? {
@@ -1569,6 +1641,8 @@ impl<'a, W: Write> Interp<'a, W> {
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
             Value::Set(t) => Rc::new(t.key_list()),
+            // type.tuple.5: `for k, v in m`, each entry as a pair.
+            Value::Map(t) => Rc::new(entry_pairs(&t)),
             // type.bytes.5: each byte, as a `u8`.
             Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
             // conc.share.7: each value received, until the channel is closed and empty.
@@ -1625,13 +1699,15 @@ impl<'a, W: Write> Interp<'a, W> {
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
+                Value::Map(t) => Rc::new(entry_pairs(&t)),
                 Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
                 Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
         };
         for item in items.iter() {
-            env.push((&c.var, item.clone()));
+            let mark = env.len();
+            push_clause(env, c, item.clone());
             let r = match &c.cond {
                 Some(cond) => match self.eval(cond, env) {
                     Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
@@ -1645,6 +1721,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.snap_block(env);
             }
             env.pop();
+            env.truncate(mark);
             match r {
                 Ok(true) | Err(Exit::Continue) => {}
                 Ok(false) | Err(Exit::Break) => return Ok(false),
@@ -1669,7 +1746,8 @@ impl<'a, W: Write> Interp<'a, W> {
         acc: &mut (Vec<Value>, Table),
     ) -> Flow<bool> {
         while let Some(item) = self.chan_next(ch, c.iter.pos())? {
-            env.push((&c.var, item));
+            let mark = env.len();
+            push_clause(env, c, item);
             let r = match &c.cond {
                 Some(cond) => match self.eval(cond, env) {
                     Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
@@ -1683,6 +1761,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.snap_block(env);
             }
             env.pop();
+            env.truncate(mark);
             match r {
                 Ok(true) | Err(Exit::Continue) => {}
                 Ok(false) | Err(Exit::Break) => return Ok(false),
@@ -1829,6 +1908,11 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             Expr::Field { recv, name, .. } => {
                 let mut p = self.place(recv, env)?;
+                // type.tuple.3: `t.0 = v` on a `mut` tuple.
+                if view(env, &p, |v| matches!(v, Value::Tuple(_)))? {
+                    p.path.push(Step::Field(element_index(name)));
+                    return Ok(p);
+                }
                 let s = match view(env, &p, |v| match v {
                     Value::Struct(s, _) => Ok(*s),
                     Value::Ref(c) => Err(c.clone()),
@@ -1984,8 +2068,12 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(Value::Enum(e, v, Rc::clone(&self.no_fields)));
         }
         let v = self.operand_value(recv, env)?;
-        let Value::Struct(s, fields) = deref(v, name_pos)? else { unreachable!("checked: struct") };
-        Ok(fields[self.field_index(s, name)].clone())
+        match deref(v, name_pos)? {
+            Value::Struct(s, fields) => Ok(fields[self.field_index(s, name)].clone()),
+            // type.tuple.3: `t.0`.
+            Value::Tuple(xs) => Ok(xs[element_index(name)].clone()),
+            other => unreachable!("checked: struct, found {other:?}"),
+        }
     }
 
     /// `recv[index]` on a list or map, and `recv[lo..hi]` (type.coll.4, type.coll.10, type.map.3).
@@ -2096,6 +2184,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Name(n, _) => lookup(env, n),
             Expr::Field { recv, name, .. } => match self.borrowed(recv, env)? {
                 Value::Struct(s, fields) => Some(&fields[self.field_index(*s, name)]),
+                Value::Tuple(xs) => name.parse::<usize>().ok().and_then(|i| xs.get(i)),
                 _ => None,
             },
             _ => None,
@@ -2222,6 +2311,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 Value::List(Rc::new(items))
             }
+            Expr::Tuple(elems, _) => {
+                let mut items = Vec::with_capacity(elems.len());
+                for x in elems {
+                    items.push(self.eval(x, env)?);
+                }
+                Value::Tuple(Rc::new(items))
+            }
             Expr::Call { callee, args, pos } => self.call_expr(callee, args, *pos, env)?,
             Expr::Method { recv, name, name_pos, args } => self.method_call(recv, name, args, *name_pos, env)?,
             Expr::TypeArgs { .. } => unreachable!("checked: type arguments only on a callee or receiver"),
@@ -2307,15 +2403,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         continue;
                     }
                     let mark = env.len();
-                    // expr.match.6: bind fields by position; `_` skips one.
-                    if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (&arm.pat, &v)
-                    {
-                        for ((n, _), value) in names.iter().zip(fields.iter()) {
-                            if n != "_" {
-                                env.push((n.as_str(), value.clone()));
-                            }
-                        }
-                    }
+                    bind_pattern(&arm.pat, &v, env);
                     // expr.match.11: a false guard falls through to the next arm.
                     if let Some(g) = &arm.guard
                         && !matches!(self.eval(g, env)?, Value::Bool(true))
@@ -2362,8 +2450,10 @@ impl<'a, W: Write> Interp<'a, W> {
     /// Whether `v` matches `pat` (expr.match.4, expr.match.7-8).
     fn matches(&self, pat: &Pattern, v: &Value) -> bool {
         match (pat, v) {
-            (Pattern::Wildcard(_), _) => true,
+            (Pattern::Wildcard(_) | Pattern::Bind(..), _) => true,
             (Pattern::Or(alts, _), v) => alts.iter().any(|a| self.matches(a, v)),
+            // type.tuple.6: every element matches.
+            (Pattern::Tuple(ps, _), Value::Tuple(xs)) => ps.iter().zip(xs.iter()).all(|(p, x)| self.matches(p, x)),
             (Pattern::Variant { name, .. }, Value::Enum(e, i, _)) => {
                 name_eq(&self.prog.enums[*e].variants[*i].name, name)
             }
@@ -2539,7 +2629,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::None, _) | (_, Value::None) => false,
             (Value::Nested(m), Value::Nested(n)) => m == n,
             (Value::Nested(_), _) | (_, Value::Nested(_)) => false,
-            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
+            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) | (Value::Tuple(x), Value::Tuple(y)) => {
                 self.all_equal(x, y, pos)?
             }
             (Value::Enum(e, v, x), Value::Enum(f, w, y)) => e == f && v == w && self.all_equal(x, y, pos)?,
@@ -2598,7 +2688,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
             (Value::Bytes(x), Value::Bytes(y)) => x.cmp(y),
-            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
+            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) | (Value::Tuple(x), Value::Tuple(y)) => {
                 self.lexicographic(x, y, pos)?
             }
             (Value::Enum(_, v, x), Value::Enum(_, w, y)) => match v.cmp(w) {
@@ -2664,6 +2754,14 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         if (n == "assert" || n == "assert_eq") && lookup(env, n).is_none() {
             return self.assert(n, args, pos, env);
+        }
+        // type.tuple.9: the pairs of two lists, as long as the shorter.
+        if !self.resolved.zips.is_empty() && self.resolved.zips.contains(&callee.pos()) {
+            let (Value::List(a), Value::List(b)) = (self.eval(&args[0].value, env)?, self.eval(&args[1].value, env)?) else {
+                unreachable!("checked: two lists")
+            };
+            let pairs = a.iter().zip(b.iter()).map(|(x, y)| Value::Tuple(Rc::new(vec![x.clone(), y.clone()])));
+            return Ok(Value::List(Rc::new(pairs.collect())));
         }
         if matches!(callee, Expr::TypeArgs { .. }) {
             match n.as_str() {
@@ -2828,6 +2926,14 @@ impl<'a, W: Write> Interp<'a, W> {
                     parts.push(self.describe(x, pos)?);
                 }
                 format!("[{}]", parts.join(", "))
+            }
+            // type.tuple.8: `(1, "a")`.
+            Value::Tuple(items) => {
+                let mut parts = Vec::with_capacity(items.len());
+                for x in items.iter() {
+                    parts.push(self.describe(x, pos)?);
+                }
+                format!("({})", parts.join(", "))
             }
             Value::Struct(s, values) => {
                 let decl = &prog.structs[*s];

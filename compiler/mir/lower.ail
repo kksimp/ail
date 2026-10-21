@@ -887,6 +887,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
         Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
+        LetTuple(_, _, pos) => problem(pos, "tuples aren't in the native subset yet")
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
@@ -1260,6 +1261,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 return lower_get_else(x, other, pos)
             lower_else(x, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
+        TupleLit(_, pos) => unsupported(pos, "a tuple")
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
     problem(pos, "not in the native subset yet: {what}")
@@ -1861,3 +1863,4 @@ pub fn expr_pos(e ast.Expr) ast.Pos
         Comp(_, _, _, _, p) => p
         OrElse(_, _, p) => p
         NewRef(_, p) => p
+        TupleLit(_, p) => p

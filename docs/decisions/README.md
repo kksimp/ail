@@ -592,6 +592,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0786](0786-syntax-diagnostic-text-and-fmt-check.md) | The self-hosted front end prints diagnostic help and fixes; `fmt --check` fails on broken sources *(delegated)* | Accepted | 2026-10-21 |
 | [0771](0771-native-proc-output-methods.md) | Native `Output.ok()` and `Output.text()`: two inline lowerings on the registered `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
+| [0792](0792-tuple-syntax.md) | Tuple syntax: `(A, B)` types, `t.0` elements, `a, b := t`, `for k, v in m` *(delegated)* | Accepted | 2026-10-21 |
+| [0793](0793-tuple-patterns.md) | Tuple patterns in `match`; a bare name binds *(delegated)* | Accepted | 2026-10-21 |
+| [0794](0794-tuple-library-names.md) | `xs.enumerate()` and `zip(a, b)`; no `m.items()` or `m.pairs()` *(delegated)* | Accepted | 2026-10-21 |
+| [0795](0795-tuple-text-and-json.md) | Tuples as text and JSON: `(1, "a")` and arrays *(delegated)* | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
 | [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
 | [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
