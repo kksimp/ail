@@ -11,8 +11,14 @@ use ast
 
 ## The methods this file lowers.
 fn is_list_edit(name str) bool
-    name == "extend" or name == "remove_at" or name == "insert" or name == "clear"
-        or name == "reverse" or name == "pop" or name == "contains" or name == "sort"
+    name == "extend"
+        or name == "remove_at"
+        or name == "insert"
+        or name == "clear"
+        or name == "reverse"
+        or name == "pop"
+        or name == "contains"
+        or name == "sort"
         or name == "sorted"
 
 ## Bytes of one element of a list of `e`.
@@ -177,7 +183,11 @@ fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
     k := eq_kind(e)
     if k < 0 or not (op_name(o) == "eq" or op_name(o) == "ne")
         return none
-    same := call("rt.list_eq", [a.id, b.id, konst(k, Ty.Int), konst(elem_bytes(e), Ty.Int)], Ty.Bool)
+    same := call(
+        "rt.list_eq",
+        [a.id, b.id, konst(k, Ty.Int), konst(elem_bytes(e), Ty.Int)],
+        Ty.Bool,
+    )
     if op_name(o) == "ne"
         return Val(id: op("not", [same], Ty.Bool), ty: Ty.Bool)
     Val(id: same, ty: Ty.Bool)
