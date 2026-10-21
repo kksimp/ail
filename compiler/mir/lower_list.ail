@@ -308,6 +308,12 @@ fn Lower.list_method(
         return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
     if name == "join" and vs.len() == 1 and e == Ty.Char and vs[0].ty == Ty.Str
         return Val(id: call("rt.list_join_chars", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+    if name == "join" and vs.len() == 1 and vs[0].ty == Ty.Str and (e == Ty.Int or e == Ty.Float or e == Ty.Bool)
+        kind := if e == Ty.Int then 0 else if e == Ty.Float then 1 else 2
+        return Val(
+            id: call("rt.list_join_nums", [r.id, vs[0].id, konst(kind, Ty.Int)], Ty.Str),
+            ty: Ty.Str,
+        )
     if is_list_edit(name)
         return lower_list_edit(r, e, name, npos, args, vs)
     if name == "push" and vs.len() == 1

@@ -29,6 +29,7 @@ NET_ERROR := "net.NetError"
 NET_CONN := "net.Conn"
 NET_LISTENER := "net.Listener"
 NET_RESPONSE := "net.Response"
+NET_RAW := "net.RawResponse"
 NET_OPTIONS := "net.Options"
 
 ## Record the names of the structs of `prog` (all files first, so fields
@@ -40,6 +41,12 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[NET_ERROR] = []
     structs[NET_CONN] = []
     structs[NET_LISTENER] = []
+    structs[NET_RAW] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "data", ty: Ty.Bytes),
+        Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+    ]
     structs[NET_RESPONSE] = []
     structs[NET_OPTIONS] = []
     for s in prog.structs
