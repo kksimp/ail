@@ -1521,7 +1521,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             Stmt::Assign { target: Expr::Field { recv, name, .. }, op, value, pos }
                 if let Expr::Name(n, _) = &**recv
                     && let Some(slot) = self.local(n)
-                    && (op.is_none() || self.effect_free(value)) =>
+                    && (op.is_none() || self.effect_free(value) || !writes_locals(value, &self.it.resolved.moves)) =>
             {
                 // The walker's path for a local struct; any other value takes its general path.
                 let guard = self.emit(Ins::IfNotStruct { slot, t: 0 });
