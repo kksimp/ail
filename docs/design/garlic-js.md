@@ -367,6 +367,27 @@ call, and a JavaScript loop step takes about 30 of them: a
 without declarations have fast paths. Running pages at speed needs the
 bytecode compiler (slice 4) and AIL's native backend.
 
+A profile (2026-10-21, `--trace=calls` counts and `AIL_BYTECODE_STATS=2`)
+shows no single hot spot. An expression statement such as `a;` makes six
+`eval` calls, three `lookup` calls, two `exec`/`exec_in`/`tick` calls and
+about ten others, and each costs about the same. Measured per loop step, a
+local read adds 8 µs, a call 22 µs, a method call 32 µs, and `push` 28 µs.
+The step counter is under 1 µs, so is the per-iteration scope copy, and
+so are the walker hand-offs (`.get` on a field reached through a `ref`
+hands off, at about 70 ns each). Two engine changes would cut the AIL calls
+per operation:
+
+- Resolve each name to a scope depth and slot at parse time, so that
+  `lookup` doesn't search maps up the chain.
+- Compile function bodies to a flat instruction list, so that `exec` and
+  `eval` don't recurse for each node.
+
+The larger step is native code. On 2026-10-21, `ail build tools/garlic/js`
+reports 1,324 constructs outside the native subset: `?` 342, `==` on `str`
+174, string interpolation 107, optionals as parameters and indexes, and
+string methods. These are the same groups the native lanes are closing for
+self-compilation.
+
 ## Notes on writing it in AIL
 
 What a 12,700-line AIL program ran into, for the language's designers:
