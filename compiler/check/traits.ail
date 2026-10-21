@@ -134,6 +134,14 @@ fn Checker.implements(self, t Ty, tr int) bool
             mut seen,
         ) and implements_in(v, eq, mut seen)
         SetOf(e) => return tr == eq and implements_in(e, eq, mut seen)
+        # type.tuple.7: a tuple is `Eq`, `Ord` and `Hash` when every element is.
+        Tuple(xs) =>
+            if tr != eq and tr != std_ord and tr != std_hash
+                return false
+            for x in xs
+                if not implements_in(x, tr, mut seen)
+                    return false
+            return true
         _ => tr == tr
     con := con_of(t) else return false
     if i := impl_of.get(impl_key(tr, con))

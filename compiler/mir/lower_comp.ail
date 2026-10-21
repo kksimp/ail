@@ -4,34 +4,62 @@
 ## fast path.
 use ast
 
+fn is_set_ty(t Ty) bool
+    match t
+        Set(_) => true
+        _ => false
+
+fn is_map_ty(t Ty) bool
+    match t
+        Map(_, _) => true
+        _ => false
+
 fn Lower.lower_comp(
     mut self,
     form ast.CompKind,
     elem ast.Expr,
+    value_expr ast.Expr?,
     clauses List[ast.CompFor],
     pos ast.Pos,
     want Ty?,
 ) Val?
-    what := match form
-        ListComp => ""
-        SetComp => "set comprehensions"
-        MapComp => "map comprehensions"
-    if what != ""
-        return unsupported(pos, what)
-    mut et := Ty.Unknown
-    if w := want
-        et = w.elem() else Ty.Unknown
     nvars += 1
     name := "#comp{nvars}"
-    t := Ty.List(et)
-    declare(name, t, call("rt.list_new", [konst(0, Ty.Int)], t))
-    push := ast.Expr.Method(
-        recv: ast.Expr.Name(name: name, pos: pos),
-        name: "push",
-        name_pos: pos,
-        args: [ast.Arg(label: none, mutable: false, moved: false, value: elem, param: none)],
-    )
-    mut body := [ast.Stmt.Eval(value: push)]
+    me := ast.Expr.Name(name: name, pos: pos)
+    mut push := ast.Stmt.Eval(value: ast.Expr.Method(recv: me, name: "push", name_pos: pos, args: [
+        ast.Arg(label: none, mutable: false, moved: false, value: elem, param: none),
+    ]))
+    match form
+        ListComp =>
+            mut et := Ty.Unknown
+            if w := want
+                et = w.elem() else Ty.Unknown
+            t := Ty.List(et)
+            declare(name, t, call("rt.list_new", [konst(0, Ty.Int)], t))
+        SetComp =>
+            t := want else return unsupported(pos, "a set comprehension whose type isn't known")
+            if not is_set_ty(t)
+                return unsupported(pos, "a set comprehension whose type isn't known")
+            declare(name, t, new_table(t))
+            push = ast.Stmt.Eval(value: ast.Expr.Method(
+                recv: me,
+                name: "add",
+                name_pos: pos,
+                args: [ast.Arg(label: none, mutable: false, moved: false, value: elem, param: none)],
+            ))
+        MapComp =>
+            t := want else return unsupported(pos, "a map comprehension whose type isn't known")
+            v := value_expr else return none
+            if not is_map_ty(t)
+                return unsupported(pos, "a map comprehension whose type isn't known")
+            declare(name, t, new_table(t))
+            push = ast.Stmt.Assign(
+                target: ast.Expr.Index(recv: me, index: elem, pos: pos),
+                op: none,
+                value: v,
+                pos: pos,
+            )
+    mut body := [push]
     mut k := clauses.len() - 1
     while k >= 0
         c := clauses[k]
@@ -55,7 +83,8 @@ fn Lower.lower_comp(
         k -= 1
     lower_stmt(body[0])
     key := lookup(name) else return none
-    if var_ty[key].elem() == none or (var_ty[key].elem() else Ty.Unknown).is_unknown()
+    if form == ast.CompKind.ListComp
+        and (var_ty[key].elem() == none or (var_ty[key].elem() else Ty.Unknown).is_unknown())
         return unsupported(pos, "a comprehension whose element type isn't known")
     Val(id: read_var(key, cur), ty: var_ty[key])
 

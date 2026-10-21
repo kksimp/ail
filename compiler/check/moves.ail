@@ -119,6 +119,10 @@ fn Mover.stmt(mut self, s ast.Stmt)
             if e := o
                 otherwise(e)
             declare(n)
+        LetTuple(names, value, _) =>
+            expr(value)
+            for b in names
+                declare(b.name)
         Assign(target, op, value, _) =>
             expr(value)
             if n := whole_name(target)
@@ -276,6 +280,7 @@ fn Mover.expr(mut self, e ast.Expr)
                     Fmt(x, _) => expr(x)
         ListLit(items, _) => exprs(items)
         SetLit(items, _) => exprs(items)
+        TupleLit(items, _) => exprs(items)
         MapLit(entries, _) =>
             for en in entries
                 expr(en.key)
@@ -366,6 +371,8 @@ fn Mover.comp(mut self, elem ast.Expr, value ast.Expr?, clauses List[ast.CompFor
         if i == 0
             entry = flow
         declare(c.var)
+        for b in c.unpack
+            declare(b.name)
         if x := c.cond
             expr(x)
     expr(elem)
@@ -374,6 +381,8 @@ fn Mover.comp(mut self, elem ast.Expr, value ast.Expr?, clauses List[ast.CompFor
     names_in = names_in[..mark]
     for c in clauses
         flow = forget(flow, c.var)
+        for b in c.unpack
+            flow = forget(flow, b.name)
     if not entry.live or not flow.live
         return
     mut again := List[Again]()
@@ -398,6 +407,10 @@ fn Mover.pattern(mut self, p ast.Pattern)
         Alt(alts, _) =>
             for a in alts
                 pattern(a)
+        TuplePat(elems, _) =>
+            for a in elems
+                pattern(a)
+        BindName(n, _) => declare(n)
         Wildcard => return
         Literal => return
         Range => return

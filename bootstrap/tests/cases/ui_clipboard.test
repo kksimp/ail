@@ -1,0 +1,3 @@
+{"test":"clipboard_round_trip","status":"pass","line":5,"col":10,"message":""}
+{"test":"clipboard_set_replaces","status":"pass","line":9,"col":10,"message":""}
+{"summary":true,"passed":2,"failed":0}
