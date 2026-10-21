@@ -185,3 +185,13 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   of another type). Every store here forgets a whole class instead; the loads
   that survive in the measured programs are in loops, where nothing carries
   over anyway.
+13. **The map probe keeps no registers on its first-slot hit.** Profiling
+    wordfreq (190 instructions per word, 3 map calls) showed `map_find` saving
+    five callee-saved registers and reloading `m` from the stack around its
+    probe loop, and `map_set` doing the same to store through the entry `get`
+    had just found. `map_find` now hashes and calls `map_probe(m, k, h)`,
+    whose first-slot hit makes no call (so ADR 0625 shrink-wrapping drops its
+    saves) and which goes on in `map_probe_from` only on a collision or a
+    key equal but not the same string; `map_set` stores through the
+    remembered entry before calling anything. wordfreq 195.5M to 167.2M
+    instructions (-14.5%); no other program of the ten uses a map.
