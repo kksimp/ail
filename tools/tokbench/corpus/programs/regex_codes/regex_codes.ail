@@ -1,5 +1,6 @@
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/agent-data/app.log")? "reading the app log"
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/app.log")? "reading the app log"
     codes := regex.compile(r"code=(\d+)")?
     mut count := 0
     mut total := 0

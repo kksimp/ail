@@ -20,6 +20,8 @@ pub fn registers() codegen.Target
         int_callee: [RBX, 12, 13, 14, 15],
         float_caller: [32, 33, 34, 35, 36, 37, 38, 39],
         float_callee: [40, 41, 42, 43, 44, 45],
+        int_args: INT_ARGS,
+        float_args: [32, 33, 34, 35, 36, 37, 38, 39],
     )
 
 INT_ARGS := [7, 6, 2, 1, 8, 9]
@@ -745,7 +747,10 @@ fn Gen.arith(mut self, i mir.Inst)
             a.jcc(CC_O, l)
         return
     # Into the result's register when that leaves `x` and `y` intact.
-    r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
+    mut r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
+    # An unchecked `n * k` writes its result over `n`: `imul d, n, k` allows it.
+    if i.op == "mul" and i.site < 0 and (ky != none or imm32(x) != none)
+        r = d
     # `3 * n`: the constant goes second; the stub still reports `x OP y`.
     kx := imm32(x)
     if ky == none and kx != none and i.op != "sub"
@@ -1018,34 +1023,48 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_gpr(i.dst, RAX)
 
 ## The memory a load or store prim addresses.
-fn Gen.address(mut self, v int) Mem
+fn Gen.address(mut self, i mir.Inst) Mem
+    v := i.args[0]
+    store := i.name.starts_with("store")
+    # `base + index * scale + offset` (an indexed load has two arguments,
+    # an indexed store three): the primitive's `imm` holds the offset, or
+    # offset * 16 + log2(scale).
+    if i.args.len() == (if store then 3 else 2)
+        mut b := gpr(v, S0)
+        if globs.contains(v)
+            a.lea(S0, at_sym("globals", 8 * globs[v]))
+            b = S0
+        return at_index(b, gpr(i.args[1], S1), 1.shl(i.imm % 16), i.imm / 16)
     if globs.contains(v)
-        return at_sym("globals", 8 * globs[v])
-    at(gpr(v, S0), 0)
+        return at_sym("globals", 8 * globs[v] + i.imm)
+    at(gpr(v, S0), i.imm)
 
 fn Gen.prim(mut self, i mir.Inst)
     match i.name
         "load64" =>
-            mem := address(i.args[0])
+            mem := address(i)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, mem)
             put_gpr(i.dst, d)
         "load8" =>
-            mem := address(i.args[0])
+            mem := address(i)
             d := out_gpr(i.dst, S1)
             a.movzx8_rm(d, mem)
             put_gpr(i.dst, d)
         "loadf" =>
-            mem := address(i.args[0])
+            mem := address(i)
             d := out_xmm(i.dst, X0)
             a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            a.mov_mr(address(i.args[0]), gpr(i.args[1], S1))
+            v := gpr(i.args[i.args.len() - 1], RDX)
+            a.mov_mr(address(i), v)
         "store8" =>
-            a.mov8_mr(address(i.args[0]), gpr(i.args[1], S1))
+            v := gpr(i.args[i.args.len() - 1], RDX)
+            a.mov8_mr(address(i), v)
         "storef" =>
-            a.vmovsd_mr(address(i.args[0]), xmm(i.args[1], X0))
+            v := xmm(i.args[i.args.len() - 1], X0)
+            a.vmovsd_mr(address(i), v)
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
             parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])

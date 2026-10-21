@@ -1,0 +1,41 @@
+error struct BadZone "unknown zone {name}"
+    name str
+
+error enum Why
+    Empty
+    Text(s str)
+
+fn known(zone str) BadZone?
+    if zone == "nowhere"
+        return BadZone(zone)
+    none
+
+fn reason(s str) Why?
+    if s == ""
+        return Why.Empty
+    Why.Text(s)
+
+fn at(zone str) int ! BadZone
+    if e := known(zone)
+        return e
+    zone.len()
+
+fn check(s str) int ! Why
+    if w := reason(s)
+        return w
+    0
+
+fn main()
+    print(at("utc") else 0)
+    v := at("nowhere") else err
+        print(err)
+        -1
+    print(v)
+    w := check("") else err
+        print(err)
+        -2
+    print(w)
+    x := check("x") else err
+        print(err)
+        -3
+    print(x)
