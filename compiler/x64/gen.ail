@@ -372,7 +372,12 @@ fn Gen.gen_block(mut self, b int)
             ps := f.blocks[to].params
             parallel([move_of(loc[ps[j]], t.args[0][j]) for j in 0..ps.len()])
             if to != next_block
-                a.jmp(blabels[to])
+                if rotates(to)
+                    # The loop test again here, instead of a jump back to it.
+                    h := f.blocks[to]
+                    branch_to(compare(h.insts[0]), h.term.targets[0], h.term.targets[1])
+                else
+                    a.jmp(blabels[to])
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
@@ -391,6 +396,16 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(RAX, t.value)])
             epilogue()
         _ => a.ud2()
+
+## Whether block `to` is only a comparison and a branch: a jump to it is
+## cheaper as the comparison and branch themselves, one instruction fewer
+## on the way round a loop (loop rotation, ADR 0611).
+fn Gen.rotates(self, to int) bool
+    h := f.blocks[to]
+    if h.term.kind != "branch" or h.insts.len() != 1
+        return false
+    last := h.insts[0]
+    last.dst == h.term.cond and uses[last.dst] == 1 and cc_of(last.op) >= 0
 
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the
 ## next block allows. A float comparison's condition may be a pair (§cc_of).
@@ -589,6 +604,11 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(r, 0))
             put_gpr(i.dst, d)
+        "cap" =>
+            r := gpr(i.args[0], S0)
+            d := out_gpr(i.dst, S1)
+            a.mov_rm(d, at(r, 8))
+            put_gpr(i.dst, d)
         "trap" => a.jmp(stub(i.imm, i.args[0], i.args[1], i.site, i.name))
         "load" =>
             r := gpr(i.args[0], S0)
@@ -780,11 +800,14 @@ fn Gen.call(mut self, i mir.Inst)
 ## full list calls the runtime, which grows it (native-abi.md §2).
 fn Gen.push(mut self, i mir.Inst)
     l := gpr(i.args[0], S0)
+    # `imm` 1: a loop guard saw room for every push the loop makes (native.bce.6).
+    room := i.imm == 1
     slow := a.label()
     done := a.label()
     a.mov_rm(RAX, at(l, 0))
-    a.alu_rm("cmp", RAX, at(l, 8))
-    a.jcc(CC_E, slow)
+    if not room
+        a.alu_rm("cmp", RAX, at(l, 8))
+        a.jcc(CC_E, slow)
     a.mov_rm(S1, at(l, 16))
     v := i.args[1]
     if f.vals[v].is_float()
@@ -795,6 +818,8 @@ fn Gen.push(mut self, i mir.Inst)
         a.mov_mr(at_index(S1, RAX, 8, 0), gpr(v, RDX))
     a.alu_ri("add", RAX, 1)
     a.mov_mr(at(l, 0), RAX)
+    if room
+        return
     a.jmp(done)
     a.bind(slow)
     # The runtime may use any caller-saved register: keep ours around it.

@@ -371,6 +371,16 @@ fn list_alloc(cap int, size int) List[int]
 fn list_new(cap int) List[int]
     list_alloc(cap, 8)
 
+## A list made with room for a loop's pushes (`list_reserve` would regrow
+## it): `(hi - lo) * per` elements, at most 2^20 iterations' worth.
+fn list_new_for(lo int, hi int, per int) List[int]
+    mut want := hi - lo
+    if want > 1048576
+        want = 1048576
+    if want < 0
+        want = 0
+    list_alloc(want * per, 8)
+
 fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
     data := alloc(size * cap)

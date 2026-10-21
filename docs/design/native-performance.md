@@ -185,6 +185,15 @@ out by a dominating bound, inline `push`, inlining of leaf functions. Left:
 4. **Division by a power of two** as a shift with a sign fix (collatz).
 5. Cache the runtime's machine code (compile time).
 
+## Pushes with room, sized lists, loop rotation (ADR 0611)
+
+fannkuch at N = 9, instructions: 274M → 218M (gcc -O2: 103M); wall 0.58 s →
+0.49 s against 0.22 s. What is left is the allocation of a list per
+permutation (about half of the gap: `rt.alloc` runs three times each with
+the checks `a == 0 or b > c` materialised as booleans, `list_new`,
+`list_reserve`), `n` spilled to the stack by the register allocator, and
+the 8 to 10 instructions per swap against gcc's 6.
+
 ## Row-length floors (ADR 0611)
 
 matmul at 400: 1,106M → 979M instructions (callgrind), 0.128 s → 0.098 s on

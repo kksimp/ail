@@ -114,3 +114,8 @@ one on every path may be removed. *(ADR 0611)*
 `b`, may be removed where `j` is at most the length of the shortest row of
 `b`, taken before a loop in which the rows of `b` can't be replaced, and no
 operation in the program shortens a list. *(ADR 0611)*
+
+**native.bce.6** — A `push` in a counted loop may skip the test that the
+list is full where, before the loop, the list's spare room is at least the
+number of pushes the loop can make; otherwise the loop with the test runs.
+*(ADR 0611)*
