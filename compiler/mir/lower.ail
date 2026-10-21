@@ -962,10 +962,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(_, var, _, mutable, iter, body, pos) =>
-            if mutable
-                problem(pos, "`for mut` isn't in the native subset yet")
-                return
-            lower_for(var, iter, body)
+            lower_for(var, iter, body, mutable, pos)
         Break(pos) =>
             if loops.len() == 0
                 problem(pos, "`break` outside a loop")
@@ -1110,7 +1107,14 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
 
 ## `for x in a..b`, `a..=b` or a list (expr.loop.2-3). The index is a hidden
 ## variable; `continue` goes to the latch, which steps it.
-fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
+fn Lower.lower_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    mutable bool,
+    fpos ast.Pos,
+)
     scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1
@@ -1139,6 +1143,8 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
                     expr_pos(iter),
                     "a `for` over a `{l.ty.name()}` isn't in the native subset yet",
                 )
+                return
+            if mutable and not for_mut_ok(e, fpos)
                 return
             elem = e
             list = l.id
