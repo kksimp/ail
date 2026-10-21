@@ -7,9 +7,9 @@
 ## product of two such sums stay below 2^63.
 pub LIMIT := 1073741824
 
-## The largest magnitude the analysis computes with (2^61): sums of two
+## The largest magnitude the analysis computes with (2^62 - 1): sums of two
 ## such values can't overflow the compiler's own `int`s.
-BIG := 2305843009213693952
+BIG := 4611686018427387903
 
 struct Span
     known bool

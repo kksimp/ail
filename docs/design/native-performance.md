@@ -213,8 +213,8 @@ use. Instructions retired (`valgrind --tool=lackey`, reduced sizes):
 |---|---:|---:|
 | nbody 100000 | 163.0M | 120.2M |
 | sieve 3000000 | 117.8M | 91.3M |
-| collatz 100000 | 173.2M | 155.3M |
-| spectralnorm 200 | 46.7M | 45.1M |
+| collatz 100000 | 173.2M | 140.9M |
+| spectralnorm 200 | 46.7M | 37.1M |
 | fannkuch 8 | 22.4M | 21.7M |
 | matmul 150 | 49.8M | 49.6M |
 

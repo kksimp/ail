@@ -763,6 +763,20 @@ fn power_of_two(n int) int
 ## a negative dividend is biased by `2^k - 1` first.
 fn Gen.shift_divide(mut self, i mir.Inst, k int)
     x := gpr(i.args[0], S0)
+    if i.op == "div"
+        # Into the result's register; the bias is taken from `x` first.
+        d := out_gpr(i.dst, S1)
+        if k > 0
+            a.mov_rr(RAX, x)
+            if k > 1
+                a.shift_ri("sar", RAX, 63)
+            a.shift_ri("shr", RAX, 64 - k)
+        a.mov_rr(d, x)
+        if k > 0
+            a.alu_rr("add", d, RAX)
+        a.shift_ri("sar", d, k)
+        put_gpr(i.dst, d)
+        return
     a.mov_rr(S1, x)
     if k > 0
         a.mov_rr(RAX, x)
@@ -770,10 +784,6 @@ fn Gen.shift_divide(mut self, i mir.Inst, k int)
             a.shift_ri("sar", RAX, 63)
         a.shift_ri("shr", RAX, 64 - k)
         a.alu_rr("add", S1, RAX)
-    if i.op == "div"
-        a.shift_ri("sar", S1, k)
-        put_gpr(i.dst, S1)
-        return
     # x - (biased x with the low k bits cleared)
     a.shift_ri("sar", S1, k)
     a.shift_ri("shl", S1, k)

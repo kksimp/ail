@@ -19,9 +19,15 @@
 4. **A move from a register to a spill slot** is one store on both targets,
    not a copy through the scratch register.
 
+5. **Range analysis limit 2^62 - 1** (ranges.ail `BIG`, was 2^61): a product
+   of two sums of guard-limited values (spectralnorm's `(i + j) * (i + j + 1)`,
+   up to 2^62 - 2^31) is now proven not to overflow. Sums of two spans still
+   fit the compiler's own `int`.
+6. **x86-64 division by a power of two** computes into the result's register.
+
 ## Measurements
 
-collatz 100000: 173.2M to 155.3M instructions (2 and 3). fannkuch 8:
+collatz 100000: 173.2M to 140.9M instructions (2, 3 and 6); spectralnorm 200: 46.7M to 37.1M (5, 6). fannkuch 8:
 22.4M to 21.7M (1 and 4).
 
 ## Rejected alternatives
