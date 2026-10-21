@@ -385,7 +385,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Int(n) => int_method(n, name, a, pos)?,
             Value::Num(k, bits) if k.is_float() => f32_method(bits, name, pos)?,
             Value::Num(k, bits) => sized_method(k, bits, name, a, pos)?,
-            Value::Float(x) => float_method(x, name, pos)?,
+            Value::Float(x) => float_method(x, name, a, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
                 "last" => opt(items.last().cloned()),
@@ -756,14 +756,26 @@ fn f32_method(bits: i64, name: &str, pos: Pos) -> Result<Value, Trap> {
         "round" => f(x.round()),
         "sqrt" => f(x.sqrt()),
         "to_float" => Value::Float(f64::from(x)),
-        "to_int" => return float_method(f64::from(x), "to_int", pos),
+        "to_int" => return float_method(f64::from(x), "to_int", &[], pos),
         _ => unreachable!("checked: f32.{name}"),
     })
 }
 
-fn float_method(x: f64, name: &str, pos: Pos) -> Result<Value, Trap> {
+fn float_method(x: f64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> {
     Ok(match name {
         "abs" => Value::Float(x.abs()),
+        // type.num.16: the transcendental functions, from the platform's libm.
+        "sin" => Value::Float(x.sin()),
+        "cos" => Value::Float(x.cos()),
+        "tan" => Value::Float(x.tan()),
+        "atan" => Value::Float(x.atan()),
+        "atan2" => Value::Float(x.atan2(a[0].float())),
+        "exp" => Value::Float(x.exp()),
+        "ln" => Value::Float(x.ln()),
+        "log10" => Value::Float(x.log10()),
+        "pow" => Value::Float(x.powf(a[0].float())),
+        "hypot" => Value::Float(x.hypot(a[0].float())),
+        "cbrt" => Value::Float(x.cbrt()),
         "floor" => Value::Float(x.floor()),
         "ceil" => Value::Float(x.ceil()),
         "round" => Value::Float(x.round()),
