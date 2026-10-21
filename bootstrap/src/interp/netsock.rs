@@ -961,6 +961,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 // std.net.24: stop listening and drop idle connections; requests
                 // already arriving are still answered.
                 if let Some(Slot::Server(s)) = sockets().get_mut(id as usize) {
+                    // A connection whose handshake finished a moment ago may
+                    // not be in the accept queue yet (seen on macOS): closing
+                    // the listener then resets it. Take what is arriving, with
+                    // a short grace, before the listener goes (std.net.24).
+                    for _ in 0..4 {
+                        s.take_new();
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
                     s.take_new();
                     s.listener = None;
                     s.pending.retain(|p| !p.idle);
