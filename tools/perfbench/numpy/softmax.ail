@@ -1,0 +1,16 @@
+# Softmax over the rows of a 512x512 tensor, 20 rounds each for float and f32.
+# The inputs are distinct in a row, so `argmax` is the same everywhere, and the
+# row sums are rounded to thousandths. `softmax.py` is the NumPy twin.
+fn main()
+    n := 512
+    x := tensor.from([((i * 7919) % 1009).to_float() * 0.01 for i in 0..n * n], [n, n])
+    f := x.to_f32()
+    mut hits := 0
+    mut mass := 0
+    for r in 0..20
+        y := x.softmax()
+        z := f.softmax().to_float()
+        hits += y.argmax(1).sum() + z.argmax(1).sum()
+        mass += y.sum(1).map(|s| s * 1000.0).round().sum() + z.sum(1).map(|s| s * 1000.0).round().sum()
+    print(hits)
+    print(mass)

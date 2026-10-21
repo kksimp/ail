@@ -56,3 +56,10 @@ Token counts are cl100k on each file.
 AIL is slower than CPython on nine of ten and uses more tokens on all ten.
 These numbers are the baseline for the native backend (lane 120); lane 132
 runs the race in the harness.
+
+## NumPy twins
+
+`numpy/` holds three `std.tensor` programs with NumPy twins (`f32_chain`,
+`f32_matmul`, `softmax`). `numpy/run.sh [RUNS]` checks that the outputs match
+and prints wall time, tokens and whether `ail build` accepts the program. The
+results are in `docs/design/automatic-parallelism.md` section 6.4.
