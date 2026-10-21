@@ -46,7 +46,8 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
-`float`, `bool` or `str` (not `by:` keys), in functions with at most eight
+`float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
+and `index_of`, and `sorted` on a set of `int` or `str`, in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
@@ -57,7 +58,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
 (std.fs, std.env, std.io, std.time, std.path). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0802)*
 
 ```ail
 fn steps(n int) int
