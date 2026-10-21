@@ -7,7 +7,7 @@
 ## types, else from the type the context expects. Instances are declared
 ## when first used and their bodies lowered after the program's functions,
 ## so an instance may ask for more. A trait bound needs nothing more: the
-## method a body calls on `T` is the concrete type's (trait.bound.1).
+## method a body calls on `T` is the concrete type's (gen.bound.2).
 
 use ast
 

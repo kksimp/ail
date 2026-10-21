@@ -53,7 +53,15 @@ pub struct TaskState
     accs Set[str]
 
 pub fn new_task_state() TaskState
-    TaskState(on: false, sites: [], pars: [], rets: {}, in_chunk: false, owner: "", accs: Set[str]())
+    TaskState(
+        on: false,
+        sites: [],
+        pars: [],
+        rets: {},
+        in_chunk: false,
+        owner: "",
+        accs: Set[str](),
+    )
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
 ## task runtime is linked. A false positive only costs compile time.
@@ -120,7 +128,11 @@ fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
                         # A task works on its own copy of a list (conc.share.1).
                         w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
                         at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
-                        prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
+                        prim_op(
+                            if sig.params[k].is_float() then "storef" else "store64",
+                            [at, w],
+                            Ty.Unit,
+                        )
                     call("rt.task_start", [rec], Ty.Unit)
                     tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
                     Val(id: rec, ty: Ty.Int)
@@ -225,7 +237,11 @@ fn Lower.build_task_fns(mut self)
         mut vs := List[int]()
         for j in 0..s.params.len()
             at := op("add", [rec, konst(T_ARGS + 8 * j, Ty.Int)], Ty.Int)
-            vs.push(prim_op(if s.params[j].is_float() then "loadf" else "load64", [at], s.params[j]))
+            vs.push(prim_op(
+                if s.params[j].is_float() then "loadf" else "load64",
+                [at],
+                s.params[j],
+            ))
         r := call(s.func, vs, s.ret)
         if not s.ret.is_unit()
             at := op("add", [rec, konst(T_RESULT, Ty.Int)], Ty.Int)
@@ -276,7 +292,24 @@ fn new_scan() ParScan
     )
 
 ## Methods that only read their receiver.
-READ_ONLY := ["len", "abs", "min", "max", "to_float", "to_int", "sqrt", "floor", "ceil", "bit_and", "bit_or", "bit_xor", "shl", "shr", "join", "chars"]
+READ_ONLY := [
+    "len",
+    "abs",
+    "min",
+    "max",
+    "to_float",
+    "to_int",
+    "sqrt",
+    "floor",
+    "ceil",
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "shl",
+    "shr",
+    "join",
+    "chars",
+]
 
 fn is_add(op ast.BinOp?) bool
     o := op else return false
@@ -459,7 +492,16 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     if by_list
         key := lookup(root_of(iter))?
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
-    ParSite(var: var, by_list: by_list, caps: caps, accs: accs, atomic: atomic, body: body, pos: pos, owner: fname)
+    ParSite(
+        var: var,
+        by_list: by_list,
+        caps: caps,
+        accs: accs,
+        atomic: atomic,
+        body: body,
+        pos: pos,
+        owner: fname,
+    )
 
 fn root_of(e ast.Expr) str
     match e
@@ -616,7 +658,9 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     for a in 0..p.accs.len()
         base := T_ARGS + 8 * (3 + 3 * a)
         for part in 0..3
-            name := if part == 0 then p.accs[a] else if part == 1 then "{p.accs[a]}#min" else "{p.accs[a]}#max"
+            name := if part
+                == 0 then p.accs[a] else if part
+                == 1 then "{p.accs[a]}#min" else "{p.accs[a]}#max"
             key := lookup(name) else continue
             at := op("add", [rec, konst(base + 8 * part, Ty.Int)], Ty.Int)
             prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
@@ -687,7 +731,14 @@ fn Lower.lower_atomic_new(mut self, targs List[ast.TypeRef]?, args List[ast.Arg]
 ## `load`, `store`, `cas` and `add` on an atomic; an `order:` argument is
 ## accepted and every operation is sequentially consistent, which is at
 ## least as strong (conc.atomic.2, conc.atomic.7).
-fn Lower.lower_atomic_method(mut self, cell int, elem Ty, name str, npos ast.Pos, args List[ast.Arg]) Val?
+fn Lower.lower_atomic_method(
+    mut self,
+    cell int,
+    elem Ty,
+    name str,
+    npos ast.Pos,
+    args List[ast.Arg],
+) Val?
     mut vs := List[int]()
     for a in args
         if a.mutable

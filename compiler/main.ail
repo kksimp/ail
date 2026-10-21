@@ -243,6 +243,7 @@ fn std_file(std str, imp str) str
     if parts.len() == 1
         return "{std}/{parts[0]}/{parts[0]}.ail"
     "{std}/{parts.join("/")}.ail"
+
 ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
 ## in the file named by `AIL_DERIVED` (ADR 0807): for each deriving `impl`,
 ## a line `@@derive MODULE TYPE.TRAIT` (`-` for the root module), then the

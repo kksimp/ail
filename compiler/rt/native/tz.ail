@@ -268,7 +268,11 @@ fn tz_be(a int, w int) int
 fn tz_zone_offset(r int, s int, t int) bool
     size := load64(s)
     b := s + 16
-    if size < 44 or load8(b) != 84 or load8(b + 1) != 90 or load8(b + 2) != 105 or load8(b + 3) != 102
+    if size < 44
+        or load8(b) != 84
+        or load8(b + 1) != 90
+        or load8(b + 2) != 105
+        or load8(b + 3) != 102
         return false
     version := load8(b + 4)
     mut at := 44
@@ -397,8 +401,15 @@ fn tz_system() str
             got = syscall(os_pick(267, 78, 0), -100, path, buf, 4095, 0, 0)
         mut k := 0
         while k + 9 <= got
-            if load8(buf + k) == 122 and load8(buf + k + 1) == 111 and load8(buf + k + 2) == 110 and load8(buf + k + 3) == 101
-                if load8(buf + k + 4) == 105 and load8(buf + k + 5) == 110 and load8(buf + k + 6) == 102 and load8(buf + k + 7) == 111 and load8(buf + k + 8) == 47
+            if load8(buf + k) == 122
+                and load8(buf + k + 1) == 111
+                and load8(buf + k + 2) == 110
+                and load8(buf + k + 3) == 101
+                if load8(buf + k + 4) == 105
+                    and load8(buf + k + 5) == 110
+                    and load8(buf + k + 6) == 102
+                    and load8(buf + k + 7) == 111
+                    and load8(buf + k + 8) == 47
                     n := got - k - 9
                     s := str_new(n, n)
                     copy_bytes(s + 16, buf + k + 9, n)
