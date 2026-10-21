@@ -3,7 +3,7 @@
 ## external assembler). Registers are numbered as the hardware numbers them:
 ## rax 0, rcx 1, rdx 2, rbx 3, rsp 4, rbp 5, rsi 6, rdi 7, r8-r15 8-15;
 ## vector registers xmm0-xmm15 are 0-15 in instructions that take them.
-## Floats use the VEX (AVX) forms, part of the x86-64-v3 baseline (ADR 0005).
+## Floats use the VEX (AVX) forms, part of the x86-64-v3 baseline (plat.isa.1, ADR 0005).
 
 pub RAX := 0
 pub RCX := 1

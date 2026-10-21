@@ -15,7 +15,7 @@ pub struct Outcome {
     pub prop: Option<PropInfo>,
     /// The trap's source line, values and frames, when a trap failed it (test.run.5).
     pub snapshot: Option<String>,
-    /// The failing test's trace events, one per line (trace.test.1).
+    /// The failing test's trace events, one per line (trace.test.1, test.run.6).
     pub trace: Vec<String>,
 }
 

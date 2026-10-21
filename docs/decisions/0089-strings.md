@@ -37,3 +37,9 @@ msg := "Hello, {name}! You have {count} new messages."
   predates this ADR. It will be updated when the byte and character APIs
   are designed.
 - Raw string literals (no escapes) may be added later for regex and paths.
+
+## Rejected alternatives
+
+- Concatenation (`"a" + x`): 23.2 tokens, against 17.0 for interpolation. Rejected on token usage.
+- `format(...)` calls: 18.4 tokens, against 17.0 for interpolation. Rejected on token usage.
+- Direct indexing `s[i]`: rejected on AI understanding, because for UTF-8 text it is ambiguous whether `i` counts bytes or characters. Explicit views `s.bytes` and `s.chars()` make the meaning visible.

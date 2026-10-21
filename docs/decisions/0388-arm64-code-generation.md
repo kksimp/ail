@@ -61,3 +61,9 @@ the trap protocol are shared.
   machine with qemu; it is also usable on Linux ARM64 hosts.
 - The code generator is `compiler/a64/gen.ail`, about the size of the
   x86-64 one; anything else target-specific is in the encoder.
+
+## Rejected alternatives
+
+- A frame addressed from x29 with negative offsets: rejected because the unscaled `ldur` and `stur` reach only 256 bytes, while positive `sp` offsets reach 32 KiB.
+- A literal pool for float constants: rejected until a measurement shows constant loads in a hot loop. A pool needs one per function and `ldr` literal relocations, for a gain of one load instead of up to four moves.
+- A checked float-to-int conversion through the FPSR exception flags: rejected because reading and clearing FPSR around each conversion is slower than the round trip.

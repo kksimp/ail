@@ -26,3 +26,7 @@
   must be spelled out.
 - Package-level visibility (visible to sibling modules but not to other
   packages) may be added later if needed.
+
+## Rejected alternatives
+
+- Capitalisation for visibility (Go-style): no tokens, but changing visibility becomes a rename, and casing no longer tells types from values. On representative code `pub` costs 195.8 tokens against 194.4 for capitalisation, a 0.7% tie, so the choice rests on the other criteria.
