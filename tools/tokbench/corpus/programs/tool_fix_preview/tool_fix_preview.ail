@@ -1,9 +1,10 @@
 
 fn main() !
     here := path.dir(env.program())
-    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
     for name in ["bad_type.ail", "bad_name.ail"]
-        r := proc.run("{here}/../ail", ["fix", "--dry-run", "{data}/{name}"])? "previewing {name}"
+        r := proc.run(ail, ["fix", "--dry-run", "{data}/{name}"])? "previewing {name}"
         mut errors := 0
         for line in r.text().lines()
             if line.contains("error[")
