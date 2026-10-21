@@ -144,12 +144,11 @@ fn fuzz_bytecode_differential() {
     let next = AtomicUsize::new(0);
     let ran = AtomicUsize::new(0);
     let rejected = AtomicUsize::new(0);
-    let trapped = AtomicUsize::new(0);
     let found: Mutex<Vec<String>> = Mutex::new(Vec::new());
     let workers = std::thread::available_parallelism().map_or(2, |p| p.get()).clamp(1, 8);
     std::thread::scope(|s| {
         for w in 0..workers {
-            let (next, ran, rejected, trapped, found, scratch, out_dir) = (&next, &ran, &rejected, &trapped, &found, &scratch, &out_dir);
+            let (next, ran, rejected, found, scratch, out_dir) = (&next, &ran, &rejected, &found, &scratch, &out_dir);
             s.spawn(move || {
                 let dir = scratch.join(format!("w{w}"));
                 fs::create_dir_all(&dir).unwrap();
@@ -186,7 +185,6 @@ fn fuzz_bytecode_differential() {
             });
         }
     });
-    let _ = trapped.load(Ordering::SeqCst);
     eprintln!(
         "fuzz-bytecode: {} programs from seed {first}: {} compared ({} ended in a trap), {} rejected by the checker; the tier ran {} instructions with {} hand-offs",
         n,

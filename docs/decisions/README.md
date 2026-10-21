@@ -577,3 +577,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 =======
 | [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
 >>>>>>> origin/lane/190-bytecode-speed-3
+| [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |

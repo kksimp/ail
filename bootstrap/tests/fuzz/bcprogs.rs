@@ -102,6 +102,33 @@ impl G<'_> {
         out.push('\n');
     }
 
+    /// Calls that return a value through `mut self`, and a struct holding a list.
+    fn extra(&mut self, ind: usize, out: &mut String) {
+        let tgt = self.target();
+        match self.r.below(5) {
+            0 => {
+                let (i, e) = (self.index(), self.expr(1));
+                let e = if self.wild > 0 { "1".to_string() } else { e };
+                Self::push(out, ind, &format!("{tgt} += xs[{i}].bump({e})"));
+            }
+            1 => {
+                let e = self.expr(1);
+                Self::push(out, ind, &format!("bag.add({e})"));
+            }
+            2 => Self::push(out, ind, &format!("{tgt} += bag.sum() + bag.n")),
+            3 => {
+                let n = self.id();
+                Self::push(out, ind, &format!("mut b{n} := bag"));
+                Self::push(out, ind, &format!("b{n}.add({})", self.r.below(50)));
+                Self::push(out, ind, &format!("{tgt} += b{n}.n - bag.n"));
+            }
+            _ => {
+                let i = if self.wild > 0 && self.r.chance(1, 2) { "bag.n".to_string() } else { "0".to_string() };
+                Self::push(out, ind, &format!("if bag.n > 0\n{}{tgt} += bag.items[{i}]", "    ".repeat(ind + 1)).replace("\n", &format!("\n")));
+            }
+        }
+    }
+
     fn target(&self) -> &'static str {
         self.tgt
     }
@@ -109,6 +136,10 @@ impl G<'_> {
     fn stmt(&mut self, depth: usize, ind: usize, out: &mut String) {
         let tgt = self.target();
         let kinds = if depth == 0 { 9 } else { 17 };
+        if !self.flat && self.r.chance(1, 7) {
+            self.extra(ind, out);
+            return;
+        }
         let mut pick = self.r.below(kinds);
         if self.flat && (3..=8).contains(&pick) {
             pick = 0;
@@ -123,7 +154,10 @@ impl G<'_> {
                 Self::push(out, ind, &format!("{tgt} = {e}"));
             }
             3 => {
+                // Known (found/bytecode/elem_call_arg_before_bounds.ail): an argument that traps beside
+                // an index that traps is evaluated in the other order on the tier. Keep them apart.
                 let (i, e) = (self.index(), self.expr(1));
+                let e = if self.wild > 0 { "1".to_string() } else { e };
                 Self::push(out, ind, &format!("xs[{i}].step({e})"));
             }
             4 => {
@@ -236,8 +270,10 @@ pub fn program(seed: u64, pure: bool) -> String {
         out.push_str(&format!("    self.a += {e1}\n    self.b = {e2}\n    self.f += 0.25\n"));
     }
     out.push_str("\nfn Acc.total(self) int\n    self.a % 1000 + self.b % 1000\n\n");
+    out.push_str("fn Acc.bump(mut self, d int) int\n    self.a += d % 100\n    self.b -= 1\n    self.a + self.b\n\n");
+    out.push_str("struct Bag\n    items List[int]\n    n int\n\nfn Bag.add(mut self, v int)\n    self.items.push(v % 1000)\n    self.n += 1\n\nfn Bag.sum(self) int\n    mut s := 0\n    for x in self.items\n        s += x\n    s\n\n");
     // A helper with loops and early returns.
-    out.push_str("fn work(n int, k int) int\n    mut t := 0\n    mut fl := 0.5\n    mut xs := [Acc(a: n, b: k, f: 1.0), Acc(a: 2, b: 3, f: 0.0), Acc(a: -5, b: 8, f: 2.5)]\n    mut acc := 0\n");
+    out.push_str("fn work(n int, k int) int\n    mut t := 0\n    mut fl := 0.5\n    mut xs := [Acc(a: n, b: k, f: 1.0), Acc(a: 2, b: 3, f: 0.0), Acc(a: -5, b: 8, f: 2.5)]\n    mut acc := 0\n    mut bag := Bag(items: [], n: 0)\n");
     if !pure {
         out.push_str("    mut m := Map[str, int]()\n");
     }
@@ -249,7 +285,7 @@ pub fn program(seed: u64, pure: bool) -> String {
         out.push_str(&body);
     }
     out.push_str("    t + acc + fl.to_int() % 100\n\n");
-    out.push_str("fn main()\n    mut xs := [Acc(a: 1, b: 2, f: 0.5), Acc(a: 100, b: -3, f: 1.5), Acc(a: 7, b: 7, f: 2.0)]\n    mut acc := 0\n    mut fl := 1.5\n");
+    out.push_str("fn main()\n    mut xs := [Acc(a: 1, b: 2, f: 0.5), Acc(a: 100, b: -3, f: 1.5), Acc(a: 7, b: 7, f: 2.0)]\n    mut acc := 0\n    mut fl := 1.5\n    mut bag := Bag(items: [], n: 0)\n");
     if !pure {
         out.push_str("    mut m := Map[str, int]()\n");
     }
