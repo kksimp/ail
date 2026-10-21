@@ -103,7 +103,49 @@ declares `Trait` or the package that declares `Type`. *(ADR 0082)*
 the trait's signature, with `Self` replaced by the implementing type.
 *(ADR 0129)*
 
+```ail error=trait.impl.5
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+    fn grow(self) float
+        2.0
+```
+
+```ail fragment
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+```
+
 **trait.impl.6** — A type implements a trait at most once. *(ADR 0129)*
+
+```ail error=trait.impl.6
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+impl Shape for int
+    fn area(self) float
+        2.0
+```
+
+```ail fragment
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+```
 
 ## Supertraits
 
@@ -186,6 +228,39 @@ method (inherent or from any implemented trait), it is a compile-time error.
 A qualified call such as `Shape.area(x)` selects one explicitly. `trait.res.2`
 makes an exception for standard traits' default methods. *(ADR 0082, ADR 0137)*
 
+```ail error=trait.res.1
+trait Shape
+    fn area(self) float
+
+trait Area
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+impl Area for int
+    fn area(self) float
+        2.0
+
+fn main()
+    n := 1
+    print(n.area())
+```
+
+```ail fragment
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+fn main()
+    n := 1
+    print(n.area())
+```
+
 **trait.res.2** — A built-in or inherent method takes precedence over a
 default method with the same name of a standard (prelude) trait, so
 `trait.res.1` reports no ambiguity between them. A list's `xs.min()`
@@ -222,12 +297,75 @@ struct Scene
 **trait.any.3** — Where a value of type `any Trait` is expected, a value of any
 type implementing `Trait` converts to it implicitly. *(ADR 0129)*
 
+```ail rules=trait.any.3
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+fn total(x any Shape) float
+    x.area()
+
+fn main()
+    print(total(1))
+```
+
 **trait.any.4** — A trait method can be called on an `any Trait` value only if
 `Self` appears in its signature only as the receiver. Calling any other method
 is a compile-time error at the call. *(ADR 0129)*
 
+```ail error=trait.any.4
+trait Shape
+    fn same(self, other Self) bool
+
+impl Shape for int
+    fn same(self, other int) bool
+        true
+
+fn show(x any Shape) bool
+    x.same(x)
+
+fn main()
+    print(show(1))
+```
+
+```ail
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+fn show(x any Shape) float
+    x.area()
+
+fn main()
+    print(show(1))
+```
+
 **trait.any.5** — `any Trait` satisfies a constraint `Trait` only when every
 method of `Trait` can be called through it (`trait.any.4`). *(ADR 0129)*
+
+```ail rules=trait.any.5
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+fn total[T Shape](x T) float
+    x.area()
+
+fn show(x any Shape) float
+    total(x)
+
+fn main()
+    print(show(1))
+```
 
 ## Standard traits
 

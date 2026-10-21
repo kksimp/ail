@@ -42,3 +42,9 @@ least an ad hoc one. The brief allowed a documented `codesign -s -` step.
 - `ail build --target aarch64-macos` works from any host, including Linux.
 - The signature is ad hoc: Gatekeeper treats downloaded binaries as
   unsigned, which is expected for locally built tools.
+
+## Rejected alternatives
+
+- Running `/usr/bin/codesign -s -` from the driver: rejected because every build would depend on a host tool, and Mach-O files could not be built on Linux.
+- A static Mach-O without dyld: rejected because the kernel refuses it on current macOS.
+- Importing `write`, `mmap` and `exit` from libSystem: kept as the fallback of ADR 0406 if raw syscalls break. It adds binds and stubs, which are not needed yet.

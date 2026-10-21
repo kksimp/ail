@@ -44,7 +44,7 @@ trait Hash Eq
 trait Drop
     fn drop(mut self)
 
-## What `Task.wait()` fails with when the task trapped (conc.task.6, ADR 0187):
+## What `Task.wait()` fails with when the task trapped (conc.task.6, err.trap.2, ADR 0187):
 ## the trap's rule and its message.
 error struct Trapped
     rule str
@@ -60,10 +60,12 @@ error struct Cancelled "the task was cancelled"
 ## @module json
 ## `std.json` (lane 5, plan section 4): a JSON value, parser and printer. It
 ## is read only when the program names one of its public items and doesn't
-## declare that name itself, so other programs pay nothing for it.
+## declare that name itself, so other programs pay nothing for it
+## (json.prelude.1).
 ## TODO(lane 4): once `use std.NAME` exists, move these to `use std.json` as
 ## `json.parse`, `json.Value`, and so on (ADR 0161).
 
+## The JSON value (json.type.1).
 enum Json
     Null
     Bool(b bool)
@@ -275,6 +277,7 @@ fn JsonParser.number(mut self) !Json
             return fail("invalid number")
     text := chars[start..pos].join("")
     n := text.to_float() else return fail_at(start, "invalid number")
+    ## json.parse.2: an infinite or NaN number fails at its first character.
     if n - n != 0.0
         return fail_at(start, "number out of range")
     Num(n)
@@ -314,6 +317,7 @@ fn json_quote(s str) str
     out.join("")
 
 ## Compact text: no spaces, object members in document order (json.print.1).
+## Infinite and NaN numbers print as `null` (json.print.2).
 fn Json.to_text(self) str
     match self
         Null => "null"

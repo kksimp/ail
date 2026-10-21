@@ -14,8 +14,20 @@ Chapter key: `json`
 `key str` and `value Json`. An object keeps its members in document order,
 and duplicate keys are kept. *(ADR 0161)*
 
+```ail rules=json.type.1
+fn main()
+    print(Json.Arr([Json.Bool(true), Json.Str("x")]).to_text())
+```
+
 **json.err.1** — `error struct JsonError` has `at int`, the 0-based character
 offset of the problem, and `message str`. *(ADR 0161)*
+
+```ail rules=json.err.1
+fn main()
+    _ := parse_json("[1,]") else err
+        print(err.at)
+        return
+```
 
 ## Parsing and printing
 
@@ -26,6 +38,13 @@ unterminated strings, invalid escapes, and unpaired surrogate escapes. A
 `😀` pair decodes to one character. Every number is a `float`.
 All errors report the first problem found. *(ADR 0161, ADR 0162)*
 
+```ail rules=json.parse.1
+fn main()
+    _ := parse_json("[1,]") else err
+        print(err.message)
+        return
+```
+
 **json.print.1** — `Json.to_text(self) str` gives compact text: no spaces,
 members in document order, `"`, `\`, `\n`, `\r`, `\t`, `\b`, `\f` escaped by
 name, other control characters as `\u00XX`, everything else as itself. A
@@ -35,13 +54,31 @@ a zero is dropped), so an `int` field derived through `ToJson` reads back
 as an integer in other languages. The same value always gives the same text.
 *(ADR 0161, ADR 0631)*
 
+```ail rules=json.print.1
+fn main()
+    v := parse_json("\{\"a\": [1, true]}") else return
+    print(v.to_text())
+```
+
 **json.parse.2** — A number whose value doesn't fit a finite `float`
 (`1e999`) fails with the message `number out of range` at its first
 character, so a `Json.Num` read from text is always finite. *(ADR 0464)*
 
+```ail rules=json.parse.2
+fn main()
+    _ := parse_json("1e999") else err
+        print(err.message)
+        return
+```
+
 **json.print.2** — `to_text` prints a `Num` that is infinite or NaN (only a
 program can build one) as `null`, so the text it gives always parses again
 and `parse_json(j.to_text())?.to_text() == j.to_text()`. *(ADR 0464)*
+
+```ail rules=json.print.2
+fn main()
+    print(Json.Num(1.0 / 0.0).to_text())
+```
 
 ## Querying
 
@@ -81,6 +118,12 @@ tied to a place in a text. `j.non_null()` is `none` for `null`, else `j`;
 `j.opt(key)` is member `key` unless it is missing or `null`;
 `j.variant_name()` is a string, or the string member `kind` of an object.
 *(ADR 0308, ADR 0343)*
+
+```ail rules=json.query.4
+fn main()
+    v := parse_json("\{\"n\": 7}") else return
+    print(v.int("n") else 0)
+```
 
 ## Derives
 
@@ -149,3 +192,8 @@ fn main()
 `Json`, `JsonMember`, `JsonError`, `parse_json`, `ToJson` or `FromJson`. A
 program that declares one of those names itself gets its own and none of the
 module's. *(ADR 0162, ADR 0308)*
+
+```ail rules=json.prelude.1
+fn main()
+    print(Json.Null.to_text())
+```

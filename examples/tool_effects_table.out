@@ -1,0 +1,9 @@
+count_lines: fail, fs, io
+main: io
+run_tool: fail, io, proc
+shout: io
+square: pure
+fail used by 2
+fs used by 1
+io used by 4
+proc used by 1

@@ -97,6 +97,29 @@ fn a_small_budget_drops_in_order() {
 }
 
 /// api.card.2: the JSON form has the same content.
+/// api.card.3 (ADR 0703): the middle level keeps each public signature and the
+/// first sentence of its doc, and drops the members, contracts and examples.
+#[test]
+fn middle_level_keeps_first_sentences_of_public_items() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("api_card").join("middle").join("pkg");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("ail.pkg"), "package middle\n").unwrap();
+    let mut src = String::from("fn main()\n    print(1)\n");
+    for i in 0..60 {
+        src.push_str(&format!("\n## Step {i} of the walk. It is long and says more.\npub fn step{i}(x int) int\n    x + {i}\n"));
+    }
+    fs::write(dir.join("main.ail"), src).unwrap();
+    let middle = (1..=8000)
+        .rev()
+        .step_by(40)
+        .map(|b| card_of(&dir, &["--budget", &b.to_string()]))
+        .find(|c| c.lines().last().is_some_and(|l| l.ends_with("(docs past their first sentence)")))
+        .expect("some budget gives the middle level");
+    assert!(middle.contains("pub fn step3(int) int  ## Step 3 of the walk."), "{middle}");
+    assert!(!middle.contains("It is long"), "{middle}");
+}
+
 #[test]
 fn json_form() {
     let out = ail().args(["api", "--card", "--json"]).arg(package("json_form")).output().unwrap();
@@ -132,7 +155,14 @@ fn rejected_programs_and_bad_options() {
 /// Regenerate with the command in each file's name below, from the repository root.
 #[test]
 fn committed_cards_are_fresh() {
-    for (target, file) in [("tools/edit", "edit.md"), ("bootstrap/src/std", "std.md")] {
+    for (target, file) in [
+        ("tools/edit", "edit.md"),
+        ("bootstrap/src/std", "std.md"),
+        ("tools/garlic", "garlic.md"),
+        ("tools/garlic/js", "garlic-js.md"),
+        ("tools/pdf", "pdf.md"),
+        ("compiler", "compiler.md"),
+    ] {
         let out = ail().current_dir(repo()).args(["api", "--card", target]).output().unwrap();
         assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
         let want = String::from_utf8(out.stdout).unwrap();

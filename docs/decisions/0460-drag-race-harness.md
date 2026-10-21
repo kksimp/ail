@@ -52,3 +52,8 @@ place, one output, nothing to misread; **speed** of the harness doesn't matter.
 
 Lane 143 adds C twins; lane 149's before/after script calls this one. The
 integrator runs the same command on macOS ARM64 and commits the second report.
+
+## Rejected alternatives
+
+- Keeping the shell script and adding flags (option B): rejected because `date +%s.%N` fails on macOS, `bc` is another dependency, and an optional-column table is awkward in shell.
+- A harness written in AIL (option C): deferred. It would measure itself with a clock capability and a process module that the native backend is still being measured against.

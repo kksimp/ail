@@ -69,3 +69,10 @@ wins on locality: a declaration is understood without its block header.
 - The loader code is toolchain code (`bootstrap/src/interp/ffi.rs`); the code a
   native build links for these calls is Runtime Code under the licence
   exception (ADR 0510) and is described in `docs/design/native-abi.md`.
+
+## Rejected alternatives
+
+- The header importer first (option B): rejected because it would take weeks before the first call worked, and ADR 0103 leaves the C subset open.
+- Linking C libraries at build time (option C): rejected because there was no `ail build` or linker yet, and dynamic loading is also what the native backend does for libc (ADR 0105).
+- Rust's spelling `extern "C" fn f(a: f64) -> f64` (option D): costs 77.8 tokens against 54.4 for the chosen form, 43% more. ADR 0011 says resemblance to Rust is not a goal.
+- A block form `extern c "lib"` of indented `fn` lines: ties with the one-line form (54.6 against 54.4, under 2%), and loses on locality, since a declaration is understood without its block header.

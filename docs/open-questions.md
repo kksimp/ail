@@ -343,6 +343,12 @@ isn't possible, so any new function needs a stated tolerance.
 set (option c, chosen by the designer on 2026-10-21), within one unit in the
 last place of the platform's libm.
 
+## OQ-172 — Unicode tables for the native `char` predicates and case mapping
+
+**Resolved** by [ADR 0567](decisions/0567-native-text-of-numbers-and-unicode-tables.md)
+(option a: range tables generated from the interpreter by
+`tools/native/gen_unicode.ail`).
+
 ## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
 The designer asked (2026-10-20) whether a `pail` module could let developers
 write Python in the AIL editor while the code is really AIL, to help adoption.
@@ -405,3 +411,36 @@ tensor an element, which changes std.tensor.15. Recommendation: (a), since
 the spec's shape rule stays true and an agent gets a diagnostic at the second
 index. The decision belongs to the designer, because it changes a spec rule
 (std.tensor.15). The corpus omits the program until then (ADR 0647).
+## OQ-123 — Compare `bytes` with `str` directly?
+Round 4 ([measurements](design/program-measurements-agent-r4.md)) found
+`gz_check` and `frames` comparing a file's bytes with its text through
+`to_bytes()`, `text()` and `len()`. Options: (a) keep `==` between `bytes`
+and `str` a type error, and write `b.text() == s` (status quo, an extra call
+per comparison); (b) allow `bytes == str` as the UTF-8 comparison, with
+`bytes == bytes` unchanged. Pros of (b): about 3 tokens per comparison on the
+round-4 programs. Cons: two kinds of equality, and a mixed `==` that a reader
+could take for a conversion. Recommendation: (a) until a larger corpus shows
+the cost; the saving is small and the rule is simpler. Decided by the
+integrator with a measurement, not by this lane.
+## OQ-124 — Pairs: tuples, `zip`, `enumerate` and map `items`
+AIL has no tuple or pair type. Agent code reaches for `zip(a, b)`,
+`enumerate(xs)` and `m.items()` (lane 192's std-parity twins, round 4).
+A two-variable `for i, x in xs` alone was measured in
+[ADR 0675](decisions/0675-round-4-syntax-candidates.md): 46 tokens on a
+23,004-token corpus (0.2%), a tie, so it is not proposed by itself. Pairs
+change the type model (value semantics, patterns, `==`, map keys,
+`type.*` rules), so the designer decides.
+- **a.** No pairs. Loop over indexes or `keys()`; use structs for paired
+  data. Nothing changes; agents keep writing `for i in 0..xs.len()`.
+- **b.** Anonymous tuples `(a, b)` with `.0`/`.1` and destructuring in
+  `let`, `for` and `match`; then `zip`, `enumerate`, `m.items()` are library
+  methods. Largest benefit (also two results from one call), largest
+  surface: the card grows and every checker, formatter and native pass sees a
+  new type.
+- **c.** Only `for i, x in xs` and `for k, v in m` as loop syntax: no new
+  type, covers the common case, but `zip` still cannot exist and the card
+  grows for 0.2%.
+Recommendation: **a** until a program needs paired data in more than a
+loop; if the designer wants parity with Python here, **b** and not **c**,
+because **c** pays syntax for the smallest slice. Measure b with the 40-program
+corpus first.

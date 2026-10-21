@@ -91,3 +91,10 @@ Option A with the details above.
   JSON remains for whole-declaration ops and for tools.
 - `ail diff` reviews usually need no textual diff.
 - Windows: the compact form reads standard input as JSON did (ADR 0004).
+
+## Rejected alternatives
+
+- Line-number edits (`ail edit FILE:LINE`): rejected because numbers go stale after the first edit, as ADR 0397 already found.
+- Keeping JSON and adding only a `hunk` op: rejected because the escaping of quotes and newlines is a large part of the cost. `hunk` still works in JSON, for tools.
+- Unlimited hunks in `ail diff`: rejected because a rewritten function would dominate the report. Hunks are capped at 12 lines.
+- A context line around each diff change: rejected because the `~ ID` line already says where the change is.

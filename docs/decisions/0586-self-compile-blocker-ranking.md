@@ -26,7 +26,8 @@ The ranking is re-run after each merge into the batch branch. A construct
 moves up or down by count, and a construct whose count reaches zero leaves
 the table.
 
-Rejected alternatives:
+## Rejected alternatives
+
 
 - **Rank by estimated effort.** Effort estimates are guesses and aren't
   measurable with the survey.

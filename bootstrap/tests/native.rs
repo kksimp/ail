@@ -174,3 +174,21 @@ fn build_refuses_programs_outside_the_subset() {
     assert!(!out.status.success() && !tmp.exists(), "built a program outside the subset");
     assert!(err.contains("error[native.subset.1]"), "{err}");
 }
+
+/// `compiler/rt/native/unicode.ail` is what `tools/native/gen_unicode.ail`
+/// writes from the interpreter's tables (native.str.1, ADR 0567), so a
+/// toolchain with newer Unicode data fails here until the file is regenerated.
+#[test]
+fn unicode_tables_are_current() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "tools/native/gen_unicode.ail"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let have = fs::read_to_string(root().join("compiler/rt/native/unicode.ail")).unwrap();
+    assert!(
+        String::from_utf8(out.stdout).unwrap() == have,
+        "compiler/rt/native/unicode.ail is stale: run `./ail run tools/native/gen_unicode.ail > compiler/rt/native/unicode.ail`"
+    );
+}

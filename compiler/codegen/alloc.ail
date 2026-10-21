@@ -37,6 +37,11 @@ pub struct Alloc
     pub slots int
     ## The callee-saved registers used, which the prologue saves.
     pub saved List[int]
+    ## The block where the callee-saved registers are saved, or -1 for the
+    ## function's entry; and the blocks it dominates, whose returns restore
+    ## them (shrink-wrapping, ADR 0625).
+    pub wrap int
+    pub region List[bool]
 
 ## Whether an instruction's value is rebuilt at each use instead of held.
 pub fn is_remat(i mir.Inst) bool
@@ -81,7 +86,6 @@ pub fn allocate(f mir.Func, t Target) Alloc
         bend[b] = pos
         pos += 2
     live_in := liveness(f, order)
-    weight := use_weights(f)
     # Each value's live ranges, block by block: from its definition (or the
     # block's start when it is live in) to its last use (or the block's end
     # when it is live out). Between ranges it has a hole, where another
@@ -153,11 +157,21 @@ pub fn allocate(f mir.Func, t Target) Alloc
         ranges: ranges,
         calls: calls,
         hints: hints,
-        weight: weight,
+        weight: [],
+        weighed: false,
+        func: f,
     )
     for v in queue
         s.assign(v, f.vals[v].is_float(), t)
-    Alloc(loc: s.loc, order: order, slots: s.slots, saved: s.saved.sorted())
+    shrink := shrink_wrap(f, order, s, bstart, bend, t)
+    Alloc(
+        loc: s.loc,
+        order: order,
+        slots: s.slots,
+        saved: s.saved.sorted(),
+        wrap: shrink.wrap,
+        region: shrink.region,
+    )
 
 ## The cost of keeping each value in memory: one per definition or use,
 ## times 8 for each loop around it (at most 4).
@@ -186,6 +200,47 @@ fn use_weights(f mir.Func) List[int]
             for a in e
                 w[a] += unit
     w
+
+struct Wrap
+    wrap int
+    region List[bool]
+
+## Where the callee-saved registers can be saved instead of at the entry:
+## the deepest block that dominates every block a callee-saved register is
+## live in, when no edge leaves what it dominates and none comes back to it.
+## A path that returns without reaching it then saves and restores nothing.
+fn shrink_wrap(f mir.Func, order List[int], s Scan, bstart List[int], bend List[int], t Target) Wrap
+    nowrap := Wrap(wrap: -1, region: [])
+    if s.saved.len() == 0
+        return nowrap
+    n := f.blocks.len()
+    mut occupied := [false for _ in 0..n]
+    for v in 0..s.loc.len()
+        l := s.loc[v]
+        if l < 0 or l >= SLOT_BASE
+            continue
+        if not (t.int_callee.contains(l) or t.float_callee.contains(l))
+            continue
+        for b in order
+            mut k := 0
+            while k < s.ranges[v].len()
+                if s.ranges[v][k] <= bend[b] and s.ranges[v][k + 1] >= bstart[b]
+                    occupied[b] = true
+                k += 2
+    if occupied[0]
+        return nowrap
+    dom := mir.dominators(f)
+    mut where := List[int]()
+    for b in order
+        if occupied[b]
+            where.push(b)
+    best := wrap_block(f, order, dom, where)
+    if best < 0
+        return nowrap
+    mut region := [false for _ in 0..n]
+    for b in order
+        region[b] = dom[b][best]
+    Wrap(wrap: best, region: region)
 
 ## Append the range `from..=to`, joining it to the last one when they meet
 ## (consecutive blocks are 2 positions apart).
@@ -261,6 +316,10 @@ struct Scan
     ## How much a value costs to keep in memory: its definitions and uses,
     ## each counted 8 times over for every loop it sits in.
     weight List[int]
+    ## Whether `weight` has been computed: only a function that runs out of
+    ## registers needs it.
+    weighed bool
+    func mir.Func
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
 fn Scan.crosses(self, v int) bool
@@ -308,6 +367,9 @@ fn Scan.assign(mut self, v int, float bool, t Target)
             if free(r, v)
                 pick = r
                 break
+    if pick < 0 and not weighed
+        weight = use_weights(func)
+        weighed = true
     if pick < 0
         # Spill whichever of `v` and the values in its way is cheapest to
         # keep in memory (loop-weighted uses, ADR 0622), the one that ends

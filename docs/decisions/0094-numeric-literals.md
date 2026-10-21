@@ -19,3 +19,7 @@ digit separators and base prefixes are the established readable forms.
    and/or an exponent (`1e9`, `2.5e-3`).
 3. Literal types follow `type.num.3` (`int`/`float` by default, otherwise
    inferred). A literal that doesn't fit its type is a compile-time error.
+
+## Rejected alternatives
+
+- Decimal-only integer literals, with no `_` separators and no base prefixes: rejected on human readability, since digit separators and base prefixes are the established readable forms. (reconstructed 2026-10-21: the record names the criterion, not a discussed alternative.)
