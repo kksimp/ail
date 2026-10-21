@@ -809,13 +809,18 @@ for each byte. *(ADR 0414)*
   with its padding and no other character.
 - `bytes.zeros(n)` is `n` zero bytes; it traps if `n` is negative or above 2^32.
 
-```ail fragment rules=type.bytes.1,type.bytes.2,type.bytes.3,type.bytes.4,type.bytes.5,type.bytes.6,type.bytes.7,type.bytes.8,type.bytes.9,type.bytes.10,type.bytes.11,type.bytes.12,type.bytes.13
+**type.bytes.14** — `b.hex(sep)` is `b.hex()` with the `str` `sep` between the byte
+pairs: `b"\x00\x0f".hex(" ")` is `"00 0f"`. An empty `sep` gives `b.hex()`, and
+empty bytes give `""`. *(ADR 0775)*
+
+```ail fragment rules=type.bytes.1,type.bytes.2,type.bytes.3,type.bytes.4,type.bytes.5,type.bytes.6,type.bytes.7,type.bytes.8,type.bytes.9,type.bytes.10,type.bytes.11,type.bytes.12,type.bytes.13,type.bytes.14
 b := b"hello\x00\n"
 print(b.len())                       # 7
 print(b[1])                          # 101
 print(b[1..3])                       # b"el"
 print(b[..2] + b[3..])               # b"helo\x00\n"
 print(b.hex())                       # 68656c6c6f000a
+print(b[..3].hex(" "))               # 68 65 6c
 print("hi".to_bytes().to_list())     # [104, 105]
 print(bytes.from_base64("aGk=") else b"")
 for x in b"abc"

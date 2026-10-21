@@ -348,6 +348,19 @@ impl<'p> Checker<'p> {
             }
             return b.ret;
         }
+        // type.bytes.14: `b.hex(sep)` puts `sep` between the byte pairs.
+        if *rt == Ty::Bytes && name == "hex" && args.len() == 1 {
+            let a = &args[0];
+            let t = self.expr(&a.value, None, true);
+            if a.mutable {
+                self.error_help("own.param.2", a.value.pos(), "this parameter isn't `mut`", "remove the `mut`");
+            }
+            if !matches!(t, Ty::Str | Ty::Err | Ty::Never) && !self.reject_unhandled(&t, a.value.pos()) {
+                let msg = format!("the separator of `hex` is a `str`, not {}", self.show(&t));
+                self.error("expr.call.2", a.value.pos(), msg);
+            }
+            return b.ret;
+        }
         if name == "get" && args.len() == 2 && matches!(rt, Ty::Map(..)) {
             self.args_only(args);
             self.error_help(

@@ -236,7 +236,10 @@ pub fn add_declarations(prog: &mut Program) {
 }
 
 /// The short `kind` of an I/O failure, as `IoError.kind` and
-/// `ProcError.kind` carry it (std.err.1).
+/// `ProcError.kind` carry it (std.err.1). The causes are std.fs.15
+/// (`not_found`), std.fs.16 (`is_dir`), std.fs.17 (`not_dir`), std.fs.18
+/// (`not_empty`) and std.fs.19 (`invalid_utf8`).
+/// std.fs.20 (`exists`), std.fs.21 (`permission`) and std.fs.22 (`other`) close the list.
 pub fn error_kind(e: &std::io::Error) -> &'static str {
     use std::io::ErrorKind as K;
     match e.kind() {

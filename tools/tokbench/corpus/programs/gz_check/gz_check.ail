@@ -1,6 +1,7 @@
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/agent-data/records.txt")? "reading records"
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/records.txt")? "reading records"
     mut big := ""
     for i in 0..50
         big = "{big}{text}"

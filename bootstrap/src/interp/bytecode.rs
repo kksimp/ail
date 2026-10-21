@@ -1596,8 +1596,9 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         }
     }
 
-    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it
-    /// (the walker runs those), and no hook or trace that expects the walker's steps.
+    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it,
+    /// no `for a, b in xs` clause (type.tuple.5) (the walker runs those), and no hook or trace that
+    /// expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
         let plain = |e: &Expr| match e {
             Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(|x| !has_try(x)) && hi.as_deref().is_none_or(|x| !has_try(x)),
@@ -1607,7 +1608,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             && self.it.tracing == 0
             && plain(elem)
             && value.is_none_or(plain)
-            && clauses.iter().all(|c| !c.par && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
+            && clauses.iter().all(|c| !c.par && c.unpack.is_empty() && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
     }
 
     /// The loops of a comprehension's clauses around its element, collected into `acc`.
