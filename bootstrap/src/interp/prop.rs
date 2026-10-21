@@ -29,6 +29,7 @@ enum G {
     Opt(Box<G>),
     Struct(usize),
     Enum(usize),
+    Tuple(Vec<G>),
 }
 
 /// splitmix64: small, fast, and the same on every platform (test.prop.3).
@@ -67,6 +68,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn gen_of(&self, t: &TypeRef) -> G {
         match &t.kind {
             TypeKind::Optional(inner) => G::Opt(Box::new(self.gen_of(inner))),
+            TypeKind::Tuple(elems) => G::Tuple(elems.iter().map(|e| self.gen_of(e)).collect()),
             TypeKind::Named { name, args } => match name.as_str() {
                 "int" | "i64" => G::Int,
                 "float" | "f64" => G::Float,
@@ -129,7 +131,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             G::List(inner) => {
                 let n = items(rng);
-                Value::List(Rc::new((0..n).map(|_| self.generate(inner, rng, size, depth + 1)).collect()))
+                Value::list((0..n).map(|_| self.generate(inner, rng, size, depth + 1)).collect())
             }
             G::Set(inner) => {
                 let n = items(rng);
@@ -154,6 +156,7 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Struct(i) => {
                 Value::Struct(*i, Rc::new(self.struct_gens(*i).iter().map(|g| self.generate(g, rng, size, depth + 1)).collect()))
             }
+            G::Tuple(gs) => Value::Tuple(Rc::new(gs.iter().map(|g| self.generate(g, rng, size, depth + 1)).collect())),
             G::Enum(e) => {
                 let n = self.prog.enums[*e].variants.len();
                 let v = if depth >= MAX_DEPTH { self.simplest_variant(*e) } else { rng.below(n as u64) as usize };
@@ -181,12 +184,13 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Char => Value::Char('a'),
             G::Str => Value::Str("".into()),
             G::Bytes => super::bytes::bytes_value(Vec::new()),
-            G::List(_) => Value::List(Rc::new(Vec::new())),
+            G::List(_) => Value::list(Vec::new()),
             G::Set(_) => Value::Set(Rc::new(Table::default())),
             G::Map(..) => Value::Map(Rc::new(Table::default())),
             G::Opt(_) => Value::None,
             G::Struct(i) => Value::Struct(*i, Rc::new(self.struct_gens(*i).iter().map(|g| self.minimal(g)).collect())),
             G::Enum(e) => self.minimal_variant(*e, self.simplest_variant(*e)),
+            G::Tuple(gs) => Value::Tuple(Rc::new(gs.iter().map(|g| self.minimal(g)).collect())),
         }
     }
 
@@ -260,14 +264,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             (G::List(inner), Value::List(xs)) => {
-                for shorter in shorten(xs) {
-                    out.push(Value::List(Rc::new(shorter)));
+                for shorter in shorten(&xs.slice()) {
+                    out.push(Value::list(shorter));
                 }
                 for (i, x) in xs.iter().enumerate().take(8) {
-                    for s in self.shrinks(inner, x).into_iter().take(3) {
-                        let mut d = (**xs).clone();
+                    for s in self.shrinks(inner, &x).into_iter().take(3) {
+                        let mut d = xs.to_vec();
                         d[i] = s;
-                        out.push(Value::List(Rc::new(d)));
+                        out.push(Value::list(d));
                     }
                 }
             }
@@ -320,6 +324,15 @@ impl<'a, W: Write> Interp<'a, W> {
                         let mut d = (**fields).clone();
                         d[j] = s;
                         out.push(Value::Struct(*i, Rc::new(d)));
+                    }
+                }
+            }
+            (G::Tuple(gs), Value::Tuple(xs)) => {
+                for (j, x) in xs.iter().enumerate() {
+                    for s in self.shrinks(&gs[j], x) {
+                        let mut d = (**xs).clone();
+                        d[j] = s;
+                        out.push(Value::Tuple(Rc::new(d)));
                     }
                 }
             }

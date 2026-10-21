@@ -6,7 +6,7 @@ use crate::fasthash::FastMap as HashMap;
 use std::io::Write;
 use std::rc::Rc;
 
-use super::{Env, Flow, Interp, Operand, Trap, Value, element, float_text, load, put, take, trap, view, with_slot};
+use super::{Env, Flow, Interp, Operand, Trap, Value, float_text, list_element, load, put, take, trap, view, with_slot};
 
 /// type.str.15: the largest text `repeat` or `pad_*` will build, in bytes.
 const MAX_TEXT_BYTES: usize = 1 << 30;
@@ -26,6 +26,7 @@ pub(super) enum Key {
     None,
     Nested(u32),
     Seq(Vec<Key>),
+    Tuple(Vec<Key>),
     Struct(usize, Vec<Key>),
     Variant(usize, usize, Vec<Key>),
 }
@@ -41,7 +42,8 @@ impl Key {
             Value::Char(c) => Key::Char(*c),
             Value::None => Key::None,
             Value::Nested(n) => Key::Nested(*n),
-            Value::List(xs) => Key::Seq(all(xs)),
+            Value::List(xs) => Key::Seq(all(&xs.slice())),
+            Value::Tuple(xs) => Key::Tuple(all(xs)),
             Value::Struct(s, fields) => Key::Struct(*s, all(fields)),
             Value::Enum(e, i, fields) => Key::Variant(*e, *i, all(fields)),
             other => unreachable!("checked: {other:?} isn't `Hash`"),
@@ -54,8 +56,8 @@ impl Key {
 /// result keeps the receiver's order, then the argument's new elements.
 fn set_op<'v>(name: &str, xs: impl Iterator<Item = &'v Value>, other: &Value) -> Value {
     let mut other_set = Table::default();
-    let other_items: Vec<&Value> = match other {
-        Value::Set(t) => t.keys().collect(),
+    let other_items: Vec<Value> = match other {
+        Value::Set(t) => t.keys().cloned().collect(),
         Value::List(l) => l.iter().collect(),
         v => unreachable!("checked: a set or list, found {v:?}"),
     };
@@ -302,12 +304,12 @@ impl<'a, W: Write> Interp<'a, W> {
         if name == "sort" {
             // Sorting may call `cmp` implementations, so the list is moved out first.
             let Value::List(items) = take(env, &p)? else { unreachable!("checked: a list") };
-            let sorted = self.sorted(Rc::unwrap_or_clone(items), pos);
+            let sorted = self.sorted(Rc::unwrap_or_clone(items).into_vec(), pos);
             let restored = match &sorted {
                 Ok(xs) => xs.clone(),
                 Err(_) => Vec::new(),
             };
-            put(env, &p, false, Value::List(Rc::new(restored)))?;
+            put(env, &p, false, Value::packed(restored))?;
             sorted?;
             if self.tracing & super::trace::WATCH != 0
                 && let Some(before) = self.watch_before(env, &p, name, &a)
@@ -318,7 +320,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         if name == "clear" && self.has_unique {
             // own.uniq.8: the removed elements are released.
-            let old = with_slot(env, &p, false, |slot| std::mem::replace(slot, Value::List(Rc::new(Vec::new()))))?;
+            let old = with_slot(env, &p, false, |slot| std::mem::replace(slot, Value::list(Vec::new())))?;
             a.clear();
             self.arg_pool.push(a);
             self.release(old, pos)?;
@@ -333,8 +335,8 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             (Value::List(items), "swap") => {
                 let (i, j) = (a[0].int(), a[1].int());
-                element(items, i, pos)?;
-                element(items, j, pos)?;
+                list_element(items, i, pos)?;
+                list_element(items, j, pos)?;
                 Rc::make_mut(items).swap(i as usize, j as usize);
                 Value::Unit
             }
@@ -355,12 +357,12 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             (Value::List(items), "remove_at") => {
                 let i = a[0].int();
-                element(items, i, pos)?;
+                list_element(items, i, pos)?;
                 Rc::make_mut(items).remove(i as usize)
             }
             (Value::List(items), "extend") => {
                 let Value::List(more) = &a[0] else { unreachable!("checked: a list") };
-                Rc::make_mut(items).extend(more.iter().cloned());
+                Rc::make_mut(items).extend_from(more);
                 Value::Unit
             }
             (Value::List(items), "clear") => {
@@ -377,7 +379,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let table = Rc::make_mut(t);
                 let i = match table.get(&a[0]) {
                     Some(i) => i,
-                    None => table.insert(a[0].clone(), Some(Value::List(Rc::new(Vec::new())))),
+                    None => table.insert(a[0].clone(), Some(Value::list(Vec::new()))),
                 };
                 let Value::List(items) = table.val_mut(i) else { unreachable!("checked: a list value") };
                 Rc::make_mut(items).push(x);
@@ -411,19 +413,30 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Num(k, bits) if k.is_float() => f32_method(bits, name, pos)?,
             Value::Num(k, bits) => sized_method(k, bits, name, a, pos)?,
             Value::Float(x) => float_method(x, name, a, pos)?,
-            Value::List(items) => match name {
-                "len" => Value::Int(items.len() as i64),
-                "is_empty" => Value::Bool(items.is_empty()),
-                "last" => opt(items.last().cloned()),
-                "first" => opt(items.first().cloned()),
+            // The constant-time methods read a packed list in place; the others work on its elements as a
+            // slice (a copy for a packed list, which an O(n) method pays for in passing; ADR 0760).
+            Value::List(list) if name == "len" => Value::Int(list.len() as i64),
+            Value::List(list) if name == "is_empty" => Value::Bool(list.is_empty()),
+            Value::List(list) if name == "last" => opt(list.last()),
+            Value::List(list) if name == "first" => opt(list.first()),
+            Value::List(list) => {
+                if let Some(v) = packed_method(&list, name, a, pos)? {
+                    return Ok(v);
+                }
+                let items = list.slice();
+                match name {
                 // type.coll.15: the first `n` elements, or all of them.
                 "take" => {
                     let n = a[0].int();
                     if n < 0 {
                         return trap("type.coll.15", pos, format!("`take` needs a count of at least 0, not {n}"));
                     }
-                    Value::List(Rc::new(items[..(n as usize).min(items.len())].to_vec()))
+                    Value::list(items[..(n as usize).min(items.len())].to_vec())
                 }
+                // type.tuple.9: each element with its index.
+                "enumerate" => Value::list(
+                    items.iter().enumerate().map(|(i, x)| Value::Tuple(Rc::new(vec![Value::Int(i as i64), x.clone()]))).collect(),
+                ),
                 // type.coll.17: `chunks(n)` pieces of `n` (the last may be shorter),
                 // `windows(n)` every run of `n` neighbours.
                 "chunks" | "windows" => {
@@ -433,11 +446,11 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     let n = n as usize;
                     let parts: Vec<Value> = if name == "chunks" {
-                        items.chunks(n).map(|c| Value::List(Rc::new(c.to_vec()))).collect()
+                        items.chunks(n).map(|c| Value::list(c.to_vec())).collect()
                     } else {
-                        items.windows(n).map(|c| Value::List(Rc::new(c.to_vec()))).collect()
+                        items.windows(n).map(|c| Value::list(c.to_vec())).collect()
                     };
-                    Value::List(Rc::new(parts))
+                    Value::list(parts)
                 }
                 // type.coll.18: how many times each element occurs, in order of first appearance.
                 "counts" => {
@@ -460,9 +473,9 @@ impl<'a, W: Write> Interp<'a, W> {
                     let mut out = Vec::new();
                     for inner in items.iter() {
                         let Value::List(l) = inner else { unreachable!("checked: a list of lists") };
-                        out.extend(l.iter().cloned());
+                        out.extend(l.iter());
                     }
-                    Value::List(Rc::new(out))
+                    Value::list(out)
                 }
                 "union" | "intersect" | "difference" => set_op(name, items.iter(), &a[0]),
                 "contains" | "index_of" => {
@@ -549,11 +562,13 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     opt(best)
                 }
-                "sorted" => Value::List(Rc::new(self.sorted(Rc::unwrap_or_clone(items), pos)?)),
+                "sorted" => Value::packed(self.sorted(items.into_owned(), pos)?),
                 _ => unreachable!("checked: List.{name}"),
-            },
+                }
+            }
             Value::Map(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                // type.coll.20
                 "is_empty" => Value::Bool(t.len() == 0),
                 "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
@@ -566,17 +581,18 @@ impl<'a, W: Write> Interp<'a, W> {
                         .collect();
                     pairs.sort_by(|x, y| y.0.cmp(&x.0));
                     let keys = pairs.into_iter().take(count.max(0) as usize).map(|(_, k)| k).collect();
-                    Value::List(Rc::new(keys))
+                    Value::list(keys)
                 }
-                "keys" => Value::List(Rc::new(t.key_list())),
-                "values" => Value::List(Rc::new(t.val_list())),
+                "keys" => Value::list(t.key_list()),
+                "values" => Value::list(t.val_list()),
                 _ => unreachable!("checked: Map.{name}"),
             },
             Value::Set(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                // type.coll.20
                 "is_empty" => Value::Bool(t.len() == 0),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
-                "sorted" => Value::List(Rc::new(self.sorted(t.key_list(), pos)?)),
+                "sorted" => Value::list(self.sorted(t.key_list(), pos)?),
                 "union" | "intersect" | "difference" => set_op(name, t.keys(), &a[0]),
                 "is_subset" => {
                     let Value::Set(other) = a.pop().expect("checked: one argument") else {
@@ -616,7 +632,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     if limit < 1 {
                         return trap("type.str.4", pos, format!("the limit of `split` must be at least 1, not {limit}"));
                     }
-                    return Ok(Value::List(Rc::new(text.splitn(limit as usize, sep).map(s).collect())));
+                    return Ok(Value::list(text.splitn(limit as usize, sep).map(s).collect()));
                 }
                 let mut chars = sep.chars();
                 let parts: Vec<Value> = match (chars.next(), chars.next()) {
@@ -631,7 +647,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     (Some(c), None) => text.split(c).map(s).collect(),
                     _ => text.split(sep).map(s).collect(),
                 };
-                Value::List(Rc::new(parts))
+                Value::list(parts)
             }
             "to_int" => {
                 let digits = text.strip_prefix('-').unwrap_or(text);
@@ -642,22 +658,23 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             "to_float" => opt(parse_float(text).map(Value::Float)),
-            "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
+            "chars" => Value::list(text.chars().map(Value::Char).collect()),
             // type.str.12: `len` counts characters; `byte_len` counts bytes.
             "len" => Value::Int(text.chars().count() as i64),
+            // type.str.19: `is_empty` is `len() == 0`.
             "is_empty" => Value::Bool(text.is_empty()),
             "byte_len" => Value::Int(text.len() as i64),
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => {
                 let mut parts = Vec::with_capacity(text.bytes().filter(|&b| b == b'\n').count() + 1);
                 parts.extend(text.lines().map(s));
-                Value::List(Rc::new(parts))
+                Value::list(parts)
             }
             "trim" => s(text.trim()),
             "trim_start" => s(text.trim_start()),
             "trim_end" => s(text.trim_end()),
             // type.str.17: the pieces between runs of whitespace; none for blank text.
-            "words" => Value::List(Rc::new(text.split_whitespace().map(s).collect())),
+            "words" => Value::list(text.split_whitespace().map(s).collect()),
             // type.str.18: non-overlapping occurrences of `sub`.
             "count" => {
                 let sub = arg_str(0);
@@ -959,6 +976,47 @@ pub(super) fn map_value<'v>(
 /// sum `k % 4`, and gives `(p0 + p1) + (p2 + p3)`; a longer list splits
 /// after `32 * ceil(n / 64)` elements and adds its halves' sums. The shape
 /// depends only on the length, so a vector or parallel sum gives the same bits.
+/// The scan methods on a packed list, read in place (no copy of the elements; ADR 0760). `None` for any
+/// other list or method, which takes the general path.
+fn packed_method(list: &super::list::List, name: &str, a: &[Value], pos: Pos) -> Result<Option<Value>, Trap> {
+    use super::list::List;
+    let find = |found: Option<usize>| -> Value {
+        match name {
+            "contains" => Value::Bool(found.is_some()),
+            _ => opt(found.map(|i| Value::Int(i as i64))),
+        }
+    };
+    Ok(Some(match (list, name, a.first()) {
+        (List::Int(v), "contains" | "index_of", Some(Value::Int(n))) => find(v.iter().position(|x| x == n)),
+        (List::Float(v), "contains" | "index_of", Some(Value::Float(n))) => find(v.iter().position(|x| x == n)),
+        (List::Bool(v), "contains" | "index_of", Some(Value::Bool(n))) => find(v.iter().position(|x| (*x != 0) == *n)),
+        (List::Int(v), "sum", _) => {
+            let mut total: i64 = 0;
+            for x in v {
+                total = match total.checked_add(*x) {
+                    Some(t) => t,
+                    None => return trap("expr.arith.1", pos, "`sum` overflows `int`".into()),
+                };
+            }
+            Value::Int(total)
+        }
+        (List::Float(v), "sum", _) if !v.is_empty() => Value::Float(tree_sum(v)),
+        (List::Int(v), "min", _) => opt(v.iter().min().map(|x| Value::Int(*x))),
+        (List::Int(v), "max", _) => opt(v.iter().max().map(|x| Value::Int(*x))),
+        (List::Float(v), "min" | "max", _) => {
+            let want = if name == "min" { Ordering::Less } else { Ordering::Greater };
+            let mut best: Option<f64> = None;
+            for x in v {
+                if best.is_none_or(|b| super::float_order(*x, b) == want) {
+                    best = Some(*x);
+                }
+            }
+            opt(best.map(Value::Float))
+        }
+        _ => return Ok(None),
+    }))
+}
+
 pub fn tree_sum(xs: &[f64]) -> f64 {
     if xs.len() <= 32 {
         let mut p = [0.0f64; 4];

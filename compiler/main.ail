@@ -6,11 +6,14 @@
 #   ail run compiler parse FILE...        the AIL parser's tree, as `ail api --ast FILE`
 #   ail run compiler mir FILE [RT]        the native backend's MIR of a program (ADR 0384), with
 #                                         the runtime in directory RT when given
-#   ail run compiler build FILE RT [TARGET [MS [MB]]]
+#   ail run compiler build FILE RT [TARGET [MS [MB [STD]]]]
 #                                         an executable of a program as hex text, with the runtime
 #                                         in directory RT, for x86_64-linux (the default) or
 #                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
 #                                         `ail build`)
+#   ail run compiler build-many RT TARGET MS MB STD FILE...
+#                                         the same for several programs in one run (ADR 0814,
+#                                         used by the selftest), each under a line `== PATH`
 # With several files, each output starts with a line `== PATH`.
 use a64
 use ast
@@ -34,6 +37,17 @@ fn main() !
                 if args.len() > 2
                     print("== {path}")
                 print(syntax.tokens_text(syntax.lex(fs.read_text(path)?)))
+        "diagnose" =>
+            for path in args[1..]
+                text := fs.read_text(path)?
+                lexed := syntax.lex(text)
+                mut diags := lexed.diags
+                diags.extend(syntax.parse(lexed.tokens).diags)
+                report := syntax.report_text(path, text, diags)
+                if report.len() > 0
+                    if args.len() > 2
+                        print("== {path}")
+                    print(report)
         "parse" =>
             for path in args[1..]
                 if args.len() > 2
@@ -42,26 +56,32 @@ fn main() !
                 print(syntax.ast_text(lexed, syntax.parse(lexed.tokens)))
         "mir" =>
             if args.len() > 2
-                print(mir.module_text(lower_file(args[1], runtime(args[2])?)?))
+                print(mir.module_text(lower_file(args[1], runtime(args[2], args[1])?, "")?))
             else
-                print(mir.module_text(lower_file(args[1], none)?))
+                print(mir.module_text(lower_file(args[1], none, "")?))
+        "pe-mir-sample" =>
+            print(obj.hex(obj.pe_image(x64.generate_windows(x64.win_sample()))))
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
         "build" =>
             # Optional defaults for the run limits (run.limit.5): `0` for none.
             ms := if args.len() > 4 then args[4] else "0"
             mb := if args.len() > 5 then args[5] else "0"
-            m := lower_file(args[1], runtime_with(args[2], ms, mb)?)?
+            std := if args.len() > 6 then args[6] else ""
+            m := lower_file(args[1], runtime_with(args[2], args[1], ms, mb)?, std)?
             target := if args.len() > 3 then args[3] else "x86_64-linux"
-            match target
-                "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
-                "aarch64-linux" => print(obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)))
-                "aarch64-macos" =>
-                    name := args[1].split("/").last() else args[1]
-                    print(obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))))
-                _ =>
-                    io.eprint("error[native.build.3]: unknown target `{target}`")
-                    io.exit(2)
+            print(executable_hex(m, args[1], target))
+        "build-many" =>
+            # ADR 0814: `build-many RT TARGET MS MB STD FILE...` builds several programs in
+            # one run, so the compiler loads and checks once. Each executable is printed
+            # as `== PATH` and its hex, as `build` prints it; the first problem ends the
+            # run, and the caller then builds each file on its own to report per file.
+            # The limits (run.limit.5) are the same for all; the runtime is chosen per program
+            # (a program that spawns tasks links the task runtime).
+            for path in args[6..]
+                print("== {path}")
+                rt := runtime_with(args[1], path, args[3], args[4])?
+                print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
@@ -91,29 +111,76 @@ fn check_dump(path str, many bool) !
         print("bodies {[i for i in bodies if not report.gapped.contains(i)].len()} {bodies.len()}")
 
 ## The native runtime in directory `dir`, parsed as one program.
-fn runtime(dir str) !ast.Program
-    runtime_with(dir, "0", "0")
+fn runtime(dir str, path str) !ast.Program
+    runtime_with(dir, path, "0", "0")
 
 ## The runtime with `ail build`'s default time limit in milliseconds and
-## memory limit in megabytes baked into `limits.ail` (run.limit.5).
-fn runtime_with(dir str, ms str, mb str) !ast.Program
+## memory limit in megabytes baked into `limits.ail` (run.limit.5). The task
+## runtime links only into a program that may use tasks (ADR 0599).
+fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
+    tasks := mir.uses_tasks(source_text(path)?)
+    skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
-    for name in ["prim.ail", "core.ail", "math.ail"]
-        texts.push(fs.read_text("{dir}/{name}")?)
+    mut names := ["prim.ail", "core.ail", "math.ail"]
     for name in fs.list_dir(dir)?.sorted()
-        if name.ends_with(".ail") and not ["prim.ail", "core.ail", "math.ail"].contains(name)
-            text := fs.read_text("{dir}/{name}")?
-            texts.push(text.replace("0 # BAKED_TIMEOUT_MS", ms).replace("0 # BAKED_MEMORY_MB", mb))
+        if name.ends_with(".ail") and not names.contains(name) and name != skip
+            names.push(name)
+    for name in names
+        text := fs.read_text("{dir}/{name}")?
+        texts.push(text.replace("0 # BAKED_TIMEOUT_MS", ms).replace("0 # BAKED_MEMORY_MB", mb))
+        # A runtime file with a syntax error fails the build with the error
+        # shown, instead of compiling whatever the parser recovered to
+        # (a `&` once dropped the rest of its statement silently).
+        runtime_syntax("{dir}/{name}", text)
+    # A baked time limit also makes `while` loops check it (run.limit.6).
+    if ms != "0"
+        texts.push("fn lim_loop_polls() bool\n    true\n")
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
+
+## The text of a program: a file, or all the files of a package directory.
+fn source_text(path str) !str
+    if path.ends_with(".ail")
+        return fs.read_text(path)?
+    mut texts := List[str]()
+    for name in fs.list_dir(path)?.sorted()
+        if name.ends_with(".ail")
+            texts.push(fs.read_text("{path}/{name}")?)
+    texts.join("\n")
+
+## The executable of lowered program `m` for `target` as hex text (native.build.3).
+## `path` names the program: the macOS target takes its name from it.
+fn executable_hex(m mir.Module, path str, target str) str
+    match target
+        "x86_64-linux" => obj.hex(obj.elf(x64.generate(m), obj.X86_64))
+        "aarch64-linux" => obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64))
+        "x86_64-windows" => obj.hex(obj.pe_image(x64.generate_windows(m)))
+        "aarch64-macos" =>
+            name := path.split("/").last() else path
+            obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", "")))
+        _ =>
+            io.eprint("error[native.build.3]: unknown target `{target}`")
+            io.exit(2)
+            ""
+
+## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
+fn runtime_syntax(path str, text str)
+    lexed := syntax.lex(text)
+    parsed := syntax.parse(lexed.tokens)
+    mut diags := lexed.diags
+    diags.extend(parsed.diags)
+    if diags.len() > 0
+        for d in diags
+            io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
+        io.exit(1)
 
 ## Parse a program and the modules it imports, and lower them to MIR
 ## (mod.unit.3-5, ADR 0393). `path` is a file, the root module by itself,
 ## or a package directory whose files form the root module. Problems
 ## outside the native subset are printed as `ail check` prints
 ## diagnostics, and the run fails.
-fn lower_file(path str, rt ast.Program?) !mir.Module
+fn lower_file(path str, rt ast.Program?, std str) !mir.Module
     mut srcs := List[mir.Source]()
     mut root := path
     if path.ends_with(".ail")
@@ -121,9 +188,11 @@ fn lower_file(path str, rt ast.Program?) !mir.Module
         root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
         srcs.push(parse_source("", path)?)
     else
+        mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
             if name.ends_with(".ail")
-                srcs.push(parse_source("", "{path}/{name}")?)
+                files.push("{path}/{name}")
+        srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
     mut k := 0
     while k < srcs.len()
@@ -131,12 +200,24 @@ fn lower_file(path str, rt ast.Program?) !mir.Module
             if loaded.contains(imp)
                 continue
             loaded.add(imp)
+            if imp.starts_with("std.")
+                # A standard module in AIL: one file under the std directory.
+                if std != ""
+                    srcs.push(parse_source(imp, std_file(std, imp))?)
+                continue
             dir := "{root}/{imp.replace(".", "/")}"
+            mut files := List[str]()
             for name in fs.list_dir(dir)?.sorted()
                 if name.ends_with(".ail")
-                    srcs.push(parse_source(imp, "{dir}/{name}")?)
+                    files.push("{dir}/{name}")
+            srcs.extend(parse_module(imp, files)?)
         k += 1
-    m := mir.lower_package(srcs, rt) else err
+    derived := derived_sources()?
+    srcs.extend(derived.sources)
+    lazy := srcs.len()
+    if text := derived.prelude
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text(text)))
+    m := mir.lower_package_with(srcs, rt, lazy) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -156,15 +237,104 @@ fn lower_file(path str, rt ast.Program?) !mir.Module
         )
     m
 
+## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
+fn std_file(std str, imp str) str
+    parts := imp.split(".")[1..]
+    if parts.len() == 1
+        return "{std}/{parts[0]}/{parts[0]}.ail"
+    "{std}/{parts.join("/")}.ail"
+
+## The methods derive generators wrote (ct.gen.1), which `ail build` puts
+## in the file named by `AIL_DERIVED` (ADR 0807): for each deriving `impl`,
+## a line `@@derive MODULE TYPE.TRAIT` (`-` for the root module), then the
+## generated text. Each text is a source `gen:impl:TYPE.TRAIT` of its
+## module whose functions are methods of `TYPE`. A last block `@@prelude`
+## is the prelude, for its JSON and `Default` modules (ADR 0808).
+fn derived_sources() !Derived
+    mut out := Derived(sources: [], prelude: none)
+    path := env.get("AIL_DERIVED") else return out
+    mut text := fs.read_text(path)?
+    parts := text.split("@@prelude\n")
+    if parts.len() > 1
+        out.prelude = parts[1]
+        text = parts[0]
+    mut lines := text.lines()
+    lines.push("@@derive")
+    mut head := List[str]()
+    mut body := List[str]()
+    for line in lines
+        if not line.starts_with("@@derive")
+            body.push(line)
+            continue
+        if head.len() == 3
+            out.sources.push(derived_source(head[1], head[2], body))
+        head = line.split(" ")
+        body = []
+    out
+
+## What `ail build` passes besides the program's files.
+struct Derived
+    sources List[mir.Source]
+    prelude str?
+
+## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
+## `module`, each `fn m` written `fn TYPE.m`, so lines stay where the
+## generator put them.
+fn derived_source(module str, label str, body List[str]) mir.Source
+    cut := label.split(".")
+    owner := cut[..cut.len() - 1].join(".")
+    mut lines := List[str]()
+    for l in body
+        if rest := l.strip_prefix("fn ")
+            lines.push("fn {owner}.{rest}")
+        else
+            lines.push(l)
+    parse_text(if module == "-" then "" else module, "gen:impl:{label}", "{lines.join("\n")}\n")
+
+## Whether the program has a `use` that ends in `regex` (`use std.regex`, `use app.regex`).
+fn uses_regex(prog ast.Program) bool
+    for u in prog.uses
+        if u.path.len() > 0 and u.path[u.path.len() - 1].name == "regex"
+            return true
+    false
+
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
-    text := fs.read_text(path)?
+    parse_text(module, path, fs.read_text(path)?)
+
+## The files of one module, parsed together: a generic name declared in one
+## file starts type arguments in the others (gen.infer.2).
+fn parse_module(module str, paths List[str]) !List[mir.Source]
+    mut texts := List[str]()
+    mut names := Set[str]()
+    for path in paths
+        text := fs.read_text(path)?
+        texts.push(text)
+        for n in syntax.generic_names(syntax.lex(text).tokens).sorted()
+            names.add(n)
+    [parse_with(module, paths[k], texts[k], names) for k in 0..paths.len()]
+
+## Text from `path`, parsed; syntax errors are printed and the run fails.
+fn parse_text(module str, path str, text str) mir.Source
+    parse_with(module, path, text, Set[str]())
+
+fn parse_with(module str, path str, text str, names Set[str]) mir.Source
     lexed := syntax.lex(text)
-    parsed := syntax.parse(lexed.tokens)
+    parsed := syntax.parse_with(lexed.tokens, names)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
-    if diags.len() > 0
-        for d in diags
-            io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
+    report := syntax.report_text(path, text, diags)
+    if report.len() > 0
+        io.eprint(report)
         io.exit(1)
-    mir.Source(module: module, path: path, text: text, prog: parsed.program)
+    mut prog := parsed.program
+    # `regex` needs no `use` (std.use.1); the module written in AIL is imported
+    # by the mention (ADR 0819).
+    if text.contains("regex.") and not uses_regex(prog)
+        pos := ast.Pos(line: 1, col: 1)
+        prog.uses.push(ast.Use(
+            path: [ast.Ident(name: "std", pos: pos), ast.Ident(name: "regex", pos: pos)],
+            alias: none,
+            pos: pos,
+        ))
+    mir.Source(module: module, path: path, text: text, prog: prog)

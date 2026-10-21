@@ -143,7 +143,7 @@ impl<'a, W: Write> Interp<'a, W> {
             ("fs", "list_dir") => {
                 let path = str_arg(0);
                 match list_dir(&path) {
-                    Ok(names) => Value::List(Rc::new(names.into_iter().map(text).collect())),
+                    Ok(names) => Value::list(names.into_iter().map(text).collect()),
                     Err(kind) => self.io_error(&path, kind, pos),
                 }
             }
@@ -171,11 +171,11 @@ impl<'a, W: Write> Interp<'a, W> {
             ("fs", "walk") => {
                 let path = str_arg(0);
                 match super::osext::walk(&path) {
-                    Ok(files) => Value::List(Rc::new(files.into_iter().map(text).collect())),
+                    Ok(files) => Value::list(files.into_iter().map(text).collect()),
                     Err((at, kind)) => self.io_error(&at.into(), kind, pos),
                 }
             }
-            ("fs", "glob") => Value::List(Rc::new(super::osext::glob(&str_arg(0)).into_iter().map(text).collect())),
+            ("fs", "glob") => Value::list(super::osext::glob(&str_arg(0)).into_iter().map(text).collect()),
             ("fs", "metadata") => {
                 let path = str_arg(0);
                 match super::osext::metadata(&path) {
@@ -197,7 +197,7 @@ impl<'a, W: Write> Interp<'a, W> {
             ("path", "join") => text(crate::stdlib::path_join(&str_arg(0), &str_arg(1))),
             ("env", "args") => {
                 let args = PROGRAM.get().map(|(_, a)| a.as_slice()).unwrap_or_default();
-                Value::List(Rc::new(args.iter().map(|a| text(a.as_str())).collect()))
+                Value::list(args.iter().map(|a| text(a.as_str())).collect())
             }
             ("env", "get") => match std::env::var(&*str_arg(0)) {
                 Ok(v) => text(v),
@@ -403,7 +403,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let Value::List(list) = &values[0] else { unreachable!("checked: List[Channel]") };
                 let chans: Vec<usize> = list
                     .iter()
-                    .map(|v| match v {
+                    .map(|v| match &v {
                         Value::Handle(super::tasks::Handle::Channel(c)) => *c,
                         other => unreachable!("checked: a channel, found {other:?}"),
                     })
@@ -498,7 +498,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         let mut all = Table::default();
                         for (k, vs) in r.all {
                             let items: Vec<Value> = vs.into_iter().map(text).collect();
-                            all.insert(text(k), Some(Value::List(Rc::new(items))));
+                            all.insert(text(k), Some(Value::list(items)));
                         }
                         let all = Value::Map(Rc::new(all));
                         if raw {
@@ -518,6 +518,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             ("mem", _) => return self.mem_call(f, &values, pos),
+            ("hw", _) => return self.hw_call(f, &values, pos),
             ("regex", _) => return self.regex_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());

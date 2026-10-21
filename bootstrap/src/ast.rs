@@ -3,6 +3,10 @@
 
 use crate::diag::Pos;
 
+/// `--unsafe driver` on the command line: a program without an `ail.pkg` may
+/// use `std.hw` (unsafe.hw.1).
+pub static UNSAFE_DRIVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[derive(Debug, Default)]
 pub struct Program {
     /// Every function: free functions, methods, and the functions of
@@ -28,6 +32,9 @@ pub struct Program {
     /// the root package as `""`. `None` without any `ail.pkg`: a program
     /// with no manifest may use `unsafe`.
     pub unsafe_allowed: Option<Vec<String>>,
+    /// The packages whose manifests say `unsafe driver` (unsafe.hw.1), the
+    /// root package as `""`.
+    pub driver_allowed: Vec<String>,
     /// The code derive generators wrote, one per deriving `impl`; each is
     /// a file of `files` (ct.gen.1-4, `derive.rs`).
     pub generated: Vec<Generated>,
@@ -121,6 +128,25 @@ impl Program {
         match &self.unsafe_allowed {
             None => true,
             Some(list) => is_prelude(pos) || list.iter().any(|p| p == self.package_at(pos)),
+        }
+    }
+
+    /// Whether the manifests let the package at `pos` reach hardware through
+    /// `std.hw` (unsafe.hw.1). Without any `ail.pkg`, only `--unsafe driver` does.
+    pub fn driver_ok_at(&self, pos: Pos) -> bool {
+        match &self.unsafe_allowed {
+            None => UNSAFE_DRIVER.load(std::sync::atomic::Ordering::Relaxed),
+            Some(_) => is_prelude(pos) || self.driver_allowed.iter().any(|p| p == self.package_at(pos)),
+        }
+    }
+
+    /// The packages that may reach hardware (unsafe.hw.1), with `""` for a
+    /// program without `ail.pkg` run with `--unsafe driver`.
+    pub fn driver_list(&self) -> Vec<String> {
+        if self.unsafe_allowed.is_none() && UNSAFE_DRIVER.load(std::sync::atomic::Ordering::Relaxed) {
+            vec![String::new()]
+        } else {
+            self.driver_allowed.clone()
         }
     }
 
@@ -397,6 +423,8 @@ pub enum TypeKind {
     Ptr(Box<TypeRef>),
     /// `fn(A, B) R`, a function value's type; `ret` is `None` for no result (type.fn.1).
     Fn { params: Vec<TypeRef>, ret: Option<Box<TypeRef>> },
+    /// `(A, B)`, a tuple of two or more elements (type.tuple.1).
+    Tuple(Vec<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;
@@ -462,12 +490,28 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
+    /// `a, mut b := t`: one binding per element of a tuple, `_` for none
+    /// (type.tuple.4). `pos` is the first name's. `for a, b in xs` is parsed
+    /// as a `for` over a hidden variable whose body starts with this.
+    LetTuple {
+        names: Vec<Binder>,
+        value: Expr,
+        pos: Pos,
+    },
+}
+
+/// One name of a destructuring binding (type.tuple.4).
+#[derive(Debug, Clone)]
+pub struct Binder {
+    pub name: String,
+    pub pos: Pos,
+    pub mutable: bool,
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } | Stmt::Unsafe { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::LetTuple { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } | Stmt::Unsafe { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
@@ -612,6 +656,8 @@ pub enum Expr {
     Map(Vec<(Expr, Expr)>, Pos),
     /// `{a, b, ...}` (type.coll.2)
     Set(Vec<Expr>, Pos),
+    /// `(a, b, ...)`, two or more elements (type.tuple.2).
+    Tuple(Vec<Expr>, Pos),
     /// `if c` / `elif c` / `else` (expr.if.1); `else_err` is the name in
     /// `else err` (expr.if.6).
     If {
@@ -678,6 +724,7 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Tuple(_, p)
             | Expr::Ref { pos: p, .. }
             | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
@@ -711,6 +758,9 @@ pub struct CompFor {
     pub var_pos: Pos,
     pub iter: Expr,
     pub cond: Option<Expr>,
+    /// `for a, b in xs`: the names bound to each element's parts, with
+    /// `var` a hidden name for the whole element (type.tuple.5).
+    pub unpack: Vec<Binder>,
 }
 
 /// A condition of `if` or `elif`: a `bool` expression, or a binding
@@ -769,6 +819,10 @@ pub enum Pattern {
     },
     /// `lo..hi` or `lo..=hi` over integer or character literals (expr.match.12).
     Range { lo: Literal, hi: Literal, inclusive: bool, pos: Pos },
+    /// `(p, q, ...)`: a tuple whose elements match (type.tuple.6).
+    Tuple(Vec<Pattern>, Pos),
+    /// A name inside a tuple pattern: binds the element (type.tuple.6).
+    Bind(String, Pos),
 }
 
 /// The value of a literal pattern.
@@ -787,7 +841,9 @@ impl Pattern {
             | Pattern::Literal(_, p)
             | Pattern::Or(_, p)
             | Pattern::Variant { pos: p, .. }
-            | Pattern::Range { pos: p, .. } => *p,
+            | Pattern::Range { pos: p, .. }
+            | Pattern::Tuple(_, p)
+            | Pattern::Bind(_, p) => *p,
         }
     }
 }

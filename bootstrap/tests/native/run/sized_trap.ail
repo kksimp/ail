@@ -1,0 +1,7 @@
+# A conversion that doesn't fit traps (type.num.15).
+fn pick(n int) u8
+    n.to_u8()
+
+fn main()
+    print(pick(255))
+    print(pick(300))

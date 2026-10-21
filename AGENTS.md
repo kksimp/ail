@@ -35,6 +35,10 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - A change to the Rust checker (`bootstrap/src/check*`) ports to
   `compiler/check/` in the same branch: the selftest `self_hosted_check`
   requires the two to agree ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
+- **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**
+  a native feature lives in its own `compiler/mir/lower_*.ail` file. It may
+  add at most one dispatch line and one state field to `lower.ail`. Only a
+  PR that breaks this needs a slot in the lower.ail merge queue.
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
 - The AI's environment can push branches but can't delete them on GitHub.
@@ -140,17 +144,21 @@ bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (A
 compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
 tools/
+  app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
+  check-doc-snippets.py   runs `ail check` on every `ail` and `ail fragment` block in the docs, outside `docs/spec/`
   card-spec-audit.py      audits the std functions against the spec (ADR 0698)
   card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
-  check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows for duplicate rows
+  check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
   native-coverage/        which native subset constructs block the examples
+  native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
+  native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
   perfbench/              drag-race programs: AIL, C and Python twins

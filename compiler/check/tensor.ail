@@ -1,7 +1,7 @@
-## `std.tensor` (spec 17-std, std.tensor.1-11, ADR 0328), as
+## `std.tensor` (spec 17-std, std.tensor.1-22, ADR 0328, ADR 0796), as
 ## `check/tensor.rs`: `tensor.from(xs, shape)`, `tensor.zeros(shape)` and
-## the methods and operators of a `tensor.Tensor[T]`, where `T` is `int` or
-## `float`. A tensor has no fields (std.tensor.1).
+## the methods and operators of a `tensor.Tensor[T]`, where `T` is `int`,
+## `float` or `f32` (std.tensor.21). A tensor has no fields (std.tensor.1).
 use ast
 
 TENSOR_METHODS := [
@@ -23,9 +23,13 @@ TENSOR_METHODS := [
     "round",
     "shape",
     "sigmoid",
+    "softmax",
     "sum",
     "tanh",
+    "to_f32",
+    "to_float",
     "to_list",
+    "top2",
     "transpose",
 ]
 
@@ -47,6 +51,21 @@ fn Checker.tensor_ty(self, elem Ty) Ty
 fn is_number(t Ty) bool
     t == Ty.Int or t == Ty.Float
 
+## The element types a tensor holds (std.tensor.21).
+fn is_elem(t Ty) bool
+    is_number(t) or t == Ty.Num("f32")
+
+## `float` or `f32`: the two float element types (std.tensor.21).
+fn is_float_elem(t Ty) bool
+    t == Ty.Float or t == Ty.Num("f32")
+
+## The element type `from` and `map` take in a list or a result: a `Tensor[f32]`
+## is built from a `List[float]` (std.tensor.21).
+fn list_elem(elem Ty) Ty
+    if elem == Ty.Num("f32")
+        return Ty.Float
+    elem
+
 ## `tensor.f(args)` (std.tensor.2).
 @allow("expr.match.3")
 fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
@@ -54,8 +73,10 @@ fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
     mut wanted := none
     if t := expect
         if e := tensor_elem(t)
-            if is_number(e)
+            if is_elem(e)
                 wanted = e
+    if f == "from_fn"
+        return tensor_from_fn(args, at)
     if f == "zeros"
         elem := wanted else Ty.Float
         sig := plain_sig(none, [shape], tensor_ty(elem))
@@ -85,10 +106,66 @@ fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
                 "pass a `List[int]` or `List[float]`, e.g. `tensor.from([1.0, 2.0])`",
             )
             return Ty.Unknown
-    mut params := [Ty.ListOf(elem)]
+    mut params := [Ty.ListOf(list_elem(elem))]
     if args.len() != 1
         params.push(shape)
     check_call("tensor.from", plain_sig(none, params, tensor_ty(elem)), [], args, none, at, expect)
+
+## std.tensor.25: `tensor.from_fn(shape, |i| e)`. `shape` is an `int` (a 1-D
+## length) or a `List[int]`; the function takes the flat index and gives an
+## `int`, a `float` or an `f32`, which is the element type.
+fn Checker.tensor_from_fn(mut self, args List[ast.Arg], at ast.Pos) Ty
+    help := "write `tensor.from_fn([2, 3], |i| i.to_float())`"
+    if args.len() != 2
+        args_only(args)
+        err_help(
+            "std.tensor.25",
+            at,
+            "`from_fn` takes a shape and a function, but {was_were(args.len())} given",
+            help,
+        )
+        return Ty.Unknown
+    shape := args[0]
+    f := args[1]
+    p := f.param else
+        args_only(args)
+        err_help(
+            "std.tensor.25",
+            expr_pos(f.value),
+            "`from_fn` takes a function of the flat index",
+            help,
+        )
+        return Ty.Unknown
+    st := expr(shape.value, none, true)
+    if st != Ty.Int and st != Ty.ListOf(Ty.Int) and st != Ty.Unknown
+        err_help(
+            "std.tensor.25",
+            expr_pos(shape.value),
+            "the shape of `from_fn` is an `int` or a `List[int]`, not {show(st)}",
+            help,
+        )
+        return Ty.Unknown
+    mark := locals.len()
+    if declare(p.name, p.pos)
+        locals.push(Local(
+            name: p.name,
+            ty: Ty.Int,
+            mutable: false,
+            how: LocalKind.LoopVar,
+            decl: none,
+        ))
+    out := expr(f.value, none, true)
+    end_scope(mark)
+    if is_elem(out)
+        return tensor_ty(out)
+    if out != Ty.Unknown
+        err_help(
+            "std.tensor.25",
+            expr_pos(f.value),
+            "`from_fn`'s function gives {show(out)}, but a tensor holds `int` or `float`",
+            "return a number from the function",
+        )
+    Ty.Unknown
 
 ## `t.n(args)` on a tensor `t` (std.tensor.3-8).
 fn Checker.tensor_method(
@@ -113,6 +190,17 @@ fn Checker.tensor_method(
     std_any.add(pos_key(at))
     if n == "map"
         return tensor_map(rt, elem, args, at)
+    if n == "to_f32" or n == "to_float"
+        return tensor_convert(n, elem, args, at)
+    if n == "top2" and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.23",
+            at,
+            "`top2` is on `float` tensors, and this one holds `int`",
+            "use `argmax` for the best index of an `int` tensor",
+        )
+        return Ty.Unknown
     if n == "mean" and elem == Ty.Int
         args_only(args)
         err_help(
@@ -155,6 +243,15 @@ fn Checker.tensor_method(
             "convert first: `t.map(|x| x.to_float()).{n}()`",
         )
         return Ty.Unknown
+    if n == "softmax" and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.24",
+            at,
+            "`softmax` is on `float` tensors, and this one holds `int`",
+            "convert first: `t.map(|x| x.to_float()).softmax()`",
+        )
+        return Ty.Unknown
     mut params := List[Ty]()
     mut ret := rt
     if n == "shape"
@@ -162,7 +259,7 @@ fn Checker.tensor_method(
     elif n == "len"
         ret = Ty.Int
     elif n == "to_list"
-        ret = Ty.ListOf(elem)
+        ret = Ty.ListOf(list_elem(elem))
     elif n == "item"
         ret = elem
     elif n == "sum" or n == "max" or n == "mean"
@@ -180,7 +277,8 @@ fn Checker.tensor_method(
             params = [Ty.Int]
             ret = tensor_ty(Ty.Int)
     elif n == "clamp"
-        params = [elem, elem]
+        # std.tensor.21: an `f32` tensor's bounds are `float`.
+        params = [list_elem(elem), list_elem(elem)]
     elif n == "dot"
         params = [rt]
         ret = elem
@@ -188,10 +286,30 @@ fn Checker.tensor_method(
         params = [rt]
     elif n == "reshape"
         params = [Ty.ListOf(Ty.Int)]
+    elif n == "top2"
+        # std.tensor.23: (best index, second index, margin) along an axis.
+        params = [Ty.Int]
+        ret = Ty.Tuple([tensor_ty(Ty.Int), tensor_ty(Ty.Int), rt])
     check_call("tensor.Tensor.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)
 
-## std.tensor.8: `t.map(|x| e)`: `x` is each element, and `e` is an `int`
-## or `float`, the new tensor's element type.
+## std.tensor.22: `to_f32()` on a `float` tensor and `to_float()` on an `f32`
+## one; every other conversion is an error.
+fn Checker.tensor_convert(mut self, n str, elem Ty, args List[ast.Arg], at ast.Pos) Ty
+    args_only(args)
+    from_t := if n == "to_f32" then Ty.Float else Ty.Num("f32")
+    to_t := if n == "to_f32" then Ty.Num("f32") else Ty.Float
+    if elem != from_t
+        err_help(
+            "std.tensor.22",
+            at,
+            "`{n}` converts a {show(from_t)} tensor, but this one holds {show(elem)}",
+            "`to_f32()` takes `float` tensors and `to_float()` takes `f32` ones",
+        )
+        return Ty.Unknown
+    tensor_ty(to_t)
+
+## std.tensor.8: `t.map(|x| e)`: `x` is each element, and `e` is an `int`,
+## `float` or `f32`, the new tensor's element type.
 fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) Ty
     if args.len() != 1
         args_only(args)
@@ -223,7 +341,7 @@ fn Checker.tensor_map(mut self, rt Ty, elem Ty, args List[ast.Arg], at ast.Pos) 
         ))
     out := expr(a.value, elem, true)
     end_scope(mark)
-    if is_number(out)
+    if is_elem(out)
         return tensor_ty(out)
     if out != Ty.Unknown
         err_help(
@@ -252,14 +370,26 @@ fn Checker.tensor_operator(mut self, sym str, arith bool, lt Ty, rt Ty, at ast.P
             return none
         err_help("std.tensor.10", at, "`{sym}` is not defined for tensors", "use `t.map(|x| ...)`")
         return Ty.Unknown
+    # std.tensor.21: `f32` and `float` tensors don't mix.
+    if a := le
+        if b := re
+            if a != b and is_float_elem(a) and is_float_elem(b)
+                err_help(
+                    "std.tensor.21",
+                    at,
+                    "`{sym}` needs tensors of one element type, but found {show(lt)} and {show(rt)}",
+                    "convert one with `t.to_f32()` or `t.to_float()`",
+                )
+                return Ty.Unknown
+    # A `float` scalar takes an `f32` tensor's element type (std.tensor.21).
     mut ok := false
     if a := le
         if b := re
             ok = a == b
         else
-            ok = a == rt
+            ok = a == rt or (a == Ty.Num("f32") and rt == Ty.Float)
     elif b := re
-        ok = b == lt
+        ok = b == lt or (b == Ty.Num("f32") and lt == Ty.Float)
     if ok and sym == "/" and (le == Ty.Int or re == Ty.Int)
         err_help(
             "std.tensor.10",

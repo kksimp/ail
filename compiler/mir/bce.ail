@@ -153,6 +153,7 @@ GROWS := [
 fn dominated(f Func) Func
     dom := dominators(f)
     defs := defs_of(f)
+    passed := passed_constants(f, defs)
     mut seen := Map[str, List[At]]()
     mut pushes := Map[int, List[At]]()
     for b in 0..f.blocks.len()
@@ -187,9 +188,54 @@ fn dominated(f Func) Func
                             for p in ps
                                 if earlier(dom, born, p) and earlier(dom, p, here)
                                     proven = true
+            if not proven
+                # A constant index, or a parameter every edge passes a
+                # constant to (`base := 3` then `if ..: base = 0`), is below
+                # the number of pushes that came first: the list has at
+                # least that many elements and never shrinks.
+                if ceiling := highest(f, defs, passed, i.args[1])
+                    mut count := 0
+                    if ps := pushes.get(i.args[0])
+                        for p in ps
+                            if earlier(dom, p, here)
+                                count += 1
+                    proven = count > ceiling
             if proven
                 g.blocks[b].insts[k].site = -1
     g
+
+## The constants passed to each block parameter, over all edges into it.
+fn passed_constants(f Func, defs List[Def]) Map[int, List[int]]
+    mut out := Map[int, List[int]]()
+    for blk in f.blocks
+        for e in 0..blk.term.targets.len()
+            to := f.blocks[blk.term.targets[e]]
+            for j in 0..blk.term.args[e].len()
+                if not out.contains(to.params[j])
+                    out[to.params[j]] = []
+                if c := const_of(f, defs, blk.term.args[e][j])
+                    out[to.params[j]].push(c)
+                else
+                    out[to.params[j]].push(-1)
+    out
+
+## The largest value `v` can have when it is a non-negative constant, or a
+## block parameter all of whose passed values are such constants.
+fn highest(f Func, defs List[Def], passed Map[int, List[int]], v int) int?
+    if c := const_of(f, defs, v)
+        if c >= 0
+            return c
+        return none
+    vals := passed.get(v)?
+    if vals.len() == 0
+        return none
+    mut ceiling := 0
+    for c in vals
+        if c < 0
+            return none
+        if c > ceiling
+            ceiling = c
+    ceiling
 
 # ---- list pre-sizing ----
 
@@ -242,7 +288,7 @@ fn reserve_lists(f Func) Func
             if per[k] > MAX_PER
                 continue
             p := lp.pre
-            if made_for(f, defs, dom, lp, c, lists[k], per[k], mut patches, mut sized)
+            if made_for(f, defs, dom, lp, c, lists[k], per[k], size[k], mut patches, mut sized)
                 continue
             n1 := konst_in(mut g, p, per[k])
             n2 := konst_in(mut g, p, size[k])
@@ -263,15 +309,18 @@ fn reserve_lists(f Func) Func
         pt := patches[best]
         konst_in(mut g, pt.b, pt.lo)
         konst_in(mut g, pt.b, pt.per)
+        konst_in(mut g, pt.b, pt.size)
         mut made := g.blocks[pt.b].insts
+        c3 := made.pop() else break
         c2 := made.pop() else break
         c1 := made.pop() else break
         mut call := made[pt.at]
         call.name = "rt.list_new_for"
-        call.args = [c1.dst, pt.hi, c2.dst]
+        call.args = [c1.dst, pt.hi, c2.dst, c3.dst]
         mut out := [made[k] for k in 0..pt.at]
         out.push(c1)
         out.push(c2)
+        out.push(c3)
         out.push(call)
         for k in pt.at + 1..made.len()
             out.push(made[k])
@@ -285,6 +334,7 @@ struct Sized
     lo int
     hi int
     per int
+    size int
 
 ## Whether the list `x`, made empty by `list_new(0)` before a counted loop
 ## whose bound `hi` is known there, is sized where it is made. True when
@@ -298,6 +348,7 @@ fn made_for(
     c Counted,
     x int,
     per int,
+    size int,
     mut patches List[Sized],
     mut sized Set[int],
 ) bool
@@ -311,7 +362,7 @@ fn made_for(
         return false
     if not sized.contains(x)
         sized.add(x)
-        patches.push(Sized(b: d.block, at: d.at, lo: start, hi: c.hi, per: per))
+        patches.push(Sized(b: d.block, at: d.at, lo: start, hi: c.hi, per: per, size: size))
     if d.block != lp.pre
         return false
     for k in d.at + 1..f.blocks[d.block].insts.len()
@@ -724,7 +775,7 @@ fn version(
         gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
     if roomy.len() > 0
         # Room for every push of the loop: `(hi - lo) * per` more elements.
-        # `hi` is within +-2^30 and `per` at most 8, so nothing here wraps.
+        # `hi` is within +-2^30 and `per` at ceiling 8, so nothing here wraps.
         gd.within(fresh_of(hoists, hidx, c.bound))
         for k in 0..roomy.len()
             x := roomy[k]

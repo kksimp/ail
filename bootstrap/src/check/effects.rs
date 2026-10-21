@@ -11,12 +11,13 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `spawn` gives `spawn`.
-const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
+/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `std.hw` and a
+/// volatile access give `hw`; `spawn` gives `spawn`.
+const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "hw", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
-/// `std.net` gives `net` (std.net.1).
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
+/// `std.net` gives `net` (std.net.1); `std.app` gives `app` (std.app.12).
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"];
 
 /// What `ail run --deterministic` denies (std.random.5, eff.det.2, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -64,6 +65,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.hash.1: values only. std.compress.1: the byte functions are
         // values only; the file and directory ones read and write files.
         "hash" => (&["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"], &[]),
+        // unsafe.hw.5: hardware access.
+        "hw" => (&["at", "fence", "fence_io"], &["hw"]),
         "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
             (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
         }
@@ -91,7 +94,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.tz.1-2: reads the tz database files, and `TZ`.
         "tz" => (&["offset", "system"], &["fs", "env"]),
         // std.tensor.1: values only, so no effects.
-        "tensor" => (&["from", "zeros"], &[]),
+        "tensor" => (&["from", "from_fn", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
         "task" => (&["cancelled", "check", "select"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.
@@ -121,6 +124,9 @@ impl<'p> Effects<'p> {
         let mut calls = Vec::with_capacity(nodes);
         for f in &prog.fns {
             w.direct = signature_effects(f);
+            if starts_host(f) {
+                w.direct.insert("app", "app.run_host".to_string());
+            }
             w.calls = Vec::new();
             if let Some(body) = &f.body {
                 w.block(body);
@@ -462,6 +468,14 @@ fn signature_effects(f: &FnDecl) -> BTreeMap<&'static str, String> {
     d
 }
 
+/// std.app.12: `app.run_host` of the standard module `std.app` (and so
+/// `app.run`) gives `app`; the module is AIL source, so the rest of its
+/// effects are inferred like any other code.
+fn starts_host(f: &FnDecl) -> bool {
+    // Module items carry their qualified names (`modules.rs`).
+    f.name == "std.app.run_host" && f.owner.is_none()
+}
+
 /// `x.name(...)` through trait `tr` on a value whose type has `impl` block
 /// `k`: the call runs that block's method or the trait's default, so record
 /// it as the call's target (eff.infer.5).
@@ -571,7 +585,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.block(body);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
-            Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -627,7 +641,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().for_each(|x| self.expr(x)),
             Expr::Comp { elem, value, clauses, .. } => {
                 for c in clauses {
                     self.expr(&c.iter);
@@ -689,6 +703,11 @@ impl<'p, 'r> Walker<'p, 'r> {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
                     }
+                } else if let Some(crate::stdlib::StdCall::Ptr(m, _)) = self.resolved.std_calls.get(name_pos)
+                    && m.ends_with("_volatile")
+                {
+                    // unsafe.hw.5: a volatile access gives `hw`.
+                    self.add("hw", format!("a pointer's `{m}`"));
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && m.starts_with("net.")
                 {
@@ -893,7 +912,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
+        assert_eq!(parse_deny("all").unwrap(), ["app", "clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

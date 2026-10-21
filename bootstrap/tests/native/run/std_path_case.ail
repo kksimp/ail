@@ -1,0 +1,10 @@
+## `std.path`: dir, base, ext and join on path text (std.path.1-4, ADR 0253).
+use std.path
+
+fn main()
+    for p in ["a/b/c.txt", "c.txt", "/c", "a/.bashrc", "a/b.tar.gz", "a/"]
+        print("{p}: {path.dir(p)} {path.base(p)} [{path.ext(p)}]")
+    print(path.join("a", "b"))
+    print(path.join("a/", "b"))
+    print(path.join("a", "/b"))
+    print(path.join("", "b"))

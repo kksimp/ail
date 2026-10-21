@@ -11,6 +11,7 @@
 //! hand-written ones (ct.gen.1), and `remap` reports a problem in them at
 //! the `impl` with a note in the generated text (ct.gen.3).
 
+use std::collections::HashMap;
 use crate::ast::*;
 use crate::diag::{Diagnostic, Note, Pos};
 use crate::lexer::{Part, Tok, Token, lex};
@@ -21,7 +22,7 @@ pub fn wanted(tokens: &[Token]) -> bool {
     tokens.iter().any(|t| matches!(t.tok, Tok::Kw("impl")))
         && tokens.windows(2).any(|w| match (&w[0].tok, &w[1].tok) {
             (Tok::Sym("@"), Tok::Ident(n)) => n == "derive",
-            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson" || n == "Default",
+            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson" || n == "Default" || n == "FromArgs",
             _ => false,
         })
 }
@@ -129,6 +130,13 @@ pub fn expand(
 /// The deriving `impl`s: no methods, and a trait with a generator
 /// (ct.derive.2). A problem with one is an error in `errors`.
 fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
+    let mut docs = HashMap::new();
+    for f in &prog.files {
+        for (line, doc) in crate::docs::by_line(&f.src) {
+            docs.insert(f.base + line, doc);
+        }
+    }
+    let docs = &docs;
     let mut jobs = Vec::new();
     for (i, imp) in prog.impls.iter().enumerate() {
         if !imp.methods.is_empty() {
@@ -167,7 +175,7 @@ fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
         {
             continue;
         }
-        let Some(info) = type_info(prog, &type_name, prog.module_at(imp.pos)) else {
+        let Some(info) = type_info(prog, docs, &type_name, prog.module_at(imp.pos)) else {
             errors.push(
                 Diagnostic::new(
                     "ct.derive.2",
@@ -220,18 +228,20 @@ fn unqualify(text: &str, module: &str) -> String {
 }
 
 /// The `TypeInfo(...)` expression describing the struct or enum `name`,
-/// preferring one declared in `module` (refl.info.1, refl.info.3).
-fn type_info(prog: &Program, name: &str, module: &str) -> Option<String> {
+/// preferring one declared in `module` (refl.info.1, refl.info.3). `doc` is the
+/// field's `##` comment (ct.derive.5).
+fn type_info(prog: &Program, docs: &HashMap<usize, String>, name: &str, module: &str) -> Option<String> {
     let pick = |pos: Pos| prog.module_at(pos) == module;
     // A module's types are named `a.b.T` by now (mod.unit.2).
     let s = prog.structs.iter().filter(|s| last(&s.name) == name).min_by_key(|s| !pick(s.pos));
     let e = prog.enums.iter().filter(|e| last(&e.name) == name).min_by_key(|e| !pick(e.pos));
     let field = |f: &Field| {
         format!(
-            "FieldInfo(name: {}, type_text: {}, public: {})",
+            "FieldInfo(name: {}, type_text: {}, public: {}, doc: {})",
             quote(&f.name),
             quote(&unqualify(&crate::api::type_text(&f.ty), prog.module_at(f.pos))),
-            prog.public.contains(&f.pos.line)
+            prog.public.contains(&f.pos.line),
+            quote(docs.get(&f.pos.line).map_or("", |d| d.as_str()))
         )
     };
     let list = |items: Vec<String>, ty: &str| {
@@ -477,11 +487,12 @@ fn shift(tokens: &mut [Token], base: usize) {
 
 /// ct.gen.3: a diagnostic inside generated code is reported at the deriving
 /// `impl`, with a note at its place in the generated text.
-pub fn remap(prog: &Program, diags: &mut [Diagnostic]) {
+pub fn remap(prog: &Program, diags: &mut Vec<Diagnostic>) {
     if prog.generated.is_empty() {
         return;
     }
-    for d in diags {
+    let mut from_impl = vec![None; diags.len()];
+    for (k, d) in diags.iter_mut().enumerate() {
         let Some(g) = prog.generated.iter().find(|g| {
             let base = prog.files[g.file].base;
             d.pos.line > base && d.pos.line <= base + FILE_LINES
@@ -501,7 +512,22 @@ pub fn remap(prog: &Program, diags: &mut [Diagnostic]) {
         d.pos = g.impl_pos;
         d.end = None;
         d.fixes.clear();
+        from_impl[k] = Some(g.impl_pos);
     }
+    // After json.derive.1-2 names the field, the generated code's other
+    // problems are its follow-ons (an `else e` whose call failed).
+    let named: Vec<Pos> = diags
+        .iter()
+        .zip(&from_impl)
+        .filter(|(d, at)| at.is_some() && d.rule.starts_with("json.derive."))
+        .map(|(d, _)| d.pos)
+        .collect();
+    let mut k = 0;
+    diags.retain(|d| {
+        let at = from_impl[k];
+        k += 1;
+        !(at.is_some_and(|p| named.contains(&p)) && !d.rule.starts_with("json.derive."))
+    });
 }
 
 /// json.derive.1-2: a derived JSON conversion that calls `to_json` or
@@ -513,7 +539,15 @@ fn json_field_problem(g: &Generated, d: &mut Diagnostic) {
         "derive_from_json" => ("FromJson", "from_json"),
         _ => return,
     };
-    let Some(ty) = d.message.strip_suffix(&format!(" has no method `{method}`")).map(str::to_string) else { return };
+    // `to_json` is a method, `from_json` an associated function (trait.assoc.1).
+    let Some(ty) = d
+        .message
+        .strip_suffix(&format!(" has no method `{method}`"))
+        .or_else(|| d.message.strip_suffix(&format!(" has no associated function `{method}`")))
+        .map(str::to_string)
+    else {
+        return;
+    };
     if d.rule != "expr.name.1" {
         return;
     }

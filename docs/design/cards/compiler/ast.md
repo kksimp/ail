@@ -29,6 +29,7 @@ pub struct ast.Param
 pub struct ast.TypeRef  ## A type as written.
 pub enum ast.TypeShape
 pub enum ast.Stmt
+pub struct ast.Binder  ## One name of a destructuring binding (type.tuple.4).
 pub enum ast.Else  ## The `else` part of `x := e else ...` (err.else.1-3).
 pub enum ast.BinOp
 pub enum ast.UnOp
@@ -46,4 +47,4 @@ pub enum ast.Pattern
 pub enum ast.Literal
 ```
 
-trimmed to fit 2000 tokens (~782); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~809); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

@@ -61,7 +61,7 @@ pub fn command(paths: &[&str], json: bool) -> ExitCode {
     files.sort();
     let scratch = std::env::temp_dir().join(format!("ail-native-test-{}", std::process::id()));
     if std::fs::create_dir_all(&scratch).is_err() {
-        eprintln!("error[native.test.1]: can't create {}", scratch.display());
+        eprintln!("error[native.test.1]: can't create {}", crate::shown::shown(&scratch));
         return ExitCode::from(2);
     }
     let next = AtomicUsize::new(0);

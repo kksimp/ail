@@ -111,7 +111,7 @@ pub(super) const LIST_METHODS: &[&str] =
     &[
         "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
         "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference", "chunks",
-        "windows", "counts", "flatten", "is_empty",
+        "windows", "counts", "flatten", "is_empty", "enumerate",
     ];
 pub(super) const MAP_METHODS: &[&str] = &["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"];
 pub(super) const SET_METHODS: &[&str] = &["len", "is_empty", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
@@ -235,6 +235,8 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
                 "last" | "first" => read(vec![], opt(e)),
                 "take" => read(vec![Int], list(e)),
+                // type.tuple.9: each element with its index.
+                "enumerate" => read(vec![], list(Ty::Tuple(vec![Int, e]))),
                 "chunks" | "windows" => read(vec![Int], list(list(e))),
                 "flatten" => match &e {
                     Ty::List(inner) => read(vec![], list((**inner).clone())),
@@ -346,6 +348,19 @@ impl<'p> Checker<'p> {
             }
             return b.ret;
         }
+        // type.bytes.14: `b.hex(sep)` puts `sep` between the byte pairs.
+        if *rt == Ty::Bytes && name == "hex" && args.len() == 1 {
+            let a = &args[0];
+            let t = self.expr(&a.value, None, true);
+            if a.mutable {
+                self.error_help("own.param.2", a.value.pos(), "this parameter isn't `mut`", "remove the `mut`");
+            }
+            if !matches!(t, Ty::Str | Ty::Err | Ty::Never) && !self.reject_unhandled(&t, a.value.pos()) {
+                let msg = format!("the separator of `hex` is a `str`, not {}", self.show(&t));
+                self.error("expr.call.2", a.value.pos(), msg);
+            }
+            return b.ret;
+        }
         if name == "get" && args.len() == 2 && matches!(rt, Ty::Map(..)) {
             self.args_only(args);
             self.error_help(
@@ -449,7 +464,6 @@ pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
         (Ty::List(_), "append" | "add") => "write `xs.push(x)`",
         (Ty::List(_), "length" | "size" | "count") => "write `xs.len()`",
         (Ty::List(_), "index" | "find" | "indexOf") => "write `xs.index_of(x)`, which gives `int?` (`none` if absent)",
-        (Ty::Map(..), "items" | "entries") => "iterate the keys and index: `for k in m.keys()` then `m[k]`",
         (Ty::Map(..), "has" | "has_key" | "contains_key") => "write `m.contains(k)`",
         (Ty::Map(..), "put" | "set" | "insert") => "write `m[k] = v`",
         (Ty::Map(..), "delete" | "pop") => "write `m.remove(k)`",

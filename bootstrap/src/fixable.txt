@@ -1,4 +1,6 @@
 conc.share.6
+contract.ens.2
+contract.ens.3
 err.else.1
 err.else.3
 err.prop.1
@@ -12,6 +14,7 @@ expr.call.3
 expr.if.1
 expr.if.2
 expr.loop.1
+expr.loop.4
 expr.loop.6
 expr.match.1
 expr.match.12
@@ -24,6 +27,7 @@ gram.fn.2
 gram.foreign.1
 lex.block.2
 lex.block.4
+lex.bytes.1
 lex.stmt.2
 lex.stmt.3
 lex.str.2
@@ -33,6 +37,7 @@ mod.main.3
 own.move.2
 own.param.2
 std.use.2
+trait.impl.1
 trait.method.3
 trait.op.1
 trait.op.3

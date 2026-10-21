@@ -1,0 +1,7 @@
+# abs of the smallest int in a callee (expr.arith.1).
+fn size(x int) int
+    x.abs()
+
+fn main()
+    m := -9223372036854775807 - 1
+    print(size(m))

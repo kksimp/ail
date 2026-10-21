@@ -1,0 +1,31 @@
+fn total(m Map[str, int]) int
+    mut t := 0
+    for _, v in m
+        t += v
+    t
+
+fn main()
+    mut ages := {"ann": 31, "bob": 27}
+    ages["cy"] = 40
+    for name, age in ages
+        print("{name}: {age}")
+    print(total(ages))
+    mut seen := Map[int, str]()
+    seen[2] = "two"
+    seen[1] = "one"
+    for k, v in seen
+        print("{k} {v}")
+    # the loop takes a snapshot, so the body may change the map
+    for name, age in ages
+        ages[name] = age + 1
+        if name == "ann"
+            ages["dan"] = 0
+    print(ages.len())
+    print(ages["ann"])
+    lists := {"a": [1, 2], "b": [3]}
+    for key, xs in lists
+        print("{key} {xs.len()}")
+    flags := {"x": true, "y": false}
+    for key, on in flags
+        if on
+            print(key)

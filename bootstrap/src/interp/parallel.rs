@@ -138,6 +138,7 @@ pub(super) enum Plain {
     Struct(usize, Vec<Plain>),
     Enum(usize, usize, Vec<Plain>),
     List(Vec<Plain>),
+    Tuple(Vec<Plain>),
     Map(Vec<(Plain, Plain)>),
     Set(Vec<Plain>),
     None,
@@ -154,7 +155,7 @@ impl Plain {
     fn has_atomic(&self) -> bool {
         match self {
             Plain::Atomic(_) => true,
-            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) => ps.iter().any(Plain::has_atomic),
+            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) | Plain::Tuple(ps) => ps.iter().any(Plain::has_atomic),
             Plain::Map(kvs) => kvs.iter().any(|(k, v)| k.has_atomic() || v.has_atomic()),
             Plain::Fail(e, _, _) => e.has_atomic(),
             _ => false,
@@ -177,7 +178,8 @@ fn plain(v: &Value) -> Option<Plain> {
         Value::Char(c) => Plain::Char(*c),
         Value::Struct(s, fs) => Plain::Struct(*s, all(fs)?),
         Value::Enum(e, i, fs) => Plain::Enum(*e, *i, all(fs)?),
-        Value::List(xs) => Plain::List(all(xs)?),
+        Value::List(xs) => Plain::List(all(&xs.slice())?),
+        Value::Tuple(xs) => Plain::Tuple(all(xs)?),
         Value::Map(t) => Plain::Map(t.entries().map(|(k, v)| Some((plain(k)?, plain(v)?))).collect::<Option<_>>()?),
         Value::Set(t) => Plain::Set(t.keys().map(plain).collect::<Option<_>>()?),
         Value::None => Plain::None,
@@ -203,7 +205,8 @@ fn value(p: &Plain) -> Value {
         Plain::Char(c) => Value::Char(*c),
         Plain::Struct(s, fs) => Value::Struct(*s, Rc::new(all(fs))),
         Plain::Enum(e, i, fs) => Value::Enum(*e, *i, Rc::new(all(fs))),
-        Plain::List(xs) => Value::List(Rc::new(all(xs))),
+        Plain::List(xs) => Value::list(all(xs)),
+        Plain::Tuple(xs) => Value::Tuple(Rc::new(all(xs))),
         Plain::Map(kvs) => {
             let mut t = Table::default();
             for (k, v) in kvs {
@@ -243,7 +246,8 @@ fn same(a: &Value, b: &Value) -> bool {
         (Value::Bytes(x), Value::Bytes(y)) => Rc::ptr_eq(x, y),
         (Value::Struct(_, x), Value::Struct(_, y))
         | (Value::Enum(_, _, x), Value::Enum(_, _, y))
-        | (Value::List(x), Value::List(y)) => Rc::ptr_eq(x, y),
+        => Rc::ptr_eq(x, y),
+        (Value::List(x), Value::List(y)) => Rc::ptr_eq(x, y),
         (Value::Map(x), Value::Map(y)) | (Value::Set(x), Value::Set(y)) => Rc::ptr_eq(x, y),
         (Value::Fail(x), Value::Fail(y)) => Rc::ptr_eq(x, y),
         _ => false,
@@ -397,7 +401,7 @@ impl<'a, W: io::Write> Interp<'a, W> {
                 let Some((_, Value::List(items))) = env.iter_mut().rev().find(|(n, _)| *n == name) else {
                     unreachable!("captured: a list")
                 };
-                Rc::make_mut(items)[index] = value(&p);
+                Rc::make_mut(items).set(index, value(&p));
             }
         }
         for (k, &i) in sums.iter().enumerate() {
@@ -487,9 +491,10 @@ fn chunk<'a>(
         if old.len() != new.len() {
             return Err(None);
         }
-        for (i, (a, b)) in old.iter().zip(new.iter()).enumerate() {
-            if !same(a, b) {
-                elements.push((l, i, plain(b).ok_or(None)?));
+        for i in 0..old.len() {
+            let (a, b) = (old.at(i), new.at(i));
+            if !same(&a, &b) {
+                elements.push((l, i, plain(&b).ok_or(None)?));
             }
         }
     }
@@ -532,7 +537,7 @@ impl<'a, W: io::Write> Interp<'a, W> {
             && let Some(out) = self.comp_on_pool(&plan, threads, elem, c, &items, env)
         {
             log(c.var_pos, &format!("comprehension: {} elements on {threads} threads", items.len()));
-            return Ok(Some(Value::List(Rc::new(out))));
+            return Ok(Some(Value::list(out)));
         }
         log(c.var_pos, &format!("comprehension: {} elements in order", items.len()));
         // conc.par.11: in order, from the same items.
@@ -547,7 +552,7 @@ impl<'a, W: io::Write> Interp<'a, W> {
                 Err(e) => return Err(e),
             }
         }
-        Ok(Some(Value::List(Rc::new(out))))
+        Ok(Some(Value::list(out)))
     }
 
     /// The elements computed by `threads` workers, in order; `None` if

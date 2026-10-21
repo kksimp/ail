@@ -139,7 +139,7 @@ pub(super) fn method(b: &Rc<Vec<u8>>, name: &str, a: &mut [Value]) -> Value {
             Err(_) => Value::None,
         },
         "text" => Value::Str(Rc::from(String::from_utf8_lossy(b).as_ref())),
-        "to_list" => Value::List(Rc::new(b.iter().map(|x| byte(*x)).collect())),
+        "to_list" => Value::list(b.iter().map(|x| byte(*x)).collect()),
         "concat" => {
             let mut v = Vec::with_capacity(b.len() + arg(0).len());
             v.extend_from_slice(b);
@@ -150,7 +150,17 @@ pub(super) fn method(b: &Rc<Vec<u8>>, name: &str, a: &mut [Value]) -> Value {
         "contains" => Value::Bool(find(b, &arg(0)).is_some()),
         "starts_with" => Value::Bool(b.starts_with(&arg(0))),
         "ends_with" => Value::Bool(b.ends_with(&arg(0))),
-        "hex" => Value::Str(Rc::from(hex_encode(b))),
+        "hex" => {
+            let hex = hex_encode(b);
+            // type.bytes.14: with a separator, between the byte pairs.
+            match a.first() {
+                Some(Value::Str(sep)) => {
+                    let pairs: Vec<&str> = (0..hex.len()).step_by(2).map(|i| &hex[i..i + 2]).collect();
+                    Value::Str(Rc::from(pairs.join(sep)))
+                }
+                _ => Value::Str(Rc::from(hex)),
+            }
+        }
         "base64" => Value::Str(Rc::from(base64_encode(b))),
         _ => unreachable!("checked: no bytes method `{name}`"),
     }
@@ -164,7 +174,7 @@ impl<'a, W: Write> Interp<'a, W> {
             ("from_list", Value::List(xs)) => {
                 let mut out = Vec::with_capacity(xs.len());
                 for x in xs.iter() {
-                    out.push(match x {
+                    out.push(match &x {
                         Value::Num(_, n) | Value::Int(n) => *n as u8,
                         other => unreachable!("checked: a u8, found {other:?}"),
                     });

@@ -1,0 +1,5 @@
+trait Show
+    fn show(self) str print
+
+fn main()
+    print(1)

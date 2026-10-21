@@ -1,0 +1,44 @@
+# Mandelbrot as text, one `par for` iteration per row: each pixel maps to a
+# shade by its escape count (up to 500). Output is ROWS lines of 2 * ROWS
+# characters. ROWS comes from argv.
+
+CHARS := " .:-=+*#%@"
+MAX_ITER := 500
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn escape(cr float, ci float) int
+    mut zr := 0.0
+    mut zi := 0.0
+    mut k := 0
+    while k < MAX_ITER
+        if zr * zr + zi * zi > 4.0
+            break
+        t := zr * zr - zi * zi + cr
+        zi = 2.0 * zr * zi + ci
+        zr = t
+        k += 1
+    k
+
+fn main()
+    rows := size(1000)
+    cols := rows * 2
+    shades := CHARS.chars()
+    mut lines := List[str]()
+    for _ in 0..rows
+        lines.push("")
+    par for y in 0..rows
+        ci := -1.2 + 2.4 * y.to_float() / rows.to_float()
+        mut line := []
+        for x in 0..cols
+            cr := -2.0 + 3.0 * x.to_float() / cols.to_float()
+            k := escape(cr, ci)
+            line.push(shades[k * 9 / MAX_ITER])
+        lines[y] = line.join("")
+    for y in 0..rows
+        print(lines[y])

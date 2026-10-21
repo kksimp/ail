@@ -1,0 +1,151 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Sorting for `sorted(by:)` and `sort(by:)` (expr.key.4, ADR 0572). The
+## compiler evaluates the key function inline, once per element, into a list
+## of `int` keys (ADR 0571); this orders the indices.
+
+## The indices `0..keys.len()` in the stable order of `keys` (a bottom-up
+## merge sort: the left run wins a tie).
+fn sort_perm(keys List[int]) List[int]
+    kp := list_addr(keys)
+    n := load64(kp)
+    kd := load64(kp + 16)
+    out := list_alloc(n, 8)
+    q := list_addr(out)
+    store64(q, n)
+    if n < 2
+        if n == 1
+            store64(load64(q + 16), 0)
+        return out
+    mut src := load64(q + 16)
+    mut dst := alloc(8 * n, KIND_ATOMIC)
+    for i in 0..n
+        store64(src + 8 * i, i)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut o := lo
+            while a < mid and b < hi
+                ia := load64(src + 8 * a)
+                ib := load64(src + 8 * b)
+                if load64(kd + 8 * ib) < load64(kd + 8 * ia)
+                    store64(dst + 8 * o, ib)
+                    b += 1
+                else
+                    store64(dst + 8 * o, ia)
+                    a += 1
+                o += 1
+            while a < mid
+                store64(dst + 8 * o, load64(src + 8 * a))
+                a += 1
+                o += 1
+            while b < hi
+                store64(dst + 8 * o, load64(src + 8 * b))
+                b += 1
+                o += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    # After the last pass the result is in `src`; copy it if that isn't the list's own data.
+    data := load64(q + 16)
+    if src != data
+        copy_bytes(data, src, 8 * n)
+    out
+
+## `sort_perm` for keys that are objects (tuples): `less(a, b)` says whether
+## key `a` sorts before key `b`. The left run wins a tie, as there.
+fn sort_perm_by(keys List[int], less fn(int, int) bool) List[int]
+    kp := list_addr(keys)
+    n := load64(kp)
+    kd := load64(kp + 16)
+    out := list_alloc(n, 8)
+    q := list_addr(out)
+    store64(q, n)
+    if n < 2
+        if n == 1
+            store64(load64(q + 16), 0)
+        return out
+    mut src := load64(q + 16)
+    mut dst := alloc(8 * n, KIND_ATOMIC)
+    for i in 0..n
+        store64(src + 8 * i, i)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut o := lo
+            while a < mid and b < hi
+                ia := load64(src + 8 * a)
+                ib := load64(src + 8 * b)
+                if less(load64(kd + 8 * ib), load64(kd + 8 * ia))
+                    store64(dst + 8 * o, ib)
+                    b += 1
+                else
+                    store64(dst + 8 * o, ia)
+                    a += 1
+                o += 1
+            while a < mid
+                store64(dst + 8 * o, load64(src + 8 * a))
+                a += 1
+                o += 1
+            while b < hi
+                store64(dst + 8 * o, load64(src + 8 * b))
+                b += 1
+                o += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    data := load64(q + 16)
+    if src != data
+        copy_bytes(data, src, 8 * n)
+    out
+
+## The first index of `x` in `xs` where `same(element, x)` holds, else -1
+## (`contains` and `index_of` on tuples).
+fn list_find_by(xs List[int], x int, same fn(int, int) bool) int
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    for i in 0..n
+        if same(load64(data + 8 * i), x)
+            return i
+    -1
+
+## The index of the least (or, with `greatest`, the greatest) element by
+## `less`, the first of equals; -1 for an empty list (`min` and `max`).
+fn list_extreme_by(xs List[int], less fn(int, int) bool, greatest int) int
+    p := list_addr(xs)
+    n := load64(p)
+    if n == 0
+        return -1
+    data := load64(p + 16)
+    mut best := 0
+    for i in 1..n
+        a := load64(data + 8 * i)
+        b := load64(data + 8 * best)
+        if greatest == 0
+            if less(a, b)
+                best = i
+        elif less(b, a)
+            best = i
+    best
+
+## The separator before element `i` of a printed list.
+fn text_sep(i int) str
+    if i == 0
+        return ""
+    ", "

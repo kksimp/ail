@@ -1,0 +1,31 @@
+# Deep recursion within the interpreter's limit, through a function, a
+# method and two mutually recursive functions (err.trap.1, ADR 0535).
+
+struct Walker
+    step int
+
+fn Walker.go(self, n int) int
+    if n == 0
+        return 0
+    self.step + self.go(n - 1)
+
+fn down(n int) int
+    if n == 0
+        return 0
+    1 + down(n - 1)
+
+fn even(n int) bool
+    if n == 0
+        return true
+    odd(n - 1)
+
+fn odd(n int) bool
+    if n == 0
+        return false
+    even(n - 1)
+
+fn main()
+    print(down(9000))
+    print(Walker(step: 2).go(9000))
+    print(even(9000))
+    print(odd(9000))

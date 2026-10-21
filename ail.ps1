@@ -13,6 +13,8 @@
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
+# std.app.10: a program finds the app host built under the toolchain.
+$env:AIL_ROOT = $root
 $bootstrap = Join-Path $root 'bootstrap'
 $manifest = Join-Path $bootstrap 'Cargo.toml'
 $pin = (Select-String -Path (Join-Path $bootstrap 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"(.*)"').Matches[0].Groups[1].Value
@@ -21,6 +23,12 @@ $toolDir = if ($env:AIL_TOOLCHAIN_DIR) { $env:AIL_TOOLCHAIN_DIR } else { Join-Pa
 $onWindows = -not ($IsLinux -or $IsMacOS)
 $exe = if ($onWindows) { '.exe' } else { '' }
 $binary = Join-Path (Join-Path (Join-Path $bootstrap 'target') 'release') "ail$exe"
+
+# A test run pins the binary it is testing (AIL_BINARY): a program that starts `ail` itself isn't rebuilt under it.
+if ($args.Count -gt 0 -and $args[0] -ne 'selftest' -and $env:AIL_BINARY -and (Test-Path $env:AIL_BINARY)) {
+    & $env:AIL_BINARY @args
+    exit $LASTEXITCODE
+}
 
 function Fail([string]$message) {
     [Console]::Error.WriteLine("ail: $message")

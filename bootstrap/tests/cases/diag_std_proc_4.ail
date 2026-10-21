@@ -1,0 +1,5 @@
+use std.proc
+
+fn main() !
+    p := proc.start("sort", [], -5)?
+    print(1)

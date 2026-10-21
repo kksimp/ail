@@ -1,0 +1,350 @@
+## Tuples (type.tuple.1-9, ADR 0791), as `bootstrap/src/check/tuples.rs`:
+## `(a, b)` values typed `(A, B)`, element access `t.0`, destructuring
+## `a, b := t` and `for a, b in xs`, and tuple patterns in `match`.
+use ast
+
+## Whether `n` is the hidden variable of `for a, b in xs` (type.tuple.5).
+fn is_hidden(n str) bool
+    n.starts_with("(")
+
+@allow("expr.match.3") fn tuple_elems(t Ty) List[Ty]?
+    match t
+        Tuple(xs) => xs
+        _ => none
+
+## `(a, b, ...)` (type.tuple.2): each element against the expected element
+## type, so `(1, none)` can be a `(int, str?)`.
+@allow("expr.match.3") fn Checker.tuple_lit(mut self, items List[ast.Expr], expect Ty?) Ty
+    mut want := List[Ty]()
+    mut has_want := false
+    if e := expect
+        if xs := tuple_elems(opt_inner(e))
+            if xs.len() == items.len()
+                want = xs
+                has_want = true
+    mut elems := List[Ty]()
+    for k in 0..items.len()
+        e := items[k]
+        mut w := no_ty()
+        if has_want
+            w = want[k]
+        t := expr(e, w, true)
+        consume(e, t)
+        if reject_unhandled(t, expr_pos(e))
+            elems.push(Ty.Unknown)
+            continue
+        if t == Ty.Unit
+            err("type.tuple.2", expr_pos(e), "a tuple's elements must be values")
+            elems.push(Ty.Unknown)
+            continue
+        no_unique(t, expr_pos(e), "an element of a tuple")
+        if wt := w
+            if accepts(wt, t)
+                elems.push(wt)
+                continue
+        elems.push(if t == Ty.Never then Ty.Unknown else t)
+    Ty.Tuple(elems)
+
+## `zip(a, b)` (type.tuple.9): the pairs of two lists, as long as the shorter.
+@allow("expr.match.3") fn Checker.zip_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    mut elems := List[Ty]()
+    for a in args
+        if a.label != none or a.mutable or a.moved or a.param != none
+            err_help(
+                "type.tuple.9",
+                expr_pos(a.value),
+                "`zip` takes two plain lists",
+                "write `zip(a, b)`",
+            )
+        t := expr(a.value, none, true)
+        consume(a.value, t)
+        match t
+            ListOf(e) => elems.push(e)
+            Unknown => elems.push(Ty.Unknown)
+            _ =>
+                if reject_unhandled(t, expr_pos(a.value))
+                    elems.push(Ty.Unknown)
+                    continue
+                hint := match t
+                    Str => "zip the characters with `s.chars()`"
+                    MapOf => "zip a list of its keys, e.g. `m.keys()`"
+                    SetOf => "zip a list of its keys, e.g. `m.keys()`"
+                    _ => "pass two lists"
+                err_help(
+                    "type.tuple.9",
+                    expr_pos(a.value),
+                    "`zip` takes lists, but this is {show(t)}",
+                    hint,
+                )
+                elems.push(Ty.Unknown)
+    if args.len() != 2
+        err_help(
+            "type.tuple.9",
+            at,
+            "`zip` takes two lists, but {was_were(args.len())} given",
+            "write `zip(a, b)`; zip a third with `zip(zip(a, b), c)`",
+        )
+        return Ty.Unknown
+    Ty.ListOf(Ty.Tuple(elems))
+
+fn all_digits(n str) bool
+    if n.len() == 0
+        return false
+    for c in n.chars()
+        if not c.is_digit()
+            return false
+    true
+
+## `t.0` (type.tuple.3), or `none` when `n` isn't an element index and `rt`
+## isn't a tuple.
+@allow("expr.match.3") fn Checker.tuple_field(mut self, rt Ty, n str, at ast.Pos) Ty?
+    index := if all_digits(n) then n.to_int() else none
+    if xs := tuple_elems(rt)
+        if i := index
+            if i < xs.len()
+                return xs[i]
+            err_help(
+                "type.tuple.3",
+                at,
+                "{show(rt)} has no element {i}",
+                "its elements are `.0` to `.{xs.len() - 1}`",
+            )
+            return Ty.Unknown
+        err_help(
+            "type.tuple.3",
+            at,
+            "{show(rt)} is a tuple, so it has no field `{n}`",
+            "read its elements by position, `.0` to `.{xs.len() - 1}`",
+        )
+        return Ty.Unknown
+    i := index else return none
+    hint := match rt
+        ListOf => "index a list with `[{i}]`"
+        _ => "only tuples have numbered elements"
+    err_help("type.tuple.3", at, "`.{i}` reads an element of a tuple, but this is {show(rt)}", hint)
+    Ty.Unknown
+
+@allow("expr.match.3") fn hidden_value(e ast.Expr) bool
+    match e
+        Name(n, _) => is_hidden(n)
+        _ => false
+
+## `a, b := e` (type.tuple.4), and the first statement of the body of
+## `for a, b in xs` (type.tuple.5).
+@allow("expr.match.3")
+fn Checker.let_tuple(mut self, names List[ast.Binder], value ast.Expr, at ast.Pos)
+    in_for := hidden_value(value)
+    vt0 := expr(value, none, true)
+    consume(value, vt0)
+    vt := if reject_unhandled(vt0, expr_pos(value)) then ok_type(vt0) else vt0
+    unknowns := [Ty.Unknown for _ in names]
+    mut elems := unknowns
+    match vt
+        Tuple(xs) =>
+            if xs.len() == names.len()
+                elems = xs
+            else
+                rule := if in_for then "type.tuple.5" else "type.tuple.4"
+                what := if in_for then "each element is" else "the value is"
+                err_help(
+                    rule,
+                    at,
+                    "{names.len()} names, but {what} a tuple of {xs.len()}, {show(vt)}",
+                    "write one name per element, `_` for the ones you don't need",
+                )
+        Unknown => elems = unknowns
+        _ =>
+            if in_for
+                mut hint := "loop with one name, or over `xs.enumerate()` or `zip(a, b)` for pairs"
+                if vt == Ty.Int
+                    hint = "for the index and the element, loop over `xs.enumerate()`"
+                err_help(
+                    "type.tuple.5",
+                    at,
+                    "`for` takes each element apart, but the elements are {show(vt)}",
+                    hint,
+                )
+            else
+                err_help(
+                    "type.tuple.4",
+                    at,
+                    "several names take a tuple apart, but the value is {show(vt)}",
+                    "bind it to one name",
+                )
+    for k in 0..names.len()
+        b := names[k]
+        if b.name == "_"
+            continue
+        if declare(b.name, b.pos)
+            how := if in_for then LocalKind.LoopVar else LocalKind.Binding
+            locals.push(Local(
+                name: b.name,
+                ty: elems[k],
+                mutable: b.mutable,
+                how: how,
+                decl: b.pos,
+            ))
+
+## The names of `for a, b in xs` in a comprehension (type.tuple.5): the
+## clause's own variable has the element type `elem`.
+fn Checker.unpack_clause(mut self, unpack List[ast.Binder], elem Ty, at ast.Pos)
+    mut elems := [Ty.Unknown for _ in unpack]
+    if elem != Ty.Unknown
+        xs := tuple_elems(elem) else []
+        if xs.len() == unpack.len()
+            elems = xs
+        else
+            mut text := "`for` takes each element apart, but the elements are {show(elem)}"
+            if xs.len() > 0
+                text = "{unpack.len()} names, but each element is a tuple of {xs.len()}"
+            err_help(
+                "type.tuple.5",
+                at,
+                text,
+                "loop with one name, or over `xs.enumerate()` or `zip(a, b)` for pairs",
+            )
+    for k in 0..unpack.len()
+        b := unpack[k]
+        if b.name != "_" and declare(b.name, b.pos)
+            locals.push(Local(
+                name: b.name,
+                ty: elems[k],
+                mutable: false,
+                how: LocalKind.LoopVar,
+                decl: b.pos,
+            ))
+
+## One arm's pattern on a tuple `xs` (type.tuple.6): the names it binds.
+## `cov.wildcard` is set once an arm matches every tuple.
+fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) List[Binding]
+    tuple := Ty.Tuple(xs)
+    match pat
+        Wildcard(at) =>
+            if cov.wildcard
+                err("expr.match.5", at, "this arm can never match; earlier arms cover every case")
+            cov.wildcard = true
+            []
+        Alt(alts, _) =>
+            for a in alts
+                mut covers := Covers(all: false)
+                names := elem_pattern(tuple, a, mut covers)
+                for nm in names
+                    if nm.name != "_"
+                        err_help(
+                            "expr.match.8",
+                            nm.pos,
+                            "a pattern with alternatives can't bind names",
+                            "give this alternative an arm of its own, or use `_`",
+                        )
+                        break
+            []
+        TuplePat(_, at) =>
+            mut covers := Covers(all: true)
+            names := elem_pattern(tuple, pat, mut covers)
+            if covers.all
+                if cov.wildcard
+                    err(
+                        "expr.match.5",
+                        at,
+                        "this arm can never match; earlier arms cover every case",
+                    )
+                cov.wildcard = true
+            names
+        Literal | Variant | Range | BindName =>
+            err_help(
+                "type.tuple.6",
+                pattern_pos(pat),
+                "the value matched is {show(tuple)}, a tuple",
+                "match it with a tuple pattern such as `(0, x)`, or `_`",
+            )
+            []
+
+@allow("expr.match.3") fn is_literal_ty(t Ty) bool
+    match t
+        Int => true
+        Char => true
+        Str => true
+        Bool => true
+        Num(k) => k != "f32"
+        _ => false
+
+## Whether the patterns seen so far match every value.
+struct Covers
+    all bool
+
+## A pattern for a value of type `t` inside a tuple pattern: its names, and
+## `covers` stays true only if it matches every value.
+@allow("expr.match.3")
+fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List[Binding]
+    match pat
+        Wildcard => return []
+        BindName(n, at) =>
+            match t
+                Enum(e, _) =>
+                    if variant_index(e, n) != none
+                        en := prog.enums[e].name
+                        err_help(
+                            "type.tuple.6",
+                            at,
+                            "`{n}` here binds a new name; it doesn't match the variant",
+                            "write `{en}.{n}` to match the variant, or another name to bind the element",
+                        )
+                _ => covers.all = covers.all
+            return [Binding(name: n, pos: at, ty: t)]
+        TuplePat(ps, at) =>
+            if xs := tuple_elems(t)
+                if ps.len() != xs.len()
+                    err(
+                        "type.tuple.6",
+                        at,
+                        "this pattern has {ps.len()} elements, but the value is {show(t)}",
+                    )
+                    covers.all = false
+                    return []
+                mut names := List[Binding]()
+                for k in 0..ps.len()
+                    names.extend(elem_pattern(xs[k], ps[k], mut covers))
+                return names
+        _ => covers.all = covers.all
+    covers.all = false
+    match t
+        Unknown => return []
+        Enum(e, args) =>
+            nvariants := prog.enums[e].variants.len()
+            mut c := Coverage(
+                variants: [false for _ in 0..nvariants],
+                literals: [],
+                wildcard: false,
+            )
+            return pattern(e, args, pat, mut c)
+        _ => covers.all = false
+    match pat
+        TuplePat(_, at) =>
+            err("type.tuple.6", at, "a tuple pattern, but this element is {show(t)}")
+            return []
+        _ => covers.all = false
+    if is_literal_ty(t)
+        mut c := Coverage(variants: [], literals: [], wildcard: false)
+        literal_pattern(t, pat, mut c)
+    else
+        err(
+            "type.tuple.6",
+            pattern_pos(pat),
+            "this element is {show(t)}, which only `_` or a name can match",
+        )
+    []
+
+## The names a pattern binds, typed unknown: the scrutinee was already
+## reported.
+@allow("expr.match.3") fn tuple_pattern_names(p ast.Pattern) List[Binding]
+    match p
+        BindName(n, at) => [Binding(name: n, pos: at, ty: Ty.Unknown)]
+        TuplePat(ps, _) =>
+            mut out := List[Binding]()
+            for q in ps
+                out.extend(tuple_pattern_names(q))
+            out
+        Variant(_, _, names, _) =>
+            given := names else []
+            [Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown) for nm in given]
+        _ => []

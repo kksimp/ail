@@ -2,7 +2,8 @@
 use std.time.date
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/agent-data/dates.txt")? "reading dates"
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/dates.txt")? "reading dates"
     for line in text.lines()
         d := date.parse_date(line)?
         later := d.add_days(7)

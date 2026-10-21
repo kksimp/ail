@@ -69,6 +69,7 @@ pub fn check_declarations(p ast.Program) List[Diag]
 
 ## ct.gen.3: a diagnostic in generated code is reported at the deriving `impl`.
 fn Checker.remap_generated(mut self)
+    mut from_impl := [false for _ in diags]
     for g in prog.generated
         base := prog.files[g.file].base
         for k in 0..diags.len()
@@ -80,18 +81,41 @@ fn Checker.remap_generated(mut self)
                 )
                 diags[k].pos = g.impl_pos
                 diags[k] = json_field_problem(g, diags[k])
+                from_impl[k] = true
+    # After json.derive.1-2 names the field, the generated code's other
+    # problems are its follow-ons (an `else e` whose call failed).
+    mut named := List[ast.Pos]()
+    for k in 0..diags.len()
+        if from_impl[k] and diags[k].rule.starts_with("json.derive.")
+            named.push(diags[k].pos)
+    if named.len() == 0
+        return
+    mut kept := List[Diag]()
+    for k in 0..diags.len()
+        d := diags[k]
+        if not (from_impl[k] and named.contains(d.pos) and not d.rule.starts_with("json.derive."))
+            kept.push(d)
+    diags = kept
 
 ## json.derive.1-2: a derived JSON conversion that calls `to_json` or
 ## `from_json` on a field type with none says so in the user's terms.
 fn json_field_problem(g ast.Generated, d Diag) Diag
     mut trait_name := "FromJson"
     mut method := "from_json"
+    # `to_json` is a method; `from_json` is an associated function
+    # (`T.from_json(j)`).
+    mut missing := "associated function"
     if g.generator == "derive_to_json"
         trait_name = "ToJson"
         method = "to_json"
+        missing = "method"
     elif g.generator != "derive_from_json"
         return d
-    suffix := " has no method `{method}`"
+    # `to_json` is a method, `from_json` an associated function (trait.assoc.1).
+    mut suffix := " has no method `{method}`"
+    alt := " has no associated function `{method}`"
+    if d.message.ends_with(alt)
+        suffix = alt
     if d.rule != "expr.name.1" or not d.message.ends_with(suffix)
         return d
     ty := d.message.slice(0, d.message.len() - suffix.len())
@@ -299,6 +323,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Let(n, at, mutable, value, otherwise) =>
             let_stmt(n, at, mutable, value, otherwise)
             Ty.Unit
+        LetTuple(names, value, at) =>
+            let_tuple(names, value, at)
+            Ty.Unit
         Assign(target, op, value, at) =>
             assign(target, op, value, at)
             Ty.Unit
@@ -313,9 +340,13 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             handle(value, otherwise)
             Ty.Unit
         For(_, var, var_pos, mutable, iter, body, _) =>
-            elem := if mutable then mut_iterable(iter, var, body) else iterable(iter)
+            elem := if mutable then mut_iterable(iter, var, body) else iterable(
+                iter,
+                is_hidden(var),
+            )
             mark := locals.len()
-            if declare(var, var_pos)
+            # type.tuple.5: the hidden variable of `for a, b in xs` clashes only when the names do.
+            if is_hidden(var) or declare(var, var_pos)
                 locals.push(Local(
                     name: var,
                     ty: elem,
@@ -598,6 +629,16 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                         "only a failure has an error to bind; an optional is just absent",
                         "write `else` without a name",
                     )
+                elif declare(nm.name, nm.pos)
+                    # The value already failed to check: bind the name as unknown,
+                    # so its uses in the block don't cascade.
+                    locals.push(Local(
+                        name: nm.name,
+                        ty: Ty.Unknown,
+                        mutable: false,
+                        how: LocalKind.Binding,
+                        decl: none,
+                    ))
             # err.else.4: with no value to supply, the block may just end.
             unit := ok == Ty.Unit
             t := if unit then block(body, none, false) else block(body, ok, true)
@@ -747,7 +788,7 @@ fn Checker.condition(mut self, cond ast.Expr)
         _ => "write a comparison that gives `bool`"
 
 ## The element type of a `for` loop's iterable (expr.loop.4).
-@allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr) Ty
+@allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr, pairs bool) Ty
     if is_range(iter)
         return range_loop(iter)
     t := expr(iter, none, true)
@@ -767,12 +808,15 @@ fn Checker.condition(mut self, cond ast.Expr)
         Res =>
             reject_unhandled(t, at)
             Ty.Unknown
-        MapOf =>
+        MapOf(k, v) =>
+            # type.tuple.5: `for k, v in m` takes each entry apart.
+            if pairs
+                return Ty.Tuple([k, v])
             err_help(
                 "type.map.5",
                 at,
-                "`for` iterates a map's keys or values explicitly",
-                "write `for k in m.keys()`, or `m.values()`",
+                "`for` iterates a map's entries as `k, v`, or its keys or values",
+                "write `for k, v in m`, `for k in m.keys()`, or `m.values()`",
             )
             Ty.Unknown
         Str =>
@@ -1120,6 +1164,7 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
             overlap_in_else(target, otherwise),
         )
         Defer(st, _) => overlap_in_stmt(target, st)
+        LetTuple(_, value, _) => overlap_in_expr(target, value)
         Break => none
         Continue => none
 
@@ -1169,6 +1214,7 @@ fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
             none
         ListLit(items, _) => overlap_in_list(target, items)
         SetLit(items, _) => overlap_in_list(target, items)
+        TupleLit(items, _) => overlap_in_list(target, items)
         Call(callee, args, _) => either(
             overlap_in_expr(target, callee),
             overlap_in_args(target, args),
@@ -1256,6 +1302,7 @@ fn stmt_breaks(s ast.Stmt) bool
         Assign(target, _, value, _) => breaks_in_expr(target) or breaks_in_expr(value)
         While(cond, _, _) => breaks_in_expr(cond)
         For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
+        LetTuple(_, value, _) => breaks_in_expr(value)
         Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool
@@ -1302,6 +1349,7 @@ fn args_break(args List[ast.Arg]) bool
         Index(recv, index, _) => breaks_in_expr(recv) or breaks_in_expr(index)
         ListLit(items, _) => any_breaks(items)
         SetLit(items, _) => any_breaks(items)
+        TupleLit(items, _) => any_breaks(items)
         MapLit(entries, _) =>
             for en in entries
                 if breaks_in_expr(en.key) or breaks_in_expr(en.value)

@@ -26,11 +26,16 @@ OBJ_ENUM := 5
 fn Lower.declare_enum_names(mut self, prog ast.Program)
     for e in prog.enums
         if e.generics.len() > 0
-            problem(e.pos, "generic enum `{e.name}` isn't in the native subset yet")
-        elif e.is_error
-            problem(e.pos, "error enum `{e.name}` isn't in the native subset yet")
+            declare_generic_enum(e)
         else
             enums["{prefix}{e.name}"] = []
+
+## The prelude's `enum Ordering` (trait.std.2), registered once per program
+## unless the program declares an `Ordering` of its own: the Rust front end
+## adds it to the program it runs, but the native compiler reads only source.
+fn Lower.declare_prelude_enums(mut self)
+    if not enums.contains("Ordering")
+        enums["Ordering"] = [Case(name: n, fields: []) for n in ["Less", "Equal", "Greater"]]
 
 ## Type the variants' fields of each enum `declare_enum_names` recorded.
 fn Lower.declare_enums(mut self, prog ast.Program)
@@ -58,7 +63,13 @@ fn Lower.enum_key(self, name str) str?
         key := "{m}.{parts[1..].join(".")}"
         return if enums.contains(key) then key else none
     key := "{prefix}{name}"
-    if enums.contains(key) then key else none
+    if enums.contains(key)
+        return key
+    if k := prelude_key(name)
+        if enums.contains(k)
+            return k
+    # The prelude's `Ordering` is visible in every module.
+    if name == "Ordering" and enums.contains(name) then name else none
 
 fn enum_name(t Ty) str?
     match t
@@ -84,7 +95,15 @@ fn Lower.case_index(self, n str, name str) int
 
 ## The type a method's `self` has: a struct or an enum.
 fn Lower.owner_ty(self, n str) Ty
-    if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
+    match n
+        "int" => Ty.Int
+        "float" => Ty.Float
+        "bool" => Ty.Bool
+        "str" => Ty.Str
+        _ =>
+            if t := gen.owner_tys.get(n)
+                return t
+            if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
 
 ## The enum `e` names, when it names one and no local: `E` or `m.E`, as
 ## in `E.V` or `m.E.V(...)`.
@@ -169,6 +188,11 @@ fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) V
         ft := c.fields[at].ty
         x := lower_value(a[k].value, ft)?
         vs[at] = copy_if_place(a[k].value, Val(id: convert(x, ft, expr_pos(a[k].value)), ty: ft))
+    build_variant(v, vs)
+
+## A new object of variant `v` with field values `vs`.
+fn Lower.build_variant(mut self, v VariantRef, vs List[int]) Val
+    t := Ty.Enum(v.en)
     obj := call("rt.obj_new", [konst(8 * (vs.len() + 1), Ty.Int), konst(OBJ_ENUM, Ty.Int)], t)
     store(obj, 0, konst(v.k, Ty.Int))
     for k in 0..vs.len()
@@ -226,13 +250,15 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
 ## 173's `rt.list_eq`).
 fn holds_record(t Ty) bool
     match t
-        Struct(_) | Enum(_) => true
+        Struct(_) | Enum(_) | Tuple(_) => true
         List(e) => not (is_number(e) or e == Ty.Str)
         _ => false
 
 ## `a == b` or `a != b` on structs or lists of lists, structs or enums: the
 ## generated `eq.T`, element by element or field by field.
 fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    if tuple_elems(a.ty) != none or struct_name(a.ty) != none
+        return tuple_compare(o, a, b, pos)
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
     if name != "eq" and name != "ne"
@@ -336,6 +362,11 @@ fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) b
         return true
     if e := t.elem()
         return comparable(e, pos, outer, mut seen)
+    if xs := tuple_elems(t)
+        for x in xs
+            if not comparable(x, pos, outer, mut seen)
+                return false
+        return true
     if s := struct_name(t)
         if seen.contains(s)
             return true
@@ -371,8 +402,12 @@ fn Lower.gen_enum_eqs(mut self)
             done.add(name)
             more = true
             t := eq_tys[name]
-            if e := t.elem()
+            if name.starts_with("lt.")
+                gen_lt(name, t)
+            elif e := t.elem()
                 gen_list_eq(name, t, e)
+            elif xs := tuple_elems(t)
+                gen_tuple_eq(name, t, xs)
             elif s := struct_name(t)
                 gen_struct_eq(name, s)
             else
@@ -470,7 +505,7 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
         return op("feq", [x, y], Ty.Bool)
     if t == Ty.Str
         return call("rt.str_eq", [x, y], Ty.Bool)
-    if t.elem() != none or struct_name(t) != none
+    if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none
         return call(eq_fn(t), [x, y], Ty.Bool)
     if m := enum_name(t)
         if not is_flat(m)

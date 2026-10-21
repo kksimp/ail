@@ -1,0 +1,58 @@
+# Spectral norm of the infinite matrix A(i, j) = 1 / ((i+j)(i+j+1)/2 + i + 1),
+# estimated by 10 power iterations on an N x N slice. Each row of a
+# matrix-vector product is one `par for` iteration; its float sum is in the
+# same order as the sequential one. N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn eval_a(i int, j int) float
+    d := (i + j) * (i + j + 1) / 2 + i + 1
+    1.0 / d.to_float()
+
+fn zeros(n int) List[float]
+    mut out := List[float]()
+    for _ in 0..n
+        out.push(0.0)
+    out
+
+fn mul_av(v List[float], n int) List[float]
+    mut out := zeros(n)
+    par for i in 0..n
+        mut sum := 0.0
+        for j in 0..n
+            sum += eval_a(i, j) * v[j]
+        out[i] = sum
+    out
+
+fn mul_atv(v List[float], n int) List[float]
+    mut out := zeros(n)
+    par for i in 0..n
+        mut sum := 0.0
+        for j in 0..n
+            sum += eval_a(j, i) * v[j]
+        out[i] = sum
+    out
+
+fn mul_ata(v List[float], n int) List[float]
+    mul_atv(mul_av(v, n), n)
+
+fn main()
+    n := size(1500)
+    mut u := List[float]()
+    for _ in 0..n
+        u.push(1.0)
+    mut v := zeros(n)
+    for _ in 0..10
+        v = mul_ata(u, n)
+        u = mul_ata(v, n)
+    mut vbv := 0.0
+    mut vv := 0.0
+    for i in 0..n
+        vbv += u[i] * v[i]
+        vv += v[i] * v[i]
+    print("{(vbv / vv).sqrt():.9}")

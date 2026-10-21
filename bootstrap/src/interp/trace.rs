@@ -293,6 +293,16 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
             }
             Err(_) => s.push_str("ref …"),
         },
+        Value::Tuple(items) => {
+            s.push('(');
+            for (i, x) in items.iter().enumerate() {
+                if i > 0 {
+                    s.push_str(", ");
+                }
+                write_value(s, x, budget);
+            }
+            s.push(')');
+        }
         Value::List(items) => {
             s.push('[');
             for (i, x) in items.iter().enumerate() {
@@ -303,7 +313,7 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
                     let _ = write!(s, "… {} more", items.len() - i);
                     break;
                 }
-                write_value(s, x, budget);
+                write_value(s, &x, budget);
             }
             s.push(']');
         }
@@ -720,8 +730,8 @@ impl<'a, W: Write> Interp<'a, W> {
     /// trace.watch.4: what a builtin mutating method is about to change, read before it runs.
     pub(super) fn watch_before(&self, env: &Env<'_>, p: &Place, name: &str, args: &[Value]) -> Option<WatchBefore> {
         let (len, removed) = view(env, p, |v| match (v, name) {
-            (Value::List(xs), "pop") => (xs.len(), xs.last().cloned()),
-            (Value::List(xs), "remove_at") => (xs.len(), usize::try_from(args[0].int()).ok().and_then(|i| xs.get(i).cloned())),
+            (Value::List(xs), "pop") => (xs.len(), xs.last()),
+            (Value::List(xs), "remove_at") => (xs.len(), usize::try_from(args[0].int()).ok().and_then(|i| xs.get(i))),
             (Value::List(xs), _) => (xs.len(), None),
             (Value::Map(t), "remove") => (t.len(), t.get(&args[0]).map(|i| t.val(i).clone())),
             (Value::Map(t) | Value::Set(t), _) => (t.len(), None),

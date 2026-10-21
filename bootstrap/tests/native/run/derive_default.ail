@@ -1,0 +1,22 @@
+# Derived methods in native code (ADR 0807): `ail build` passes the
+# methods a derive generator wrote, and they lower like written ones.
+struct Point
+    x int
+    y float
+
+struct Config
+    name str
+    verbose bool
+    at Point
+    tags List[str]
+
+impl Default for Point
+impl Default for Config
+
+fn main()
+    c := Config.default()
+    print(c.name.len())
+    print(c.verbose)
+    print(c.at.x)
+    print(c.at.y)
+    print(c.tags.len())

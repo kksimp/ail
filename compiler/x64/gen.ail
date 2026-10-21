@@ -20,9 +20,13 @@ pub fn registers() codegen.Target
         int_callee: [RBX, 12, 13, 14, 15],
         float_caller: [32, 33, 34, 35, 36, 37, 38, 39],
         float_callee: [40, 41, 42, 43, 44, 45],
+        int_args: INT_ARGS,
+        float_args: [32, 33, 34, 35, 36, 37, 38, 39],
     )
 
 INT_ARGS := [7, 6, 2, 1, 8, 9]
+## The runtime global holding the stack limit (`rt.STACK_LIMIT`, ADR 0535).
+STACK_LIMIT := 15
 
 ## A move of the parallel moves at an edge or a call: into location `dst`
 ## from location `src`, or from a constant (`imm`) or a symbol's address.
@@ -42,11 +46,14 @@ struct Stub
     site int
     op str
     ## 1: the result overwrote `a`, which is result - b (an add); 2: result + b
-    ## (a sub). The stub undoes it before reporting.
+    ## (a sub); 3: the second operand was overwritten by a sum with the first,
+    ## a constant. The stub undoes it before reporting.
     undo int
 
 struct Gen
     a Asm
+    ## The Windows target (ADR 0608): `target()` is 3.
+    win bool
     img codegen.Image
     m mir.Module
     f mir.Func
@@ -93,10 +100,15 @@ pub fn generate(m mir.Module) codegen.Image
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
     for f in m.funcs
-        gen_func(mut img, m, f)
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f, false)
+    codegen.add_call_table(mut img, m)
     img
 
-fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
+## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
+fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
     f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
@@ -109,6 +121,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    first := img.calls.len()
     mut globs := Map[int, int]()
     mut addr_uses := [0 for _ in 0..f.vals.len()]
     for blk in f.blocks
@@ -123,6 +136,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
                     globs[i.dst] = remat[i.args[0]].imm
     mut g := Gen(
         a: new_asm(),
+        win: win,
         img: img,
         m: m,
         f: f,
@@ -159,6 +173,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
     g.a.resolve_labels()
     img = g.img
     base := img.code.len()
+    for k in first..img.calls.len()
+        img.calls[k].off += base
     img.funcs[f.name] = base
     img.code.extend(g.a.code)
     for fx in g.a.fixups
@@ -258,6 +274,8 @@ fn Gen.gpr(mut self, v int, scratch int) int
         a.mov_ri(scratch, i.imm)
     elif i.op == "str"
         a.lea(scratch, at_sym("d:s{i.imm}", 0))
+    elif i.op == "fnaddr"
+        a.lea(scratch, at_sym(i.name, 0))
     else
         unreachable("value v{v} has no location")
     scratch
@@ -306,6 +324,8 @@ fn Gen.move_of(mut self, dst int, v int) Move
         return Move(dst: dst, src: -1, imm: i.imm, sym: "", float: fl)
     if i.op == "str"
         return Move(dst: dst, src: -1, imm: 0, sym: "d:s{i.imm}", float: fl)
+    if i.op == "fnaddr"
+        return Move(dst: dst, src: -1, imm: 0, sym: i.name, float: fl)
     if i.op == "fconst"
         return Move(dst: dst, src: -1, imm: 0, sym: codegen.add_f64(mut img, i.fimm), float: fl)
     Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
@@ -567,7 +587,9 @@ fn Gen.compare(mut self, i mir.Inst) int
 
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
     l := a.label()
-    stubs.push(Stub(label: l, kind: kind, a: x, b: y, site: site, op: op, undo: 0))
+    # An atomic add's overflow has its own message (conc.atomic.5).
+    k := if kind == 0 and m.sites[site].rule == "conc.atomic.5" then 16 else kind
+    stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op, undo: 0))
     l
 
 fn Gen.gen_inst(mut self, i mir.Inst)
@@ -676,6 +698,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.bind(ok)
             put_gpr(i.dst, S1)
         "call" => call(i)
+        "icall" => call_out(i)
+        "utrap" => a.jmp(stub(14, i.args[0], i.args[0], i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
@@ -711,6 +735,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             v := i.args[1]
             if f.vals[v].is_float()
                 a.vmovsd_mr(at(r, i.imm), xmm(v, X0))
+            elif k := imm32(v)
+                a.mov_mi(at(r, i.imm), k)
             else
                 a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
@@ -718,8 +744,13 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         _ => unreachable("x64: no code for `{i.op}`")
 
 fn Gen.arith(mut self, i mir.Inst)
-    x := i.args[0]
-    y := i.args[1]
+    mut x := i.args[0]
+    mut y := i.args[1]
+    # An unchecked `add` or `mul` whose result takes the second operand's
+    # register works in place with the operands swapped.
+    if i.site < 0 and i.op != "sub" and loc[y] == loc[i.dst] and loc[x] != loc[y] and is_reg(loc[y])
+        x = i.args[1]
+        y = i.args[0]
     sym := match i.op
         "add" => "+"
         "sub" => "-"
@@ -738,10 +769,37 @@ fn Gen.arith(mut self, i mir.Inst)
             stubs[stubs.len() - 1].undo = if i.op == "add" then 1 else 2
             a.jcc(CC_O, l)
         return
+    # An unchecked sum is one `lea`, whatever the result's register (it
+    # reads both operands before it writes).
+    if i.op == "add" and i.site < 0 and is_reg(loc[x])
+        if k := ky
+            a.lea(d, at(loc[x], k))
+            put_gpr(i.dst, d)
+            return
+        if is_reg(loc[y])
+            a.lea(d, at_index(loc[x], loc[y], 1, 0))
+            put_gpr(i.dst, d)
+            return
+    if i.op == "sub" and i.site < 0 and is_reg(loc[x])
+        if k := ky
+            a.lea(d, at(loc[x], 0 - k))
+            put_gpr(i.dst, d)
+            return
     # Into the result's register when that leaves `x` and `y` intact.
-    r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
+    mut r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
+    # An unchecked `n * k` writes its result over `n`: `imul d, n, k` allows it.
+    if i.op == "mul" and i.site < 0 and (ky != none or imm32(x) != none)
+        r = d
     # `3 * n`: the constant goes second; the stub still reports `x OP y`.
     kx := imm32(x)
+    # `1 + n` into `n`'s own register: the stub recovers `n` from the sum.
+    if ky == none and kx != none and i.op == "add" and d == loc[y]
+        a.alu_ri("add", d, kx else 0)
+        if i.site >= 0
+            l := stub(0, x, y, i.site, sym)
+            stubs[stubs.len() - 1].undo = 3
+            a.jcc(CC_O, l)
+        return
     if ky == none and kx != none and i.op != "sub"
         k := kx else 0
         if i.op == "mul"
@@ -973,12 +1031,29 @@ fn Gen.push(mut self, i mir.Inst)
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
+    if i.name.starts_with("libsys.")
+        # System DLL calls exist only on Windows (ADR 0606). Elsewhere the
+        # call traps if it is ever run.
+        if self.win
+            self.libsys_call(i)
+        else
+            a.ud2()
+        return
+    if i.site >= 0
+        # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
+        a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
+        a.jcc(CC_B, stub(11, -1, -1, i.site, m.sites[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
+    # A call through a value (`icall`) takes the callee first, into the scratch register.
+    indirect := i.op == "icall"
     mut extra := List[int]()
-    for v in i.args
-        if f.vals[v].is_float()
+    for k in 0..i.args.len()
+        v := i.args[k]
+        if indirect and k == 0
+            moves.push(move_of(S0, v))
+        elif f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
         elif ni < INT_ARGS.len()
@@ -994,7 +1069,17 @@ fn Gen.call_out(mut self, i mir.Inst)
         for k in 0..extra.len()
             a.mov_mr(at(RSP, 8 * k), gpr(extra[k], S0))
     parallel(moves)
-    a.call_sym(i.name)
+    if indirect
+        a.call_reg(S0)
+    elif i.name.starts_with("libsys.")
+        # An import exists only on macOS; the runtime guards it with
+        # `target() == 2`, so on x86-64 Linux it is never reached.
+        a.ud2()
+    else
+        a.call_sym(i.name)
+    if i.imm != 0
+        # The return address, for a trap's stack (trace.frame.1).
+        img.calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
     if room > 0
         a.alu_ri("add", RSP, room)
     if i.dst >= 0
@@ -1004,34 +1089,53 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_gpr(i.dst, RAX)
 
 ## The memory a load or store prim addresses.
-fn Gen.address(mut self, v int) Mem
+fn Gen.address(mut self, i mir.Inst) Mem
+    v := i.args[0]
+    store := i.name.starts_with("store")
+    # `base + index * scale + offset` (an indexed load has two arguments,
+    # an indexed store three): the primitive's `imm` holds the offset, or
+    # offset * 16 + log2(scale).
+    if i.args.len() == (if store then 3 else 2)
+        mut b := gpr(v, S0)
+        if globs.contains(v)
+            a.lea(S0, at_sym("globals", 8 * globs[v]))
+            b = S0
+        return at_index(b, gpr(i.args[1], S1), 1.shl(i.imm % 16), i.imm / 16)
     if globs.contains(v)
-        return at_sym("globals", 8 * globs[v])
-    at(gpr(v, S0), 0)
+        return at_sym("globals", 8 * globs[v] + i.imm)
+    at(gpr(v, S0), i.imm)
 
 fn Gen.prim(mut self, i mir.Inst)
+    if i.name.starts_with("fn_addr:")
+        # The function's address is only used with an import: never reached.
+        a.ud2()
+        d := out_gpr(i.dst, S1)
+        a.mov_ri(d, 0)
+        put_gpr(i.dst, d)
+        return
     match i.name
         "load64" =>
-            mem := address(i.args[0])
+            mem := address(i)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, mem)
             put_gpr(i.dst, d)
         "load8" =>
-            mem := address(i.args[0])
+            mem := address(i)
             d := out_gpr(i.dst, S1)
             a.movzx8_rm(d, mem)
             put_gpr(i.dst, d)
         "loadf" =>
-            mem := address(i.args[0])
+            mem := address(i)
             d := out_xmm(i.dst, X0)
             a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            a.mov_mr(address(i.args[0]), gpr(i.args[1], S1))
+            store_word(address(i), i.args[i.args.len() - 1])
         "store8" =>
-            a.mov8_mr(address(i.args[0]), gpr(i.args[1], S1))
+            store_byte(address(i), i.args[i.args.len() - 1])
         "storef" =>
-            a.vmovsd_mr(address(i.args[0]), xmm(i.args[1], X0))
+            v := xmm(i.args[i.args.len() - 1], X0)
+            a.vmovsd_mr(address(i), v)
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
             parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])
@@ -1044,6 +1148,61 @@ fn Gen.prim(mut self, i mir.Inst)
             k := imm(i.args[0]) else 0
             a.lea(d, at_sym("globals", 8 * k))
             put_gpr(i.dst, d)
+        # Threads and atomics (ADRs 0599, 0600). The atomic operations are
+        # sequentially consistent: x86-64 loads are acquire, stores are `xchg`.
+        "atomic_load" =>
+            r := gpr(i.args[0], S0)
+            d := out_gpr(i.dst, S1)
+            a.mov_rm(d, at(r, 0))
+            put_gpr(i.dst, d)
+        "atomic_store" | "atomic_xchg" =>
+            cell := at(gpr(i.args[0], S0), 0)
+            parallel([move_of(RAX, i.args[1])])
+            a.xchg_mr(cell, RAX)
+            if i.dst >= 0
+                put_gpr(i.dst, RAX)
+        "atomic_add" =>
+            cell := at(gpr(i.args[0], S0), 0)
+            parallel([move_of(RAX, i.args[1])])
+            a.lock_xadd(cell, RAX)
+            put_gpr(i.dst, RAX)
+        "atomic_cas" =>
+            cell := at(gpr(i.args[0], S0), 0)
+            new := gpr(i.args[2], S1)
+            parallel([move_of(RAX, i.args[1])])
+            a.lock_cmpxchg(cell, new)
+            put_gpr(i.dst, RAX)
+        "sp" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RSP)
+            put_gpr(i.dst, d)
+        "clone" =>
+            # clone(CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM, stack, 0, 0, arg):
+            # the child resumes here on the new stack with rax 0 and runs
+            # `rt.worker_main(arg)`; the argument rides in r8 (unused as tls).
+            parallel([move_of(RSI, i.args[0]), move_of(R8, i.args[1])])
+            a.mov_ri(RDI, 331520)
+            a.mov_ri(RDX, 0)
+            a.mov_ri(S0, 0)
+            a.mov_ri(RAX, 56)
+            a.syscall()
+            parent := a.label()
+            a.test_rr(RAX, RAX)
+            a.jcc(CC_NE, parent)
+            a.mov_rr(RDI, R8)
+            a.alu_rr("xor", RBP, RBP)
+            a.call_sym("rt.worker_main")
+            a.ud2()
+            a.bind(parent)
+            put_gpr(i.dst, RAX)
+        "restart" =>
+            # Abandon this thread's frames: run `rt.worker_main(arg)` on a
+            # fresh stack at `top`.
+            parallel([move_of(RAX, i.args[0]), move_of(RDI, i.args[1])])
+            a.mov_rr(RSP, RAX)
+            a.alu_rr("xor", RBP, RBP)
+            a.call_sym("rt.worker_main")
+            a.ud2()
         "globals_end" =>
             d := out_gpr(i.dst, S1)
             a.lea(d, at_sym("globals", 8 * m.globals_used()))
@@ -1057,7 +1216,15 @@ fn Gen.prim(mut self, i mir.Inst)
             put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)
-            a.mov_ri(d, 0)
+            a.mov_ri(d, if win then 3 else 0)
+            put_gpr(i.dst, d)
+        "code_tab" =>
+            d := out_gpr(i.dst, S1)
+            a.lea(d, at_sym("trace.tab", 0))
+            put_gpr(i.dst, d)
+        "frame_ptr" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RBP)
             put_gpr(i.dst, d)
         "str_addr" | "str_at" | "list_addr" | "list_at" =>
             parallel([move_of(loc[i.dst], i.args[0])])
@@ -1068,6 +1235,12 @@ fn Gen.prim(mut self, i mir.Inst)
         "bits_float" =>
             d := out_xmm(i.dst, X0)
             a.vmovq_xr(d, gpr(i.args[0], S0))
+            put_xmm(i.dst, d)
+        "f32_round" =>
+            xa := xmm(i.args[0], X0)
+            d := out_xmm(i.dst, X0)
+            a.vcvtsd2ss(X1, xa, xa)
+            a.vcvtss2sd(d, X1, X1)
             put_xmm(i.dst, d)
         _ => unreachable("x64: unknown primitive {i.name}")
 
@@ -1114,11 +1287,11 @@ fn Gen.list_set(mut self, i mir.Inst)
         x := xmm(v, X0)
         a.vmovsd_mr(list_index(i, 8), x)
     elif t == mir.Ty.Bool
-        r := gpr(v, RDX)
-        a.mov8_mr(list_index(i, 1), r)
+        mem := list_index(i, 1)
+        store_byte(mem, v)
     else
-        r := gpr(v, RDX)
-        a.mov_mr(list_index(i, 8), r)
+        mem := list_index(i, 8)
+        store_word(mem, v)
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577).
 fn Gen.indexed_mem(mut self, i mir.Inst) Mem
@@ -1148,9 +1321,23 @@ fn Gen.indexed_store(mut self, i mir.Inst)
     if f.vals[v].is_float()
         a.vmovsd_mr(mem, xmm(v, X0))
     elif i.imm == 1
-        a.mov8_mr(mem, gpr(v, RDX))
+        store_byte(mem, v)
+    else
+        store_word(mem, v)
+
+## Store the `int` or `bool` `v` as a word or a byte: a constant goes in as an
+## immediate, not through a register.
+fn Gen.store_word(mut self, mem Mem, v int)
+    if k := imm32(v)
+        a.mov_mi(mem, k)
     else
         a.mov_mr(mem, gpr(v, RDX))
+
+fn Gen.store_byte(mut self, mem Mem, v int)
+    if k := imm(v)
+        a.mov8_mi(mem, k.bit_and(255))
+    else
+        a.mov8_mr(mem, gpr(v, RDX))
 
 # ---- trap stubs ----
 
@@ -1163,9 +1350,10 @@ fn Gen.gen_stubs(mut self)
         if s.kind == 4
             # The float's bits.
             a.vmovq_rx(RSI, xmm(s.a, X0))
-        else
+        elif s.kind != 11
             moves.push(move_of(RSI, s.a))
-        moves.push(move_of(RDX, s.b))
+        if s.kind != 11
+            moves.push(move_of(RDX, s.b))
         moves.push(Move(dst: RCX, src: -1, imm: 0, sym: "d:h{s.site}", float: false))
         moves.push(Move(dst: R8, src: -1, imm: 0, sym: "d:o{s.op}", float: false))
         moves.push(Move(dst: R9, src: -1, imm: 0, sym: "d:t{s.site}", float: false))
@@ -1176,6 +1364,8 @@ fn Gen.gen_stubs(mut self)
             a.alu_rr("sub", RSI, RDX)
         elif s.undo == 2
             a.alu_rr("add", RSI, RDX)
+        elif s.undo == 3
+            a.alu_rr("sub", RDX, RSI)
         if s.kind == 3
             # The list's length.
             a.mov_rm(RDX, at(RDX, 0))

@@ -1,6 +1,6 @@
 ## List methods that edit, search or order a list (type.coll.9, 11, 14;
 ## ADR 0605): `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop`,
-## `contains`, `sort` and `sorted`. Each is a runtime call
+## `contains`, `sort`, `sorted` and `take` (type.coll.15). Each is a runtime call
 ## (`compiler/rt/native/list.ail`); the index checks are MIR checks, so a
 ## trap names the interpreter's rule and position.
 ##
@@ -20,6 +20,15 @@ fn is_list_edit(name str) bool
         or name == "contains"
         or name == "sort"
         or name == "sorted"
+        or name == "swap"
+        or name == "take"
+        or name == "sum"
+        or name == "min"
+        or name == "max"
+        or name == "first"
+        or name == "last"
+        or name == "index_of"
+        or is_set_op(name)
 
 ## Bytes of one element of a list of `e`.
 fn elem_bytes(e Ty) int
@@ -29,7 +38,7 @@ fn elem_bytes(e Ty) int
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int
     match e
-        Int | Bool => 0
+        Int | Bool | Char => 0
         Str => 1
         Float => 2
         _ => -1
@@ -46,6 +55,8 @@ fn Lower.lower_list_edit(
 ) Val?
     size := konst(elem_bytes(e), Ty.Int)
     unit := Val(id: -1, ty: Ty.Unit)
+    if structural(e) and tuple_list_method(name)
+        return tuple_list_edit(r, e, name, npos, vs)
     if name == "extend" and vs.len() == 1
         if not same_ty(vs[0].ty, r.ty)
             return unsupported(npos, "`.extend()` of a `{vs[0].ty.name()}` onto a `{r.ty.name()}`")
@@ -126,7 +137,76 @@ fn Lower.lower_list_edit(
         if name == "sorted"
             return Val(id: target, ty: r.ty)
         return unit
+    if is_set_op(name) and vs.len() == 1
+        return set_op(r, name, vs[0], npos)
+    if name == "swap" and vs.len() == 2
+        # Both reads check their index (type.coll.7); the call then swaps.
+        checked("get", [r.id, vs[0].id], bounds_site(npos), e)
+        checked("get", [r.id, vs[1].id], bounds_site(npos), e)
+        call("rt.list_swap", [r.id, vs[0].id, vs[1].id, size], Ty.Unit)
+        return unit
+    if name == "take" and vs.len() == 1
+        n := convert(vs[0], Ty.Int, npos)
+        texts := trap_texts("type.coll.15", npos)
+        return Val(id: call("rt.list_take", [r.id, n, size, texts[0], texts[1]], r.ty), ty: r.ty)
+    if name == "sum" and vs.len() == 0
+        if e == Ty.Float
+            return Val(id: call("rt.list_sum_float", [r.id], Ty.Float), ty: Ty.Float)
+        if e != Ty.Int
+            return unsupported(npos, "`.sum()` on `{r.ty.name()}`")
+        texts := trap_texts("expr.arith.1", npos)
+        return Val(id: call("rt.list_sum_int", [r.id, texts[0], texts[1]], Ty.Int), ty: Ty.Int)
+    n := op("len", [r.id], Ty.Int)
+    nonempty := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
+    if name == "first" and vs.len() == 0
+        return opt_at(r, nonempty, konst(0, Ty.Int), e, false, npos)
+    if name == "last" and vs.len() == 0
+        last := op("sub", [n, konst(1, Ty.Int)], Ty.Int)
+        return opt_at(r, nonempty, last, e, false, npos)
+    if (name == "min" or name == "max") and vs.len() == 0
+        k := match e
+            Int => 0
+            Str => 1
+            Float => 2
+            _ => -1
+        if k < 0
+            return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+        greatest := konst(if name == "max" then 1 else 0, Ty.Int)
+        idx := call("rt.list_extreme", [r.id, konst(k, Ty.Int), greatest], Ty.Int)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        return opt_at(r, found, idx, e, false, npos)
+    if name == "index_of" and vs.len() == 1
+        k := eq_kind(e)
+        if k < 0
+            return unsupported(npos, "`.index_of()` on `{r.ty.name()}`")
+        mut w := convert(vs[0], e, npos)
+        if e.is_float()
+            w = list_prim("float_bits", [w], Ty.Int)
+        idx := call("rt.list_index_of", [r.id, w, konst(k, Ty.Int), size], Ty.Int)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        return opt_at(r, found, idx, Ty.Int, true, npos)
     unsupported(npos, "`.{name}()` with these arguments")
+
+## `T?` for a list read: the element at `idx` (or `idx` itself when `index` is
+## set) when `has`, else `none`.
+fn Lower.opt_at(mut self, xs Val, has int, idx int, e Ty, index bool, pos ast.Pos) Val?
+    t := opt_of(e) else return unsupported(pos, "an optional `{e.name()}`")
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    yes := new_block()
+    no := new_block()
+    branch(has, yes, [], no, [])
+    seal(yes)
+    cur = yes
+    v := if index then idx else op("get", [xs.id, idx], e)
+    jump(join, [some(Val(id: v, ty: e)).id])
+    seal(no)
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: t)
 
 ## A runtime primitive used by the lowering itself.
 fn Lower.list_prim(mut self, name str, args List[int], ty Ty) int
@@ -159,14 +239,12 @@ fn Lower.lower_pop_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     seal(missing)
     cur = missing
     match other
-        Fallback(x) =>
-            f := lower_value(x, e)?
-            jump(join, [convert(f, e, pos)])
+        Fallback(x) => fallback_jump(x, e, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
                 problem(pos, "this `else` must leave: `return`, `break` or `continue`")
-        Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
+        Handler(name, body, hpos) => handler_jump(name, body, hpos, e, join)
     seal(join)
     cur = join
     Val(id: r, ty: e)
@@ -191,3 +269,54 @@ fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
     if op_name(o) == "ne"
         return Val(id: op("not", [same], Ty.Bool), ty: Ty.Bool)
     Val(id: same, ty: Ty.Bool)
+
+## `xs[i]`, `xs[a..b]`, and `m[k]` on a map.
+fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
+    l := lower_value(recv, none)?
+    if l.ty == Ty.Bytes
+        return bytes_index(l, index, pos)
+    if l.ty.is_coll()
+        return lower_coll_index(l, index, pos)
+    elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
+    if is_range(index)
+        return match index
+            Range(lo, hi, incl, rpos) => lower_slice(l, lo, hi, incl, rpos)
+            _ => none
+    i := lower_value(index, Ty.Int)?
+    Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
+
+## A method of a list: `len`, `join`, `push` and the edits.
+fn Lower.list_method(
+    mut self,
+    e Ty,
+    r Val,
+    name str,
+    npos ast.Pos,
+    vs List[Val],
+    args List[ast.Arg],
+    recv ast.Expr,
+) Val?
+    if name == "len" and vs.len() == 0
+        return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
+    if name == "is_empty" and vs.len() == 0
+        return Val(
+            id: op("eq", [op("len", [r.id], Ty.Int), konst(0, Ty.Int)], Ty.Bool),
+            ty: Ty.Bool,
+        )
+    # type.coll.9
+    if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
+        return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+    if name == "join" and vs.len() == 1 and e == Ty.Char and vs[0].ty == Ty.Str
+        return Val(id: call("rt.list_join_chars", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+    if is_list_edit(name)
+        return lower_list_edit(r, e, name, npos, args, vs)
+    if name == "push" and vs.len() == 1
+        mut el := e
+        if e.is_unknown()
+            el = vs[0].ty
+            retype(recv, Ty.List(el))
+        # A list pushed from a place is copied: lists are values (ADR 0060).
+        item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
+        call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

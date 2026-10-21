@@ -831,6 +831,10 @@ pub(crate) fn type_text(t: &TypeRef) -> String {
                 None => format!("fn({})", ps.join(", ")),
             }
         }
+        TypeKind::Tuple(elems) => {
+            let es: Vec<String> = elems.iter().map(type_text).collect();
+            format!("({})", es.join(", "))
+        }
         TypeKind::Fallible { ok, errors } => {
             let errs = errors.as_ref().map(|es| es.iter().map(type_text).collect::<Vec<_>>().join(" | "));
             match (ok, errs) {
@@ -1001,6 +1005,7 @@ impl<'p> Refs<'p> {
                 }
             }
             TypeKind::Optional(t) | TypeKind::Ref(t) | TypeKind::Ptr(t) => self.type_ref(t),
+            TypeKind::Tuple(elems) => elems.iter().for_each(|e| self.type_ref(e)),
             TypeKind::Fn { params, ret } => {
                 params.iter().for_each(|p| self.type_ref(p));
                 if let Some(r) = ret {
@@ -1033,6 +1038,7 @@ impl<'p> Refs<'p> {
                     self.otherwise(o);
                 }
             }
+            Stmt::LetTuple { value, .. } => self.expr(value),
             Stmt::Assign { target, value, .. } => {
                 self.expr(target);
                 self.expr(value);
@@ -1126,7 +1132,7 @@ impl<'p> Refs<'p> {
                     self.type_ref(a);
                 }
             }
-            Expr::List(xs, _) | Expr::Set(xs, _) => {
+            Expr::List(xs, _) | Expr::Set(xs, _) | Expr::Tuple(xs, _) => {
                 for x in xs {
                     self.expr(x);
                 }
@@ -1225,8 +1231,8 @@ impl<'p> Refs<'p> {
 
     fn pattern(&mut self, p: &Pattern) {
         match p {
-            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
-            Pattern::Or(ps, _) => {
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } | Pattern::Bind(..) => {}
+            Pattern::Or(ps, _) | Pattern::Tuple(ps, _) => {
                 for p in ps {
                     self.pattern(p);
                 }
@@ -1408,7 +1414,7 @@ fn main()
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|x| x == "ail") {
                 let src = std::fs::read_to_string(&path).unwrap();
-                let p = path.display().to_string();
+                let p = crate::shown::shown(&path);
                 for (symbols, form) in [(false, Form::Json), (true, Form::Pretty), (true, Form::Text)] {
                     if let Err(d) = outline(&p, &src, symbols, form) {
                         panic!("{p}: {d:?}");

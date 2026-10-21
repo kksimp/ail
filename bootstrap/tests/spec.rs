@@ -43,6 +43,8 @@
 //! Every program that checks clean and has a `main` also runs under both
 //! interpreter tiers (ADR 0361); the two outputs must match exactly.
 
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -70,7 +72,15 @@ struct Block {
 }
 
 /// Chapters changed by the batch: every rule in them needs a runnable example.
-const BATCH_CHAPTERS: [&str; 5] = ["04-types.md", "05-expressions.md", "17-std.md", "18-effects.md", "22-tools.md"];
+const BATCH_CHAPTERS: [&str; 7] = [
+    "04-types.md",
+    "05-expressions.md",
+    "15-compile-time.md",
+    "16-reflection.md",
+    "17-std.md",
+    "18-effects.md",
+    "22-tools.md",
+];
 
 fn blocks(dir: Option<&Path>, extra: &[&Path]) -> Result<Vec<Block>, String> {
     let mut chapters: Vec<PathBuf> = dir.map_or(Vec::new(), |d| fs::read_dir(d).unwrap().map(|e| e.unwrap().path()).collect());
@@ -425,6 +435,16 @@ fn spec_examples() {
         }
     }
     eprintln!("spec examples: {run} checked, {skipped} skipped (skip=bootstrap)");
+    let failures: Vec<String> = failures
+        .into_iter()
+        .filter(|f| match common::windows_gap(f) {
+            Some(why) => {
+                eprintln!("skipped a spec example on Windows: {why}");
+                false
+            }
+            None => true,
+        })
+        .collect();
     assert!(failures.is_empty(), "{} spec example(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
     // Each rule ID the chapter files define that no example demonstrates, for the batch chapters
     // (ADR 0002). `AIL_LIST_UNCOVERED=1` prints the list for every chapter instead.

@@ -112,7 +112,7 @@ fn comparison(s str) ast.BinOp?
 
 ## Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 ## these, `[` starts type arguments rather than an index (gen.infer.2).
-fn generic_names(tokens List[Token]) Set[str]
+pub fn generic_names(tokens List[Token]) Set[str]
     mut names := {"List", "Map", "Set", "Channel", "Mutex", "Atomic"}
     for k in 2..tokens.len()
         a := tok_text(tokens[k - 2].tok)
@@ -146,8 +146,15 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
 pub fn parse(tokens List[Token]) Parsed
+    parse_with(tokens, Set[str]())
+
+## `parse` of a file whose module's other files declare generic names too:
+## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
+pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
     mut p := new_parser(tokens, [])
     p.generic_names = generic_names(tokens)
+    for n in extra.sorted()
+        p.generic_names.add(n)
     p.top_level()
     public := p.public.sorted()
     program := ast.Program(
@@ -162,6 +169,7 @@ pub fn parse(tokens List[Token]) Parsed
         files: [],
         grants: [],
         unsafe_allowed: none,
+        driver_allowed: [],
         generated: [],
     )
     Parsed(program: program, diags: p.diags)
@@ -248,12 +256,25 @@ fn Parser.top_level(mut self)
                 unexpected("`struct` or `enum` after `error`", "err.decl.1")
                 skip_statement()
         elif tag == "kw" and text == "mut" and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            error_text(
+                "mod.const.1",
+                here(),
+                "there are no mutable top-level variables",
+                "declare a constant `NAME := value`, or pass the value to the functions that change it",
+                "",
+            )
             skip_statement()
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            fix := if sym_at(2) == "=" then "declare the constant with `:=`" else ""
+            error_text(
+                "mod.const.1",
+                here(),
+                "AIL has no `{text}`; a constant is declared `NAME := value`",
+                "remove the keyword and write `NAME := value`",
+                fix,
+            )
             skip_statement()
         elif tag == "id" and foreign_decl(text)
             i += 0
@@ -361,7 +382,7 @@ fn Parser.line_ends_at(self, k int) bool
 # ---- Diagnostics ----
 
 fn Parser.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false))
+    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
@@ -370,7 +391,11 @@ fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str)
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: "", fix: ""))
+
+## A diagnostic with the bootstrap's message, help line and fix title.
+fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
     diag("lex.num.3", pos)
@@ -424,7 +449,13 @@ fn Parser.take_name(mut self, expected str, rule str) ast.Ident?
         pos := bump().pos
         return ast.Ident(name: n, pos: pos)
     if tag_at(0) == "kw" and not not_yet(kw_at(0))
-        diag("lex.kw.1", here())
+        error_text(
+            "lex.kw.1",
+            here(),
+            "`{kw_at(0)}` is a keyword and can't be used as a name",
+            "choose a different name",
+            "",
+        )
         return none
     unexpected(expected, rule)
     none
@@ -618,6 +649,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
     if tag_at(0) == "id"
         or at_sym("!")
         or at_sym("*")
+        or at_sym("(")
         or at_kw("any")
         or at_kw("ref")
         or at_kw("fn")
@@ -826,6 +858,19 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         pos := bump().pos
         inner := named_type("a type after `*`", "unsafe.ptr.1")?
         return ast.TypeRef(shape: ast.TypeShape.PtrTo(inner), pos: pos)
+    # `(A, B)`: a tuple type, two or more elements (type.tuple.1).
+    if at_sym("(")
+        pos := bump().pos
+        mut elems := List[ast.TypeRef]()
+        while not at_sym(")")
+            elems.push(type_ref("an element type", "type.tuple.1")?)
+            if not eat_sym(",")
+                break
+        expect_sym(")", "`)` or `,` in the tuple type", "type.tuple.1")?
+        if elems.len() < 2
+            diag("type.tuple.1", pos)
+            return none
+        return ast.TypeRef(shape: ast.TypeShape.TupleType(elems), pos: pos)
     # `fn(A, B) R`: a function value's type (type.fn.1).
     if at_kw("fn")
         pos := bump().pos
@@ -837,7 +882,7 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
                 break
         expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?
         mut ret := absent[ast.TypeRef]()
-        if tag_at(0) == "id" or at_kw("any") or at_kw("ref")
+        if tag_at(0) == "id" or at_sym("(") or at_kw("any") or at_kw("ref")
             ret = optional_type("the result type", "type.fn.1")?
         return ast.TypeRef(shape: ast.TypeShape.FnType(params: params, ret: ret), pos: pos)
     n := dotted_name(expected, rule)?
@@ -1022,6 +1067,13 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         bump()
         inner := statement_inner()?
         return ast.Stmt.Defer(stmt: inner, pos: pos)
+    if tag == "kw" and text == "mut" and tag_at(1) == "id" and sym_at(2) == ","
+        bump()
+        n := take_name("a binding name after `mut`", "expr.bind.2")?
+        return let_tuple(ast.Binder(name: n.name, pos: n.pos, mutable: true))
+    if tag == "id" and sym_at(1) == "," and at_let_tuple()
+        i += 1
+        return let_tuple(ast.Binder(name: text, pos: pos, mutable: false))
     if tag == "kw" and text == "mut"
         bump()
         n := take_name("a binding name after `mut`", "expr.bind.2")?
@@ -1041,10 +1093,23 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         e := otherwise()?
         return ast.Stmt.Let(name: text, pos: pos, mutable: false, value: value, otherwise: e.part)
     if tag == "id" and (text == "let" or text == "var" or text == "const") and tag_at(1) == "id"
-        diag("expr.bind.1", pos)
+        fix := if sym_at(2) == "=" then "declare it with `:=`" else ""
+        error_text(
+            "expr.bind.1",
+            pos,
+            "AIL has no `{text}`; bindings are declared with `:=`",
+            "write `name := value`, or `mut name := value` to allow reassignment",
+            fix,
+        )
         return none
     if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
-        diag("lex.kw.1", pos)
+        error_text(
+            "lex.kw.1",
+            pos,
+            "`{text}` is a keyword and can't be used as a name",
+            "choose a different name",
+            "",
+        )
         return none
     if tag == "kw" and text == "while"
         bump()
@@ -1102,7 +1167,7 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         value := expression()?
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
-        diag("expr.bind.1", here())
+        error_text("expr.bind.1", here(), "only a plain name can be declared with `:=`", "", "")
         return none
     ast.Stmt.Eval(target)
 
@@ -1111,28 +1176,82 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
     bump()
     mutable := eat_kw("mut")
     if at_sym("(")
-        diag("expr.loop.1", here())
+        error_text(
+            "expr.loop.1",
+            here(),
+            "AIL has no C-style `for`",
+            "loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions",
+            "write the range loop",
+        )
         return none
     v := take_name("a loop variable after `for`", "expr.loop.1")?
+    mut var := v.name
+    # type.tuple.5: `for a, b in xs` takes each element apart.
+    mut unpack := List[ast.Binder]()
     if at_sym(",")
-        diag("expr.loop.1", here())
-        return none
+        if mutable
+            diag("type.tuple.5", here())
+            return none
+        unpack = more_binders(ast.Binder(name: v.name, pos: v.pos, mutable: false), "type.tuple.5")?
+        var = hidden_name(unpack)
     if not eat_kw("in")
         unexpected("`in` after the loop variable", "expr.loop.1")
         return none
     iter := range()?
     # err.else.6: `for x in xs else []` (ADR 0252).
     iter2 := else_expr(iter)?
-    body := block("the `for` header", "expr.loop.1")?
+    mut body := block("the `for` header", "expr.loop.1")?
+    if unpack.len() > 0
+        value := ast.Expr.Name(name: var, pos: v.pos)
+        body.insert(0, ast.Stmt.LetTuple(names: unpack, value: value, pos: v.pos))
     ast.Stmt.For(
         is_par: is_par,
-        var: v.name,
+        var: var,
         var_pos: v.pos,
         mutable: mutable,
         iter: iter2,
         body: body,
         pos: pos,
     )
+
+## After the first name of `a, b := e` or `for a, b in`, at `,`: the first
+## and the other names, each `mut` only in a binding (type.tuple.4).
+fn Parser.more_binders(mut self, first ast.Binder, rule str) List[ast.Binder]?
+    mut names := [first]
+    while eat_sym(",")
+        mutable := rule == "type.tuple.4" and eat_kw("mut")
+        n := take_name("a name or `_` for the element", rule)?
+        names.push(ast.Binder(name: n.name, pos: n.pos, mutable: mutable))
+    names
+
+## At `a, b, ... :=`: names, each maybe `mut`, then `:=` on this line.
+fn Parser.at_let_tuple(self) bool
+    mut k := 0
+    while true
+        if kw_at(k) == "mut"
+            k += 1
+        if tag_at(k) != "id"
+            return false
+        s := sym_at(k + 1)
+        if s == ","
+            k += 2
+        elif s == ":="
+            return true
+        else
+            return false
+    false
+
+## `a, mut b := e` after the first name, at `,` (type.tuple.4).
+fn Parser.let_tuple(mut self, first ast.Binder) ast.Stmt?
+    names := more_binders(first, "type.tuple.4")?
+    expect_sym(":=", "`:=` after the names", "type.tuple.4")?
+    value := expression()?
+    ast.Stmt.LetTuple(names: names, value: value, pos: first.pos)
+
+## The hidden variable of `for a, b in xs` (type.tuple.5): `(a, b)`, which
+## no program can name.
+fn hidden_name(names List[ast.Binder]) str
+    "({[b.name for b in names].join(", ")})"
 
 ## The `else` part of a binding, if any (err.else.1-3); `none` after a
 ## syntax error.
@@ -1186,6 +1305,15 @@ fn Parser.comp_clauses(mut self) List[ast.CompFor]?
             diag("expr.comp.2", here())
             return none
         v := take_name("a variable after `for`", "expr.comp.2")?
+        mut var := v.name
+        # type.tuple.5: `[e for a, b in xs]`.
+        mut unpack := List[ast.Binder]()
+        if at_sym(",")
+            unpack = more_binders(
+                ast.Binder(name: v.name, pos: v.pos, mutable: false),
+                "type.tuple.5",
+            )?
+            var = hidden_name(unpack)
         if not eat_kw("in")
             unexpected("`in` after the comprehension's variable", "expr.comp.2")
             return none
@@ -1195,10 +1323,11 @@ fn Parser.comp_clauses(mut self) List[ast.CompFor]?
             cond = expression()?
         clauses.push(ast.CompFor(
             is_par: is_par,
-            var: v.name,
+            var: var,
             var_pos: v.pos,
             iter: iter,
             cond: cond,
+            unpack: unpack,
         ))
     clauses
 
@@ -1300,7 +1429,7 @@ fn Parser.comparison_expr(mut self) ast.Expr?
         if op == ast.BinOp.Lt and upper_name(lhs) and at_sym(">")
             error_fix("gram.foreign.1", pos, "type arguments are written in `[]`, not `<>`")
             return none
-        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true))
+        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true, help: "", fix: ""))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
 
@@ -1314,7 +1443,7 @@ fn upper_name(e ast.Expr) bool
             _,
             _,
             _,
-        ) | OrElse(_, _, _) | NewRef(_, _) => false
+        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => false
 
 fn Parser.additive(mut self) ast.Expr?
     mut lhs := multiplicative()?
@@ -1381,12 +1510,12 @@ fn name_of(e ast.Expr) str?
             _,
             _,
             _,
-        ) | OrElse(_, _, _) | NewRef(_, _) => none
+        ) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => none
 
 fn name_pos(e ast.Expr) ast.Pos
     match e
         Name(_, p) => p
-        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) => ast.Pos(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) | TupleLit(_, _) => ast.Pos(
             line: 0,
             col: 0,
         )
@@ -1417,6 +1546,14 @@ fn Parser.postfix(mut self) ast.Expr?
             args := call_args()?
             e = call_or_old(e, args, pos)
         elif eat_sym(".")
+            # type.tuple.3: `t.0`, an element of a tuple.
+            if tag_at(0) == "int"
+                k := match peek()
+                    Int(v) => "{v}"
+                    Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
+                kpos := bump().pos
+                e = ast.Expr.Member(recv: e, name: k, name_pos: kpos)
+                continue
             m := take_name("a field or method name after `.`", "gram.syntax.1")?
             recv_name := name_of(e) else ""
             # `m.Stack[int]` after an import `m` (gen.infer.2, mod.use.2).
@@ -1538,10 +1675,16 @@ fn Parser.primary(mut self) ast.Expr?
                 # expr.if.8: a parenthesised one-line `if` is an operand.
                 inner := if at_kw("if") then if_expr()? else range()?
                 inner2 := else_expr(inner)?
-                # AIL has no tuples: `(a, b)` is a list.
+                # type.tuple.2: `(a, b, ...)` is a tuple.
                 if at_sym(",")
-                    diag("gram.foreign.1", here())
-                    return none
+                    mut elems := [inner2]
+                    while eat_sym(",") and not at_sym(")")
+                        elems.push(expression()?)
+                    expect_sym(")", "`)` or `,` in the tuple", "type.tuple.2")?
+                    if elems.len() < 2
+                        diag("type.tuple.2", pos)
+                        return none
+                    return ast.Expr.TupleLit(items: elems, pos: pos)
                 expect_sym(")", "`)`", "gram.syntax.1")?
                 return inner2
             if s == "["
@@ -1628,7 +1771,14 @@ fn Parser.interpolation(mut self, parts List[Part], pos ast.Pos) ast.Expr?
                     and tok_tag(code[0].tok) == "sym"
                     and tok_text(code[0].tok) == "\{"
                     # lex.str.2: `{{` isn't an escape; `\{` is.
-                    diags.push(Diag(rule: "lex.str.2", pos: code[0].pos, msg: "", fixed: true))
+                    diags.push(Diag(
+                        rule: "lex.str.2",
+                        pos: code[0].pos,
+                        msg: "",
+                        fixed: true,
+                        help: "",
+                        fix: "",
+                    ))
                     ok = false
                 elif e := sub_expression(code)
                     out.push(ast.InterpPart.Hole(e))
@@ -1688,7 +1838,14 @@ fn Parser.if_expr(mut self) ast.Expr?
         elif at_kw("else")
             else_pos := bump().pos
             if at_kw("if")
-                diags.push(Diag(rule: "expr.if.1", pos: else_pos, msg: "", fixed: true))
+                diags.push(Diag(
+                    rule: "expr.if.1",
+                    pos: else_pos,
+                    msg: "",
+                    fixed: true,
+                    help: "",
+                    fix: "",
+                ))
                 return none
             # `else err` binds the error (expr.if.6).
             if n := ident()
@@ -1802,7 +1959,12 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 StrLit(_) | BoolLit(_) =>
                     diag("expr.match.12", pos)
                     return none
-        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) =>
+        Wildcard(_) | Alt(_, _) | Variant(
+            _,
+            _,
+            _,
+            _,
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) =>
             diag("expr.match.12", pos)
             return none
     i += 1
@@ -1818,7 +1980,12 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 IntLit(_) | CharLit(_) =>
                     return ast.Pattern.Range(lo: lo_lit, hi: value, inclusive: inclusive, pos: pos)
                 StrLit(_) | BoolLit(_) => i += 0
-        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) => i += 0
+        Wildcard(_) | Alt(_, _) | Variant(
+            _,
+            _,
+            _,
+            _,
+        ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) => i += 0
     diag("expr.match.12", hpos)
     none
 
@@ -1858,6 +2025,8 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
             i += 1
             return ast.Pattern.Literal(value: ast.Literal.IntLit("{v}"), pos: pos)
         Sym(s) =>
+            if s == "("
+                return tuple_pattern(pos)
             t := tag_at(1)
             if s == "-" and (t == "int" or t == "intmin")
                 i += 1
@@ -1885,3 +2054,23 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
         Bytes(_) | Newline | Indent | Dedent | Eof => i += 0
     unexpected("a pattern (a variant name or `_`)", "expr.match.4")
     none
+
+## `(p, q, ...)` at `(` (type.tuple.6); a plain name in it binds the element.
+fn Parser.tuple_pattern(mut self, pos ast.Pos) ast.Pattern?
+    i += 1
+    mut elems := List[ast.Pattern]()
+    while not at_sym(")")
+        s := sym_at(1)
+        n := ident() else ""
+        if n != "" and n != "_" and (s == "," or s == ")")
+            npos := bump().pos
+            elems.push(ast.Pattern.BindName(name: n, pos: npos))
+        else
+            elems.push(pattern()?)
+        if not eat_sym(",")
+            break
+    expect_sym(")", "`)` or `,` in the tuple pattern", "type.tuple.6")?
+    if elems.len() < 2
+        diag("type.tuple.6", pos)
+        return none
+    ast.Pattern.TuplePat(elems: elems, pos: pos)

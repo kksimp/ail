@@ -1,23 +1,36 @@
 ## The `help:` line for a `native.subset.1` problem (ADR 0722). The problem's
 ## message is written by `lower.ail` and its siblings; this file only reads it,
-## so the messages can change without touching the lowering. A message with no
-## entry here gets no help line. `owner` names the queued PR when the night-run
+## so the messages can change without touching the lowering. `owner` names the queued PR when the night-run
 ## merge order has one; `ail run` runs everything the backend refuses.
+
+## The help text for a message (native.subset.1 names the construct and the position; this line
+## says what to do). Every help tells the reader that `ail run` still runs the program: an entry
+## that doesn't say so gets the suffix, and a message with no entry gets the generic line. An
+## internal error has no help.
+pub fn subset_help(message str) str
+    if message.starts_with("internal error")
+        return ""
+    h := entry_help(message)
+    if h == ""
+        return "`ail run` runs this program"
+    if h.contains("`ail run`")
+        return h
+    return "{h}; or `ail run`"
 
 ## The help text for a message, or "" when no entry matches. The first match
 ## wins, so the more specific forms come first.
-pub fn subset_help(message str) str
+fn entry_help(message str) str
     if message.contains("calling `TaskGroup`")
         or message.contains("Channel[")
         or message.contains("calling `Mutex`")
         or message.contains("`spawn`")
         return "tasks and channels aren't native yet (owner: #194); `ail run` runs them"
-    if message.contains("maps")
-        or message.contains("Map[")
-        or message.contains("map comprehensions")
-        return "maps aren't native yet (owner: #180); keep a `List` of pairs or a struct list, or use `ail run`"
-    if message.contains("sets") or message.contains("set comprehensions")
-        return "sets aren't native yet (owner: #180); use a `List` with a loop, or `ail run`"
+    if message.contains("comprehension whose type isn't known")
+        return "a set or map comprehension is native with `int`, `bool`, `char` or `str` keys and an element type the loop finds; otherwise build it with a loop"
+    if message.contains("maps") or message.contains("Map[") or message.contains("a map of")
+        return "maps are native with `int`, `bool`, `char` or `str` keys (ADR 0568); `get` and `remove` need `else`; other keys, or `ail run`"
+    if message.contains("sets") or message.contains("Set[")
+        return "sets are native over `int`, `bool`, `char` and `str` (ADR 0568); other element types, or `ail run`"
     if message.contains("`==` on `str`") or message.contains("`!=` on `str`")
         return "string equality isn't native yet (owner: #184); compare the parts you need, or use `ail run`"
     if message.contains(".lines()")

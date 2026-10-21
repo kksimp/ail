@@ -58,13 +58,14 @@ pub struct Response {
     pub body: Vec<u8>,
 }
 
-/// A failure (std.net.4): the URL, its kind and a sentence for people.
+/// A failure (std.net.4; `bad_url` and `bad_request` fire before connecting, std.net.29): the URL, its kind and a sentence for people.
 pub struct NetFail {
     pub url: String,
     pub kind: &'static str,
     pub message: String,
 }
 
+// Every failure built here is a std.net.27 (connection, DNS, timeout) or std.net.28 (HTTP shape) cause.
 fn fail(url: &str, kind: &'static str, message: impl Into<String>) -> NetFail {
     NetFail { url: url.to_string(), kind, message: message.into() }
 }

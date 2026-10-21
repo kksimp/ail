@@ -75,14 +75,37 @@ fn u8_skip(p int, at int, k int) int
         left -= 1
     i
 
-## The characters in bytes `from` up to `to` of the string object at `p`.
+## The continuation bytes (`10xxxxxx`) in the eight bytes of `w`: bit 7 set
+## and bit 6 clear, one bit per byte, added up by a multiply.
+fn u8_cont8(w int) int
+    c := w
+        .bit_and(w.shl(1).bit_xor(-1))
+        .bit_and(-9187201950435737472)
+        .shr(7)
+        .bit_and(72340172838076673)
+    (c * 72340172838076673).shr(56).bit_and(255)
+
+## The characters in bytes `from` up to `to` of the string object at `p`, eight
+## bytes at a time (ADR 0768): each word has 8 minus its continuation bytes, the
+## last partial word is masked to its bytes. Reading the whole last word is
+## safe, as in `map_hash_str` (ADR 0766).
 fn u8_count(p int, from int, to int) int
     mut n := 0
     mut i := from
-    while i < to
-        if load8(p + 16 + i).bit_and(192) != 128
-            n += 1
-        i += 1
+    while i + 8 <= to
+        w := load64(p + 16 + i)
+        if w.bit_and(-9187201950435737472) == 0
+            n += 8
+        else
+            n += 8 - u8_cont8(w)
+        i += 8
+    if i < to
+        r := to - i
+        w := load64(p + 16 + i).bit_and(1.shl(8 * r) - 1)
+        if w.bit_and(-9187201950435737472) == 0
+            n += r
+        else
+            n += r - u8_cont8(w)
     n
 
 ## The string object holding bytes `from` up to `to` of the one at `p`.
@@ -98,7 +121,8 @@ fn str_sub(p int, from int, to int) str
 ## the message: 0 slice (`a`, `b` bounds, `n` length), 1 empty separator,
 ## 2 empty text to replace, 3 negative repeat count `a`, 5 bad radix `a`,
 ## 4 text over 2^30
-## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right).
+## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right, 3 center),
+## 6 empty text to count.
 fn str_trap(kind int, a int, b int, n int, head str, tail str)
     flush()
     out_str(head)
@@ -119,17 +143,22 @@ fn str_trap(kind int, a int, b int, n int, head str, tail str)
     elif kind == 5
         out_str("`to_digit` needs a radix from 2 to 36, not ")
         out_int(a)
+    elif kind == 6
+        out_str("`count` needs a non-empty text to find")
     else
         out_byte(96)
         if a == 0
             out_str("repeat")
         elif a == 1
             out_str("pad_left")
+        elif a == 3
+            out_str("center")
         else
             out_str("pad_right")
         out_str("` would build a text over 1073741824 bytes")
     out_byte(10)
     out_str(tail)
+    trace_frames(tail)
     flush_to(2)
     sys_exit(1)
 
@@ -145,11 +174,87 @@ fn str_cat(a str, b str) str
     copy_bytes(r + 16 + pn, q + 16, load64(q))
     str_at(r)
 
+## The bytes of the string object at `p` written at `dst`; the end.
+fn str_put(dst int, p int) int
+    n := load64(p)
+    copy_bytes(dst, p + 16, n)
+    dst + n
+
+## `"{a}{b}{c}"` and longer interpolations: the pieces joined in one
+## allocation (ADR 0768).
+fn str_cat3(a str, b str, c str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    r := str_new(load64(p) + load64(q) + load64(t), load64(p + 8) + load64(q + 8) + load64(t + 8))
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    str_put(d, t)
+    str_at(r)
+
+fn str_cat4(a str, b str, c str, e str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    str_put(d, u)
+    str_at(r)
+
+fn str_cat5(a str, b str, c str, e str, f str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    v := str_addr(f)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u) + load64(v),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8) + load64(v + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    d = str_put(d, u)
+    str_put(d, v)
+    str_at(r)
+
+fn str_cat6(a str, b str, c str, e str, f str, g str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    v := str_addr(f)
+    w := str_addr(g)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u) + load64(v) + load64(w),
+        load64(p + 8)
+            + load64(q + 8)
+            + load64(t + 8)
+            + load64(u + 8)
+            + load64(v + 8)
+            + load64(w + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    d = str_put(d, u)
+    d = str_put(d, v)
+    str_put(d, w)
+    str_at(r)
+
 ## `a == b`: the same UTF-8 bytes.
 fn str_eq(a str, b str) bool
     p := str_addr(a)
     q := str_addr(b)
     n := load64(p)
+    if p == q
+        return true
     if n != load64(q)
         return false
     mut i := 0
@@ -157,10 +262,9 @@ fn str_eq(a str, b str) bool
         if load64(p + 16 + i) != load64(q + 16 + i)
             return false
         i += 8
-    while i < n
-        if load8(p + 16 + i) != load8(q + 16 + i)
-            return false
-        i += 1
+    if i < n
+        # The last partial word, read whole and masked to its bytes (ADR 0766).
+        return load64(p + 16 + i).bit_xor(load64(q + 16 + i)).bit_and(1.shl(8 * (n - i)) - 1) == 0
     true
 
 ## -1, 0 or 1 as `a` is before, equal to or after `b` by bytes, which is by
@@ -172,6 +276,10 @@ fn str_cmp(a str, b str) int
     qn := load64(q)
     n := if pn < qn then pn else qn
     mut i := 0
+    # Equal words are skipped eight bytes at a time; the first word that
+    # differs is settled byte by byte.
+    while i + 8 <= n and load64(p + 16 + i) == load64(q + 16 + i)
+        i += 8
     while i < n
         x := load8(p + 16 + i)
         y := load8(q + 16 + i)
@@ -196,13 +304,13 @@ fn str_char(c int) str
     u8_put(r + 16, c)
     str_at(r)
 
-## `s.pad_left(width, fill)` (align 1) and `s.pad_right` (align 0)
-## (type.str.9, type.str.15).
+## `s.pad_left(width, fill)` (align 1), `s.pad_right` (align 0) and
+## `s.center` (align 2) (type.str.9, type.str.16, type.str.15).
 fn str_pad_checked(s str, width int, fill int, align int, head str, tail str) str
     if width <= 0
         return s
     if width > 1073741824 or width * u8_size(fill) > 1073741824
-        str_trap(4, if align == 1 then 1 else 2, 0, 0, head, tail)
+        str_trap(4, if align == 1 then 1 else if align == 2 then 3 else 2, 0, 0, head, tail)
     fmt_pad(s, width, str_char(fill), align)
 
 # ---- slicing and searching (type.str.13-14) ----
@@ -218,16 +326,44 @@ fn str_slice(s str, a int, b int, head str, tail str) str
     from := u8_skip(p, 0, a)
     str_sub(p, from, u8_skip(p, from, b - a))
 
+## Whether the bytes of `q` after its first match those of `p` at `i`.
+fn bytes_tail_eq(p int, q int, i int, m int) bool
+    mut k := 1
+    while k < m and load8(p + 16 + i + k) == load8(q + 16 + k)
+        k += 1
+    k == m
+
 ## The byte offset of the first `sub` in `s` at or after byte `from`, or -1.
+## Eight bytes at a time look for the first byte of `sub`: a word xored with
+## it has a zero byte where it occurs, found by the usual subtract-and-mask
+## test, whose lowest flagged byte is exact (ADR 0768).
 fn bytes_find(p int, q int, from int) int
     n := load64(p)
     m := load64(q)
+    if m == 0
+        return if from <= n then from else -1
+    c := load8(q + 16)
+    pat := c * 72340172838076673
+    last := n - m
     mut i := from
-    while i + m <= n
-        mut k := 0
-        while k < m and load8(p + 16 + i + k) == load8(q + 16 + k)
-            k += 1
-        if k == m
+    while i <= last
+        if i + 8 <= n
+            x := load64(p + 16 + i).bit_xor(pat)
+            mut z := (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472)
+            if z == 0
+                i += 8
+                continue
+            mut k := 0
+            while z.bit_and(128) == 0
+                z = z.shr(8)
+                k += 1
+            i += k
+            if i > last
+                return -1
+        elif load8(p + 16 + i) != c
+            i += 1
+            continue
+        if bytes_tail_eq(p, q, i, m)
             return i
         i += 1
     -1
@@ -346,6 +482,14 @@ fn str_chars(s str) List[int]
     p := str_addr(s)
     n := load64(p)
     out := list_new(load64(p + 8))
+    if load64(p + 8) == n
+        # One byte per character: store the bytes in place.
+        lp := list_addr(out)
+        data := load64(lp + 16)
+        for k in 0..n
+            store64(data + 8 * k, load8(p + 16 + k))
+        store64(lp, n)
+        return out
     mut i := 0
     while i < n
         list_push(out, u8_get(p + 16 + i))
@@ -587,13 +731,17 @@ fn str_to_upper(s str) str
 fn str_to_lower(s str) str
     str_map_case(s, false)
 
-## `s.trim()`: without the White_Space characters at both ends.
-fn str_trim(s str) str
-    p := str_addr(s)
+## The byte offset of the first character of `s` that is not White_Space.
+fn str_trim_from(p int, n int) int
     mut a := 0
-    mut b := load64(p)
-    while a < b and char_is_space(u8_get(p + 16 + a))
+    while a < n and char_is_space(u8_get(p + 16 + a))
         a += u8_width(load8(p + 16 + a))
+    a
+
+## The byte offset just after the last character at or after `a` that is not
+## White_Space.
+fn str_trim_to(p int, a int, n int) int
+    mut b := n
     while b > a
         mut j := b - 1
         while load8(p + 16 + j).bit_and(192) == 128
@@ -601,9 +749,84 @@ fn str_trim(s str) str
         if not char_is_space(u8_get(p + 16 + j))
             break
         b = j
-    if a == 0 and b == load64(p)
+    b
+
+## `s.trim()`: without the White_Space characters at both ends.
+fn str_trim(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    a := str_trim_from(p, n)
+    b := str_trim_to(p, a, n)
+    if a == 0 and b == n
         return s
     str_sub(p, a, b)
+
+## `s.trim_start()` (type.str.17).
+fn str_trim_start(s str) str
+    p := str_addr(s)
+    a := str_trim_from(p, load64(p))
+    if a == 0
+        return s
+    str_sub(p, a, load64(p))
+
+## `s.trim_end()` (type.str.17).
+fn str_trim_end(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    b := str_trim_to(p, 0, n)
+    if b == n
+        return s
+    str_sub(p, 0, b)
+
+## `s.words()`: the pieces between runs of White_Space, none empty (type.str.17).
+fn str_words(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    out := list_new(4)
+    mut start := -1
+    mut i := 0
+    while i < n
+        w := u8_width(load8(p + 16 + i))
+        if char_is_space(u8_get(p + 16 + i))
+            if start >= 0
+                list_push(out, str_to_obj(str_sub(p, start, i)))
+                start = -1
+        elif start < 0
+            start = i
+        i += w
+    if start >= 0
+        list_push(out, str_to_obj(str_sub(p, start, n)))
+    out
+
+## `s.count(sub)`: the non-overlapping occurrences (type.str.18).
+fn str_count(s str, sub str, head str, tail str) int
+    p := str_addr(s)
+    q := str_addr(sub)
+    m := load64(q)
+    if m == 0
+        str_trap(6, 0, 0, 0, head, tail)
+    mut hits := 0
+    mut at := bytes_find(p, q, 0)
+    while at >= 0
+        hits += 1
+        at = bytes_find(p, q, at + m)
+    hits
+
+## `s.rfind(sub)`: the boxed character index of the last occurrence, or 0
+## (type.str.18). The last occurrence may overlap the one before it.
+fn str_rfind_opt(s str, sub str) int
+    p := str_addr(s)
+    q := str_addr(sub)
+    if load64(q) == 0
+        return box(load64(p + 8))
+    mut last := -1
+    mut at := bytes_find(p, q, 0)
+    while at >= 0
+        last = at
+        at = bytes_find(p, q, at + 1)
+    if last < 0
+        return 0
+    box(u8_count(p, 0, last))
 
 # ---- printing (type.char.1, trait.auto.2) ----
 

@@ -97,9 +97,9 @@ fn load_package(
             }
             let src = match first_src.take() {
                 Some(src) => src,
-                None => match crate::stdlib::ail_module_source(&p.display().to_string()) {
+                None => match crate::stdlib::ail_module_source(&crate::shown::shown(&p)) {
                     Some(src) => src.to_string(),
-                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", crate::shown::shown(&p)))?,
                 },
             };
             let base = files.len() * FILE_LINES;
@@ -134,7 +134,7 @@ fn load_package(
                 }
             }
             tokens.extend(toks);
-            files.push(SourceFile { path: p.display().to_string(), src, module: module.clone(), base });
+            files.push(SourceFile { path: crate::shown::shown(&p), src, module: module.clone(), base });
         }
     }
     let end = Pos { line: files.len() * FILE_LINES, col: 1 };
@@ -244,7 +244,11 @@ fn scan_uses(tokens: &[Token]) -> Vec<Vec<String>> {
                         _ => break,
                     }
                 }
-                out.push(path);
+                // A `use` with no name (`use`, `use 5`) has no path to load; the
+                // parser reports it as mod.use.1 (lane diag-checker-fixes).
+                if !path.is_empty() {
+                    out.push(path);
+                }
             }
             _ => {}
         }
@@ -409,6 +413,23 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         imports[fi].insert(name.to_string(), target.unwrap_or(Target::Std));
     }
     report_cycles(&edges, diags);
+    // Generated code (ct.gen.1) sees the imports of its module's files, so a
+    // generator can name `args.flag` for a program that has `use std.args`
+    // (ct.derive.6).
+    for gi in 0..prog.files.len() {
+        if !prog.files[gi].path.starts_with("gen:impl:") {
+            continue;
+        }
+        let mut merged = HashMap::default();
+        for (fi, f) in prog.files.iter().enumerate() {
+            if fi != gi && f.module == prog.files[gi].module && !f.path.starts_with("gen:") {
+                for (k, v) in &imports[fi] {
+                    merged.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+        }
+        imports[gi] = merged;
+    }
 
     // Rename each module's declarations to their qualified names, so that
     // implicit `self` sees each type's own members (trait.method.6).
@@ -670,6 +691,7 @@ impl Cx<'_> {
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
             TypeKind::Optional(inner) | TypeKind::Ref(inner) | TypeKind::Ptr(inner) => self.type_ref(inner),
+            TypeKind::Tuple(elems) => elems.iter_mut().for_each(|e| self.type_ref(e)),
             TypeKind::Fn { params, ret } => {
                 params.iter_mut().for_each(|p| self.type_ref(p));
                 if let Some(r) = ret {
@@ -739,6 +761,12 @@ impl Cx<'_> {
             }
             Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::LetTuple { names, value, .. } => {
+                self.expr(value);
+                for b in names.iter() {
+                    self.local(&b.name, b.pos);
+                }
+            }
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -771,7 +799,8 @@ impl Cx<'_> {
                     self.local(name, *pos);
                 }
             }
-            Pattern::Or(alts, _) => alts.iter_mut().for_each(|a| self.pattern(a)),
+            Pattern::Or(alts, _) | Pattern::Tuple(alts, _) => alts.iter_mut().for_each(|a| self.pattern(a)),
+            Pattern::Bind(name, pos) => self.local(name, *pos),
             Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
@@ -832,7 +861,7 @@ impl Cx<'_> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
             Expr::Map(pairs, _) => pairs.iter_mut().for_each(|(k, v)| {
                 self.expr(k);
                 self.expr(v);
@@ -841,6 +870,9 @@ impl Cx<'_> {
                 for c in clauses.iter_mut() {
                     self.expr(&mut c.iter);
                     self.local(&c.var, c.var_pos);
+                    for b in c.unpack.iter() {
+                        self.local(&b.name, b.pos);
+                    }
                     if let Some(cond) = &mut c.cond {
                         self.expr(cond);
                     }

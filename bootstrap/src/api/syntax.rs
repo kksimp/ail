@@ -305,6 +305,7 @@ fn program(p: &Program) -> J {
             ])
         })),
         ("unsafe_allowed", opt(&p.unsafe_allowed, |l| arr(l, |p| s(p)))),
+        ("driver_allowed", arr(&p.driver_list(), |p| s(p))),
         ("generated", arr(&p.generated, |g| {
             J::Obj(vec![
                 ("file", n(g.file)),
@@ -444,6 +445,7 @@ fn ty(t: &TypeRef) -> J {
         TypeKind::Fn { params, ret } => {
             variant("FnType", vec![("params", arr(params, ty)), ("ret", opt(ret, |r| ty(r)))])
         }
+        TypeKind::Tuple(elems) => variant("TupleType", vec![("elems", arr(elems, ty))]),
     };
     J::Obj(vec![("shape", shape), ("pos", pos(t.pos))])
 }
@@ -482,6 +484,10 @@ fn stmt(st: &Stmt) -> J {
                 ("value", expr(value)),
                 ("otherwise", opt(otherwise, otherwise_part)),
             ],
+        ),
+        Stmt::LetTuple { names, value, pos: p } => variant(
+            "LetTuple",
+            vec![("names", arr(names, binder)), ("value", expr(value)), ("pos", pos(*p))],
         ),
         Stmt::Assign { target, op, value, pos: p } => variant(
             "Assign",
@@ -523,6 +529,10 @@ fn stmt(st: &Stmt) -> J {
             ],
         ),
     }
+}
+
+fn binder(b: &Binder) -> J {
+    J::Obj(vec![("name", s(&b.name)), ("pos", pos(b.pos)), ("mutable", J::Bool(b.mutable))])
 }
 
 fn otherwise_part(e: &Else) -> J {
@@ -618,6 +628,7 @@ fn expr(e: &Expr) -> J {
             ],
         ),
         Expr::Set(items, p) => variant("SetLit", vec![("items", arr(items, expr)), ("pos", pos(*p))]),
+        Expr::Tuple(items, p) => variant("TupleLit", vec![("items", arr(items, expr)), ("pos", pos(*p))]),
         Expr::If { branches, els, else_err, pos: p } => variant(
             "If",
             vec![
@@ -656,6 +667,7 @@ fn expr(e: &Expr) -> J {
                         ("var_pos", pos(c.var_pos)),
                         ("iter", expr(&c.iter)),
                         ("cond", opt(&c.cond, expr)),
+                        ("unpack", arr(&c.unpack, binder)),
                     ])
                 })),
                 ("pos", pos(*p)),
@@ -688,6 +700,8 @@ fn pattern(p: &Pattern) -> J {
             vec![("lo", literal(lo)), ("hi", literal(hi)), ("inclusive", J::Bool(*inclusive)), ("pos", pos(*at))],
         ),
         Pattern::Or(alts, at) => variant("Alt", vec![("alts", arr(alts, pattern)), ("pos", pos(*at))]),
+        Pattern::Tuple(elems, at) => variant("TuplePat", vec![("elems", arr(elems, pattern)), ("pos", pos(*at))]),
+        Pattern::Bind(name, at) => variant("BindName", vec![("name", s(name)), ("pos", pos(*at))]),
         Pattern::Variant { qualifier, name, bindings, pos: at } => variant(
             "Variant",
             vec![

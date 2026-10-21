@@ -5,6 +5,10 @@
 ## needs no fixups and loads at any slide. The writer signs the file ad hoc
 ## itself, as Apple Silicon requires: a code directory of SHA-256 page
 ## hashes, as `codesign -s -` writes.
+##
+## Calls into libSystem (native-abi.md §11) are pointers in the slots after
+## the globals, which dyld fills at load from a bind table in __LINKEDIT
+## (`LC_DYLD_INFO_ONLY`, opcodes). A program with none is laid out as before.
 use codegen
 
 MACHO_BASE := 4294967296
@@ -13,16 +17,18 @@ HEADER := 32
 
 ## The executable, signed with `ident` as its identifier.
 pub fn macho(img codegen.Image, ident str) List[int]
-    cmds := load_commands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    bind := bind_info(img)
+    cmds := load_commands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bind.len()])
     code_off := align_up(HEADER + cmds.len(), 16)
     data_off := align_up(code_off + img.code.len(), 16)
     text_size := align_up(data_off + img.data.len(), MACHO_PAGE)
     bss := MACHO_BASE + text_size
-    bss_size := align_up(8 * img.globals, MACHO_PAGE)
+    bss_size := align_up(8 * (img.globals + img.imports.len()), MACHO_PAGE)
     link_off := text_size
     # __LINKEDIT: a string table of 8 bytes, then the signature.
     strings := 8
-    sig_off := align_up(link_off + strings, 16)
+    bind_off := link_off + strings
+    sig_off := align_up(bind_off + bind.len(), 16)
     name := codegen.utf8(ident)
     slots := (sig_off + 4095) / 4096
     cd_size := 88 + name.len() + 1 + 32 * slots
@@ -46,8 +52,10 @@ pub fn macho(img codegen.Image, ident str) List[int]
         img.code.len(),
         data_off,
         img.data.len(),
+        bind_off,
+        bind.len(),
     ])
-    put(mut out, COMMANDS, 4)
+    put(mut out, if bind.len() > 0 then COMMANDS + 1 else COMMANDS, 4)
     put(mut out, final.len(), 4)
     # MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL | MH_PIE
     put(mut out, 2097285, 4)
@@ -57,11 +65,41 @@ pub fn macho(img codegen.Image, ident str) List[int]
     out.extend(code)
     pad_to(mut out, data_off)
     out.extend(img.data)
+    pad_to(mut out, bind_off)
+    out.extend(bind)
     pad_to(mut out, sig_off)
     sign(mut out, name, slots, text_size)
     out
 
 COMMANDS := 11
+
+## The bind table: each import's pointer slot in __DATA (segment 2), bound to
+## the symbol of libSystem (dylib ordinal 1). Empty without imports.
+fn bind_info(img codegen.Image) List[int]
+    mut b := List[int]()
+    if img.imports.len() == 0
+        return b
+    b.push(17)
+    for k in 0..img.imports.len()
+        # SET_SYMBOL_TRAILING_FLAGS_IMM 0, the name; SET_TYPE_IMM pointer;
+        # SET_SEGMENT_AND_OFFSET_ULEB 2, the offset; DO_BIND.
+        b.push(64)
+        b.extend(codegen.utf8(img.imports[k]))
+        b.push(0)
+        b.push(81)
+        b.push(114)
+        uleb(mut b, 8 * (img.globals + k))
+        b.push(144)
+    b.push(0)
+    pad_to(mut b, align_up(b.len(), 8))
+    b
+
+fn uleb(mut b List[int], n int)
+    mut v := n
+    while v >= 128
+        b.push(v.bit_and(127) + 128)
+        v = v.shr(7)
+    b.push(v)
 
 ## The load commands, from the layout `v`: the sizes and offsets of
 ## __TEXT, __bss, __LINKEDIT, the entry, the signature, the code and the
@@ -95,6 +133,16 @@ fn load_commands(v List[int]) List[int]
     put(mut c, 0, 4)
     put(mut c, link_off, 4)
     put(mut c, 8, 4)
+    # LC_DYLD_INFO_ONLY: only a bind table, when the code imports anything.
+    if v[12] > 0
+        put(mut c, 2147483682, 4)
+        put(mut c, 48, 4)
+        put(mut c, 0, 4)
+        put(mut c, 0, 4)
+        put(mut c, v[11], 4)
+        put(mut c, v[12], 4)
+        for _ in 0..6
+            put(mut c, 0, 4)
     # LC_DYSYMTAB, all empty.
     put(mut c, 11, 4)
     put(mut c, 80, 4)

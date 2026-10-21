@@ -201,6 +201,13 @@ pub fn Asm.mov_mi(mut self, m Mem, v int)
     modrm_mem(0, m, 4)
     u32(v)
 
+## `mov byte [m], imm8`.
+pub fn Asm.mov8_mi(mut self, m Mem, v int)
+    rex(0, 0, index_of(m), base_of(m), false)
+    byte(198)
+    modrm_mem(0, m, 1)
+    byte(v)
+
 pub fn Asm.movzx8_rm(mut self, dst int, m Mem)
     rex(0, dst, index_of(m), base_of(m), false)
     byte(15)
@@ -364,6 +371,11 @@ pub fn Asm.call_sym(mut self, sym str)
     fixups.push(Fixup(at: code.len(), label: -1, sym: sym, tail: 0))
     u32(0)
 
+pub fn Asm.call_reg(mut self, r int)
+    rex(0, 0, 0, r, false)
+    byte(255)
+    byte(208 + low(r))
+
 pub fn Asm.ret(mut self)
     byte(195)
 
@@ -378,6 +390,20 @@ pub fn Asm.pop(mut self, r int)
 pub fn Asm.syscall(mut self)
     byte(15)
     byte(5)
+
+## Atomic read-modify-write on a 64-bit memory operand (ADR 0600): `xchg`
+## is implicitly locked; `cmpxchg` compares with and returns in rax; `xadd`
+## returns the old value in `r`.
+pub fn Asm.xchg_mr(mut self, m Mem, r int)
+    op_rm(false, 135, r, m)
+
+pub fn Asm.lock_cmpxchg(mut self, m Mem, r int)
+    byte(240)
+    op_rm(true, 177, r, m)
+
+pub fn Asm.lock_xadd(mut self, m Mem, r int)
+    byte(240)
+    op_rm(true, 193, r, m)
 
 pub fn Asm.ud2(mut self)
     byte(15)
@@ -414,10 +440,14 @@ fn Asm.vex_rm(mut self, pp int, map int, w int, op int, reg int, vvvv int, m Mem
     modrm_mem(reg, m, tail)
 
 fn Asm.vex_prefix(mut self, pp int, map int, w int, r int, x int, b int, vvvv int)
+    vex_prefix_l(pp, map, w, r, x, b, vvvv, 0)
+
+## The same with the vector length bit `l`: 0 for 128 bits and scalars, 1 for 256.
+fn Asm.vex_prefix_l(mut self, pp int, map int, w int, r int, x int, b int, vvvv int, l int)
     nr := 1 - ext(r)
     nx := 1 - ext(x)
     nb := 1 - ext(b)
-    tail := (15 - vvvv) * 8 + pp
+    tail := (15 - vvvv) * 8 + l * 4 + pp
     if map == 1 and w == 0 and nx == 1 and nb == 1
         byte(197)
         byte(nr * 128 + tail)
@@ -474,6 +504,54 @@ pub fn Asm.vroundsd(mut self, dst int, a int, b int, mode int)
 ## `vucomisd a, b`: the flags of comparing `a` with `b`.
 pub fn Asm.vucomisd(mut self, a int, b int)
     vex_rr(1, 1, 0, 46, a, 0, b)
+
+## `vcvtsd2ss dst, a, b` and `vcvtss2sd dst, a, b`: `b`'s low double as a
+## single in `dst`, and back.
+pub fn Asm.vcvtsd2ss(mut self, dst int, a int, b int)
+    vex_rr(3, 1, 0, 90, dst, a, b)
+
+pub fn Asm.vcvtss2sd(mut self, dst int, a int, b int)
+    vex_rr(2, 1, 0, 90, dst, a, b)
+
+# ---- 256-bit packed double operations (AVX), for the vector kernels ----
+
+fn Asm.vex256_rr(mut self, pp int, map int, op int, reg int, vvvv int, rm int)
+    vex_prefix_l(pp, map, 0, reg, 0, rm, vvvv, 1)
+    byte(op)
+    modrm_reg(reg, rm)
+
+fn Asm.vex256_rm(mut self, pp int, map int, op int, reg int, vvvv int, m Mem)
+    vex_prefix_l(pp, map, 0, reg, index_of(m), base_of(m), vvvv, 1)
+    byte(op)
+    modrm_mem(reg, m, 0)
+
+## `vmovupd ymm, [m]` and `vmovupd [m], ymm`.
+pub fn Asm.vmovupd_rm(mut self, dst int, m Mem)
+    vex256_rm(1, 1, 16, dst, 0, m)
+
+pub fn Asm.vmovupd_mr(mut self, m Mem, src int)
+    vex256_rm(1, 1, 17, src, 0, m)
+
+## `vaddpd`, `vsubpd`, `vmulpd`, `vdivpd` on ymm registers: `dst = a op b`.
+pub fn Asm.vpd256_rrr(mut self, op str, dst int, a int, b int)
+    vex256_rr(1, 1, sd_opcode(op), dst, a, b)
+
+## `vbroadcastsd ymm, xmm`: the low double in all four lanes.
+pub fn Asm.vbroadcastsd(mut self, dst int, src int)
+    vex256_rr(1, 2, 25, dst, 0, src)
+
+## `vcvtpd2ps xmm, ymm` (four doubles to four singles) and
+## `vcvtps2pd ymm, xmm`.
+pub fn Asm.vcvtpd2ps(mut self, dst int, src int)
+    vex256_rr(1, 1, 90, dst, 0, src)
+
+pub fn Asm.vcvtps2pd(mut self, dst int, src int)
+    vex256_rr(0, 1, 90, dst, 0, src)
+
+pub fn Asm.vzeroupper(mut self)
+    byte(197)
+    byte(248)
+    byte(119)
 
 ## `vcvtsi2sd dst, dst, r64` and `vcvttsd2si r64, xmm`.
 pub fn Asm.vcvtsi2sd(mut self, dst int, src int)

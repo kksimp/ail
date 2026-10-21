@@ -67,6 +67,7 @@ impl<W: Write> Interp<'_, W> {
                 }
             });
         }
+        // std.regex.26: the escaped pattern matches its text as plain text.
         if f == "escape" {
             return Ok(text(regex::escape(&str_arg(0))));
         }
@@ -80,7 +81,7 @@ impl<W: Write> Interp<'_, W> {
             },
             "find_all" => {
                 let ms = prog.find_all(&chars, 2, usize::MAX);
-                Value::List(Rc::new(ms.iter().map(|m| self.match_value(&chars, m)).collect()))
+                Value::list(ms.iter().map(|m| self.match_value(&chars, m)).collect())
             }
             "group_all" => {
                 let Value::Int(g) = values[2] else { unreachable!("checked: an int group") };
@@ -93,11 +94,11 @@ impl<W: Write> Interp<'_, W> {
                 }
                 let g = g as usize;
                 let ms = prog.find_all(&chars, 2 * prog.groups, usize::MAX);
-                Value::List(Rc::new(
+                Value::list(
                     ms.iter()
                         .map(|m| if m[2 * g] == UNSET { text("") } else { text(regex::slice(&chars, m[2 * g], m[2 * g + 1])) })
                         .collect(),
-                ))
+                )
             }
             "captures" => match prog.exec(&chars, 0, 2 * prog.groups, false) {
                 None => Value::None,
@@ -114,7 +115,7 @@ impl<W: Write> Interp<'_, W> {
                     Value::Struct(s, Rc::new(vec![
                         Value::Int(m[0] as i64),
                         Value::Int(m[1] as i64),
-                        Value::List(Rc::new(groups)),
+                        Value::list(groups),
                         Value::Map(Rc::new(named)),
                     ]))
                 }
@@ -129,7 +130,7 @@ impl<W: Write> Interp<'_, W> {
                 let limit = if f == "replace" { usize::MAX } else { 1 };
                 text(regex::replace(&prog, &chars, &parts, limit))
             }
-            "split" => Value::List(Rc::new(regex::split(&prog, &chars).into_iter().map(text).collect())),
+            "split" => Value::list(regex::split(&prog, &chars).into_iter().map(text).collect()),
             _ => unreachable!("stdlib::MODULES lists `regex.{f}`"),
         })
     }

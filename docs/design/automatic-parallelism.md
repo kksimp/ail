@@ -270,7 +270,32 @@ in CPython (Linux x86-64). Also done: `conv2d`, NumPy-style broadcasting,
 chains ([ADR 0524](../decisions/0524-tensor-operator-fusion.md)) runs one
 chunked pass: on 1,000,000 elements, 20 passes of a five-operator chain take
 0.29 s fused against 0.41–0.46 s unfused (a per-element version was slower,
-1.01 s). Still open: `f32`.
+1.01 s); chains over `Tensor[f32]` fuse too (2026-10-21: `f32_chain` loop 0.19 s to 0.12 s, whole program 0.43 s to 0.35 s median of 5). `Tensor[f32]` is done ([ADR 0796](../decisions/0796-tensor-f32.md)): packed 4-byte elements with 8-wide AVX2 and 4-wide NEON kernels, in lockstep with scalar.
+
+**Against NumPy (2026-10-21, Linux x86-64, lane 154).** Three fair twins in
+`tools/perfbench/numpy/` (`NAME.ail`, `NAME.py`; same algorithm, same printed
+output, which the runner checks), run by `tools/perfbench/numpy/run.sh`:
+min of 5 wall times, `ail run` (check and startup included) against CPython
+plus NumPy 2.5 (`python3 -I`, interpreter start and `import numpy`, about
+0.13 s, included). Tokens are the five-tokenizer mean from `tools/tokbench`.
+
+| Program | What it does | ail s | numpy s | ail/numpy | tokens ail | tokens numpy | ratio |
+|---|---|---|---|---|---|---|---|
+| f32_chain | `(x*x + x)*0.5 - x` on 2^20 `f32`, 20 rounds | 0.50 | 0.36 | 1.38 | 165.6 | 118.4 | 1.40 |
+| f32_matmul | 256x256 `f32` product, 5 rounds | 0.065 | 0.121 | 0.54 | 187.4 | 145.8 | 1.29 |
+| softmax | 512x512 rows, `float` and `f32`, 20 rounds | 0.23 | 0.24 | 0.93-1.03 | 251.2 | 231.2 | 1.09 |
+
+Reading it: the machine is noisy (repeat runs moved f32_chain between 0.39 and
+0.50 s), and NumPy's time includes about 0.13 s of import, so without it NumPy
+is ahead on the elementwise chain and on softmax (`exp` is scalar code here,
+std.tensor.24) and AIL is ahead on the matmul, where the pooled kernel runs
+across cores. AIL uses 8-40% more tokens than NumPy on all three: `to_f32()`
+and the list comprehension that builds the input cost tokens NumPy's
+`astype(np.float32)` and `arange` do not. Native: `ail build` reports
+`native.subset.1` for all three, because `std.tensor` is not in the native
+subset yet (lane 174), so there is no native column; the runner reports it as
+`no` and will pick it up once it builds.
+
 
 1. **`std.tensor` on the CPU in the bootstrap** (about one lane-night):
    the type, the operations, lazy graph, exact CPU evaluation, tests. This

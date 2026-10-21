@@ -25,7 +25,7 @@ fn list_extend(xs List[int], ys List[int], size int)
     k := load64(q)
     while n + k > load64(p + 8)
         list_grow(p, size)
-    copy_bytes(load64(p + 16) + size * n, load64(q + 16), size * k)
+    copy_list(load64(p + 16) + size * n, load64(q + 16), size * k)
     store64(p, n + k)
 
 ## `xs.remove_at(i)`, the index already checked.
@@ -178,3 +178,101 @@ fn list_eq(xs List[int], ys List[int], kind int, size int) bool
         if not list_word_eq(kind, list_get_word(a, size, i), list_get_word(b, size, i))
             return false
     true
+
+## `xs.index_of(x)`: the index of the first equal element, or -1 (type.coll.9).
+fn list_index_of(xs List[int], w int, kind int, size int) int
+    p := list_addr(xs)
+    data := load64(p + 16)
+    for i in 0..load64(p)
+        if list_word_eq(kind, list_get_word(data, size, i), w)
+            return i
+    -1
+
+## `xs.min()` and `xs.max()` (type.coll.11): the index of the first least
+## (`greatest` 0) or first greatest element, or -1 for an empty list.
+fn list_extreme(xs List[int], kind int, greatest int) int
+    p := list_addr(xs)
+    n := load64(p)
+    if n == 0
+        return -1
+    data := load64(p + 16)
+    mut best := 0
+    for i in 1..n
+        a := load64(data + 8 * i)
+        b := load64(data + 8 * best)
+        if greatest == 0
+            if list_word_lt(kind, a, b)
+                best = i
+        elif list_word_lt(kind, b, a)
+            best = i
+    best
+
+## `xs.swap(i, j)` for indexes already checked (type.coll.7).
+fn list_swap(xs List[int], i int, j int, size int)
+    data := load64(list_addr(xs) + 16)
+    a := list_get_word(data, size, i)
+    list_set_word(data, size, i, list_get_word(data, size, j))
+    list_set_word(data, size, j, a)
+
+## `xs.sum()` of integers (type.coll.12): left to right, trapping on overflow.
+## `head` and `tail` are the trap's first line and excerpt.
+## `xs.take(n)` (type.coll.15): the first `n` elements, or all of them; a
+## negative `n` traps.
+fn list_take(xs List[int], n int, size int, head str, tail str) List[int]
+    if n < 0
+        flush()
+        out_str(head)
+        out_str("`take` needs a count of at least 0, not ")
+        out_int(n)
+        out_str("\n")
+        out_str(tail)
+        trace_frames(tail)
+        flush_to(2)
+        sys_exit(1)
+    len := load64(list_addr(xs))
+    list_slice(xs, 0, if n < len then n else len, size)
+
+fn list_sum_int(xs List[int], head str, tail str) int
+    p := list_addr(xs)
+    data := load64(p + 16)
+    mut s := 0
+    for i in 0..load64(p)
+        v := load64(data + 8 * i)
+        t := s + v
+        if (v >= 0 and t < s) or (v < 0 and t > s)
+            flush()
+            out_str(head)
+            out_str("`sum` overflows `int`\n")
+            out_str(tail)
+            trace_frames(tail)
+            flush_to(2)
+            sys_exit(1)
+        s = t
+    s
+
+## The fixed summation tree of a float list (type.coll.12), over `lo..hi`.
+fn list_sum_tree(data int, lo int, hi int) float
+    n := hi - lo
+    if n <= 32
+        mut p0 := 0.0
+        mut p1 := 0.0
+        mut p2 := 0.0
+        mut p3 := 0.0
+        for i in 0..n
+            v := bits_float(load64(data + 8 * (lo + i)))
+            k := i % 4
+            if k == 0
+                p0 += v
+            elif k == 1
+                p1 += v
+            elif k == 2
+                p2 += v
+            else
+                p3 += v
+        return (p0 + p1) + (p2 + p3)
+    m := 32 * ((n + 63) / 64)
+    list_sum_tree(data, lo, lo + m) + list_sum_tree(data, lo + m, hi)
+
+fn list_sum_float(xs List[int]) float
+    p := list_addr(xs)
+    list_sum_tree(load64(p + 16), 0, load64(p))

@@ -818,6 +818,12 @@ status is 2 when there are errors, 0 otherwise. The files are written even
 when there are errors, unless `--if-clean` is given.
 **edit.out.3** — `--dry-run` writes nothing and prints a unified diff of
 each file that would change; `--diff` prints the diff and writes.
+A single existing file is checked from memory, so a preview or a refused
+edit never changes it on disk, not even for a moment. Known limitation: for a
+package (a directory path) or an edit that adds a file, the new state is
+written, checked and put back, so a program reading those files at that moment
+can see the edited text. Writes go to a temporary file beside the target and
+are renamed over it.
 **edit.out.4** — `--test` runs `ail test PATH` after an edit that was
 written without errors, and its report and exit status follow the summary.
 

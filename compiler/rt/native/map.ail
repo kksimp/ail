@@ -10,7 +10,7 @@
 ## Object (a Set uses the same layout and ignores the value word):
 ##   +0 len     live entries        +8 used     array slots used, live or dead
 ##   +16 ecap   array capacity      +24 mask    index size - 1 (a power of two)
-##   +32 kind   0 int, 1 str, 2 bool keys
+##   +32 kind   0 int, 1 str, 2 bool, 4 char keys
 ##   +40 ents   ecap * 24 bytes: hash (-1 when dead), key, value
 ##   +48 index  (mask + 1) * 8 bytes: 0 empty, else entry number + 1
 ##   +56 vmode  0 plain values, 1 lists (copied on copy), 2 maps and sets
@@ -36,16 +36,31 @@ fn map_hash_int(k int) int
     h = h.bit_xor(h.shr(29).bit_and(34359738367))
     h.bit_and(4611686018427387903)
 
-## FNV-1a over a string object's bytes.
+## A string object's bytes hashed eight at a time: each word is xored in and
+## multiplied, the last partial word is masked to its bytes, and the high half
+## is folded into the low bits at the end (the index uses the low bits). Reading
+## the whole last word is safe: an object's block is 16-byte rounded, which
+## leaves at least seven readable bytes past any data end (ADR 0766). The hash
+## only places keys in the index; iteration order is insertion order.
 fn map_hash_str(s int) int
     n := load64(s)
-    mut h := -3750763034362895579
+    if n == 0
+        return 0
+    if n <= 8
+        w := load64(s + 16)
+        mut h := (n.bit_xor(if n == 8 then w else w.bit_and(1.shl(8 * n) - 1)))
+            * -7046029254386353131
+        h = h.bit_xor(h.shr(32)) * -7046029254386353131
+        return h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
+    mut h := n
     mut i := 0
-    while i < n
-        h = h.bit_xor(load8(s + 16 + i)) * 1099511628211
-        i += 1
-    h = h.bit_xor(h.shr(32).bit_and(4294967295))
-    h.bit_and(4611686018427387903)
+    while i + 8 <= n
+        h = h.bit_xor(load64(s + 16 + i)) * -7046029254386353131
+        i += 8
+    if i < n
+        h = h.bit_xor(load64(s + 16 + i).bit_and(1.shl(8 * (n - i)) - 1)) * -7046029254386353131
+    h = h.bit_xor(h.shr(32)) * -7046029254386353131
+    h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
 
 fn map_hash(kind int, k int) int
     if kind == 1
@@ -95,33 +110,28 @@ fn map_new(kind int, vmode int, vinfo int) int
     map_tables(m, 8)
     m
 
-## The entry for key `k` (hash `h`), or 0.
-fn map_find_h(m int, k int, h int) int
-    mask := load64(m + 24)
-    idx := load64(m + 48)
-    ents := load64(m + 40)
-    kind := load64(m + 32)
-    mut i := h.bit_and(mask)
-    mut s := load64(idx + 8 * i)
-    while s != 0
-        e := ents + 24 * (s - 1)
-        if load64(e) == h and map_key_eq(kind, load64(e + 8), k)
-            return e
-        i = (i + 1).bit_and(mask)
-        s = load64(idx + 8 * i)
-    0
-
 ## `get` then assignment on one key is the common pattern: the entry of the
 ## last key found or added is remembered, so the second lookup skips the
 ## hash and the probe. A rebuild or a removal forgets it.
 fn map_find(m int, k int) int
     if load64(m + 80) != 0 and load64(m + 72) == k
         return load64(m + 80)
-    e := map_find_h(m, k, map_hash(load64(m + 32), k))
-    if e != 0
-        store64(m + 72, k)
-        store64(m + 80, e)
-    e
+    kind := load64(m + 32)
+    h := if kind == 1 then map_hash_str(k) else map_hash_int(k)
+    mask := load64(m + 24)
+    idx := load64(m + 48)
+    ents := load64(m + 40)
+    mut j := h.bit_and(mask)
+    mut s := load64(idx + 8 * j)
+    while s != 0
+        e := ents + 24 * (s - 1)
+        if load64(e) == h and (load64(e + 8) == k or map_key_eq(kind, load64(e + 8), k))
+            store64(m + 72, k)
+            store64(m + 80, e)
+            return e
+        j = (j + 1).bit_and(mask)
+        s = load64(idx + 8 * j)
+    0
 
 fn map_index_put(m int, h int, number int)
     mask := load64(m + 24)
@@ -311,10 +321,15 @@ fn map_out_quoted(s int)
             out_byte(c)
     out_byte(34)
 
-## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float.
+## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float,
+## 4 char.
 fn out_scalar(kind int, v int)
     if kind == 1
         map_out_quoted(v)
+    elif kind == 4
+        out_byte(39)
+        out_escaped(v, 39)
+        out_byte(39)
     elif kind == 2
         out_bool(v != 0)
     elif kind == 3
@@ -365,6 +380,112 @@ fn map_at(m int, k int, head str, tail str) int
     out_scalar(load64(m + 32), k)
     out_byte(10)
     out_str(tail)
+    trace_frames(tail)
     flush_to(2)
     sys_exit(1)
+    0
+
+# ---- counting and set algebra (std.count.2, type.coll.16) ----
+
+## Entry numbers `lo..hi` of `idx` merged into `dst`, largest value first;
+## equal values keep their order.
+fn map_top_sort(ents int, idx int, n int)
+    mut src := idx
+    mut dst := alloc_raw(8 * n, 11)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut k := lo
+            while a < mid and b < hi
+                va := load64(ents + 24 * load64(src + 8 * a) + 16)
+                vb := load64(ents + 24 * load64(src + 8 * b) + 16)
+                if vb > va
+                    store64(dst + 8 * k, load64(src + 8 * b))
+                    b += 1
+                else
+                    store64(dst + 8 * k, load64(src + 8 * a))
+                    a += 1
+                k += 1
+            while a < mid
+                store64(dst + 8 * k, load64(src + 8 * a))
+                a += 1
+                k += 1
+            while b < hi
+                store64(dst + 8 * k, load64(src + 8 * b))
+                b += 1
+                k += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    if src != idx
+        copy_bytes(idx, src, 8 * n)
+
+## `m.top(n)` on a `Map[K, int]`: the `n` keys with the largest counts.
+fn map_top(m int, n int) List[int]
+    live := load64(m)
+    k := if n < live then n else live
+    out := list_new(if k > 0 then k else 0)
+    if k <= 0
+        return out
+    ents := load64(m + 40)
+    idx := alloc_raw(8 * live, 11)
+    mut j := 0
+    for i in 0..load64(m + 8)
+        if load64(ents + 24 * i) >= 0
+            store64(idx + 8 * j, i)
+            j += 1
+    map_top_sort(ents, idx, live)
+    for i in 0..k
+        list_push(out, load64(ents + 24 * load64(idx + 8 * i) + 8))
+    out
+
+## A set of the elements of a list of `int` or `str`.
+fn set_from_list(kind int, xs List[int]) int
+    s := map_new(kind, 0, 0)
+    q := list_addr(xs)
+    data := load64(q + 16)
+    for i in 0..load64(q)
+        map_add(s, load64(data + 8 * i))
+    s
+
+## `a.union(b)`: `a`'s elements, then `b`'s new ones.
+fn set_union(a int, b int) int
+    r := map_copy(a)
+    ents := load64(b + 40)
+    for i in 0..load64(b + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            map_add(r, load64(e + 8))
+    r
+
+## `a.intersect(b)` (`keep` 1) and `a.difference(b)` (`keep` 0): the elements
+## of `a` that are, or are not, in `b`.
+fn set_filter(a int, b int, keep int) int
+    r := map_new(load64(a + 32), 0, 0)
+    ents := load64(a + 40)
+    for i in 0..load64(a + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            if map_has(b, load64(e + 8)) == (keep != 0)
+                map_add(r, load64(e + 8))
+    r
+
+# ---- copies of tables of structs ----
+
+## The slots in use, live or dead.
+fn map_used(m int) int
+    load64(m + 8)
+
+## The address of entry `i` when it is live, else 0.
+fn map_live(m int, i int) int
+    e := load64(m + 40) + 24 * i
+    if load64(e) >= 0
+        return e
     0

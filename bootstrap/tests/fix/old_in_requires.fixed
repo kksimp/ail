@@ -1,0 +1,6 @@
+fn bump(a int) int
+    requires (a + 1) > 0
+    a + 1
+
+fn main()
+    print(bump(1))

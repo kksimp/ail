@@ -1,0 +1,11 @@
+# unsafe.mem.3: cast gives the same address as a pointer to the example's type.
+use std.mem
+
+fn main()
+    unsafe
+        xs := mem.alloc(2, 0)
+        xs.write(258)
+        ys := mem.cast(xs, 0)
+        print(ys.read())
+        print(xs.read())
+        mem.free(xs)
