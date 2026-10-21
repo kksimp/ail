@@ -363,10 +363,13 @@ fn print(v: &Value, out: &mut String, room: usize) -> bool {
         }
         NUM => {
             let Value::Float(n) = fields[0] else { unreachable!("Num holds a float") };
-            if n.is_finite() {
-                out.push_str(&float_text(n));
-            } else {
+            if !n.is_finite() {
                 out.push_str("null");
+            } else if n.abs() < 1e15 && n.fract() == 0.0 {
+                // json.print.1: whole numbers below 1e15 print without a fraction (ADR 0631).
+                out.push_str(&format!("{}", n as i64));
+            } else {
+                out.push_str(&float_text(n));
             }
         }
         STR => {
