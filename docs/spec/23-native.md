@@ -120,7 +120,7 @@ fn main()
 **native.str.1** — In a native program `str` and `char` behave as
 type.str.3-14 and type.char.1-4 say, with the interpreter's results and
 traps. The subset has: interpolation as a value, with `{x:.N}`, `{x:x}`,
-width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
+width, fill and alignment (type.str.11), of a `List[int]` as `[1, 2]`; `==`, `!=`, `<`, `<=`, `>`, `>=` on
 `str` and on `char`; on `str`, `len`, `byte_len`, `chars` (a `List[char]`),
 `lines`, `trim`, `to_upper`, `to_lower`, `to_str`, `contains`,
 `starts_with`, `ends_with` and `split` (each taking a `str` or a `char`),

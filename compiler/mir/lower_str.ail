@@ -53,6 +53,13 @@ fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
         Bool => call("rt.fmt_bool", [v.id], Ty.Str)
         Char => call("rt.str_char", [v.id], Ty.Str)
         Tensor(_) => call("rt.tensor_text", [v.id], Ty.Str)
+        List(e) =>
+            if e == Ty.Int
+                return call("rt.fmt_int_list", [v.id], Ty.Str)
+            if s := display_call(v)
+                return s
+            problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
+            none
         _ =>
             if s := display_call(v)
                 return s

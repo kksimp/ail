@@ -108,6 +108,20 @@ fn fmt_int(n int) str
     put_int(n)
     sb_str()
 
+## The text of a `List[int]`: `[1, -2, 3]` (type.str.3).
+fn fmt_int_list(xs List[int]) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sb_reset()
+    sb_byte(91)
+    for i in 0..k
+        if i > 0
+            sb_text(", ")
+        put_int(load64(items + 8 * i))
+    sb_byte(93)
+    sb_str()
+
 fn fmt_hex(n int) str
     sb_reset()
     put_hex(n)
