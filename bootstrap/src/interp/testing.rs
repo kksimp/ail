@@ -64,7 +64,7 @@ fn literal_of(v: &Value, e: &Expr) -> Option<String> {
         Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..) | Expr::Float(..)) => scalar(v),
         Expr::List(items, _) if items.iter().all(is_literal) => {
             let Value::List(xs) = v else { return None };
-            let parts: Option<Vec<String>> = xs.iter().map(scalar).collect();
+            let parts: Option<Vec<String>> = xs.iter().map(|x| scalar(&x)).collect();
             Some(format!("[{}]", parts?.join(", ")))
         }
         _ => None,

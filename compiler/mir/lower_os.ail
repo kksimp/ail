@@ -36,6 +36,9 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, true)
         "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
+        "fs.copy" => os_fn("rt.fs_copy", [s, s], Ty.Unit, true)
+        "fs.glob" => os_fn("rt.fs_glob", [s], Ty.List(s), false)
+        "fs.walk" => os_fn("rt.fs_walk", [s], Ty.List(s), true)
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
         "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
@@ -48,6 +51,14 @@ fn os_lookup(mod str, name str) OsFn?
         "path.ext" => os_fn("rt.path_ext", [s], s, false)
         "path.stem" => os_fn("rt.path_stem", [s], s, false)
         "path.join" => os_fn("rt.path_join", [s, s], s, false)
+        "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
+        "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
+        "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
+        "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
+        "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
+        "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)
+        "bytes.from_hex" => os_fn("rt.bytes_parse_hex", [s], Ty.Opt(Ty.Bytes), false)
+        "bytes.from_base64" => os_fn("rt.bytes_parse_base64", [s], Ty.Opt(Ty.Bytes), false)
         "proc.run" =>
             OsFn(
                 rt: "rt.proc_run",
@@ -68,16 +79,65 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "tz"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz"]
         if is_module(recv, m)
             return m
     ""
+
+## The module name when `recv` is a standard module written in the
+## runtime (ADR 0614), unless the program has its own module of the name.
+fn Lower.std_module(self, recv ast.Expr) str
+    for m in ["hash", "random"]
+        if is_module(recv, m) and not aliases.contains(m)
+            return m
+    ""
+
+## `hash.NAME(...)`, `path.NAME(...)`, `random.NAME(...)`: a call of the
+## runtime's `NAME_m`, typed by its declaration. `random.int` first checks
+## `lo <= hi` (std.random.2).
+fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    if m == "random" and name == "shuffle"
+        return lower_shuffle(npos, args)
+    key := "rt.{m}_{name}"
+    sig := sigs.get(key) else return unsupported(npos, "`{m}.{name}`")
+    if args.len() != sig.params.len()
+        return unsupported(npos, "this call of `{m}.{name}`")
+    mut vs := List[int]()
+    for k in 0..args.len()
+        a := args[k]
+        if a.label != none or a.mutable
+            return unsupported(npos, "this call of `{m}.{name}`")
+        v := lower_value(a.value, sig.params[k])?
+        vs.push(convert(v, sig.params[k], expr_pos(a.value)))
+    if m == "random" and name == "int"
+        ok := check_branch(op("le", [vs[0], vs[1]], Ty.Bool))
+        trap_open("std.random.2", npos)
+        say("`int` needs lo <= hi, but lo is ")
+        call("rt.out_int", [vs[0]], Ty.Unit)
+        say(" and hi is ")
+        call("rt.out_int", [vs[1]], Ty.Unit)
+        trap_close(npos)
+        cur = ok
+    Val(id: call(key, vs, sig.ret), ty: sig.ret)
+
+## `random.shuffle(mut xs)` (std.random.4) on any list: the runtime swaps
+## elements of the list's element size.
+fn Lower.lower_shuffle(mut self, npos ast.Pos, args List[ast.Arg]) Val?
+    if args.len() != 1 or not args[0].mutable or args[0].label != none
+        return unsupported(npos, "this call of `random.shuffle`")
+    v := lower_value(args[0].value, none)?
+    e := v.ty.elem() else return unsupported(npos, "`random.shuffle` of a `{v.ty.name()}`")
+    size := if e == Ty.Bool then 1 else 8
+    call("rt.random_shuffle", [v.id, konst(size, Ty.Int)], Ty.Unit)
+    Val(id: -1, ty: Ty.Unit)
 
 ## Whether the call `recv.name(...)` is an OS function that can fail.
 fn Lower.os_fails(self, recv ast.Expr, name str) bool
     m := os_module(recv)
     if m == ""
         return false
+    if m == "net"
+        return net_module_fails(name)
     f := os_lookup(m, name) else return false
     f.fails
 
@@ -86,6 +146,8 @@ fn Lower.os_fails(self, recv ast.Expr, name str) bool
 fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
     if m == "io" and name == "eprint"
         return lower_eprint(args, npos)
+    if m == "net"
+        return lower_net_module(name, npos, args)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"
@@ -97,14 +159,18 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
 ## Emit the call of `f` with `args`.
 fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() > f.params.len() or args.len() + f.optional < f.params.len()
-        return unsupported(pos, "this call")
+        return unsupported(pos, "`{f.rt}` with {args.len()} arguments")
     mut vs := List[int]()
     for i in 0..args.len()
         a := args[i]
         if a.label != none or a.mutable
-            return unsupported(pos, "labelled arguments")
+            return unsupported(pos, "`{f.rt}` with a labelled or `mut` argument")
         v := lower_value(a.value, f.params[i])?
-        vs.push(convert(v, f.params[i], expr_pos(a.value)))
+        if v.ty == Ty.Bytes and f.params[i] == Ty.Str and f.rt.starts_with("rt.compress_")
+            # `bytes` and `str` have one layout; std.compress.1 takes either.
+            vs.push(v.id)
+        else
+            vs.push(convert(v, f.params[i], expr_pos(a.value)))
     for i in args.len()..f.params.len()
         vs.push(konst(0, f.params[i]))
     if f.fails
@@ -153,8 +219,10 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
 fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     n := spec.precision else -1
     mut text := -1
+    if v.ty.is_sized() and spec.hex
+        return unsupported(pos, "a hex format on `{v.ty.name()}`")
     match v.ty
-        Int =>
+        Int | Sized(_) =>
             text = call(if spec.hex then "rt.fmt_hex" else "rt.fmt_int", [v.id], Ty.Str)
         Float =>
             if n >= 0
@@ -166,7 +234,7 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
         Char => text = call("rt.str_char", [v.id], Ty.Str)
         _ => return unsupported(pos, "a format specification on a `{v.ty.name()}`")
     w := spec.width else return Val(id: text, ty: Ty.Str)
-    numeric := v.ty == Ty.Int or v.ty.is_float()
+    numeric := v.ty == Ty.Int or v.ty.is_sized() or v.ty.is_float()
     mut align := if numeric then 1 else 0
     if a := spec.align
         align = if a == "<" then 0 else if a == ">" then 1 else 2

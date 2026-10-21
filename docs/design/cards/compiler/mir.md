@@ -11,6 +11,8 @@ pub struct mir.Versioned
 pub fn mir.bce(f mir.Func, reserve bool, grow_only bool) mir.Func
 pub fn mir.lists_only_grow(m mir.Module) bool
 pub fn mir.fold(f mir.Func) mir.Func
+pub fn mir.rpo(f mir.Func) List[int]
+pub fn mir.forward_loads(f mir.Func) mir.Func
 pub fn mir.inline_module(m mir.Module) mir.Module
 pub fn mir.merge_blocks(f mir.Func) mir.Func
 pub struct mir.Def
@@ -71,6 +73,8 @@ pub enum mir.Ty
     Float
     Bool
     Str
+    Bytes
+    Byte
     Char
     List(elem mir.Ty)
     Map(key mir.Ty, val mir.Ty)
@@ -79,14 +83,18 @@ pub enum mir.Ty
     Struct(name str)
     Enum(name str)
     Tensor(elem mir.Ty)
+    F32
+    Tuple(elems List[mir.Ty])
     Unknown
     Unit
     Fn(params List[mir.Ty], ret mir.Ty)
+    Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
     pub fn mir.Ty.elem(self) mir.Ty?
+    pub fn mir.Ty.is_sized(self) bool
     pub fn mir.Ty.is_tensor(self) bool
     pub fn mir.Ty.is_coll(self) bool
     pub fn mir.Ty.name(self) str
@@ -131,6 +139,7 @@ pub struct mir.Site
     pub col int
     pub func str
     pub file int
+pub fn mir.excerpt(line str, n int, col int) str
 pub struct mir.Module
     pub path str
     pub funcs List[mir.Func]
@@ -140,6 +149,7 @@ pub struct mir.Module
     pub files List[str]
     pub file_lines List[List[str]]
     pub fn mir.Module.globals_used(self) int
+pub fn mir.keep_lengths(f mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
     pub sites Set[str]
@@ -148,6 +158,7 @@ pub struct mir.Proven
     pub highs Map[int, int]
 pub fn mir.prove(f mir.Func, defs List[mir.Def], lp mir.LoopInfo, c mir.Counted, order List[int], held List[bool]) mir.Proven
 pub fn mir.mark_recursion(m mir.Module) mir.Module
+pub fn mir.reuse_lists(m mir.Module) mir.Module
 pub fn mir.simplify(f mir.Func) mir.Func
 pub fn mir.subset_help(message str) str
 pub fn mir.module_text(m mir.Module) str
@@ -156,4 +167,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1567); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1690); dropped: private items, doc comments

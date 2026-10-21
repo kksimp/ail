@@ -304,6 +304,8 @@ pub fn Asm.fop1(mut self, op str, d int, n int)
         "frintm" => 509952000
         "frintp" => 509919232
         "frintz" => 509984768
+        "fcvt_sd" => 509755392
+        "fcvt_ds" => 505593856
         _ => 509624320
     word(base + n * 32 + d)
 
@@ -316,6 +318,36 @@ pub fn Asm.scvtf(mut self, d int, n int)
 
 pub fn Asm.fcvtzs(mut self, d int, n int)
     word(2658664448 + n * 32 + d)
+
+# ---- NEON (tensor kernels, ADR 0815) ----
+
+## `ldr qt, [xn], #16` and `str qt, [xn], #16`: two doubles, then advance.
+pub fn Asm.ldr_q_post(mut self, t int, n int)
+    word(1019282432 + n * 32 + t)
+
+pub fn Asm.str_q_post(mut self, t int, n int)
+    word(1015088128 + n * 32 + t)
+
+## `fadd`, `fsub`, `fmul`, `fdiv` on `v.2d`.
+pub fn Asm.vop(mut self, op str, d int, n int, m int)
+    base := match op
+        "fadd" => 1314968576
+        "fsub" => 1323357184
+        "fmul" => 1851841536
+        _ => 1851849728
+    word(rrr(base, d, n, m))
+
+## `dup vd.2d, vn.d[0]`.
+pub fn Asm.vdup(mut self, d int, n int)
+    word(1309148160 + n * 32 + d)
+
+## `fcvtn vd.2s, vn.2d` and `fcvtl vd.2d, vn.2s`: the two lanes rounded to
+## `f32` and widened back (through the low half of a scratch register).
+pub fn Asm.vcvtn(mut self, d int, n int)
+    word(241264640 + n * 32 + d)
+
+pub fn Asm.vcvtl(mut self, d int, n int)
+    word(241268736 + n * 32 + d)
 
 ## `fmov xd, dn` and `fmov dd, xn`: the bits, unchanged.
 pub fn Asm.fmov_xd(mut self, d int, n int)

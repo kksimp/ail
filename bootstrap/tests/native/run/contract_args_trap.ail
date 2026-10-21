@@ -1,0 +1,18 @@
+# contract.req.1: a failed `requires` names every argument in its text form.
+struct Pt
+    x float
+    tag str
+
+fn check(p Pt, names List[str], ok bool, n int, f float)
+    requires n > 0 and ok
+    print(n)
+
+fn Pt.scale(self, k int) int
+    requires k > 0 and x > 0.0
+    k
+
+fn main()
+    p := Pt(x: 1.5, tag: "a\"b")
+    print(p.scale(2))
+    check(p, ["x", "y z"], true, 3, 2.5)
+    check(p, ["x", "y z"], false, 4, 2.5)

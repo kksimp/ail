@@ -22,7 +22,7 @@ pub fn wanted(tokens: &[Token]) -> bool {
     tokens.iter().any(|t| matches!(t.tok, Tok::Kw("impl")))
         && tokens.windows(2).any(|w| match (&w[0].tok, &w[1].tok) {
             (Tok::Sym("@"), Tok::Ident(n)) => n == "derive",
-            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson" || n == "Default",
+            (_, Tok::Ident(n)) => n == "ToJson" || n == "FromJson" || n == "Default" || n == "FromArgs",
             _ => false,
         })
 }
@@ -539,9 +539,15 @@ fn json_field_problem(g: &Generated, d: &mut Diagnostic) {
         "derive_from_json" => ("FromJson", "from_json"),
         _ => return,
     };
-    // `to_json` is a method; `from_json` is an associated function (T.from_json(j)).
-    let missing = if method == "to_json" { "method" } else { "associated function" };
-    let Some(ty) = d.message.strip_suffix(&format!(" has no {missing} `{method}`")).map(str::to_string) else { return };
+    // `to_json` is a method, `from_json` an associated function (trait.assoc.1).
+    let Some(ty) = d
+        .message
+        .strip_suffix(&format!(" has no method `{method}`"))
+        .or_else(|| d.message.strip_suffix(&format!(" has no associated function `{method}`")))
+        .map(str::to_string)
+    else {
+        return;
+    };
     if d.rule != "expr.name.1" {
         return;
     }

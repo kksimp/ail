@@ -5,6 +5,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+mod common;
+
 fn ail() -> Command {
     Command::new(env!("CARGO_BIN_EXE_ail"))
 }
@@ -27,7 +29,7 @@ fn refs_cross_user_modules() {
     let text = String::from_utf8(out.stdout).unwrap();
     assert!(text.contains("\"symbol\":\"fn:geo.origin\""), "{text}");
     let shapes = dir.join("geo/shapes.ail");
-    assert!(text.contains(&format!("{{\"file\":{:?},\"line\":4,\"col\":8,\"def\":true}}", shapes.to_str().unwrap())), "{text}");
+    assert!(text.contains(&format!("{{\"file\":{:?},\"line\":4,\"col\":8,\"def\":true}}", common::shown(&shapes))), "{text}");
     assert!(text.contains("\"line\":4,\"col\":10,\"def\":false"), "{text}");
 }
 
@@ -113,7 +115,7 @@ fn refs_across_a_package() {
     for text in [ask(&util, "4", "9"), ask(&util, "4", "5"), ask(&shapes, "4", "8")] {
         assert!(text.contains("\"symbol\":\"fn:geo.origin\""), "{text}");
         for file in ["main.ail", "util.ail", "geo/shapes.ail"] {
-            assert!(text.contains(&format!("{}\"", dir.join(file).display())), "{file} in {text}");
+            assert!(text.contains(&format!("{}\"", common::shown(&dir.join(file)))), "{file} in {text}");
         }
     }
     // The single-file form keeps working (api.pkg.4).

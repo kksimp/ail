@@ -22,3 +22,12 @@ file is included in this repository.
 - Caladea. Copyright 2012 The Caladea Project Authors
   (https://github.com/huertatipografica/Caladea). SIL Open Font License,
   Version 1.1.
+
+compiler/rt/native/math.ail holds algorithms ported from fdlibm (e_exp.c,
+e_log.c, e_pow.c, s_sin.c, s_cos.c, s_tan.c, s_atan.c, e_atan2.c, e_hypot.c,
+s_cbrt.c, s_expm1.c, s_tanh.c and their kernels), rewritten in AIL.
+
+- fdlibm. Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+  Developed at SunSoft, a Sun Microsystems, Inc. business. Permission to use,
+  copy, modify, and distribute this software is freely granted, provided that
+  this notice is preserved.

@@ -22,6 +22,7 @@ struct Derived  ## What `ail build` passes besides the program's files.
     sources List[mir.Source]
     prelude str?
 fn derived_source(module str, label str, body List[str]) mir.Source [io]  ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
+fn uses_regex(prog ast.Program) bool  ## Whether the program has a `use` that ends in `regex` (`use std.regex`, `use app.regex`).
 fn parse_source(module str, path str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
     fails with fs.IoError
 fn parse_module(module str, paths List[str]) !List[mir.Source] [fail fs io]  ## The files of one module, parsed together: a generic name declared in one

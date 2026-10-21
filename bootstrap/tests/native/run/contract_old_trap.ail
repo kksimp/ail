@@ -1,0 +1,12 @@
+# contract.ens.3: a failed `ensures` with `old` names both values.
+fn Counter.add(mut self, k int)
+    ensures n == old(n) + k
+    n += k + 1
+
+struct Counter
+    n int
+
+fn main()
+    mut c := Counter(n: 1)
+    c.add(2)
+    print("unreachable")

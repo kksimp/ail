@@ -1,0 +1,24 @@
+# std.net.6: options and refused requests, with no server: every request here
+# fails before it connects, or connects to nothing.
+use std.net
+
+fn kind(method str, url str, o net.Options) str
+    r := net.request(method, url, o) else err
+        return err.kind
+    "{r.status}"
+
+fn main()
+    mut o := net.options()
+    print("{o.timeout_ms} {o.max_redirects} {o.connect_ms} {o.total_ms}")
+    mut h := net.options()
+    h.headers["x-a"] = "1\r\nHost: evil"
+    print(kind("GET", "http://127.0.0.1:1/", h))
+    mut n := net.options()
+    n.headers["bad name"] = "1"
+    print(kind("GET", "http://127.0.0.1:1/", n))
+    print(kind("GE T", "http://127.0.0.1:1/", net.options()))
+    print(kind("get", "ftp://x/", net.options()))
+    print(kind("GET", "http://127.0.0.1:1/", net.options()))
+    mut t := net.options()
+    t.query["q"] = "a b"
+    print(kind("get", "http://127.0.0.1:1/?x=1", t))

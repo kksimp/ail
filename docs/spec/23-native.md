@@ -18,6 +18,33 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
+function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
+locals, constants whose values are literals, other constants and operators
+on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
+value), `while`, `for` over a range or a list, `break`, `continue`,
+`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
+field names in a method), method calls, `print` of numbers, strings and
+lists of them or an interpolation of them (with
+`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
+`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
+methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
+construct is reported at its position under this rule, all of them at once,
+`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, `unreachable(message)` (err.model.2), `requires`, `ensures`, `old(e)` and struct `invariant` lines (contract.req.1, contract.ens.1-3, contract.inv.2-3, contract.run.1-2, ADR 0612), `path.dir`, `path.base`, `path.ext` and `path.join` (std.path.2-4), `hash.crc32`, `hash.hash64`, `hash.sha256`, `hash.sha384`, `hash.sha512` and `hash.hmac_sha256` (std.hash.2-4), `random.seed`, `random.int`, `random.float` and `random.shuffle` (std.random.2-4, ADR 0614), `unsafe` blocks (unsafe.block.1) as plain blocks, functions marked `@test` (left out of the build, test.attr.2), `@deprecated` and `@inline` (gram.attr.3-4, ADR 0613), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
+position under this rule, all of them at once, and nothing is built.
+*(ADRs 0384, 0390, 0392, 0393)*
+and the bit operations of expr.bit.1. Also: format specifications on numbers,
+`bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
+`.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
+`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.glob`, `fs.copy`,
+`fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
+`env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
+`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
+call that can fail is in the subset only as the value of `else` with a
+fallback value, a statement that leaves, or a block without a binding
+(err.else.1-2); `else err` and `?` are not yet. Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is
+reported at its position under this rule, all of them at once, and nothing
+is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
 function is a free function, a method of a struct or enum, or a method of
 an `impl` block (no generic methods, `any Trait` values or contracts), in
 the root module or a module it imports (mod.unit.1-5), over `int`, `float`,
@@ -35,7 +62,7 @@ fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
 guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
-`o else d` and `o?` in a function returning an optional, functions that can
+`o else d` and `o?` in a function returning an optional (and a `?` chain such as `a?.b.c else d`, err.prop.4), `@allow` and `@deprecated` on functions, functions that can
 fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
 with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
 typed when the function names one error type, a failing
@@ -45,7 +72,7 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
 `Map[K, V]` and `Set[T]` over `int`, `bool`, `char` and `str` keys (`Map[K, V]()`,
 `Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
-include structs and enums (`Map[K, V]()`,
+include structs and enums, and lists of maps and sets (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
 `Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values of
 any type in the subset, enums included (`Map[K, V]()`,
@@ -63,20 +90,33 @@ whose type is expected (a function result, argument or field), in functions with
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
-`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
-(they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
+`fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.glob`, `fs.copy`, `fs.remove`, `fs.make_dir`, `fs.rename`
+(`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); on Linux, `proc.run` (with
+(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`); and the standard
+readable yet, and on macOS the program traps at `proc.run`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
+`net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
+`close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
+per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
+fails with kind `tls`, and `Accept-Encoding` and connection pooling are not built), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
+other host fails with kind `not_found`, as there is no DNS client yet), no TLS, a wait does not let other tasks run, the
+`bytes` forms are not built, and a message's wording may differ from the interpreter's (the `kind` is the same); and the standard
 modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log` and `std.time.date`). Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its position under this rule, all of them
+`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log`, `std.regex` and `std.time.date`; `regex.captures` is not built yet). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0840)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0830)*
+readable yet, and on macOS the program traps at `proc.run`); and the standard
+modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
+`std.net.jar`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log`; `std.app`
+waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0838)*
 
 ```ail
 fn steps(n int) int
@@ -94,15 +134,15 @@ fn main()
 **native.str.1** — In a native program `str` and `char` behave as
 type.str.3-14 and type.char.1-4 say, with the interpreter's results and
 traps. The subset has: interpolation as a value, with `{x:.N}`, `{x:x}`,
-width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
+width, fill and alignment (type.str.11), of a `List[int]` as `[1, 2]`; `==`, `!=`, `<`, `<=`, `>`, `>=` on
 `str` and on `char`; on `str`, `len`, `byte_len`, `chars` (a `List[char]`),
-`lines`, `trim`, `to_upper`, `to_lower`, `to_str`, `contains`,
+`lines`, `trim`, `trim_start`, `trim_end`, `words`, `to_upper`, `to_lower`, `to_str`, `contains`,
 `starts_with`, `ends_with` and `split` (each taking a `str` or a `char`),
-`slice`, `replace`, `repeat`, `pad_left`, `pad_right`; on `char`, `code`,
+`slice`, `replace`, `repeat`, `pad_left`, `pad_right`, `center`, `count`; on `char`, `code`,
 `to_str`, `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`,
 `is_lower`, `to_upper`, `to_lower`; `to_str` on `int`, `float` and `bool`;
 `print` of a `char`, a `List[char]` and a `List[str]`. The methods with an
-optional result are `find`, `char_at`, `strip_prefix`, `strip_suffix`,
+optional result are `find`, `rfind`, `char_at`, `strip_prefix`, `strip_suffix`,
 `to_digit` and `char.from_code`, used with the optional forms of
 native.subset.1.
 The character predicates and case mappings, and `to_upper` and `to_lower`
@@ -185,8 +225,10 @@ fn main()
 
 **native.bce.2** — An access `xs[i]` has no bounds check when `i` was
 already used to index `xs` on every path to it, or is `xs.len()` taken
-before a `push` to `xs` that is on every path to it. This holds while no
-operation in the program shortens a list. *(ADR 0578)*
+before a `push` to `xs` that is on every path to it, or is a constant, or a
+variable that only ever holds constants, below the number of `push` calls to
+`xs` that are on every path to it. This holds while no operation in the
+program shortens a list. *(ADR 0578, ADR 0816)*
 
 ```ail rules=native.bce.2
 fn main()
@@ -197,8 +239,9 @@ fn main()
 
 **native.bce.3** — A list's capacity is not observable: a native executable
 may allocate room for a list ahead of the pushes that fill it, at most 8 MiB
-of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list.
-*(ADR 0579, ADR 0816)*
+of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list. A
+list that fills its first block also grows straight to 16 elements before it
+doubles. *(ADR 0579, ADR 0816, ADR 0562)*
 
 ```ail rules=native.bce.3
 fn main()
@@ -287,6 +330,24 @@ fn main()
     for i in 0..4
         total += i + s
     print(total)
+```
+
+**native.reuse.1** — A list made empty inside a loop may be one object that
+each iteration empties (length 0, capacity kept) instead of a new object per
+iteration, where no reference to the list can outlive the iteration: it is
+not stored, returned, passed to a function value, or passed to a function
+whose parameter can keep it, and it isn't carried to the next iteration. A
+list bound, assigned or stored from a variable is copied (own.val.1), so the
+copy, not the reused list, is what's kept. *(ADR 0824)*
+
+```ail rules=native.reuse.1
+fn main()
+    mut rows := List[List[int]]()
+    for i in 0..3
+        mut row := []
+        row.push(i)
+        rows.push(row)
+    print(rows)
 ```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every

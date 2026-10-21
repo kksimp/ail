@@ -111,7 +111,11 @@ fn json_field_problem(g ast.Generated, d Diag) Diag
         missing = "method"
     elif g.generator != "derive_from_json"
         return d
-    suffix := " has no {missing} `{method}`"
+    # `to_json` is a method, `from_json` an associated function (trait.assoc.1).
+    mut suffix := " has no method `{method}`"
+    alt := " has no associated function `{method}`"
+    if d.message.ends_with(alt)
+        suffix = alt
     if d.rule != "expr.name.1" or not d.message.ends_with(suffix)
         return d
     ty := d.message.slice(0, d.message.len() - suffix.len())
@@ -625,6 +629,16 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                         "only a failure has an error to bind; an optional is just absent",
                         "write `else` without a name",
                     )
+                elif declare(nm.name, nm.pos)
+                    # The value already failed to check: bind the name as unknown,
+                    # so its uses in the block don't cascade.
+                    locals.push(Local(
+                        name: nm.name,
+                        ty: Ty.Unknown,
+                        mutable: false,
+                        how: LocalKind.Binding,
+                        decl: none,
+                    ))
             # err.else.4: with no value to supply, the block may just end.
             unit := ok == Ty.Unit
             t := if unit then block(body, none, false) else block(body, ok, true)

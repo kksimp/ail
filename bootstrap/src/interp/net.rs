@@ -58,7 +58,7 @@ pub struct Response {
     pub body: Vec<u8>,
 }
 
-/// A failure (std.net.4): the URL, its kind and a sentence for people.
+/// A failure (std.net.4; `bad_url` and `bad_request` fire before connecting, std.net.29): the URL, its kind and a sentence for people.
 pub struct NetFail {
     pub url: String,
     pub kind: &'static str,

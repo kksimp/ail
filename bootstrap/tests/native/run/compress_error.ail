@@ -1,0 +1,8 @@
+# An unhandled gunzip failure ends the program with the interpreter's message (std.compress.2).
+use std.compress
+
+fn main() !
+    ok := compress.gunzip(compress.gzip("fine"))?
+    print(ok.text())
+    d := compress.gunzip(b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xcb\x48\xcd\xc9\xc9\x57\x28\xcf\x2f\xca\x49\x01\x00\x85\x11\x4b\x0d\x0b\x00\x00\x00")?
+    print(d.len())

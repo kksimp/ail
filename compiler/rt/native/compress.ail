@@ -1,0 +1,1054 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.compress` (std.compress.1-3, 7-8, ADRs 0443-0445): DEFLATE, gzip and
+## zlib. This is a port of `bootstrap/src/codec/deflate.rs`, step for step, so
+## the native executable writes the same bytes as `ail run` (LZ77 with hash
+## chains and one step of lazy matching at level 6, then per block the
+## smallest of stored, fixed and dynamic Huffman). Data in and out is a
+## `bytes` object, which has a string object's layout (native-abi.md §2):
+## `+0` length, `+8` the same, `+16` the data. Every scratch buffer is an
+## atomic block (no pointers in it), filled by the caller's frame, which keeps
+## the block's address in a local until the call that uses it is done.
+
+## Word `i` of the block at `a`.
+fn cz_rd(a int, i int) int
+    load64(a + 8 * i)
+
+fn cz_wr(a int, i int, v int)
+    store64(a + 8 * i, v)
+
+## A zeroed block of `n` words.
+fn cz_words(n int) int
+    alloc(8 * n, KIND_ATOMIC)
+
+# ---- tables ----
+
+## The tables of RFC 1951 in one block of words: 0 length bases (29), 29
+## length extra bits (29), 58 distance bases (30), 88 distance extra bits
+## (30), 118 the order of the code-length codes (19), 137 the length symbol
+## of each length 0-258 (259).
+fn cz_tables() int
+    t := cz_words(396)
+    mut base := 3
+    for s in 0..29
+        extra := if s < 8 or s == 28 then 0 else (s - 4) / 4
+        cz_wr(t, s, if s == 28 then 258 else base)
+        cz_wr(t, 29 + s, extra)
+        base += 1.shl(extra)
+    base = 1
+    for d in 0..30
+        extra := if d < 4 then 0 else (d - 2) / 2
+        cz_wr(t, 58 + d, base)
+        cz_wr(t, 88 + d, extra)
+        base += 1.shl(extra)
+    order := str_addr("QRSAIHJGKFLEMDNCOBP")
+    for i in 0..19
+        cz_wr(t, 118 + i, load8(order + 16 + i) - 65)
+    for s in 0..29
+        hi := if s == 28 then 258 else cz_rd(t, s + 1) - 1
+        mut n := cz_rd(t, s)
+        while n <= hi
+            cz_wr(t, 137 + n, s)
+            n += 1
+    t
+
+## The length symbol (0-28) of a match length 3-258.
+fn cz_len_sym(t int, len int) int
+    cz_rd(t, 137 + len)
+
+## The distance symbol (0-29) of a distance 1-32768: the last base not above.
+fn cz_dist_sym(t int, dist int) int
+    mut s := 29
+    while cz_rd(t, 58 + s) > dist
+        s -= 1
+    s
+
+# ---- the bit writer ----
+
+## The writer is three words: 0 bytes written, 1 bits waiting, 2 how many.
+fn cz_put(w int, out int, v int, k int)
+    mut n := cz_rd(w, 2)
+    mut buf := cz_rd(w, 1).bit_or(v.shl(n))
+    n += k
+    mut pos := cz_rd(w, 0)
+    while n >= 8
+        store8(out + pos, buf.bit_and(255))
+        pos += 1
+        buf = buf.shr(8)
+        n -= 8
+    cz_wr(w, 0, pos)
+    cz_wr(w, 1, buf)
+    cz_wr(w, 2, n)
+
+## Pad to a byte boundary.
+fn cz_align(w int, out int)
+    n := cz_rd(w, 2)
+    if n > 0
+        pos := cz_rd(w, 0)
+        store8(out + pos, cz_rd(w, 1).bit_and(255))
+        cz_wr(w, 0, pos + 1)
+        cz_wr(w, 1, 0)
+        cz_wr(w, 2, 0)
+
+# ---- Huffman codes ----
+
+## Code lengths for the `n` frequencies at `freq`, none longer than `max`,
+## forming a complete code; a single used symbol gets length 1. The two-queue
+## construction over the leaves sorted by (frequency, symbol), then the
+## Kraft repair after clamping, exactly as the Rust encoder does it.
+fn cz_code_lengths(freq int, n int, max int, lens int)
+    for i in 0..n
+        cz_wr(lens, i, 0)
+    used := cz_words(n + 1)
+    mut u := 0
+    for i in 0..n
+        if cz_rd(freq, i) > 0
+            cz_wr(used, u, i)
+            u += 1
+    if u == 0
+        return
+    if u == 1
+        cz_wr(lens, cz_rd(used, 0), 1)
+        return
+    # The leaves in the stable order of frequency (symbols already ascend).
+    leaves := cz_words(u)
+    for i in 0..u
+        s := cz_rd(used, i)
+        mut j := i
+        while j > 0 and cz_rd(freq, cz_rd(leaves, j - 1)) > cz_rd(freq, s)
+            cz_wr(leaves, j, cz_rd(leaves, j - 1))
+            j -= 1
+        cz_wr(leaves, j, s)
+    total := 2 * u - 1
+    weight := cz_words(total)
+    parent := cz_words(total)
+    for i in 0..total
+        cz_wr(parent, i, -1)
+    for i in 0..u
+        cz_wr(weight, i, cz_rd(freq, cz_rd(leaves, i)))
+    mut leaf := 0
+    mut node := u
+    for k in u..total
+        mut a := 0
+        if leaf < u and (node >= k or cz_rd(weight, leaf) <= cz_rd(weight, node))
+            a = leaf
+            leaf += 1
+        else
+            a = node
+            node += 1
+        mut b := 0
+        if leaf < u and (node >= k or cz_rd(weight, leaf) <= cz_rd(weight, node))
+            b = leaf
+            leaf += 1
+        else
+            b = node
+            node += 1
+        cz_wr(weight, k, cz_rd(weight, a) + cz_rd(weight, b))
+        cz_wr(parent, a, k)
+        cz_wr(parent, b, k)
+    depth := cz_words(total)
+    mut i := total - 2
+    while i >= 0
+        d := cz_rd(depth, cz_rd(parent, i)) + 1
+        cz_wr(depth, i, if d > 255 then 255 else d)
+        i -= 1
+    for rank in 0..u
+        d := cz_rd(depth, rank)
+        cz_wr(lens, cz_rd(leaves, rank), if d > max then max else d)
+    # Restore the Kraft equality after clamping.
+    full := 1.shl(max)
+    mut kraft := 0
+    for i in 0..u
+        kraft += 1.shl(max - cz_rd(lens, cz_rd(used, i)))
+    # The used symbols by (length descending, frequency ascending), stable.
+    by_len := cz_words(u)
+    for i in 0..u
+        s := cz_rd(used, i)
+        mut j := i
+        while j > 0 and cz_before(freq, lens, s, cz_rd(by_len, j - 1))
+            cz_wr(by_len, j, cz_rd(by_len, j - 1))
+            j -= 1
+        cz_wr(by_len, j, s)
+    while kraft > full
+        # Lengthen the rarest symbol of the longest length below max; the
+        # last of equals wins.
+        mut best := -1
+        for i in 0..u
+            s := cz_rd(by_len, i)
+            ls := cz_rd(lens, s)
+            if ls < max
+                if best < 0
+                    best = s
+                else
+                    lb := cz_rd(lens, best)
+                    if ls > lb or (ls == lb and cz_rd(freq, s) <= cz_rd(freq, best))
+                        best = s
+        kraft -= 1.shl(max - cz_rd(lens, best) - 1)
+        cz_wr(lens, best, cz_rd(lens, best) + 1)
+    while kraft < full
+        mut best := -1
+        for i in 0..u
+            s := cz_rd(by_len, i)
+            ls := cz_rd(lens, s)
+            if ls > 1 and kraft + 1.shl(max - ls) <= full
+                if best < 0
+                    best = s
+                else
+                    lb := cz_rd(lens, best)
+                    if ls > lb or (ls == lb and cz_rd(freq, s) >= cz_rd(freq, best))
+                        best = s
+        kraft += 1.shl(max - cz_rd(lens, best))
+        cz_wr(lens, best, cz_rd(lens, best) - 1)
+
+## Whether symbol `a` sorts strictly before `b` by (length descending,
+## frequency ascending).
+fn cz_before(freq int, lens int, a int, b int) bool
+    la := cz_rd(lens, a)
+    lb := cz_rd(lens, b)
+    if la != lb
+        return la > lb
+    cz_rd(freq, a) < cz_rd(freq, b)
+
+## The `l` low bits of `code`, reversed.
+fn cz_rev(code int, l int) int
+    mut r := 0
+    mut c := code
+    for i in 0..l
+        r = r.shl(1).bit_or(c.bit_and(1))
+        c = c.shr(1)
+    r
+
+## Canonical codes, bit-reversed for output from the LSB, of the `n` lengths.
+fn cz_codes(lens int, n int, out int)
+    count := cz_words(16)
+    for i in 0..n
+        l := cz_rd(lens, i)
+        cz_wr(count, l, cz_rd(count, l) + 1)
+    cz_wr(count, 0, 0)
+    next := cz_words(16)
+    mut c := 0
+    for l in 1..16
+        c = (c + cz_rd(count, l - 1)).shl(1)
+        cz_wr(next, l, c)
+    for i in 0..n
+        l := cz_rd(lens, i)
+        if l == 0
+            cz_wr(out, i, 0)
+        else
+            code := cz_rd(next, l)
+            cz_wr(next, l, code + 1)
+            cz_wr(out, i, cz_rev(code, l))
+
+## The lengths of the fixed code: 288 literal/length words at `ll`, then 30
+## distance words at `dl`.
+fn cz_fixed(ll int, dl int)
+    for i in 0..288
+        cz_wr(ll, i, if i < 144 then 8 else if i < 256 then 9 else if i < 280 then 7 else 8)
+    for i in 0..30
+        cz_wr(dl, i, 5)
+
+## The run-length coding of the `n` code lengths (symbols 16-18) into `sym`
+## and `extra`; the number of pairs.
+fn cz_rle(lens int, n int, sym int, extra int) int
+    mut out := 0
+    mut i := 0
+    while i < n
+        v := cz_rd(lens, i)
+        mut run := 1
+        while i + run < n and cz_rd(lens, i + run) == v
+            run += 1
+        i += run
+        if v == 0
+            while run >= 11
+                r := if run < 138 then run else 138
+                cz_wr(sym, out, 18)
+                cz_wr(extra, out, r - 11)
+                out += 1
+                run -= r
+            if run >= 3
+                cz_wr(sym, out, 17)
+                cz_wr(extra, out, run - 3)
+                out += 1
+                run = 0
+        else
+            cz_wr(sym, out, v)
+            cz_wr(extra, out, 0)
+            out += 1
+            run -= 1
+            while run >= 3
+                r := if run < 6 then run else 6
+                cz_wr(sym, out, 16)
+                cz_wr(extra, out, r - 3)
+                out += 1
+                run -= r
+        for k in 0..run
+            cz_wr(sym, out, v)
+            cz_wr(extra, out, 0)
+            out += 1
+    out
+
+# ---- blocks ----
+
+## The tokens of a block: word `i` of `tl` is a match length, or 0 for a
+## literal, whose byte is word `i` of `td`; otherwise `td` is the distance.
+## The bits of the `n` tokens under the code lengths `ll` and `dl`, with the
+## end-of-block code.
+fn cz_token_bits(t int, tl int, td int, n int, ll int, dl int) int
+    mut bits := cz_rd(ll, 256)
+    for i in 0..n
+        len := cz_rd(tl, i)
+        if len == 0
+            bits += cz_rd(ll, cz_rd(td, i))
+        else
+            s := cz_len_sym(t, len)
+            d := cz_dist_sym(t, cz_rd(td, i))
+            bits += cz_rd(ll, 257 + s) + cz_rd(t, 29 + s) + cz_rd(dl, d) + cz_rd(t, 88 + d)
+    bits
+
+fn cz_emit_tokens(t int, w int, out int, tl int, td int, n int, ll int, lc int, dl int, dc int)
+    for i in 0..n
+        len := cz_rd(tl, i)
+        if len == 0
+            b := cz_rd(td, i)
+            cz_put(w, out, cz_rd(lc, b), cz_rd(ll, b))
+        else
+            s := cz_len_sym(t, len)
+            cz_put(w, out, cz_rd(lc, 257 + s), cz_rd(ll, 257 + s))
+            cz_put(w, out, len - cz_rd(t, s), cz_rd(t, 29 + s))
+            dist := cz_rd(td, i)
+            d := cz_dist_sym(t, dist)
+            cz_put(w, out, cz_rd(dc, d), cz_rd(dl, d))
+            cz_put(w, out, dist - cz_rd(t, 58 + d), cz_rd(t, 88 + d))
+    cz_put(w, out, cz_rd(lc, 256), cz_rd(ll, 256))
+
+## Stored blocks for `n` bytes at `raw`: 65535 a chunk, at least one chunk.
+fn cz_stored(w int, out int, raw int, n int, last bool)
+    mut chunks := (n + 65534) / 65535
+    if chunks == 0
+        chunks = 1
+    mut at := 0
+    for c in 0..chunks
+        k := if n - at < 65535 then n - at else 65535
+        cz_put(w, out, if last and c + 1 == chunks then 1 else 0, 1)
+        cz_put(w, out, 0, 2)
+        cz_align(w, out)
+        cz_put(w, out, k, 16)
+        cz_put(w, out, k.bit_xor(65535), 16)
+        pos := cz_rd(w, 0)
+        copy_bytes(out + pos, raw + at, k)
+        cz_wr(w, 0, pos + k)
+        at += k
+
+## One block holding the `n` tokens, which expand to the `rawn` bytes at
+## `raw`: the smallest of the stored, fixed and dynamic encodings.
+fn cz_block(t int, w int, out int, tl int, td int, n int, raw int, rawn int, last bool)
+    lf := cz_words(286)
+    df := cz_words(30)
+    cz_wr(lf, 256, 1)
+    for i in 0..n
+        len := cz_rd(tl, i)
+        if len == 0
+            b := cz_rd(td, i)
+            cz_wr(lf, b, cz_rd(lf, b) + 1)
+        else
+            s := 257 + cz_len_sym(t, len)
+            cz_wr(lf, s, cz_rd(lf, s) + 1)
+            d := cz_dist_sym(t, cz_rd(td, i))
+            cz_wr(df, d, cz_rd(df, d) + 1)
+    fl := cz_words(288)
+    fd := cz_words(30)
+    cz_fixed(fl, fd)
+    fixed_bits := 3 + cz_token_bits(t, tl, td, n, fl, fd)
+    ll := cz_words(286)
+    dl := cz_words(30)
+    cz_code_lengths(lf, 286, 15, ll)
+    cz_code_lengths(df, 30, 15, dl)
+    mut has_dist := false
+    for i in 0..30
+        if cz_rd(dl, i) != 0
+            has_dist = true
+    if not has_dist
+        cz_wr(dl, 0, 1)
+    mut nlen := 286
+    while nlen > 257 and cz_rd(ll, nlen - 1) == 0
+        nlen -= 1
+    mut ndist := 30
+    while ndist > 1 and cz_rd(dl, ndist - 1) == 0
+        ndist -= 1
+    all := cz_words(nlen + ndist)
+    for i in 0..nlen
+        cz_wr(all, i, cz_rd(ll, i))
+    for i in 0..ndist
+        cz_wr(all, nlen + i, cz_rd(dl, i))
+    sym := cz_words(nlen + ndist)
+    extra := cz_words(nlen + ndist)
+    nsym := cz_rle(all, nlen + ndist, sym, extra)
+    cf := cz_words(19)
+    for i in 0..nsym
+        s := cz_rd(sym, i)
+        cz_wr(cf, s, cz_rd(cf, s) + 1)
+    cl := cz_words(19)
+    cz_code_lengths(cf, 19, 7, cl)
+    mut ncode := 19
+    while ncode > 4 and cz_rd(cl, cz_rd(t, 118 + ncode - 1)) == 0
+        ncode -= 1
+    mut dyn_bits := 3 + 14 + 3 * ncode + cz_token_bits(t, tl, td, n, ll, dl)
+    for i in 0..nsym
+        s := cz_rd(sym, i)
+        dyn_bits += cz_rd(cl, s)
+        if s == 16
+            dyn_bits += 2
+        elif s == 17
+            dyn_bits += 3
+        elif s == 18
+            dyn_bits += 7
+    mut chunks := (rawn + 65534) / 65535
+    if chunks == 0
+        chunks = 1
+    stored_bits := chunks * 40 + rawn * 8 + 7
+    best := if fixed_bits < dyn_bits then fixed_bits else dyn_bits
+    if stored_bits <= best
+        cz_stored(w, out, raw, rawn, last)
+    elif fixed_bits <= dyn_bits
+        cz_put(w, out, if last then 1 else 0, 1)
+        cz_put(w, out, 1, 2)
+        lc := cz_words(288)
+        dc := cz_words(30)
+        cz_codes(fl, 288, lc)
+        cz_codes(fd, 30, dc)
+        cz_emit_tokens(t, w, out, tl, td, n, fl, lc, fd, dc)
+    else
+        cz_put(w, out, if last then 1 else 0, 1)
+        cz_put(w, out, 2, 2)
+        cz_put(w, out, nlen - 257, 5)
+        cz_put(w, out, ndist - 1, 5)
+        cz_put(w, out, ncode - 4, 4)
+        for i in 0..ncode
+            cz_put(w, out, cz_rd(cl, cz_rd(t, 118 + i)), 3)
+        cc := cz_words(19)
+        cz_codes(cl, 19, cc)
+        for i in 0..nsym
+            s := cz_rd(sym, i)
+            cz_put(w, out, cz_rd(cc, s), cz_rd(cl, s))
+            if s == 16
+                cz_put(w, out, cz_rd(extra, i), 2)
+            elif s == 17
+                cz_put(w, out, cz_rd(extra, i), 3)
+            elif s == 18
+                cz_put(w, out, cz_rd(extra, i), 7)
+        lc := cz_words(286)
+        dc := cz_words(30)
+        cz_codes(ll, 286, lc)
+        cz_codes(dl, 30, dc)
+        cz_emit_tokens(t, w, out, tl, td, n, ll, lc, dl, dc)
+
+# ---- matching ----
+
+## The hash of the three bytes at `p`.
+fn cz_hash(p int) int
+    v := load8(p).bit_or(load8(p + 1).shl(8)).bit_or(load8(p + 2).shl(16))
+    (v * 2654435761).bit_and(4294967295).shr(17)
+
+## The longest match for the bytes at `i` of the `n` at `data`, as
+## `length | distance << 16`, or 0 for none (level 6: chains of 128, good
+## enough at 128). `head` and `prev` hold positions plus one, 0 for none.
+fn cz_find(data int, n int, head int, prev int, i int) int
+    if i + 3 > n
+        return 0
+    max_len := if n - i < 258 then n - i else 258
+    mut best_len := 2
+    mut best_dist := 0
+    mut cand := cz_rd(head, cz_hash(data + i))
+    mut chain := 128
+    while cand != 0 and chain > 0
+        c := cand - 1
+        dist := i - c
+        if dist > 32768
+            break
+        probe := if best_len < max_len - 1 then best_len else max_len - 1
+        if load8(data + c + probe) == load8(data + i + probe)
+            mut l := 0
+            while l < max_len and load8(data + c + l) == load8(data + i + l)
+                l += 1
+            if l > best_len
+                best_len = l
+                best_dist = dist
+                if l >= 128 or l == max_len
+                    break
+        cand = cz_rd(prev, c)
+        chain -= 1
+    if best_len >= 3
+        return best_len.bit_or(best_dist.shl(16))
+    0
+
+fn cz_insert(data int, n int, head int, prev int, i int)
+    if i + 3 <= n
+        h := cz_hash(data + i)
+        cz_wr(prev, i, cz_rd(head, h))
+        cz_wr(head, h, i + 1)
+
+# ---- DEFLATE ----
+
+## A raw DEFLATE stream of the `n` bytes at `data` (std.compress.1), as a
+## bytes object.
+fn cz_deflate(data int, n int) str
+    t := cz_tables()
+    # Never more than the stored form: a block costs at most 5 bytes over
+    # its input and a block of tokens holds at least 32768 bytes or is the last.
+    cap := n + n / 4000 + 64
+    os := str_new(cap, cap)
+    out := os + 16
+    w := cz_words(3)
+    if n == 0
+        cz_block(t, w, out, 0, 0, 0, data, 0, true)
+        cz_align(w, out)
+        return cz_finish(os, w)
+    tl := cz_words(32768)
+    td := cz_words(32768)
+    head := cz_words(32768)
+    prev := cz_words(n)
+    mut ntok := 0
+    mut block_start := 0
+    mut i := 0
+    while i < n
+        m := cz_find(data, n, head, prev, i)
+        len := m.bit_and(65535)
+        dist := m.shr(16)
+        mut lit := false
+        if len >= 3 and len < 128 and i + 1 < n
+            cz_insert(data, n, head, prev, i)
+            m2 := cz_find(data, n, head, prev, i + 1)
+            if m2.bit_and(65535) > len
+                lit = true
+            else
+                cz_wr(tl, ntok, len)
+                cz_wr(td, ntok, dist)
+                ntok += 1
+                for k in i + 1..i + len
+                    cz_insert(data, n, head, prev, k)
+                i += len
+        elif len >= 3
+            cz_wr(tl, ntok, len)
+            cz_wr(td, ntok, dist)
+            ntok += 1
+            for k in i..i + len
+                cz_insert(data, n, head, prev, k)
+            i += len
+        else
+            cz_insert(data, n, head, prev, i)
+            lit = true
+        if lit
+            cz_wr(tl, ntok, 0)
+            cz_wr(td, ntok, load8(data + i))
+            ntok += 1
+            i += 1
+        if ntok >= 32768
+            cz_block(t, w, out, tl, td, ntok, data + block_start, i - block_start, false)
+            ntok = 0
+            block_start = i
+    cz_block(t, w, out, tl, td, ntok, data + block_start, n - block_start, true)
+    cz_align(w, out)
+    cz_finish(os, w)
+
+## The buffer `os` cut to the `w` writer's length.
+fn cz_finish(os int, w int) str
+    k := cz_rd(w, 0)
+    store64(os, k)
+    store64(os + 8, k)
+    str_at(os)
+
+# ---- checksums ----
+
+## The CRC-32 of gzip (RFC 1952), by the byte-wise table.
+fn cz_crc32(data int, n int) int
+    table := cz_words(256)
+    for i in 0..256
+        mut c := i
+        for k in 0..8
+            c = if c.bit_and(1) != 0 then 3988292384.bit_xor(c.shr(1)) else c.shr(1)
+        cz_wr(table, i, c)
+    mut c := 4294967295
+    for i in 0..n
+        c = cz_rd(table, c.bit_xor(load8(data + i)).bit_and(255)).bit_xor(c.shr(8))
+    c.bit_xor(4294967295)
+
+## The Adler-32 of zlib (RFC 1950).
+fn cz_adler32(data int, n int) int
+    mut a := 1
+    mut b := 0
+    mut i := 0
+    while i < n
+        end := if n - i < 5552 then i + (n - i) else i + 5552
+        while i < end
+            a += load8(data + i)
+            b += a
+            i += 1
+        a = a % 65521
+        b = b % 65521
+    b.shl(16).bit_or(a)
+
+# ---- wrappers ----
+
+## `compress.deflate(data)`.
+fn compress_deflate(data str) str
+    p := str_addr(data)
+    cz_deflate(p + 16, load64(p))
+
+## A bytes object of `n` bytes made of the three pieces: `head` of `hn`
+## bytes at `h`, the object `body`, and `tn` trailer bytes at `tail`.
+fn cz_join(h int, hn int, body str, tail int, tn int) str
+    bp := str_addr(body)
+    bn := load64(bp)
+    total := hn + bn + tn
+    os := str_new(total, total)
+    copy_bytes(os + 16, h, hn)
+    copy_bytes(os + 16 + hn, bp + 16, bn)
+    copy_bytes(os + 16 + hn + bn, tail, tn)
+    str_at(os)
+
+## `compress.gzip(data)` (std.compress.1, 3): the plain ten-byte header with
+## no timestamp, the DEFLATE stream, the CRC-32 and the size, little endian.
+fn compress_gzip(data str) str
+    p := str_addr(data)
+    n := load64(p)
+    body := cz_deflate(p + 16, n)
+    hd := cz_words(3)
+    store8(hd, 31)
+    store8(hd + 1, 139)
+    store8(hd + 2, 8)
+    store8(hd + 9, 3)
+    crc := cz_crc32(p + 16, n)
+    for i in 0..4
+        store8(hd + 16 + i, crc.shr(8 * i).bit_and(255))
+        store8(hd + 20 + i, n.shr(8 * i).bit_and(255))
+    cz_join(hd, 10, body, hd + 16, 8)
+
+## `compress.zlib(data)` (std.compress.7): `78 9c`, DEFLATE, Adler-32 big endian.
+fn compress_zlib(data str) str
+    p := str_addr(data)
+    n := load64(p)
+    body := cz_deflate(p + 16, n)
+    hd := cz_words(2)
+    store8(hd, 120)
+    store8(hd + 1, 156)
+    ad := cz_adler32(p + 16, n)
+    for i in 0..4
+        store8(hd + 8 + i, ad.shr(8 * (3 - i)).bit_and(255))
+    cz_join(hd, 2, body, hd + 8, 4)
+
+# ---- INFLATE ----
+
+## The reader and the result of an inflate are words at `st`: 0 the next
+## input byte, 1 the bits waiting, 2 how many, 3 the error kind (0 none, 1
+## `corrupt`, 2 `checksum`, 3 `too_big`, 4 `unsupported`), 4 its message (a
+## string object), 5 the output object, 6 the input bytes the stream used.
+
+## Record a failure and return 0.
+fn cz_fail(st int, kind int, msg str) int
+    cz_wr(st, 3, kind)
+    cz_wr(st, 4, str_addr(msg))
+    0
+
+## The next `k` bits (0-16) of the `n` input bytes at `in`, or -1 at the end.
+fn cz_get(st int, src int, n int, k int) int
+    if k == 0
+        return 0
+    mut nb := cz_rd(st, 2)
+    mut buf := cz_rd(st, 1)
+    mut pos := cz_rd(st, 0)
+    while nb < k
+        if pos >= n
+            return -1
+        buf = buf.bit_or(load8(src + pos).shl(nb))
+        pos += 1
+        nb += 8
+    cz_wr(st, 0, pos)
+    cz_wr(st, 1, buf.shr(k))
+    cz_wr(st, 2, nb - k)
+    buf.bit_and(1.shl(k) - 1)
+
+## Drop the bits left in the current byte.
+fn cz_drop(st int)
+    drop := cz_rd(st, 2) % 8
+    cz_wr(st, 1, cz_rd(st, 1).shr(drop))
+    cz_wr(st, 2, cz_rd(st, 2) - drop)
+
+## A decoding table for the `n` code lengths at `lens`: the 16 counts, then
+## the symbols in code order. 0 for an over-subscribed code.
+fn cz_huff(st int, lens int, n int) int
+    h := cz_words(16 + n + 1)
+    for i in 0..n
+        l := cz_rd(lens, i)
+        cz_wr(h, l, cz_rd(h, l) + 1)
+    cz_wr(h, 0, 0)
+    mut left := 1
+    for len in 1..16
+        left = left.shl(1) - cz_rd(h, len)
+        if left < 0
+            return cz_fail(st, 1, "over-subscribed Huffman code")
+    offs := cz_words(17)
+    for len in 1..15
+        cz_wr(offs, len + 1, cz_rd(offs, len) + cz_rd(h, len))
+    for s in 0..n
+        l := cz_rd(lens, s)
+        if l != 0
+            o := cz_rd(offs, l)
+            cz_wr(h, 16 + o, s)
+            cz_wr(offs, l, o + 1)
+    h
+
+## The next symbol of table `h`, or -1 (with the failure recorded).
+fn cz_decode(st int, src int, n int, h int) int
+    mut code := 0
+    mut first := 0
+    mut index := 0
+    for len in 1..16
+        b := cz_get(st, src, n, 1)
+        if b < 0
+            cz_fail(st, 1, "unexpected end of compressed data")
+            return -1
+        code = code.bit_or(b)
+        c := cz_rd(h, len)
+        if code - c < first
+            return cz_rd(h, 16 + index + code - first)
+        index += c
+        first = (first + c).shl(1)
+        code = code.shl(1)
+    cz_fail(st, 1, "invalid Huffman code")
+    -1
+
+## The string object `os` with room for `need` bytes: itself, or a bigger
+## copy of its `olen` bytes. The object's two header words hold its capacity.
+fn cz_grow(os int, olen int, need int) int
+    cap := load64(os)
+    if need <= cap
+        return os
+    mut nc := cap * 2
+    if nc < need
+        nc = need
+    ns := str_new(nc, nc)
+    copy_bytes(ns + 16, os + 16, olen)
+    ns
+
+## The tables of a dynamic block (RFC 1951 3.2.7): the literal/length table
+## at word 0 of `out` and the distance table at word 1; false on a failure.
+fn cz_dynamic(st int, src int, n int, t int, out int) bool
+    nlen := cz_get(st, src, n, 5) + 257
+    ndist := cz_get(st, src, n, 5) + 1
+    ncode := cz_get(st, src, n, 4) + 4
+    if nlen < 257 or ndist < 1 or ncode < 4
+        cz_fail(st, 1, "unexpected end of compressed data")
+        return false
+    if nlen > 286 or ndist > 30
+        cz_fail(st, 1, "too many length or distance codes")
+        return false
+    cl := cz_words(19)
+    for i in 0..ncode
+        v := cz_get(st, src, n, 3)
+        if v < 0
+            cz_fail(st, 1, "unexpected end of compressed data")
+            return false
+        cz_wr(cl, cz_rd(t, 118 + i), v)
+    clh := cz_huff(st, cl, 19)
+    if clh == 0
+        return false
+    lens := cz_words(316)
+    mut i := 0
+    while i < nlen + ndist
+        sym := cz_decode(st, src, n, clh)
+        if sym < 0
+            return false
+        if sym < 16
+            cz_wr(lens, i, sym)
+            i += 1
+        else
+            mut val := 0
+            mut rep := 0
+            if sym == 16
+                if i == 0
+                    cz_fail(st, 1, "repeat with no previous length")
+                    return false
+                val = cz_rd(lens, i - 1)
+                e := cz_get(st, src, n, 2)
+                if e < 0
+                    cz_fail(st, 1, "unexpected end of compressed data")
+                    return false
+                rep = 3 + e
+            elif sym == 17
+                e := cz_get(st, src, n, 3)
+                if e < 0
+                    cz_fail(st, 1, "unexpected end of compressed data")
+                    return false
+                rep = 3 + e
+            else
+                e := cz_get(st, src, n, 7)
+                if e < 0
+                    cz_fail(st, 1, "unexpected end of compressed data")
+                    return false
+                rep = 11 + e
+            if i + rep > nlen + ndist
+                cz_fail(st, 1, "code length repeat overruns the table")
+                return false
+            for k in 0..rep
+                cz_wr(lens, i + k, val)
+            i += rep
+    if cz_rd(lens, 256) == 0
+        cz_fail(st, 1, "block has no end-of-block code")
+        return false
+    lit := cz_huff(st, lens, nlen)
+    if lit == 0
+        return false
+    dlens := cz_words(30)
+    for k in 0..ndist
+        cz_wr(dlens, k, cz_rd(lens, nlen + k))
+    dist := cz_huff(st, dlens, ndist)
+    if dist == 0
+        return false
+    cz_wr(out, 0, lit)
+    cz_wr(out, 1, dist)
+    true
+
+## Inflate the DEFLATE stream at the start of the `n` bytes at `in`
+## (std.compress.1-2, 4): true with the output object in word 5 of `st` and
+## the input bytes used in word 6, or false with the failure in words 3-4.
+## `limit` caps the output.
+fn cz_inflate(src int, n int, limit int, st int) bool
+    t := cz_tables()
+    cap := n * 3 + 64
+    mut os := str_new(cap, cap)
+    mut olen := 0
+    mut last := 0
+    tabs := cz_words(2)
+    while last == 0
+        last = cz_get(st, src, n, 1)
+        typ := cz_get(st, src, n, 2)
+        if last < 0 or typ < 0
+            cz_fail(st, 1, "unexpected end of compressed data")
+            return false
+        if typ == 0
+            cz_drop(st)
+            len := cz_get(st, src, n, 16)
+            nlen := cz_get(st, src, n, 16)
+            if len < 0 or nlen < 0
+                cz_fail(st, 1, "unexpected end of compressed data")
+                return false
+            if len != nlen.bit_xor(65535)
+                cz_fail(st, 1, "stored block length check failed")
+                return false
+            if olen + len > limit
+                cz_fail(st, 3, "output exceeds the size limit")
+                return false
+            os = cz_grow(os, olen, olen + len)
+            for k in 0..len
+                b := cz_get(st, src, n, 8)
+                if b < 0
+                    cz_fail(st, 1, "unexpected end of compressed data")
+                    return false
+                store8(os + 16 + olen + k, b)
+            olen += len
+        elif typ == 1 or typ == 2
+            if typ == 1
+                fl := cz_words(288)
+                fd := cz_words(30)
+                cz_fixed(fl, fd)
+                lit := cz_huff(st, fl, 288)
+                dist := cz_huff(st, fd, 30)
+                cz_wr(tabs, 0, lit)
+                cz_wr(tabs, 1, dist)
+            elif not cz_dynamic(st, src, n, t, tabs)
+                return false
+            lit := cz_rd(tabs, 0)
+            dist := cz_rd(tabs, 1)
+            mut done := false
+            while not done
+                sym := cz_decode(st, src, n, lit)
+                if sym < 0
+                    return false
+                if sym < 256
+                    os = cz_grow(os, olen, olen + 1)
+                    store8(os + 16 + olen, sym)
+                    olen += 1
+                elif sym == 256
+                    done = true
+                else
+                    s := sym - 257
+                    if s >= 29
+                        cz_fail(st, 1, "invalid length symbol")
+                        return false
+                    eb := cz_get(st, src, n, cz_rd(t, 29 + s))
+                    if eb < 0
+                        cz_fail(st, 1, "unexpected end of compressed data")
+                        return false
+                    len := cz_rd(t, s) + eb
+                    d := cz_decode(st, src, n, dist)
+                    if d < 0
+                        return false
+                    if d >= 30
+                        cz_fail(st, 1, "invalid distance symbol")
+                        return false
+                    db := cz_get(st, src, n, cz_rd(t, 88 + d))
+                    if db < 0
+                        cz_fail(st, 1, "unexpected end of compressed data")
+                        return false
+                    back := cz_rd(t, 58 + d) + db
+                    if back > olen
+                        cz_fail(st, 1, "distance reaches before the start of the output")
+                        return false
+                    os = cz_grow(os, olen, olen + len)
+                    start := os + 16 + olen - back
+                    for k in 0..len
+                        store8(start + back + k, load8(start + k))
+                    olen += len
+                if not done and olen > limit
+                    cz_fail(st, 3, "output exceeds the size limit")
+                    return false
+        else
+            cz_fail(st, 1, "invalid block type")
+            return false
+    cz_drop(st)
+    store64(os, olen)
+    store64(os + 8, olen)
+    cz_wr(st, 5, os)
+    cz_wr(st, 6, cz_rd(st, 0) - cz_rd(st, 2) / 8)
+    true
+
+## Fail with `compress.CompressError(kind: "K", message: "M")`; `at` is the
+## call's trace line.
+fn cz_error(kind int, msg int, at str)
+    sb_reset()
+    sb_text("compress.CompressError(kind: ")
+    k := if kind
+        == 1 then "corrupt" else if kind
+        == 2 then "checksum" else if kind
+        == 3 then "too_big" else "unsupported"
+    os_put_quoted(k)
+    sb_text(", message: ")
+    os_put_quoted(str_at(msg))
+    sb_byte(41)
+    err_set(sb_str(), at)
+
+## Fail with `kind` and `msg` and return the empty bytes object.
+fn cz_raise(st int, kind int, msg str, at str) str
+    cz_wr(st, 3, kind)
+    cz_wr(st, 4, str_addr(msg))
+    cz_report(st, at)
+
+## Report the failure recorded in `st`; the empty bytes object.
+fn cz_report(st int, at str) str
+    cz_error(cz_rd(st, 3), cz_rd(st, 4), at)
+    os := str_new(0, 0)
+    str_at(os)
+
+## `compress.inflate(data)`.
+fn compress_inflate(data str, at str) str
+    p := str_addr(data)
+    st := cz_words(8)
+    n := load64(p)
+    if not cz_inflate(p + 16, n, 1073741824, st)
+        return cz_report(st, at)
+    if cz_rd(st, 6) != n
+        return cz_raise(st, 1, "extra bytes after the end of the compressed data", at)
+    str_at(cz_rd(st, 5))
+
+## `compress.unzlib(data)` (std.compress.7).
+fn compress_unzlib(data str, at str) str
+    p := str_addr(data)
+    n := load64(p)
+    st := cz_words(8)
+    if n < 6
+        return cz_raise(st, 1, "not zlib data", at)
+    cmf := load8(p + 16)
+    flg := load8(p + 17)
+    if cmf.bit_and(15) != 8 or cmf.shr(4) > 7 or (cmf.shl(8).bit_or(flg)) % 31 != 0
+        return cz_raise(st, 1, "not zlib data", at)
+    if flg.bit_and(32) != 0
+        return cz_raise(st, 4, "zlib preset dictionaries are not supported", at)
+    if not cz_inflate(p + 18, n - 2, 1073741824, st)
+        return cz_report(st, at)
+    used := cz_rd(st, 6)
+    out := str_at(cz_rd(st, 5))
+    if 2 + used + 4 > n
+        return cz_raise(st, 1, "truncated zlib trailer", at)
+    t := p + 18 + used
+    want := load8(t)
+        .shl(24)
+        .bit_or(load8(t + 1).shl(16))
+        .bit_or(load8(t + 2).shl(8))
+        .bit_or(load8(t + 3))
+    op := str_addr(out)
+    if want != cz_adler32(op + 16, load64(op))
+        return cz_raise(st, 2, "zlib Adler-32 mismatch", at)
+    out
+
+## `compress.gunzip(data)` (std.compress.2-4, 8): every member, header
+## fields skipped, the CRC-32 and size of each checked.
+fn compress_gunzip(data str, at str) str
+    p := str_addr(data)
+    n := load64(p)
+    st := cz_words(8)
+    mut acc := str_new(0, 0)
+    mut alen := 0
+    mut at_ := 0
+    while true
+        d := p + 16 + at_
+        dn := n - at_
+        if dn < 18 or load8(d) != 31 or load8(d + 1) != 139
+            return cz_raise(st, 1, "not gzip data", at)
+        if load8(d + 2) != 8
+            return cz_raise(st, 1, "unknown gzip compression method", at)
+        flags := load8(d + 3)
+        if flags.bit_and(224) != 0
+            return cz_raise(st, 1, "reserved gzip flags set", at)
+        mut q := 10
+        if flags.bit_and(4) != 0
+            if q + 1 >= dn
+                return cz_raise(st, 1, "truncated gzip header", at)
+            q += 2 + load8(d + q).bit_or(load8(d + q + 1).shl(8))
+        for bit in [8, 16]
+            if flags.bit_and(bit) != 0
+                mut z := q
+                while z < dn and load8(d + z) != 0
+                    z += 1
+                if q > dn or z >= dn
+                    return cz_raise(st, 1, "truncated gzip header", at)
+                q = z + 1
+        if flags.bit_and(2) != 0
+            q += 2
+        if q > dn
+            return cz_raise(st, 1, "truncated gzip header", at)
+        room := 1073741824 - alen
+        cz_wr(st, 0, 0)
+        cz_wr(st, 1, 0)
+        cz_wr(st, 2, 0)
+        if not cz_inflate(d + q, dn - q, room, st)
+            return cz_report(st, at)
+        used := cz_rd(st, 6)
+        chunk := cz_rd(st, 5)
+        if used + 8 > dn - q
+            return cz_raise(st, 1, "truncated gzip trailer", at)
+        tr := d + q + used
+        crc := load8(tr)
+            .bit_or(load8(tr + 1).shl(8))
+            .bit_or(load8(tr + 2).shl(16))
+            .bit_or(load8(tr + 3).shl(24))
+        size := load8(tr + 4)
+            .bit_or(load8(tr + 5).shl(8))
+            .bit_or(load8(tr + 6).shl(16))
+            .bit_or(load8(tr + 7).shl(24))
+        clen := load64(chunk)
+        if crc != cz_crc32(chunk + 16, clen)
+            return cz_raise(st, 2, "gzip CRC-32 mismatch", at)
+        if size != clen.bit_and(4294967295)
+            return cz_raise(st, 2, "gzip size mismatch", at)
+        at_ += q + used + 8
+        if alen == 0 and at_ >= n
+            return str_at(chunk)
+        acc = cz_grow(acc, alen, alen + clen)
+        copy_bytes(acc + 16 + alen, chunk + 16, clen)
+        alen += clen
+        if at_ >= n
+            store64(acc, alen)
+            store64(acc + 8, alen)
+            return str_at(acc)
+    str_at(acc)

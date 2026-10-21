@@ -1,0 +1,48 @@
+# The client side of tools/native-net/check.sh: net.get and net.post against
+# the scripted server, whose base URL is the first argument. Prints what a
+# program can observe; `ail run` and the native build must print the same.
+use std.net
+
+fn show(base str, path str)
+    r := net.get("{base}{path}") else err
+        print("GET {path}: error {err.kind}")
+        return
+    print("GET {path}: {r.status} {r.body.len()} bytes")
+    if r.body.len() < 80
+        print("  body {r.body}")
+    keys := r.headers.keys().sorted()
+    for k in keys
+        print("  {k}: {r.headers[k]}")
+
+fn main()
+    base := env.args()[0]
+    for p in [
+        "/plain",
+        "/chunked",
+        "/close",
+        "/redirect",
+        "/redirect-relative",
+        "/loop",
+        "/missing",
+        "/headers",
+        "/big",
+        "/badutf8",
+        "/nocontent",
+        "/continue",
+        "/garbage",
+        "/truncated",
+    ]
+        show(base, p)
+    r := net.post("{base}/echo", "a=1&b=2", "application/x-www-form-urlencoded") else err
+        print("post: error {err.kind}")
+        return
+    print("POST: {r.status} {r.body}")
+    s := net.get("{base}/headers") else err
+        print("error {err.kind}")
+        return
+    print(s.all_headers["x-multi"].len())
+    print(s.all_headers["set-cookie"])
+    bad := net.get("ftp://example.com/") else err
+        print("scheme: {err.kind}")
+        return
+    print(bad.status)
