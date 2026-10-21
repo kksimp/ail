@@ -1189,7 +1189,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
         Index(recv, index, pos) => lower_index(recv, index, pos)
         ListLit(items, pos) => lower_list(items, pos, want)
-        If(branches, els, _, pos) => lower_if(branches, els, pos, want)
+        If(branches, els, else_err, pos) => lower_if(branches, els, else_err, pos, want)
         Interp(parts, pos) => lower_interp_value(parts, pos)
         Char(text, _) => lower_char(text)
         NoneLit(pos) => lower_none(want, pos)
@@ -1268,10 +1268,13 @@ fn Lower.lower_if(
     mut self,
     branches List[ast.Branch],
     els List[ast.Stmt]?,
+    else_err ast.Ident?,
     pos ast.Pos,
     want Ty?,
 ) Val?
     join := new_block()
+    mut taken := false
+    mut taken_ty := Ty.Unknown
     value := els != none and want_value(want)
     mut result := -1
     mut rty := Ty.Unknown
@@ -1282,24 +1285,41 @@ fn Lower.lower_if(
     for br in branches
         mut bound := ""
         mut bval := Val(id: -1, ty: Ty.Unit)
+        mut failable := false
         c := match br.cond
             Test(x) => lower_value(x, Ty.Bool)?
             Bind(bname, bpos, x) =>
-                o := lower_value(x, none)?
-                if o.ty.opt_inner() == none
-                    return unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
-                bound = bname
-                bval = o
-                Val(id: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+                # `if v := f(i)` on a call that can fail binds its value on success.
+                if fallible_call(x)
+                    m := lower_maybe(x)?
+                    bound = bname
+                    bval = m.val
+                    failable = true
+                    taken_ty = m.err
+                    Val(id: m.present, ty: Ty.Bool)
+                else
+                    o := lower_value(x, none)?
+                    if o.ty.opt_inner() == none
+                        return unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
+                    bound = bname
+                    bval = o
+                    Val(id: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
         yes := new_block()
         no := new_block()
         branch(c.id, yes, [], no, [])
         seal(yes)
         seal(no)
+        if failable
+            # The failure is handled by taking the `else` side, which may name it.
+            cur = no
+            if else_err == none
+                call("rt.err_clear", [], Ty.Unit)
+            else
+                taken = true
         cur = yes
         scopes.push(Map[str, str]())
         if bound != ""
-            u := unwrap(bval)
+            u := if failable then bval else unwrap(bval)
             declare(bound, u.ty, u.id)
         tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(br.body, value)
@@ -1307,8 +1327,13 @@ fn Lower.lower_if(
         rty = arm_end(join, value, v, pos, rty)
         cur = no
     if body := els
+        scopes.push(Map[str, str]())
+        if taken
+            if n := else_err
+                bind_taken_error(n.name, taken_ty)
         tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(body, value)
+        scopes.pop()
         rty = arm_end(join, value, v, pos, rty)
     else
         jump(join, [])
