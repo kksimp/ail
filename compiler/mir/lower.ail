@@ -1425,24 +1425,37 @@ fn Lower.lower_if(
     for br in branches
         mut bound := ""
         mut bval := Val(id: -1, ty: Ty.Unit)
+        mut failable := false
         c := match br.cond
             Test(x) => lower_value(x, Ty.Bool)?
             Bind(bname, bpos, x) =>
-                o := lower_value(x, none)?
-                if o.ty.opt_inner() == none
-                    return unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
-                bound = bname
-                bval = o
-                Val(id: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+                # `if v := f(i)` on a call that can fail binds its value on success.
+                if fallible_call(x)
+                    m := lower_maybe(x)?
+                    bound = bname
+                    bval = m.val
+                    failable = true
+                    Val(id: m.present, ty: Ty.Bool)
+                else
+                    o := lower_value(x, none)?
+                    if o.ty.opt_inner() == none
+                        return unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
+                    bound = bname
+                    bval = o
+                    Val(id: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
         yes := new_block()
         no := new_block()
         branch(c.id, yes, [], no, [])
         seal(yes)
         seal(no)
+        if failable
+            # The failure is handled by taking the `else` side.
+            cur = no
+            call("rt.err_clear", [], Ty.Unit)
         cur = yes
         scopes.push(Map[str, str]())
         if bound != ""
-            u := unwrap(bval)
+            u := if failable then bval else unwrap(bval)
             declare(bound, u.ty, u.id)
         tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(br.body, value)

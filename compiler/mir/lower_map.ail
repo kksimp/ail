@@ -293,9 +293,15 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     cur = join
     Val(id: r, ty: vt)
 
+## Whether `r.n(...)` calls a method of a struct, enum or module, not a built-in.
+fn Lower.user_method(self, r ast.Expr, n str) bool
+    key := method_key(r, n) else return false
+    sigs.contains(key)
+
 fn Lower.is_get_call(self, e ast.Expr) bool
     match e
-        Method(r, n, _, a) => n == "get" and a.len() == 1 and not self.is_module(r, "env")
+        Method(r, n, _, a) =>
+            n == "get" and a.len() == 1 and not self.is_module(r, "env") and not user_method(r, n)
         _ => false
 
 # ---- methods ----
