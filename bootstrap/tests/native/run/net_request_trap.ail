@@ -1,0 +1,10 @@
+# std.net.6: a timeout must be at least 1; the trap names the call.
+use std.net
+
+fn main()
+    mut o := net.options()
+    o.timeout_ms = 0
+    r := net.request("GET", "http://127.0.0.1:1/", o) else err
+        print(err.kind)
+        return
+    print(r.status)

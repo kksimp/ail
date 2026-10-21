@@ -9,6 +9,8 @@
 //!                no `bootstrap.*` diagnostic;
 //!   fuzz.prop.5  `run` prints the same bytes and exits the same with and
 //!                without the bytecode tier (ADR 0361);
+//!   fuzz.prop.6  `run` prints the same bytes with every list boxed
+//!                (`AIL_NO_PACK=1`) as with packed list storage (ADR 0760);
 //!   fuzz.mut.1   after one token-level mutation, `check` still diagnoses
 //!                without panicking and `fix` leaves a parsable file.
 //!
@@ -71,9 +73,14 @@ impl Runner {
     }
 
     fn exec_for(&self, args: &[&str], file: &Path, secs: u64) -> Out {
+        self.exec_with(args, file, secs, &[])
+    }
+
+    fn exec_with(&self, args: &[&str], file: &Path, secs: u64, env: &[(&str, &str)]) -> Out {
         let mut child = Command::new(env!("CARGO_BIN_EXE_ail"))
             .args(args)
             .arg(file)
+            .envs(env.iter().copied())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -200,6 +207,14 @@ fn generated(r: &Runner, src: &str) -> Result<bool, String> {
             return Err(format!(
                 "fuzz.prop.5 the bytecode tier changed the run\n--- walker (exit {:?})\n{}{}--- tier (exit {:?})\n{}{}",
                 r4.code, r4.stdout, r4.stderr, r5.code, r5.stdout, r5.stderr
+            ));
+        }
+        // fuzz.prop.6: packed list storage is invisible (ADR 0760): the same run with every list boxed.
+        let r6 = r.exec_with(&["run", "--deny", "clock,random,proc,net", "--no-contracts"], &p, 10, &[("AIL_NO_PACK", "1")]);
+        if !same(&r5, &r6) {
+            return Err(format!(
+                "fuzz.prop.6 packed lists changed the run\n--- boxed (exit {:?})\n{}{}--- packed (exit {:?})\n{}{}",
+                r6.code, r6.stdout, r6.stderr, r5.code, r5.stdout, r5.stderr
             ));
         }
         if !smoke() && !same(&r1, &r.exec(&["run", "--deterministic"], &p)) {

@@ -1,0 +1,144 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `fs.glob` (std.fs.9, ADR 0281) for the native runtime, a port of the
+## interpreter's matcher: components split at `/`; `*` and `?` in a component
+## (neither matches a leading `.` unless the component starts with one); a
+## whole `**` component spans directories; a directory that can't be read is
+## skipped, so the call never fails. Matches are collected through the
+## address of the output list (`out`), then sorted and made unique.
+
+## The length in bytes of the UTF-8 character starting with byte `b`.
+fn glob_ulen(b int) int
+    if b >= 240
+        return 4
+    if b >= 224
+        return 3
+    if b >= 192
+        return 2
+    1
+
+## Whether `name` matches the component pattern `pat`.
+fn glob_wildcard(pat str, name str) bool
+    pp := str_addr(pat) + 16
+    np := str_addr(name) + 16
+    pn := load64(str_addr(pat))
+    nn := load64(str_addr(name))
+    mut p := 0
+    mut n := 0
+    mut star_p := -1
+    mut star_n := 0
+    while n < nn
+        if p < pn and (load8(pp + p) == 63 or load8(pp + p) == load8(np + n))
+            if load8(pp + p) == 63
+                n += glob_ulen(load8(np + n))
+            else
+                n += 1
+            p += 1
+        elif p < pn and load8(pp + p) == 42
+            star_p = p
+            star_n = n
+            p += 1
+        elif star_p >= 0
+            p = star_p + 1
+            star_n += glob_ulen(load8(np + star_n))
+            n = star_n
+        else
+            return false
+    while p < pn and load8(pp + p) == 42
+        p += 1
+    p == pn
+
+## Whether the component has a `*` or `?`.
+fn glob_has_wild(part str) bool
+    pp := str_addr(part) + 16
+    for i in 0..load64(str_addr(part))
+        c := load8(pp + i)
+        if c == 42 or c == 63
+            return true
+    false
+
+fn glob_dotted(s str) bool
+    load64(str_addr(s)) > 0 and load8(str_addr(s) + 16) == 46
+
+## Whether a file, directory or link (even a dangling one) is at `path`.
+fn glob_lexists(path str) bool
+    p := os_cstr(OS_PATH_B, path)
+    if p == 0
+        return false
+    at := if target() == 2 then -2 else -100
+    syscall(os_pick(439, 439, 466), at, p, 0, os_pick(256, 256, 32), 0, 0) == 0
+
+## Whether `path` is a directory, following links.
+fn glob_is_dir(path str) bool
+    p := os_cstr(OS_PATH_B, path)
+    p != 0 and os_is_dir_at(p)
+
+fn glob_join(prefix str, name str) str
+    if load64(str_addr(prefix)) == 0
+        return name
+    path_join(prefix, name)
+
+fn glob_push(out int, s str)
+    list_push(list_at(out), str_addr(s))
+
+fn glob_in(prefix str, parts List[str], i int, out int)
+    if i >= parts.len()
+        return
+    part := parts[i]
+    last := i + 1 == parts.len()
+    if not glob_has_wild(part)
+        path := glob_join(prefix, part)
+        if last
+            if glob_lexists(path)
+                glob_push(out, path)
+        elif glob_is_dir(path)
+            glob_in(path, parts, i + 1, out)
+        return
+    names := os_fs_list_dir(if load64(str_addr(prefix)) == 0 then "." else prefix)
+    if not os_ok()
+        return
+    wild_all := part == "**"
+    for k in 0..names.len()
+        name := str_at(names[k])
+        dotted := glob_dotted(name)
+        full := glob_join(prefix, name)
+        if wild_all
+            if dotted
+                continue
+            if last
+                glob_push(out, full)
+                if os_is_real_dir(full)
+                    glob_in(full, parts, i, out)
+            elif os_is_real_dir(full)
+                glob_in(full, parts, i, out)
+        elif not (dotted and not glob_dotted(part)) and glob_wildcard(part, name)
+            if last
+                glob_push(out, full)
+            elif os_is_real_dir(full)
+                glob_in(full, parts, i + 1, out)
+    if wild_all and not last
+        glob_in(prefix, parts, i + 1, out)
+
+## `fs.glob(pattern)` (std.fs.9).
+fn fs_glob(pattern str) List[int]
+    p := str_addr(pattern) + 16
+    n := load64(str_addr(pattern))
+    mut parts := List[str]()
+    mut start := 0
+    for i in 0..n + 1
+        if i == n or load8(p + i) == 47
+            if i > start
+                parts.push(os_str_from(p + start, i - start))
+            start = i + 1
+    root := if n > 0 and load8(p) == 47 then "/" else ""
+    mut out := List[int]()
+    glob_in(root, parts, 0, list_addr(out))
+    q := list_addr(out)
+    os_sort_names(load64(q + 16), load64(q))
+    mut uniq := List[int]()
+    for i in 0..out.len()
+        if i == 0 or os_str_cmp(out[i - 1], out[i]) != 0
+            uniq.push(out[i])
+    os_succeed()
+    uniq

@@ -1,0 +1,6 @@
+true none none in.txt 3
+false a 4 x 5
+error: missing LIMIT
+error: limit needs an integer, got `many`
+error: unknown option --bogus
+error: jobs needs an integer, got `many`

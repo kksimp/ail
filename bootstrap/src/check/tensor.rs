@@ -11,7 +11,7 @@ use crate::num::Num;
 use crate::stdlib::{StdCall, TENSOR_METHODS};
 
 impl<'p> Checker<'p> {
-    fn tensor_ty(&self, elem: Ty) -> Ty {
+    pub(super) fn tensor_ty(&self, elem: Ty) -> Ty {
         match self.types.get("tensor.Tensor") {
             Some(Def::Struct(s)) => Ty::Struct(*s, vec![elem]),
             _ => unreachable!("std/types.ail declares `Tensor`"),
@@ -33,6 +33,7 @@ impl<'p> Checker<'p> {
         let shape = Ty::List(Box::new(Ty::Int));
         let wanted = expect.and_then(|t| self.tensor_elem(t)).filter(|e| matches!(e, Ty::Int | Ty::Float | Ty::Num(Num::F32)));
         match f {
+            "from_fn" => self.tensor_from_fn(args, pos),
             "zeros" => {
                 let elem = wanted.unwrap_or(Ty::Float);
                 self.note_elem(&elem, pos);
@@ -70,6 +71,48 @@ impl<'p> Checker<'p> {
                 }
                 let sig = Sig::plain(None, params, self.tensor_ty(elem));
                 self.check_call("tensor.from", &sig, Vec::new(), args, None, pos, expect)
+            }
+        }
+    }
+
+    /// std.tensor.25: `tensor.from_fn(shape, |i| e)`. `shape` is an `int` (a
+    /// 1-D length) or a `List[int]`; the function takes the flat index and
+    /// gives an `int`, a `float` or an `f32`, which is the element type.
+    fn tensor_from_fn(&mut self, args: &'p [Arg], pos: Pos) -> Ty {
+        let help = "write `tensor.from_fn([2, 3], |i| i.to_float())`";
+        let [shape, f] = args else {
+            self.args_only(args);
+            let msg = format!("`from_fn` takes a shape and a function, but {} given", super::was_were(args.len()));
+            self.error_help("std.tensor.25", pos, msg, help);
+            return Ty::Err;
+        };
+        let Some((var, vpos)) = &f.param else {
+            self.args_only(args);
+            self.error_help("std.tensor.25", f.value.pos(), "`from_fn` takes a function of the flat index", help);
+            return Ty::Err;
+        };
+        let st = self.expr(&shape.value, None, true);
+        if !matches!(&st, Ty::Int | Ty::Err) && st != Ty::List(Box::new(Ty::Int)) {
+            let msg = format!("the shape of `from_fn` is an `int` or a `List[int]`, not {}", self.show(&st));
+            self.error_help("std.tensor.25", shape.value.pos(), msg, help);
+            return Ty::Err;
+        }
+        let mark = self.locals.len();
+        if self.declare(var, *vpos) {
+            self.locals.push(Local { name: var.clone(), ty: Ty::Int, mutable: false, kind: Kind::LoopVar, decl: None });
+        }
+        let out = self.expr(&f.value, None, true);
+        self.end_scope(mark);
+        match out {
+            Ty::Int | Ty::Float | Ty::Num(Num::F32) => {
+                self.note_elem(&out, pos);
+                self.tensor_ty(out)
+            }
+            Ty::Err => Ty::Err,
+            other => {
+                let msg = format!("`from_fn`'s function gives {}, but a tensor holds `int` or `float`", self.show(&other));
+                self.error_help("std.tensor.25", f.value.pos(), msg, "return a number from the function");
+                Ty::Err
             }
         }
     }
@@ -172,6 +215,12 @@ impl<'p> Checker<'p> {
             self.error_help("std.tensor.13", pos, msg, format!("convert first: `t.map(|x| x.to_float()).{m}()`"));
             return Some(Ty::Err);
         }
+        if m == "softmax" && elem == Ty::Int {
+            self.args_only(args);
+            let msg = "`softmax` is on `float` tensors, and this one holds `int`";
+            self.error_help("std.tensor.24", pos, msg, "convert first: `t.map(|x| x.to_float()).softmax()`");
+            return Some(Ty::Err);
+        }
         let t = rt.clone();
         // std.tensor.21: an `f32` tensor's bounds and list are `float`.
         let (bound, list) = if elem == Ty::Num(Num::F32) { (Ty::Float, Ty::Float) } else { (elem.clone(), elem.clone()) };
@@ -192,7 +241,7 @@ impl<'p> Checker<'p> {
             "clamp" => (vec![bound.clone(), bound], t),
             "dot" => (vec![t], elem),
             "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
-            "relu" | "sigmoid" | "tanh" => (vec![], t),
+            "relu" | "sigmoid" | "tanh" | "softmax" => (vec![], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),
         };

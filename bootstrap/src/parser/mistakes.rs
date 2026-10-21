@@ -323,6 +323,45 @@ impl Parser {
         )
     }
 
+    /// The edits for `c ? a : b` as `if c then a else b` when it is the whole value of a
+    /// binding, assignment or `return` (so no parentheses are needed). `start` is the first
+    /// token of the statement and `q` the `?`.
+    fn ternary_edits(&self, start: usize, q: usize) -> Option<Vec<Edit>> {
+        let lead = (start..q).find(|k| {
+            matches!(self.tokens[*k].tok, Tok::Sym(":=" | "=") | Tok::Kw("return"))
+        })?;
+        if (start..lead).any(|k| matches!(self.tokens[k].tok, Tok::Sym("(" | "[" | "{"))) {
+            return None;
+        }
+        let cond = lead + 1;
+        if cond >= q {
+            return None;
+        }
+        let (mut depth, mut colon) = (0i32, None);
+        for k in q + 1..self.tokens.len() {
+            match &self.tokens[k].tok {
+                Tok::Newline | Tok::Eof | Tok::Indent | Tok::Dedent => break,
+                Tok::Sym("(" | "[" | "{") => depth += 1,
+                Tok::Sym(")" | "]" | "}") => depth -= 1,
+                Tok::Sym("?") if depth == 0 => return None,
+                Tok::Sym(":") if depth == 0 => {
+                    if colon.is_some() {
+                        return None;
+                    }
+                    colon = Some(k);
+                }
+                _ => {}
+            }
+        }
+        let colon = colon.filter(|c| *c > q + 1)?;
+        let (qp, cp, sp) = (self.tokens[q].pos, self.tokens[colon].pos, self.tokens[cond].pos);
+        Some(vec![
+            Edit::insert(sp, "if "),
+            Edit::span(qp, Pos { col: qp.col + 1, ..qp }, "then"),
+            Edit::span(cp, Pos { col: cp.col + 1, ..cp }, "else"),
+        ])
+    }
+
     /// The generic "expected end of line after the statement" at a token that
     /// betrays another language. `start` is the index of the statement's
     /// first token. Returns true when it reported something specific.
@@ -383,13 +422,12 @@ impl Parser {
         }
         // `n > 0 ? a : b`
         if at >= 1 && matches!(self.tokens[at - 1].tok, Tok::Sym("?")) && !matches!(cur, Tok::Newline) {
-            self.error("gram.foreign.1", self.tok_pos(at - 1), "AIL has no `?:` conditional operator");
-            if let Some(d) = self.diags.last_mut() {
-                d.help = Some(
-                    "use an `if` expression: `x := if n > 0` with the value indented below, then `else` and its value"
-                        .into(),
-                );
+            let mut d = Diagnostic::new("gram.foreign.1", self.tok_pos(at - 1), "AIL has no `?:` conditional operator")
+                .help("use an `if` expression: `x := if n > 0 then a else b`");
+            if let Some(edits) = self.ternary_edits(start, at - 1) {
+                d = d.fix("write it as `if c then a else b`", edits);
             }
+            self.diags.push(d);
             return true;
         }
         // `(x) => x + 1`

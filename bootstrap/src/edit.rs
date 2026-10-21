@@ -596,7 +596,7 @@ fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
                 None => {
                     let f = work.target(op)?;
                     let n = work.files[&f].split('\n').count();
-                    let place = f.display().to_string();
+                    let place = crate::shown::shown(&f);
                     (f, 0, n, place)
                 }
             };
@@ -700,7 +700,7 @@ fn rename(work: &mut Work, id: &str, to: &str, path: &str) -> Result<(), String>
             });
             match at {
                 Some(i) if l[i..].starts_with(&old) => l.replace_range(i..i + old.len(), to),
-                _ => return Err(format!("{}:{line}:{col} doesn't hold `{old}`; nothing was renamed (edit.op.5)", f.display())),
+                _ => return Err(format!("{}:{line}:{col} doesn't hold `{old}`; nothing was renamed (edit.op.5)", crate::shown::shown(&f))),
             }
         }
         work.files.insert(f, lines.join("\n"));
@@ -754,7 +754,7 @@ fn save(work: &Work) -> Result<Saved, String> {
     for (f, src) in &work.files {
         let before = std::fs::read_to_string(f).ok();
         if before.as_deref() != Some(src.as_str()) {
-            std::fs::write(f, src).map_err(|e| format!("can't write {}: {e}", f.display()))?;
+            std::fs::write(f, src).map_err(|e| format!("can't write {}: {e}", crate::shown::shown(&f)))?;
             saved.push((f.clone(), before));
         }
     }
@@ -834,7 +834,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
                 files.insert(f, s);
             }
             Err(e) => {
-                eprintln!("error: can't read {}: {e}", f.display());
+                eprintln!("error: can't read {}: {e}", crate::shown::shown(&f));
                 return ExitCode::from(2);
             }
         }
@@ -864,28 +864,45 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             changed.push(f.clone());
         }
     }
-    let saved = match save(&work) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: {e}");
-            return ExitCode::from(2);
-        }
-    };
+    // A single file is checked from memory, so a preview or a refused edit never shows
+    // another process the edited text; a package is written, checked and put back.
+    let single = !Path::new(path).is_dir() && work.files.len() == 1;
+    let mut saved = Vec::new();
+    if !single {
+        saved = match save(&work) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::from(2);
+            }
+        };
+    }
     // edit.out.2: the new state's diagnostics.
-    let Some((prog, diags)) = check_quietly(path) else {
+    let checked = if single {
+        let src = work.files.values().next().map(String::as_str).unwrap_or_default();
+        check_source(path, src)
+    } else {
+        check_quietly(path)
+    };
+    let Some((prog, diags)) = checked else {
         restore(saved);
         return ExitCode::from(2);
     };
     let errors = diags.iter().filter(|d| !d.warning).count();
     let warnings = diags.len() - errors;
     let kept = !dry && !(if_clean && errors > 0);
-    if !kept {
+    if single && kept {
+        if let Err(e) = save(&work) {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    } else if !kept {
         restore(saved);
     }
     let mut out = String::new();
     if show_diff || dry {
         for f in &changed {
-            let name = f.display().to_string();
+            let name = crate::shown::shown(&f);
             out.push_str(&crate::fmt::diff(&name, &original[f], &work.files[f]).replacen(" (formatted)\n", " (edited)\n", 1));
         }
     }
@@ -894,7 +911,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         crate::modules::report(&prog.files, diags, json);
     }
     let verb = if kept { "edited" } else if dry { "would edit" } else { "not written (--if-clean)" };
-    let names: Vec<String> = changed.iter().map(|f| f.display().to_string()).collect();
+    let names: Vec<String> = changed.iter().map(|f| crate::shown::shown(&f)).collect();
     if json {
         let files: Vec<String> = names.iter().map(|n| json_str(n)).collect();
         println!(
@@ -928,6 +945,16 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         };
     }
     ExitCode::SUCCESS
+}
+
+/// Check `src` as the text of the file `path` without reporting; a file without `main` is fine.
+fn check_source(path: &str, src: &str) -> Option<(crate::ast::Program, Vec<crate::diag::Diagnostic>)> {
+    let (prog, mut diags) = crate::modules::load_src(path, src);
+    if diags.is_empty() {
+        diags = crate::check::check(&prog).0;
+    }
+    diags.retain(|d| d.rule != "mod.main.1");
+    Some((prog, diags))
 }
 
 /// Load and check `path` without reporting; a file without `main` is fine.

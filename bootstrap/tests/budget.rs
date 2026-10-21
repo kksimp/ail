@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+mod common;
+
 fn ail(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_ail")).args(args).output().unwrap()
 }
@@ -13,7 +15,7 @@ fn file(name: &str, src: &str) -> String {
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join(name);
     fs::write(&path, src).unwrap();
-    path.display().to_string()
+    common::shown(&path)
 }
 
 fn text(b: &[u8]) -> String {

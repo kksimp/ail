@@ -53,6 +53,9 @@ const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson", "load_json", "print_j
 
 /// Names of the optional `derive` prelude module: what a derive generator
 /// receives (refl.info.1, ADR 0306).
+/// Its `argsderive` part: `FromArgs` and its generator (std.args.7, ADR 0777).
+const ARGS_DERIVE_NAMES: &[&str] = &["FromArgs", "ArgsFailure"];
+
 const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveError"];
 
 /// The always-read prelude, plus the `json` module (after its `## @module`
@@ -65,7 +68,8 @@ fn prelude_text(tokens: &[Token]) -> String {
     let (core, rest) = PRELUDE.split_once("## @module json\n").expect("prelude has a json module");
     let (json, rest) = rest.split_once("## @module jsonderive\n").expect("prelude has a jsonderive module");
     let (json_derive, rest) = rest.split_once("## @module default\n").expect("prelude has a default module");
-    let (default, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
+    let (default, rest) = rest.split_once("## @module argsderive\n").expect("prelude has an argsderive module");
+    let (args_derive, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
     let wants = |names: &[&str]| {
         let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
         let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
@@ -86,7 +90,11 @@ fn prelude_text(tokens: &[Token]) -> String {
     if want_default {
         text.push_str(default);
     }
-    if want_json_derive || want_default || at_derive || wants(DERIVE_NAMES) {
+    let want_args = wants(ARGS_DERIVE_NAMES);
+    if want_args {
+        text.push_str(args_derive);
+    }
+    if want_json_derive || want_default || want_args || at_derive || wants(DERIVE_NAMES) {
         text.push_str(derive);
     }
     text
@@ -154,6 +162,7 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
         in_interp: false,
         generic_names,
         olds: None,
+        member_owner: None,
         aliases: HashSet::default(),
         public: HashSet::default(),
     };
@@ -315,6 +324,8 @@ struct Parser {
     generic_names: HashSet<String>,
     /// While parsing an `ensures` condition: its `old(e)` calls (contract.ens.3).
     olds: Option<Vec<(String, Expr)>>,
+    /// The struct whose members are being parsed, for the method-placement fix (type.struct.2).
+    member_owner: Option<String>,
 }
 
 impl Parser {
@@ -949,12 +960,31 @@ impl Parser {
             if !self.eat_kw("for") {
                 if matches!(self.peek(), Tok::Newline) {
                     let at = self.tokens[self.i - 1].pos;
-                    self.error_help(
-                        "trait.impl.1",
-                        at,
-                        format!("`impl {trait_name}` needs `for Type`: `impl` implements a trait"),
-                        format!("methods of a struct are plain functions: `fn {trait_name}.name(self) T`"),
-                    );
+                    // A trait name here means the author left out the type, so only a
+                    // name that no `trait` declares is taken for the type.
+                    let is_trait = self
+                        .tokens
+                        .windows(2)
+                        .any(|w| matches!(&w[0].tok, Tok::Kw("trait")) && matches!(&w[1].tok, Tok::Ident(n) if *n == trait_name));
+                    let moved = (matches!(self.peek_at(1), Tok::Indent) && !is_trait)
+                        .then(|| self.methods_out(self.i + 2, &trait_name))
+                        .flatten();
+                    let msg = format!("`impl {trait_name}` needs `for Type`: `impl` implements a trait");
+                    let help = format!("methods of a struct are plain functions: `fn {trait_name}.name(self) T`");
+                    match moved {
+                        Some(mut edits) => {
+                            edits.push(Edit::delete(Pos { line: pos.line, col: 1 }, Pos { line: pos.line + 1, col: 1 }));
+                            self.error_fix(
+                                "trait.impl.1",
+                                at,
+                                msg,
+                                help,
+                                "move the methods out of the `impl` block and name the type in each",
+                                edits,
+                            );
+                        }
+                        None => self.error_help("trait.impl.1", at, msg, help),
+                    }
                 } else {
                     self.unexpected("`for` after the trait name", "trait.impl.1");
                 }
@@ -980,6 +1010,59 @@ impl Parser {
             let methods = self.fn_block(prog, Within::Impl(index), &label);
             prog.impls[index].methods = methods;
         }
+    }
+
+    /// The edits that turn the methods written inside a block into top-level
+    /// `fn Owner.name(...)` functions: each line of the block moves left one
+    /// indent step and each method name gains `Owner.`. `from` is the first
+    /// token of the first method; the block ends at its closing dedent.
+    /// `None` unless every member is a plain `fn` (trait.impl.1, type.struct.2).
+    fn methods_out(&self, from: usize, owner: &str) -> Option<Vec<Edit>> {
+        let mut edits = Vec::new();
+        let (mut depth, mut line, mut j) = (0i32, 0usize, from);
+        let mut fresh = true;
+        while let Some(t) = self.tokens.get(j) {
+            match &t.tok {
+                Tok::Eof => break,
+                Tok::Newline => fresh = true,
+                Tok::Indent => depth += 1,
+                Tok::Dedent => {
+                    depth -= 1;
+                    if depth < 0 {
+                        break;
+                    }
+                    fresh = true;
+                }
+                tok => {
+                    if fresh && t.pos.line != line {
+                        if t.pos.col < 5 {
+                            return None;
+                        }
+                        line = t.pos.line;
+                        edits.push(Edit::delete(Pos { line, col: 1 }, Pos { line, col: 5 }));
+                        let mut k = j;
+                        if depth == 0 {
+                            if matches!(tok, Tok::Kw("pub")) {
+                                k += 1;
+                            }
+                            if !matches!(self.tokens.get(k).map(|t| &t.tok), Some(Tok::Kw("fn"))) {
+                                return None;
+                            }
+                            let name = self.tokens.get(k + 1)?;
+                            if !matches!(name.tok, Tok::Ident(_))
+                                || matches!(self.tokens.get(k + 2).map(|t| &t.tok), Some(Tok::Sym(".")))
+                            {
+                                return None;
+                            }
+                            edits.push(Edit::insert(name.pos, format!("{owner}.")));
+                        }
+                    }
+                    fresh = false;
+                }
+            }
+            j += 1;
+        }
+        (!edits.is_empty()).then_some(edits)
     }
 
     /// The indented functions of a `trait` or `impl` block, after its first
@@ -1150,12 +1233,25 @@ impl Parser {
         self.field_pub(rule);
         if self.at_kw("fn") {
             let at = self.pos();
-            self.error_help(
-                rule,
-                at,
-                "methods aren't declared inside a struct",
-                "declare the method after the struct, with the type's name: `fn Name.method(self) T`",
-            );
+            let msg = "methods aren't declared inside a struct";
+            let help = "declare the method after the struct, with the type's name: `fn Name.method(self) T`";
+            // Methods are the last members, so they move out where they stand.
+            let moved = self
+                .member_owner
+                .clone()
+                .filter(|_| at.col == 5)
+                .and_then(|o| self.methods_out(self.i, &o));
+            match moved {
+                Some(edits) => self.error_fix(
+                    rule,
+                    at,
+                    msg,
+                    help,
+                    "move the methods after the struct and name the type in each",
+                    edits,
+                ),
+                None => self.error_help(rule, at, msg, help),
+            }
             return None;
         }
         let (fname, fpos) = self.name("a field name", rule)?;
@@ -1202,6 +1298,7 @@ impl Parser {
         if bare {
             self.bump();
         } else {
+            self.member_owner = Some(name.clone());
             self.members(&format!("`struct {name}`"), "type.struct.1", |p| {
                 if p.at_kw("invariant") {
                     invariants.push(p.invariant_line()?);
@@ -1210,6 +1307,7 @@ impl Parser {
                 fields.push(p.field_decl("type.struct.2")?);
                 Some(())
             });
+            self.member_owner = None;
         }
         if whole.is_some() {
             self.splice_messages(&name, pos, !generics.is_empty(), Vec::new(), whole);
@@ -2133,6 +2231,7 @@ impl Parser {
                         in_interp: true,
                         generic_names,
                         olds: None,
+                        member_owner: None,
                         aliases: self.aliases.clone(),
                         public: HashSet::default(),
                     };

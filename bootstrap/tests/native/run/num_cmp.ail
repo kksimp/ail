@@ -1,0 +1,20 @@
+# trait.std.2, type.num.11: cmp on int and float gives an Ordering.
+fn name(o Ordering) str
+    match o
+        Less => "less"
+        Equal => "equal"
+        Greater => "greater"
+
+fn main()
+    print(name(3.cmp(5)))
+    print(name(5.cmp(5)))
+    print(name((-2).cmp(-9)))
+    print(name(1.5.cmp(2.5)))
+    print(name(2.5.cmp(2.5)))
+    print(name((-0.0).cmp(0.0)))
+    inf := 1.0 / 0.0
+    nan := inf - inf
+    print(name(nan.cmp(nan)))
+    print(name(nan.cmp(inf)))
+    print(name(inf.cmp(nan)))
+    print(3.cmp(5) == Ordering.Less)

@@ -77,14 +77,17 @@ pub enum mir.Ty
     Struct(name str)
     Enum(name str)
     Tensor(elem mir.Ty)
+    F32
     Unknown
     Unit
     Fn(params List[mir.Ty], ret mir.Ty)
+    Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
     pub fn mir.Ty.elem(self) mir.Ty?
+    pub fn mir.Ty.is_sized(self) bool
     pub fn mir.Ty.is_tensor(self) bool
     pub fn mir.Ty.is_coll(self) bool
     pub fn mir.Ty.name(self) str
@@ -138,6 +141,7 @@ pub struct mir.Module
     pub files List[str]
     pub file_lines List[List[str]]
     pub fn mir.Module.globals_used(self) int
+pub fn mir.keep_lengths(f mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
     pub sites Set[str]
@@ -145,6 +149,7 @@ pub struct mir.Proven
     pub lows Map[int, int]
     pub highs Map[int, int]
 pub fn mir.prove(f mir.Func, defs List[mir.Def], lp mir.LoopInfo, c mir.Counted, order List[int], held List[bool]) mir.Proven
+pub fn mir.reuse_lists(m mir.Module) mir.Module
 pub fn mir.simplify(f mir.Func) mir.Func
 pub fn mir.subset_help(message str) str
 pub fn mir.module_text(m mir.Module) str
@@ -153,4 +158,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1494); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1551); dropped: private items, doc comments

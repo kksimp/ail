@@ -39,12 +39,18 @@ pub fn inline_module(m Module) Module
         if budget < INLINE_BUDGET
             f = simplify(fold(simplify(f)))
         out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(merge_blocks(f)) else fold_prim_addresses(
-            fold_addresses(bce(merge_blocks(f), reserve, grow_only)),
+            fold_addresses(kept_lengths(
+                bce(merge_blocks(f), reserve, grow_only),
+                reserve and grow_only,
+            )),
         )
-    out
+    reuse_lists(out)
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
+    # `rt.vec_*` are replaced by assembled kernels where the target has them.
+    if f.name.starts_with("rt.vec_")
+        return false
     mut n := 0
     for blk in f.blocks
         n += blk.insts.len()
@@ -159,3 +165,6 @@ fn rename(f Func, repl List[int]) Func
         t.args = [[repl[a] for a in edge] for edge in t.args]
         g.blocks[b].term = t
     g
+
+fn kept_lengths(f Func, on bool) Func
+    if on then keep_lengths(f) else f

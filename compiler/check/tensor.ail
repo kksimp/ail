@@ -23,6 +23,7 @@ TENSOR_METHODS := [
     "round",
     "shape",
     "sigmoid",
+    "softmax",
     "sum",
     "tanh",
     "to_f32",
@@ -74,6 +75,8 @@ fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
         if e := tensor_elem(t)
             if is_elem(e)
                 wanted = e
+    if f == "from_fn"
+        return tensor_from_fn(args, at)
     if f == "zeros"
         elem := wanted else Ty.Float
         sig := plain_sig(none, [shape], tensor_ty(elem))
@@ -107,6 +110,62 @@ fn Checker.tensor_call(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
     if args.len() != 1
         params.push(shape)
     check_call("tensor.from", plain_sig(none, params, tensor_ty(elem)), [], args, none, at, expect)
+
+## std.tensor.25: `tensor.from_fn(shape, |i| e)`. `shape` is an `int` (a 1-D
+## length) or a `List[int]`; the function takes the flat index and gives an
+## `int`, a `float` or an `f32`, which is the element type.
+fn Checker.tensor_from_fn(mut self, args List[ast.Arg], at ast.Pos) Ty
+    help := "write `tensor.from_fn([2, 3], |i| i.to_float())`"
+    if args.len() != 2
+        args_only(args)
+        err_help(
+            "std.tensor.25",
+            at,
+            "`from_fn` takes a shape and a function, but {was_were(args.len())} given",
+            help,
+        )
+        return Ty.Unknown
+    shape := args[0]
+    f := args[1]
+    p := f.param else
+        args_only(args)
+        err_help(
+            "std.tensor.25",
+            expr_pos(f.value),
+            "`from_fn` takes a function of the flat index",
+            help,
+        )
+        return Ty.Unknown
+    st := expr(shape.value, none, true)
+    if st != Ty.Int and st != Ty.ListOf(Ty.Int) and st != Ty.Unknown
+        err_help(
+            "std.tensor.25",
+            expr_pos(shape.value),
+            "the shape of `from_fn` is an `int` or a `List[int]`, not {show(st)}",
+            help,
+        )
+        return Ty.Unknown
+    mark := locals.len()
+    if declare(p.name, p.pos)
+        locals.push(Local(
+            name: p.name,
+            ty: Ty.Int,
+            mutable: false,
+            how: LocalKind.LoopVar,
+            decl: none,
+        ))
+    out := expr(f.value, none, true)
+    end_scope(mark)
+    if is_elem(out)
+        return tensor_ty(out)
+    if out != Ty.Unknown
+        err_help(
+            "std.tensor.25",
+            expr_pos(f.value),
+            "`from_fn`'s function gives {show(out)}, but a tensor holds `int` or `float`",
+            "return a number from the function",
+        )
+    Ty.Unknown
 
 ## `t.n(args)` on a tensor `t` (std.tensor.3-8).
 fn Checker.tensor_method(
@@ -182,6 +241,15 @@ fn Checker.tensor_method(
             at,
             "`{n}` is on `float` tensors, and this one holds `int`",
             "convert first: `t.map(|x| x.to_float()).{n}()`",
+        )
+        return Ty.Unknown
+    if n == "softmax" and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.24",
+            at,
+            "`softmax` is on `float` tensors, and this one holds `int`",
+            "convert first: `t.map(|x| x.to_float()).softmax()`",
         )
         return Ty.Unknown
     mut params := List[Ty]()

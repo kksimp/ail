@@ -11,8 +11,9 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `spawn` gives `spawn`.
-const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
+/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `std.hw` and a
+/// volatile access give `hw`; `spawn` gives `spawn`.
+const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "hw", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `std.net` gives `net` (std.net.1).
@@ -64,6 +65,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.hash.1: values only. std.compress.1: the byte functions are
         // values only; the file and directory ones read and write files.
         "hash" => (&["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"], &[]),
+        // unsafe.hw.5: hardware access.
+        "hw" => (&["at", "fence", "fence_io"], &["hw"]),
         "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
             (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
         }
@@ -91,7 +94,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.tz.1-2: reads the tz database files, and `TZ`.
         "tz" => (&["offset", "system"], &["fs", "env"]),
         // std.tensor.1: values only, so no effects.
-        "tensor" => (&["from", "zeros"], &[]),
+        "tensor" => (&["from", "from_fn", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
         "task" => (&["cancelled", "check", "select"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.
@@ -689,6 +692,11 @@ impl<'p, 'r> Walker<'p, 'r> {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
                     }
+                } else if let Some(crate::stdlib::StdCall::Ptr(m, _)) = self.resolved.std_calls.get(name_pos)
+                    && m.ends_with("_volatile")
+                {
+                    // unsafe.hw.5: a volatile access gives `hw`.
+                    self.add("hw", format!("a pointer's `{m}`"));
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && m.starts_with("net.")
                 {

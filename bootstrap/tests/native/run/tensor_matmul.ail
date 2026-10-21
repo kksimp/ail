@@ -1,0 +1,15 @@
+# std.tensor.7: matmul on float and int tensors, in the plain loop's order.
+fn main()
+    a := tensor.from([1.5, -2.0, 3.25, 4.0, 0.1, 7.0], [2, 3])
+    b := tensor.from([0.5, 1.0, -1.5, 2.0, 0.25, 3.0, 1.0e-3, 9.0, -7.5, 0.1, 6.0, 2.5], [3, 4])
+    print(a.matmul(b))
+    ia := tensor.from([1, 2, 3, 4, 5, 6], [2, 3])
+    ib := tensor.from([7, 8, 9, 10, 11, 12], [3, 2])
+    print(ia.matmul(ib))
+    print(ia.matmul(ib).transpose().matmul(ia))
+    # An inner size of zero gives zeros; an outer size of zero gives no elements.
+    z := tensor.from(List[int](), [2, 0])
+    w := tensor.from(List[int](), [0, 3])
+    print(z.matmul(w))
+    print(tensor.from(List[int](), [0, 2]).matmul(tensor.from([1, 2, 3, 4], [2, 2])).shape())
+    print(ia.matmul(tensor.from([1, 0, 0, 1, 1, 1], [3, 2])).sum())

@@ -44,6 +44,14 @@ fn map_hash_int(k int) int
 ## only places keys in the index; iteration order is insertion order.
 fn map_hash_str(s int) int
     n := load64(s)
+    if n == 0
+        return 0
+    if n <= 8
+        w := load64(s + 16)
+        mut h := (n.bit_xor(if n == 8 then w else w.bit_and(1.shl(8 * n) - 1)))
+            * -7046029254386353131
+        h = h.bit_xor(h.shr(32)) * -7046029254386353131
+        return h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
     mut h := n
     mut i := 0
     while i + 8 <= n
@@ -51,8 +59,8 @@ fn map_hash_str(s int) int
         i += 8
     if i < n
         h = h.bit_xor(load64(s + 16 + i).bit_and(1.shl(8 * (n - i)) - 1)) * -7046029254386353131
-    h = h.bit_xor(h.shr(32))
-    h.bit_and(4611686018427387903)
+    h = h.bit_xor(h.shr(32)) * -7046029254386353131
+    h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
 
 fn map_hash(kind int, k int) int
     if kind == 1
@@ -102,46 +110,28 @@ fn map_new(kind int, vmode int, vinfo int) int
     map_tables(m, 8)
     m
 
-## The entry for key `k` (hash `h`), or 0, probing from index slot `i`.
-fn map_probe(m int, k int, h int, i int) int
-    mask := load64(m + 24)
-    idx := load64(m + 48)
-    ents := load64(m + 40)
-    kind := load64(m + 32)
-    mut j := i
-    mut s := load64(idx + 8 * j)
-    while s != 0
-        e := ents + 24 * (s - 1)
-        if load64(e) == h and map_key_eq(kind, load64(e + 8), k)
-            return e
-        j = (j + 1).bit_and(mask)
-        s = load64(idx + 8 * j)
-    0
-
-## The entry for key `k` (hash `h`), or 0. The first probe is the common hit
-## on the very key object and needs no saved registers; anything else goes to
-## `map_probe` from the same slot (ADR 0767).
-fn map_find_h(m int, k int, h int) int
-    i := h.bit_and(load64(m + 24))
-    s := load64(load64(m + 48) + 8 * i)
-    if s == 0
-        return 0
-    e := load64(m + 40) + 24 * (s - 1)
-    if load64(e) == h and load64(e + 8) == k
-        return e
-    map_probe(m, k, h, i)
-
 ## `get` then assignment on one key is the common pattern: the entry of the
 ## last key found or added is remembered, so the second lookup skips the
 ## hash and the probe. A rebuild or a removal forgets it.
 fn map_find(m int, k int) int
     if load64(m + 80) != 0 and load64(m + 72) == k
         return load64(m + 80)
-    e := map_find_h(m, k, map_hash(load64(m + 32), k))
-    if e != 0
-        store64(m + 72, k)
-        store64(m + 80, e)
-    e
+    kind := load64(m + 32)
+    h := if kind == 1 then map_hash_str(k) else map_hash_int(k)
+    mask := load64(m + 24)
+    idx := load64(m + 48)
+    ents := load64(m + 40)
+    mut j := h.bit_and(mask)
+    mut s := load64(idx + 8 * j)
+    while s != 0
+        e := ents + 24 * (s - 1)
+        if load64(e) == h and (load64(e + 8) == k or map_key_eq(kind, load64(e + 8), k))
+            store64(m + 72, k)
+            store64(m + 80, e)
+            return e
+        j = (j + 1).bit_and(mask)
+        s = load64(idx + 8 * j)
+    0
 
 fn map_index_put(m int, h int, number int)
     mask := load64(m + 24)

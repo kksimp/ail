@@ -11,6 +11,7 @@ fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
 fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
 fn std_file(str, str) str
+fn uses_regex(ast.Program) bool
 fn parse_source(str, str) !mir.Source [fail fs io]
 ```
 
@@ -44,6 +45,8 @@ pub fn a64.registers() codegen.Target
 pub a64.LINUX := 1
 pub a64.MACOS := 2
 pub fn a64.generate(mir.Module, int) codegen.Image
+pub fn a64.is_kernel(str) bool
+pub fn a64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
 ## ast
@@ -244,9 +247,11 @@ pub struct mir.Block
 pub struct mir.Func
 pub struct mir.Site
 pub struct mir.Module
+pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.reuse_lists(mir.Module) mir.Module
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
@@ -330,6 +335,8 @@ pub fn x64.alu_digit(str) int
 pub fn x64.sd_opcode(str) int
 pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
+pub fn x64.is_kernel(str) bool
+pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3682); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3789); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

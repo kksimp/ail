@@ -23,6 +23,24 @@ impl<'p> Checker<'p> {
         );
     }
 
+    /// unsafe.hw.1: `what` reaches hardware, which only a package whose
+    /// manifest says `unsafe driver` may do. A package without `unsafe allow`
+    /// already has its error at the `unsafe` block.
+    pub(super) fn driver_opt_in(&mut self, what: &str, pos: Pos) {
+        if self.prog.driver_ok_at(pos) || !self.prog.unsafe_ok_at(pos) {
+            return;
+        }
+        let (who, help) = match (&self.prog.unsafe_allowed, self.prog.package_at(pos)) {
+            (None, _) => (
+                "this program".to_string(),
+                "run or build it with `--unsafe driver`, or give it an `ail.pkg` that says `unsafe driver`",
+            ),
+            (_, "") => ("this package".to_string(), "write `unsafe driver` on the `package` line of `ail.pkg`"),
+            (_, p) => (format!("dependency `{p}`"), "write `unsafe driver` on the `dep` line that grants it"),
+        };
+        self.error_help("unsafe.hw.1", pos, format!("{what} reaches hardware, which {who} isn't allowed to do"), help);
+    }
+
     /// unsafe.block.2, ffi.call.1: calling an `unsafe fn` or a C function is
     /// an unsafe operation (unsafe.op.1).
     pub(super) fn note_unsafe_call(&mut self, f: usize, pos: Pos) {
@@ -132,7 +150,7 @@ impl<'p> Checker<'p> {
 }
 
 /// The methods of a raw pointer `*T` (unsafe.ptr.2-3), sorted.
-pub const PTR_METHODS: &[&str] = &["is_null", "offset", "read", "write"];
+pub const PTR_METHODS: &[&str] = &["is_null", "offset", "read", "read_volatile", "write", "write_volatile"];
 
 impl<'p> Checker<'p> {
     /// The memory layout of what `t` points to (unsafe.ptr.1).
@@ -177,9 +195,13 @@ impl<'p> Checker<'p> {
         if m != "is_null" {
             self.note_unsafe_op(&format!("`{m}` on a raw pointer"), pos);
         }
+        if m.ends_with("_volatile") {
+            // unsafe.hw.3: a volatile access is hardware access.
+            self.driver_opt_in(&format!("`{m}` on a raw pointer"), pos);
+        }
         let (params, ret) = match m {
-            "read" => (vec![], (**target).clone()),
-            "write" => (vec![(**target).clone()], Ty::Unit),
+            "read" | "read_volatile" => (vec![], (**target).clone()),
+            "write" | "write_volatile" => (vec![(**target).clone()], Ty::Unit),
             "offset" => (vec![Ty::Int], rt.clone()),
             _ => (vec![], Ty::Bool),
         };
@@ -236,5 +258,25 @@ impl<'p> Checker<'p> {
         };
         let sig = super::Sig::plain(None, params.into_iter().map(|t| (false, t)).collect(), ret);
         Some(self.check_call(&format!("mem.{f}"), &sig, Vec::new(), args, None, pos, expect))
+    }
+}
+
+impl<'p> Checker<'p> {
+    /// `hw.at(addr, example)`: a pointer to the example's type at a fixed
+    /// address, the only way from a number to a pointer (unsafe.hw.2).
+    pub(super) fn hw_at(&mut self, args: &'p [crate::ast::Arg], pos: Pos, expect: Option<&Ty>) -> Ty {
+        let mut tys = Vec::new();
+        for a in args {
+            tys.push(self.quiet_type(&a.value));
+        }
+        if args.len() != 2 {
+            let sig = super::Sig::plain(None, vec![(false, Ty::Err); 2], Ty::Err);
+            return self.check_call("hw.at", &sig, Vec::new(), args, None, pos, expect);
+        }
+        let example = tys[1].clone();
+        self.ptr_target(&example, args[1].value.pos());
+        let ret = if example == Ty::Err { Ty::Err } else { Ty::Ptr(Box::new(example.clone())) };
+        let sig = super::Sig::plain(None, vec![(false, Ty::Int), (false, example)], ret);
+        self.check_call("hw.at", &sig, Vec::new(), args, None, pos, expect)
     }
 }

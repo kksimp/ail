@@ -437,6 +437,21 @@ places (`a.b[i].m()`) and `ref` cells still run on the walker.
 
 Step 3b (ADR 0620): `mut self` calls on a field path of a local and calls through a
 function-value local run on the tier too (0 hand-offs in a loop doing both).
+## Frame redesign, measured (lane 190, day 3, ADR 0759)
+Locals and temporaries in one array, and calls as frames in one loop, were both built and are slower or
+equal; the kept changes are operator-specific instructions, a fused end of a `while` turn, branches kept as
+branches, and scalars written to their slot from registers (whole-`Value` moves through the stack stall the
+loads after them). Collatz, nbody and mandelbrot are 13-20% faster by wall time; instruction counts fall
+2-10% on seven of the eight. Sieve is memory-bound (32 bytes per `bool` element); binarytrees needs fewer
+steps per call. Numbers and rejected experiments are in the ADR.
+
+## Packed lists (lane 190, day 3, ADR 0760)
+`List[int]`, `List[float]` and `List[bool]` are stored as one machine word (a byte for `bool`) per element instead
+of a 32-byte `Value`, behind the same `Value::List`; any other list stays boxed, and `AIL_NO_PACK=1` boxes them all for
+the differential fuzzers. Sieve at 3,000,000 flags drops from 101 MB to 12 MB (30 bytes to under 1 byte per flag) and
+from 0.59 s to 0.21 s (1.24x to 0.43x CPython); matmul 0.37 s to 0.28 s; the geometric mean over CPython for the
+eight programs is 0.871 before and 0.725 after. Binarytrees (no lists) stays at 1.5-1.7x.
+
 ## Day 2 table (2026-10-21)
 Date: 2026-10-21. Linux x86-64, 14 cores. Median of 5 wall-clock runs of
 `ail run PROGRAM ARGS` (release build; includes start-up and the check pass)

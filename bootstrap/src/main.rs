@@ -34,6 +34,7 @@ mod num;
 mod packages;
 mod parser;
 mod regex;
+mod shown;
 mod snapshot;
 mod stdlib;
 mod tensor;
@@ -147,7 +148,7 @@ fn main() -> ExitCode {
             "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
-            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
+            "--deny" | "--unsafe" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
             // budget.out.5: `--budget` may stand alone (the command's default).
             "--budget" if args.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())) => i += 1,
             "--budget" => {}
@@ -240,6 +241,10 @@ fn main() -> ExitCode {
             eprintln!("error: {msg}");
             return ExitCode::from(2);
         }
+    }
+    if let Err(msg) = take_unsafe_driver(&mut rest) {
+        eprintln!("error: {msg}");
+        return ExitCode::from(2);
     }
     let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
         Ok(d) => d,
@@ -404,6 +409,18 @@ fn take_test_options(flags: &mut Vec<&str>) -> Result<(u64, Option<u64>), String
         }
     }
     Ok((cases, seed))
+}
+
+/// Remove `--unsafe driver`: a program without an `ail.pkg` may use `std.hw`
+/// (unsafe.hw.1).
+fn take_unsafe_driver(args: &mut Vec<&str>) -> Result<(), String> {
+    let Some(at) = args.iter().position(|a| *a == "--unsafe") else { return Ok(()) };
+    if args.get(at + 1).copied() != Some("driver") {
+        return Err("`--unsafe` takes `driver`: `--unsafe driver` lets a program without `ail.pkg` use `std.hw` (unsafe.hw.1)".into());
+    }
+    args.drain(at..at + 2);
+    ast::UNSAFE_DRIVER.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 /// Remove `--deny LIST` from the arguments and return the denied

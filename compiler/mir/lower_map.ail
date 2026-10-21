@@ -91,6 +91,27 @@ fn Lower.entry_value(mut self, e int, t Ty) int
         return rawop("bits_float", [word], Ty.Float)
     rawop("load64", [addr], t)
 
+## `m.get(k)` as a `V?` (type.map.6): the entry's value, or `none`.
+fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
+    t := opt_of(vt) else return unsupported(pos, "`.get(k)` on a map of `{vt.name()}`")
+    e := call("rt.map_find", [m.id, k], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    jump(join, [some(Val(id: entry_value(e, vt), ty: vt)).id])
+    seal(missing)
+    cur = missing
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: t)
+
 ## A call that returns a stored word, as a value of type `t`.
 fn Lower.word_call(mut self, name str, args List[int], t Ty) int
     if t.is_float()
@@ -162,7 +183,7 @@ fn Lower.entry_or(mut self, e int, t Ty, zero int) int
 ## `Map[K, V]()` and `Set[T]()` (type.coll.8).
 fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val?
     t := self.coll_type_of(name, targs) else
-        return unsupported(pos, "this `{name}` type")
+        return unsupported(pos, "`{name}` with these type arguments")
     Val(id: new_table(t), ty: t)
 
 fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want Ty?) Val?
@@ -175,7 +196,7 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
                 vt = v
             _ => kt = kt
     if entries.len() == 0 and kt.is_unknown()
-        return unsupported(pos, "an empty `\{}` whose type isn't known")
+        return pending_table()
     mut ks := List[int]()
     mut vs := List[int]()
     for e in entries
@@ -224,6 +245,8 @@ fn Lower.lower_set_lit(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Va
 
 ## `m[k]` (type.map.3): traps when `k` is missing.
 fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
+    if is_pending_table(m.ty)
+        return unsupported(pos, "an empty `\{}` whose type isn't known")
     match m.ty
         Map(kt, vt) =>
             k := lower_value(index, kt)?
@@ -244,10 +267,21 @@ fn Lower.lower_map_assign(
     ipos ast.Pos,
 )
     match m.ty
-        Map(kt, vt) =>
-            k := lower_value(index, kt) else return
+        Map(kt0, vt0) =>
+            mut kt := kt0
+            mut vt := vt0
+            k := lower_value(index, if kt.is_unknown() then none else kt) else return
+            mut r := Val(id: -1, ty: Ty.Unknown)
+            if kt.is_unknown()
+                # A pending `{}` (type.coll.13): this assignment types it.
+                r = lower_value(value, none) else return
+                if not settle_map(m, k.ty, r.ty, ipos)
+                    return
+                kt = k.ty
+                vt = r.ty
             kid := convert(k, kt, ipos)
-            r := lower_value(value, vt) else return
+            if r.id < 0
+                r = lower_value(value, vt) else return
             mut stored := -1
             if o := op
                 zero := match vt
@@ -273,10 +307,16 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     key := match value
         Method(_, _, _, a) => a[0].value
         _ => return none
+    removes := match value
+        Method(_, n, _, _) => n == "remove"
+        _ => false
     m := lower_value(recv, none)?
     kt := match m.ty
         Map(k, _) => k
-        _ => return unsupported(pos, "`.get(k) else` on a `{m.ty.name()}`")
+        _ => return unsupported(
+            pos,
+            "`.{if removes then "remove" else "get"}(k) else` on a `{m.ty.name()}`",
+        )
     vt := match m.ty
         Map(_, v) => v
         _ => Ty.Unknown
@@ -292,13 +332,14 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     branch(has, found, [], missing, [])
     seal(found)
     cur = found
-    jump(join, [entry_value(e, vt)])
+    got := entry_value(e, vt)
+    if removes
+        call("rt.map_remove", [m.id, kid], Ty.Unit)
+    jump(join, [got])
     seal(missing)
     cur = missing
     match other
-        Fallback(x) =>
-            f := lower_value(x, vt)?
-            jump(join, [convert(f, vt, pos)])
+        Fallback(x) => fallback_jump(x, vt, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
@@ -308,9 +349,22 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     cur = join
     Val(id: r, ty: vt)
 
+## Whether `r.n(...)` calls a method of a struct, enum or module, not a built-in.
+fn Lower.user_method(self, r ast.Expr, n str) bool
+    key := method_key(r, n) else return false
+    sigs.contains(key)
+
+## `r.get(k)`, or `r.remove(k)` on a local: a map call that `else` can follow.
+fn Lower.is_table_call(self, r ast.Expr, n str) bool
+    if n == "get"
+        return not (self.is_module(r, "env") or self.is_module(r, "net")) and not user_method(r, n)
+    match r
+        Name(nm, _) => n == "remove" and lookup(nm) != none
+        _ => false
+
 fn Lower.is_get_call(self, e ast.Expr) bool
     match e
-        Method(r, n, _, a) => n == "get" and a.len() == 1 and not self.is_module(r, "env")
+        Method(r, n, _, a) => a.len() == 1 and self.is_table_call(r, n)
         _ => false
 
 # ---- methods ----
@@ -318,7 +372,12 @@ fn Lower.is_get_call(self, e ast.Expr) bool
 fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
-            return unsupported(npos, "this method call")
+            return unsupported(npos, "`.{name}()` with a labelled or `mut` argument")
+    if is_pending_table(r.ty)
+        if name == "add" and args.len() == 1
+            return settle_set_add(r, args, npos)
+        if name != "len"
+            return unsupported(npos, "an empty `\{}` whose type isn't known")
     mut vs := List[Val]()
     match r.ty
         Map(kt, vt) =>
@@ -331,6 +390,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 vs.push(lower_value(a.value, if want.is_unknown() then none else want)?)
             if name == "len" and vs.len() == 0
                 return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "is_empty" and vs.len() == 0
+                n0 := rawop("load64", [r.id], Ty.Int)
+                return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "contains" and vs.len() == 1
                 return Val(
                     id: call("rt.map_has", [r.id, convert(vs[0], kt, npos)], Ty.Bool),
@@ -350,8 +412,13 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 f := if vt == Ty.Bool then "rt.map_values_bool" else "rt.map_values"
                 return Val(id: call(f, [r.id], Ty.List(vt)), ty: Ty.List(vt))
             if name == "get" and vs.len() == 1
-                return unsupported(npos, "`.get(k)` without `else` (an optional)")
+                return map_get(r, convert(vs[0], kt, npos), vt, npos)
         Set(et) =>
+            if name == "is_subset" and args.len() == 1
+                b := lower_value(args[0].value, none)?
+                rest := set_op(r, "difference", b, npos)?
+                n0 := rawop("load64", [rest.id], Ty.Int)
+                return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if is_set_op(name) and args.len() == 1
                 b := lower_value(args[0].value, none)?
                 return set_op(r, name, b, npos)
@@ -359,6 +426,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 vs.push(lower_value(a.value, et)?)
             if name == "len" and vs.len() == 0
                 return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "is_empty" and vs.len() == 0
+                n0 := rawop("load64", [r.id], Ty.Int)
+                return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "add" and vs.len() == 1
                 return Val(
                     id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool),
@@ -425,6 +495,8 @@ fn Lower.iter_coll(mut self, v Val) Val
 
 ## `print(m)` and `print(s)` (type.map.4): `{"a": 1}`, `{1, 2}`.
 fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
+    if is_pending_table(v.ty)
+        return unsupported(pos, "an empty `\{}` whose type isn't known")
     match v.ty
         Map(k, x) =>
             kk := scalar_kind(k)
@@ -466,3 +538,86 @@ fn Lower.as_set(mut self, v Val, e Ty, pos ast.Pos) int?
         return call("rt.set_from_list", [konst(key_kind(e), Ty.Int), v.id], Ty.Set(e))
     problem(pos, "expected a set or list of `{e.name()}`, found `{v.ty.name()}`")
     none
+
+## The two names of the `LetTuple` that starts a `for a, b in xs` body, or
+## none when `stmt` is anything else.
+fn pair_binders(var str, stmt ast.Stmt) List[ast.Binder]
+    match stmt
+        LetTuple(ns, value, _) =>
+            match value
+                Name(nm, _) => if nm == var and ns.len() == 2 then ns else []
+                _ => []
+        _ => []
+
+## `for k, v in m` over a map (type.tuple.5): the keys and values are taken
+## as two lists when the loop starts, so the body may change `m`, and the
+## loop runs over their indexes. `for a, b in xs` starts its body with a
+## `LetTuple` over the hidden loop variable `var`. True when the loop is
+## lowered here (or reported), false for any other `for`.
+fn Lower.for_pairs(mut self, var str, iter ast.Expr, body List[ast.Stmt]) bool
+    if body.len() == 0
+        return false
+    pair := pair_binders(var, body[0])
+    if pair.len() == 0
+        return false
+    pos := expr_pos(iter)
+    m := lower_value(iter, none) else return true
+    if not is_map_ty(m.ty)
+        problem(pos, "a `for` over a `{m.ty.name()}` with two names isn't in the native subset yet")
+        return true
+    nvars += 1
+    id := nvars
+    me := "#fm{id}"
+    declare(me, m.ty, m.id)
+    mut stmts := List[ast.Stmt]()
+    for part in ["keys", "values"]
+        call_expr := ast.Expr.Method(
+            recv: ast.Expr.Name(name: me, pos: pos),
+            name: part,
+            name_pos: pos,
+            args: [],
+        )
+        lower_stmt(ast.Stmt.Let(
+            name: "#f{part}{id}",
+            pos: pos,
+            mutable: false,
+            value: call_expr,
+            otherwise: none,
+        ))
+    at := ast.Expr.Name(name: "#fi{id}", pos: pos)
+    mut inner := List[ast.Stmt]()
+    mut k := 0
+    for b in pair
+        if b.name != "_"
+            list := ast.Expr.Name(name: "#f{if k == 0 then "keys" else "values"}{id}", pos: pos)
+            inner.push(ast.Stmt.Let(
+                name: b.name,
+                pos: b.pos,
+                mutable: b.mutable,
+                value: ast.Expr.Index(recv: list, index: at, pos: pos),
+                otherwise: none,
+            ))
+        k += 1
+    for rest in body[1..]
+        inner.push(rest)
+    count := ast.Expr.Method(
+        recv: ast.Expr.Name(name: "#fkeys{id}", pos: pos),
+        name: "len",
+        name_pos: pos,
+        args: [],
+    )
+    lower_stmt(ast.Stmt.For(
+        is_par: false,
+        var: "#fi{id}",
+        var_pos: pos,
+        mutable: false,
+        iter: ast.Expr.Range(
+            lo: ast.Expr.Int(value: "0", pos: pos),
+            hi: count,
+            inclusive: false,
+            pos: pos,
+        ),
+        body: inner,
+        pos: pos,
+    ))
+    true
