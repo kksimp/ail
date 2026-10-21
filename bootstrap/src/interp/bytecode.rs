@@ -53,6 +53,10 @@ pub(super) struct Stats {
     pub handoffs: u64,
     /// With `AIL_BYTECODE_STATS=2`: hand-offs by kind of node.
     pub kinds: Option<HashMap<Cow<'static, str>, u64>>,
+    /// With `AIL_BYTECODE_STATS=3`: calls and own instructions by function.
+    pub by_fn: Option<HashMap<String, (u64, u64)>>,
+    /// Instructions run by callees of the body now running (for `by_fn`).
+    pub child_ins: u64,
 }
 
 /// The kind of a handed-off node, for `AIL_BYTECODE_STATS=2`.
@@ -1731,6 +1735,11 @@ impl<'a, W: Write> Interp<'a, W> {
             "bytecode: {compiled} of {tried} functions called compiled; calls {tier} on the tier, {walker} on the walker; \
              {ins} instructions, {handoffs} hand-offs ({native:.1}% native)"
         );
+        let mut fns: Vec<_> = self.stats.by_fn.iter().flatten().collect();
+        fns.sort_by(|a, b| b.1.1.cmp(&a.1.1));
+        for (name, (calls, ins)) in fns.into_iter().take(40) {
+            eprintln!("  {ins:>10} ins {calls:>8} calls  {name}");
+        }
         let mut kinds: Vec<_> = self.stats.kinds.iter().flatten().collect();
         kinds.sort_by(|a, b| b.1.cmp(a.1));
         for (k, n) in kinds {

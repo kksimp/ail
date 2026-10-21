@@ -54,24 +54,11 @@ KEYWORDS := {
     "with",
 }
 
-## Symbols, longest first so that `..=` wins over `..` and `.`.
-SYMBOLS := [
-    "..=",
-    "..",
-    "->",
-    "=>",
-    ":=",
-    "==",
-    "!=",
-    "<=",
-    ">=",
-    "+=",
-    "-=",
-    "*=",
-    "/=",
-    "%=",
-    "&&",
-    "||",
+## Symbols of two characters, and of one. `..=` is checked first, then `..`,
+## then these, so the longest spelling wins (`..=` over `..` over `.`).
+TWO_SYMBOLS := {"->", "=>", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||"}
+
+ONE_SYMBOLS := {
     ".",
     ":",
     ",",
@@ -93,7 +80,7 @@ SYMBOLS := [
     "?",
     "@",
     "|",
-]
+}
 
 ## A line ending in one of these continues on the next line (lex.stmt.2).
 BINARY_SYMBOLS := {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "..", "..="}
@@ -549,16 +536,17 @@ fn rest_is_space(line List[char], from int) bool
 
 ## The longest symbol spelled at `line[i..]`.
 fn symbol_at(line List[char], i int) str?
-    for sym in SYMBOLS
-        cs := sym.chars()
-        if i + cs.len() <= line.len()
-            mut same := true
-            for k in 0..cs.len()
-                if line[i + k] != cs[k]
-                    same = false
-                    break
-            if same
-                return sym
+    if i + 1 < line.len()
+        two := text_of(line, i, i + 2)
+        if two == ".."
+            if i + 2 < line.len() and line[i + 2] == '='
+                return "..="
+            return ".."
+        if TWO_SYMBOLS.contains(two)
+            return two
+    one := text_of(line, i, i + 1)
+    if ONE_SYMBOLS.contains(one)
+        return one
     none
 
 fn Lexer.symbol(mut self, sym str, pos ast.Pos)

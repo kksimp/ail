@@ -530,3 +530,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
 | [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
 | [0655](0655-build-cache.md) | A content-addressed cache of finished `ail build` executables, and derive expansion with one effect inference *(delegated)* | Accepted | 2026-10-21 |
+| [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |

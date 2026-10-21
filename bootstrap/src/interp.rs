@@ -464,6 +464,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         stats: bytecode::Stats {
             on: std::env::var_os("AIL_BYTECODE_STATS").is_some(),
             kinds: (std::env::var_os("AIL_BYTECODE_STATS").is_some_and(|v| v == "2")).then(HashMap::default),
+            by_fn: (std::env::var_os("AIL_BYTECODE_STATS").is_some_and(|v| v == "3")).then(HashMap::default),
             ..Default::default()
         },
     }
@@ -1203,7 +1204,18 @@ impl<'a, W: Write> Interp<'a, W> {
         let mut outcome = match self.compiled(f) {
             Some(code) => {
                 self.stats.calls[1] += 1;
-                self.run_code(&code, env)
+                if self.stats.by_fn.is_some() {
+                    let (start, child) = (self.stats.ins, self.stats.child_ins);
+                    let out = self.run_code(&code, env);
+                    let total = self.stats.ins - start;
+                    let own = total - (self.stats.child_ins - child);
+                    self.stats.child_ins = child + total;
+                    let e = self.stats.by_fn.as_mut().expect("checked").entry(f.full_name()).or_default();
+                    (e.0, e.1) = (e.0 + 1, e.1 + own);
+                    out
+                } else {
+                    self.run_code(&code, env)
+                }
             }
             None => {
                 self.stats.calls[0] += 1;
