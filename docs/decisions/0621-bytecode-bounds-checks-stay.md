@@ -46,3 +46,23 @@ recurses through `run_code` and `exec`.
   that the walker shares; a lane of its own, not an end-of-night change.
 - **Per-program fusion (a sieve-inner-loop instruction).** Wins one benchmark
   and nothing else.
+
+## Hand-off survey (2026-10-21, for day 3)
+
+Every program in `examples/` and `bootstrap/tests/cases/` (390 programs that ran)
+under `AIL_BYTECODE_STATS=2`: 54.3 M tier instructions and 29,706 hand-offs, so
+hand-offs are about 0.05% of the work and not where the time goes. Ranked by count:
+
+| Hand-offs | Construct |
+|---:|---|
+| 17,692 | assignment to a field or element (16,620 are `examples/interp.ail`: `env.scopes[k][name] = eval(value)?`, a map-in-list place with a fallible value) |
+| 5,676 | method call `.call` |
+| 2,329 | method call `.from_code` |
+| 940 | slice |
+| 661 | method call `.len` (on non-local receivers) |
+| 484 | `let ... else` with a block |
+| 259 | comprehension; 259 `call`; 154 `if ... else err` |
+
+No fix is worth a PR: the top entry is one program's deep place assignment
+with `?` in the value (a tree-walker style the tier would need a place-path
+instruction for), and the rest are under 1% of the programs' instructions.
