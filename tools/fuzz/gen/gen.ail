@@ -1,0 +1,334 @@
+## Random AIL programs for differential checking (ADR 0753): well-typed by
+## construction, and with `MISTAKES` chance in 4 of having one typed mistake
+## put in, so the diagnostics path is exercised as well as the happy path.
+##
+##   ail run tools/fuzz/gen/gen.ail N SEED OUTDIR
+##
+## writes OUTDIR/p0.ail .. p{N-1}.ail; program k comes from seed SEED + k, so a
+## seed alone reproduces a program.
+
+## Types of a generated variable: int, bool, str, ints (List[int]), map
+## (Map[str, int]), opt (int?), pt (Pt), shape (Shape).
+struct Var
+    name str
+    ty str
+    mutable bool
+
+struct Gen
+    lines List[str]
+    vars List[Var]
+    ind int
+    fresh int
+    loops int
+    ## The number of statements before the mistake goes in, and its kind (0: none).
+    mistake_at int
+    mistake int
+    stmts int
+
+PRELUDE := [
+    "struct Pt",
+    "    a int",
+    "    b int",
+    "",
+    "fn Pt.sum(self) int",
+    "    a + b",
+    "",
+    "fn Pt.shift(mut self, d int)",
+    "    a += d",
+    "",
+    "enum Shape",
+    "    Circle(r int)",
+    "    Rect(w int, h int)",
+    "    Dot",
+    "",
+    "fn Shape.area(self) int",
+    "    match self",
+    "        Circle(r) => 3 * r * r",
+    "        Rect(w, h) => w * h",
+    "        Dot => 0",
+    "",
+    "fn mul(a int, b int) int",
+    "    a * b",
+    "",
+    "fn bump(mut n int)",
+    "    n += 1",
+    "",
+    "error enum Fail",
+    "    Neg(n int)",
+    "",
+    "fn check_pos(x int) int ! Fail",
+    "    if x < 0",
+    "        return Fail.Neg(n: x)",
+    "    x",
+    "",
+    "fn chain(x int) !int",
+    "    y := check_pos(x)? \"chain\"",
+    "    y + 1",
+    "",
+    "fn pick(xs List[int], i int) int?",
+    "    if i >= 0 and i < xs.len()",
+    "        return xs[i]",
+    "    none",
+    "",
+]
+
+fn Gen.emit(mut self, s str)
+    lines.push("{" ".repeat(4 * ind)}{s}")
+
+fn Gen.with_type(self, ty str) List[Var]
+    [v for v in vars if v.ty == ty]
+
+fn pick_of(xs List[str]) str
+    xs[random.int(0, xs.len() - 1)]
+
+fn Gen.var_of(self, ty str) str?
+    vs := with_type(ty)
+    if vs.len() == 0
+        return none
+    vs[random.int(0, vs.len() - 1)].name
+
+## An expression of type `ty`; `depth` bounds its size.
+fn Gen.expr(self, ty str, depth int) str
+    deep := depth <= 0
+    match ty
+        "int" =>
+            if v := var_of("int")
+                if deep or random.int(0, 2) == 0
+                    return v
+            k := random.int(0, 9)
+            if deep or k < 2
+                return "{random.int(0, 20)}"
+            if k == 2
+                return "({expr("int", depth - 1)} + {expr("int", depth - 1)})"
+            if k == 3
+                return "({expr("int", depth - 1)} - {expr("int", depth - 1)})"
+            if k == 4
+                return "mul({expr("int", depth - 1)}, {random.int(1, 5)})"
+            if k == 5
+                return "({expr("int", depth - 1)} % {random.int(2, 9)})"
+            if k == 6
+                if p := var_of("pt")
+                    return "{p}.sum()"
+            if k == 7
+                if xs := var_of("ints")
+                    return "{xs}.len()"
+            if k == 8
+                if m := var_of("map")
+                    return "({m}.get({expr("str", 0)}) else 0)"
+            if k == 9
+                if o := var_of("opt")
+                    return "({o} else 0)"
+            "{random.int(0, 20)}"
+        "bool" =>
+            if v := var_of("bool")
+                if deep or random.int(0, 2) == 0
+                    return v
+            k := random.int(0, 4)
+            if deep or k == 0
+                return pick_of(["true", "false"])
+            if k == 1
+                return "{expr("int", depth - 1)} {pick_of(["<", "<=", ">", ">=", "==", "!="])} {expr("int", depth - 1)}"
+            if k == 2
+                return "not ({expr("bool", depth - 1)})"
+            if k == 3
+                return "({expr("bool", depth - 1)} and {expr("bool", depth - 1)})"
+            "({expr("bool", depth - 1)} or {expr("bool", depth - 1)})"
+        "str" =>
+            if v := var_of("str")
+                if deep or random.int(0, 2) == 0
+                    return v
+            k := random.int(0, 3)
+            if deep or k == 0
+                return pick_of(["\"a\"", "\"b\"", "\"ab\"", "\"\"", "\"Hi\""])
+            if k == 1
+                return "\"n=\{{expr("int", depth - 1)}}\""
+            if k == 2
+                return "{expr("str", depth - 1)}.to_upper()"
+            "{expr("str", depth - 1)}.trim()"
+        "ints" =>
+            if v := var_of("ints")
+                if deep or random.int(0, 2) == 0
+                    return v
+            "[{expr("int", 0)}, {expr("int", 0)}, {expr("int", 0)}]"
+        "opt" =>
+            if xs := var_of("ints")
+                if random.int(0, 1) == 0
+                    return "pick({xs}, {expr("int", 0)})"
+            "pick([1, 2, 3], {expr("int", 0)})"
+        "pt" =>
+            "Pt(a: {expr("int", 0)}, b: {expr("int", 0)})"
+        "shape" =>
+            pick_of([
+                "Shape.Dot",
+                "Shape.Circle(r: {random.int(1, 4)})",
+                "Shape.Rect(w: {random.int(1, 4)}, h: {random.int(1, 4)})",
+            ])
+        _ =>
+            "0"
+
+fn Gen.name(mut self) str
+    fresh += 1
+    "v{fresh}"
+
+fn Gen.declare(mut self, ty str, mutable bool) str
+    n := name()
+    vars.push(Var(name: n, ty: ty, mutable: mutable))
+    n
+
+fn Gen.block(mut self, count int)
+    saved := vars.len()
+    ind += 1
+    for _ in 0..count
+        stmt()
+    # a block must not be empty
+    emit("print({expr("int", 1)})")
+    ind -= 1
+    while vars.len() > saved
+        vars.pop()
+
+fn Gen.stmt(mut self)
+    stmts += 1
+    if mistake > 0 and stmts == mistake_at
+        wrong()
+        return
+    k := random.int(0, 13)
+    if k <= 2
+        ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
+        e := expr(ty, 2)
+        mutable := ty != "opt" and random.int(0, 1) == 0
+        n := declare(ty, mutable)
+        emit("{if mutable then "mut " else ""}{n} := {e}")
+    elif k == 3
+        vs := [v for v in vars if v.mutable and v.ty == "int"]
+        if vs.len() > 0
+            v := vs[random.int(0, vs.len() - 1)]
+            emit("{v.name} {pick_of(["=", "+=", "-="])} {expr("int", 2)}")
+        else
+            emit("print({expr("str", 1)})")
+    elif k == 4
+        emit("print({expr(pick_of(["int", "bool", "str", "ints"]), 2)})")
+    elif k == 5
+        emit("if {expr("bool", 2)}")
+        block(random.int(1, 2))
+        if random.int(0, 1) == 0
+            emit("else")
+            block(1)
+    elif k == 6
+        emit("for {name()} in 0..{random.int(1, 4)}")
+        loops += 1
+        block(random.int(1, 2))
+        loops -= 1
+    elif k == 7
+        c := declare("int", true)
+        emit("mut {c} := 0")
+        emit("while {c} < {random.int(1, 3)}")
+        loops += 1
+        ind += 1
+        emit("{c} += 1")
+        ind -= 1
+        block(1)
+        loops -= 1
+    elif k == 8
+        if xs := var_of("ints")
+            emit("{pick_of(["mut ", ""])}{name()} := {xs}.sorted()")
+        else
+            emit("print(1)")
+    elif k == 9
+        if sh := var_of("shape")
+            emit("print({sh}.area())")
+        else
+            emit("print(2)")
+    elif k == 10
+        if sh := var_of("shape")
+            emit("match {sh}")
+            ind += 1
+            emit("Circle(r) => print(r)")
+            emit("Rect(w, h) => print(w + h)")
+            emit("Dot => print(0)")
+            ind -= 1
+        else
+            emit("print(3)")
+    elif k == 11
+        emit("print(chain({expr("int", 1)}) else 0)")
+    elif k == 12
+        if loops > 0
+            emit("if {expr("bool", 1)}")
+            ind += 1
+            emit(pick_of(["break", "continue"]))
+            ind -= 1
+        else
+            emit("print(4)")
+    else
+        emit("print({expr("int", 2)} {pick_of(["+", "*"])} {expr("int", 1)})")
+
+## One typed mistake, of the kind `mistake`.
+fn Gen.wrong(mut self)
+    iv := var_of("int") else "7"
+    match mistake
+        1 => emit("{name()} := mul({iv})")
+        2 => emit("bump({iv})")
+        3 => emit("{pick_of(["x1", "x2"])} := 1")
+        4 => emit("{name()} := {name()}")
+        5 => emit("{name()} := {iv} + \"text\"")
+        6 => emit("{name()} := {iv}.nosuch()")
+        7 => emit("{name()} := check_pos({iv})")
+        8 => emit("{name()} := pick([1], 0) else \"x\"")
+        9 => emit("{name()} := pick([1], 0) + 1")
+        10 => emit("{name()} := [1, 2][0] + \"x\"")
+        11 => emit("return 1")
+        12 => emit("if {iv}")
+        13 => emit("break")
+        14 => emit("{name()} := Pt(a: 1, b: 2).zz")
+        15 => emit("{iv} = \"s\"")
+        16 => emit("{name()} := mul({iv}, {iv}, {iv})")
+        17 => emit("{name()} := Shape.Square")
+        18 => emit("print({name()}.len())")
+        _ => emit("{name()} := chain({iv})")
+
+fn program(seed int) str
+    random.seed(seed)
+    mut g := Gen(
+        lines: [],
+        vars: [],
+        ind: 1,
+        fresh: 0,
+        loops: 0,
+        mistake_at: 0,
+        mistake: 0,
+        stmts: 0,
+    )
+    if random.int(0, 3) == 0
+        g.mistake = random.int(1, 19)
+        g.mistake_at = random.int(1, 12)
+    # a few helper functions of two ints, then main
+    mut helpers := ""
+    for h in 0..random.int(0, 2)
+        mut hg := Gen(
+            lines: [],
+            vars: [],
+            ind: 1,
+            fresh: 100 * (h + 1),
+            loops: 0,
+            mistake_at: 0,
+            mistake: 0,
+            stmts: 0,
+        )
+        hg.vars.push(Var(name: "a", ty: "int", mutable: false))
+        hg.vars.push(Var(name: "b", ty: "int", mutable: false))
+        for _ in 0..random.int(1, 4)
+            hg.stmt()
+        helpers = "{helpers}fn f{h}(a int, b int) int\n{hg.lines.join("\n")}\n    {hg.expr("int", 2)}\n\n"
+    for _ in 0..random.int(4, 14)
+        g.stmt()
+    "{PRELUDE.join("\n")}\n{helpers}fn main()\n{g.lines.join("\n")}\n    print(0)\n"
+
+fn main() !
+    args := env.args()
+    if args.len() < 3
+        io.eprint("usage: ail run tools/fuzz/gen/gen.ail N SEED OUTDIR")
+        io.exit(2)
+    n := args[0].to_int() else 0
+    seed := args[1].to_int() else 1
+    fs.make_dir(args[2])?
+    for k in 0..n
+        fs.write_text("{args[2]}/p{k}.ail", program(seed + k))?
