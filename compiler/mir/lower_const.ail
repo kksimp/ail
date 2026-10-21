@@ -55,7 +55,7 @@ fn Lower.gen_const_init(mut self)
     mut state := [0 for _ in global_consts]
     for k in 0..global_consts.len()
         const_order(k, mut order, mut state)
-    sigs["init.consts"] = Sig(params: [], ret: Ty.Unit)
+    sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.consts", Ty.Unit, [])
     for k in order
         c := global_consts[k]

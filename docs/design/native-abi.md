@@ -78,6 +78,19 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
+**Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
+optional is the pointer itself. An `int`, `float` or `bool` optional points at
+an 8-byte box (the value, or its bits for a `float`); the heap lane gives the
+box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
+`rt.unbox`, `rt.unboxf`, `rt.unbox_bool`.
+
+**Results** (ADRs 0575, 0576). A function that can fail returns its success
+value (zero on failure); failure is the runtime's global slot 8 holding the
+error's display text (a string object), 0 otherwise. Global 9 holds the return
+trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`; `rt.exit` reports a failure
+that reached `main` first (`error: TEXT`, the trace, status 1).
+
 **Heap object header** (ADR 0392). Objects allocated with `rt.obj_new(size,
 kind)` have an 8-byte word just before the address the program holds, so a
 pointer is to the first field:

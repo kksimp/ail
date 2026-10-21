@@ -21,7 +21,7 @@ with its own encoders and object writers (ADR 0010).
 function is a free function or a method of a struct or enum (no generics or
 contracts), in the root module or a module it imports (mod.unit.1-5), over
 `int`, `float`, `bool`, `str`, structs and enums without generics or
-invariants, and lists of those and of lists, using locals, module constants
+invariants, optionals of those (`T?`), and lists of those and of lists, using locals, module constants
 of any expression in the subset (computed once before `main` runs),
 arithmetic, comparisons (`==` on enums, structs and lists compares their
 values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
@@ -31,7 +31,11 @@ fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
 `match` as a statement or a value (variant patterns and bindings, `_`, `|`,
 guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, `xs[i]`, `xs[i] = v`,
-`len`, `push`, `join`, `chars`, `env.args()`, the methods `abs`, `min`,
+`len`, `push`, `join`, `chars`, `env.args()`, `none`, `x == none`, `if v := o`,
+`o else d` and `o?` in a function returning an optional, functions that can
+fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
+without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+`main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 and the bit operations of expr.bit.1, in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
@@ -46,7 +50,7 @@ only as the value of `else` with a fallback value, a statement that leaves,
 or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
 Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
-0580, 0582, 0591, 0602–0604)*
+0574-0576, 0580, 0582, 0591, 0602–0604)*
 
 ```ail
 fn steps(n int) int
