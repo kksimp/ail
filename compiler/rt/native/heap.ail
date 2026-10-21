@@ -29,8 +29,10 @@ H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112
 
-PAGE := 16384
-PAGE_SHIFT := 14
+# Not a power of two: 257 cache lines, so each page starts one cache set
+# later than the one before (ADR 0562). With 16384, every page of a size class
+# had the same layout and the rows of a table all fell in a few sets.
+PAGE := 16448
 MAX_SMALL := 8192
 MIN_THRESH := 8388608
 
