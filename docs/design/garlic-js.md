@@ -74,6 +74,16 @@ tools/garlic/js/
 `tools/garlic/js` is the package `garlicjs` (`ail.pkg`): Garlic declares it as a
 dependency and imports `garlicjs.vm` from `tools/garlic/jsdom`.
 
+In Garlic (`tools/garlic/jsdom`, `load_doc` in `garlic.ail`), a page's
+scripts run after it is parsed, with external scripts fetched first, a
+budget of 1 s of virtual time and 5,000,000 steps, and the real time as the
+clock. Their changes are replayed into Garlic's tree. A navigation a
+script asks for, or else a `<meta http-equiv=refresh>` outside `<noscript>`,
+is followed, up to 5 hops. `jsdom/cookies.ail` is the cookie jar: cookies
+from `Set-Cookie` and `document.cookie` are sent back to their site (no
+paths, `Secure` or `SameSite` yet). `--no-js` skips scripts, and then a
+refresh inside `<noscript>` is followed too.
+
 ```sh
 ./ail run tools/garlic/js --ast page.js          # ESTree JSON, one line
 ./ail run tools/garlic/js --ast --loc page.js    # with "loc":"LINE:COL" on each node
@@ -309,7 +319,7 @@ it comes later for speed, and these frames will move onto it).
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
 - `testdata/page`: 9 pages (tree, events, timers, forms, URL, a
-  Google-style script redirect, binary strings and beacons, Chrome's
+  script redirect, binary strings and beacons, Chrome's
   interface objects), each with `NAME.out`: the console, the
   body's `innerHTML` at the end, and the navigations asked for, as Chromium
   (Playwright's build 1194) gave them with the page at
@@ -318,17 +328,12 @@ it comes later for speed, and these frames will move onto it).
 - `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
   all of these in `./ail selftest`.
 
-Google's search page was the first real target (captures from 2026-10-20
-in the project's shared files, not in the repository: Google's code isn't
-ours to commit). It sends clients without JavaScript to an "enable
-JavaScript" page. With JavaScript, an obfuscated challenge script runs
-through `eval`, stores a token in the `SG_SS` cookie, and reloads the search.
-The engine runs the challenge to the end. Getting there needed indirect and
-direct `eval`, function source text, `Date` setters, `Image`,
-`navigator.sendBeacon`, `btoa` on binary strings, an assignment's target
-evaluated before its value, and Chrome's surface above. The challenge is
-bot detection, so the engine is not tuned to it beyond general standards
-work. How Garlic gets search results is an open question for the designer.
+Real pages lean on indirect and direct `eval`, function source text,
+`Date` setters, `Image`, `navigator.sendBeacon`, `btoa` on binary strings,
+an assignment's target evaluated before its value, and Chrome's surface
+above, so the engine has them. The engine follows general web standards
+and is not tuned to any one site. The designer dropped Google search as a
+target on 2026-10-21: its search page gates results behind bot detection.
 `--page --url URL FILE` loads a page at `URL` and lists every request and
 cookie, to compare with Chromium.
 
