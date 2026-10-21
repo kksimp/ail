@@ -1,0 +1,25 @@
+fn main()
+    m := {"a": 1, "b": 2}
+    mut n := m
+    print(n.remove("a") else -1)
+    print(n.remove("a") else -1)
+    print(n.len())
+    print(m.len())
+    print(m.is_empty())
+    e := Map[str, int]()
+    print(e.is_empty())
+    st := {1, 2, 3}
+    print(st.is_empty())
+    print(Set[int]().is_empty())
+    print({1}.is_subset(st))
+    print({1, 9}.is_subset(st))
+    print(st.is_subset(st))
+    xs := [1, 2]
+    print(xs.is_empty())
+    print(Map[str, List[int]]().is_empty())
+    print("".is_empty())
+    print("x".is_empty())
+    mut lists := {"k": [1, 2]}
+    taken := lists.remove("k") else []
+    print(taken.len())
+    print(lists.len())

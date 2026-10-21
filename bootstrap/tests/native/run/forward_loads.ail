@@ -1,0 +1,129 @@
+# Loads that repeat what an earlier load or store in the same run of blocks
+# read are reused (ADR 0816), but not after anything that can change the
+# memory: a push, a pop, a call that edits the list, a store through another
+# name for the same list or struct, or a loop's back edge.
+struct Pt
+    x int
+    y int
+
+fn bump(mut p Pt)
+    p.x += 1
+
+fn twice(xs List[int], i int) int
+    xs[i] + xs[i]
+
+fn after_set(mut xs List[int], i int) int
+    a := xs[i]
+    xs[i] = a + 5
+    b := xs[i]
+    xs[i] = 7
+    c := xs[i]
+    a + b + c
+
+fn after_push(mut xs List[int]) int
+    n := xs.len()
+    xs.push(n)
+    xs.push(n + 1)
+    xs.len() * 100 + n
+
+fn after_pop(mut xs List[int]) int
+    a := xs.len()
+    b := xs[a - 1]
+    xs.pop()
+    c := xs.len()
+    a * 1000 + b * 10 + c
+
+fn alias(mut xs List[int], mut ys List[int]) int
+    # `xs` and `ys` are different lists, but every write is checked against
+    # every read, so a stale value can't survive.
+    a := xs[0]
+    ys[0] = a + 1
+    b := xs[0]
+    xs[0] = b + 10
+    c := xs[0]
+    a * 10000 + b * 100 + c
+
+fn fields(mut p Pt) int
+    a := p.x
+    p.x = a + 3
+    b := p.x
+    bump(mut p)
+    c := p.x
+    p.y = c
+    d := p.y + p.x
+    a + b * 10 + c * 100 + d * 1000
+
+fn bools(mut bs List[bool]) int
+    mut n := 0
+    bs[0] = true
+    if bs[0]
+        n += 1
+    bs[0] = false
+    if not bs[0]
+        n += 2
+    bs[1] = true
+    bs[2] = false
+    if bs[1] and not bs[2]
+        n += 4
+    n
+
+fn floats(mut xs List[float]) float
+    a := xs[1]
+    xs[1] = a * 2.0
+    b := xs[1]
+    xs[1] = b + 0.5
+    a + b + xs[1]
+
+fn loop_reads(mut xs List[int]) int
+    mut total := 0
+    for i in 0..xs.len()
+        total += xs[i]
+        xs[i] = xs[i] + 1
+        total += xs[i]
+    total
+
+fn consts(mut xs List[int]) int
+    xs[0] = -1
+    xs[1] = 0
+    xs[2] = 2147483647
+    xs[3] = -2147483648
+    xs[4] = 4294967296
+    xs[5] = -4294967297
+    mut t := 0
+    for x in xs
+        t = t * 31 + x
+    t
+
+fn main()
+    xs := [1, 2, 3]
+    print(twice(xs, 1))
+    mut ys := [10, 20, 30]
+    print(after_set(mut ys, 2))
+    print(ys)
+    mut zs := [4, 5]
+    print(after_push(mut zs))
+    print(zs)
+    mut ws := [7, 8, 9]
+    print(after_pop(mut ws))
+    print(ws)
+    mut a := [1, 2]
+    mut b := [3, 4]
+    print(alias(mut a, mut b))
+    print(a)
+    print(b)
+    mut p := Pt(x: 1, y: 2)
+    print(fields(mut p))
+    print(p.x)
+    print(p.y)
+    mut bs := [false, false, true]
+    print(bools(mut bs))
+    print(bs)
+    mut fs := [1.0, 2.0, 3.0]
+    print(floats(mut fs))
+    print(fs)
+    mut ls := [1, 2, 3, 4]
+    print(loop_reads(mut ls))
+    print(ls)
+    mut cs := [9, 9, 9, 9, 9, 9]
+    print(consts(mut cs))
+    print(cs)

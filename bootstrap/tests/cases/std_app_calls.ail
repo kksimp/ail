@@ -1,0 +1,32 @@
+## std.app.2-6: canvas ops, a key event, one step, a frame, an event from
+## JSON and the host lookup.
+use std.app
+
+struct Counter
+    n int
+
+impl app.App for Counter
+    fn update(mut self, ev app.Event)
+        if ev.kind == "key"
+            n += 1
+
+    fn view(self) app.Node
+        app.canvas("c", 40.0, 20.0, [
+            app.draw_rect(0.0, 0.0, 10.0, 5.0, 255),
+            app.draw_text(1.0, 2.0, "n={n}", 0),
+        ])
+
+    fn title(self) str
+        "Counter"
+
+fn main()
+    mut c := Counter(n: 0)
+    print(app.step(mut c, app.key("a")))
+    print(c.n)
+    print(app.frame(c))
+    j := parse_json("\{\"kind\": \"press\", \"id\": \"go\"}") else
+        return
+    ev := app.event_from_json(j)
+    print("{ev.kind} {ev.id}")
+    found := app.host_path() else ""
+    print(found.len() >= 0)

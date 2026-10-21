@@ -3,6 +3,10 @@
 
 use crate::diag::Pos;
 
+/// `--unsafe driver` on the command line: a program without an `ail.pkg` may
+/// use `std.hw` (unsafe.hw.1).
+pub static UNSAFE_DRIVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[derive(Debug, Default)]
 pub struct Program {
     /// Every function: free functions, methods, and the functions of
@@ -28,6 +32,9 @@ pub struct Program {
     /// the root package as `""`. `None` without any `ail.pkg`: a program
     /// with no manifest may use `unsafe`.
     pub unsafe_allowed: Option<Vec<String>>,
+    /// The packages whose manifests say `unsafe driver` (unsafe.hw.1), the
+    /// root package as `""`.
+    pub driver_allowed: Vec<String>,
     /// The code derive generators wrote, one per deriving `impl`; each is
     /// a file of `files` (ct.gen.1-4, `derive.rs`).
     pub generated: Vec<Generated>,
@@ -121,6 +128,25 @@ impl Program {
         match &self.unsafe_allowed {
             None => true,
             Some(list) => is_prelude(pos) || list.iter().any(|p| p == self.package_at(pos)),
+        }
+    }
+
+    /// Whether the manifests let the package at `pos` reach hardware through
+    /// `std.hw` (unsafe.hw.1). Without any `ail.pkg`, only `--unsafe driver` does.
+    pub fn driver_ok_at(&self, pos: Pos) -> bool {
+        match &self.unsafe_allowed {
+            None => UNSAFE_DRIVER.load(std::sync::atomic::Ordering::Relaxed),
+            Some(_) => is_prelude(pos) || self.driver_allowed.iter().any(|p| p == self.package_at(pos)),
+        }
+    }
+
+    /// The packages that may reach hardware (unsafe.hw.1), with `""` for a
+    /// program without `ail.pkg` run with `--unsafe driver`.
+    pub fn driver_list(&self) -> Vec<String> {
+        if self.unsafe_allowed.is_none() && UNSAFE_DRIVER.load(std::sync::atomic::Ordering::Relaxed) {
+            vec![String::new()]
+        } else {
+            self.driver_allowed.clone()
         }
     }
 

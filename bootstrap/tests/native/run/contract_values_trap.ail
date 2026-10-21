@@ -1,0 +1,11 @@
+# trace.snap.2: a failed contract shows the value of each name its
+# condition reads.
+
+fn withdraw(balance int, amount int) int
+    requires amount <= balance
+    balance - amount
+
+fn main()
+    have := 10
+    print(withdraw(have, 3))
+    print(withdraw(have, 25))

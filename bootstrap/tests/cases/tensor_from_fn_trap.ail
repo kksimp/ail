@@ -1,0 +1,2 @@
+fn main()
+    print(tensor.from_fn(-1, |i| i))

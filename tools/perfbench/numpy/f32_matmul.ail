@@ -1,0 +1,11 @@
+# A 256x256 f32 matrix product, five rounds. Entries are multiples of 1/4 and
+# the sums stay exact in f32. `f32_matmul.py` is the NumPy twin.
+fn main()
+    n := 256
+    a := tensor.from([(i % 7).to_float() * 0.25 for i in 0..n * n], [n, n]).to_f32()
+    b := tensor.from([(i % 5).to_float() * 0.5 for i in 0..n * n], [n, n]).to_f32()
+    mut total := 0.0
+    for r in 0..5
+        c := a.matmul(b)
+        total += c.to_float().sum() + c.to_float().max()
+    print(total)

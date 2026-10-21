@@ -1,0 +1,123 @@
+## Sized integers in the native subset (ADR 0834, type.num.13-15): `i8 i16
+## i32 u8 u16 u32` as `Ty.Sized(kind)`. A value lives in a register like an
+## `int`, sign- or zero-extended from its width, so it is always inside its
+## type's range; comparison and printing are the `int` ones. This file has
+## literals, the conversions and comparison. Arithmetic, `u64` and `f32` come
+## later (not yet: `native.subset.1` problems, never a wrong answer).
+use ast
+
+## The kinds, in the order of the codes `rt.sized_msg` knows.
+SIZED_KINDS := ["i8", "i16", "i32", "u8", "u16", "u32"]
+
+fn sized_lo(kind str) int
+    match kind
+        "i8" => -128
+        "i16" => -32768
+        "i32" => -2147483648
+        _ => 0
+
+fn sized_hi(kind str) int
+    match kind
+        "i8" => 127
+        "i16" => 32767
+        "i32" => 2147483647
+        "u8" => 255
+        "u16" => 65535
+        _ => 4294967295
+
+fn sized_code(kind str) int
+    for k in 0..SIZED_KINDS.len()
+        if SIZED_KINDS[k] == kind
+            return k
+    -1
+
+fn sized_kind(t Ty) str
+    match t
+        Sized(k) => k
+        _ => ""
+
+## The sized type a context wants, if it wants one.
+fn want_sized(want Ty?) str
+    w := want else return ""
+    sized_kind(w)
+
+## An integer literal: a sized integer where one is wanted (type.num.13; the
+## checker has already made sure it fits), a `float` where one is wanted.
+fn Lower.lower_int_lit(mut self, text str, pos ast.Pos, want Ty?) Val?
+    n := text.to_int() else
+        problem(pos, "integer literal `{text}` out of range")
+        return none
+    if wants_float(want)
+        return Val(id: fconst(n.to_float()), ty: Ty.Float)
+    k := want_sized(want)
+    if k != ""
+        if n > sized_hi(k)
+            problem(pos, "integer literal `{text}` doesn't fit in `{k}`")
+            return none
+        return Val(id: konst(n, Ty.Sized(k)), ty: Ty.Sized(k))
+    Val(id: konst(n, Ty.Int), ty: Ty.Int)
+
+## `-N` where a sized integer is wanted: the `-` belongs to the literal, so
+## `-128` is an `i8` (type.num.13).
+fn Lower.negative_sized_lit(mut self, operand ast.Expr, want Ty?) Val?
+    k := want_sized(want)
+    if k == ""
+        return none
+    text := int_text(operand)
+    if text == "" or text.len() > 10
+        return none
+    n := text.to_int()?
+    if 0 - n < sized_lo(k)
+        problem(expr_pos(operand), "integer literal `-{text}` doesn't fit in `{k}`")
+        return none
+    Val(id: konst(0 - n, Ty.Sized(k)), ty: Ty.Sized(k))
+
+## Comparison of two sized integers of one type; the register order is the
+## value order. Arithmetic comes with ADR 0834's second change.
+fn Lower.sized_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val?
+    if is_comparison(o)
+        return Val(id: op(op_name(o), [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+    unsupported(pos, "`{op_symbol(o)}` on `{a.ty.name()}`")
+
+## The conversions of type.num.15 between `int` and the sized integers:
+## `to_i8` ... `to_u32` on any of them, and `to_int` back. A conversion that
+## doesn't fit traps with `type.num.15`. `None` for any other method.
+fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if vs.len() != 0 or not name.starts_with("to_")
+        return none
+    target := name.slice(3, name.len())
+    if target == "int"
+        if r.ty.is_sized()
+            return Val(id: r.id, ty: Ty.Int)
+        return none
+    if target == "u64" or target == "f32"
+        return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    code := sized_code(target)
+    if code < 0
+        return none
+    t := Ty.Sized(target)
+    if r.ty.is_sized()
+        and sized_lo(sized_kind(r.ty)) >= sized_lo(target)
+        and sized_hi(sized_kind(r.ty)) <= sized_hi(target)
+        # Every value of the source type is in range: only the type changes.
+        return Val(id: r.id, ty: t)
+    sized_trap_unless(op("ge", [r.id, konst(sized_lo(target), Ty.Int)], Ty.Bool), r.id, code, npos)
+    sized_trap_unless(op("le", [r.id, konst(sized_hi(target), Ty.Int)], Ty.Bool), r.id, code, npos)
+    Val(id: r.id, ty: t)
+
+## Trap at `pos` with `type.num.15`'s message unless `ok` holds. The runtime
+## builds the message from the value and the target's code (runtime message
+## kind 15).
+fn Lower.sized_trap_unless(mut self, ok int, v int, code int, pos ast.Pos)
+    fail := new_block()
+    check(ok, fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    msg := call("rt.sized_msg", [v, konst(code, Ty.Int)], Ty.Int)
+    mut t := inst(-1, "trap", [msg, msg])
+    t.imm = 15
+    t.site = site("type.num.15", "tensor", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good

@@ -53,6 +53,7 @@ pub STD_MODULES := [
     "env",
     "fs",
     "hash",
+    "hw",
     "io",
     "mem",
     "net",
@@ -69,6 +70,7 @@ pub STD_MODULES := [
 
 ## The standard modules written in AIL (std.ui.19).
 pub AIL_STD_MODULES := [
+    "std.app",
     "std.args",
     "std.csv",
     "std.log",

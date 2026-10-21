@@ -1,0 +1,6 @@
+fn main()
+    ch := Channel[int](4)
+    ch.send(1)
+    ch.close()
+    for v in ch
+        print(v)

@@ -305,6 +305,7 @@ fn program(p: &Program) -> J {
             ])
         })),
         ("unsafe_allowed", opt(&p.unsafe_allowed, |l| arr(l, |p| s(p)))),
+        ("driver_allowed", arr(&p.driver_list(), |p| s(p))),
         ("generated", arr(&p.generated, |g| {
             J::Obj(vec![
                 ("file", n(g.file)),

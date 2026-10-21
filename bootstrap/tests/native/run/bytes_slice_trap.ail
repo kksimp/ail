@@ -1,0 +1,5 @@
+fn main()
+    a := b"abc"
+    n := a.len()
+    print(a[1..n].hex())
+    print(a[2..=n].hex())

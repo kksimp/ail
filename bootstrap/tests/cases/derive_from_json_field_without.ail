@@ -1,0 +1,12 @@
+## FromJson names a field type that has no `from_json` (json.derive.2).
+struct Inner
+    n int
+
+struct Outer
+    inner Inner
+    name str
+
+impl FromJson for Outer
+
+fn main()
+    print("unused")

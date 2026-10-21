@@ -507,6 +507,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0612](0612-native-contracts.md) | Contracts in native code: `requires` at the call, `ensures` at each return, unchecked `.nc` copies for conditions *(delegated)* | Accepted | 2026-10-20 |
+| [0613](0613-native-unsafe-and-attributes.md) | `unsafe` blocks, `@test` and `@deprecated` in native code *(delegated)* | Accepted | 2026-10-20 |
+| [0614](0614-native-std-in-the-runtime.md) | `std.path`, `std.hash` and `std.random` as native runtime functions *(delegated)* | Accepted | 2026-10-20 |
 | [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
 | [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
 | [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
@@ -516,6 +519,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
+| [0702](0702-native-bytes.md) | Native `bytes`: string-object layout, literals decoded at the use, a `Byte` type that only `to_int` accepts *(delegated)* | Accepted | 2026-10-21 |
 | [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
 | [0626](0626-std-csv.md) | `std.csv`: CSV as rows and records *(delegated)* | Accepted | 2026-10-21 |
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
@@ -577,6 +581,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
 | [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
 | [0759](0759-bytecode-tier-stalls-not-frames.md) | Bytecode tier: the cost left is stalls, not the frame layout; two frame redesigns measured and dropped *(delegated)* | Accepted | 2026-10-21 |
+| [0760](0760-packed-list-storage.md) | Lists of `int`, `float` and `bool` are stored packed (`Value::List(Rc<List>)`), invisible to programs; sieve 0.59 s to 0.21 s *(delegated)* | Accepted | 2026-10-21 |
 | [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
 | [0757](0757-fuzz-math-special-values.md) | A fuzzer for `std.math` special values; the fuzz budget stays in the harness *(delegated)* | Accepted | 2026-10-21 |
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
@@ -598,12 +603,14 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0794](0794-tuple-library-names.md) | `xs.enumerate()` and `zip(a, b)`; no `m.items()` or `m.pairs()` *(delegated)* | Accepted | 2026-10-21 |
 | [0795](0795-tuple-text-and-json.md) | Tuples as text and JSON: `(1, "a")` and arrays *(delegated)* | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
+| [0799](0799-one-path-spelling-in-tool-output.md) | One path spelling in every tool output: `/` in diagnostics, JSON and `ail api` *(delegated)* | Accepted | 2026-10-21 |
 | [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
 | [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
 | [0764](0764-comprehension-if-and-text-len.md) | `if` elements in comprehensions and `len` of text, maps, sets and bytes compile in the tier: -43% on a micro-benchmark *(delegated)* | Accepted | 2026-10-21 |
 | [0776](0776-fieldinfo-doc.md) | `FieldInfo.doc` carries a field's `##` comment (integrator choice) | Accepted | 2026-10-21 |
 | [0782](0782-fix-text-plus-chains.md) | `ail fix` joins text with interpolation across a `+` chain and around calls with strings *(delegated)* | Accepted | 2026-10-21 |
 | [0768](0768-native-string-scans-by-words.md) | Native strings: character counts and separator search a word at a time, interpolation joined in one allocation; `lines_split` -27% instructions *(delegated)* | Accepted | 2026-10-21 |
+| [0837](0837-interpolation-with-number-holes-uses-the-builder.md) | Interpolation with a number, `char` or `bool` hole is written into the builder and allocated once: `map_ops` -19%, `lines_split` -11% *(delegated)* | Accepted | 2026-10-21 |
 | [0769](0769-map-hash-finalizer.md) | Native string hash: a second multiply as the finalizer, so keys that differ in their high bytes spread (50 to 1.75 probes) *(delegated)* | Accepted | 2026-10-21 |
 | [0814](0814-selftest-speed.md) | Selftest speed: native builds on four threads, then parallel test binaries, then one compiler load for many builds (AI, delegated ADR 0076, integrator-approved) | Accepted | 2026-10-21 |
 | [0809](0809-fix-contract-keywords.md) | `ail fix` moves `requires result` to `ensures` and unwraps `old()` in `requires` *(delegated)* | Accepted | 2026-10-21 |
@@ -613,13 +620,33 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
 | [0815](0815-native-tensors.md) | Native tensors: a runtime object and kernels written in AIL *(delegated)* | Accepted | 2026-10-21 |
 | [0783](0783-std-error-families.md) | Std error families: a closed kind list per module, as spec rules | Accepted | 2026-10-21 |
+| [0784](0784-std-error-compress-net.md) | Std error families: compress and net client causes | Accepted | 2026-10-21 |
+| [0785](0785-native-subset-help-runs-with-ail-run.md) | Every `native.subset.1` help line says `ail run` runs the program | Accepted | 2026-10-21 |
 | [0774](0774-load-json-and-print-json.md) | `load_json[T](path)` and `print_json(v)` *(delegated)* | Accepted | 2026-10-21 |
 | [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
-| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
+| [0832](0832-native-str-char-cmp-and-char-index-of.md) | Native `.cmp()` on `str` and `char`, `.index_of()` on `List[char]` *(delegated)* | Accepted | 2026-10-21 |
 | [0820](0820-driver-level-unsafe.md) | `unsafe driver` manifest level unlocks hardware access through `std.hw`; 64-bit targets only | Accepted | 2026-10-21 |
 | [0823](0823-lower-ail-feature-files.md) | `lower.ail` is a core plus feature files with one-line hooks: a native feature lives in its own `lower_*.ail` and adds at most one dispatch line and one state field *(delegated)* | Accepted | 2026-10-21 |
+| [0834](0834-native-sized-numbers.md) | Native sized integers are `Ty.Sized(kind)`, held sign- or zero-extended in a register, with trapping conversions *(delegated)* | Accepted | 2026-10-21 |
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
+| [0830](0830-native-raw-tcp.md) | Native raw TCP: sockets by system calls, handles in a table, `net.NetError` *(delegated)* | Accepted | 2026-10-21 |
+| [0821](0821-unsafe-driver-manifest-and-flag.md) | `unsafe driver` in `ail.pkg`, and `--unsafe driver` for a program without one *(delegated)* | Accepted | 2026-10-21 |
+| [0822](0822-std-hw-volatile-and-hw-effect.md) | `std.hw`: `at`, volatile methods and fences, and the effect `hw` *(delegated)* | Accepted | 2026-10-21 |
+| [0819](0819-native-std-regex-in-ail.md) | Native `std.regex` is an AIL module compiled with the program *(delegated)* | Accepted | 2026-10-21 |
+| [0811](0811-fix-for-over-recv.md) | `ail fix` turns `for v in ch.recv()` into `for v in ch` *(delegated)* | Accepted | 2026-10-21 |
+| [0827](0827-tensor-softmax.md) | `softmax()` along the last axis (AI, delegated) | Accepted | 2026-10-21 |
+| [0831](0831-tensor-from-fn.md) | `tensor.from_fn(shape, \|i\| e)` (AI, delegated) | Accepted | 2026-10-21 |
+| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
+| [0777](0777-args-from-struct.md) | `Opts.parse(...)`: command-line options derived from a struct *(delegated)* | Accepted | 2026-10-21 |
+| [0812](0812-fix-ternary.md) | `ail fix` writes `c ? a : b` as `if c then a else b` *(delegated)* | Accepted | 2026-10-21 |
+| [0836](0836-native-tls.md) | Native TLS: the in-house client ported to AIL in slices, starting with native `std.hash` *(delegated)* | Accepted | 2026-10-21 |
+| [0824](0824-native-loop-list-reuse.md) | Native: reuse lists that do not outlive a loop iteration *(delegated)* | Accepted | 2026-10-21 |
+| [0828](0828-native-compress.md) | Native `std.compress`: the Rust codec ported to the runtime, byte for byte *(delegated)* | Accepted | 2026-10-21 |
+| [0841](0841-fix-single-case-mistakes.md) | `ail fix` for fn-type `->`, `reshape(2, 3)`, `e.message()` and `\u{..}` in bytes *(delegated)* | Accepted | 2026-10-21 |
+| [0829](0829-native-tuples.md) | Native tuples: a kind-4 struct object with one slot per element; `eq.T`, `lt.T` and `copy.T` generated; table keys stay out | Accepted | 2026-10-21 |
+| [0838](0838-std-app-native-windows.md) | `std.app`: native windows from a view tree, drawn by a generic host (SwiftUI on macOS) over JSON lines; capability `app` | Accepted | 2026-10-21 |
+| [0825](0825-native-ascii-join-chars.md) | Native: an ASCII path for joining characters *(delegated)* | Accepted | 2026-10-21 |
 | [0606](0606-win64-calls-to-system-dlls.md) | Win64 calls to system DLL functions: `libsys.NAME` through the PE import table *(delegated)* | Accepted | 2026-10-20 |
 | [0607](0607-windows-runtime-guard.md) | `ail build --target x86_64-windows` is refused until the Windows runtime lands *(delegated)* | Accepted | 2026-10-20 |
 | [0608](0608-windows-target-and-runtime.md) | The Windows x86-64 target: `target()` is 3, the entry runs the runtime, and output, exit and the heap use kernel32 *(delegated)* | Accepted | 2026-10-20 |

@@ -37,6 +37,7 @@ with `./ail fmt`.
 | `compress.ail` | Compression (`std.compress`): gzip a log, check it shrinks, gunzip it back; bad input is refused. |
 | `regex.ail` | Regular expressions (`std.regex`): find, capture groups, replacement with `${name}`, split. |
 | `loopback.ail` | An HTTP round trip on 127.0.0.1 (`std.net` server and client). Runs offline. |
+| `app_todo.ail` | A to-do list in a native window (`std.app`). Needs the app host; see `app_todo.rules`. |
 | `ui_hello.ail` | A window that says hello (`std.ui`). Needs a display; see `ui_hello.rules`. |
 | `bits.ail` | Bit operations on `int`: flags, a bitset, a hash mix; `shr` keeps the sign. |
 | `calendar.ail` | Dates, times and zones (`std.time.date`, `std.tz`): leap years, ISO 8601, DST, `in_zone`. Fixed values, same output every run. |
