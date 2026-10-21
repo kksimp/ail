@@ -69,7 +69,9 @@ documents with fences:
 A block that cannot run because it uses names outside its own snippet keeps
 `skip=context`; that tag is the mark.
 
-## Spec skip and norun fences (lane 254, ADR 0498)
+## Spec skip and norun fences (lane 254, ADR 0498; re-audited day 3, lane 223)
+
+Day-3 rerun on 079c6d8: 112 fences (67 norun, 45 skip), each with one row below. Rows for fences that the lane 254 table missed (chapters 11-14, 20, 23, and the new ch03 and ch21 examples) were added from their fence comments; those rows are owned by 223. Lines are as of this commit.
 
 Every `norun`, `skip=bootstrap` and `skip=context` fence in `docs/spec/`, one row
 each: where it is, its kind, the rules it cites, the reason, and the owner. A
@@ -92,15 +94,14 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `01-platforms.md:94` | norun | `plat.ptr.1,plat.ptr.3,plat.endian.1` | Raw pointers are 64 bits; managed references may be narrower and aren't visible to safe code; all targets are little-endian. | unowned |
 | `02-lexical.md:180` | skip=context | `(none cited)` | Returns the area of a circle. pi is a library constant | unowned |
 | `02-lexical.md:233` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `02-lexical.md:358` | skip=bootstrap | `lex.kw.1` | - | 238 |
 | `03-grammar.md:104` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `04-types.md:112` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `04-types.md:221` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `04-types.md:350` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `04-types.md:718` | norun | `type.bytes.3,type.bytes.4` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `04-types.md:949` | norun | `(none cited)` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `04-types.md:1353` | norun | `type.str.15` | A trap on purpose: building a 2 GiB string exceeds the 2^30-byte limit. | unowned |
-| `04-types.md:1507` | norun | `type.map.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `04-types.md:721` | norun | `type.bytes.3,type.bytes.4` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `04-types.md:952` | norun | `(none cited)` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `04-types.md:1357` | norun | `type.str.15` | A trap on purpose: building a 2 GiB string exceeds the 2^30-byte limit. | unowned |
+| `04-types.md:1511` | norun | `type.map.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
 | `05-expressions.md:28` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `05-expressions.md:197` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `05-expressions.md:216` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
@@ -118,19 +119,19 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `07-ownership.md:564` | norun | `own.borrow.2` | The language has no lifetime parameters: a borrow is the call it is passed to. | unowned |
 | `07-ownership.md:621` | norun | `own.ref.7` | not run: traps on purpose, needs input or a host resource, or prints tool output | 238 |
 | `08-errors.md:26` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:118` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:146` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:225` | norun | `(none cited)` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `08-errors.md:479` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:487` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:506` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:526` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
-| `08-errors.md:535` | norun | `err.trap.1` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `08-errors.md:550` | norun | `err.trap.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `08-errors.md:612` | norun | `err.model.2,err.trap.1,err.trap.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `08-errors.md:691` | skip=bootstrap | `err.type.4` | - | 238 |
-| `08-errors.md:848` | skip=bootstrap | `err.ctx.3` | An error report shows the error, every attached context message and the return trace. | 238 |
-| `08-errors.md:891` | norun | `err.api.1,err.paths.1` | `ail api` lists each failing function's fails_with; `ail check --errors` prints the paths. | unowned |
+| `08-errors.md:121` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
+| `08-errors.md:149` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
+| `08-errors.md:228` | norun | `(none cited)` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `08-errors.md:482` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
+| `08-errors.md:490` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
+| `08-errors.md:509` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
+| `08-errors.md:529` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
+| `08-errors.md:538` | norun | `err.trap.1` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `08-errors.md:553` | norun | `err.trap.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `08-errors.md:615` | norun | `err.model.2,err.trap.1,err.trap.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `08-errors.md:694` | skip=bootstrap | `err.type.4` | - | 238 |
+| `08-errors.md:851` | skip=bootstrap | `err.ctx.3` | An error report shows the error, every attached context message and the return trace. | 238 |
+| `08-errors.md:894` | norun | `err.api.1,err.paths.1` | `ail api` lists each failing function's fails_with; `ail check --errors` prints the paths. | unowned |
 | `09-generics.md:322` | skip=context | `gen.anon.2` | The canonical form uses the anonymous form when the parameter is referenced once; the formatter enforces it (ail fmt), so there is no output to print. | unowned |
 | `09-generics.md:329` | norun | `gen.impl.1` | Generic code behaves the same whether or not an instance is specialised; the observable behaviour is the same program output shown in the examples above. | unowned |
 | `10-traits.md:27` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
@@ -140,34 +141,66 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `10-traits.md:345` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `10-traits.md:518` | skip=context | `(none cited)` | illustration; relies on names or packages outside the block | unowned |
 | `10-traits.md:583` | norun | `trait.method.5` | Methods are declared in the package that declares the type; a single file is one package. | unowned |
-| `10-traits.md:685` | skip=bootstrap | `trait.auto.4` | A method named `to_str` declared outside an impl of ToStr should be rejected, and the diagnostic should suggest the impl. The bootstrap accepts `fn to_str(p P)  | 238 |
+| `10-traits.md:685` | skip=bootstrap | `trait.auto.4` | A method named `to_str` declared outside an impl of ToStr should be rejected, and the diagnostic should suggest the impl. The bootstrap accepts `fn to_str(p P) | 238 |
 | `10-traits.md:770` | norun | `trait.res.2` | A built-in or inherent method wins over a default method of a prelude trait with the same name, so the call below uses the struct's own method. | unowned |
-| `10-traits.md:777` | norun | `trait.op.2` | Only the operators of trait.op.1 may be implemented; other operator symbols are not defined by any trait, so there is no output to print. | unowned |
-| `10-traits.md:845` | norun | `trait.any.5` | `any Shape` satisfies the constraint Shape only when every method can be called through it (trait.any.4); the rule is checked by the example for trait.any.4 abo | unowned |
-| `10-traits.md:898` | skip=context | `trait.auto.5` | Hash has no methods; a type is Hash when its Eq is automatic or derived by an empty impl. The map and set examples in chapter 17 use it as a key. | unowned |
-| `10-traits.md:903` | skip=context | `trait.impl.4` | An impl outside the package that declares the trait or the type is rejected. An example needs two packages; the bootstrap's package tests cover it (bootstrap/te | unowned |
-| `11-concurrency.md:396` | norun | `(none cited)` | norun: the order of the two streams depends on how the child's writes race, so the output differs between runs; the example is checked, not compared. | unowned |
+| `10-traits.md:851` | norun | `trait.any.5` | `any Shape` satisfies the constraint Shape only when every method can be called through it (trait.any.4); the rule is checked by the example for trait.any.4 abo | unowned |
+| `10-traits.md:904` | skip=context | `trait.auto.5` | Hash has no methods; a type is Hash when its Eq is automatic or derived by an empty impl. The map and set examples in chapter 17 use it as a key. | unowned |
+| `10-traits.md:909` | skip=context | `trait.impl.4` | An impl outside the package that declares the trait or the type is rejected. An example needs two packages; the bootstrap's package tests cover it (bootstrap/te | unowned |
+| `11-concurrency.md:396` | norun | `conc.select.1` | norun: the order of the two streams depends on how the child process races, so the output varies between runs | 223 |
+| `11-concurrency.md:592` | norun | `conc.task.7` | traps on purpose: the deadlock trap is a run-time result, not printed output | 223 |
+| `11-concurrency.md:666` | norun | `conc.mm.1` | [definitional] a memory-model rule with no observable output | 223 |
+| `11-concurrency.md:673` | norun | `conc.sched.1,conc.sched.2` | the schedule is random by seed; the gate runs no tests, so the example is run with `ail test --schedule` | 223 |
+| `12-modules.md:70` | skip=context | `mod.unit.2,mod.unit.5` | layout illustration; the files it shows are not a runnable package | 223 |
+| `12-modules.md:94` | skip=context | `mod.vis.3` | layout illustration of two packages | 223 |
 | `12-modules.md:134` | skip=bootstrap | `(none cited)` | - | 238 |
 | `12-modules.md:169` | skip=bootstrap | `(none cited)` | - | 238 |
-| `15-compile-time.md:131` | norun | `ct.eval.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
-| `17-std.md:135` | norun | `std.fs.9` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:369` | norun | `std.io.4` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:403` | norun | `std.proc.1` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:602` | norun | `std.net.2,std.net.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1270` | skip=context | `(none cited)` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1344` | norun | `std.ui.1,std.ui.2,std.ui.5,std.ui.6,std.ui.7,std.ui.8` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1811` | norun | `std.net.1,std.net.3,std.net.4,std.net.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1853` | norun | `std.random.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1868` | norun | `std.ui.3,std.ui.4,std.ui.10,std.ui.11,std.ui.12,std.ui.13,std.ui.16,std.ui.18` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1960` | norun | `std.compress.4,std.compress.5,std.compress.6` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1971` | norun | `std.net.6,std.net.7` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1982` | norun | `std.net.8,std.net.9,std.net.10,std.net.11` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:1992` | norun | `std.net.12,std.net.13,std.net.14,std.net.15` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:2002` | norun | `std.proc.4,std.proc.5,std.proc.6,std.proc.7` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:2017` | norun | `std.proc.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:2075` | norun | `std.date.11,std.date.12` | needs a network, UI, process, device or clock the gate lacks | unowned |
-| `17-std.md:2120` | norun | `std.io.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `12-modules.md:201` | skip=context | `mod.pkg.1,mod.pkg.2,mod.pkg.3` | package layout illustration; the package cases are in bootstrap/tests/packages | 223 |
+| `12-modules.md:243` | skip=context | `mod.pkg.6` | package layout illustration; the package cases are in bootstrap/tests/packages | 223 |
+| `12-modules.md:326` | norun | `mod.const.3` | the overflow traps when the constant is computed before main, so it is checked and not run | 223 |
+| `12-modules.md:349` | norun | `mod.use.1,mod.use.2` | needs a second module or package named in the block; checked and not run | 223 |
+| `12-modules.md:399` | norun | `mod.main.2` | a duplicate main is a checker error with no output to print | 223 |
+| `12-modules.md:407` | skip=context | `mod.use.5` | needs a second package named in the block; the cases are in bootstrap/tests/packages | 223 |
+| `12-modules.md:412` | skip=context | `mod.pkg.4,mod.pkg.5,mod.pkg.7,mod.pkg.8,mod.pkg.9` | names tests/cases/packages and tests/git_deps.rs; needs packages or git, which the gate does not set up | 223 |
+| `13-unsafe.md:202` | norun | `unsafe.ptr.4` | traps on purpose: the raw pointer is invalid at run time, so the output is a trap | 223 |
+| `13-unsafe.md:209` | norun | `unsafe.ptr.5` | traps on purpose: the raw pointer is invalid at run time, so the output is a trap | 223 |
+| `13-unsafe.md:217` | norun | `unsafe.ptr.6` | traps on purpose: the raw pointer is invalid at run time, so the output is a trap | 223 |
+| `13-unsafe.md:226` | norun | `unsafe.mem.2` | traps on purpose: the freed or null memory is used at run time, so the output is a trap | 223 |
+| `13-unsafe.md:235` | norun | `unsafe.mem.3` | traps on purpose: the freed or null memory is used at run time, so the output is a trap | 223 |
+| `13-unsafe.md:243` | skip=context | `unsafe.block.3` | illustration; the two package cases are unsafe_denied and unsafe_root_denied | 223 |
+| `14-ffi.md:191` | norun | `ffi.native.1` | `ail build` rejects it; the gate runs only `ail check` | 223 |
+| `14-ffi.md:200` | norun | `ffi.load.1` | traps at load time on a missing library, so it is checked and not run | 223 |
+| `14-ffi.md:209` | norun | `ffi.load.2` | traps at load time on a missing symbol, so it is checked and not run | 223 |
+| `14-ffi.md:218` | norun | `ffi.load.3` | the kernel32 note needs Windows; checked and not run | 223 |
+| `14-ffi.md:228` | skip=bootstrap | `ffi.decl.1` | use c "stdlib.h" is not built into the bootstrap yet | 238 |
+| `15-compile-time.md:141` | norun | `ct.eval.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | 223 |
+| `15-compile-time.md:160` | norun | `ct.eval.4` | optional reuse of compile-time results is a MAY rule; not built, see OQ-135 | 238 |
+| `17-std.md:139` | norun | `std.fs.9` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:373` | norun | `std.io.4` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:407` | norun | `std.proc.1` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:606` | norun | `std.net.2,std.net.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1275` | skip=context | `(none cited)` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1349` | norun | `std.ui.1,std.ui.2,std.ui.5,std.ui.6,std.ui.7,std.ui.8` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1816` | norun | `std.net.1,std.net.3,std.net.4,std.net.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1858` | norun | `std.random.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1873` | norun | `std.ui.3,std.ui.4,std.ui.10,std.ui.11,std.ui.12,std.ui.13,std.ui.16,std.ui.18` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1965` | norun | `std.compress.4,std.compress.5,std.compress.6` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1976` | norun | `std.net.6,std.net.7` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1987` | norun | `std.net.8,std.net.9,std.net.10,std.net.11` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:1997` | norun | `std.net.12,std.net.13,std.net.14,std.net.15` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:2007` | norun | `std.proc.4,std.proc.5,std.proc.6,std.proc.7` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:2022` | norun | `std.proc.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:2080` | norun | `std.date.11,std.date.12` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `17-std.md:2125` | norun | `std.io.5` | needs a network, UI, process, device or clock the gate lacks | unowned |
+| `20-contracts.md:316` | norun | `contract.ens.1` | a violated ensures traps at run time, so the block is checked and not run | 223 |
+| `20-contracts.md:337` | norun | `contract.inv.2` | a violated invariant traps at run time, so the block is checked and not run | 223 |
+| `20-contracts.md:348` | norun | `contract.inv.3` | a violated invariant traps at run time, so the block is checked and not run | 223 |
+| `21-trace.md:367` | norun | `run.limit.5` | the limits are read from the environment at native start; the gate runs `ail` only, and bootstrap/tests/native.rs checks it | 223 |
+| `21-trace.md:374` | norun | `run.limit.6` | a native program past a limit prints a trap; the gate runs `ail` only, and bootstrap/tests/native.rs checks it | 223 |
 | `22-tools.md:732` | norun | `expr.bit.2` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `23-native.md:356` | norun | `native.build.2` | needs `ail build` and a native toolchain; the gate runs only `ail check` | 223 |
+| `23-native.md:361` | norun | `native.build.4` | needs `ail build` and a native toolchain; the gate runs only `ail check` | 223 |
+| `23-native.md:366` | norun | `native.build.5` | needs `ail build` and a native toolchain; the gate runs only `ail check` | 223 |
+| `23-native.md:371` | norun | `native.test.5` | needs `ail test --native` and a native toolchain; the gate runs only `ail check` | 223 |
 
 ## Spec examples by chapter (lane 223, ADR 0498)
 
