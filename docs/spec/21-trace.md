@@ -376,14 +376,4 @@ fn main()
     mut xs := [0]
     for i in 0..100000000
         xs.push(i)
-```ail norun rules=run.limit.5
-# norun: the limits are read from the environment when the native program starts, and the gate
-# runs `ail` only. bootstrap/tests/native.rs (run_limits_stop_native_programs) checks run.limit.5.
-    print("ok")
-```
-
-```ail norun rules=run.limit.6
-# norun: a native program past a limit prints a trap, which the gate does not run.
-# bootstrap/tests/native.rs (run_limits_stop_native_programs) checks run.limit.6.
-    print("ok")
 ```

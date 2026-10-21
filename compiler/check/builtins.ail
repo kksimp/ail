@@ -558,11 +558,15 @@ fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args 
                 "this parameter isn't `mut`",
                 "remove the `mut`",
             )
-        if t != Ty.Str
-            and t != Ty.Unknown
-            and t != Ty.Never
-            and not reject_unhandled(t, expr_pos(a.value))
-            err("expr.call.2", expr_pos(a.value), "the separator of `hex` is a `str`, not {show(t)}")
+        if t != Ty.Str and t != Ty.Unknown and t != Ty.Never and not reject_unhandled(
+            t,
+            expr_pos(a.value),
+        )
+            err(
+                "expr.call.2",
+                expr_pos(a.value),
+                "the separator of `hex` is a `str`, not {show(t)}",
+            )
         return b.ret
     if n == "get" and args.len() == 2 and is_map_ty(rt)
         args_only(args)
