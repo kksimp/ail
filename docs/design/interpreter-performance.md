@@ -391,3 +391,13 @@ arguments no longer take generic paths or hand off to the walker. Geometric
 mean over the eight compute programs: 1.85x of CPython before, 1.33x after
 (nbody 2.59x to 1.31x, mandelbrot 3.07x to 1.08x, binarytrees 3.80x to 2.70x,
 sieve 2.56x to 1.94x); the table is in the ADR. Agent programs are unchanged.
+
+[ADR 0619](../decisions/0619-bytecode-calls-loops-and-fusion.md) cuts the
+per-instruction and per-call overhead (lean calls, loop shapes, fused
+`push`/`len` and `a[i][k]`): geometric mean 1.97x of CPython at the batch head,
+1.12x now; fannkuch 0.91x, mandelbrot 1.00x, matmul 1.14x, sieve 1.26x,
+nbody 1.28x, spectralnorm 1.33x, binarytrees 2.30x (calls and `mut`
+arguments). What is left is the cost of reading a local: the walker's
+environment is a vector of (name, value) pairs behind a pointer, so every
+local read reloads its length and bounds-checks it. A frame with locals in the
+register file would remove that; it is the next step.

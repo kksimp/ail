@@ -324,6 +324,15 @@ enum Ins<'a> {
         idx: Opnd,
         pos: Pos,
     },
+    /// `local.push(val)` or `local.len()` on a list (type.coll.5, type.coll.6): done and
+    /// jump to `done`; for any other value fall through to the walker's call.
+    ListFast {
+        slot: u32,
+        val: Opnd,
+        dst: Opnd,
+        push: bool,
+        done: u32,
+    },
     /// `recv[i][k]`: two index steps with no copy of the row between them.
     Index2 {
         dst: Opnd,
@@ -839,6 +848,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             | Ins::BrCmp { t: x, .. }
             | Ins::BrCmpK { t: x, .. }
             | Ins::IfNotListMap { t: x, .. }
+            | Ins::ListFast { done: x, .. }
             | Ins::MethodGuard { t: x, .. }
             | Ins::TraitGuard { t: x, .. }
             | Ins::ElseTest { t: x, .. }
@@ -1496,23 +1506,26 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 self.patch(j, end);
             }
             Stmt::While { cond, body, .. } => {
-                let top = self.here();
+                // The test sits after the body, so a turn is one branch: enter at the test.
                 let depth = self.depth();
                 let l = self.loop_start(depth);
-                self.loops[l as usize].cont = top;
-                let out = self.cond_jump(cond, false);
+                let enter = self.emit(Ins::Jump(0));
+                let top = self.here();
                 if self.it.hook {
                     // A turn of a `while` is a step too.
                     self.emit(Ins::Hit(s.pos()));
                 }
                 self.block(body, NONE);
-                self.emit(Ins::Jump(top));
+                let test = self.here();
+                self.patch(enter, test);
+                self.loops[l as usize].cont = test;
+                let back = self.cond_jump(cond, true);
+                for x in back {
+                    self.patch(x, top);
+                }
                 self.loop_end();
                 let end = self.here();
                 self.loops[l as usize].brk = end;
-                for x in out {
-                    self.patch(x, end);
-                }
             }
             Stmt::For { par: false, var, mutable: false, iter, body, pos, .. }
                 if !self.it.par.as_ref().is_some_and(|p| p.contains_key(pos)) =>
@@ -1666,6 +1679,28 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         } else {
             path.into()
         };
+        // `xs.push(v)` and `xs.len()` on a list local: one instruction, then the walker's call for any other value.
+        if path.is_empty()
+            && recv_op & KIND == LOCAL
+            && self.it.tracing & trace::WATCH == 0
+            && ((name == "push" && args.len() == 1) || (name == "len" && args.is_empty()))
+        {
+            let val = match args.first().map(|a| &a.value) {
+                None => Some(NONE),
+                Some(v @ Expr::Name(n, p)) if !self.it.resolved.moves.contains_key(p) && self.local(n).is_some() => {
+                    let _ = v;
+                    Some(LOCAL | self.local(n).expect("a local"))
+                }
+                Some(v) => self.literal(v),
+            };
+            if let Some(val) = val {
+                let g = self.emit(Ins::ListFast { slot: recv_op & !KIND, val, dst, push: name == "push", done: 0 });
+                self.delegate(e, dst);
+                let end = self.here();
+                self.patch(g, end);
+                return;
+            }
+        }
         let guard =
             self.emit(Ins::MethodGuard { recv: recv_op, path: path.clone(), name, t: 0, cache: Cell::new(None) });
         let first = self.next_reg;
@@ -2195,6 +2230,24 @@ impl<'a, W: Write> Interp<'a, W> {
                     done(*recv, regs);
                     done(*idx, regs);
                     put(*dst, v, env, base, regs);
+                }
+                Ins::ListFast { slot, val, dst, push, done } => {
+                    let at = base + *slot as usize;
+                    if matches!(env[at].1, Value::List(_)) {
+                        if *push {
+                            let v = take!(*val);
+                            let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
+                            Rc::make_mut(items).push(v);
+                            put(*dst, Value::Unit, env, base, regs);
+                        } else {
+                            let Value::List(items) = &env[at].1 else { unreachable!("a list") };
+                            let len = items.len() as i64;
+                            put_int(*dst, len, env, base, regs);
+                        }
+                        pc = *done as usize;
+                    } else {
+                        pc += 1;
+                    }
                 }
                 Ins::Index2 { dst, recv, i, k, pos1, pos2 } => {
                     pc += 1;
