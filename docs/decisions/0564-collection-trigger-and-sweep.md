@@ -107,5 +107,7 @@ data. Resident size (Linux x86-64, `ru_maxrss`) with the earlier trigger
 | 10 GB short-lived lists (`heavy/gc_10gb.ail`) | 10 MiB | 16 MiB |
 | native `lines`/`split` (200,000 lines) | 65 MiB | 60 MiB |
 
-Instructions on the `lines`/`split` program: 2.91 G (first trigger), 2.37 G
-(16 MiB minimum, 1x live), 2.31 G (2x live).
+Instructions on the `lines`/`split` program, cumulative: 2.91 G before this
+amendment; 2.56 G with the block-size lookup; 2.49 G with the 16 MiB minimum;
+2.37 G with 2x live; 2.23 G with the one-pass sweep, lazy page zeroing and
+the shift-indexed fast path.
