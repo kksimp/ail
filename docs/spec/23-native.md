@@ -74,7 +74,7 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 include structs and enums (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table; a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,

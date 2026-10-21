@@ -175,7 +175,7 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
                 vt = v
             _ => kt = kt
     if entries.len() == 0 and kt.is_unknown()
-        return unsupported(pos, "an empty `\{}` whose type isn't known")
+        return pending_table()
     mut ks := List[int]()
     mut vs := List[int]()
     for e in entries
@@ -224,6 +224,8 @@ fn Lower.lower_set_lit(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Va
 
 ## `m[k]` (type.map.3): traps when `k` is missing.
 fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
+    if is_pending_table(m.ty)
+        return unsupported(pos, "an empty `\{}` whose type isn't known")
     match m.ty
         Map(kt, vt) =>
             k := lower_value(index, kt)?
@@ -244,10 +246,21 @@ fn Lower.lower_map_assign(
     ipos ast.Pos,
 )
     match m.ty
-        Map(kt, vt) =>
-            k := lower_value(index, kt) else return
+        Map(kt0, vt0) =>
+            mut kt := kt0
+            mut vt := vt0
+            k := lower_value(index, if kt.is_unknown() then none else kt) else return
+            mut r := Val(id: -1, ty: Ty.Unknown)
+            if kt.is_unknown()
+                # A pending `{}` (type.coll.13): this assignment types it.
+                r = lower_value(value, none) else return
+                if not settle_map(m, k.ty, r.ty, ipos)
+                    return
+                kt = k.ty
+                vt = r.ty
             kid := convert(k, kt, ipos)
-            r := lower_value(value, vt) else return
+            if r.id < 0
+                r = lower_value(value, vt) else return
             mut stored := -1
             if o := op
                 zero := match vt
@@ -319,6 +332,11 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "this method call")
+    if is_pending_table(r.ty)
+        if name == "add" and args.len() == 1
+            return settle_set_add(r, args, npos)
+        if name != "len"
+            return unsupported(npos, "an empty `\{}` whose type isn't known")
     mut vs := List[Val]()
     match r.ty
         Map(kt, vt) =>
@@ -425,6 +443,8 @@ fn Lower.iter_coll(mut self, v Val) Val
 
 ## `print(m)` and `print(s)` (type.map.4): `{"a": 1}`, `{1, 2}`.
 fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
+    if is_pending_table(v.ty)
+        return unsupported(pos, "an empty `\{}` whose type isn't known")
     match v.ty
         Map(k, x) =>
             kk := scalar_kind(k)

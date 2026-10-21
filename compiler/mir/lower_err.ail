@@ -532,7 +532,9 @@ fn is_pending_opt(t Ty) bool
 ## that has a value), else unknown.
 fn arms_start(want Ty?, bodies List[List[ast.Stmt]], els List[ast.Stmt]?) Ty
     if w := want
-        return w
+        # A pending `[]` or `{}` (type.coll.13) is typed by the arms instead.
+        if not is_pending_coll(w)
+            return w
     mut has_none := false
     for b in bodies
         has_none = has_none or ends_in_none(b)
@@ -556,7 +558,7 @@ fn settle_arm_ty(t Ty, xt Ty) Ty
 ## variable (and every value it has had) by that value.
 fn Lower.settle_var(mut self, target ast.Expr, ty Ty, r Val) Ty
     if not is_pending_opt(ty)
-        return ty
+        return settle_coll(target, ty, r)
     t := settle_arm_ty(ty, r.ty)
     if is_pending_opt(t)
         return ty
