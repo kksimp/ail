@@ -436,41 +436,40 @@ against `python3 -I PROGRAM.py ARGS`. Sizes come from `NAME.args`. Day 1 is
 main at 65a42826 (#223). Day 2 is the post-gate head bd982d2. Both binaries
 were built from clean worktrees. Other lanes were timing native programs on the
 same box during some runs, hence medians. Harness: `tools/perfbench/wall.sh OLD NEW [N]`;
-`tools/perfbench/instr.sh` gives load-independent callgrind counts.
+`tools/perfbench/instr.sh` gives callgrind instruction counts (load-independent; the last two columns), so lane 235's timing on the same box does not affect them.
 
-| Program | CPython s | Day 1 s | Day 2 s | Day 2 vs day 1 | Day 2 / CPython |
-|---|---|---|---|---|---|
-| binarytrees | 0.447 | 1.753 | 0.690 | 2.54x faster | 1.54 |
-| collatz | 0.814 | 0.358 | 0.289 | 1.24x faster | 0.36 |
-| fannkuch | 0.691 | 0.986 | 0.648 | 1.52x faster | 0.94 |
-| fasta | 0.112 | 0.157 | 0.105 | 1.50x faster | 0.94 |
-| json_roundtrip | 0.101 | 2.003 | 0.262 | 7.65x faster | 2.59 |
-| lines_split | 0.286 | 0.400 | 0.382 | 1.05x faster | 1.34 |
-| mandelbrot | 0.239 | 0.607 | 0.171 | 3.55x faster | 0.72 |
-| map_ops | 0.107 | 0.136 | 0.122 | 1.11x faster | 1.14 |
-| matmul | 0.402 | 0.792 | 0.477 | 1.66x faster | 1.19 |
-| nbody | 0.292 | 0.846 | 0.245 | 3.45x faster | 0.84 |
-| print_many | 0.169 | 0.157 | 0.125 | 1.26x faster | 0.74 |
-| sieve | 0.533 | 1.128 | 0.602 | 1.87x faster | 1.13 |
-| spectralnorm | 0.386 | 0.680 | 0.398 | 1.71x faster | 1.03 |
-| tensor | 0.365 | 0.014 | 0.014 | 1.00x faster | 0.04 |
-| tensor_loops | 0.345 | 0.711 | 0.285 | 2.49x faster | 0.83 |
-| tensor_ops | 0.216 | 0.046 | 0.036 | 1.28x faster | 0.17 |
-| tensor_ops_loops | 0.195 | 0.503 | 0.370 | 1.36x faster | 1.90 |
-| wordfreq | 0.137 | 0.279 | 0.169 | 1.65x faster | 1.23 |
-| geo mean | | | | 1.79x faster | 0.79 |
+| Program | CPython s | Day 1 s | Day 2 s | Day 2 vs day 1 | Day 2 / CPython | Instr: day 2 / day 1 | Instr: day 2 / CPython |
+|---|---|---|---|---|---|---|---|
+| binarytrees | 0.447 | 1.753 | 0.690 | 2.54x faster | 1.54 | 0.51 | 1.45 |
+| collatz | 0.814 | 0.358 | 0.289 | 1.24x faster | 0.36 | 0.92 | 0.39 |
+| fannkuch | 0.691 | 0.986 | 0.648 | 1.52x faster | 0.94 | 0.73 | 1.11 |
+| fasta | 0.112 | 0.157 | 0.105 | 1.50x faster | 0.94 | 0.68 | 0.78 |
+| json_roundtrip | 0.101 | 2.003 | 0.262 | 7.65x faster | 2.59 | 0.07 | 1.87 |
+| lines_split | 0.286 | 0.400 | 0.382 | 1.05x faster | 1.34 | 0.93 | 1.00 |
+| mandelbrot | 0.239 | 0.607 | 0.171 | 3.55x faster | 0.72 | 0.48 | 1.17 |
+| map_ops | 0.107 | 0.136 | 0.122 | 1.11x faster | 1.14 | 0.89 | 0.73 |
+| matmul | 0.402 | 0.792 | 0.477 | 1.66x faster | 1.19 | 0.66 | 0.86 |
+| nbody | 0.292 | 0.846 | 0.245 | 3.45x faster | 0.84 | 0.42 | 1.02 |
+| print_many | 0.169 | 0.157 | 0.125 | 1.26x faster | 0.74 | 1.01 | 0.69 |
+| sieve | 0.533 | 1.128 | 0.602 | 1.87x faster | 1.13 | 0.52 | 0.77 |
+| spectralnorm | 0.386 | 0.680 | 0.398 | 1.71x faster | 1.03 | 0.63 | 0.81 |
+| tensor (native kernel) | 0.365 | 0.014 | 0.014 | 1.00x faster | 0.04 | 1.00 | 0.02 |
+| tensor_loops | 0.345 | 0.711 | 0.285 | 2.49x faster | 0.83 | 0.46 | 0.89 |
+| tensor_ops (native kernel) | 0.216 | 0.046 | 0.036 | 1.28x faster | 0.17 | 1.00 | 0.14 |
+| tensor_ops_loops | 0.195 | 0.503 | 0.370 | 1.36x faster | 1.90 | 0.83 | 1.64 |
+| wordfreq | 0.137 | 0.279 | 0.169 | 1.65x faster | 1.23 | 0.75 | 0.95 |
+| **geo mean, all 18** | | | | 1.79x faster | 0.79 | 0.62 | 0.68 |
+| **geo mean, without the 2 native-kernel rows (16)** | | | | 1.90x faster | 1.05 | 0.58 | 0.94 |
 
-Ratios below 1.00 in the last column mean AIL is faster than CPython.
+Ratios below 1.00 mean AIL is faster (or executes fewer instructions) than CPython. Instruction counts and wall time disagree where CPython's C loops retire more instructions per second than the interpreter's (mandelbrot, nbody, fannkuch), so wall time is the headline.
 
 ### Reading it
 
-- Day 2 is faster than day 1 on all 18 programs, 1.79x geo mean. The biggest
+- Day 2 is faster than day 1 on 17 of 18 programs (tensor is unchanged at 14 ms), 1.79x geo mean over all 18. The biggest
   gains are json_roundtrip (7.7x: one text allocation per string, ADR 0739),
   mandelbrot (3.6x), nbody (3.5x), binarytrees (2.5x) and tensor_loops (2.5x).
-- Faster than CPython on 9 of 18, within 10% on 3 more (fannkuch, fasta,
-  spectralnorm). Geo mean 0.79 of CPython's time, but the tensor and tensor_ops
-  rows (native kernels, 0.04 and 0.17) pull it down; those compare a native
-  kernel against pure-Python loops, not the interpreter.
+- Headline: without the two native-kernel rows (tensor, tensor_ops, which compare a native kernel against Python loops) the interpreter is **1.90x faster than day 1 and at 1.05x CPython's wall time** (parity, 5% slower; 0.94x by instruction count). With all 18 rows it reads 0.79, which the native-kernel rows flatter.
+- Faster than CPython by wall time on 7 of the 16 comparable programs (collatz, mandelbrot, nbody, tensor_loops, print_many, fasta, fannkuch); spectralnorm is within 3%.
 - Still slower than CPython: json_roundtrip 2.6x, tensor_ops_loops 1.9x,
   binarytrees 1.5x, lines_split 1.3x, wordfreq 1.2x, matmul 1.2x, sieve 1.1x,
   map_ops 1.1x. json_roundtrip is value building and binarytrees is the call path
