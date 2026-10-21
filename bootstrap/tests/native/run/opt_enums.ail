@@ -1,0 +1,89 @@
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Dot
+    Circle(radius int)
+    Rect(w int, h int)
+
+struct Item
+    color Color?
+    shape Shape?
+    sizes List[int]?
+
+fn pick(n int) Color?
+    if n == 0
+        return Color.Red
+    if n == 1
+        return Color.Blue
+    none
+
+fn shape_of(n int) Shape?
+    if n == 0
+        return none
+    if n == 1
+        return Dot
+    if n == 2
+        return Circle(radius: 5)
+    Rect(w: 2, h: 3)
+
+fn color_name(c Color) str
+    match c
+        Red => "red"
+        Green => "green"
+        Blue => "blue"
+
+fn area(s Shape) int
+    match s
+        Dot => 0
+        Circle(r) => r * r * 3
+        Rect(w, h) => w * h
+
+fn main()
+    for i in 0..3
+        if c := pick(i)
+            print(color_name(c))
+        else
+            print("no color")
+    for i in 0..4
+        s := shape_of(i) else
+            print("no shape")
+            continue
+        print(area(s))
+    it := Item(color: Color.Red, shape: none, sizes: [1, 2])
+    c := it.color else Color.Green
+    print(color_name(c))
+    print(color_name(pick(7) else Color.Green))
+    if it.shape == none
+        print("shapeless")
+    print(it.sizes else [])
+    b := pick(1)
+    print(b != none)
+    print(label(3) else "-")
+    print(label(0) else "-")
+    print(grade(95) else 0)
+    print(grade(10) else 0)
+    print(first_big([1, 20, 3]) else -1)
+    print(first_big([1, 2]) else -1)
+
+fn label(n int) str?
+    match n
+        0 => none
+        3 => "three"
+        _ => none
+
+fn grade(score int) int?
+    if score > 90
+        3
+    elif score > 50
+        2
+    else
+        none
+
+fn first_big(xs List[int]) int?
+    for x in xs
+        if x > 10
+            return x
+    none

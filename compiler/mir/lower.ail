@@ -46,6 +46,8 @@ struct Lower
     ## Zero-field `error struct`s to their messages (lower_err.ail).
     err_msgs Map[str, str]
     err_fns Set[str]
+    ## The type the next block's final expression should have (consumed by `lower_block`).
+    tail_want Ty?
     ## The function being lowered can fail.
     fails bool
     sigs Map[str, Sig]
@@ -161,6 +163,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         file_paths: [src.path for src in srcs],
         err_msgs: {"fs.IoError": "", "IoError": ""},
         err_fns: Set[str](),
+        tail_want: none,
         fails: false,
         sigs: {},
         bad: Set[str](),
@@ -637,6 +640,8 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
         borrowed.add(lookup(p.name) else "")
     body := f.body else return
     want := not ret.is_unit()
+    if want
+        tail_want = ret
     result := lower_block(body, want)
     if not done()
         if want
@@ -726,6 +731,8 @@ fn same_ty(a Ty, b Ty) bool
 ## Lower statements in a new scope. With `want`, a final expression
 ## statement is the block's value.
 fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
+    tail := tail_want
+    tail_want = none
     scopes.push(Map[str, str]())
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
@@ -734,7 +741,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
             dead_block()
         if want and i == body.len() - 1
             if e := final_expr(s)
-                result = lower_expr(e, none) else Val(id: -2, ty: Ty.Unit)
+                result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                 continue
         lower_stmt(s)
     scopes.pop()
@@ -887,7 +894,8 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
                 v = binary(o, old, r, pos).id
             else
                 r := lower_value(value, ty) else return
-                v = copy_if_place(value, Val(id: convert(r, ty, pos), ty: ty))
+                ty2 := settle_var(target, ty, r)
+                v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
             write_var(key, cur, v)
         Index(recv, index, ipos) =>
             l := lower_value(recv, none) else return
@@ -1341,6 +1349,7 @@ fn Lower.lower_if(
     if value
         result = new_value(Ty.Unknown, "")
         blocks[join].params.push(result)
+        rty = arms_start(want, [br.body for br in branches], els)
     for br in branches
         mut bound := ""
         mut bval := Val(id: -1, ty: Ty.Unit)
@@ -1363,11 +1372,13 @@ fn Lower.lower_if(
         if bound != ""
             u := unwrap(bval)
             declare(bound, u.ty, u.id)
+        tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(br.body, value)
         scopes.pop()
         rty = arm_end(join, value, v, pos, rty)
         cur = no
     if body := els
+        tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(body, value)
         rty = arm_end(join, value, v, pos, rty)
     else
@@ -1397,8 +1408,8 @@ fn Lower.arm_end(mut self, join int, value bool, v Val?, pos ast.Pos, rty Ty) Ty
         jump(join, [])
         return rty
     mut t := rty
-    if t.is_unknown()
-        t = x.ty
+    if t.is_unknown() or is_pending_opt(t)
+        t = settle_arm_ty(t, x.ty)
     jump(join, [convert(x, t, pos)])
     t
 
