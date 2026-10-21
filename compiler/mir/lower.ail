@@ -124,6 +124,9 @@ struct Lower
     ## them at start-up.
     globals Map[str, Global]
     global_consts List[GlobalConst]
+    ## The failure blocks of the `else` parts being lowered, innermost last:
+    ## a `?` on an optional inside an `else` value goes there (err.prop.4).
+    else_targets List[int]
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -217,6 +220,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         singletons: [],
         globals: {},
         global_consts: [],
+        else_targets: [],
     )
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
@@ -378,7 +382,8 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if f.contracts.len() > 0
         problem(f.pos, "`{f.name}`: contracts aren't in the native subset yet")
     for a in f.attrs
-        if a.name != "inline" and a.name != "pure"
+        # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5).
+        if a.name != "inline" and a.name != "pure" and a.name != "allow" and a.name != "deprecated"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params

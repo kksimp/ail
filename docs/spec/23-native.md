@@ -61,7 +61,7 @@ fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
 guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
-`o else d` and `o?` in a function returning an optional, functions that can
+`o else d` and `o?` in a function returning an optional (and a `?` chain such as `a?.b.c else d`, err.prop.4), `@allow` and `@deprecated` on functions, functions that can
 fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
 with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
 typed when the function names one error type, a failing
