@@ -1,0 +1,5 @@
+fn main()
+    mut total := 0
+    for l in io.read_all().lines()
+        total += l.trim().to_int() else 0
+    print(total)
