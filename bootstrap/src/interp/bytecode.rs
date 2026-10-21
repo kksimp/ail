@@ -168,6 +168,20 @@ enum Ins<'a> {
         k: i64,
         pos: Pos,
     },
+    /// `local op= k` with an int literal.
+    OpAssignK {
+        op: BinOp,
+        slot: u32,
+        k: i64,
+        pos: Pos,
+    },
+    /// `local op= b` (expr.op.2).
+    OpAssign {
+        op: BinOp,
+        slot: u32,
+        b: Opnd,
+        pos: Pos,
+    },
     Not {
         dst: Opnd,
         src: Opnd,
@@ -1506,10 +1520,17 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                             slot
                         };
                         match self.int_literal(value) {
+                            Some(k) if old == slot => {
+                                self.emit(Ins::OpAssignK { op: *op, slot: slot & !KIND, k, pos: *pos })
+                            }
                             Some(k) => self.emit(Ins::BinK { op: *op, dst: slot, a: old, k, pos: *pos }),
                             None => {
                                 let b = self.operand(value);
-                                self.emit(Ins::Bin { op: *op, dst: slot, a: old, b, pos: *pos })
+                                if old == slot {
+                                    self.emit(Ins::OpAssign { op: *op, slot: slot & !KIND, b, pos: *pos })
+                                } else {
+                                    self.emit(Ins::Bin { op: *op, dst: slot, a: old, b, pos: *pos })
+                                }
                             }
                         };
                     }
@@ -2121,6 +2142,48 @@ impl<'a, W: Write> Interp<'a, W> {
                     let y = take!(*b);
                     let v = self.binop(*op, x, y, *pos)?;
                     put(*dst, v, env, base, regs);
+                }
+                Ins::OpAssignK { op, slot, k, pos } => {
+                    pc += 1;
+                    let at = base + *slot as usize;
+                    if let Value::Int(x) = &mut env[at].1
+                        && let Some(r) = int_arith(*op, *x, *k)
+                    {
+                        *x = r;
+                        continue;
+                    }
+                    let x = env[at].1.clone();
+                    let v = self.binop(*op, x, Value::Int(*k), *pos)?;
+                    put(LOCAL | *slot, v, env, base, regs);
+                }
+                Ins::OpAssign { op, slot, b, pos } => {
+                    pc += 1;
+                    let at = base + *slot as usize;
+                    match get!(*b) {
+                        Value::Int(y) => {
+                            let y = *y;
+                            if let Value::Int(x) = &mut env[at].1
+                                && let Some(r) = int_arith(*op, *x, y)
+                            {
+                                *x = r;
+                                continue;
+                            }
+                        }
+                        Value::Float(y) => {
+                            let y = *y;
+                            if let Value::Float(x) = &mut env[at].1
+                                && let Some(r) = float_arith(*op, *x, y)
+                            {
+                                *x = r;
+                                continue;
+                            }
+                        }
+                        _ => {}
+                    }
+                    let x = env[at].1.clone();
+                    let y = take!(*b);
+                    let v = self.binop(*op, x, y, *pos)?;
+                    put(LOCAL | *slot, v, env, base, regs);
                 }
                 Ins::BrCmpK { op, a, k, when, t, pos } => {
                     let c = match get!(*a) {
