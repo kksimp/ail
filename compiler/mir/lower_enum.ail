@@ -65,6 +65,9 @@ fn Lower.enum_key(self, name str) str?
     key := "{prefix}{name}"
     if enums.contains(key)
         return key
+    if k := prelude_key(name)
+        if enums.contains(k)
+            return k
     # The prelude's `Ordering` is visible in every module.
     if name == "Ordering" and enums.contains(name) then name else none
 
@@ -92,7 +95,15 @@ fn Lower.case_index(self, n str, name str) int
 
 ## The type a method's `self` has: a struct or an enum.
 fn Lower.owner_ty(self, n str) Ty
-    if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
+    match n
+        "int" => Ty.Int
+        "float" => Ty.Float
+        "bool" => Ty.Bool
+        "str" => Ty.Str
+        _ =>
+            if t := gen.owner_tys.get(n)
+                return t
+            if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
 
 ## The enum `e` names, when it names one and no local: `E` or `m.E`, as
 ## in `E.V` or `m.E.V(...)`.

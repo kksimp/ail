@@ -62,16 +62,19 @@ pub struct mir.Source
     pub text str
     pub prog ast.Program
 pub fn mir.lower_package(input List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package_with(input List[mir.Source], rt ast.Program?, lazy int) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(e ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
 pub fn mir.imports_of(prog ast.Program) List[str]
+pub fn mir.prelude_text(text str) str
 pub struct mir.TaskState
     on bool
     sites List[mir.TaskSite]
     pars List[mir.ParSite]
     rets Map[str, mir.Ty]
     in_chunk bool
+    owner str
     accs Set[str]
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(text str) bool
@@ -181,4 +184,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1793); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1850); dropped: private items, doc comments

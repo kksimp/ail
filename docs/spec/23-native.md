@@ -86,7 +86,7 @@ statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
 sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
 whose type is expected (a function result, argument or field), in functions with at most eight
-`float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); format specifications on
+`float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); the methods derive generators write (ct.gen.1, ADR 0807); the prelude's `Json` and `Default`, as far as the program reaches them (ADR 0808); format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression), and `else` followed by a block on `s.to_int()`, `xs.pop()` and `m.get(k)` (the block leaves or ends in the replacement value, err.else.1-3) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
@@ -94,7 +94,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
+(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
@@ -109,12 +109,10 @@ other host fails with kind `not_found`, as there is no DNS client yet), no TLS, 
 `bytes` forms are not built, and a message's wording may differ from the interpreter's (the `kind` is the same); and the standard
 modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
 `std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet, and `std.app`
+the constructs their source uses are in the subset (so far `std.log`, `std.regex` and `std.time.date`; `regex.captures` is not built yet, and `std.app`
 waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830, 0838)*
-the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet, and `std.app` waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830, 0838)*
+0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830, 0838, 0840)*
 
 ```ail
 fn steps(n int) int

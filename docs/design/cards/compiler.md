@@ -1,7 +1,7 @@
 # compiler
 entry: main in main.ail
 
-## (root) (11 items)
+## (root) (17 items)
 
 ## a64 (58 items)
 
@@ -11,11 +11,11 @@ entry: main in main.ail
 
 ## codegen (45 items)
 
-## mir (315 items)
+## mir (322 items)
 
 ## obj (58 items)
 
-## syntax (99 items)
+## syntax (100 items)
 
 ## x64 (74 items)
 

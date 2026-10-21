@@ -148,6 +148,7 @@ struct Lower
     global_consts List[GlobalConst]
     ## Generic declarations and their instances (ADR 0536).
     gen Gen
+    lazy Lazy
     ## The failure blocks of the `else` parts being lowered, innermost last:
     ## a `?` on an optional inside an `else` value goes there (err.prop.4).
     else_targets List[int]
@@ -203,6 +204,11 @@ pub struct Source
 ## the runtime. The first source is the root module's file holding `main`;
 ## problems name the file they are in (`Problems.files`).
 pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
+    lower_package_with(input, rt, input.len())
+
+## `lower_package` with the sources from `lazy` on the prelude's, lowered
+## as the program reaches them (ADR 0808).
+pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
     srcs := with_error_owners(input)
     mut l := Lower(
         path: srcs[0].path,
@@ -272,8 +278,10 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         globals: {},
         global_consts: [],
         gen: new_gen(),
+        lazy: new_lazy(lazy),
         else_targets: [],
     )
+    l.note_lazy_names(srcs)
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
@@ -281,24 +289,32 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         l.declare_all(r, "rt.")
     l.tk.on = l.sigs.contains("rt.task_new")
     l.problem_files = [0 for _ in l.problems]
-    for src in srcs
-        l.declare_errors(src.prog)
+    for k in 0..srcs.len()
+        before := l.problems.len()
+        l.declare_errors(srcs[k].prog)
+        l.quiet_lazy(k, before)
     for k in 0..srcs.len()
         l.enter_file(k)
+        before := l.problems.len()
         l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
+        l.quiet_lazy(k, before)
     l.declare_prelude_enums()
     for k in 0..srcs.len()
         l.enter_file(k)
+        before := l.problems.len()
         l.declare_struct_fields(srcs[k].prog)
         l.declare_enums(srcs[k].prog)
+        l.quiet_lazy(k, before)
     for k in 0..srcs.len()
         l.enter_file(k)
+        before := l.problems.len()
         l.declare_all(srcs[k].prog, l.prefix)
+        l.quiet_lazy(k, before)
     l.stamp_problems()
     l.gen_const_init()
-    for k in 0..srcs.len()
+    for k in 0..lazy.min(srcs.len())
         l.enter_file(k)
         l.path = srcs[k].path
         for f in program_fns(srcs[k].prog)
@@ -306,6 +322,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
                 l.lower_fn(f)
         l.stamp_problems()
     l.gen_instances()
+    l.lower_lazy(srcs)
     l.enter_file(0)
     l.gen_unchecked()
     l.enter_file(0)
@@ -417,6 +434,8 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         if problems.len() > before
             bad.add(fn_key(f, pre))
             sigs.remove(fn_key(f, pre))
+            hold_lazy(fn_key(f, pre), before)
+    self_ty = ""
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if f.ext != none
@@ -429,9 +448,11 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if declare_generic_fn(f, pre)
         return
     mut params := List[Ty]()
+    self_ty = if o := f.owner then owner_key(o.name, pre) else ""
     if o := f.owner
-        owner := "{pre}{o.name}"
-        if o.params != none or not (structs.contains(owner) or enums.contains(owner))
+        owner := owner_key(o.name, pre)
+        prim := ["int", "float", "bool", "str"].contains(owner)
+        if o.params != none or not (structs.contains(owner) or enums.contains(owner) or prim)
             problem(
                 f.pos,
                 "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
@@ -499,7 +520,7 @@ fn is_test(f ast.FnDecl) bool
 ## A function's name in MIR: `T.m` for a method of `T`.
 fn fn_key(f ast.FnDecl, pre str) str
     if o := f.owner
-        return "{pre}{o.name}.{f.name}"
+        return "{owner_key(o.name, pre)}.{f.name}"
     "{pre}{f.name}"
 
 ## The MIR type of a written type, if it is in the subset.
@@ -537,6 +558,10 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
+                    if name == "Self" and self_ty != ""
+                        # A method's own type (trait.self.1), as derived
+                        # methods write it (ADR 0807).
+                        return owner_ty(self_ty)
                     if g := generic_type(name, args)
                         return g
                     if args.len() == 0
@@ -771,12 +796,13 @@ fn Lower.str_lit(mut self, s str) int
 # ---- functions ----
 
 fn Lower.lower_fn(mut self, f ast.FnDecl)
-    lower_fn_as(f, fn_key(f, prefix), fn_key(f, prefix), fn_owner(f))
+    owner := if o := f.owner then owner_key(o.name, prefix) else ""
+    lower_fn_as(f, fn_key(f, prefix), fn_key(f, prefix), owner)
 
 ## The type a method belongs to, as its key: `Tag` or `mod.Tag`; "" for a
 ## free function.
 fn Lower.fn_owner(self, f ast.FnDecl) str
-    if o := f.owner then "{prefix}{o.name}" else ""
+    if o := f.owner then owner_key(o.name, prefix) else ""
 
 ## `f` under the MIR name `name`, with the signature of `key`: the function
 ## itself, or its `.nc` copy, which checks no contracts (contract.run.2). It is
@@ -1610,10 +1636,14 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     npos,
                 )
             if self_ty != "" and bad.contains("{self_ty}.{name}")
+                release("{self_ty}.{name}")
                 fn_failed = true
                 return none
-            key := "{prefix}{name}"
+            mut key := "{prefix}{name}"
+            if not sigs.contains(key) and not bad.contains(key)
+                key = prelude_key(name) else key
             if bad.contains(key)
+                release(key)
                 fn_failed = true
                 return none
             if name == "zip" and not sigs.contains(key)
@@ -1777,6 +1807,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
+    if a := assoc_owner(recv)
+        return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
     if m := module_name(recv)
@@ -1790,6 +1822,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
         return lower_sorted(r, name, args, npos)
+    if k := builtin_method(r.ty, name)
+        return struct_call(k, r, args, npos)
     if r.ty.is_coll()
         return lower_coll_method(r, name, npos, args)
     if r.ty.is_tensor()

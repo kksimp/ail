@@ -635,6 +635,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0834](0834-native-sized-numbers.md) | Native sized integers are `Ty.Sized(kind)`, held sign- or zero-extended in a register, with trapping conversions *(delegated)* | Accepted | 2026-10-21 |
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
+| [0807](0807-native-build-passes-derived-methods.md) | `ail build` passes derived methods to the native backend as `gen:impl` sources; `Self` in method signatures *(delegated)* | Accepted | 2026-10-21 |
+| [0808](0808-native-prelude-json-lowered-on-demand.md) | Native builds get the prelude's JSON and `Default` modules, lowered only where the program reaches them *(delegated)* | Accepted | 2026-10-21 |
+| [0840](0840-native-std-tz-in-the-runtime.md) | Native `std.tz`: a TZif reader and POSIX rules in the runtime, so `std.time.date` builds natively *(delegated)* | Accepted | 2026-10-21 |
 | [0830](0830-native-raw-tcp.md) | Native raw TCP: sockets by system calls, handles in a table, `net.NetError` *(delegated)* | Accepted | 2026-10-21 |
 | [0821](0821-unsafe-driver-manifest-and-flag.md) | `unsafe driver` in `ail.pkg`, and `--unsafe driver` for a program without one *(delegated)* | Accepted | 2026-10-21 |
 | [0822](0822-std-hw-volatile-and-hw-effect.md) | `std.hw`: `at`, volatile methods and fences, and the effect `hw` *(delegated)* | Accepted | 2026-10-21 |

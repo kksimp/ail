@@ -257,6 +257,11 @@ fn Lower.fallible_call(self, e ast.Expr) bool
 fn Lower.method_key(self, recv ast.Expr, name str) str?
     if m := module_name(recv)
         return "{m}.{name}"
+    # `Type.f(...)`, a function of a type (an associated one such as `from_json`).
+    if a := assoc_owner(recv)
+        return "{a}.{name}"
+    if t := type_name(recv)
+        return "{t}.{name}"
     match recv
         Name(n, _) =>
             k := lookup(n) else return none
