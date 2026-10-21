@@ -48,13 +48,14 @@ The budgets are in one place, the `BUDGETS` table at the top of `tokbench.py`:
 | Page | Budget | Source |
 |---|---:|---|
 | `docs/language-card.md` | 8,000 | [ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md) |
-| `docs/quick-reference.md` | 12,518 | no ADR in the tree sets it yet |
+| `docs/quick-reference.md` | 12,518 | [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md) |
 
-The mean rule is the one the coordinator set for this check. ADR 0276 states the
-card budget per tokenizer ("on every tokbench tokenizer"), and the mean is looser,
-so a card that passes the mean can still fail a single tokenizer. ADR 0703 is about
-`ail api --card` trimming levels and does not state a budget. Change a budget only
-here, and cite its source next to it.
+The mean rule is [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md).
+ADR 0276 stated the card budget per tokenizer ("on every tokbench tokenizer"); the
+mean is looser, so a card that passes the mean can still fail one tokenizer. ADR 0703
+is about `ail api --card` trimming levels and does not state a budget. Change a budget
+only here, and cite its ADR next to it. Any quick-reference addition is paid for by a
+trim in the same change (ADR 0817).
 
 ### Optional: the current Claude tokenizer
 
@@ -129,6 +130,10 @@ says which program changed and why, with its five-tokenizer mean before and afte
   - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
   - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
   Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
+- **2026-10-21, tuples (ADR 0791-0794)** (two twins; output checked byte-identical to the Python twin):
+  - `agent-r4/t12_sort_ties`: the people are `(name, age)` pairs sorted by the key `(-p.1, p.0)`, as the Python twin does, instead of a `struct P` and two `sorted` passes. 91.4 → 57.6.
+  - `agent-r4/t03_table`: the rows are `(str, int)` pairs taken apart by `for name, qty in rows`, as in Python. 38.8 → 35.2.
+  Total for the 25 std twins: 1,128.6 → 1,091.2 (−37.4), AIL against Python +13.9% → +10.1%. This change is the language's.
 - **2026-10-21, day 3** (output checked byte-identical to the Python twin where one runs):
   - `agent-r4/t11_json_transform`: `load_json[List[U]](p)?` and `print_json(v)` replace the `from_json`/`parse_json`/`to_text` chain (ADR 0774). 89.6 → 76.4.
   - `programs/hexdump`: `data[a..b].hex(" ")` replaces the row comprehension and join (ADR 0775). 124.2 → 104.2.

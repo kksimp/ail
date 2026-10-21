@@ -45,3 +45,12 @@ fn main()
     print([c for c in b"hi"])
     big := [x * 3000000000 for x in 0..3]
     print(big)
+    print([if x > 3 then x * 2 else x for x in xs])
+    print([if x % 2 == 0 then "even" else "odd" for x in xs if x < 5])
+    print({if x > 4 then "big" else "small": x for x in xs}.len())
+    word := "héllo"
+    print(word.len())
+    print(m.len() + s.len() + b"abc".len())
+    print([w.len() for w in ["a", "bcd", "éé"]])
+    print([k.len() for k in [m, m]])
+    print([x for x in xs].len())
