@@ -70,6 +70,8 @@ typed when the function names one error type, a failing
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
 `Map[K, V]` and `Set[T]` over `int`, `bool`, `char` and `str` keys (`Map[K, V]()`,
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
+include structs and enums (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
 `Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
@@ -98,6 +100,7 @@ modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
 the constructs their source uses are in the subset (so far `std.log`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803, 0818)*
 
 ```ail
 fn steps(n int) int

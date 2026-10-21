@@ -485,3 +485,16 @@ fn set_filter(a int, b int, keep int) int
             if map_has(b, load64(e + 8)) == (keep != 0)
                 map_add(r, load64(e + 8))
     r
+
+# ---- copies of tables of structs ----
+
+## The slots in use, live or dead.
+fn map_used(m int) int
+    load64(m + 8)
+
+## The address of entry `i` when it is live, else 0.
+fn map_live(m int, i int) int
+    e := load64(m + 40) + 24 * i
+    if load64(e) >= 0
+        return e
+    0

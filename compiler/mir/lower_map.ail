@@ -16,6 +16,7 @@ fn is_key_ty(t Ty) bool
 
 fn is_value_ty(t Ty) bool
     is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll()
+    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t)
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
@@ -53,6 +54,9 @@ fn scalar_kind(t Ty) int
 ## How a copy of a table treats its values: `[mode, info]`, with mode 1 for
 ## lists (info: nesting depth * 256 + element bytes) and 2 for tables.
 fn value_mode(v Ty) List[int]
+    if holds_struct(v)
+        # A copy of the table copies the structs (`copy.Map[...]`).
+        return [0, 0]
     if v.is_coll()
         return [2, 0]
     mut t := v.elem() else return [0, 0]
@@ -112,6 +116,15 @@ fn Lower.new_table(mut self, ty Ty) int
 
 ## A copy of the table `v` (own.val.1).
 fn Lower.copy_coll(mut self, v Val) int
+    x := match v.ty
+        Map(_, x) => x
+        _ => Ty.Unknown
+    if holds_struct(x)
+        name := "copy.{v.ty.name()}"
+        if not sigs.contains(name)
+            sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
+            copy_tys[name] = v.ty
+        return call(name, [v.id], v.ty)
     call("rt.map_copy", [v.id], v.ty)
 
 ## The trap's first line and source excerpt as string values, as the code
