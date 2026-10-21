@@ -1,0 +1,4 @@
+fn main()
+    print(tensor.from([1.0, 2.0]).sum())
+    print(tensor.from([1, 2, 3, 4], [2, 2]).sum())
+    print(tensor.zeros([2]).len())

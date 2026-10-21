@@ -1,0 +1,12 @@
+## type.tuple.5 on the bytecode tier: comprehensions with `for a, b in xs`
+## clauses bind each part, in every shape (tuples_basic found the first).
+fn main()
+    pairs := [(1, "a"), (2, "b"), (3, "c")]
+    print([n for n, _ in pairs])
+    print([s for _, s in pairs if s != "b"])
+    print({n % 2 for n, _ in pairs})
+    print({s: n for n, s in pairs})
+    print([k for k, v in {"x": 1, "y": 2} if v > 1])
+    print([i * 10 + n for i in 0..2 for n, _ in pairs])
+    print([x for i, x in ["p", "q"].enumerate() if i == 1])
+    print([a + b for a, b in zip([1, 2], [10, 20])])

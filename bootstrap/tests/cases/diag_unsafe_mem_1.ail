@@ -1,0 +1,6 @@
+# unsafe.mem.1: `from_cstr` of a null pointer is a run-time trap.
+use std.mem
+
+fn main()
+    unsafe
+        print(mem.from_cstr(mem.null()))

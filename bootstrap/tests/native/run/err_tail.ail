@@ -1,0 +1,37 @@
+error struct Bad "bad {n}"
+    n int
+
+fn mk(n int) Bad
+    Bad(n)
+
+fn pick(c int) int ! Bad
+    match c
+        1 => 10
+        2 => 20
+        _ =>
+            if c > 5
+                return 99
+            mk(c)
+
+fn first_over(limit int) int ! Bad
+    mut i := 0
+    while true
+        if i > limit
+            return i
+        if i == 7
+            return mk(i)
+        i += 1
+
+fn forever(n int) int
+    mut i := n
+    while true
+        i += 1
+        if i > 5
+            return i
+
+fn main() ! Bad
+    print(pick(1)?)
+    print(pick(9)?)
+    print(first_over(3)?)
+    print(forever(0))
+    print(first_over(9)?)

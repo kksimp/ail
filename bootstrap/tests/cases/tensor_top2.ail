@@ -1,0 +1,17 @@
+# std.tensor.23: top-2 along an axis, with ties and f32 margins.
+fn scores() tensor.Tensor[f32]
+    tensor.from([0.1, 0.9, 0.4, 0.7, 0.7, 0.3], [2, 3]).to_f32()
+
+fn main()
+    best, second, margin := scores().top2(1)
+    print(best)
+    print(second)
+    print(margin)
+    a, b, c := tensor.from([0.2, 0.5, 0.5, 0.1], [2, 2]).top2(1)
+    print(a)
+    print(b)
+    print(c)
+    x, y, z := tensor.from([3.0, -1.0, 2.0, 5.0, 4.0, 1.0], [3, 2]).top2(0)
+    print(x)
+    print(y)
+    print(z)

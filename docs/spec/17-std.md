@@ -123,7 +123,7 @@ the tree: `to` and its parents are made when missing, files already there are
 replaced, other files there are kept, and entries are copied in name order.
 A symbolic link is copied as the file it points to; a link to a directory
 fails with `other` at that path, and so does copying a directory into itself.
-A file at `to` fails with `exists`. For `rename` and `copy`, a failure's
+For `rename` and `copy`, a failure's
 `path` is `from` when `from` is missing, else the path that failed.
 *(ADR 0281, ADR 0751)*
 
@@ -517,7 +517,8 @@ fn main()
 
 ## Processes: `std.proc`
 
-**std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
+**std.proc.1** — `run(cmd str, args List[str], input str?, timeout_ms int?) Output ! ProcError`
+runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
 On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
@@ -1468,6 +1469,34 @@ lacks writes as an empty field. *(ADR 0626)*
 An unterminated quote and a record of the wrong width are its causes.
 *(ADR 0626)*
 
+**std.csv.6** — A quoted field with no closing quote before the end of the text
+fails with `CsvError` and why `unterminated quote`, at the row where it starts.
+*(ADR 0783)*
+
+**std.csv.7** — A record whose field count differs from the header's fails with
+`CsvError` and why `N fields, the header has M`, where `row` is that record's row.
+*(ADR 0783)*
+
+```ail rules=std.csv.6
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\n\"ann,3\n") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 2)
+        []
+    print(recs.len())
+```
+
+```ail rules=std.csv.7
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
+
 ```ail rules=std.csv.2,std.csv.5
 use std.csv
 
@@ -1948,6 +1977,22 @@ fn main()
     print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
 ```
 
+**std.tensor.24** — `t.softmax()` on a `float` or `f32` tensor of at least one
+axis gives a tensor of the same shape in which each row along the last axis is
+`exp(x - m)` divided by the sum of the row's `exp(x - m)`, where `m` is the
+row's largest element. The sum runs in element order. A row that holds a NaN
+or an infinity gives NaN for that row. An empty last axis traps. An `f32`
+tensor is computed in `float` and rounded once, as std.tensor.21 does for the
+other activations. On a `Tensor[int]` it is a compile-time error. Fusion
+(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+
+```ail rules=std.tensor.24
+fn main()
+    print(tensor.from([0.0, 0.0]).softmax())    # tensor.from([0.5, 0.5])
+    a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
+    print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
+```
+
 **std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
 the methods and operators of `Tensor[float]`, and each result is rounded to
 `f32` once: the operations are single-precision IEEE operations, and `sum`,
@@ -1973,6 +2018,23 @@ fn main()
     print(a.to_list())             # [1.0, 2.0, 3.0, 4.0]
     print(a.to_float().sum())      # 10.0
     print(a.map(|x| x * x).sum())  # 30.0
+```
+
+**std.tensor.23** — `t.top2(axis)` on a `float` or `f32` tensor gives three
+tensors of the shape without `axis`: the index of each row's best element, the
+index of its second-best, and the margin (best minus second) in `t`'s element
+type. The best is the first largest element, and a tie with it is the second,
+so its margin is `0`; a NaN never replaces either. A NaN best, or a row without
+a second value, traps. An `int` tensor is a compile-time error, and an `axis`
+with fewer than two elements traps. *(ADR 0813)*
+
+```ail rules=std.tensor.23
+fn main()
+    s := tensor.from([0.1, 0.9, 0.4, 0.7, 0.7, 0.3], [2, 3])
+    best, second, margin := s.top2(1)
+    print(best)      # tensor.from([1, 0])
+    print(second)    # tensor.from([2, 1])
+    print(margin)    # the margins 0.5 and 0.0, up to rounding
 ```
 
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
