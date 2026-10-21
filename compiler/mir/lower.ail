@@ -831,11 +831,20 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     continue
                 result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                 continue
+            # An `unsafe` block gives its last expression's value.
+            if inner := unsafe_body(s)
+                result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                continue
         lower_stmt(s)
     scopes.pop()
     if result.id == -2
         return none
     result
+
+fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
+    match s
+        Unsafe(body, _) => body
+        _ => none
 
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
@@ -958,7 +967,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
-        Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
+        Unsafe(body, _) => lower_block(body, false)
         LetTuple(_, _, pos) => problem(pos, "tuples aren't in the native subset yet")
 
 ## A list read from a variable or an element is copied when it is bound
