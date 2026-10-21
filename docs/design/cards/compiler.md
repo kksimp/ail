@@ -213,6 +213,8 @@ pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
 pub fn mir.fold(mir.Func) mir.Func
+pub fn mir.rpo(mir.Func) List[int]
+pub fn mir.forward_loads(mir.Func) mir.Func
 pub fn mir.inline_module(mir.Module) mir.Module
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub struct mir.Def
@@ -342,3 +344,4 @@ pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 
 trimmed to fit 4000 tokens (~3789); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
 trimmed to fit 4000 tokens (~3724); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3740); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

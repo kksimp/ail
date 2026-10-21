@@ -11,6 +11,8 @@ pub struct mir.Versioned
 pub fn mir.bce(f mir.Func, reserve bool, grow_only bool) mir.Func
 pub fn mir.lists_only_grow(m mir.Module) bool
 pub fn mir.fold(f mir.Func) mir.Func
+pub fn mir.rpo(f mir.Func) List[int]
+pub fn mir.forward_loads(f mir.Func) mir.Func
 pub fn mir.inline_module(m mir.Module) mir.Module
 pub fn mir.merge_blocks(f mir.Func) mir.Func
 pub struct mir.Def
@@ -166,3 +168,4 @@ trimmed to fit 2000 tokens (~1551); dropped: private items, doc comments
 trimmed to fit 2000 tokens (~1515); dropped: private items, doc comments
 trimmed to fit 2000 tokens (~1529); dropped: private items, doc comments
 trimmed to fit 2000 tokens (~1505); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1544); dropped: private items, doc comments

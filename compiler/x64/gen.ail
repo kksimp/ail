@@ -723,6 +723,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             v := i.args[1]
             if f.vals[v].is_float()
                 a.vmovsd_mr(at(r, i.imm), xmm(v, X0))
+            elif k := imm32(v)
+                a.mov_mi(at(r, i.imm), k)
             else
                 a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
@@ -1090,11 +1092,9 @@ fn Gen.prim(mut self, i mir.Inst)
             a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            v := gpr(i.args[i.args.len() - 1], RDX)
-            a.mov_mr(address(i), v)
+            store_word(address(i), i.args[i.args.len() - 1])
         "store8" =>
-            v := gpr(i.args[i.args.len() - 1], RDX)
-            a.mov8_mr(address(i), v)
+            store_byte(address(i), i.args[i.args.len() - 1])
         "storef" =>
             v := xmm(i.args[i.args.len() - 1], X0)
             a.vmovsd_mr(address(i), v)
@@ -1186,11 +1186,11 @@ fn Gen.list_set(mut self, i mir.Inst)
         x := xmm(v, X0)
         a.vmovsd_mr(list_index(i, 8), x)
     elif t == mir.Ty.Bool
-        r := gpr(v, RDX)
-        a.mov8_mr(list_index(i, 1), r)
+        mem := list_index(i, 1)
+        store_byte(mem, v)
     else
-        r := gpr(v, RDX)
-        a.mov_mr(list_index(i, 8), r)
+        mem := list_index(i, 8)
+        store_word(mem, v)
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577).
 fn Gen.indexed_mem(mut self, i mir.Inst) Mem
@@ -1220,9 +1220,23 @@ fn Gen.indexed_store(mut self, i mir.Inst)
     if f.vals[v].is_float()
         a.vmovsd_mr(mem, xmm(v, X0))
     elif i.imm == 1
-        a.mov8_mr(mem, gpr(v, RDX))
+        store_byte(mem, v)
+    else
+        store_word(mem, v)
+
+## Store the `int` or `bool` `v` as a word or a byte: a constant goes in as an
+## immediate, not through a register.
+fn Gen.store_word(mut self, mem Mem, v int)
+    if k := imm32(v)
+        a.mov_mi(mem, k)
     else
         a.mov_mr(mem, gpr(v, RDX))
+
+fn Gen.store_byte(mut self, mem Mem, v int)
+    if k := imm(v)
+        a.mov8_mi(mem, k.bit_and(255))
+    else
+        a.mov8_mr(mem, gpr(v, RDX))
 
 # ---- trap stubs ----
 
