@@ -43,7 +43,10 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
 `Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
-that are lists of constants, in functions with at most eight
+that are lists of constants, `join` on lists of strings or characters, and the
+list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
+statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
+`float`, `bool` or `str` (not `by:` keys), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
@@ -53,7 +56,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
 (std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
 
 ```ail
 fn steps(n int) int

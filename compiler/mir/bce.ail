@@ -139,6 +139,7 @@ GROWS := [
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",
+    "rt.list_join_chars",
     "rt.list_reserve",
     "rt.list_rows_min",
     "rt.list_new_for",

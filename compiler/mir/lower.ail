@@ -778,6 +778,12 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
+    if is_pop_call(value)
+        got := lower_pop_else(value, other, pos) else
+            declare(name, Ty.Unknown, -1)
+            return
+        declare(name, got.ty, got.id)
+        return
     if self.is_get_call(value)
         got := lower_get_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
@@ -1221,6 +1227,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Try(x, context, pos) => lower_try(x, context, pos)
         Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
         OrElse(x, other, pos) =>
+            if is_pop_call(x)
+                return lower_pop_else(x, other, pos)
             if self.is_get_call(x)
                 return lower_get_else(x, other, pos)
             lower_else(x, other, pos)
@@ -1348,6 +1356,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
         _ =>
+            if eq := self.list_equal(o, a, b)
+                return eq
             problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
             a
 
@@ -1695,6 +1705,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             # type.coll.9
             if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
                 return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+            if name == "join" and vs.len() == 1 and e == Ty.Char and vs[0].ty == Ty.Str
+                return Val(id: call("rt.list_join_chars", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+            if is_list_edit(name)
+                return lower_list_edit(r, e, name, npos, args, vs)
             if name == "push" and vs.len() == 1
                 mut el := e
                 if e.is_unknown()
