@@ -11,7 +11,7 @@ use crate::num::Num;
 use crate::stdlib::{StdCall, TENSOR_METHODS};
 
 impl<'p> Checker<'p> {
-    fn tensor_ty(&self, elem: Ty) -> Ty {
+    pub(super) fn tensor_ty(&self, elem: Ty) -> Ty {
         match self.types.get("tensor.Tensor") {
             Some(Def::Struct(s)) => Ty::Struct(*s, vec![elem]),
             _ => unreachable!("std/types.ail declares `Tensor`"),
@@ -172,6 +172,12 @@ impl<'p> Checker<'p> {
             self.error_help("std.tensor.13", pos, msg, format!("convert first: `t.map(|x| x.to_float()).{m}()`"));
             return Some(Ty::Err);
         }
+        if m == "softmax" && elem == Ty::Int {
+            self.args_only(args);
+            let msg = "`softmax` is on `float` tensors, and this one holds `int`";
+            self.error_help("std.tensor.24", pos, msg, "convert first: `t.map(|x| x.to_float()).softmax()`");
+            return Some(Ty::Err);
+        }
         let t = rt.clone();
         // std.tensor.21: an `f32` tensor's bounds and list are `float`.
         let (bound, list) = if elem == Ty::Num(Num::F32) { (Ty::Float, Ty::Float) } else { (elem.clone(), elem.clone()) };
@@ -192,7 +198,7 @@ impl<'p> Checker<'p> {
             "clamp" => (vec![bound.clone(), bound], t),
             "dot" => (vec![t], elem),
             "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
-            "relu" | "sigmoid" | "tanh" => (vec![], t),
+            "relu" | "sigmoid" | "tanh" | "softmax" => (vec![], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),
         };

@@ -62,7 +62,7 @@ work (maps on #180, `.to_int()` on strings, native `Json`).
 | print_many | 0.230 | 0.037 | 0.071 | 0.346 | 0.53 | 0.11 |
 | lines_split | | build | | | | |
 | json_roundtrip | | build | | | | |
-| map_ops | | build | | | | |
+| map_ops | 0.172 | 0.083 | 0.028 | 0.165 | 2.96 | 0.50 |
 
 `print_many` was 0.077 s native before ADR 0734 (integer text), 0.026 s after,
 measured alone; the table row is from the shared race harness run on a loaded machine.
