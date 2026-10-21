@@ -129,6 +129,9 @@ fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
         v := lower_value(a.value, sig.params[k])?
         vs.push(convert(v, sig.params[k], expr_pos(a.value)))
     mut i := inst(-1, "icall", vs)
+    # The call's position, for a trap's stack (trace.frame.1, ADR 0641).
+    if not is_rt and not fname.starts_with("init.")
+        i.imm = call_pos(file, pos.line, pos.col)
     if sig.ret.is_unit()
         emit_void(i)
         return Val(id: -1, ty: Ty.Unit)
