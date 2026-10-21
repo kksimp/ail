@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture; performance
 - **Spec rules:** type.str.3, type.str.6, type.str.7
-- **Builds on:** [ADR 0766](0766-native-string-hash-by-words.md), [ADR 0565](0565-native-string-runtime-calls.md)
+- **Builds on:** ADR 0766 (#372), [ADR 0565](0565-native-string-runtime-calls.md)
 
 ## Context
 

@@ -78,7 +78,11 @@ fn u8_skip(p int, at int, k int) int
 ## The continuation bytes (`10xxxxxx`) in the eight bytes of `w`: bit 7 set
 ## and bit 6 clear, one bit per byte, added up by a multiply.
 fn u8_cont8(w int) int
-    c := w.bit_and(w.shl(1).bit_xor(-1)).bit_and(-9187201950435737472).shr(7).bit_and(72340172838076673)
+    c := w
+        .bit_and(w.shl(1).bit_xor(-1))
+        .bit_and(-9187201950435737472)
+        .shr(7)
+        .bit_and(72340172838076673)
     (c * 72340172838076673).shr(56).bit_and(255)
 
 ## The characters in bytes `from` up to `to` of the string object at `p`, eight
@@ -223,7 +227,12 @@ fn str_cat6(a str, b str, c str, e str, f str, g str) str
     w := str_addr(g)
     r := str_new(
         load64(p) + load64(q) + load64(t) + load64(u) + load64(v) + load64(w),
-        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8) + load64(v + 8) + load64(w + 8),
+        load64(p + 8)
+            + load64(q + 8)
+            + load64(t + 8)
+            + load64(u + 8)
+            + load64(v + 8)
+            + load64(w + 8),
     )
     mut d := str_put(r + 16, p)
     d = str_put(d, q)
