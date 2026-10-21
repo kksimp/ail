@@ -590,3 +590,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0755](0755-http-serve-dir.md) | `http.serve_dir` serves a directory *(delegated)* | Accepted | 2026-10-21 |
 | [0751](0751-fs-copy-copies-a-directory-tree.md) | `fs.copy` copies a directory tree *(delegated)* | Accepted | 2026-10-21 |
 | [0749](0749-regex-methods.md) | Methods on `regex.Regex` *(delegated)* | Accepted | 2026-10-21 |
+| [0753](0753-checker-differential-fuzz.md) | Differential fuzzing of the self-hosted checker against `ail check`: generator, driver, 19,800 programs compared, 0 disagreements *(delegated)* | Accepted | 2026-10-21 |
