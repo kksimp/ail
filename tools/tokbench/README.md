@@ -34,6 +34,27 @@ Options (the same for both scripts):
 | `run.sh FILE ...` | Measure specific files (paths relative to where you run it) |
 | `run.sh --json` | Machine-readable output |
 | `run.sh --claude` | Also count with the **current** Claude tokenizer (optional, see below) |
+| `run.sh --check-budgets` | Check the language card and quick reference against their token budgets (see below) |
+
+### Budget check
+
+`run.sh --check-budgets` measures `docs/language-card.md` and
+`docs/quick-reference.md` on the offline five-tokenizer mean (the `mean` column)
+and prints each number with its budget. It exits 1 if either is over, so the gate
+can run it. It always uses the offline tokenizers, even when `--claude` is given.
+
+The budgets are in one place, the `BUDGETS` table at the top of `tokbench.py`:
+
+| Page | Budget | Source |
+|---|---:|---|
+| `docs/language-card.md` | 8,000 | [ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md) |
+| `docs/quick-reference.md` | 12,518 | no ADR in the tree sets it yet |
+
+The mean rule is the one the coordinator set for this check. ADR 0276 states the
+card budget per tokenizer ("on every tokbench tokenizer"), and the mean is looser,
+so a card that passes the mean can still fail a single tokenizer. ADR 0703 is about
+`ail api --card` trimming levels and does not state a budget. Change a budget only
+here, and cite its source next to it.
 
 ### Optional: the current Claude tokenizer
 
@@ -61,7 +82,7 @@ Results may be off by about one token per file.
 
 ## Corpus
 
-The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh docs/language-card.md`.
+The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh --check-budgets` (or `run.sh docs/language-card.md` for the per-tokenizer table).
 
 | Directory | Contents |
 |---|---|

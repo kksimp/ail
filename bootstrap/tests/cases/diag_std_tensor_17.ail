@@ -1,0 +1,3 @@
+fn main()
+    e := tensor.from(List[float](), [2, 0])
+    print(e.argmax(1))

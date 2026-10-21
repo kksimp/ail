@@ -35,7 +35,7 @@ cancels the producers, written under (b) and under (c). Under (b) the
 consumer must drain the channel before waiting, or the blocked producer
 deadlocks the scope:
 
-```ail
+```ail excerpt
                 feed.cancel()
                 break
     for _ in ch          # (b) only: release the producer blocked in `send`

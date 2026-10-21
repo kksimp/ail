@@ -202,6 +202,30 @@ The bootstrap runs generators while it loads the program, before checking
 it: a generator, and what it calls, can't use what other derives generate.
 *(ADR 0306)*
 
+**ct.derive.5** — A `FieldInfo` carries the field's `##` doc comment in
+`doc` (`api.doc.1`): the comment lines joined by `\n`, without the `##`
+marks, or the empty string when the field has none. A generator can turn the
+comments into help text or schema descriptions. *(ADR 0776)*
+
+```ail rules=ct.derive.5
+@derive(derive_help) trait Help
+    fn help(self) str
+
+fn derive_help(t TypeInfo) str ! DeriveError
+    lines := ["{f.name}={f.doc}" for f in t.fields]
+    "fn help(self) str\n    \"{lines.join("|")}\"\n"
+
+struct Opts
+    ## Input file.
+    path str
+    verbose bool
+
+impl Help for Opts
+
+fn main()
+    print(Opts(path: "a", verbose: false).help()) # path=Input file.|verbose=
+```
+
 **ct.derive.3** — A derive generator MUST be compile-time-safe
 (`ct.const.2`), and its evaluation follows `ct.eval.1–4`. The diagnostic
 names the chain of calls to each forbidden effect. *(ADR 0227, ADR 0306)*

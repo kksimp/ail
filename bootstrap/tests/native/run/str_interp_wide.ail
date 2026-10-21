@@ -1,0 +1,31 @@
+# Interpolations of 1 to 13 pieces: each is joined in as few allocations as possible (ADR 0768).
+struct P
+    x int
+
+fn main()
+    mut total := 0
+    for i in 0..300
+        a := "α{i}"
+        b := i * 7
+        c := i % 3 == 0
+        d := 'é'
+        e := (i * 3).to_float() / 4.0
+        s1 := "{a}"
+        s2 := "{a}{b}"
+        s3 := "{a}-{b}-{c}"
+        s4 := "{a}{b}{c}{d}"
+        s5 := "<{a}|{b}|{c}|{d}|{e}>"
+        s6 := "{a}{b}{c}{d}{e}{i:0>5}"
+        s7 := "x{a}y{b}z{c}w{d}v{e}u{i:0>5}t{a}"
+        s8 := "{a}{a}{a}{a}{a}{a}{a}{a}{a}{a}{a}{a}{a}"
+        total += s1.len()
+            + s2.len() * 3
+            + s3.len() * 5
+            + s4.len() * 7
+            + s5.len() * 11
+            + s6.len() * 13
+            + s7.len() * 17
+            + s8.len() * 19
+        if i % 50 == 0
+            print("{s1}|{s2}|{s3}|{s4}|{s5}|{s6}|{s7}|{s8}")
+    print(total)

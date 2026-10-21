@@ -1,0 +1,4 @@
+fn main()
+    m := Mutex(1)
+    m.unlock(2)
+    print(m.get())
