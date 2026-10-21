@@ -500,9 +500,9 @@ struct P
     depth int
     names List[str]
     name_ix List[int]
-    kind str
-    at int
-    msg str
+    fail_kind str
+    fail_at int
+    fail_msg str
     nk List[int]
     na List[int]
     nb List[int]
@@ -512,7 +512,7 @@ struct P
     cls_at List[int]
     cls_items List[int]
     cls_neg List[int]
-    flags int
+    fl int
     rmin int
     rmax int
     ak int
@@ -520,14 +520,14 @@ struct P
     aneg bool
 
 fn P.fail(mut self, at int, kind str, msg str) int
-    if self.kind == ""
-        self.kind = kind
-        self.at = at
-        self.msg = msg
+    if self.fail_kind == ""
+        self.fail_kind = kind
+        self.fail_at = at
+        self.fail_msg = msg
     -1
 
 fn P.failed(self) bool
-    self.kind != ""
+    self.fail_kind != ""
 
 fn P.more(self, k int) bool
     self.pos + k < self.s.len()
@@ -554,10 +554,10 @@ fn P.mk(mut self, kind int, a int, b int, c int, d int) int
     self.nk.len() - 1
 
 fn P.alt(mut self, flags int) int
-    saved := self.flags
-    self.flags = flags
+    saved := self.fl
+    self.fl = flags
     r := self.alt_in()
-    self.flags = saved
+    self.fl = saved
     r
 
 fn P.alt_in(mut self) int
@@ -705,7 +705,7 @@ fn ch(n int) str
     "{chr(n)}"
 
 fn P.atom(mut self) int
-    f := self.flags
+    f := self.fl
     at := self.pos
     c := self.s[self.pos]
     self.pos += 1
@@ -726,7 +726,7 @@ fn P.atom(mut self) int
     self.mk(1, c.code(), if f.bit_and(F_I) != 0 then 1 else 0, 0, 0)
 
 fn P.group(mut self, at int) int
-    f := self.flags
+    f := self.fl
     self.depth += 1
     if self.depth > 200
         return self.fail(at, "too_large", "groups are nested more than 200 deep")
@@ -804,7 +804,7 @@ fn P.group(mut self, at int) int
                     on = false
                 elif d == ')'
                     # `(?i)` applies to the rest of the enclosing group.
-                    self.flags = inner
+                    self.fl = inner
                     self.depth -= 1
                     return -2
                 elif d == ':'
@@ -1381,9 +1381,9 @@ pub fn compile(pattern str) Regex ! RegexError
         depth: 0,
         names: [],
         name_ix: [],
-        kind: "",
-        at: 0,
-        msg: "",
+        fail_kind: "",
+        fail_at: 0,
+        fail_msg: "",
         nk: [],
         na: [],
         nb: [],
@@ -1393,7 +1393,7 @@ pub fn compile(pattern str) Regex ! RegexError
         cls_at: [],
         cls_items: [],
         cls_neg: [],
-        flags: 0,
+        fl: 0,
         rmin: 0,
         rmax: 0,
         ak: 0,
@@ -1406,10 +1406,10 @@ pub fn compile(pattern str) Regex ! RegexError
     if p.failed()
         return RegexError(
             pattern: pattern,
-            at: p.at,
-            kind: p.kind,
-            rule: rule_of(p.kind),
-            message: p.msg,
+            at: p.fail_at,
+            kind: p.fail_kind,
+            rule: rule_of(p.fail_kind),
+            message: p.fail_msg,
         )
     mut c := C(p: p, code: [], full: false, classes: 0)
     c.push(I_SAVE, 0, 0)
