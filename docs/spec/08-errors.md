@@ -599,7 +599,7 @@ fn main()
     print(b.why)            # x
 ```
 
-```ail skip=bootstrap rules=err.decl.2
+```ail error=err.decl.2 rules=err.decl.2
 error struct Bad
     why str
 
@@ -836,16 +836,31 @@ fn main()
     print("{k}")           # Kind.Full(n: 2): the type name, then the variant
 ```
 
-```ail skip=bootstrap rules=err.trap.2
+```ail rules=err.trap.2
+fn boom(n int) int
+    unreachable("boom {n}")
+
 fn main()
-    # A task that spawned or awaits a trapped task can observe the trapped outcome.
-    print("trapped")
+    t := spawn boom(1)
+    r := t.wait() else err
+        print("observed a trap")     # observed a trap
+        return
+    print(r)
 ```
 
-```ail skip=bootstrap rules=err.fix.1
+```ail tool=fix,--dry-run,FILE expect=fail rules=err.fix.1
+error struct Bad
+    why str
+
+fn load(n int) int ! Bad
+    if n == 0
+        return Bad(why: "zero")
+    n
+
 fn main()
-    # A diagnostic about error handling carries a machine-applicable fix where one is mechanical.
-    print("fix")
+    # The failure isn't handled: `ail fix` makes `main` fail and adds `?`.
+    x := load(1)
+    print(x)
 ```
 
 ```ail norun rules=err.api.1,err.paths.1
