@@ -283,6 +283,12 @@ default method with the same name of a standard (prelude) trait, so
 `min` keeps working when the type implements `Ord`. Methods of user traits
 stay ambiguous under `trait.res.1`. *(ADR 0137)*
 
+```ail rules=trait.res.2
+fn main()
+    xs := [3, 1, 2]
+    print(xs.min())
+```
+
 ## Operators
 
 **trait.op.1** — The operators `+ - * / %`, unary `-`, `== != < <= > >=`

@@ -283,3 +283,13 @@ that took no part in a match gives the empty string. `group` must name a group
 the pattern has: a `group` below 0, or above the last group, traps. The
 pattern `code=(\d+)` gives the digits of each `code=NNN`, with no prefix to
 strip. *(ADR 0667)*
+
+```ail tool=run,FILE expect="b" rules=std.regex.24
+use std.regex
+
+fn main()
+    re := regex.compile(r"(\d)(\w)") else err
+        print(err.kind)
+        return
+    print(regex.group_all(re, "1a 2b", 2))
+```

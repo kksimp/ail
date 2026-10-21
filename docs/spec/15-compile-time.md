@@ -105,6 +105,13 @@ stack. The bootstrap computes constants before `main` and reports such a
 trap at the constant before `main` starts (`mod.const.3`). *(ADR 0225,
 ADR 0226, ADR 0032)*
 
+```ail tool=run,FILE status=1 expect=expr.arith.3 rules=ct.eval.2
+Z := 1 / 0
+
+fn main()
+    print(Z)
+```
+
 **ct.eval.3** — Each constant and each derive (`ct.derive.2`) MAY take at
 most 100,000,000 evaluation steps (one per expression evaluated) and 1 GiB
 of live values, within the run-time call-depth limit. Exceeding a limit is a
@@ -236,3 +243,23 @@ under its `impl`'s `methods` with `origin` (`kind`, `impl`, `generator`,
 `at`) and `text`; the `impl` gets `derived_by`, the generator's id, or
 `built-in` for an empty `impl` of `Eq`, `Ord` or `ToStr` (OQ-096). Without
 `--expanded` the outline is unchanged. *(ADR 0309)*
+
+```ail tool=api,--expanded,FILE expect=origin rules=ct.gen.4
+@derive(derive_describe) trait Describe
+    fn describe(self) str
+
+fn derive_describe(t TypeInfo) str ! DeriveError
+    mut names := List[str]()
+    for f in t.fields
+        names.push(f.name)
+    "fn describe(self) str\n    \"{t.name} with {names.join(", ")}\"\n"
+
+struct Version
+    major int
+    minor int
+
+impl Describe for Version
+
+fn main()
+    print(Version(major: 1, minor: 2).describe())
+```
