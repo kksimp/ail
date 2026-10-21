@@ -28,7 +28,7 @@ lists of them or an interpolation of them (with
 `{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
 `chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
 methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round` (type.num.9, ADR 0591), `to_hex` on an `int` (type.str.8), and the bit operations of expr.bit.1. Any other
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
 construct is reported at its position under this rule, all of them at once,
 `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, `unreachable(message)` (err.model.2), `requires`, `ensures`, `old(e)` and struct `invariant` lines (contract.req.1, contract.ens.1-3, contract.inv.2-3, contract.run.1-2, ADR 0612), `path.dir`, `path.base`, `path.ext` and `path.join` (std.path.2-4), `hash.crc32`, `hash.hash64`, `hash.sha256`, `hash.sha384`, `hash.sha512` and `hash.hmac_sha256` (std.hash.2-4), `random.seed`, `random.int`, `random.float` and `random.shuffle` (std.random.2-4, ADR 0614), functions marked `@test` (left out of the build, test.attr.2), `@deprecated` and `@inline` (gram.attr.3-4, ADR 0613), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
 position under this rule, all of them at once, and nothing is built.

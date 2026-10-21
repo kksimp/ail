@@ -1,14 +1,3 @@
-# type.str.8: `n.to_hex()` is lowercase hexadecimal without a prefix.
-fn main()
-    print(255.to_hex())
-    print(0.to_hex())
-    print((-255).to_hex())
-    print(4096.to_hex())
-    min := -9223372036854775807 - 1
-    print(min.to_hex())
-    print(9223372036854775807.to_hex())
-    n := 3735928559
-    print("{n.to_hex()}!")
 fn main()
     for n in [0, 1, 15, 255, 4096, -1, -255, 9223372036854775807, -9223372036854775807 - 1]
         print(n.to_hex())

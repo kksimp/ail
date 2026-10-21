@@ -1627,56 +1627,6 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         text := text_of(r, npos)?
         return Val(id: text, ty: Ty.Str)
     match r.ty
-        Int =>
-            if name == "to_float" and vs.len() == 0
-                return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
-            if name == "abs" and vs.len() == 0
-                return Val(id: int_abs(r.id, npos), ty: Ty.Int)
-            # type.str.8
-            if name == "to_hex" and vs.len() == 0
-                return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
-            if (name == "min" or name == "max") and vs.len() == 1
-                return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
-            # expr.bit.1-2
-            if BIT_OPS.contains(name) and vs.len() == 1
-                mut s := -1
-                if name == "shl" or name == "shr"
-                    s = site("expr.bit.2", "shift", name, npos)
-                return Val(id: checked(BIT_OPS[name], [r.id, vs[0].id], s, Ty.Int), ty: Ty.Int)
-            if name == "bit_not" and vs.len() == 0
-                return Val(id: op("bnot", [r.id], Ty.Int), ty: Ty.Int)
-        Float =>
-            if name == "to_int" and vs.len() == 0
-                s := site("type.num.9", "float_int", "", npos)
-                return Val(id: checked("ftoi", [r.id], s, Ty.Int), ty: Ty.Int)
-            if (name == "sqrt" or name == "abs" or name == "floor" or name == "ceil")
-                and vs.len() == 0
-                return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
-            # type.num.9
-            if name == "round" and vs.len() == 0
-                return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
-        Str =>
-            # type.str.3, type.str.5
-            if name == "chars" and vs.len() == 0
-                t := Ty.List(Ty.Str)
-                return Val(id: call("rt.str_chars", [r.id], t), ty: t)
-            if name == "len" and vs.len() == 0
-                return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
-        List(e) =>
-            if name == "len" and vs.len() == 0
-                return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
-            # type.coll.9
-            if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
-                return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
-            if name == "push" and vs.len() == 1
-                mut el := e
-                if e.is_unknown()
-                    el = vs[0].ty
-                    retype(recv, Ty.List(el))
-                # A list pushed from a place is copied: lists are values (ADR 0060).
-                item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
-                call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
-                return Val(id: -1, ty: Ty.Unit)
         Int => return int_method(r, name, npos, vs)
         Float => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
