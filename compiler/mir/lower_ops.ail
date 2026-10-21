@@ -219,6 +219,9 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     # type.str.8
     if name == "to_hex" and vs.len() == 0
         return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
+    # type.num.11
+    if name == "cmp" and vs.len() == 1 and vs[0].ty == Ty.Int and enums.contains("Ordering")
+        return ordering(call("rt.int_cmp", [r.id, vs[0].id], Ty.Int))
     if (name == "min" or name == "max") and vs.len() == 1
         return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
     # expr.bit.1-2
@@ -231,6 +234,11 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         return Val(id: op("bnot", [r.id], Ty.Int), ty: Ty.Int)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 
+## The `Ordering` value of index `k`, as `rt.int_cmp` returns it.
+fn Lower.ordering(mut self, k int) Val
+    t := Ty.Enum("Ordering")
+    Val(id: op("copy", [k], t), ty: t)
+
 ## A method of a `float` (type.num.9, type.num.16).
 fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if name == "to_int" and vs.len() == 0
@@ -238,6 +246,9 @@ fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val
         return Val(id: checked("ftoi", [r.id], s, Ty.Int), ty: Ty.Int)
     if (name == "sqrt" or name == "abs" or name == "floor" or name == "ceil") and vs.len() == 0
         return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
+    # type.num.11
+    if name == "cmp" and vs.len() == 1 and vs[0].ty == Ty.Float and enums.contains("Ordering")
+        return ordering(call("rt.float_cmp", [r.id, vs[0].id], Ty.Int))
     # type.num.9
     if name == "round" and vs.len() == 0
         return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)

@@ -38,7 +38,7 @@ fn elem_bytes(e Ty) int
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int
     match e
-        Int | Bool => 0
+        Int | Bool | Char => 0
         Str => 1
         Float => 2
         _ => -1

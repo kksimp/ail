@@ -236,6 +236,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
+    l.declare_prelude_enums()
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_struct_fields(srcs[k].prog)

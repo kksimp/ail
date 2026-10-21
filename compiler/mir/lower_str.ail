@@ -273,6 +273,8 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
 
 ## `c.NAME(...)` on a `char` (type.char.2-4).
 fn Lower.lower_char_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "cmp" and vs.len() == 1
+        return lower_cmp(r, vs[0], npos)
     if vs.len() == 1 and name == "to_digit"
         radix := int_arg(vs[0], name, npos)?
         h := trap_head("type.char.3", npos)
@@ -319,6 +321,8 @@ fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
 
 ## A method of a `str`.
 fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "cmp" and vs.len() == 1
+        return lower_cmp(r, vs[0], npos)
     if name == "to_float" and vs.len() == 0
         return lower_to_float(r)
     return lower_str_method(r, name, npos, vs)
