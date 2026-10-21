@@ -1,0 +1,10 @@
+# type.tuple.7: a tuple is `Eq`, `Ord` and `Hash` only when its elements are;
+# own.uniq.5: a unique value can't be an element.
+unique struct Token
+    id int
+
+fn main()
+    m := {(1.5, 2): "x"}
+    xs := [({"a": 1}, 2)]
+    print(xs.sorted())
+    t := (Token(id: 1), 2)

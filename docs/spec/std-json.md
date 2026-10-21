@@ -31,6 +31,53 @@ fn main()
 
 ## Parsing and printing
 
+**json.err.2** — A `parse_json` failure in the shape of the text fails with
+`JsonError` and `message` `unexpected character 'C'`, `unexpected end of input`,
+`extra data after value`, `expected ':' after object key` or `trailing comma`. `at`
+is the character where the parser stopped. *(ADR 0783)*
+
+**json.err.3** — A failure inside a string fails with `JsonError` and `message`
+`unterminated string`, `control character in string`, `invalid escape '\C'`,
+`invalid unicode escape` or `unpaired surrogate escape`. `at` is the backslash or
+the opening quote. *(ADR 0783)*
+
+**json.err.4** — A malformed number fails with `JsonError` and `message` `invalid
+number`; a number too large for a float fails with `number out of range`. *(ADR 0783)*
+
+```ail rules=json.err.2
+fn why(text str) str
+    j := parse_json(text) else err
+        return "{err.at}: {err.message}"
+    return "ok {j.kind()}"
+
+fn main()
+    print(why("[1,]"))     # 2: trailing comma
+    print(why("[1] 2"))    # 4: extra data after value
+    print(why("@"))        # 0: unexpected character '@'
+```
+
+```ail rules=json.err.3
+fn why(text str) str
+    j := parse_json(text) else err
+        return "{err.at}: {err.message}"
+    return "ok {j.kind()}"
+
+fn main()
+    print(why("\"abc"))       # 0: unterminated string
+    print(why("\"a\\qb\""))  # 2: invalid escape '\q'
+```
+
+```ail rules=json.err.4
+fn why(text str) str
+    j := parse_json(text) else err
+        return "{err.at}: {err.message}"
+    return "ok {j.kind()}"
+
+fn main()
+    print(why("-"))      # 0: invalid number
+    print(why("1e999")) # 0: number out of range
+```
+
 **json.parse.1** — `parse_json(text str) Json ! JsonError` parses exactly one
 RFC 8259 document with optional surrounding whitespace. It fails on trailing
 data, trailing commas, leading zeros, unescaped control characters,
@@ -200,9 +247,10 @@ its fields in declaration order, a `T?` field that is `none` giving `null`; a
 derived enum gives a variant without fields as its name, and one with fields
 as an object `{"kind": "Name", fields...}`. Fields of type `Map[str, T]`,
 `List[T]` and `T?` convert element by element when `T` has no `to_json`
-(`List[int?]`, `Map[str, List[U]]`). A generic type derives it through
+(`List[int?]`, `Map[str, List[U]]`), and a tuple field gives an array of its
+elements (`type.tuple.8`). A generic type derives it through
 bounds on the `impl`: `impl ToJson for Pair[A ToJson, B ToJson]`.
-*(ADR 0308, ADR 0343)*
+*(ADR 0308, ADR 0343, ADR 0795)*
 
 **json.derive.2** — `trait FromJson` has the associated function
 `fn from_json(j Json) Self ! JsonError` (`trait.assoc.1`); its generator
@@ -220,8 +268,9 @@ member `kind` names the variant and whose other members are its fields; a
 variant field named `kind` is a `ct.derive.4` error. A generic type derives
 it through bounds on the `impl`, `impl FromJson for Pair[A FromJson, B
 FromJson]`; without them the generated `A.from_json` is a `trait.assoc.2`
-error. A map whose key isn't `str` and any other type (`Set[T]`, tuples) are
-a `ct.derive.4` error naming the type. *(ADR 0308, ADR 0343, ADR 0350)*
+error. A tuple field reads an array of as many elements (`type.tuple.8`). A
+map whose key isn't `str` and any other type (`Set[T]`) are a `ct.derive.4`
+error naming the type. *(ADR 0308, ADR 0343, ADR 0350, ADR 0795)*
 
 **json.derive.3** — A failure of a derived `from_json` names its path from
 the document root: `missing items[2].kind` for a missing member, and

@@ -846,6 +846,7 @@ fn compilable(b: &Block) -> bool {
             Stmt::With { .. } | Stmt::Defer(..) | Stmt::Unsafe { .. } => false,
             Stmt::For { par: true, .. } => false,
             Stmt::Let { value, otherwise, .. } => expr(value) && otherwise.as_ref().is_none_or(other),
+            Stmt::LetTuple { value, .. } => expr(value),
             Stmt::Assign { target, value, .. } => expr(target) && expr(value),
             Stmt::While { cond, body, .. } => expr(cond) && compilable(body),
             Stmt::For { iter, body, .. } => expr(iter) && compilable(body),
@@ -918,6 +919,32 @@ fn has_try(e: &Expr) -> bool {
         | Expr::None(_)
         | Expr::Name(..) => false,
         _ => true,
+    }
+}
+
+/// Whether a part of a comprehension can't leave it early: no `?`, `break`, `continue`, `return` or
+/// leaving `else`, looking through `if` and `match` whose arms only compute values.
+fn comp_part_plain(e: &Expr) -> bool {
+    fn block(b: &Block) -> bool {
+        b.iter().all(|s| match s {
+            Stmt::Expr(e) => comp_part_plain(e),
+            Stmt::Let { value, otherwise: None, .. } => comp_part_plain(value),
+            _ => false,
+        })
+    }
+    match e {
+        Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(comp_part_plain) && hi.as_deref().is_none_or(comp_part_plain),
+        Expr::If { branches, els, .. } => {
+            branches.iter().all(|(c, b)| {
+                (match c {
+                    Cond::Expr(e) | Cond::Bind { value: e, .. } => comp_part_plain(e),
+                }) && block(b)
+            }) && els.as_ref().is_none_or(block)
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            comp_part_plain(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(comp_part_plain) && block(&a.body))
+        }
+        e => !has_try(e),
     }
 }
 
@@ -1082,6 +1109,9 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         if let Stmt::Let { name, .. } = s {
             self.scope.push(name);
         }
+        if let Stmt::LetTuple { names, .. } = s {
+            self.scope.extend(names.iter().map(|b| b.name.as_str()));
+        }
     }
 
     /// Code that leaves the value of `e` in `dst`.
@@ -1181,9 +1211,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     let test = self.emit(Ins::Arm { src, pat: &arm.pat, t: 0 });
                     let mark = self.depth();
                     // expr.match.6: fields bind by position; `_` skips one.
-                    if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
-                        self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
-                    }
+                    bound_names(&arm.pat, &mut self.scope);
                     // expr.match.11: a false guard drops the bindings and tries the next arm.
                     let fails = arm.guard.as_ref().map(|g| self.cond_jump(g, false));
                     self.block(&arm.body, t);
@@ -1594,18 +1622,16 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         }
     }
 
-    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it
-    /// (the walker runs those), and no hook or trace that expects the walker's steps.
+    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it,
+    /// no `for a, b in xs` clause (type.tuple.5) (the walker runs those), and no hook or trace that
+    /// expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
-        let plain = |e: &Expr| match e {
-            Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(|x| !has_try(x)) && hi.as_deref().is_none_or(|x| !has_try(x)),
-            e => !has_try(e),
-        };
+        let plain = comp_part_plain;
         !self.it.hook
             && self.it.tracing == 0
             && plain(elem)
             && value.is_none_or(plain)
-            && clauses.iter().all(|c| !c.par && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
+            && clauses.iter().all(|c| !c.par && c.unpack.is_empty() && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
     }
 
     /// The loops of a comprehension's clauses around its element, collected into `acc`.
@@ -2741,13 +2767,7 @@ match take!(*src) {
                 pc = *t as usize;
             } else {
                 pc += 1;
-                if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (pat, v) {
-                    for ((n, _), value) in names.iter().zip(fields.iter()) {
-                        if n != "_" {
-                            env.push((n.as_str(), value.clone()));
-                        }
-                    }
-                }
+                bind_pattern(pat, v, env);
             }
         
         Ok(pc)
@@ -3530,7 +3550,21 @@ match {
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
-                    if matches!(env[at].1, Value::List(_)) {
+                    // `len` of text, a map, a set or bytes: the walker's count, without its call.
+                    let other_len = if *push {
+                        None
+                    } else {
+                        match &env[at].1 {
+                            Value::Str(t) => Some(t.chars().count()),
+                            Value::Map(t) | Value::Set(t) => Some(t.len()),
+                            Value::Bytes(b) => Some(b.len()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(n) = other_len {
+                        put_int(*dst, n as i64, env, base, regs);
+                        pc = *done as usize;
+                    } else if matches!(env[at].1, Value::List(_)) {
                         if *push {
                             let v = take!(*val);
                             let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
@@ -3619,10 +3653,15 @@ match {
                             };
                             fields[i].clone()
                         }
+                        // type.tuple.3: `t.0`.
+                        Value::Tuple(xs) => xs[element_index(name)].clone(),
                         _ => {
                             let v = take!(*recv);
-                            let Value::Struct(s, fields) = deref(v, *pos)? else { unreachable!("checked: struct") };
-                            fields[self.field_index(s, name)].clone()
+                            match deref(v, *pos)? {
+                                Value::Struct(s, fields) => fields[self.field_index(s, name)].clone(),
+                                Value::Tuple(xs) => xs[element_index(name)].clone(),
+                                other => unreachable!("checked: struct, found {other:?}"),
+                            }
                         }
                     };
                     done(*recv, regs);
@@ -3871,6 +3910,8 @@ match {
                         regs[r] = Value::List(Rc::new(t.key_list()));
                     } else if let Value::Bytes(b) = &regs[r] {
                         regs[r] = Value::List(Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()));
+                    } else if let Value::Map(t) = &regs[r] {
+                        regs[r] = Value::List(Rc::new(entry_pairs(t)));
                     }
                     regs[(*idx & !KIND) as usize] = Value::Int(0);
                 }

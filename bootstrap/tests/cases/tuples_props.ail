@@ -1,0 +1,14 @@
+## Property tests over tuples (type.tuple.7, test.prop.2): tuple parameters
+## are generated element by element and shrink element by element.
+
+@test fn tuple_order_matches_elements(a(int, str), b(int, str))
+    want := a.0 < b.0 or a.0 == b.0 and a.1 < b.1
+    assert_eq(a < b, want)
+
+@test fn take_apart_and_rebuild(t(int, (bool, char)))
+    n, inner := t
+    assert_eq((n, inner), t)
+
+@test fn enumerate_pairs_index(xs List[str])
+    for i, x in xs.enumerate()
+        assert_eq(xs[i], x)

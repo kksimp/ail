@@ -81,6 +81,7 @@ impl Parser<'_> {
         self.b.get(self.pos) == Some(&c)
     }
 
+    // The syntax causes are json.err.2 (the shape) and the string and number causes json.err.3 and json.err.4.
     fn unexpected(&self) -> Bad {
         match self.peek() {
             Some(c) => Bad { at: self.pos, message: format!("unexpected character '{c}'"), deep: false },

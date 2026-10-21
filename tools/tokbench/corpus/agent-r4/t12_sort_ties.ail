@@ -1,8 +1,4 @@
-struct P
-    name str
-    age int
-
 fn main()
-    people := [P(name: "bo", age: 30), P(name: "al", age: 25), P(name: "cy", age: 30)]
-    for p in people.sorted(by: |p| p.name).sorted(by: |p| -p.age)
-        print("{p.name} {p.age}")
+    people := [("bo", 30), ("al", 25), ("cy", 30)]
+    for name, age in people.sorted(by: |p| (-p.1, p.0))
+        print("{name} {age}")
