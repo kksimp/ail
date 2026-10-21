@@ -102,6 +102,8 @@ struct Lower
     borrowed Set[str]
     ## The generated `copy.T` functions asked for, by name.
     copy_tys Map[str, Ty]
+    ## `any T` implementations and dispatchers (ADR 0616).
+    traits Traits
     ## `problems.len()` when the current function began.
     fn_problems int
     ## Set when the function used something already reported elsewhere (a
@@ -251,6 +253,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
+        traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
         file: 0,
@@ -299,6 +302,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
+        l.declare_traits(srcs[k].prog)
         l.quiet_lazy(k, before)
     l.declare_prelude_enums()
     for k in 0..srcs.len()
@@ -326,6 +330,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     l.enter_file(0)
     l.gen_unchecked()
     l.enter_file(0)
+    l.gen_dispatch()
     l.gen_copies()
     l.gen_enum_eqs()
     l.gen_init_enums()
@@ -570,6 +575,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         if k := enum_key(name)
                             return Ty.Enum(k)
                     none
+        AnyTrait(name) => any_type(name)
         TupleType(elems) => tuple_type_of(elems)
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
@@ -1385,6 +1391,9 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
     if v.id < 0
         problem(expr_pos(e), "this expression has no value")
         return none
+    if t := any_of(want)
+        if any_of(v.ty) == none and not v.ty.is_unknown()
+            return box_any(v, t, expr_pos(e))
     v
 
 ## Lower an expression; `want` is the type the context expects, which lets
@@ -1832,6 +1841,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
+    if t := any_of(r.ty)
+        return any_call(t, r, name, args, npos)
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable

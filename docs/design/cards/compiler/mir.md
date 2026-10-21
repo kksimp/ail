@@ -79,6 +79,10 @@ pub struct mir.TaskState
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(text str) bool
 pub fn mir.is_wait_call(e ast.Expr) bool
+pub struct mir.Traits
+    impls Map[str, List[str]]
+    dispatch Map[str, List[str]]
+pub fn mir.new_traits() mir.Traits
 pub enum mir.Ty
     Int
     Float
@@ -96,6 +100,7 @@ pub enum mir.Ty
     Tensor(elem mir.Ty)
     F32
     Tuple(elems List[mir.Ty])
+    Any(trait_name str)
     Unknown
     Unit
     Atomic(elem mir.Ty)
@@ -184,4 +189,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1850); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1901); dropped: private items, doc comments
