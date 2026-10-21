@@ -1,0 +1,9 @@
+# `1 + n` overflows: the trap reports both operands as written even when the
+# sum is built in n's register (expr.arith.1).
+fn bump(n int) int
+    1 + n
+
+fn main()
+    print(bump(41))
+    print(bump(9223372036854775806))
+    print(bump(9223372036854775807))

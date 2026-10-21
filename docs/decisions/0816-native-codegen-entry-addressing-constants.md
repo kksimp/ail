@@ -101,6 +101,23 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    constant-index reads of a list literal after a loop. fasta 66.9M to
    65.9M instructions.
 
+7. **The allocator puts values where their partners are.** About a fifth
+   of the executed instructions in wordfreq and binarytrees were
+   register-to-register moves. Three causes are fixed in
+   `codegen/alloc.ail` and one in the x86-64 `add`: (a) the result of
+   `add`, `sub`, `band`, `bor` and `bxor` is hinted to its operand's register
+   (and, for the commutative ones, to the second operand's), so x86-64's
+   in-place form applies; (b) a value whose hinted partner (that operand
+   result, a block parameter) is placed later and lives across a call goes
+   straight to a callee-saved register, so the partner takes the same one
+   and no move is left (`mov %rax,%rsi; mov %rsi,%r14`); (c) a value
+   computed within a few instructions of a call it dies at, and passed to
+   it, prefers the argument register it is passed in; (d) `1 + n` (a
+   constant first operand) is `add d, 1` in `n`'s register, with the
+   overflow stub recovering `n` from the sum (`undo` 3). Instructions
+   (x86-64): wordfreq 209.1M to 204.8M, binarytrees 323.8M to 318.8M,
+   fasta 65.9M to 64.9M, nbody unchanged.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register

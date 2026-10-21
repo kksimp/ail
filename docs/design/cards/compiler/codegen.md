@@ -20,11 +20,14 @@ pub struct codegen.Alloc
     pub saved List[int]  ## The callee-saved registers used, which the prologue saves.
     pub wrap int  ## The block where the callee-saved registers are saved, or -1 for the
     pub region List[bool]
+codegen.IN_PLACE := ...  ## The operations the x86-64 code generator does in the operand's register.
+codegen.COMMUTES := ...
 pub fn codegen.is_remat(i mir.Inst) bool  ## Whether an instruction's value is rebuilt at each use instead of held.
 pub fn codegen.is_call(i mir.Inst) bool  ## Whether an instruction clobbers the caller-saved registers. A `push`
 pub fn codegen.is_push(i mir.Inst) bool
 pub fn codegen.caller_used(al codegen.Alloc, t codegen.Target) List[int]  ## The caller-saved registers that hold some value of the function.
 pub fn codegen.allocate(f mir.Func, t codegen.Target) codegen.Alloc
+fn codegen.short_lived(start List[int], end List[int], v int, at int) bool  ## Whether `v` dies at position `at` and was defined within a few
 fn codegen.use_weights(f mir.Func) List[int]  ## The cost of keeping each value in memory: one per definition or use,
 struct codegen.Wrap
     wrap int
@@ -48,6 +51,7 @@ struct codegen.Scan
     weighed bool  ## Whether `weight` has been computed: only a function that runs out of
     func mir.Func
     fn codegen.Scan.crosses(self, v int) bool  ## Whether `v` is live across a call, so it needs a callee-saved register.
+    fn codegen.Scan.partner_crosses(self, v int) bool  ## Whether a hinted value that starts after `v` and is not placed yet lives
     fn codegen.Scan.free(self, r int, v int) bool  ## Whether register `r` is free for all of `v`'s ranges.
     fn codegen.Scan.assign(mut self, v int, float bool, t codegen.Target) [mutates]
     fn codegen.Scan.sole(self, a int, v int) bool  ## Whether `a` is the only active value whose use of its register meets `v`.
