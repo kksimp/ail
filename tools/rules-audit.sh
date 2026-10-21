@@ -3,7 +3,7 @@
 #
 #   tools/rules-audit.sh
 #
-# Checks four things and exits 1 when any is not empty:
+# Checks six things and exits 1 when any is not empty:
 #   1. cited but not in the spec: a rule ID named in a comment or a string
 #      literal of bootstrap/src or compiler/ that docs/spec/ does not define;
 #   2. spec rules never cited: a rule in docs/spec/ that no comment or string
@@ -16,10 +16,10 @@
 #      `example` (checked through `ail explain RULE --json`);
 #   5. std functions with no spec mention: a function in the MODULES table of
 #      bootstrap/src/stdlib.rs that docs/spec/ never names (tools/card-spec-audit.py,
-#      ADR 0698).
-#   4. `ail explain` entries with no example: a rule whose explanation has
-#      neither an `example` nor a worked `rejected` example (checked through
-#      `ail explain RULE --json`; ADR 0670).
+#      ADR 0698);
+#   6. test cases: duplicate programs (same program modulo names, same
+#      companion files) and diagnostic cases with no `.rules` file
+#      (tools/cases-audit.py, ADR 0725).
 #
 # Ranges such as `eff.cap.4-5` count as citations of each ID in the range.
 # Self-setting-up (ADR 0071): the first `./ail explain` builds the bootstrap
@@ -137,6 +137,10 @@ audit = subprocess.run(
     capture_output=True, text=True, check=False,
 )
 report("5. std functions with no spec mention", [l.removeprefix("no spec mention: ") for l in audit.stdout.splitlines() if l.startswith("no spec mention: ")])
+
+# 6. The test cases (ADR 0725): duplicates and missing .rules.
+cases = subprocess.run([sys.executable, "-I", str(root / "tools" / "cases-audit.py"), str(root)], capture_output=True, text=True, check=False)
+report("6. test cases: duplicates or missing .rules", [l.strip() for l in cases.stdout.splitlines()[1:]])
 
 print(f"rules in spec: {len(spec)}; explained: {len(explained)}; findings: {problems}")
 sys.exit(1 if problems else 0)
