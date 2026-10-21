@@ -603,6 +603,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0776](0776-fieldinfo-doc.md) | `FieldInfo.doc` carries a field's `##` comment (integrator choice) | Accepted | 2026-10-21 |
 | [0782](0782-fix-text-plus-chains.md) | `ail fix` joins text with interpolation across a `+` chain and around calls with strings *(delegated)* | Accepted | 2026-10-21 |
 | [0768](0768-native-string-scans-by-words.md) | Native strings: character counts and separator search a word at a time, interpolation joined in one allocation; `lines_split` -27% instructions *(delegated)* | Accepted | 2026-10-21 |
+| [0769](0769-map-hash-finalizer.md) | Native string hash: a second multiply as the finalizer, so keys that differ in their high bytes spread (50 to 1.75 probes) *(delegated)* | Accepted | 2026-10-21 |
 | [0814](0814-selftest-speed.md) | Selftest speed: native builds on four threads, then parallel test binaries, then one compiler load for many builds (AI, delegated ADR 0076, integrator-approved) | Accepted | 2026-10-21 |
 | [0809](0809-fix-contract-keywords.md) | `ail fix` moves `requires result` to `ensures` and unwraps `old()` in `requires` *(delegated)* | Accepted | 2026-10-21 |
 | [0817](0817-token-budgets-for-agent-pages.md) | Token budgets for the language card (8,000) and quick reference (12,518) on the five-tokenizer mean; quick-reference additions are paid for by a trim in the same PR; amends 0276 in part | Accepted | 2026-10-21 |
