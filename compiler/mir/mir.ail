@@ -41,6 +41,8 @@ pub enum Ty
     Tuple(elems List[Ty])
     Unknown
     Unit
+    ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
+    Atomic(elem Ty)
     ## A function value: the address of a declared function (ADR 0573).
     Fn(params List[Ty], ret Ty)
     ## A sized integer `i8 i16 i32 u8 u16 u32` (ADR 0834): in a register like
@@ -107,6 +109,7 @@ pub fn Ty.name(self) str
         Enum(n) => n
         Unknown => "?"
         Unit => "unit"
+        Atomic(e) => "Atomic[{e.name()}]"
         Fn(ps, r) =>
             mut names := List[str]()
             for p in ps

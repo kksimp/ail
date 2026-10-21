@@ -43,9 +43,11 @@ pub struct codegen.Image
     pub globals int  ## The size of the runtime's globals, in 8-byte slots.
     pub entry int  ## The entry point's offset in `code`.
     pub calls List[codegen.CallRow]  ## Each user call, in address order (trace.frame.1).
+    pub imports List[str]  ## The libSystem symbols the code calls (`import_call`, native-abi.md
 pub fn codegen.new_image() codegen.Image
 pub fn codegen.add_str(mut img codegen.Image, sym str, s str) [mutates]  ## A string object (native-abi.md §2) in the read-only data, once per symbol.
 pub fn codegen.add_f64(mut img codegen.Image, x float) str [mutates]  ## A float constant in the read-only data; gives its symbol.
+pub fn codegen.import_slot(mut img codegen.Image, sym str) int [mutates]  ## The slot of import `sym`, added on first use.
 pub fn codegen.align(mut bytes List[int], n int) [mutates]
 pub fn codegen.push64(mut bytes List[int], v int) [mutates]
 pub fn codegen.utf8(s str) List[int]  ## The UTF-8 bytes of a string.

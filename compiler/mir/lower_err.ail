@@ -335,6 +335,9 @@ fn Lower.add_context(mut self, context ast.Expr?)
 
 ## `e?` (err.prop.1, err.prop.2, err.prop.5).
 fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
+    # `t.wait()?` on a task: a trapped task ends the program (lower_task.ail).
+    if tk.on and is_wait_call(e)
+        return lower_wait(e, pos)
     if fallible_call(e)
         v := lower_expr(e, none)?
         return propagate_result(v, context, pos)

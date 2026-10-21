@@ -66,6 +66,16 @@ pub fn mir.expr_pos(e ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
 pub fn mir.imports_of(prog ast.Program) List[str]
+pub struct mir.TaskState
+    on bool
+    sites List[mir.TaskSite]
+    pars List[mir.ParSite]
+    rets Map[str, mir.Ty]
+    in_chunk bool
+    accs Set[str]
+pub fn mir.new_task_state() mir.TaskState
+pub fn mir.uses_tasks(text str) bool
+pub fn mir.is_wait_call(e ast.Expr) bool
 pub enum mir.Ty
     Int
     Float
@@ -85,6 +95,7 @@ pub enum mir.Ty
     Tuple(elems List[mir.Ty])
     Unknown
     Unit
+    Atomic(elem mir.Ty)
     Fn(params List[mir.Ty], ret mir.Ty)
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
@@ -171,3 +182,4 @@ pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
 trimmed to fit 2000 tokens (~1694); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1716); dropped: private items, doc comments

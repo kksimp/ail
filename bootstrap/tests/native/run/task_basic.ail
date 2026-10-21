@@ -1,0 +1,44 @@
+# conc.task.1, conc.task.6: tasks run on other threads; `wait` gives their
+# results (ADR 0599).
+fn work(seed int) int
+    mut x := seed
+    mut total := 0
+    for _ in 0..20000
+        x = (x * 1103515245 + 12345) % 2147483648
+        total += x % 1000
+    total
+
+fn square(x int) int
+    x * x
+
+fn total(xs List[int]) int
+    mut sum := 0
+    for x in xs
+        sum += x
+    sum
+
+fn half(x float) float
+    x / 2.0
+
+fn greet(name str, n int)
+    print("hello {name} {n}")
+
+fn main() !
+    a := spawn work(1)
+    b := spawn work(2)
+    print(a.wait()? + b.wait()?)
+    s := spawn square(3)
+    t := spawn square(4)
+    print(s.wait()? + t.wait()?)
+    # conc.share.1: the task works on its own copy of the list.
+    mut xs := [1, 2, 3]
+    u := spawn total(xs)
+    xs.push(100)
+    print(u.wait()?)
+    h := spawn half(5.0)
+    print(h.wait()?)
+    g := spawn greet("ail", 7)
+    g.wait()?
+    for i in 0..8
+        w := spawn square(i)
+        print(w.wait()?)

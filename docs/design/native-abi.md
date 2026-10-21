@@ -287,9 +287,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-61 free, 62-63 `random.ail`
-(the generator's state and whether it is seeded).
-flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 16-24). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -502,6 +500,97 @@ interpreter-side tests (ADR 0435 is merged); (2) the ELF writer gains
 follows in lockstep (ADR 0008); (4) `ail build` drops `ffi.native.1` and the
 selftest diffs `examples/ffi_libc.ail` and `examples/ffi_buffers.ail` between
 the interpreter and the native executable on both platforms.
+
+## 10. Threads, tasks and atomics
+
+**As built (lane 178, ADRs 0599–0601).** `compiler/rt/native/task.ail` is part
+of the runtime of a program whose source mentions `spawn `, `par for` or
+`Atomic`; `notask.ail` otherwise. Linux x86-64 and ARM64, and macOS ARM64 through §11.
+
+- **Threads.** `clone` with `CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM` (flags
+  `0x50F00`; syscall 56 on x86-64, 220 on ARM64), no TLS. Worker `k` has the
+  stack `STACKS + k * 8 MiB` (a lazily committed region of 64, `PROT_NONE`
+  guard page at the low end); `STACKS` is global slot 46, and a thread is a
+  worker exactly when its stack pointer lies in that region. The child starts
+  in `rt.worker_main(k)` with the stack top (16-byte aligned) in `rsp`/`sp`;
+  the argument rides in `r8` (x86-64) or `x4` (ARM64), which `clone` ignores
+  without `CLONE_SETTLS`. The `restart` primitive re-enters `rt.worker_main`
+  on a fresh stack after a trap.
+- **Sleeping.** `futex` wait and wake with `FUTEX_PRIVATE` (`128`, `129`) on
+  the low 32 bits of an 8-byte word (syscall 202 on x86-64, 98 on ARM64).
+  Locks are three-state futex mutexes (0 free, 1 held, 2 held and waited
+  for) over `atomic_cas`, `atomic_add` and `atomic_store`.
+- **Atomics.** x86-64: `mov`, `xchg`, `lock xadd`, `lock cmpxchg`. ARM64:
+  `ldar`, `stlr`, `swpal`, `ldaddal`, `casal` (LSE). Always sequentially
+  consistent.
+- **Globals** 16–24: `TASKS` (the pool block), `MULTI` (1 once the pool
+  exists: `alloc` then takes `ALLOC_LOCK`), `ALLOC_LOCK`, `OUT_LOCK`,
+  `OUT_OWNER` and `OUT_DEPTH` (the reentrant output lock), `STACKS`. The image
+  has 64 slots.
+- **Task record** (8-byte words): 0 state (0 queued or running, 2 done,
+  3 trapped), 1 function id, 2 result, 3 next in the queue, 4–6 the trap's
+  kind and operands, 7 its head string, 8 its operator, 9 its source
+  excerpt, 10–23 arguments (a chunk function: environment, `lo`, `hi`, then
+  sum, lowest and highest running sum per accumulator). The compiler writes
+  `task.K(rec)` for each `spawn` and `par for` site, and `rt.dispatch(id,
+  rec)` to call it.
+- **Pool block** (one `mmap` page): lock, queue head and tail, the sequence
+  word idle workers sleep on, live, blocked and idle counts, the target, and
+  the task each worker runs.
+- **Atomic cell:** 8 bytes, heap kind 11.
+
+**With the collector (lane 171).** The collector is conservative and assumes
+every other thread is at a call; a worker in a loop that never allocates is
+not. As built, a threaded program works like this:
+
+1. Once the pool exists (`MULTI`), the allocator's fast path is off and
+   `alloc_slow` runs under `ALLOC_LOCK`. A collection starts inside it, so the
+   collector holds the lock and no other thread can allocate.
+2. `gc_stop_world` sets `GC_REQ` and waits until every other live thread has
+   published a stack pointer (`P_PARK`). A thread publishes at each safe point:
+   before any futex sleep (`futex_wait`, which saves the callee-saved registers
+   with `gc_regs` first), when it finds `GC_REQ` set in `lock`, and between
+   tasks. After waking it stays published while `GC_REQ` is set, and clears its
+   mark first and re-checks, so the collector never scans a thread that runs.
+3. The collector scans its own stack, then each other thread's registers and
+   stack (published pointer up to the main stack's top or the worker's slice of
+   `STACKS`), the pool block (queued and running task records), each thread's
+   text builder, and the globals. A thread that computes without reaching the
+   runtime delays a collection, nothing else.
+4. `gc_start_world` clears `GC_REQ` and wakes the parked threads.
+   `notask.ail` stubs all of it.
+
+Heap kinds: 11 (`KIND_ATOMIC`, no pointers) is an atomic cell; 12 is a task
+record and 13 an environment or group record (every word may be a pointer).
+`str` formatting keeps one text builder per thread in the pool block
+(`fmt.ail`, `sb_cell`). A trap inside the allocator (a run limit) releases its
+lock before the task ends. What is still shared and not thread-safe: the error
+slot (`rt.err_set`), `PARSE_OK` and the OS layer's result slots (`os.ail`), so
+tasks must not use fallible calls or the file and environment functions at
+the same time.
+
+## 11. Imports from libSystem (macOS)
+
+A runtime file calls a libSystem function with the primitive
+`import_call("_name", a, b, c, d)` (the name is a string literal with its
+leading underscore; the arguments are integers, any number the target's
+calls support, so the declaration in `prim.ail` doesn't limit a call site). It lowers
+to an ordinary MIR `call` named `libsys._name`, so it clobbers the caller-saved
+registers like any call. The ARM64 generator passes the arguments as for any
+call, then `adrp x16, slot; add; ldr x16, [x16]; blr x16`. Slot `k`, for the
+`k`th distinct name in `Image.imports`, is the 8 bytes after the runtime's
+globals (`globals + k`), so the images grow by one word per import and
+nothing else moves.
+
+The Mach-O writer adds `LC_DYLD_INFO_ONLY` with a bind table only when the
+image imports something: ordinal 1 (libSystem), one `SET_SYMBOL`,
+`SET_TYPE_IMM pointer`, `SET_SEGMENT_AND_OFFSET_ULEB` (segment 2, `__DATA`) and
+`DO_BIND` per name. dyld fills the slots before `main` runs. On Linux a
+`libsys.` call is `ud2`/`brk`: the runtime guards each with `target() == 2`.
+`fn_addr("rt.name")` gives a function's address (for `pthread_create`).
+
+Used by `task.ail` (`pthread_attr_init`, `pthread_attr_setstack`,
+`pthread_create`, `sysconf`) and `core.ail` (`__ulock_wait`, `__ulock_wake`).
 
 ## Licensing
 

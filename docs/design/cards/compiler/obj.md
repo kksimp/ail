@@ -26,6 +26,8 @@ obj.MACHO_PAGE := 16384
 obj.HEADER := 32
 pub fn obj.macho(img codegen.Image, ident str) List[int]  ## The executable, signed with `ident` as its identifier.
 obj.COMMANDS := 11
+fn obj.bind_info(img codegen.Image) List[int]  ## The bind table: each import's pointer slot in __DATA (segment 2), bound to
+fn obj.uleb(mut b List[int], n int) [mutates]
 fn obj.load_commands(v List[int]) List[int]  ## The load commands, from the layout `v`: the sizes and offsets of
 fn obj.dylib_name(mut c List[int], cmd int, name str, at int, size int) [mutates]  ## LC_LOAD_DYLINKER-shaped: a command with one string at offset `at`.
 fn obj.text(mut c List[int], s str, n int) [mutates]  ## `s` padded with zeros to `n` bytes.
