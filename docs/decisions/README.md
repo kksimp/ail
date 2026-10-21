@@ -535,3 +535,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0640](0640-samesite-and-graceful-shutdown.md) | SameSite in the cookie jar; `srv.shutdown()` stops a server without dropping requests under way *(delegated)* | Accepted | 2026-10-21 |
 | [0716](0716-streaming-response-bodies.md) | Streaming response bodies: `net.open` returns a `net.Body` read with `read_bytes`, and a body read to its end returns its connection to the pool *(delegated)* | Accepted | 2026-10-21 |
 | [0717](0717-transparent-content-encoding.md) | `std.net` sends `Accept-Encoding: gzip, deflate` and decodes the response unless the program sets the header itself *(delegated)* | Accepted | 2026-10-21 |
+| [0692](0692-fuzz-http-and-socket-templates.md) | HTTP fuzzers, `fuzz-net` templates that actually run, and the three-digit status fix *(delegated)* | Accepted | 2026-10-21 |

@@ -1,0 +1,25 @@
+# fuzz-input: cookie
+# fuzz-needs: std.net.jar
+# std.net.jar on hostile Set-Cookie lines (std.net.20-23): a bad line is dropped, never a crash;
+# the Cookie header a jar builds has no CR, LF or NUL; a script never sees an HttpOnly cookie.
+use std.net.jar
+
+fn main()
+    mut j := jar.new()
+    url := "http://example.com/a/b"
+    stored := j.set_cookie(url, {{TEXT}})
+    also := j.set_cookie("http://sub.example.com/", {{TEXT2}})
+    h := j.header(url)
+    if h.contains("\r") or h.contains("\n") or h.contains("\0")
+        print("FAIL the Cookie header has a control character")
+    print(stored or not stored)
+    print(also or not also)
+    print(j.len() <= 2)
+    for k in j.for_script(url).keys()
+        if k == ""
+            print("FAIL a script sees an unnamed cookie")
+    ok := j.set_from_script(url, "x=1; HttpOnly")
+    if ok and j.for_script(url).contains("x")
+        print("FAIL a script set an HttpOnly cookie")
+    j.clear()
+    print(j.len())

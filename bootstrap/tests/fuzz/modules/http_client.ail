@@ -1,0 +1,44 @@
+# fuzz-input: httpresp
+# fuzz-net: yes
+# fuzz-needs: std.net
+# The HTTP/1.1 client against a hostile server (std.net.2, 4, 6, 19, 25, 26): whatever a server
+# sends back, `get` returns a response or a NetError, never a crash or a hang.
+use std.net
+
+fn rogue(l net.Listener) int
+    c := l.accept() else err
+        return 0
+    c.set_timeout(1500)
+    for _ in 0..40
+        line := c.read_line() else err
+            break
+        got := line else break
+        if got == ""
+            break
+    c.write({{TEXT}}) else err
+        c.close()
+        return 1
+    c.close()
+    1
+
+fn visit(addr str) str
+    mut o := net.options()
+    o.timeout_ms = 1500
+    o.total_ms = 4000
+    o.max_redirects = 0
+    r := net.request("GET", "http://{addr}/p", o) else err
+        return "error {err.kind.len() > 0}"
+    if r.status < 100 or r.status > 999
+        return "FAIL status {r.status} out of range"
+    for k in r.headers.keys()
+        if k != k.to_lower()
+            return "FAIL header name not lowercase: {k}"
+    "{r.body.len() >= 0}"
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    w := spawn rogue(l)
+    msg := visit(l.addr())
+    l.close()
+    w.wait()?
+    print(msg)

@@ -617,6 +617,8 @@ fn read_head(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Result<Head
     }
     let status: i64 = parts
         .next()
+        // std.net.4: a status code is exactly three digits (RFC 9112 4); `20`, `+200` and `-1` are malformed.
+        .filter(|s| s.len() == 3 && s.bytes().all(|b| b.is_ascii_digit()))
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| protocol(format!("no status code in `{status_line}`")))?;
     let mut headers: Vec<(String, String)> = Vec::new();
