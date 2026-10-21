@@ -1,11 +1,11 @@
 struct Box
-    at (int, int)
+    at(int, int)
     tag str
 
-fn mk() (int, str)
+fn mk()(int, str)
     (7, "seven")
 
-fn pick(xs List[(int, str)]) (int, str)?
+fn pick(xs List[(int, str)])(int, str)?
     for x in xs
         if x.0 > 1
             return x

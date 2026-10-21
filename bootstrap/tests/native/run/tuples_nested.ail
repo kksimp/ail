@@ -1,12 +1,12 @@
 enum Shape
-    Dot(at (int, int))
-    Line(from (int, int), to (int, int))
+    Dot(at(int, int))
+    Line(from(int, int), to(int, int))
 
 struct Seg
-    a (int, int)
-    b (int, int)
+    a(int, int)
+    b(int, int)
 
-fn bump(mut p (int, int))
+fn bump(mut p(int, int))
     p.0 += 1
     p.1 += 10
 
@@ -15,7 +15,7 @@ fn len2(s Shape) int
         Dot(p) => p.0 + p.1
         Line(p, q) => (q.0 - p.0) + (q.1 - p.1)
 
-fn first_big(xs List[(int, str)]) (int, str)?
+fn first_big(xs List[(int, str)])(int, str)?
     for x in xs
         if x.0 > 1
             return x

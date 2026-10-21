@@ -6,11 +6,11 @@ struct P
     name str
     age int
 
-fn swap(p (int, str)) (str, int)
+fn swap(p(int, str))(str, int)
     a, b := p
     (b, a)
 
-fn kind(p (int, int)) str
+fn kind(p(int, int)) str
     match p
         (0, _) => "zero"
         (x, 1) => "x{x} one"
