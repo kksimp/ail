@@ -1,0 +1,15 @@
+## Read length-prefixed frames from a byte buffer: each frame is one length
+## byte, then that many payload bytes. Bytes are sliced, not copied by hand.
+##   ./ail run examples/frames.ail
+
+fn main()
+    wire := b"\x05hello\x03abc\x00\x02hi"
+    mut at := 0
+    mut n := 0
+    while at < wire.len()
+        size := wire[at].to_int()
+        body := wire[at + 1..at + 1 + size]
+        n += 1
+        print("frame {n}: {body.text()} ({body.hex()})")
+        at += 1 + size
+    print("{n} frames in {wire.len()} bytes")
