@@ -5,6 +5,8 @@
 ## listens and answers until the server is closed; `run` does the same on a
 ## server the program already holds, so it can `close` it.
 use std.net
+use std.fs
+use std.path
 
 ## Workers that answer requests at once. Each handles one request at a time.
 WORKERS := 4
@@ -16,6 +18,74 @@ fn worker(srv net.Server, handler fn(net.Request) net.Response)
         # A client that has gone away is not the server's failure.
         ex.respond(handler(ex.request)) else err
             continue
+
+## http.serve.2: `serve_dir` types, by extension.
+TYPES := {
+    "html": "text/html; charset=utf-8",
+    "htm": "text/html; charset=utf-8",
+    "css": "text/css; charset=utf-8",
+    "js": "text/javascript; charset=utf-8",
+    "json": "application/json",
+    "txt": "text/plain; charset=utf-8",
+    "md": "text/markdown; charset=utf-8",
+    "xml": "application/xml",
+    "svg": "image/svg+xml",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "ico": "image/x-icon",
+    "pdf": "application/pdf",
+    "wasm": "application/wasm",
+}
+
+fn plain(ex net.Exchange, status int, why str)
+    ex.respond(net.Response(status: status, headers: {}, body: why)) else err
+        return
+
+## Answers one request for a file under `root` (http.serve.2).
+fn file_for(ex net.Exchange, root str)
+    req := ex.request
+    if req.method != "GET" and req.method != "HEAD"
+        plain(ex, 405, "method not allowed")
+        return
+    mut file := root
+    for seg in req.path.split("/")
+        if seg == ".."
+            plain(ex, 403, "forbidden")
+            return
+        if seg != "" and seg != "."
+            file = path.join(file, seg)
+    meta := fs.metadata(file) else err
+        plain(ex, 404, "not found")
+        return
+    if meta.is_dir
+        file = path.join(file, "index.html")
+    data := fs.read_bytes(file) else err
+        plain(ex, 404, "not found")
+        return
+    kind := TYPES.get(path.ext(file)) else "application/octet-stream"
+    ex.respond_bytes(200, {"content-type": kind}, data) else err
+        return
+
+fn dir_worker(srv net.Server, root str)
+    while true
+        ex := srv.accept() else err
+            return
+        file_for(ex, root)
+
+## Answers every request on `srv` with the files under `root` until `srv.close()`.
+pub fn run_dir(srv net.Server, root str) !
+    g := TaskGroup()
+    for _ in 0..WORKERS
+        g.add(spawn dir_worker(srv, root))
+    g.wait_all()?
+
+## Listens on `addr` and serves the files under `root`.
+pub fn serve_dir(addr str, root str) !
+    srv := net.serve(addr)?
+    run_dir(srv, root)?
 
 ## Answers every request on `srv` with `handler` until `srv.close()`.
 pub fn run(srv net.Server, handler fn(net.Request) net.Response) !
