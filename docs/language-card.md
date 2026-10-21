@@ -76,7 +76,7 @@ update a `mut` variable in a loop, use `=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`); float math `x.sin()`, `x.pow(y)` (type.num.16).
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
 Regex (RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `is_match(re, s)`, `find(re, s)` (`Match?`), `find_all`, `group_all(re, s, n)`, `captures(re, s)`, `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`.
 
@@ -362,7 +362,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
-- There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
+- There's no `+` on strings and no `{{` escape: a literal brace is `\{`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
   `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
@@ -396,7 +396,7 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
-mut counts := {}                       # typed by first use: counts[w] += 1
+mut counts := {}                       # typed by first use: counts[w] += 1; `counts.top(3)`
 b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
 for name in ages.keys()                # `for k in m` is an error; also values()
     print("{name}: {ages[name]}")
@@ -405,7 +405,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up and `m.top(n)` gives the `n` keys with the largest counts, ties in insertion order. Keys can't be floats.
+Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up; `m.top(n)` gives the `n` largest-count keys, ties in insertion order. Keys can't be floats.
 
 ## Values and `mut`
 
@@ -495,7 +495,7 @@ fn main()
 
 ## Contracts
 
-`requires`, `ensures` (`result`, `old(e)`) and struct `invariant` are checked at run time, and `ail run --no-contracts` skips them. A trait method's contracts bind its implementations.
+`requires`, `ensures` (`result`, `old(e)`) and struct `invariant` are checked at run time (`ail run --no-contracts` skips them). A trait method's contracts bind its implementations.
 
 ## Tests
 
