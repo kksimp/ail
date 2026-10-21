@@ -774,11 +774,17 @@ fn main()
     print("inherent")
 ```
 
-```ail norun rules=trait.op.2
-# Only the operators of trait.op.1 may be implemented; other operator symbols are not
-# defined by any trait, so there is no output to print.
+```ail error=trait.op.2 rules=trait.op.2
+# Only the operators of trait.op.1 may be implemented: `Shl` would define `<<`, which no trait exists for.
+struct V
+    n int
+
+impl Shl for V
+    fn shl(self, other int) V
+        self
+
 fn main()
-    print("operators")
+    print(1)
 ```
 
 ```ail rules=trait.op.1,trait.std.2
