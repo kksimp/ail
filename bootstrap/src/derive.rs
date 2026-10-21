@@ -228,7 +228,8 @@ fn unqualify(text: &str, module: &str) -> String {
 }
 
 /// The `TypeInfo(...)` expression describing the struct or enum `name`,
-/// preferring one declared in `module` (refl.info.1, refl.info.3).
+/// preferring one declared in `module` (refl.info.1, refl.info.3). `doc` is the
+/// field's `##` comment (ct.derive.5).
 fn type_info(prog: &Program, docs: &HashMap<usize, String>, name: &str, module: &str) -> Option<String> {
     let pick = |pos: Pos| prog.module_at(pos) == module;
     // A module's types are named `a.b.T` by now (mod.unit.2).
