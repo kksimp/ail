@@ -786,6 +786,31 @@ fn read_frame_all(r: &mut impl BufRead, frame: Frame) -> Result<Vec<u8>, Bad> {
 mod tests {
     use super::*;
 
+    /// std.net.26: each bad body names its encoding and the decoder's reason.
+    #[test]
+    fn decode_errors_name_the_reason() {
+        let mk = |enc: &str, body: Vec<u8>| Response {
+            status: 200,
+            headers: vec![("content-encoding".into(), enc.into())],
+            all: vec![],
+            body,
+        };
+        let gz = crate::codec::gzip::gzip(b"hello world hello world", 6);
+        let cases = [
+            ("gzip", gz[..gz.len() - 4].to_vec(), "a body that says it is gzip is not: truncated gzip trailer"),
+            ("gzip", b"not gzip at all".to_vec(), "a body that says it is gzip is not: not gzip data"),
+            (
+                "deflate",
+                vec![0x78, 0x9c, 0xf3, 0x48],
+                "a body that says it is deflate is not: unexpected end of compressed data",
+            ),
+        ];
+        for (enc, body, want) in cases {
+            let mut r = mk(enc, body);
+            assert_eq!(decode_body("http://h/x", &mut r).err().unwrap().message, want);
+        }
+    }
+
     #[test]
     fn urls() {
         let t = parse_url("http://example.com:8080/a/b?q=1#frag").ok().unwrap();
