@@ -207,8 +207,10 @@ fn main()
 
 **native.bce.2** — An access `xs[i]` has no bounds check when `i` was
 already used to index `xs` on every path to it, or is `xs.len()` taken
-before a `push` to `xs` that is on every path to it. This holds while no
-operation in the program shortens a list. *(ADR 0578)*
+before a `push` to `xs` that is on every path to it, or is a constant, or a
+variable that only ever holds constants, below the number of `push` calls to
+`xs` that are on every path to it. This holds while no operation in the
+program shortens a list. *(ADR 0578, ADR 0816)*
 
 ```ail rules=native.bce.2
 fn main()
