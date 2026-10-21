@@ -2,6 +2,10 @@
 
 Non-normative survey of why programs do not build with `ail build` (x86-64) on the batch head bd982d2, 2026-10-21. Of 101 programs (84 `examples/`, 17 `tools/perfbench/programs/`) 25 build and 76 do not (72 examples, 4 perfbench). A program can hit several features: `ail build` prints every problem, and this survey groups them. Owners are the PRs and lanes the integrator named for the area; "none known" means no PR in flight was named. Sources: the `error[native.*]` lines of each build.
 
+## Caveat: errors are masked
+
+`ail build` reports the first problem it meets in each function, so a program can hide further blockers behind the first one. The counts below are therefore the problems visible at bd982d2, and the "Alone" and "Newly buildable" columns are upper bounds. Check: with native `std.path` added (PR #361), none of the nine "path only" programs builds yet; their next errors are `hash`, `date`, `proc` (two programs) and `List[str].sorted()` (five programs), and the native build count stays 25 of 101. Rerun the survey after each landing.
+
 ## Features, most programs first
 
 "Alone" counts programs this feature is the only blocker of, "first" counts programs whose first error it is.
