@@ -75,4 +75,4 @@ Native against C: collatz 1.58x clang, nbody 1.00x, spectralnorm 0.60x, fannkuch
 
 `tasks` printed different output from its Python twin (DIFF) and has no ratio.
 
-Full tables, and the day-1 comparison: [day-2 benchmarks](../../../mnt/project-files/reports/day2-benchmarks.md) in the project files. The `tools/bench/run.sh` token and before/after tables were not rerun in this refresh.
+Full tables, and the day-1 comparison: the day-2 report `/mnt/project-files/reports/day2-benchmarks.md`. The `tools/bench/run.sh` token and before/after tables were not rerun in this refresh.
