@@ -1,0 +1,6 @@
+fn work(n int) int
+    n * n
+
+fn main()
+    th := thread.start(work)
+    print(th.join())

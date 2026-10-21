@@ -40,3 +40,8 @@ Option A. The time limit is a detached thread that kills the child after
 
 - `proc.wait` is a switch point only through `yield_turn`; schedule seeds
   replay task order, not child timing.
+
+## Rejected alternatives
+
+- Blocking in the OS (option B): rejected because the waiting task can deadlock with the task that would close the child's stdin.
+- A watcher thread per child that posts an event on exit (option C): not chosen, because it adds one thread per child for up to 5 ms of worst-case latency. Revisit if perfbench shows it matters.

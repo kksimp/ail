@@ -1,0 +1,11 @@
+## json.print.1: whole numbers print without a fraction; an int field stays an int.
+struct S
+    n int
+    ratio float
+    big float
+
+impl ToJson for S
+
+fn main() !
+    print(S(n: 3, ratio: 2.5, big: 1e20).to_json().to_text())
+    print(parse_json("[3, 2.5, 1e3, -0, -12]")?.to_text())

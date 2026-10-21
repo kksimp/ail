@@ -25,3 +25,9 @@
 
 - The Linux test matrix covers both modes.
 - The performance report and build output say which mode a binary uses.
+
+## Rejected alternatives
+
+- AIL's own libc layer on Linux: large and risky. Rejected.
+- No C interop on Linux: fails brief section 17. Rejected.
+- Always linking libc on Linux: pure-AIL programs would lose the libc-free benefits that ADR 0020 gives them. Rejected by the refinement, which links libc only when C is used.

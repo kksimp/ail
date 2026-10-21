@@ -13,7 +13,36 @@ use std::sync::OnceLock;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Data {
     F(Vec<f64>),
+    /// `Tensor[f32]` (std.tensor.21): each element is an `f32`, and every
+    /// result is rounded to `f32` once. The kernels run on widened `f64`
+    /// values (`Tensor::widened`), so the operations are the `float` ones.
+    F32(Vec<f32>),
     I(Vec<i64>),
+}
+
+impl Tensor {
+    /// Whether the elements are `f32` (std.tensor.21).
+    pub fn is_f32(&self) -> bool {
+        matches!(self.data, Data::F32(_))
+    }
+
+    /// `to_f32()`: each `float` element rounded to `f32` once (std.tensor.22).
+    pub fn to_f32(&self) -> Result<Tensor, Fault> {
+        match &self.data {
+            Data::F(v) => Ok(Tensor { shape: self.shape.clone(), data: Data::F32(v.iter().map(|&x| x as f32).collect()) }),
+            Data::F32(_) => Ok(self.clone()),
+            Data::I(_) => fault("std.tensor.22", "`to_f32` is on `float` tensors, not `int` ones".into()),
+        }
+    }
+
+    /// `to_float()`: each `f32` element as a `float`, exactly (std.tensor.22).
+    pub fn to_float(&self) -> Result<Tensor, Fault> {
+        match &self.data {
+            Data::F32(v) => Ok(Tensor { shape: self.shape.clone(), data: Data::F(v.iter().map(|&x| f64::from(x)).collect()) }),
+            Data::F(_) => Ok(self.clone()),
+            Data::I(_) => fault("std.tensor.22", "`to_float` is on `f32` tensors, not `int` ones".into()),
+        }
+    }
 }
 
 /// A tensor value (std.tensor.1): a shape and its elements.
@@ -36,7 +65,7 @@ fn fault<T>(rule: &'static str, message: String) -> Result<T, Fault> {
 /// The partial sums `sum` and `dot` keep (std.tensor.5): element `i` goes
 /// to accumulator `i % LANES`; four AVX2 registers or eight NEON registers,
 /// enough independent additions to hide the adder's latency.
-const LANES: usize = 16;
+pub(crate) const LANES: usize = 16;
 
 /// The smallest `m * k * n` that `matmul` spreads over threads (64^3).
 const PAR_WORK: usize = 64 * 64 * 64;
@@ -96,6 +125,7 @@ impl Tensor {
     pub fn len(&self) -> usize {
         match &self.data {
             Data::F(v) => v.len(),
+            Data::F32(v) => v.len(),
             Data::I(v) => v.len(),
         }
     }
@@ -112,6 +142,7 @@ impl Tensor {
     pub fn sum(&self) -> Result<Sum, Fault> {
         Ok(match &self.data {
             Data::F(v) => Sum::F(sum_f64(v)),
+            Data::F32(v) => Sum::F(f64::from(crate::tensor32::sum(v))),
             Data::I(v) => Sum::I(sum_i64(v.iter().copied())?),
         })
     }
@@ -121,6 +152,7 @@ impl Tensor {
         self.same_shape(other, "dot")?;
         Ok(match (&self.data, &other.data) {
             (Data::F(a), Data::F(b)) => Sum::F(dot_f64(a, b)),
+            (Data::F32(a), Data::F32(b)) => Sum::F(f64::from(crate::tensor32::dot(a, b))),
             (Data::I(a), Data::I(b)) => {
                 let mut prods = Vec::with_capacity(a.len());
                 for (x, y) in a.iter().zip(b) {
@@ -157,6 +189,7 @@ impl Tensor {
         }
         match &self.data {
             Data::F(v) => Data::F(expand(v, &self.shape, shape)),
+            Data::F32(v) => Data::F32(expand(v, &self.shape, shape)),
             Data::I(v) => Data::I(expand(v, &self.shape, shape)),
         }
     }
@@ -166,6 +199,7 @@ impl Tensor {
     pub fn with_scalar(&self, s: Scalar, op: Op, left: bool) -> Result<Tensor, Fault> {
         let data = match (&self.data, s) {
             (Data::F(a), Scalar::F(s)) => Data::F(scalar_f64(a, s, op, left)),
+            (Data::F32(a), Scalar::F(s)) => Data::F32(crate::tensor32::with_scalar(a, s as f32, op, left)),
             (Data::I(a), Scalar::I(s)) => {
                 let mut out = Vec::with_capacity(a.len());
                 for &x in a {
@@ -212,6 +246,7 @@ impl Tensor {
         }
         Ok(match &self.data {
             Data::F(v) => Scalar::F(v[0]),
+            Data::F32(v) => Scalar::F(f64::from(v[0])),
             Data::I(v) => Scalar::I(v[0]),
         })
     }
@@ -229,6 +264,7 @@ impl Tensor {
         let (lo, hi) = (a * row, b * row);
         let data = match &self.data {
             Data::F(v) => Data::F(v[lo..hi].to_vec()),
+            Data::F32(v) => Data::F32(v[lo..hi].to_vec()),
             Data::I(v) => Data::I(v[lo..hi].to_vec()),
         };
         let mut shape = self.shape.clone();
@@ -250,23 +286,13 @@ impl Tensor {
         if kh > h || kw > w {
             return fault("std.tensor.16", format!("`conv2d`: a {kh}x{kw} kernel doesn't fit a {h}x{w} image"));
         }
-        let (Data::F(img), Data::F(k)) = (&self.data, &kernel.data) else {
-            return fault("std.tensor.16", "`conv2d` is on `float` tensors".into());
-        };
         let (oh, ow) = (h - kh + 1, w - kw + 1);
-        let mut out = vec![0.0; oh * ow];
-        for oy in 0..oh {
-            for ox in 0..ow {
-                let mut s = 0.0;
-                for ky in 0..kh {
-                    for kx in 0..kw {
-                        s += img[(oy + ky) * w + ox + kx] * k[ky * kw + kx];
-                    }
-                }
-                out[oy * ow + ox] = s;
-            }
-        }
-        Ok(Tensor { shape: vec![oh, ow], data: Data::F(out) })
+        let data = match (&self.data, &kernel.data) {
+            (Data::F(img), Data::F(k)) => Data::F(conv_t(img, k, (w, kh, kw), (oh, ow))),
+            (Data::F32(img), Data::F32(k)) => Data::F32(conv_t(img, k, (w, kh, kw), (oh, ow))),
+            _ => return fault("std.tensor.16", "`conv2d` is on `float` or `f32` tensors".into()),
+        };
+        Ok(Tensor { shape: vec![oh, ow], data })
     }
 
     /// std.tensor.17: the index of the largest (`max`) or smallest element
@@ -279,6 +305,7 @@ impl Tensor {
             return fault("std.tensor.17", format!("`argmax` of an empty axis of a tensor of shape {:?}", self.shape));
         }
         let data = match &self.data {
+            Data::F32(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
             Data::F(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
             Data::I(v) => Data::I(arg_axis(v, before, n, after, |x, best| if max { x > best } else { x < best })),
         };
@@ -290,21 +317,27 @@ impl Tensor {
         if lo.is_nan() || hi.is_nan() || lo > hi {
             return fault("std.tensor.18", format!("`clamp({lo}, {hi})`: the bounds must satisfy lo <= hi"));
         }
-        let Data::F(v) = &self.data else {
-            return fault("std.tensor.18", "`clamp` is on `float` tensors".into());
+        let data = match &self.data {
+            Data::F(v) => Data::F(v.iter().map(|&x| if x.is_nan() { x } else { x.clamp(lo, hi) }).collect()),
+            Data::F32(v) => {
+                let (lo, hi) = (lo as f32, hi as f32);
+                Data::F32(v.iter().map(|&x| if x.is_nan() { x } else { x.clamp(lo, hi) }).collect())
+            }
+            Data::I(_) => return fault("std.tensor.18", "`clamp` is on `float` tensors".into()),
         };
-        let data = v.iter().map(|&x| if x.is_nan() { x } else { x.clamp(lo, hi) }).collect();
-        Ok(Tensor { shape: self.shape.clone(), data: Data::F(data) })
+        Ok(Tensor { shape: self.shape.clone(), data })
     }
 
     /// std.tensor.19: each element rounded half away from zero to an `int`.
     /// A NaN, an infinity or a value outside `int` traps.
     pub fn round_int(&self) -> Result<Tensor, Fault> {
-        let Data::F(v) = &self.data else {
-            return fault("std.tensor.19", "`round` is on `float` tensors".into());
+        let v: Vec<f64> = match &self.data {
+            Data::F(v) => v.clone(),
+            Data::F32(v) => v.iter().map(|&x| f64::from(x)).collect(),
+            Data::I(_) => return fault("std.tensor.19", "`round` is on `float` tensors".into()),
         };
         let mut out = Vec::with_capacity(v.len());
-        for &x in v {
+        for x in v {
             let r = x.round();
             // `i64::MAX as f64` rounds up to 2^63, which is out of range.
             if !(-9.223_372_036_854_776e18..9.223_372_036_854_776e18).contains(&r) {
@@ -320,6 +353,7 @@ impl Tensor {
     pub fn neg(&self) -> Result<Tensor, Fault> {
         let data = match &self.data {
             Data::F(v) => Data::F(v.iter().map(|&x| -x).collect()),
+            Data::F32(v) => Data::F32(v.iter().map(|&x| -x).collect()),
             Data::I(v) => {
                 let mut out = Vec::with_capacity(v.len());
                 for &x in v {
@@ -335,11 +369,13 @@ impl Tensor {
     /// The scalar code below runs on every target, so the results agree
     /// across ISAs (std.tensor.5, lockstep ADR 0008).
     pub fn activate(&self, act: Activation) -> Result<Tensor, Fault> {
-        let Data::F(v) = &self.data else {
-            return fault("std.tensor.13", format!("`{}` is on `float` tensors", act.name()));
+        let data = match &self.data {
+            Data::F(v) => Data::F(v.iter().map(|&x| act.apply(x)).collect()),
+            // An `f32` activation is the `f64` one rounded once (std.tensor.21).
+            Data::F32(v) => Data::F32(v.iter().map(|&x| act.apply(f64::from(x)) as f32).collect()),
+            Data::I(_) => return fault("std.tensor.13", format!("`{}` is on `float` tensors", act.name())),
         };
-        let data = v.iter().map(|&x| act.apply(x)).collect();
-        Ok(Tensor { shape: self.shape.clone(), data: Data::F(data) })
+        Ok(Tensor { shape: self.shape.clone(), data })
     }
 
     /// std.tensor.12: the transpose of a 2-D tensor.
@@ -349,6 +385,7 @@ impl Tensor {
         };
         let data = match &self.data {
             Data::F(v) => Data::F(transpose(v, m, n)),
+            Data::F32(v) => Data::F32(transpose(v, m, n)),
             Data::I(v) => Data::I(transpose(v, m, n)),
         };
         Ok(Tensor { shape: vec![n, m], data })
@@ -385,13 +422,10 @@ impl Tensor {
         let data = match (&self.data, kind) {
             (Data::F(v), Reduce::Sum) => Data::F(sum_axis(v, before, n, after)),
             (Data::F(v), Reduce::Max) => Data::F(max_axis(v, before, n, after)),
-            (Data::F(v), Reduce::Mean) => {
-                let mut s = sum_axis(v, before, n, after);
-                for x in &mut s {
-                    *x /= n as f64;
-                }
-                Data::F(s)
-            }
+            (Data::F(v), Reduce::Mean) => Data::F(mean_axis(v, before, n, after)),
+            (Data::F32(v), Reduce::Sum) => Data::F32(sum_axis(v, before, n, after)),
+            (Data::F32(v), Reduce::Max) => Data::F32(max_axis(v, before, n, after)),
+            (Data::F32(v), Reduce::Mean) => Data::F32(mean_axis(v, before, n, after)),
             (Data::I(v), Reduce::Sum) => Data::I(sum_axis_i64(v, before, n, after)?),
             (Data::I(v), Reduce::Max) => Data::I(max_axis_i64(v, before, n, after)),
             (Data::I(_), Reduce::Mean) => unreachable!("checked: `mean` is on `float` tensors"),
@@ -416,7 +450,8 @@ impl Tensor {
             );
         }
         let data = match (&self.data, &other.data) {
-            (Data::F(a), Data::F(b)) => Data::F(matmul_f64(a, b, m, k, n)),
+            (Data::F(a), Data::F(b)) => Data::F(matmul_t(a, b, m, k, n)),
+            (Data::F32(a), Data::F32(b)) => Data::F32(matmul_t(a, b, m, k, n)),
             (Data::I(a), Data::I(b)) => Data::I(matmul_i64(a, b, m, k, n)?),
             _ => unreachable!("checked: one element type"),
         };
@@ -443,7 +478,17 @@ impl Op {
         }
     }
 
-    fn f(self, x: f64, y: f64) -> f64 {
+    pub fn f(self, x: f64, y: f64) -> f64 {
+        match self {
+            Op::Add => x + y,
+            Op::Sub => x - y,
+            Op::Mul => x * y,
+            Op::Div => x / y,
+        }
+    }
+
+    /// `f` in `f32`: one rounded IEEE operation (std.tensor.21).
+    pub fn f32(self, x: f32, y: f32) -> f32 {
         match self {
             Op::Add => x + y,
             Op::Sub => x - y,
@@ -495,7 +540,7 @@ impl Activation {
 
     /// `relu` keeps a positive element and makes the rest `0.0`, but a NaN
     /// stays NaN. `sigmoid` and `tanh` use the platform's `exp` and `tanh`.
-    fn apply(self, x: f64) -> f64 {
+    pub fn apply(self, x: f64) -> f64 {
         match self {
             Activation::Relu if x.is_nan() => x,
             Activation::Relu if x > 0.0 => x,
@@ -510,6 +555,7 @@ impl Activation {
 fn zip_data(a: &Data, b: &Data, op: Op) -> Result<Data, Fault> {
     Ok(match (a, b) {
         (Data::F(a), Data::F(b)) => Data::F(zip_f64(a, b, op)),
+        (Data::F32(a), Data::F32(b)) => Data::F32(crate::tensor32::zip(a, b, op)),
         (Data::I(a), Data::I(b)) => {
             let mut out = Vec::with_capacity(a.len());
             for (x, y) in a.iter().zip(b) {
@@ -588,6 +634,24 @@ fn arg_axis<T: Copy>(v: &[T], before: usize, n: usize, after: usize, better: imp
     out
 }
 
+/// The valid convolution of an image of width `w` with a `kh x kw` kernel,
+/// one output at a time, its products added in the kernel's row-major order.
+fn conv_t<T: Float>(img: &[T], k: &[T], (w, kh, kw): (usize, usize, usize), (oh, ow): (usize, usize)) -> Vec<T> {
+    let mut out = vec![T::zero(); oh * ow];
+    for oy in 0..oh {
+        for ox in 0..ow {
+            let mut s = T::zero();
+            for ky in 0..kh {
+                for kx in 0..kw {
+                    s += img[(oy + ky) * w + ox + kx] * k[ky * kw + kx];
+                }
+            }
+            out[oy * ow + ox] = s;
+        }
+    }
+    out
+}
+
 fn overflow() -> Fault {
     Fault { rule: "std.tensor.6", message: "integer overflow in a tensor operation".into() }
 }
@@ -603,7 +667,7 @@ fn sum_i64(xs: impl Iterator<Item = i64>) -> Result<i64, Fault> {
 /// std.tensor.5: how the partial sums combine: halve repeatedly,
 /// `acc[i] += acc[i + half]`, down to one. Every backend ends this way,
 /// then adds the tail elements in order.
-fn combine(mut acc: [f64; LANES]) -> f64 {
+fn combine<T: Float>(mut acc: [T; LANES]) -> T {
     let mut half = LANES / 2;
     while half > 0 {
         for i in 0..half {
@@ -612,6 +676,64 @@ fn combine(mut acc: [f64; LANES]) -> f64 {
         half /= 2;
     }
     acc[0]
+}
+
+/// The element types of the float kernels: `f64` (`float`) and `f32`
+/// (`Tensor[f32]`, std.tensor.21). Each kernel does the same operations on
+/// either type, in the same order; the vector paths are lockstep twins
+/// (ADR 0008). The `f32` kernels are in `tensor32.rs`.
+pub trait Float:
+    Copy + Default + PartialOrd + Send + Sync + std::ops::Add<Output = Self> + std::ops::AddAssign + std::ops::Mul<Output = Self>
+{
+    fn zero() -> Self;
+    /// `n` as an element, for `mean`.
+    fn from_count(n: usize) -> Self;
+    fn div(self, y: Self) -> Self;
+    fn sum_slice(v: &[Self]) -> Self;
+    fn max_slice(m: &mut [Self], b: &[Self]);
+    fn axpy_slice(c: &mut [Self], x: Self, b: &[Self]);
+}
+
+impl Float for f64 {
+    fn zero() -> f64 {
+        0.0
+    }
+    fn from_count(n: usize) -> f64 {
+        n as f64
+    }
+    fn div(self, y: f64) -> f64 {
+        self / y
+    }
+    fn sum_slice(v: &[f64]) -> f64 {
+        sum_f64(v)
+    }
+    fn max_slice(m: &mut [f64], b: &[f64]) {
+        max_into(m, b)
+    }
+    fn axpy_slice(c: &mut [f64], x: f64, b: &[f64]) {
+        axpy(c, x, b)
+    }
+}
+
+impl Float for f32 {
+    fn zero() -> f32 {
+        0.0
+    }
+    fn from_count(n: usize) -> f32 {
+        n as f32
+    }
+    fn div(self, y: f32) -> f32 {
+        self / y
+    }
+    fn sum_slice(v: &[f32]) -> f32 {
+        crate::tensor32::sum(v)
+    }
+    fn max_slice(m: &mut [f32], b: &[f32]) {
+        crate::tensor32::max_into(m, b)
+    }
+    fn axpy_slice(c: &mut [f32], x: f32, b: &[f32]) {
+        crate::tensor32::axpy(c, x, b)
+    }
 }
 
 pub fn sum_f64(v: &[f64]) -> f64 {
@@ -683,8 +805,10 @@ fn max_into(m: &mut [f64], b: &[f64]) {
 }
 
 /// `c += b`, elementwise. `axpy` with 1.0 is exact: `1.0 * b` is `b`.
-fn add_into(c: &mut [f64], b: &[f64]) {
-    axpy(c, 1.0, b);
+fn add_into<T: Float>(c: &mut [T], b: &[T]) {
+    for (c, b) in c.iter_mut().zip(b) {
+        *c += *b;
+    }
 }
 
 /// What `reduce` computes (std.tensor.11).
@@ -710,16 +834,24 @@ impl Reduce {
 /// they are contiguous and `sum_f64` adds them; otherwise the partial
 /// sums are rows of `after` results, added a whole row at a time, which
 /// is the same order element by element.
-fn sum_axis(v: &[f64], before: usize, n: usize, after: usize) -> Vec<f64> {
+fn mean_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Vec<T> {
+    let mut s = sum_axis(v, before, n, after);
+    for x in &mut s {
+        *x = x.div(T::from_count(n));
+    }
+    s
+}
+
+fn sum_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Vec<T> {
     if after == 1 {
-        return (0..before).map(|o| sum_f64(&v[o * n..(o + 1) * n])).collect();
+        return (0..before).map(|o| T::sum_slice(&v[o * n..(o + 1) * n])).collect();
     }
     let mut out = Vec::with_capacity(before * after);
     let body = n / LANES * LANES;
-    let mut acc = vec![0.0; LANES * after];
+    let mut acc = vec![T::zero(); LANES * after];
     for o in 0..before {
         let row = |i: usize| &v[(o * n + i) * after..(o * n + i + 1) * after];
-        acc.fill(0.0);
+        acc.fill(T::zero());
         for i in 0..body {
             let l = i % LANES;
             add_into(&mut acc[l * after..(l + 1) * after], row(i));
@@ -743,14 +875,14 @@ fn sum_axis(v: &[f64], before: usize, n: usize, after: usize) -> Vec<f64> {
 
 /// std.tensor.11: the maximum of each `n` elements, `after` apart, the
 /// first element then each later one in order.
-fn max_axis(v: &[f64], before: usize, n: usize, after: usize) -> Vec<f64> {
+fn max_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Vec<T> {
     let mut out = Vec::with_capacity(before * after);
     for o in 0..before {
         let row = |i: usize| &v[(o * n + i) * after..(o * n + i + 1) * after];
         let start = out.len();
         out.extend_from_slice(row(0));
         for i in 1..n {
-            max_into(&mut out[start..], row(i));
+            T::max_slice(&mut out[start..], row(i));
         }
     }
     out
@@ -809,11 +941,11 @@ fn axpy(c: &mut [f64], x: f64, b: &[f64]) {
 }
 
 /// Rows `rows` of `a * b` into `out` (`rows.len() * n` elements).
-fn matmul_rows(a: &[f64], b: &[f64], k: usize, n: usize, rows: std::ops::Range<usize>, out: &mut [f64]) {
+fn matmul_rows<T: Float>(a: &[T], b: &[T], k: usize, n: usize, rows: std::ops::Range<usize>, out: &mut [T]) {
     for (r, i) in rows.enumerate() {
         let c = &mut out[r * n..(r + 1) * n];
         for p in 0..k {
-            axpy(c, a[i * k + p], &b[p * n..(p + 1) * n]);
+            T::axpy_slice(c, a[i * k + p], &b[p * n..(p + 1) * n]);
         }
     }
 }
@@ -826,8 +958,8 @@ fn threads_for(m: usize, k: usize, n: usize) -> usize {
     }
 }
 
-fn matmul_f64(a: &[f64], b: &[f64], m: usize, k: usize, n: usize) -> Vec<f64> {
-    let mut out = vec![0.0; m * n];
+fn matmul_t<T: Float>(a: &[T], b: &[T], m: usize, k: usize, n: usize) -> Vec<T> {
+    let mut out = vec![T::zero(); m * n];
     let t = threads_for(m, k, n);
     if t <= 1 || n == 0 {
         matmul_rows(a, b, k, n, 0..m, &mut out);
@@ -1286,7 +1418,7 @@ mod tests {
     fn matmul_equals_the_triple_loop() {
         for (m, k, n) in [(1, 1, 1), (3, 5, 7), (64, 64, 64), (70, 65, 9)] {
             let (a, b) = (data(m * k), data(k * n));
-            let got = matmul_f64(&a, &b, m, k, n);
+            let got = matmul_t(&a, &b, m, k, n);
             for i in 0..m {
                 for j in 0..n {
                     let mut c = 0.0;

@@ -19,6 +19,8 @@ pub fn inline_module(m Module) Module
             leaves.add(f.name)
     mut out := m
     reserve := by_name.contains("rt.list_reserve")
+        and by_name.contains("rt.list_rows_min")
+        and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(m)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
@@ -36,11 +38,11 @@ pub fn inline_module(m Module) Module
                     break
         if budget < INLINE_BUDGET
             f = simplify(fold(simplify(f)))
-        out.funcs[k] = if f.name.starts_with("rt.") then merge_blocks(f) else bce(
+        out.funcs[k] = if f.name.starts_with("rt.") then merge_blocks(f) else fold_addresses(bce(
             merge_blocks(f),
             reserve,
             grow_only,
-        )
+        ))
     out
 
 ## Small, calls nothing, and nothing jumps back to its entry.
@@ -49,7 +51,7 @@ fn inlinable(f Func) bool
     for blk in f.blocks
         n += blk.insts.len()
         for i in blk.insts
-            if i.op == "call" or i.op == "prim" and (i.name == "syscall" or i.name == "clone")
+            if i.op == "call" or i.op == "icall" or i.op == "prim" and (i.name == "syscall" or i.name == "clone")
                 return false
         for t in blk.term.targets
             if t == 0
@@ -80,7 +82,7 @@ fn inline_call(f Func, b int, at int, callee Func) Func
     for k in at + 1..g.blocks[b].insts.len()
         tail.push(g.blocks[b].insts[k])
     cont := Block(
-        params: if call.dst >= 0 then[call.dst] else [],
+        params: if call.dst >= 0 then [call.dst] else [],
         insts: tail,
         term: g.blocks[b].term,
     )
@@ -99,7 +101,7 @@ fn inline_call(f Func, b int, at int, callee Func) Func
         t := blk.term
         mut nt := t
         if t.kind == "return"
-            nt = jump_to(rest, if t.value >= 0 then[t.value + nv] else [])
+            nt = jump_to(rest, if t.value >= 0 then [t.value + nv] else [])
         else
             nt.cond = if t.cond >= 0 then t.cond + nv else -1
             nt.targets = [x + nb for x in t.targets]

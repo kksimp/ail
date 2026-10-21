@@ -18,6 +18,27 @@ rule for the full text. Rewrite the code without the construct, or wait for the 
 /// `tests/explain_coverage.rs` keeps it equal to what the corpora produce.
 const FIXABLE: &str = include_str!("fixable.txt");
 
+/// The constructs outside the native subset and their owners (ADR 0746), read
+/// here, by `tools/native-coverage/coverage.py` and by the selftest in
+/// `tests/native_subset_table.rs`: one list.
+const SUBSET_CONSTRUCTS: &str = include_str!("../../docs/design/native-subset-constructs.md");
+
+/// The rule whose explanation lists those constructs (ADR 0746).
+const SUBSET_RULE: &str = "native.subset.1";
+
+/// The rows of the constructs table: (construct, wording, owner).
+pub fn subset_constructs() -> Vec<(String, String, String)> {
+    SUBSET_CONSTRUCTS
+        .lines()
+        .filter(|l| l.starts_with('|'))
+        .filter_map(|l| {
+            let cells: Vec<&str> = l.trim().trim_matches('|').split('|').map(str::trim).collect();
+            let data = cells.len() == 3 && cells[0] != "Construct" && !cells[0].starts_with("---");
+            data.then(|| (cells[0].to_string(), cells[1].to_string(), cells[2].to_string()))
+        })
+        .collect()
+}
+
 /// Does `ail fix` repair diagnostics of `rule` (in some context)?
 pub fn fixable(rule: &str) -> bool {
     FIXABLE.lines().any(|l| l == rule)
@@ -64,7 +85,7 @@ fn shorten(text: &str) -> String {
 }
 
 /// Longest example printed in the text form (explain.cover.4); `--json` has it whole.
-const EXAMPLE_LINES: usize = 6;
+const EXAMPLE_LINES: usize = 4;
 
 pub struct Explanation {
     pub rule: String,
@@ -147,7 +168,7 @@ pub fn explain(rule: &str) -> Option<Explanation> {
         }
         let (rejected, fixed) = worked_example(rule).unzip();
         // A worked example replaces the nearest example, which may belong to another rule.
-        let example = if rejected.is_some() { None } else { example };
+        let example = if rejected.is_some() { None } else { example.filter(|x| !x.trim().is_empty()).or_else(|| tagged_example(rule)) };
         return Some(Explanation {
             rule: rule.into(),
             file: format!("docs/spec/{name}"),
@@ -188,6 +209,49 @@ fn worked_example(rule: &str) -> Option<(String, Option<String>)> {
             .filter(|&k| matches!(lines[k].trim_end(), "```ail" | "```ail fragment"))
             .map(block);
         return Some((rejected, fixed));
+    }
+    None
+}
+
+/// The first block of the specification whose `rules=` tag names `rule`, when
+/// the rule's own section has no example (ADR 0670). The block is checked
+/// by the spec harness like any other. A `tool=` block shows its command first,
+/// so the explanation says how to run the example.
+fn tagged_example(rule: &str) -> Option<String> {
+    for (_, src) in SPEC {
+        let lines: Vec<&str> = src.lines().collect();
+        for (i, l) in lines.iter().enumerate() {
+            let Some(tags) = l.strip_prefix("```ail ") else { continue };
+            let words: Vec<&str> = tags.split_whitespace().collect();
+            let named = words.iter().any(|w| w.strip_prefix("rules=").is_some_and(|ids| ids.split(',').any(|id| id == rule)));
+            if !named {
+                continue;
+            }
+            let body: Vec<&str> = lines[i + 1..].iter().take_while(|l| !l.starts_with("```")).copied().collect();
+            let tool = words.iter().find_map(|w| w.strip_prefix("tool="));
+            let blank = body.iter().all(|l| l.trim().is_empty());
+            // A block with no code (`pkg=` or `fixture=`) shows its command alone.
+            if blank && tool.is_none() {
+                continue;
+            }
+            let mut out = String::new();
+            if let Some(pkg) = words.iter().find_map(|w| w.strip_prefix("pkg=")) {
+                let _ = writeln!(out, "# package {pkg}");
+            }
+            if let Some(cmd) = tool {
+                let stdin = words.iter().find_map(|w| w.strip_prefix("stdin="));
+                let _ = write!(out, "$ ail {}", cmd.replace(',', " "));
+                if let Some(name) = stdin {
+                    let _ = write!(out, " < {name}");
+                }
+                out.push('\n');
+            }
+            if !blank {
+                // Three lines at most: a tagged block is often a whole program (ail explain stays short, ADR 0670).
+                out.push_str(&body.iter().take(3).copied().collect::<Vec<_>>().join("\n"));
+            }
+            return Some(out.trim_end().to_string());
+        }
     }
     None
 }
@@ -295,11 +359,18 @@ pub fn run(rule: &str, json: bool) -> ExitCode {
 fn to_text(e: &Explanation) -> String {
     let file = e.file.strip_prefix("docs/spec/").unwrap_or(&e.file);
     let mut s = format!("{} ({file}:{})\n{}\n", e.rule, e.line, shorten(&e.text));
+    if e.rule == SUBSET_RULE {
+        // ADR 0746: the constructs the native backend does not take yet, with the owner of each.
+        s.push_str("\noutside the subset:\n");
+        for (construct, _wording, owner) in subset_constructs() {
+            let _ = writeln!(s, "  {construct}: {owner}");
+        }
+    }
     // A worked example (rejected and repaired) is printed whole: the repair
-    // may be on any line. A plain example is cut.
-    for (label, code, cut) in
-        [("example", &e.example, true), ("rejected example", &e.rejected, false), ("repaired", &e.fixed, false)]
-    {
+    // may be on any line. A plain example is cut. The subset rule's table
+    // (ADR 0746) takes the place of its example.
+    let example = if e.rule == SUBSET_RULE { None } else { e.example.clone() };
+    for (label, code, cut) in [("example", &example, true), ("rejected example", &e.rejected, false), ("repaired", &e.fixed, false)] {
         if let Some(x) = code {
             let _ = write!(s, "\n{label}:\n");
             let keep = if cut { EXAMPLE_LINES } else { usize::MAX };
@@ -360,6 +431,15 @@ mod tests {
         assert!(e.text.starts_with("Declaring a local name"), "{}", e.text);
         assert!(e.adrs.iter().any(|(n, t)| n == "0039" && !t.is_empty()));
         assert!(e.example.unwrap().contains("mut sum := 0"));
+    }
+
+    #[test]
+    fn a_rule_without_an_example_in_its_section_gets_its_tagged_block() {
+        let e = explain("api.refs.1").unwrap();
+        let example = e.example.unwrap();
+        assert!(example.starts_with("$ ail api --refs"), "{example}");
+        let diff = explain("diff.out.1").unwrap().example.unwrap();
+        assert!(diff.starts_with("# package diff_pair\n$ ail diff old/a.ail new/a.ail"), "{diff}");
     }
 
     #[test]

@@ -43,8 +43,12 @@ fn inst_text(f Func, i Inst) str
         "const" => "const {i.imm}"
         "fconst" => "fconst {i.fimm}"
         "str" => "str #{i.imm}"
-        "call" | "prim" => "{i.op} {i.name}({vals_text(f, i.args)})"
-        "ldx" | "stx" => "{i.op} {vals_text(f, i.args)} *{i.imm}"
+        "call" | "prim" | "fnaddr" => "{i.op} {i.name}({vals_text(f, i.args)})"
+        "ldx" | "stx" =>
+            if i.elem_off() != 0
+                "{i.op} {vals_text(f, i.args)} *{i.imm} +{i.elem_off()}"
+            else
+                "{i.op} {vals_text(f, i.args)} *{i.imm}"
         "load" | "store" => "{i.op} {vals_text(f, i.args)} +{i.imm}"
         _ => "{i.op} {vals_text(f, i.args)}{site}"
 

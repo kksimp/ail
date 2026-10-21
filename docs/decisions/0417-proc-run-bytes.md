@@ -38,3 +38,8 @@ time limit are those of `run`.
 
 - `run` and `run_bytes` share one implementation; `run` decodes lossily as
   before.
+
+## Rejected alternatives
+
+- Overloading `run` on the type of `input` (option B): rejected because the result type would depend on the argument type, which the checker and a reader must both track, and optional trailing arguments make the overload easy to misread.
+- Making `Output.out` a `bytes` (option C): rejected because it breaks `r.out.trim()` and every use of the output as text.

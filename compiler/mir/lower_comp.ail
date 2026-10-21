@@ -1,0 +1,108 @@
+## List comprehensions in the native subset (ADR 0532): `[e for x in xs if
+## c]` is lowered as the loops it means, pushing onto a new list, so it
+## gets the `for` loop's code (ranges, lists, `break`-free) and `push`'s
+## fast path.
+use ast
+
+fn Lower.lower_comp(
+    mut self,
+    form ast.CompKind,
+    elem ast.Expr,
+    clauses List[ast.CompFor],
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    what := match form
+        ListComp => ""
+        SetComp => "set comprehensions"
+        MapComp => "map comprehensions"
+    if what != ""
+        return unsupported(pos, what)
+    mut et := Ty.Unknown
+    if w := want
+        et = w.elem() else Ty.Unknown
+    nvars += 1
+    name := "#comp{nvars}"
+    t := Ty.List(et)
+    declare(name, t, call("rt.list_new", [konst(0, Ty.Int)], t))
+    push := ast.Expr.Method(
+        recv: ast.Expr.Name(name: name, pos: pos),
+        name: "push",
+        name_pos: pos,
+        args: [ast.Arg(label: none, mutable: false, moved: false, value: elem, param: none)],
+    )
+    mut body := [ast.Stmt.Eval(value: push)]
+    mut k := clauses.len() - 1
+    while k >= 0
+        c := clauses[k]
+        if cond := c.cond
+            br := ast.Branch(cond: ast.Cond.Test(value: cond), body: body)
+            body = [ast.Stmt.Eval(value: ast.Expr.If(
+                branches: [br],
+                els: none,
+                else_err: none,
+                pos: pos,
+            ))]
+        body = [ast.Stmt.For(
+            is_par: false,
+            var: c.var,
+            var_pos: c.var_pos,
+            mutable: false,
+            iter: c.iter,
+            body: body,
+            pos: pos,
+        )]
+        k -= 1
+    lower_stmt(body[0])
+    key := lookup(name) else return none
+    if var_ty[key].elem() == none or (var_ty[key].elem() else Ty.Unknown).is_unknown()
+        return unsupported(pos, "a comprehension whose element type isn't known")
+    Val(id: read_var(key, cur), ty: var_ty[key])
+
+## `xs[a..b]`, `xs[a..=b]`, `xs[a..]`, `xs[..b]`: a new list, after a check
+## that traps as the interpreter does (type.coll.4, ADR 0532).
+fn Lower.lower_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool, rpos ast.Pos) Val?
+    elem := l.ty.elem() else return none
+    n := op("len", [l.id], Ty.Int)
+    zero := konst(0, Ty.Int)
+    mut a := zero
+    if x := lo
+        a = lower_value(x, Ty.Int)?.id
+    mut b := n
+    mut end := n
+    if y := hi
+        b = lower_value(y, Ty.Int)?.id
+        end = b
+        if inclusive
+            # Wraps only for the largest `int`, which the check below rejects.
+            end = op("add", [b, konst(1, Ty.Int)], Ty.Int)
+    fail := new_block()
+    check(op("le", [zero, a], Ty.Bool), fail)
+    if inclusive and hi != none
+        check(op("ne", [b, konst(9223372036854775807, Ty.Int)], Ty.Bool), fail)
+    check(op("le", [a, end], Ty.Bool), fail)
+    check(op("le", [end, n], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    call("rt.note_len", [n], Ty.Unit)
+    dots := if inclusive and hi != none then "..=" else ".."
+    mut t := inst(-1, "trap", [a, b])
+    t.imm = 7
+    t.name = dots
+    t.site = site("type.coll.4", "slice", dots, rpos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
+    size := konst(if elem == Ty.Bool then 1 else 8, Ty.Int)
+    v := Val(id: call("rt.list_slice", [l.id, a, end, size], l.ty), ty: l.ty)
+    if needs_copy(elem)
+        return Val(id: copy_value(v), ty: l.ty)
+    v
+
+## Continue in a new block when `c` holds; otherwise go to `fail`.
+fn Lower.check(mut self, c int, fail int)
+    next := new_block()
+    branch(c, next, [], fail, [])
+    seal(next)
+    cur = next

@@ -13,9 +13,14 @@ struct Slot
     name str
     ty Ty
 
+## The result of `proc.run` (std.proc.1), a struct of the standard library
+## that no source declares; its key can't clash with a program's own name.
+PROC_OUTPUT := "proc.Output"
+
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
+    structs[PROC_OUTPUT] = []
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
@@ -23,12 +28,19 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
             problem(s.pos, "struct `{s.name}`: invariants aren't in the native subset yet")
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
+        elif err_msgs.contains(s.name)
+            continue
         elif s.is_error
             problem(s.pos, "error struct `{s.name}` isn't in the native subset yet")
         else
             structs["{prefix}{s.name}"] = []
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
+    structs[PROC_OUTPUT] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "out", ty: Ty.Str),
+        Slot(name: "err", ty: Ty.Str),
+    ]
     for s in prog.structs
         key := "{prefix}{s.name}"
         if not structs.contains(key)
@@ -107,6 +119,7 @@ fn Lower.assign_member(
     op ast.BinOp?,
     value ast.Expr,
     pos ast.Pos,
+    at ast.Pos,
 )
     r := lower_value(recv, none) else return
     n := struct_name(r.ty) else
@@ -116,7 +129,7 @@ fn Lower.assign_member(
     if k < 0
         problem(pos, "`{n}` has no field `{name}`")
         return
-    assign_slot(r.id, n, k, op, value, pos)
+    assign_slot(r.id, n, k, op, value, at)
 
 fn Lower.assign_slot(mut self, obj int, n str, k int, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     t := structs[n][k].ty
@@ -143,6 +156,8 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if bad.contains(key)
         fn_failed = true
         return none
+    if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
+        return proc_output_method(key, recv, args, pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv
@@ -156,6 +171,19 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
     Val(id: call(key, vs, sig.ret), ty: sig.ret)
+
+## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
+## status is zero; the standard output followed by the standard error.
+fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    r := recv else return unsupported(pos, "calling `{key}`")
+    if args.len() > 0
+        return unsupported(pos, "this call")
+    if key == "{PROC_OUTPUT}.ok"
+        status := load(r.id, 0, Ty.Int)
+        return Val(id: op("eq", [status, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    out := load(r.id, 1, Ty.Str)
+    err := load(r.id, 2, Ty.Str)
+    Val(id: call("rt.str_cat", [out, err], Ty.Str), ty: Ty.Str)
 
 ## Whether a value of type `t` read from a place must be copied to stay
 ## independent (own.val.1).
@@ -173,11 +201,13 @@ fn holds_struct(t Ty) bool
 
 ## A copy of `v`, deep through lists and structs.
 fn Lower.copy_value(mut self, v Val) int
+    if v.ty.is_coll()
+        return copy_coll(v)
     if not holds_struct(v.ty)
         return copy_list(v)
     name := "copy.{v.ty.name()}"
     if not sigs.contains(name)
-        sigs[name] = Sig(params: [v.ty], ret: v.ty)
+        sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
         copy_tys[name] = v.ty
     call(name, [v.id], v.ty)
 

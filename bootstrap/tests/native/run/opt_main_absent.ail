@@ -1,0 +1,13 @@
+fn pick(xs List[int], i int) int?
+    if i < xs.len()
+        return xs[i]
+    none
+
+fn run(xs List[int]) !int
+    pick(xs, 0)? + pick(xs, 5)?
+
+fn main() !
+    print("start")
+    print(run([3, 4]) else 0)
+    print(run([3, 4, 5, 6, 7, 8])?)
+    print(run([3])?)

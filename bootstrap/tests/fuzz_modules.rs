@@ -7,6 +7,8 @@
 //!
 //!     # fuzz-input: json|text|bytes|regex|date|http|compress
 //!     # fuzz-needs: std.bytes        (blank when built in)
+//!     # fuzz-native: yes             (optional: also build with `ail build`, fuzz.mod.6)
+//!     # fuzz-net: yes                (optional: uses sockets, so runs without --deterministic)
 //!
 //! A template whose module isn't merged yet is skipped and reported. A lane
 //! adds a module's fuzzer by adding one file, with no Rust. The properties:
@@ -31,6 +33,8 @@ mod progs;
 mod inputs;
 #[path = "fuzz/runner.rs"]
 mod runner;
+#[path = "fuzz/pure.rs"]
+mod pure;
 
 use inputs::{generate, literal, Input};
 use runner::{exec_program, Out, Runner};
@@ -64,8 +68,14 @@ fn fill(t: &Template, i: &Input) -> String {
     // `{{BYTES}}` is the hex secondary input as a list of ints.
     let bytes = |h: &str| format!("[{}]", (0..h.len() / 2).map(|k| i64::from_str_radix(&h[2 * k..2 * k + 2], 16).unwrap_or(0).to_string()).collect::<Vec<_>>().join(", "));
     let body = if t.body.contains("{{BYTES}}") { t.body.replace("{{BYTES}}", &bytes(&i.text2)) } else { t.body.clone() };
+    // `{{BLIT}}` and `{{BLIT2}}` are the primary and secondary hex inputs as `b"\xHH..."` literals.
+    let blit = |h: &str| format!("b\"{}\"", (0..h.len() / 2).map(|k| format!("\\x{}", &h[2 * k..2 * k + 2])).collect::<String>());
+    let body = if body.contains("{{BLIT") { body.replace("{{BLIT2}}", &blit(&i.text2)).replace("{{BLIT}}", &blit(&i.text)) } else { body };
     body.replace("{{TEXT2}}", &literal(&i.text2)).replace("{{TEXT}}", &literal(&i.text)).replace("{{INT}}", &i.int.to_string())
 }
+
+/// Programs `ail build` accepted and whose output was compared (fuzz.mod.6); the rest are outside the pure subset.
+static NATIVE_COMPARED: AtomicUsize = AtomicUsize::new(0);
 
 fn smoke() -> bool {
     std::env::var("AIL_FUZZ_N").is_err()
@@ -77,9 +87,17 @@ fn env_num(name: &str, default: u64) -> u64 {
 
 /// The bootstrap binary's `build` command, if lane 120 has landed it: `ail build FILE -o OUT`.
 fn native(r: &Runner, p: &Path) -> Option<PathBuf> {
-    let out = r.dir.join(if cfg!(windows) { "native.exe" } else { "native" });
+    build_for(r, p, None)
+}
+
+/// `ail build --target T`; `None` is the host's.
+fn build_for(r: &Runner, p: &Path, target: Option<&str>) -> Option<PathBuf> {
+    let out = r.dir.join(format!("native{}", target.unwrap_or("")));
     let _ = fs::remove_file(&out);
-    let args = ["build", p.to_str()?, "-o", out.to_str()?];
+    let mut args = vec!["build", p.to_str()?, "-o", out.to_str()?];
+    if let Some(t) = target {
+        args.extend(["--target", t]);
+    }
     let b = exec_program(Path::new(env!("CARGO_BIN_EXE_ail")), &args, 60);
     (b.code == Some(0) && out.exists()).then_some(out)
 }
@@ -106,7 +124,10 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
     if c.code != Some(0) {
         return Some(format!("fuzz.mod.0 template does not check: {}", c.stdout.lines().chain(c.stderr.lines()).next().unwrap_or("")));
     }
-    let walker = r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10);
+    // `# fuzz-net: yes` templates talk to a socket on this machine, which `--deterministic` and `--deny net`
+    // refuse before the program starts: they run as they are and skip the tier and repeat checks.
+    let net = src.contains("# fuzz-net: yes");
+    let walker = if net { r.exec(&["run", "--no-contracts"], &p, 20) } else { r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10) };
     if walker.code.is_none() {
         return Some("fuzz.mod.2 hang: no result in 10 s".into());
     }
@@ -124,21 +145,22 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
     }
     // `--deterministic` keeps a run on the walker; denying the clock gives the tier the same sandbox.
     let tier = r.exec(&["run", "--no-contracts", "--deny", "clock,random,proc,net"], &p, 10);
-    if !same(&walker, &tier) {
+    if !net && !same(&walker, &tier) {
         return Some(format!(
             "fuzz.mod.5 the bytecode tier changed the run\n--- walker (exit {:?})\n{}{}--- tier (exit {:?})\n{}{}",
             walker.code, walker.stdout, walker.stderr, tier.code, tier.stdout, tier.stderr
         ));
     }
-    if with_native {
+    if with_native && src.contains("# fuzz-native: yes") {
         if let Some(exe) = native(r, &p) {
+            NATIVE_COMPARED.fetch_add(1, Ordering::SeqCst);
             let n = exec_program(&exe, &[], 10);
             if n.code != walker.code || n.stdout != walker.stdout {
                 return Some(format!("fuzz.mod.6 native differs (exit {:?} against {:?})\n{}", n.code, walker.code, n.stdout));
             }
         }
     }
-    if !smoke() {
+    if !smoke() && !net {
         let again = r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10);
         if !same(&walker, &again) {
             return Some("fuzz.mod.7 run is not deterministic".into());
@@ -252,8 +274,148 @@ fn fuzz_module_inputs() {
     }
     let mut failures = failures.into_inner().unwrap();
     failures.extend(template_errors);
+    log.push(format!("native: {} programs built and compared", NATIVE_COMPARED.load(Ordering::SeqCst)));
     let log = log.join("\n");
     eprintln!("{log}");
     let _ = fs::write(out_dir.join("run.log"), format!("{log}\n"));
     assert!(failures.is_empty(), "{} module fuzz failures (fuzz.policy.1: each becomes a case)\n{}", failures.len(), failures.join("\n"));
+}
+
+/// The ARM64 Linux user-mode emulator, when installed (`apt install qemu-user`).
+fn qemu_aarch64() -> Option<&'static str> {
+    if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        return None;
+    }
+    ["qemu-aarch64-static", "qemu-aarch64"].into_iter().find(|q| std::process::Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()))
+}
+
+/// fuzz.nat.1 (ADR 0462): generated pure-subset programs run on the walker, the bytecode tier
+/// and as `ail build` output, and print the same bytes, exit the same, and trap with the same
+/// first line. Programs the backend declines are counted and skipped.
+#[test]
+fn fuzz_native_differential() {
+    native_differential("pure", pure::program, true);
+}
+
+/// The same for programs that use `str` and `char` (native.str.1). Programs the backend
+/// declines are reported, not failed, until the feature has merged everywhere.
+#[test]
+fn fuzz_native_strings() {
+    native_differential("strings", pure::strings, false);
+}
+
+#[test]
+fn fuzz_native_options() {
+    native_differential("options", pure::options, false);
+}
+
+#[test]
+fn fuzz_native_enums() {
+    native_differential("enums", pure::enums, false);
+}
+
+#[test]
+fn fuzz_native_funcs() {
+    native_differential("funcs", pure::funcs, false);
+}
+
+#[test]
+fn fuzz_native_maps() {
+    native_differential("maps", pure::maps, false);
+}
+
+fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
+    if !has_native() {
+        eprintln!("fuzz-native: `ail build` is not available; skipped");
+        return;
+    }
+    let n = if smoke() { 6 } else { (env_num("AIL_FUZZ_N", 40) as usize / 5).max(6) };
+    let first = env_num("AIL_FUZZ_SEED", 1);
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("fuzz-native-{name}"));
+    let out_dir = std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("failures"));
+    fs::create_dir_all(&out_dir).unwrap();
+    let workers = std::thread::available_parallelism().map_or(2, |p| p.get()).clamp(1, 4);
+    let next = AtomicUsize::new(0);
+    let (built, declined, unchecked, trapped) = (AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0));
+    let failures: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let qemu = qemu_aarch64();
+    let first_line = |o: &Out| o.stderr.lines().next().unwrap_or("").to_string();
+    std::thread::scope(|s| {
+        for w in 0..workers {
+            let (next, built, declined, unchecked, trapped, failures, root, out_dir, qemu) = (&next, &built, &declined, &unchecked, &trapped, &failures, &root, &out_dir, &qemu);
+            s.spawn(move || {
+                let dir = root.join(format!("w{w}"));
+                fs::create_dir_all(&dir).unwrap();
+                let r = Runner { dir };
+                loop {
+                    let k = next.fetch_add(1, Ordering::SeqCst);
+                    if k >= n {
+                        break;
+                    }
+                    let seed = first + k as u64;
+                    let src = make(seed);
+                    let p = r.write("n.ail", &src);
+                    if r.exec(&["check"], &p, 20).code != Some(0) {
+                        unchecked.fetch_add(1, Ordering::SeqCst);
+                        continue;
+                    }
+                    let Some(exe) = native(&r, &p) else {
+                        declined.fetch_add(1, Ordering::SeqCst);
+                        continue;
+                    };
+                    built.fetch_add(1, Ordering::SeqCst);
+                    let walker = r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10);
+                    let tier = r.exec(&["run", "--no-contracts", "--deny", "clock,random,proc,net"], &p, 10);
+                    let nat = exec_program(&exe, &[], 10);
+                    let arm = qemu.and_then(|q| build_for(&r, &p, Some("aarch64-linux")).map(|e| exec_program(Path::new(q), &[e.to_str().unwrap()], 20)));
+                    if walker.code == Some(1) {
+                        trapped.fetch_add(1, Ordering::SeqCst);
+                    }
+                    let bad = if !same(&walker, &tier) {
+                        Some("the bytecode tier differs from the walker".to_string())
+                    } else if nat.code != walker.code || nat.stdout != walker.stdout || first_line(&nat) != first_line(&walker) {
+                        Some(format!(
+                            "native differs: exit {:?} against {:?}\n--- native\n{}{}--- interpreter\n{}{}",
+                            nat.code, walker.code, nat.stdout, first_line(&nat), walker.stdout, first_line(&walker)
+                        ))
+                    } else {
+                        None
+                    };
+                    let bad = bad.or_else(|| {
+                        let a = arm.as_ref()?;
+                        (a.code != walker.code || a.stdout != walker.stdout || first_line(a) != first_line(&walker))
+                            .then(|| format!("aarch64 under qemu differs: exit {:?} against {:?}\n--- aarch64\n{}{}--- interpreter\n{}{}", a.code, walker.code, a.stdout, first_line(a), walker.stdout, first_line(&walker)))
+                    });
+                    if let Some(msg) = bad {
+                        let file = out_dir.join(format!("native-{name}-seed-{seed}.ail"));
+                        fs::write(&file, &src).unwrap();
+                        failures.lock().unwrap().push(format!("seed {seed}: fuzz.mod.6 {msg}\n  program: {}", file.display()));
+                    }
+                }
+            });
+        }
+    });
+    let (built, declined, unchecked) = (built.into_inner(), declined.into_inner(), unchecked.into_inner());
+    eprintln!("fuzz-native {name}: {n} programs from seed {first}: {built} built and compared ({} trapped; aarch64 under qemu: {}), {declined} declined by the backend, {unchecked} rejected by the checker", trapped.into_inner(), if qemu.is_some() { "yes" } else { "no emulator" });
+    let failures = failures.into_inner().unwrap();
+    assert!(failures.is_empty(), "{} native differential failures (fuzz.policy.1)\n{}", failures.len(), failures.join("\n"));
+    assert!(!need_half || built * 2 >= n, "only {built} of {n} generated pure programs built natively ({declined} declined, {unchecked} rejected): the generator and the subset have drifted apart");
+}
+
+/// `AIL_FUZZ_PURE=SEED cargo test --test fuzz_modules dump_pure -- --nocapture` prints a pure program.
+#[test]
+fn dump_pure() {
+    if let Ok(seed) = std::env::var("AIL_FUZZ_PURE") {
+        print!("{}", pure::program(seed.parse().unwrap()));
+    }
+}
+
+/// `AIL_FUZZ_PURE=NAME:SEED cargo test --test fuzz_modules dump_pure -- --nocapture` prints a generated program.
+#[test]
+fn dump_named() {
+    if let Ok(v) = std::env::var("AIL_FUZZ_NAMED") {
+        let (name, seed) = v.split_once(':').unwrap();
+        let seed = seed.parse().unwrap();
+        print!("{}", match name { "strings" => pure::strings(seed), "maps" => pure::maps(seed), "options" => pure::options(seed), "funcs" => pure::funcs(seed), "enums" => pure::enums(seed), _ => pure::program(seed) });
+    }
 }

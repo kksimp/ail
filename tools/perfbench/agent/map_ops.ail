@@ -1,0 +1,16 @@
+# Maps and sorting: 200,000 inserts under 20,000 keys, lookups, sorted by count then key.
+
+fn main()
+    mut counts := Map[str, int]()
+    mut seed := 5
+    for _ in 0..200000
+        seed = (seed * 3877 + 29573) % 139968
+        counts["key{seed % 20000}"] += 1
+    mut hits := 0
+    for i in 0..20000
+        if counts.contains("key{i}")
+            hits += counts["key{i}"]
+    top := counts.keys().sorted(by: |k| -counts[k]).take(5)
+    for k in top
+        print("{k} {counts[k]}")
+    print("distinct {counts.len()} hits {hits}")

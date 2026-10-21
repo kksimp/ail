@@ -68,6 +68,8 @@ struct Options
     timeout_ms int
     max_redirects int
     data bytes
+    connect_ms int
+    total_ms int
 
 ## std.net.9-11: a request the server received, and the server.
 struct Request
@@ -78,6 +80,14 @@ struct Request
     body str
     peer str
     data bytes
+    server int
+
+## std.net.25: a response whose body is read in pieces.
+struct Body
+    status int
+    headers Map[str, str]
+    all_headers Map[str, List[str]]
+    handle int
 
 struct Server
     handle int

@@ -264,8 +264,13 @@ reading was recorded as OQ-090 and the designer accepted it in
 **Status (2026-10-20, lane 154):** the CPU slice has float division and the
 activations `relu`, `sigmoid` and `tanh` ([ADR 0507](../decisions/0507-tensor-divide-and-activations.md)).
 On 1,000,000 elements, four passes take 0.25–0.32 s in AIL against 0.39–0.50 s
-in CPython (Linux x86-64). `conv2d`, `f32`, indexing, slicing, broadcasting,
-unary `-` and fusion are not done yet.
+in CPython (Linux x86-64). Also done: `conv2d`, NumPy-style broadcasting,
+`argmax`/`argmin`/`clamp`/`round`, indexing, slicing and unary `-`
+([ADRs 0521–0523](../decisions/README.md)). Operator fusion of elementwise
+chains ([ADR 0524](../decisions/0524-tensor-operator-fusion.md)) runs one
+chunked pass: on 1,000,000 elements, 20 passes of a five-operator chain take
+0.29 s fused against 0.41–0.46 s unfused (a per-element version was slower,
+1.01 s). `Tensor[f32]` is done ([ADR 0796](../decisions/0796-tensor-f32.md)): packed 4-byte elements with 8-wide AVX2 and 4-wide NEON kernels, in lockstep with scalar.
 
 1. **`std.tensor` on the CPU in the bootstrap** (about one lane-night):
    the type, the operations, lazy graph, exact CPU evaluation, tests. This
@@ -305,3 +310,11 @@ parallelise if one write moved: the reason names the write and its position.
   `json` 0.011 → 0.012 s, `sheet` 0.023 → 0.023 s, `loops` 0.686 → 0.705 s
   (three re-runs: 0.699/0.704, 0.700/0.709, 0.791/0.690, so noise),
   `examples/parallel.ail` 0.029 → 0.029 s. No measurable change.
+- **Interpreter scaling (4-core Linux VM, `taskset`):** CPU-bound `par for` and
+  `spawn` bodies run on separate threads and speed up 2.7-3.5x from 1 to 4
+  cores (collatz 2.55 s to 0.92 s; allocation-heavy 5.47 s to 1.23 s, 4.5x).
+  The workers copy their results back as `Plain` values that the main thread
+  rebuilds serially, so a body that returns a large structure gains nothing:
+  lexing a file 16 times is 0.96 s on 1 core and 1.01 s on 4 when each
+  iteration returns its token list, and 0.80 s to 0.56 s when it returns a
+  count. Native programs share memory and don't pay this cost.

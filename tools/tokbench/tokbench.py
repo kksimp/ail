@@ -8,6 +8,7 @@ Usage (normally via ./run.sh or .\run.ps1, which set everything up):
     python tokbench.py FILE [FILE ...]
     python tokbench.py --claude [FILE ...] # add current-Claude counts via the API
     python tokbench.py --json [FILE ...]
+    python tokbench.py --check-budgets     # the agent-facing pages against their budgets
 
 Offline tokenizers need `python fetch_tokenizers.py` once first.
 
@@ -25,7 +26,32 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
+DEFAULT_CLAUDE_MODEL = os.environ.get("TOKBENCH_CLAUDE_MODEL", "")  # set to the model to count with
+
+# Token budgets for the agent-facing pages, checked by --check-budgets on the
+# offline five-tokenizer mean (the mean column). Change budgets here only.
+# The language card: ADR 0276 (8,000). The quick reference: 12,518 (no ADR in
+# this tree states it; see tools/tokbench/README.md).
+BUDGETS = {
+    "docs/language-card.md": 8000,
+    "docs/quick-reference.md": 12518,
+}
+REPO = HERE.parents[1]
+
+
+def check_budgets():
+    """Print each page's offline five-tokenizer mean and budget; return 1 if any is over."""
+    counters = offline_tokenizers()
+    over = False
+    for path, budget in BUDGETS.items():
+        text = (REPO / path).read_text()
+        counts = [fn(text) for fn in counters.values()]
+        mean = round(sum(counts) / len(counts), 1)
+        ok = mean <= budget
+        over = over or not ok
+        verdict = "ok" if ok else f"OVER by {mean - budget:.1f}"
+        print(f"{path}: {mean:.1f} tokens, budget {budget} ({verdict})")
+    return 1 if over else 0
 
 
 def offline_tokenizers():
@@ -104,9 +130,14 @@ def main():
     ap.add_argument("files", nargs="*", type=pathlib.Path,
                     help="files to measure (default: every file under corpus/)")
     ap.add_argument("--claude", action="store_true", help="add current-Claude counts via the API")
-    ap.add_argument("--model", default=DEFAULT_CLAUDE_MODEL, help="Claude model for --claude")
+    ap.add_argument("--model", default=DEFAULT_CLAUDE_MODEL, help="model for --claude (default: $TOKBENCH_CLAUDE_MODEL)")
     ap.add_argument("--json", action="store_true", help="print JSON instead of a table")
+    ap.add_argument("--check-budgets", action="store_true",
+                    help="measure the language card and quick reference against their budgets; exit 1 if one is over")
     args = ap.parse_args()
+
+    if args.check_budgets:
+        sys.exit(check_budgets())
 
     if not args.files:
         # Program folders also hold the inputs their programs read (data/, configs/):
@@ -118,6 +149,8 @@ def main():
 
     counters = offline_tokenizers()
     if args.claude:
+        if not args.model:
+            sys.exit("--claude needs --model or $TOKBENCH_CLAUDE_MODEL")
         counters[f"claude:{args.model}"] = claude_tokenizer(args.model)
 
     rows = []

@@ -31,3 +31,8 @@ struct Scene
 - Dynamic-dispatch sites are listed in the performance report, and the
   optimizer may devirtualise them (whole-program optimisation, ADR 0015).
 - Which traits can be used with `any` (object safety) is to be specified.
+
+## Rejected alternatives
+
+- `dyn Trait` as the dynamic-dispatch keyword: ties with `any` on tokens; `any` reads more naturally, so AI understanding chose it.
+- A bare trait name as the dynamic type: under ADR 0078 a bare trait name means static dispatch, so the dynamic case would look the same as the static one.

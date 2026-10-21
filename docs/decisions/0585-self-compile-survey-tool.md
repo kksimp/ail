@@ -23,7 +23,8 @@ writes `problems.tsv` and `summary.md` to a directory of the caller's choice.
 Each file is lowered alone, with the native runtime as its runtime. Problems
 are grouped by file and by construct, with names in back-quotes normalised.
 
-Rejected alternatives:
+## Rejected alternatives
+
 
 - **Wait for module loading and use `ail build compiler/main.ail`.** Accurate
   once it lands, but it gives no numbers now and hides which files block.
@@ -33,7 +34,9 @@ Rejected alternatives:
 - **Count problems from the source by grep.** Misses the lowering's real
   rules, which change with every lane.
 
-Known error of the method: a call of a function defined in another module is
+## Known error of the method
+
+A call of a function defined in another module is
 reported as `calling X`, and a qualified constant (`codegen.SLOT_BASE`) is
 reported as field access. The script can't tell these from real gaps, so
 the status document marks them as cross-module. The script's output is

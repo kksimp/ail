@@ -1,0 +1,13 @@
+struct Acc
+    a int
+
+fn Acc.step(mut self, d int)
+    self.a += d
+
+fn main()
+    mut xs := [Acc(a: 1), Acc(a: 2)]
+    for i in 0..6
+        xs[i % xs.len()].step(i)
+    print("{xs[0].a} {xs[1].a}")
+    for i in 0..1
+        xs[3].step(4611686018427387904 * 3037000500)

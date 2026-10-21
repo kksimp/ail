@@ -11,6 +11,7 @@
 //! hand-written ones (ct.gen.1), and `remap` reports a problem in them at
 //! the `impl` with a note in the generated text (ct.gen.3).
 
+use std::collections::HashMap;
 use crate::ast::*;
 use crate::diag::{Diagnostic, Note, Pos};
 use crate::lexer::{Part, Tok, Token, lex};
@@ -67,6 +68,13 @@ pub fn expand(
     let mut inserts: Vec<(usize, Vec<Token>)> = Vec::new();
     let mut gen_files = Vec::new();
     let mut generated = Vec::new();
+    // Where each `impl` keyword is, found once instead of by a scan per job.
+    let mut impl_at: std::collections::HashMap<Pos, usize> = std::collections::HashMap::new();
+    for (i, t) in tokens.iter().enumerate() {
+        if t.tok == Tok::Kw("impl") {
+            impl_at.entry(t.pos).or_insert(i);
+        }
+    }
     for (job, text) in jobs.iter().zip(texts) {
         let Some(text) = text else { continue };
         let imp = &prog.impls[job.imp];
@@ -81,7 +89,7 @@ pub fn expand(
         }
         shift(&mut toks, base);
         let Some(split) = split(toks, job, imp.pos, &mut errors) else { continue };
-        let Some(header) = tokens.iter().position(|t| t.tok == Tok::Kw("impl") && t.pos == imp.pos) else { continue };
+        let Some(&header) = impl_at.get(&imp.pos) else { continue };
         let Some(newline) = tokens[header..].iter().position(|t| t.tok == Tok::Newline) else { continue };
         let mut spliced = Vec::new();
         if let (Some(first), Some(last)) = (split.0.first(), split.0.last()) {
@@ -122,6 +130,13 @@ pub fn expand(
 /// The deriving `impl`s: no methods, and a trait with a generator
 /// (ct.derive.2). A problem with one is an error in `errors`.
 fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
+    let mut docs = HashMap::new();
+    for f in &prog.files {
+        for (line, doc) in crate::docs::by_line(&f.src) {
+            docs.insert(f.base + line, doc);
+        }
+    }
+    let docs = &docs;
     let mut jobs = Vec::new();
     for (i, imp) in prog.impls.iter().enumerate() {
         if !imp.methods.is_empty() {
@@ -160,7 +175,7 @@ fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
         {
             continue;
         }
-        let Some(info) = type_info(prog, &type_name, prog.module_at(imp.pos)) else {
+        let Some(info) = type_info(prog, docs, &type_name, prog.module_at(imp.pos)) else {
             errors.push(
                 Diagnostic::new(
                     "ct.derive.2",
@@ -213,18 +228,20 @@ fn unqualify(text: &str, module: &str) -> String {
 }
 
 /// The `TypeInfo(...)` expression describing the struct or enum `name`,
-/// preferring one declared in `module` (refl.info.1, refl.info.3).
-fn type_info(prog: &Program, name: &str, module: &str) -> Option<String> {
+/// preferring one declared in `module` (refl.info.1, refl.info.3). `doc` is the
+/// field's `##` comment (ct.derive.5).
+fn type_info(prog: &Program, docs: &HashMap<usize, String>, name: &str, module: &str) -> Option<String> {
     let pick = |pos: Pos| prog.module_at(pos) == module;
     // A module's types are named `a.b.T` by now (mod.unit.2).
     let s = prog.structs.iter().filter(|s| last(&s.name) == name).min_by_key(|s| !pick(s.pos));
     let e = prog.enums.iter().filter(|e| last(&e.name) == name).min_by_key(|e| !pick(e.pos));
     let field = |f: &Field| {
         format!(
-            "FieldInfo(name: {}, type_text: {}, public: {})",
+            "FieldInfo(name: {}, type_text: {}, public: {}, doc: {})",
             quote(&f.name),
             quote(&unqualify(&crate::api::type_text(&f.ty), prog.module_at(f.pos))),
-            prog.public.contains(&f.pos.line)
+            prog.public.contains(&f.pos.line),
+            quote(docs.get(&f.pos.line).map_or("", |d| d.as_str()))
         )
     };
     let list = |items: Vec<String>, ty: &str| {
@@ -308,6 +325,8 @@ fn generate(
     // generator is reported when the whole program is checked.
     let mut texts = vec![None; jobs.len()];
     let mut runnable = Vec::new();
+    // One effect inference serves every generator (a full walk of the program).
+    let mut effects = None;
     for (k, job) in jobs.iter().enumerate() {
         let at = prog.impls[job.imp].pos;
         let start = (wrappers + k) * FILE_LINES;
@@ -327,7 +346,8 @@ fn generate(
         };
         // ct.derive.3: a generator is compile-time-safe.
         let wrapper = format!("{} -> ", names[k]);
-        let impure: Vec<String> = crate::check::effects::impure_chains(&gen_prog, &resolved, f)
+        let fx = effects.get_or_insert_with(|| crate::check::effects::Effects::infer(&gen_prog, &resolved));
+        let impure: Vec<String> = crate::check::effects::impure_chains(fx, f)
             .into_iter()
             .map(|c| c.replace(&wrapper, ""))
             .collect();

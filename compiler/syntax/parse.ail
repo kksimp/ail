@@ -161,6 +161,7 @@ pub fn parse(tokens List[Token]) Parsed
         public: public,
         files: [],
         grants: [],
+        unsafe_allowed: none,
         generated: [],
     )
     Parsed(program: program, diags: p.diags)
@@ -266,20 +267,23 @@ fn Parser.peek(self) Tok
     tokens[i].tok
 
 fn Parser.peek_at(self, n int) Tok
-    tokens[(i + n).min(tokens.len() - 1)].tok
+    k := i + n
+    if k < tokens.len() then tokens[k].tok else tokens[tokens.len() - 1].tok
 
 fn Parser.tag_at(self, n int) str
     tok_tag(peek_at(n))
 
 ## The symbol `n` tokens ahead, or "".
 fn Parser.sym_at(self, n int) str
-    t := peek_at(n)
-    if tok_tag(t) == "sym" then tok_text(t) else ""
+    match peek_at(n)
+        Sym(s) => s
+        Ident(_) | Kw(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 ## The keyword `n` tokens ahead, or "".
 fn Parser.kw_at(self, n int) str
-    t := peek_at(n)
-    if tok_tag(t) == "kw" then tok_text(t) else ""
+    match peek_at(n)
+        Kw(w) => w
+        Ident(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 fn Parser.here(self) ast.Pos
     tokens[i].pos
@@ -357,7 +361,7 @@ fn Parser.line_ends_at(self, k int) bool
 # ---- Diagnostics ----
 
 fn Parser.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false))
+    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
@@ -366,7 +370,7 @@ fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str)
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: "", fix: ""))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
     diag("lex.num.3", pos)
@@ -1039,6 +1043,9 @@ fn Parser.statement_inner(mut self) ast.Stmt?
     if tag == "id" and (text == "let" or text == "var" or text == "const") and tag_at(1) == "id"
         diag("expr.bind.1", pos)
         return none
+    if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
+        diag("lex.kw.1", pos)
+        return none
     if tag == "kw" and text == "while"
         bump()
         cond := range()?
@@ -1073,9 +1080,6 @@ fn Parser.statement_inner(mut self) ast.Stmt?
             return ast.Stmt.Return(value: none, pos: pos)
         value := expression()?
         return ast.Stmt.Return(value: value, pos: pos)
-    if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
-        diag("lex.kw.1", pos)
-        return none
     if tag == "kw" and (text == "elif" or text == "else")
         diag("expr.if.1", pos)
         return none
@@ -1296,7 +1300,7 @@ fn Parser.comparison_expr(mut self) ast.Expr?
         if op == ast.BinOp.Lt and upper_name(lhs) and at_sym(">")
             error_fix("gram.foreign.1", pos, "type arguments are written in `[]`, not `<>`")
             return none
-        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true))
+        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true, help: "", fix: ""))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
 
@@ -1463,6 +1467,17 @@ fn Parser.call_args(mut self) List[ast.Arg]?
             param = take_name("a parameter name after `|`", "expr.key.1")?
             expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
         value := expression()?
+        # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
+        if at_sym("|")
+            diag("gram.foreign.1", here())
+            return none
+        # `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
+        if at_sym("@")
+            diag("gram.foreign.1", here())
+            return none
+        if at_sym("=")
+            diag("expr.call.1", here())
+            return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
             break
@@ -1523,6 +1538,10 @@ fn Parser.primary(mut self) ast.Expr?
                 # expr.if.8: a parenthesised one-line `if` is an operand.
                 inner := if at_kw("if") then if_expr()? else range()?
                 inner2 := else_expr(inner)?
+                # AIL has no tuples: `(a, b)` is a list.
+                if at_sym(",")
+                    diag("gram.foreign.1", here())
+                    return none
                 expect_sym(")", "`)`", "gram.syntax.1")?
                 return inner2
             if s == "["
@@ -1609,7 +1628,14 @@ fn Parser.interpolation(mut self, parts List[Part], pos ast.Pos) ast.Expr?
                     and tok_tag(code[0].tok) == "sym"
                     and tok_text(code[0].tok) == "\{"
                     # lex.str.2: `{{` isn't an escape; `\{` is.
-                    diags.push(Diag(rule: "lex.str.2", pos: code[0].pos, msg: "", fixed: true))
+                    diags.push(Diag(
+                        rule: "lex.str.2",
+                        pos: code[0].pos,
+                        msg: "",
+                        fixed: true,
+                        help: "",
+                        fix: "",
+                    ))
                     ok = false
                 elif e := sub_expression(code)
                     out.push(ast.InterpPart.Hole(e))
@@ -1669,7 +1695,14 @@ fn Parser.if_expr(mut self) ast.Expr?
         elif at_kw("else")
             else_pos := bump().pos
             if at_kw("if")
-                diags.push(Diag(rule: "expr.if.1", pos: else_pos, msg: "", fixed: true))
+                diags.push(Diag(
+                    rule: "expr.if.1",
+                    pos: else_pos,
+                    msg: "",
+                    fixed: true,
+                    help: "",
+                    fix: "",
+                ))
                 return none
             # `else err` binds the error (expr.if.6).
             if n := ident()
@@ -1739,7 +1772,12 @@ fn Parser.arm(mut self) ast.Arm?
             error_fix("expr.match.1", here(), "arms are written `pattern => result`")
             i += 1
         else
-            unexpected("`=>` after the pattern", "expr.match.1")
+            match pat
+                Variant(q, nm, _, cpos) if nm == "case" and q == none =>
+                    # AIL has no `case`: an arm is `pattern => result`.
+                    diag("expr.match.1", cpos)
+                _ =>
+                    unexpected("`=>` after the pattern", "expr.match.1")
             return none
     if at_newline()
         body := block("`=>`", "expr.match.1")?
@@ -1783,6 +1821,10 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             return none
     i += 1
     hpos := here()
+    # expr.match.12: a range needs both ends (`lo..=hi`).
+    if at_sym("=>") or at_sym(".") or at_kw("if")
+        diag("expr.match.12", hpos)
+        return none
     hi := plain_pattern()?
     match hi
         Literal(value, _) =>

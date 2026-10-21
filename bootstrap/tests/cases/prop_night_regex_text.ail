@@ -1,0 +1,16 @@
+## Property tests for regex.group_all (std.regex.24, lane 211) and for
+## `str.len` against `str.byte_len` (type.str.12). Run with `ail test`.
+use std.regex
+
+@test fn group_all_matches_find_all(text str)
+    re := regex.compile("code=(\\d+)") else return
+    found := regex.find_all(re, text)
+    digits := regex.group_all(re, text, 1)
+    assert_eq(digits.len(), found.len())
+    for i in 0..found.len()
+        assert_eq(digits[i], found[i].text.split("=")[1])
+
+@test fn byte_len_and_len_differ_by_the_utf8_extra_bytes(s str)
+    u := "é{s}"
+    assert_eq(u.len(), s.len() + 1)
+    assert_eq(u.byte_len(), s.byte_len() + 2)

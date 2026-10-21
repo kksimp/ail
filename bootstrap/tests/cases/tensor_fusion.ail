@@ -1,0 +1,13 @@
+# std.tensor.20: chains of elementwise tensor operations, fused, give the unfused results.
+fn main()
+    a := tensor.from([1.0, -2.0, 3.0, 0.5], [2, 2])
+    b := tensor.from([4.0, 8.0, -1.0, 2.0], [2, 2])
+    print((a * b + a).relu())
+    print(-(a - b) / b)
+    print((a * 2.0 - b).relu().clamp(0.0, 3.0))
+    print((a + 1.0) * (b - 0.5))
+    x := 2.0
+    print((a * x - 1.0).relu().sum())
+    row := tensor.from([10.0, 20.0])
+    print(a * row + row)
+    print(1.0 - (a * a).relu())

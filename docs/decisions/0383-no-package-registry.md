@@ -51,3 +51,9 @@ manifest, the lockfile or the tooling assumes a registry.
   (a `name` separate from the URL, a solver) is not needed.
 - Discovery for agents is a documentation matter: a curated list of
   packages in the docs, not a service.
+
+## Rejected alternatives
+
+- A central package registry with semver ranges: rejected for now. It needs a service to host and operate, accounts and a naming policy, and the designer deferred it. A registry may be revisited later.
+- A name-to-git index without a solver: rejected because it still needs a service to run, for a token saving confined to the manifest.
+- Deciding later: rejected because it would leave the tooling questions of ADR 0357 open.

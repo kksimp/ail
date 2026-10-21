@@ -40,3 +40,8 @@ trusted: `from_cstr` scans to its NUL and `free` calls `free`.
 - Blocks that are not freed leak, as in C; a scoped helper (`defer`-based) can
   wrap `cstr` in a later change.
 - Typed allocation (`alloc`) joins this module in ADR 0435.
+
+## Rejected alternatives
+
+- A Rust allocation per string (option B): rejected because C code cannot free it and AIL cannot free C's blocks.
+- Passing `str` straight to `extern` functions (option C): rejected because it hides a copy and the NUL requirement behind a signature that claims `*u8`. The brief asks for explicit helpers.

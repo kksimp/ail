@@ -103,3 +103,11 @@ single JSON line is shown whole; its `--text` form splits.
   passed through).
 - Windows: the wrapper uses `std::env::current_exe` and pipes, which work
   there as on Linux and macOS (ADR 0004).
+
+## Rejected alternatives
+
+- Each command trims its own output (option A): rejected because about fifteen commands would change in shared files, and every new command would have to remember to do it.
+- Line limits in the style of `head -n` (option C): rejected because lines are a poor proxy for tokens (one JSON diagnostic is about 150 tokens), cut records in half, and keep the first output rather than the most severe.
+- Ranking by rule or by file: rejected because no reason makes one rule matter more than another.
+- Dropping warnings entirely: rejected because an agent asked for a budget, not a filter.
+- An opaque cursor token for `--from`: rejected because deterministic output makes a plain record index stable, so a cursor adds tokens for nothing.

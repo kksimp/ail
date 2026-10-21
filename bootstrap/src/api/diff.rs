@@ -17,7 +17,7 @@ use crate::modules;
 pub const USAGE: &str = "usage: ail diff OLD NEW [--json] [--no-tests]   (two files, or two package directories)\n       ail diff --rev REV PATH [--json] [--no-tests]   (PATH as of git revision REV against now)\n";
 
 /// Item keys compared by `diff.out.2`; the rest repeat the signature.
-const KEYS: [&str; 10] =
+pub(super) const KEYS: [&str; 10] =
     ["signature", "pub", "effects", "fails_with", "requires", "ensures", "inherits", "default", "doc", "body"];
 
 /// One declaration: its id, kind and the compared properties as text.
@@ -26,6 +26,8 @@ struct Decl {
     line: usize,
     kind: &'static str,
     props: Vec<(&'static str, String)>,
+    /// A function's body lines, for the hunk of diff.out.7.
+    body: Vec<String>,
 }
 
 /// A diagnostic, compared by rule, file and message (lines move).
@@ -158,8 +160,9 @@ fn side(path: &str, run_tests: bool) -> Result<Side, String> {
         }
         for d in decls.iter_mut().filter(|d| item_is_fn(d)) {
             let next = starts.iter().copied().find(|l| *l > d.line);
-            let body = body_hash(&prog, d.line, next);
-            d.props.push(("body", body));
+            let (hash, body) = body_hash(&prog, d.line, next);
+            d.props.push(("body", hash));
+            d.body = body;
         }
         decls
     });
@@ -173,8 +176,8 @@ fn item_is_fn(d: &Decl) -> bool {
 
 /// A short hash of a declaration's source lines after `line`, up to `next`
 /// (or the end of its file), with trailing blank lines dropped.
-fn body_hash(prog: &crate::ast::Program, line: usize, next: Option<usize>) -> String {
-    let Some(file) = prog.file_at(crate::diag::Pos { line, col: 1 }) else { return String::new() };
+fn body_hash(prog: &crate::ast::Program, line: usize, next: Option<usize>) -> (String, Vec<String>) {
+    let Some(file) = prog.file_at(crate::diag::Pos { line, col: 1 }) else { return (String::new(), Vec::new()) };
     let first = line - file.base;
     let lines: Vec<&str> = file.src.lines().collect();
     let last = next.filter(|n| *n > file.base).map_or(lines.len(), |n| (n - file.base - 1).min(lines.len()));
@@ -188,7 +191,42 @@ fn body_hash(prog: &crate::ast::Program, line: usize, next: Option<usize>) -> St
     for b in text.join("\n").bytes() {
         h = (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3);
     }
-    format!("{:08x}", h >> 32)
+    let body = text.iter().map(|l| l.strip_prefix("    ").unwrap_or(l).to_string()).collect();
+    (format!("{:08x}", h >> 32), body)
+}
+
+/// The most lines a body hunk shows (diff.out.7).
+const HUNK_LINES: usize = 12;
+
+/// The lines removed (`-`) and added (`+`) between two bodies, by a longest
+/// common subsequence, at most `HUNK_LINES` of them and then a count of the rest.
+fn hunk(old: &[String], new: &[String]) -> Vec<String> {
+    let (n, m) = (old.len(), new.len());
+    let mut lcs = vec![vec![0u32; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            lcs[i][j] = if old[i] == new[j] { lcs[i + 1][j + 1] + 1 } else { lcs[i + 1][j].max(lcs[i][j + 1]) };
+        }
+    }
+    let (mut i, mut j, mut out) = (0, 0, Vec::new());
+    while i < n || j < m {
+        if i < n && j < m && old[i] == new[j] {
+            i += 1;
+            j += 1;
+        } else if i < n && (j == m || lcs[i + 1][j] >= lcs[i][j + 1]) {
+            out.push(format!("-{}", old[i]));
+            i += 1;
+        } else {
+            out.push(format!("+{}", new[j]));
+            j += 1;
+        }
+    }
+    if out.len() > HUNK_LINES {
+        let more = out.len() - HUNK_LINES;
+        out.truncate(HUNK_LINES);
+        out.push(format!("... {more} more changed line{}", if more == 1 { "" } else { "s" }));
+    }
+    out
 }
 
 fn flatten(prog: &crate::ast::Program, item: Item, out: &mut Vec<Decl>) {
@@ -203,7 +241,7 @@ fn flatten(prog: &crate::ast::Program, item: Item, out: &mut Vec<Decl>) {
     if let Some(d) = item.doc {
         props.push(("doc", d));
     }
-    out.push(Decl { id: item.id, line: item.pos.line, kind: item.kind, props });
+    out.push(Decl { id: item.id, line: item.pos.line, kind: item.kind, props, body: Vec::new() });
     for (_, members) in item.members {
         for m in members {
             flatten(prog, m, out);
@@ -273,7 +311,8 @@ fn render(old: &str, new: &str, a: &Side, b: &Side, json: bool) -> (String, usiz
                         let diffs = prop_changes(o, d);
                         if !diffs.is_empty() {
                             changed += 1;
-                            lines.push(changed_line(d, &diffs, json));
+                            let lines_changed = if diffs.iter().any(|(k, _, _)| *k == "body") { hunk(&o.body, &d.body) } else { Vec::new() };
+                            lines.push(changed_line(d, &diffs, &lines_changed, json));
                         }
                     }
                 }
@@ -433,20 +472,22 @@ fn decl_line(op: &str, d: &Decl, json: bool) -> String {
     }
 }
 
-fn changed_line(d: &Decl, diffs: &[(&str, &str, &str)], json: bool) -> String {
+fn changed_line(d: &Decl, diffs: &[(&str, &str, &str)], hunk: &[String], json: bool) -> String {
     if json {
         let keys: Vec<String> = diffs
             .iter()
             .map(|(k, o, n)| format!("\"{k}\":{{\"old\":{},\"new\":{}}}", json_str(o), json_str(n)))
             .collect();
+        let lines: Vec<String> = hunk.iter().map(|l| json_str(l)).collect();
+        let lines = if lines.is_empty() { String::new() } else { format!(",\"lines\":[{}]", lines.join(",")) };
         return format!(
-            "{{\"change\":\"api\",\"op\":\"changed\",\"id\":{},\"kind\":\"{}\",\"keys\":{{{}}}}}",
+            "{{\"change\":\"api\",\"op\":\"changed\",\"id\":{},\"kind\":\"{}\",\"keys\":{{{}}}{lines}}}",
             json_str(&d.id),
             d.kind,
             keys.join(",")
         );
     }
-    // A body or doc comment is long; say that it changed, not how.
+    // A doc comment is long; say that it changed. A body shows its changed lines (diff.out.7).
     let flags: Vec<&str> = diffs.iter().filter(|(k, _, _)| matches!(*k, "doc" | "body")).map(|(k, _, _)| *k).collect();
     let mut s = format!("~ {}", d.id);
     if !flags.is_empty() {
@@ -454,6 +495,9 @@ fn changed_line(d: &Decl, diffs: &[(&str, &str, &str)], json: bool) -> String {
     }
     for (k, o, n) in diffs.iter().filter(|(k, _, _)| !matches!(*k, "doc" | "body")) {
         s.push_str(&format!("\n    {k}: {} -> {}", shown(o), shown(n)));
+    }
+    for l in hunk {
+        s.push_str(&format!("\n    {l}"));
     }
     s
 }
@@ -463,9 +507,9 @@ fn shown(v: &str) -> &str {
 }
 
 /// A temporary copy of a path as git has it at a revision, removed on drop.
-struct Checkout {
+pub(super) struct Checkout {
     dir: std::path::PathBuf,
-    path: String,
+    pub(super) path: String,
 }
 
 impl Drop for Checkout {
@@ -476,7 +520,7 @@ impl Drop for Checkout {
 
 /// Extract `path` (a package directory, or a file with the directory that
 /// holds its modules) at `rev` into a temporary directory (diff.out.5).
-fn at_revision(rev: &str, path: &str) -> Result<Checkout, String> {
+pub(super) fn at_revision(rev: &str, path: &str) -> Result<Checkout, String> {
     let p = std::path::Path::new(path);
     let (dir, name) = if p.is_dir() {
         (p, None)

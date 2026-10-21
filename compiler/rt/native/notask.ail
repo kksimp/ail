@@ -6,3 +6,25 @@
 
 fn on_trap(kind int, a int, b int, head str, op str, tail str)
     return
+
+## No second thread exists, so there is nothing to park or scan.
+fn blocked_enter() int
+    0
+
+fn blocked_leave(s int)
+    return
+
+fn gc_park()
+    return
+
+fn gc_stop_world()
+    return
+
+fn gc_start_world()
+    return
+
+fn gc_scan_threads()
+    return
+
+fn stack_end_self() int
+    load64(global(STACK_TOP))

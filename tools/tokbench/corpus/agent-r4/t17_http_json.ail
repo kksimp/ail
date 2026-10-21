@@ -1,0 +1,3 @@
+fn main() !
+    r := net.get("https://example.com/api")?
+    print(parse_json(r.body)?.str("name") else "")

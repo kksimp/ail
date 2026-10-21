@@ -1,0 +1,35 @@
+## std.log (spec std.log.1-2, ADR 0628): leveled messages on standard error.
+## `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) says
+## which messages show; each line is `LEVEL message`.
+
+fn rank(level str) int
+    if level == "debug"
+        return 0
+    if level == "info"
+        return 1
+    if level == "warn"
+        return 2
+    if level == "error"
+        return 3
+    4
+
+fn emit(level str, message str)
+    wanted := env.get("LOG_LEVEL") else "info"
+    if rank(level) >= rank(wanted.to_lower())
+        io.eprint("{level.to_upper()} {message}")
+
+## Shows `message` as `DEBUG message` when `LOG_LEVEL` is `debug` (std.log.2).
+pub fn debug(message str)
+    emit("debug", message)
+
+## Shows `message` as `INFO message` (std.log.2).
+pub fn info(message str)
+    emit("info", message)
+
+## Shows `message` as `WARN message` (std.log.2).
+pub fn warn(message str)
+    emit("warn", message)
+
+## Shows `message` as `ERROR message` (std.log.2); `error` is a keyword.
+pub fn err(message str)
+    emit("error", message)

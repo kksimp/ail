@@ -63,3 +63,9 @@ speed (criterion 4) is the cost, and it falls to the native backend.
   `inflate_zlib`, which stays as its differential test.
 - A pixel view needs a surface, glyph rasterisation and image decoders in
   the window layer ([design note](../design/pdf-viewer.md#what-the-window-layer-needs-for-pixels)).
+
+## Rejected alternatives
+
+- OCR on rendered pages (option B): rejected because it needs a renderer and a recognition model, is lossy and slow, and solves only scans. Option A detects and reports scans instead.
+- Binding Poppler, MuPDF or pdf.js (option C): rejected because it violates ADR 0009 and ADR 0010. MuPDF is AGPL, which is incompatible with ADR 0510.
+- Waiting for `bytes` and `std.compress` (option D): rejected because it would block the parser, fonts, search and viewer, which do not depend on how bytes are read.

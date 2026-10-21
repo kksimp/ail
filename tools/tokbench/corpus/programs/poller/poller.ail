@@ -12,9 +12,9 @@ fn main() !
     doc := parse_json(load(url)?)?
     mut down := 0
     for svc in doc.arr("services") else []
-        name := svc.str("name") else "?"
+        name := svc.text("name", "?")
         ms := svc.num("ms") else 0.0
-        up := svc.bool("up") else false
+        up := svc.flag("up", false)
         if up
             print("{name:<8}up    {ms}ms")
         else

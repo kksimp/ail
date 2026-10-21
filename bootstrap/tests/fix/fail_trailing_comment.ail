@@ -1,0 +1,11 @@
+error struct Bad
+    why str
+
+fn load(n int) int ! Bad
+    if n == 0
+        return Bad(why: "zero")
+    n
+
+fn main()
+    x := load(1)  # c
+    print(x)

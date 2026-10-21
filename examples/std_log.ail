@@ -1,0 +1,13 @@
+## std.log: leveled messages on standard error. Messages below LOG_LEVEL are
+## dropped; the default level is info. Only standard output is checked here.
+##   ./ail run examples/std_log.ail
+##   LOG_LEVEL=warn ./ail run examples/std_log.ail
+
+use std.log
+
+fn main()
+    log.debug("parsing 3 records")
+    log.info("loaded config")
+    log.warn("cache is cold")
+    log.err("disk full, 2 records not written")
+    print("done")

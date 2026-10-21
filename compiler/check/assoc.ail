@@ -1,0 +1,144 @@
+## Associated functions in traits (ADR 0377), as `check/assoc.rs`:
+## `fn zero() Self` in a trait, called as `T.zero()` on a bounded type
+## parameter (trait.assoc.2) or as `Type.zero()` on an implementing type
+## (trait.assoc.4).
+use ast
+
+## The trait function `n` without `self` that trait `tr` declares.
+fn Checker.assoc_fn(self, tr int, n str) int?
+    m := trait_method(tr, n)?
+    if prog.fns[m].receiver == none then m else none
+
+## `T.n(args)` where `T` is a type parameter in scope (trait.assoc.2);
+## `none` when `tn` isn't one.
+fn Checker.param_assoc_call(mut self, tn str, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty?
+    mut p := -1
+    for s in scope
+        if s.name == tn
+            p = s.id
+    if p < 0
+        return none
+    mut bound_traits := List[int]()
+    for b in tparams[p].bounds
+        bound_traits.push(b)
+        bound_traits.extend(supers[b])
+    for tr in bound_traits
+        if f := assoc_fn(tr, n)
+            binds := [Bind(param: trait_self[tr], ty: Ty.Param(p))]
+            assoc_calls[pos_key(at)] = tr
+            return check_call("{tn}.{n}", sigs[f], binds, args, none, at, expect)
+    args_only(args)
+    mut offer := -1
+    for t in 0..prog.traits.len()
+        if offer < 0 and assoc_fn(t, n) != none
+            offer = t
+    bounds := tparams[p].bounds
+    mut hint := ""
+    if offer >= 0
+        hint = "add the bound `{prog.traits[offer].name}` to `{tn}`, whose trait declares `fn {n}`"
+    elif bounds.len() == 0
+        hint = "add a bound whose trait declares `fn {n}(...)`: `[{tn} Trait]`"
+    else
+        names := ["`{prog.traits[b].name}`" for b in bounds].join(", ")
+        hint = "`{tn}` is bound by {names}; add a bound whose trait declares `fn {n}(...)` without `self`"
+    err_help("trait.assoc.2", at, "`{tn}` has no associated function `{n}`", hint)
+    # Type the call as the trait that declares it would, so its `else e`
+    # binds and reports nothing more.
+    if offer < 0
+        return Ty.Unknown
+    f := assoc_fn(offer, n) else return Ty.Unknown
+    subst(sigs[f].ret, [Bind(param: trait_self[offer], ty: Ty.Unknown)])
+
+## `Type.n(args)` naming an associated function of a trait that `Type`
+## implements (trait.assoc.4); `none` when there is none.
+fn Checker.impl_assoc_call(
+    mut self,
+    d Def,
+    explicit List[Bind]?,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty?
+    con := match d
+        DStruct(s) => "s{s}"
+        DEnum(e) => "e{e}"
+    mut found := -1
+    mut tr := 0
+    mut f := 0
+    for t in 0..prog.traits.len()
+        if found < 0
+            if decl := assoc_fn(t, n)
+                if i := impl_of.get(impl_key(t, con))
+                    found = i
+                    tr = t
+                    f = decl
+                    for m in prog.impls[i].methods
+                        if prog.fns[m].name == n
+                            f = m
+    if found < 0
+        return none
+    info := impl_info[found]
+    mut sig := sigs[f]
+    if in_trait(prog.fns[f].within, tr)
+        # The trait's default body, with `Self` the implementing type.
+        b := [Bind(param: trait_self[tr], ty: info.target)]
+        sig.params = [SigParam(mutable: q.mutable, ty: subst(q.ty, b)) for q in sig.params]
+        sig.ret = subst(sig.ret, b)
+        sig.generics = info.params
+        sig.owner = info.params.len()
+    # Explicit `Type[int].n()` arguments name the type's parameters, which
+    # the `impl` block's parameters stand for in order.
+    mut binds := List[Bind]()
+    if e := explicit
+        binds = zip_binds(info.params, [x.ty for x in e])
+    targets[pos_key(at)] = f
+    check_call("{def_name(d)}.{n}", sig, binds, args, none, at, expect)
+
+## `List[T].n(args)` on a builtin type that implements a trait with an
+## associated function (trait.assoc.4, ADR 0748): `List[U].from_json(j)`.
+## `none` when no trait offers `n` for `ty`.
+fn Checker.builtin_assoc_call(
+    mut self,
+    ty Ty,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty?
+    con := con_of(ty)?
+    mut found := -1
+    mut tr := 0
+    mut f := 0
+    for t in 0..prog.traits.len()
+        if found < 0
+            if decl := assoc_fn(t, n)
+                if i := impl_of.get(impl_key(t, con))
+                    found = i
+                    tr = t
+                    f = decl
+                    for m in prog.impls[i].methods
+                        if prog.fns[m].name == n
+                            f = m
+    if found < 0
+        return none
+    info := impl_info[found]
+    mut binds := List[Bind]()
+    bind(info.target, ty, info.params, mut binds)
+    mut sig := sigs[f]
+    if in_trait(prog.fns[f].within, tr)
+        b := [Bind(param: trait_self[tr], ty: info.target)]
+        sig.params = [SigParam(mutable: q.mutable, ty: subst(q.ty, b)) for q in sig.params]
+        sig.ret = subst(sig.ret, b)
+        sig.generics = info.params
+        sig.owner = info.params.len()
+    targets[pos_key(at)] = f
+    t := check_call("{show(ty)}.{n}", sig, binds, args, none, at, expect)
+    assoc_calls[pos_key(at)] = tr
+    t
+
+fn in_trait(w ast.Within, tr int) bool
+    match w
+        InTrait(t) => t == tr
+        TopLevel => false
+        InImpl => false

@@ -1,0 +1,296 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native heap (native-abi.md §5, ADRs 0562-0563): one reserved region
+## of 16 KiB pages, size classes with free lists for small objects, page
+## spans for large ones. Every object has an 8-byte header word at pointer
+## minus 8: bits 0-7 kind, bit 8 mark, bits 16-63 payload bytes.
+## The collector is in `gc.ail`.
+
+# Global slots 10 and 11: the heap state block, and the stack top.
+HEAP := 10
+STACK_TOP := 11
+
+# Words of the state block (`HEAP`'s target).
+H_BASE := 0
+H_LIMIT := 1
+H_TOP := 2
+H_ALLOCD := 3
+H_THRESH := 4
+H_LIVE := 5
+H_PAGES := 6
+H_HINT := 7
+H_MARKS := 8
+H_MARKCAP := 9
+H_MARKN := 10
+H_NOFIT := 13
+H_REGS := 14
+H_HEADS := 32
+H_BUMP := 72
+H_BEND := 112
+
+PAGE := 16384
+PAGE_SHIFT := 14
+MAX_SMALL := 8192
+MIN_THRESH := 8388608
+
+# Page table tags (low byte): 0 free, 1 small page (class in the rest),
+# 2 first page of a large span (page count), 3 later page of one (the
+# first page's index).
+KIND_STR := 1
+KIND_LIST := 2
+KIND_LDATA := 3
+KIND_BYTES := 9
+KIND_ATOMIC := 11
+
+## Reserve `n` bytes of address space, read-write and not counted against
+## memory until touched. A negative result is the error.
+fn heap_reserve(n int) int
+    t := target()
+    k := if t == 0 then 9 else if t == 1 then 222 else 197
+    flags := if t == 2 then 4162 else 16418
+    syscall(k, 0, n, 3, flags, -1, 0)
+
+fn heap_state() int
+    load64(global(HEAP))
+
+fn hs(k int) int
+    load64(load64(global(HEAP)) + 8 * k)
+
+fn hset(k int, v int)
+    store64(load64(global(HEAP)) + 8 * k, v)
+
+## Set up the heap; `top` is the stack address above every frame.
+fn heap_init(top int)
+    m := sys_mmap(4096)
+    if m < 0
+        fail(1, 0, 0)
+    store64(global(HEAP), m)
+    store64(global(STACK_TOP), top)
+    mut size := 17179869184
+    mut base := heap_reserve(size + PAGE)
+    while base < 0 and size > 67108864
+        size = size / 2
+        base = heap_reserve(size + PAGE)
+    if base < 0
+        fail(1, 0, 0)
+    aligned := (base + PAGE - 1) / PAGE * PAGE
+    hset(H_BASE, aligned)
+    hset(H_TOP, aligned)
+    hset(H_LIMIT, aligned + size)
+    pages := heap_reserve(size / PAGE * 8)
+    if pages < 0
+        fail(1, 0, 0)
+    hset(H_PAGES, pages)
+    mut cap := 536870912
+    mut marks := heap_reserve(cap)
+    while marks < 0 and cap > 1048576
+        cap = cap / 2
+        marks = heap_reserve(cap)
+    if marks < 0
+        fail(1, 0, 0)
+    hset(H_MARKS, marks)
+    hset(H_MARKCAP, cap / 8)
+    hset(H_THRESH, MIN_THRESH)
+
+# ---- size classes ----
+#
+# Block sizes (header included): 16 to 256 in steps of 16 (classes 1-16),
+# then four per doubling up to 8192 (classes 17-36).
+
+fn class_size(idx int) int
+    if idx <= 16
+        return idx * 16
+    g := (idx - 17) / 4
+    j := idx - 17 - 4 * g
+    one := 256
+    base := one.shl(g)
+    base + (j + 1) * (base / 4)
+
+fn class_of(need int) int
+    if need <= 256
+        return need / 16
+    mut base := 256
+    mut g := 0
+    while need > base * 2
+        base = base * 2
+        g += 1
+    step := base / 4
+    17 + 4 * g + (need - base + step - 1) / step - 1
+
+fn zero_words(p int, n int)
+    mut i := 0
+    while i + 32 <= n
+        store64(p + i, 0)
+        store64(p + i + 8, 0)
+        store64(p + i + 16, 0)
+        store64(p + i + 24, 0)
+        i += 32
+    while i < n
+        store64(p + i, 0)
+        i += 8
+
+## `np` zeroed, contiguous, unused pages: the lowest run that fits, else
+## new pages at the top (which the kernel has zeroed).
+fn heap_pages(np int, zero int) int
+    heap_pages_try(np, 0, zero)
+
+## `tried` is 1 after a collection made room for a memory cap; `zero` 0 lets
+## reused pages keep their old contents.
+fn heap_pages_try(np int, tried int, zero int) int
+    base := hs(H_BASE)
+    top := hs(H_TOP)
+    pt := hs(H_PAGES)
+    top_i := (top - base) / PAGE
+    hint := hs(H_HINT)
+    nofit := hs(H_NOFIT)
+    mut i := hint
+    mut run := 0
+    mut start := 0
+    if nofit == 0 or np < nofit
+        # Whole spans are stepped over by their first page's count.
+        mut lowest := -1
+        while i < top_i and run < np
+            t := load64(pt + 8 * i)
+            if t == 0
+                if run == 0
+                    start = i
+                if lowest < 0
+                    lowest = i
+                run += 1
+                i += 1
+            else
+                run = 0
+                i += if t.bit_and(255) == 2 then t.shr(8) else 1
+        # Every page below the lowest free one seen is in use.
+        hset(H_HINT, if lowest >= 0 then lowest else top_i)
+        if run < np
+            hset(H_NOFIT, np)
+    else
+        # No free run this long exists below the top until the next sweep.
+        i = top_i
+        while i > 0 and run < np and load64(pt + 8 * (i - 1)) == 0
+            i -= 1
+            run += 1
+    if run == np
+        p := base + start * PAGE
+        if zero != 0
+            zero_words(p, np * PAGE)
+        return p
+    # A free run at the end continues into new pages.
+    mut first := top_i
+    if run > 0
+        first = top_i - run
+    p := base + first * PAGE
+    end := p + np * PAGE
+    if end > hs(H_LIMIT) or end < p
+        fail(1, 0, 0)
+    if limits_over(end - hs(H_BASE))
+        if tried == 0
+            gc_collect()
+            return heap_pages_try(np, 1, zero)
+        limits_trap()
+    limits_pages()
+    if run > 0 and zero != 0
+        zero_words(p, run * PAGE)
+    hset(H_TOP, end)
+    p
+
+## Count `bytes` against the collection trigger and collect when due.
+fn heap_account(bytes int)
+    mut a := hs(H_ALLOCD) + bytes
+    if a > hs(H_THRESH)
+        gc_collect()
+        a = hs(H_ALLOCD) + bytes
+    hset(H_ALLOCD, a)
+
+fn alloc_large(n int, kind int, zero int) int
+    np := (n + 8 + PAGE - 1) / PAGE
+    heap_account(np * PAGE)
+    p := heap_pages(np, zero)
+    first := (p - hs(H_BASE)) / PAGE
+    pt := hs(H_PAGES)
+    store64(pt + 8 * first, 2 + np * 256)
+    for k in 1..np
+        store64(pt + 8 * (first + k), 3 + first * 256)
+    store64(p, kind + n * 65536)
+    p + 8
+
+## A zeroed object of `n` payload bytes and kind `kind`, 8-byte aligned
+## (native-abi.md §5). Collects first when enough has been allocated.
+fn alloc(n int, kind int) int
+    alloc_z(n, kind, 1)
+
+## The same with contents unspecified, for blocks the caller fills before
+## reading (list element blocks, strings, buffers): it skips the zeroing.
+## Stale words in it are read as possible pointers by the collector, which
+## can only keep a dead block alive a little longer, and a list's scan stops
+## at its length (ADR 0564).
+fn alloc_raw(n int, kind int) int
+    alloc_z(n, kind, 0)
+
+## The common case, a small object served from a free list or the page being
+## filled while no collection or time check is due, is straight-line code
+## with no calls; everything else is `alloc_slow`.
+fn alloc_z(n int, kind int, zero int) int
+    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
+        idx := (n + 23).shr(4)
+        csz := idx.shl(4)
+        m := load64(global(HEAP))
+        a := load64(m + 8 * H_ALLOCD) + csz
+        if a <= load64(m + 8 * H_THRESH)
+            b := load64(m + 8 * (H_HEADS + idx))
+            if b != 0
+                store64(m + 8 * (H_HEADS + idx), load64(b + 8))
+                store64(m + 8 * H_ALLOCD, a)
+                if zero != 0
+                    zero_words(b + 8, csz - 8)
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(m + 8 * (H_BUMP + idx))
+            if c != 0 and c + csz <= load64(m + 8 * (H_BEND + idx))
+                store64(m + 8 * (H_BUMP + idx), c + csz)
+                store64(m + 8 * H_ALLOCD, a)
+                store64(c, kind + n.shl(16))
+                return c + 8
+    alloc_slow(n, kind, zero)
+
+## `alloc_z` for everything the fast path does not take: large objects, a
+## class with no block ready, a collection or time check due.
+fn alloc_slow(n int, kind int, zero int) int
+    # With threads, the heap's state is guarded by one lock; the fast path
+    # above is only for a single thread (ADR 0599).
+    if load64(global(MULTI)) == 0
+        return alloc_locked(n, kind, zero)
+    lock(global(ALLOC_LOCK))
+    atomic_store(global(ALLOC_OWNER), thread_id())
+    p := alloc_locked(n, kind, zero)
+    atomic_store(global(ALLOC_OWNER), 0)
+    unlock(global(ALLOC_LOCK))
+    p
+
+fn alloc_locked(n int, kind int, zero int) int
+    tick := load64(global(LIM_TICK))
+    if tick != 0
+        limits_tick(tick)
+    need := (n + 23) / 16 * 16
+    if need > MAX_SMALL
+        return alloc_large(n, kind, zero)
+    idx := class_of(need)
+    csz := class_size(idx)
+    heap_account(csz)
+    mut b := hs(H_HEADS + idx)
+    if b != 0
+        hset(H_HEADS + idx, load64(b + 8))
+        if zero != 0
+            zero_words(b + 8, csz - 8)
+    else
+        b = hs(H_BUMP + idx)
+        if b == 0 or b + csz > hs(H_BEND + idx)
+            b = heap_pages(1, 1)
+            first := (b - hs(H_BASE)) / PAGE
+            store64(hs(H_PAGES) + 8 * first, 1 + idx * 256)
+            hset(H_BEND + idx, b + PAGE / csz * csz)
+        hset(H_BUMP + idx, b + csz)
+    store64(b, kind + n * 65536)
+    b + 8

@@ -124,7 +124,12 @@ fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
         _ => unsupported(pos, "`spawn` of anything but a function call")
 
 ## `t.wait()?`: the task's result, or the program ends with the trap.
-fn Lower.lower_try(mut self, inner ast.Expr, pos ast.Pos) Val?
+pub fn is_wait_call(e ast.Expr) bool
+    match e
+        Method(_, name, _, margs) => name == "wait" and margs.len() == 0
+        _ => false
+
+fn Lower.lower_wait(mut self, inner ast.Expr, pos ast.Pos) Val?
     match inner
         Method(recv, name, npos, margs) =>
             if name == "wait" and margs.len() == 0
@@ -133,13 +138,15 @@ fn Lower.lower_try(mut self, inner ast.Expr, pos ast.Pos) Val?
                         key := lookup(tname) else return unsupported(pos, "`?`")
                         res := tk.rets.get(key) else return unsupported(pos, "`?`")
                         h := read_var(key, cur)
+                        at1 := trace_line(npos)
+                        at2 := trace_line(pos)
                         if res.is_unit()
-                            call("rt.task_wait", [h], Ty.Int)
+                            call("rt.task_wait", [h, at1, at2], Ty.Int)
                             return Val(id: -1, ty: Ty.Unit)
                         if res.is_float()
-                            w := call("rt.task_wait", [h], Ty.Int)
+                            w := call("rt.task_wait", [h, at1, at2], Ty.Int)
                             return Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
-                        return Val(id: call("rt.task_wait", [h], res), ty: res)
+                        return Val(id: call("rt.task_wait", [h, at1, at2], res), ty: res)
                     _ => return unsupported(pos, "`wait` on anything but a task variable")
             unsupported(pos, "`?`")
         _ => unsupported(pos, "`?`")
@@ -666,7 +673,7 @@ fn Lower.lower_atomic_new(mut self, targs List[ast.TypeRef]?, args List[ast.Arg]
         return unsupported(pos, "`Atomic` of `{v.ty.name()}`")
     if not want.is_unknown() and want != v.ty
         return unsupported(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
-    cell := call("rt.alloc", [konst(8, Ty.Int)], Ty.Int)
+    cell := call("rt.alloc", [konst(8, Ty.Int), konst(11, Ty.Int)], Ty.Int)
     prim_op("atomic_store", [cell, v.id], Ty.Unit)
     Val(id: cell, ty: Ty.Atomic(v.ty))
 
