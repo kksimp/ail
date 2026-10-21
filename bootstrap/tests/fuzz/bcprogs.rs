@@ -309,7 +309,7 @@ pub fn wide(seed: u64, pure: bool) -> String {
     wide_for(seed, pure, false)
 }
 
-/// `nat`: keep to what `ail build` can be asked for next (no function values; maps off).
+/// `nat`: keep to what `ail build` can be asked for next (no function values).
 pub fn wide_for(seed: u64, pure: bool, nat: bool) -> String {
     let mut r = Rng::new(seed ^ 0x5EED_1DE5);
     let wild = if r.chance(1, 4) { 6 } else { 0 };
@@ -345,8 +345,8 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
                     uid += 1;
                     vec![format!("mut c{uid} := o"), format!("c{uid}.inner.grow({i})"), format!("acc += c{uid}.inner.n - o.inner.n")]
                 }
-                11 if !pure && !nat => vec![format!("m[\"k{{{i} % 3}}\"] = acc % 100"), format!("acc += m.len()")],
-                12 if !pure && !nat => vec![if wild > 0 && r.chance(1, 2) { format!("acc += m[\"k{{{i}}}\"]") } else { format!("acc += m.get(\"k{{{i} % 3}}\") else 7") }],
+                11 if !pure => vec![format!("m[\"k{{{i} % 3}}\"] = acc % 100"), format!("acc += m.len()")],
+                12 if !pure => vec![if wild > 0 && r.chance(1, 2) { format!("acc += m[\"k{{{i}}}\"]") } else { format!("acc += m.get(\"k{{{i} % 3}}\") else 7") }],
                 13 if !pure => vec![format!("s = \"{{s}}{{acc % 10}}\""), format!("acc += s.len()")],
                 14 if !pure => vec![format!("acc += s.slice(0, {}).len()", if wild > 0 && r.chance(1, 2) { "100".to_string() } else { "s.len() / 2".to_string() })],
                 15 if !pure => vec![format!("print(\"{{o.inner.tag}} {{acc}} {{o.inner.n}}\")")],
@@ -363,12 +363,12 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
     }
     out.push_str(&body);
     if nat {
-        out = out.replace("    mut f := dbl\n", "").replace("    mut m := Map[str, int]()\n", "");
+        out = out.replace("    mut f := dbl\n", "");
         out = out.replace("fn apply(f fn(int) int, x int) int\n    f(f(x))\n\n", "");
     }
     out.push_str("    print(acc)\n    print(o.inner.n)\n    print(o.xs.len())\n    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n    print(s)\n");
-    if nat {
-        out = out.replace("    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n", "");
+    if nat && !pure {
+        out = out.replace("    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n", "    print(m.len())\n");
     }
     if pure {
         out = out.replace("    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n    print(s)\n", "");
