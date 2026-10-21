@@ -8,13 +8,18 @@ use ast
 ## (std.use.1); the lowering knows their functions by name.
 STD_MODULES := ["env", "fs", "io", "net", "path", "proc", "random", "regex", "tensor", "time", "ui"]
 
+## The standard modules written in AIL (std.ui.19), compiled like a user's
+## own: their source is in `bootstrap/src/std`, and each is a module of the
+## program under its dotted path (`std.csv`).
+STD_AIL := ["std.args", "std.csv", "std.log", "std.net.http", "std.net.jar", "std.time.date"]
+
 ## The imports of a file: the name each makes available, to the module's
-## import path. Standard modules are left out.
+## import path. The standard modules the runtime implements are left out.
 pub fn aliases_of(prog ast.Program) Map[str, str]
     mut out := Map[str, str]()
     for u in prog.uses
         parts := [i.name for i in u.path]
-        if parts.len() == 0 or parts[0] == "std"
+        if parts.len() == 0 or (parts[0] == "std" and not STD_AIL.contains(parts.join(".")))
             continue
         name := if a := u.alias then a.name else parts[parts.len() - 1]
         out[name] = parts.join(".")
