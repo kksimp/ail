@@ -81,5 +81,10 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 | 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
 | 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
 
-The other chapters are unchanged: 382 uncovered rules before lane 223's first
-PR, 339 after chapters 01-03 (07-21, std and the rest still to do).
+Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow the same way:
+`own.*` and `err.*` rules are cited by checked blocks, with `norun` for trapping and tool
+output and `skip=bootstrap` for `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`
+and `own.excl.3`, `own.ref.2`, `own.ref.7` (features the gate can't check yet).
+
+Uncovered rules outside the batch chapters: 382 before lane 223, 275 now (chapters 04-06 are
+the batch's and 09-16, 19-21 remain).

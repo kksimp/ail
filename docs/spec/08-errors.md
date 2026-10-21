@@ -563,3 +563,293 @@ on a result), `handle` (`else` on a result), `return` (of an error value, or
 of a result), or `absent` (`?` or `else` on an optional, which has no error).
 `how` is `default`, `leave` or `block`. A trap isn't a failure path
 (`err.trap.1`). *(ADR 0286)*
+
+## Runnable examples for the rules above
+
+Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
+report the named rule. Blocks that trap, or that describe tool output the
+fence can't check, are `norun`; blocks the bootstrap doesn't implement yet are
+`skip=bootstrap`.
+
+```ail rules=err.model.1
+error struct Bad
+    why str
+
+fn f(n int) int ! Bad       # a failure is a returned value, not an exception
+    if n == 0
+        return Bad(why: "zero")
+    n
+
+fn main()
+    print(f(1) else 0)      # 1
+```
+
+```ail norun rules=err.model.2,err.trap.1,err.trap.3
+fn main()
+    xs := [1]
+    print(xs[5])            # a trap: the program stops with a diagnostic, not a value
+```
+
+```ail rules=err.decl.1
+error struct Bad
+    why str                 # an error struct is an ordinary struct
+
+fn main()
+    b := Bad(why: "x")
+    print(b.why)            # x
+```
+
+```ail skip=bootstrap rules=err.decl.2
+error struct Bad
+    why str
+
+fn f(n int) int ! int       # `int` is not an error type; only error types may be errors
+    n
+```
+
+```ail rules=err.msg.1
+error enum Bad
+    Empty "no items"        # every variant has a message: the display text
+    Full "too many"
+
+fn main()
+    print(Bad.Empty)        # no items
+```
+
+```ail error=err.msg.2 rules=err.msg.2
+error enum Bad
+    Empty "no items"
+    Full                    # some variants have a message and some don't
+```
+
+```ail rules=err.type.1
+error struct Bad
+    why str
+
+fn parse(s str) int ! Bad   # a value that is an int or a Bad
+    if s == ""
+        return Bad(why: "empty")
+    s.len()
+
+fn main()
+    print(parse("abc") else 0)  # 3
+```
+
+```ail rules=err.type.2,err.type.6
+fn half(n int) int?
+    if n % 2 == 0
+        return n / 2
+    none
+
+fn f(n int) !int        # the error set is inferred from the body: here, none that is named
+    x := half(n)?
+    x
+
+fn main()
+    print(f(4) else 0)      # 2
+    print(f(3) else -1)     # -1
+```
+
+```ail rules=err.type.3
+error struct Bad
+    why str
+
+fn parse(s str) int ! Bad   # a public function states its error type explicitly
+    if s == ""
+        return Bad(why: "empty")
+    s.len()
+
+fn main()
+    print(parse("ab") else 0)   # 2
+```
+
+```ail skip=bootstrap rules=err.type.4
+error struct A
+    why str
+
+error struct B
+    why str
+
+fn f(n int) int ! A | B
+    if n == 0
+        return A(why: "zero")
+    n
+
+fn main()
+    f(1) else err          # matching the error set must cover every member
+```
+
+```ail rules=err.type.5
+error struct A
+    why str
+
+error struct B
+    why str
+
+fn f(n int) int ! A | B     # the members of an explicit union, in any order
+    if n == 0
+        return A(why: "zero")
+    if n < 0
+        return B(why: "neg")
+    n
+
+fn main()
+    print(f(3) else 0)      # 3
+```
+
+```ail rules=err.type.7
+error struct E
+    why str
+
+fn f(n int) ! E            # no success value: it can only succeed or fail
+    if n == 0
+        return E(why: "zero")
+
+fn main()
+    f(1) else err
+        print("failed")
+    print("done")           # done
+```
+
+```ail rules=err.prop.4
+error struct Bad
+    why str
+
+fn half(n int) int?
+    if n % 2 == 0
+        return n / 2
+    none
+
+fn f(n int) int
+    x := half(n) else 9     # the else of `x := e else d` takes the absent case
+    x + 1
+
+fn main()
+    print(f(4))             # 3
+    print(f(3))             # 10
+```
+
+```ail rules=err.prop.5
+fn half(n int) int?
+    if n % 2 == 0
+        return n / 2
+    none
+
+fn f(n int) !int           # an inferred error set: `?` on an optional is allowed here
+    x := half(n)?
+    x
+
+fn main()
+    print(f(3) else -1)    # -1
+```
+
+```ail rules=err.else.1
+error struct Bad
+    why str
+
+fn parse(s str) int ! Bad
+    if s == ""
+        return Bad(why: "empty")
+    s.len()
+
+fn main()
+    x := parse("abc") else 0   # x is the success value, or 0 if it failed
+    print(x)                   # 3
+```
+
+```ail rules=err.else.2
+error struct Bad
+    why str
+
+fn parse(s str) int ! Bad
+    if s == ""
+        return Bad(why: "empty")
+    s.len()
+
+fn main()
+    x := parse("") else err
+        print("bad {err.why}") # the block leaves the function, so x is defined after it
+        return
+    print(x)
+```
+
+```ail rules=err.else.5
+error struct E
+    why str
+
+fn f(n int) ! E
+    if n == 0
+        return E(why: "zero")
+
+fn main()
+    f(0) else err
+        print("e {err.why}")   # e zero
+    print("done")              # done
+```
+
+```ail rules=err.else.6
+error struct Bad
+    why str
+
+fn parse(s str) int ! Bad
+    if s == ""
+        return Bad(why: "empty")
+    s.len()
+
+fn main()
+    print(parse("") else -1)   # -1: the default has the success type
+```
+
+```ail rules=err.ctx.1,err.ctx.2
+error struct Bad
+    why str
+
+fn parse(s str) int ! Bad
+    if s == ""
+        return Bad(why: "empty")
+    s.len()
+
+fn load(s str) int ! Bad
+    n := parse(s)? "while loading {s}"   # the context message is attached to the error
+    n
+
+fn main()
+    x := load("") else err
+        print(err.why)      # empty
+        return
+    print(x)
+```
+
+```ail skip=bootstrap rules=err.ctx.3
+fn main()
+    # An error report shows the error, every attached context message and the return trace.
+    print("report")
+```
+
+```ail rules=err.text.1
+error enum Kind
+    Empty
+    Full(n int)
+
+fn main()
+    k := Kind.Full(n: 2)
+    print("{k}")           # Kind.Full(n: 2): the type name, then the variant
+```
+
+```ail skip=bootstrap rules=err.trap.2
+fn main()
+    # A task that spawned or awaits a trapped task can observe the trapped outcome.
+    print("trapped")
+```
+
+```ail skip=bootstrap rules=err.fix.1
+fn main()
+    # A diagnostic about error handling carries a machine-applicable fix where one is mechanical.
+    print("fix")
+```
+
+```ail norun rules=err.api.1,err.paths.1
+fn main()
+    # `ail api` lists each failing function's fails_with; `ail check --errors` prints the paths.
+    print("tools")
+```
