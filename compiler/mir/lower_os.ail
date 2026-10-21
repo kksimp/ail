@@ -146,4 +146,3 @@ fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     s := fmt_text(v, spec, pos)?
     call("rt.out_str", [s.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
-
