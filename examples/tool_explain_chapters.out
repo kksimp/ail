@@ -8,7 +8,7 @@ edit 17 0
 eff 15 0
 err 40 5
 explain 6 0
-expr 64 16
+expr 64 17
 ffi 12 0
 fix 9 0
 gen 14 0
@@ -33,3 +33,4 @@ unsafe 16 0
 all 935 51
 unsafe 21 0
 all 936 50
+all 935 52

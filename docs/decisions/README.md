@@ -624,3 +624,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0821](0821-unsafe-driver-manifest-and-flag.md) | `unsafe driver` in `ail.pkg`, and `--unsafe driver` for a program without one *(delegated)* | Accepted | 2026-10-21 |
 | [0822](0822-std-hw-volatile-and-hw-effect.md) | `std.hw`: `at`, volatile methods and fences, and the effect `hw` *(delegated)* | Accepted | 2026-10-21 |
 | [0819](0819-native-std-regex-in-ail.md) | Native `std.regex` is an AIL module compiled with the program *(delegated)* | Accepted | 2026-10-21 |
+| [0811](0811-fix-for-over-recv.md) | `ail fix` turns `for v in ch.recv()` into `for v in ch` *(delegated)* | Accepted | 2026-10-21 |
