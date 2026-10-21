@@ -1,0 +1,5 @@
+fn main()
+    a := b"abc"
+    n := a.len()
+    print(a[n - 1].to_int())
+    print(a[n].to_int())

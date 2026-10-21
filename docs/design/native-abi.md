@@ -63,6 +63,9 @@ shortens a list must be added to the optimiser's decision first.
 +16  u8[] data     UTF-8, `bytes` long, no terminator
 ```
 
+A `bytes` object has the same layout with `chars` equal to `bytes`
+(ADR 0702).
+
 A literal is a string object in read-only data. `chars` is computed once when
 the object is built, which makes `s.len()` free and byte indexing impossible.
 

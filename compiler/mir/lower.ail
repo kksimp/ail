@@ -421,6 +421,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "float" => Ty.Float
                 "bool" => Ty.Bool
                 "str" => Ty.Str
+                "bytes" => Ty.Bytes
                 "List" =>
                     if args.len() != 1
                         return none
@@ -1116,7 +1117,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             Val(id: konst(n, Ty.Int), ty: Ty.Int)
         Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
-        Bytes(_, pos) => unsupported(pos, "`bytes` literals")
+        Bytes(hex, pos) => lower_bytes_lit(hex, pos)
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
         Name(name, pos) =>
             key := lookup(name) else
@@ -1162,6 +1163,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
         Index(recv, index, pos) =>
             l := lower_value(recv, none)?
+            if l.ty == Ty.Bytes
+                return bytes_index(l, index, pos)
             elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
             if is_range(index)
                 return match index
@@ -1290,6 +1293,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return a
     if is_enum(a.ty)
         return enum_compare(o, a, b, pos)
+    if a.ty == Ty.Bytes
+        return bytes_compare(o, a, b, pos)
     if holds_record(a.ty)
         return value_compare(o, a, b, pos)
     cmp := is_comparison(o)
@@ -1607,6 +1612,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 arg_want = Ty.Str
         vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
     match r.ty
+        Bytes | Byte => return bytes_method(r, name, vs.len(), npos)
         Int =>
             if name == "to_float" and vs.len() == 0
                 return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
