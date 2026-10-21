@@ -488,3 +488,18 @@ fn map_live(m int, i int) int
     if load64(e) >= 0
         return e
     0
+
+## `xs.counts()` (type.coll.18): how often each element of a list of `int`,
+## `str` or `char` occurs, keys in order of first appearance.
+fn map_counts(kind int, xs List[int]) int
+    m := map_new(kind, 0, 0)
+    q := list_addr(xs)
+    data := load64(q + 16)
+    for i in 0..load64(q)
+        k := load64(data + 8 * i)
+        e := map_find(m, k)
+        if e != 0
+            store64(e + 16, load64(e + 16) + 1)
+        else
+            map_append(m, map_hash(kind, k), k, 1)
+    m

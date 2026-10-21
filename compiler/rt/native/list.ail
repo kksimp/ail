@@ -274,3 +274,50 @@ fn list_sum_tree(data int, lo int, hi int) float
 fn list_sum_float(xs List[int]) float
     p := list_addr(xs)
     list_sum_tree(load64(p + 16), 0, load64(p))
+
+## `xs.chunks(n)` (`win` 0) and `xs.windows(n)` (`win` 1), type.coll.17: a
+## list of fresh lists of `n` elements (`size` bytes each); the last chunk may
+## be shorter. `n < 1` traps. `head` and `tail` are the trap's first line and
+## excerpt.
+fn list_runs(xs List[int], n int, win int, size int, head str, tail str) List[int]
+    if n < 1
+        flush()
+        out_str(head)
+        out_str(if win == 1 then "`windows`" else "`chunks`")
+        out_str(" needs a size of at least 1, not ")
+        out_int(n)
+        out_str("\n")
+        out_str(tail)
+        flush_to(2)
+        sys_exit(1)
+    len := load64(list_addr(xs))
+    out := list_new(0)
+    mut i := 0
+    if win == 1
+        while i + n <= len
+            list_push(out, list_addr(list_slice(xs, i, i + n, size)))
+            i += 1
+    else
+        while i < len
+            hi := if i + n < len then i + n else len
+            list_push(out, list_addr(list_slice(xs, i, hi, size)))
+            i += n
+    out
+
+## `xs.flatten()` (type.coll.19): the elements of the inner lists, in order.
+## `size` is the inner element's byte size.
+fn list_flatten(xs List[int], size int) List[int]
+    p := list_addr(xs)
+    data := load64(p + 16)
+    mut total := 0
+    for i in 0..load64(p)
+        total += load64(load64(data + 8 * i))
+    q := list_addr(list_alloc(total, size))
+    mut at := 0
+    for i in 0..load64(p)
+        inner := load64(data + 8 * i)
+        n := load64(inner)
+        copy_bytes(load64(q + 16) + size * at, load64(inner + 16), size * n)
+        at += n
+    store64(q, total)
+    list_at(q)
