@@ -559,6 +559,25 @@ fn time_now_ms() int
     syscall(os_pick(228, 113, 0), 0, ts, 0, 0, 0, 0)
     load64(ts) * 1000 + load64(ts + 8) / 1000000
 
+## A monotonic clock for deadlines (a runtime entry point; `std.time` has no
+## monotonic call): nanoseconds from `CLOCK_MONOTONIC` on Linux, unaffected by
+## changes of the wall clock. NOT monotonic on macOS: there it reads the wall
+## clock (`gettimeofday`), which can step backwards or jump, so a deadline built
+## on it can fire early or late. Follow-up for the Mac gate: read
+## `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` or `mach_continuous_time` through
+## libSystem (ADR 0534, `import_call`) and drop this branch.
+fn time_mono_ns() int
+    ts := os_scratch(OS_TMP)
+    if target() == 2
+        syscall(116, ts, 0, 0, 0, 0, 0)
+        return load64(ts) * 1000000000 + load64(ts + 8).bit_and(4294967295) * 1000
+    syscall(os_pick(228, 113, 0), 1, ts, 0, 0, 0, 0)
+    load64(ts) * 1000000000 + load64(ts + 8)
+
+## The same clock in milliseconds.
+fn time_mono_ms() int
+    time_mono_ns() / 1000000
+
 ## `time.sleep_ms(ms)` (std.time.2). A negative `ms` is reported without the
 ## source excerpt (the check's trap site comes with lane 120's next slice).
 fn time_sleep_ms(ms int)
@@ -858,6 +877,182 @@ fn fs_list_dir(path str, at str) List[int]
     if not os_ok()
         os_error(path, os_kind(), at)
     xs
+
+## Whether `path` is a directory itself, not a link to one: opening it with
+## `O_DIRECTORY | O_NOFOLLOW` works. A directory that can't be opened for
+## permission still counts, so listing it reports the failure (std.fs.8).
+fn os_is_real_dir(path str) bool
+    p := os_cstr(OS_PATH_B, path)
+    if p == 0
+        return false
+    flags := os_pick(196608, 49152, 1048832)
+    fd := os_open(p, flags, 0)
+    if fd < 0
+        return fd == -13
+    os_close(fd)
+    true
+
+## `fs.walk(dir)` (std.fs.8): every file below `dir`, joined with `dir` and
+## sorted by bytes; a directory that can't be read fails with its own path.
+fn fs_walk(dir str, at str) List[int]
+    mut out := List[int]()
+    mut dirs := [dir]
+    mut next := 0
+    while next < dirs.len()
+        d := dirs[next]
+        next += 1
+        names := os_fs_list_dir(d)
+        if not os_ok()
+            os_error(d, os_kind(), at)
+            return List[int]()
+        for i in 0..names.len()
+            full := path_join(d, str_at(names[i]))
+            if os_is_real_dir(full)
+                dirs.push(full)
+            else
+                out.push(str_addr(full))
+    os_succeed()
+    q := list_addr(out)
+    os_sort_names(load64(q + 16), load64(q))
+    out
+
+# ---- fs.copy (std.fs.12) ----
+
+## The permission bits of the open file `fd` (`st_mode` of `fstat`).
+fn os_fd_mode(fd int) int
+    buf := os_scratch(OS_TMP)
+    r := syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
+    if r < 0
+        return 438
+    # macOS syscall 189 fills the legacy `struct stat`: st_dev is 4 bytes and
+    # st_ino 4 more, so st_mode sits at offset 8 (offset 4 is inode bits).
+    off := os_pick(24, 16, 8)
+    (load8(buf + off) + load8(buf + off + 1) * 256).bit_and(4095)
+
+## Copy the file `src` over `dst`, keeping its permissions. Fails with the
+## errno's kind in `os_kind()`.
+fn os_copy_file(src str, dst str)
+    a := os_cstr(OS_PATH_A, src)
+    b := os_cstr(OS_PATH_B, dst)
+    if a == 0 or b == 0
+        os_fail_kind(K_NOT_FOUND)
+        return
+    sfd := os_open(a, 0, 0)
+    if sfd < 0
+        os_fail_errno(sfd)
+        return
+    mode := os_fd_mode(sfd)
+    dfd := os_open(b, if target() == 2 then 1537 else 577, mode)
+    if dfd < 0
+        os_close(sfd)
+        os_fail_errno(dfd)
+        return
+    syscall(os_pick(91, 52, 124), dfd, mode, 0, 0, 0, 0)
+    buf := alloc_raw(65536, KIND_BYTES)
+    mut failed := 0
+    while failed == 0
+        n := os_read(sfd, buf, 65536)
+        if n == -4
+            continue
+        if n < 0
+            failed = n
+        elif n == 0
+            break
+        else
+            w := os_write_all(dfd, buf, n)
+            if w < 0
+                failed = w
+    os_close(sfd)
+    os_close(dfd)
+    if failed < 0
+        os_fail_errno(failed)
+        return
+    os_succeed()
+
+## `p` as an absolute path with `.` and `..` resolved by text.
+fn os_abs_norm(p str) str
+    full := if load64(str_addr(p)) > 0 and load8(str_addr(p) + 16) == 47 then p else path_join(
+        env_cwd(),
+        p,
+    )
+    q := str_addr(full) + 16
+    n := load64(str_addr(full))
+    mut parts := List[str]()
+    mut start := 0
+    for i in 0..n + 1
+        if i == n or load8(q + i) == 47
+            if i > start
+                c := os_str_from(q + start, i - start)
+                if c == "."
+                    start = i + 1
+                    continue
+                if c == ".."
+                    if parts.len() > 0
+                        parts.pop()
+                    start = i + 1
+                    continue
+                parts.push(c)
+            start = i + 1
+    mut out := ""
+    for c in parts
+        out = str_cat(str_cat(out, "/"), c)
+    if out == ""
+        return "/"
+    out
+
+## Copy the tree `from` to `to`; "" when done, else the path that failed
+## (its kind in `os_kind()`).
+fn os_copy_dir(from str, to str) str
+    os_fs_make_dir(to)
+    if not os_ok()
+        return to
+    names := os_fs_list_dir(from)
+    if not os_ok()
+        return from
+    for i in 0..names.len()
+        name := str_at(names[i])
+        src := path_join(from, name)
+        dst := path_join(to, name)
+        if os_is_real_dir(src)
+            bad := os_copy_dir(src, dst)
+            if bad != ""
+                return bad
+        elif glob_is_dir(src)
+            os_fail_kind(K_OTHER)
+            return src
+        else
+            os_copy_file(src, dst)
+            if not os_ok()
+                if os_kind() != K_IS_DIR and glob_is_dir(dst)
+                    os_fail_kind(K_IS_DIR)
+                return dst
+    os_succeed()
+    ""
+
+## `fs.copy(from, to)` (std.fs.12). The path of a failure: `from` when it is
+## missing, else `to` (or the entry that failed inside a copied tree).
+fn fs_copy(from str, to str, at str)
+    p := os_cstr(OS_PATH_A, from)
+    if p == 0 or os_access(p) < 0
+        k := if p == 0 then -2 else os_access(p)
+        os_fail_errno(k)
+        os_error(from, os_kind(), at)
+        return
+    if glob_is_dir(from)
+        src := os_abs_norm(from)
+        dst := os_abs_norm(to)
+        if str_eq(src, dst) or str_starts_with(dst, if src == "/" then "/" else str_cat(src, "/"))
+            os_error(to, K_OTHER, at)
+            return
+        bad := os_copy_dir(from, to)
+        if bad != ""
+            os_error(bad, os_kind(), at)
+        return
+    os_copy_file(from, to)
+    if not os_ok()
+        if os_kind() != K_IS_DIR and glob_is_dir(to)
+            os_fail_kind(K_IS_DIR)
+        os_error(to, os_kind(), at)
 
 fn fs_remove(path str, at str)
     os_fs_remove(path)

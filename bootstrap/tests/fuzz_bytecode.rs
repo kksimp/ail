@@ -5,6 +5,8 @@
 //!   fuzz.bc.1  standard output, the exit code and standard error (the trap
 //!              text and its trace) are the same bytes;
 //!   fuzz.bc.2  neither run panics, hangs or reports an internal error;
+//!   fuzz.bc.4  packed list storage is invisible (ADR 0760): the tier with
+//!              `AIL_NO_PACK=1` (every list boxed) gives the same bytes as the tier;
 //!   fuzz.bc.3  in a `pure` program (no hand-off construct) the tier hands
 //!              off at most `PURE_HANDOFFS` times however long the loops run.
 //! `AIL_FUZZ_N` programs (default 60, the selftest smoke) from `AIL_FUZZ_SEED`
@@ -36,14 +38,16 @@ static TRAPS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// fuzz.bc.3 misses: not failures, since a missed fast path costs speed only.
 static MISSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-fn run(file: &Path, tier: bool) -> (Out, Option<u64>) {
+fn run(file: &Path, tier: bool, nopack: bool) -> (Out, Option<u64>) {
     let mut args = vec!["run", "--no-contracts"];
     if !tier {
         args.push("--no-bytecode");
     }
     let f = file.to_string_lossy().into_owned();
     args.push(&f);
-    let o = exec_program_env(Path::new(env!("CARGO_BIN_EXE_ail")), &args, &[("AIL_BYTECODE_STATS", "1")], 30);
+    let env: &[(&str, &str)] =
+        if nopack { &[("AIL_BYTECODE_STATS", "1"), ("AIL_NO_PACK", "1")] } else { &[("AIL_BYTECODE_STATS", "1")] };
+    let o = exec_program_env(Path::new(env!("CARGO_BIN_EXE_ail")), &args, env, 30);
     // The stats line goes to standard error; take it out before comparing.
     let mut handoffs = None;
     let kept: Vec<&str> = o
@@ -52,10 +56,12 @@ fn run(file: &Path, tier: bool) -> (Out, Option<u64>) {
         .filter(|l| {
             if let Some(rest) = l.strip_prefix("bytecode: ") {
                 handoffs = rest.split(" hand-offs").next().and_then(|h| h.rsplit(", ").next()).and_then(|n| n.trim().parse().ok());
-                if let Some(ins) = rest.split(" instructions").next().and_then(|h| h.rsplit("; ").next()).and_then(|n| n.trim().parse::<u64>().ok()) {
-                    INS.fetch_add(ins, Ordering::SeqCst);
+                if !nopack {
+                    if let Some(ins) = rest.split(" instructions").next().and_then(|h| h.rsplit("; ").next()).and_then(|n| n.trim().parse::<u64>().ok()) {
+                        INS.fetch_add(ins, Ordering::SeqCst);
+                    }
+                    HAND.fetch_add(handoffs.unwrap_or(0), Ordering::SeqCst);
                 }
-                HAND.fetch_add(handoffs.unwrap_or(0), Ordering::SeqCst);
                 false
             } else {
                 true
@@ -70,8 +76,9 @@ fn run(file: &Path, tier: bool) -> (Out, Option<u64>) {
 fn disagreement(dir: &Path, src: &str, pure: bool) -> Option<String> {
     let p = dir.join("p.ail");
     fs::write(&p, src).unwrap();
-    let (walker, _) = run(&p, false);
-    let (tier, handoffs) = run(&p, true);
+    let (walker, _) = run(&p, false, false);
+    let (tier, handoffs) = run(&p, true, false);
+    let (boxed, _) = run(&p, true, true);
     if tier.code != Some(0) {
         TRAPPED.fetch_add(1, Ordering::SeqCst);
         let rule = tier.stderr.split('[').nth(1).and_then(|r| r.split(']').next()).unwrap_or("none").to_string();
@@ -89,6 +96,12 @@ fn disagreement(dir: &Path, src: &str, pure: bool) -> Option<String> {
         return Some(format!(
             "fuzz.bc.1 the tiers differ\n--- walker (exit {:?})\n{}{}\n--- tier (exit {:?})\n{}{}",
             walker.code, walker.stdout, walker.stderr, tier.code, tier.stdout, tier.stderr
+        ));
+    }
+    if boxed.code != tier.code || boxed.stdout != tier.stdout || boxed.stderr != tier.stderr {
+        return Some(format!(
+            "fuzz.bc.4 packed and boxed lists differ\n--- boxed (exit {:?})\n{}{}\n--- packed (exit {:?})\n{}{}",
+            boxed.code, boxed.stdout, boxed.stderr, tier.code, tier.stdout, tier.stderr
         ));
     }
     if pure && walker.code == Some(0) {

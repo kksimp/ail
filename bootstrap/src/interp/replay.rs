@@ -328,7 +328,10 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                 json_str(&self.prog.enums[*e].name),
                 list(&mut fields.iter())?
             ),
-            Value::List(xs) => list(&mut xs.iter())?,
+            Value::List(xs) => {
+                let xs = xs.slice();
+                list(&mut xs.iter())?
+            }
             Value::Tuple(xs) => format!("{{\"tuple\":{}}}", list(&mut xs.iter())?),
             Value::Map(t) => {
                 let parts: Option<Vec<String>> =
@@ -368,7 +371,7 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
             J::Int(i) => Value::Int(*i),
             J::Num(_) => return None,
             J::Str(s) => Value::Str(Rc::from(s.as_str())),
-            J::Arr(_) => Value::List(Rc::new(all(j)?)),
+            J::Arr(_) => Value::list(all(j)?),
             J::Obj(_) => {
                 if let Some(f) = j.str("f") {
                     Value::Float(f.parse().ok()?)

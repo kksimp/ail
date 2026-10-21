@@ -139,7 +139,7 @@ pub(super) fn method(b: &Rc<Vec<u8>>, name: &str, a: &mut [Value]) -> Value {
             Err(_) => Value::None,
         },
         "text" => Value::Str(Rc::from(String::from_utf8_lossy(b).as_ref())),
-        "to_list" => Value::List(Rc::new(b.iter().map(|x| byte(*x)).collect())),
+        "to_list" => Value::list(b.iter().map(|x| byte(*x)).collect()),
         "concat" => {
             let mut v = Vec::with_capacity(b.len() + arg(0).len());
             v.extend_from_slice(b);
@@ -174,7 +174,7 @@ impl<'a, W: Write> Interp<'a, W> {
             ("from_list", Value::List(xs)) => {
                 let mut out = Vec::with_capacity(xs.len());
                 for x in xs.iter() {
-                    out.push(match x {
+                    out.push(match &x {
                         Value::Num(_, n) | Value::Int(n) => *n as u8,
                         other => unreachable!("checked: a u8, found {other:?}"),
                     });

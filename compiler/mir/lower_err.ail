@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | List | Struct | Enum => Ty.Opt(t)
+        Int | Float | Bool | Char | Str | Bytes | List | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -244,7 +244,12 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s := callee_sig(n) else return false
                     s.fails
                 _ => false
-        Method(recv, name, _, _) => os_fails(recv, name) or method_fails(recv, name)
+        Method(
+            recv,
+            name,
+            _,
+            _,
+        ) => os_fails(recv, name) or method_fails(recv, name) or net_fails(recv, name)
         _ => false
 
 ## The signature key of `x.name(...)` when `x` is an imported module or a local
@@ -266,7 +271,16 @@ fn Lower.method_returns_error(self, recv ast.Expr, name str) bool
     s := sigs.get(key) else return false
     returns_error(s)
 
+## Whether `x.name(...)` is a method of a `net.Conn` or `net.Listener` that
+## can fail.
+fn Lower.net_fails(self, recv ast.Expr, name str) bool
+    key := method_key(recv, name) else return false
+    net_method_fails(key)
+
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
+    if m := module_name(recv)
+        s := sigs.get("{m}.{name}") else return false
+        return s.fails
     key := method_key(recv, name) else return false
     s := sigs.get(key) else return false
     s.fails
@@ -328,6 +342,13 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     if o.ty.opt_inner() == none
         return unsupported(pos, "`?` on a `{o.ty.name()}`")
     absent := op("eq", [o.id, konst(0, Ty.Int)], Ty.Bool)
+    if else_targets.len() > 0
+        # Inside an `else` value: an absent value runs the `else` (err.prop.4).
+        present := new_block()
+        branch(absent, else_targets[else_targets.len() - 1], [], present, [])
+        seal(present)
+        cur = present
+        return unwrap(o)
     leave := new_block()
     good := new_block()
     branch(absent, leave, [], good, [])
@@ -374,11 +395,22 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
         return none
     Maybe(val: o, present: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), opt: true, err: Ty.Unknown)
 
+## Bind `name` to the error being handled: its typed value when the call names
+## one, else its display text.
+fn Lower.bind_taken_error(mut self, name str, ty Ty)
+    if ty == Ty.Unknown
+        declare(name, Ty.Str, call("rt.err_take", [], Ty.Str))
+    else
+        raw := call("rt.err_take_value", [], Ty.Int)
+        declare(name, ty, op("copy", [raw], ty))
+
 ## `e else ...` (err.else.1-6): the success value, or the `else` part.
 ## A value of type `Unit` when `e` has no success value.
 fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     if r := str_to_int_recv(e)
         return lower_str_to_int_else(r, other, pos)
+    if chain_try(e)
+        return lower_else_chain(e, other, pos)
     m := lower_maybe(e)?
     mut t := m.val.ty
     if m.opt
@@ -400,9 +432,23 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     else
         jump(join, [])
     cur = failure
+    else_part(other, m.opt, m.err, join, r, t, pos)
+
+## The `else` part of `e else ...`, lowered in the failure block: it jumps
+## to `join` with a value when `r` (of type `t`) is one, or leaves.
+fn Lower.else_part(
+    mut self,
+    other ast.Else,
+    opt bool,
+    err Ty,
+    join int,
+    r int,
+    t Ty,
+    pos ast.Pos,
+) Val?
     match other
         Fallback(x) =>
-            if not m.opt
+            if not opt
                 call("rt.err_clear", [], Ty.Unit)
             if r < 0
                 problem(pos, "`else` with a value, but there is no value to replace")
@@ -410,7 +456,7 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
             else
                 fallback_jump(x, t, join, pos)
         Leave(st) =>
-            if not m.opt
+            if not opt
                 call("rt.err_clear", [], Ty.Unit)
             lower_stmt(st)
             if not done()
@@ -421,14 +467,14 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
         Handler(name, body, hpos) =>
             scopes.push(Map[str, str]())
             if n := name
-                if m.opt
+                if opt
                     problem(n.pos, "an absent value has no error to bind")
-                elif m.err == Ty.Unknown
+                elif err == Ty.Unknown
                     declare(n.name, Ty.Str, call("rt.err_take", [], Ty.Str))
                 else
                     raw := call("rt.err_take_value", [], Ty.Int)
-                    declare(n.name, m.err, op("copy", [raw], m.err))
-            elif not m.opt
+                    declare(n.name, err, op("copy", [raw], err))
+            elif not opt
                 call("rt.err_clear", [], Ty.Unit)
             v := lower_block(body, r >= 0)
             if not done()
@@ -444,6 +490,54 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     seal(join)
     cur = join
     Val(id: r, ty: t)
+
+## Whether a `?` on a value inside `e`'s receivers can send `e` to its
+## `else` (err.prop.4): `a?.b`, `a?.m()`, `a?[i]`.
+fn Lower.chain_try(self, e ast.Expr) bool
+    match e
+        Member(r, _, _) => receiver_try(r)
+        Method(r, _, _, _) => receiver_try(r)
+        Index(r, _, _) => receiver_try(r)
+        _ => false
+
+fn Lower.receiver_try(self, e ast.Expr) bool
+    match e
+        Try(x, _, _) => not fallible_call(x) or receiver_try(x)
+        _ => chain_try(e)
+
+## `e else ...` where a `?` inside `e` meets an absent value: that `?`
+## jumps to the `else` part, and `e` has type `T?` if it isn't optional
+## already (err.prop.4).
+fn Lower.lower_else_chain(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
+    failure := new_block()
+    else_targets.push(failure)
+    got := lower_value(e, none)
+    else_targets.pop()
+    v := got else return none
+    mut t := v.ty
+    opt := v.ty.opt_inner() != none
+    if opt
+        t = v.ty.opt_inner() else Ty.Unknown
+    join := new_block()
+    mut r := -1
+    if not t.is_unit()
+        r = new_value(t, "")
+        blocks[join].params.push(r)
+    good := new_block()
+    if opt
+        branch(op("ne", [v.id, konst(0, Ty.Int)], Ty.Bool), good, [], failure, [])
+    else
+        jump(good, [])
+    seal(good)
+    seal(failure)
+    cur = good
+    if r >= 0
+        s := if opt then unwrap(v) else v
+        jump(join, [s.id])
+    else
+        jump(join, [])
+    cur = failure
+    else_part(other, true, Ty.Unknown, join, r, t, pos)
 
 ## `x := e else ...`
 fn Lower.lower_bind_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
@@ -461,6 +555,7 @@ fn Lower.lower_handle(mut self, value ast.Expr, other ast.Else)
 fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[IO_ERROR] = ""
     err_msgs[PROC_ERROR] = ""
+    err_msgs[NET_ERROR] = ""
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""
@@ -580,8 +675,15 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
             if os_fails(recv, name)
-                return Ty.Struct(if os_module(recv) == "proc" then PROC_ERROR else IO_ERROR)
+                m := os_module(recv)
+                if m == "net"
+                    return Ty.Struct(NET_ERROR)
+                return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
+            if m := module_name(recv)
+                return fn_errs.get("{m}.{name}") else Ty.Unknown
             key := method_key(recv, name) else return Ty.Unknown
+            if net_method_fails(key)
+                return Ty.Struct(NET_ERROR)
             fn_errs.get(key) else Ty.Unknown
         _ => Ty.Unknown
 
@@ -591,6 +693,7 @@ fn Lower.display_call(mut self, v Val) int?
     key := match v.ty
         Struct(k) => k
         Enum(k) => k
+        Tuple => return tuple_text(v)
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)

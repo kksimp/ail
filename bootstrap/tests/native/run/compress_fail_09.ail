@@ -1,0 +1,6 @@
+# `compress.gunzip` fails with: compress.CompressError(kind: "corrupt", message: "not gzip data")
+use std.compress
+
+fn main() !
+    d := compress.gunzip(b"\x73\x68\x6f\x72\x74")?
+    print(d.len())

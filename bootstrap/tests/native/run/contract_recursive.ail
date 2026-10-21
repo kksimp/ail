@@ -1,0 +1,11 @@
+# contract.run.2: a condition that calls its own function checks nothing
+# inside, so this stays linear.
+fn fact(n int) int
+    requires n >= 0
+    ensures n == 0 or result == n * fact(n - 1)
+    if n == 0
+        return 1
+    n * fact(n - 1)
+
+fn main()
+    print(fact(20))

@@ -2133,7 +2133,19 @@ impl<'p> Checker<'p> {
                             );
                             self.drop_else_name(name, *npos);
                         }
-                        None => {}
+                        // The value already failed to check: bind the name with an
+                        // error type, so its uses in the block don't cascade.
+                        None => {
+                            if self.declare(name, *npos) {
+                                self.locals.push(Local {
+                                    name: name.clone(),
+                                    ty: Ty::Err,
+                                    mutable: false,
+                                    kind: Kind::Binding,
+                                    decl: None,
+                                });
+                            }
+                        }
                     }
                 }
                 // err.else.4: with no value to supply, the block may just end.
@@ -2380,12 +2392,22 @@ impl<'p> Checker<'p> {
                 if t == Ty::Int {
                     self.error_help("expr.loop.4", iter.pos(), msg, "iterate over a range, e.g. `0..n`");
                 } else if matches!(t, Ty::Opt(_)) {
-                    self.error_help(
-                        "expr.loop.4",
-                        iter.pos(),
-                        msg,
+                    let mut d = Diagnostic::new("expr.loop.4", iter.pos(), msg).help(
                         "`recv()` gives one value or `none`; to receive until the channel is closed, write `for v in ch`",
                     );
+                    // `for v in ch.recv()` on a channel name: the loop is the receive.
+                    if let Expr::Method { recv, name, args, .. } = iter
+                        && name == "recv"
+                        && args.is_empty()
+                        && let Expr::Name(n, p) = &**recv
+                        && matches!(self.local(n).map(|l| &l.ty), Some(Ty::Conc(conc::Conc::Channel, _)))
+                    {
+                        d = d.fix(
+                            "receive until the channel is closed",
+                            vec![Edit::replace(*p, format!("{n}.recv()"), n.clone())],
+                        );
+                    }
+                    self.diags.push(d);
                 } else {
                     self.error_help(
                         "expr.loop.4",
@@ -3844,11 +3866,15 @@ impl<'p> Checker<'p> {
     fn arg_slots(&mut self, what: &str, sig: &Sig, args: &'p [Arg], pos: Pos) -> Option<Vec<usize>> {
         let named = args.iter().position(|a| a.label.is_some());
         let miscount = |s: &mut Self| {
-            s.error(
-                "expr.call.1",
-                pos,
-                format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len())),
-            );
+            let msg = format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len()));
+            let mut d = Diagnostic::new("expr.call.1", pos, msg);
+            // `t.reshape(2, 3)`: the shape is one list.
+            if what.ends_with("Tensor.reshape") && sig.params.len() == 1 && args.len() >= 2 && named.is_none() {
+                d = d
+                    .help("the new shape is one list: `t.reshape([2, 3])`")
+                    .fix("pass the shape as a list", vec![Edit::call(pos, "reshape", "reshape([$a])")]);
+            }
+            s.diags.push(d);
         };
         let Some(first) = named else {
             if args.len() != sig.params.len() {
@@ -4549,6 +4575,11 @@ impl<'p> Checker<'p> {
             d = d
                 .help("a map iterates as its entries: `for k, v in m`")
                 .fix(format!("drop `.{name}()`"), vec![Edit::replace(dot, format!(".{name}()"), "")]);
+        } else if self.is_error(rt) && matches!(name, "message" | "msg" | "description" | "getMessage" | "get_message") {
+            // An error's text is `to_str()` (the same text as interpolating it).
+            d = d
+                .help("an error's message is its text: interpolate `\"{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
+                .fix("write `to_str`", vec![Edit::replace(pos, name, "to_str")]);
         } else if let Some(new) = builtins::method_rename(rt, name) {
             d = d.help(format!("write `.{new}()`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
         } else if let Some(h) = builtins::method_help(rt, name) {
