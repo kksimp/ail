@@ -86,7 +86,7 @@ Minimal native cases for the blocked constructs live in
 `cargo test --test native`; a case that fails is a blocker, not a broken test.
 `tools/self-compile/selfc-cases.sh` builds each one and prints the pass count.
 
-Current: **16 of 29 pass**. The survey is stale in one large way: the
+Current: **20 of 29 pass** (rerun on 1c370770; was 16 on fcc7f33d). The nine still failing are maps (`for_over_map`, `map_get`, `map_param`, `map_field`), sets (`set_add`), `.contains()` and `.extend()` on lists, `unreachable`, and a sorted closure. The survey is stale in one large way: the
 `parameter \`f\`: its type isn't in the native subset` count (43 of 169 on this
 head) comes from lowering one file alone. `Func` is declared in
 `compiler/mir/mir.ail`, not in `addr.ail`, so the survey reports it as unknown.
@@ -113,4 +113,4 @@ those rows, not a native lane.
 Owners follow the native queue in `/mnt/project-files/lanes/170-native-rules.md`. A row changes
 status when its owner's PR lands on the batch head: rerun
 `tools/self-compile/selfc-cases.sh` and `tools/self-compile/run.sh`, then update
-the table. Last rerun: 16 of 29 pass on fcc7f33d.
+the table. Last rerun: 20 of 29 pass on 1c370770.
