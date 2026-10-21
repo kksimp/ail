@@ -1,0 +1,157 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `tensor.Tensor[T]` (ADR 0815, std.tensor.1-21). A tensor is an object of
+## kind 4 (every word is scanned) with the layout
+##
+##   +0 element kind (0 int, 1 float)  +8 rank  +16 element count
+##   +24 pointer to the elements (8 bytes each, kind 11: no pointers)
+##   +32 the sizes of the axes, one word each
+##
+## Tensors are never changed after they are built, so copying one shares it.
+## The elements are in row-major order, as in the interpreter.
+
+TENSOR_OBJ := 4
+
+## A tensor of `rank` axes and `n` elements, zeroed; the sizes are the
+## caller's to store.
+fn tensor_new(kind int, rank int, n int) int
+    t := alloc(32 + 8 * rank, TENSOR_OBJ)
+    store64(t, kind)
+    store64(t + 8, rank)
+    store64(t + 16, n)
+    store64(t + 24, alloc(8 * n + 8, KIND_ATOMIC))
+    t
+
+fn tensor_data(t int) int
+    load64(t + 24)
+
+## `[a, b, c]` of the words at `p`, as `Debug` prints a list of sizes.
+fn put_sizes(p int, n int)
+    sb_byte(91)
+    for i in 0..n
+        if i > 0
+            sb_text(", ")
+        put_int(load64(p + 8 * i))
+    sb_byte(93)
+
+fn tensor_copy_words(dst int, src int, n int)
+    for i in 0..n
+        store64(dst + 8 * i, load64(src + 8 * i))
+
+## `tensor.from(xs)`: a 1-D tensor of the elements of `xs` (std.tensor.2).
+fn tensor_from(xs List[int], kind int) int
+    q := list_addr(xs)
+    n := load64(q)
+    t := tensor_new(kind, 1, n)
+    store64(t + 32, n)
+    tensor_copy_words(tensor_data(t), load64(q + 16), n)
+    t
+
+## The message of `tensor.from(xs, shape)` failing (std.tensor.2), a string
+## object, or 0 when `shape` is fine for `xs`.
+fn tensor_shape_fault(xs List[int], shape List[int]) int
+    n := load64(list_addr(xs))
+    sp := list_addr(shape)
+    rank := load64(sp)
+    d := load64(sp + 16)
+    mut count := 1
+    for i in 0..rank
+        s := load64(d + 8 * i)
+        if s < 0
+            sb_reset()
+            sb_text("a tensor's sizes can't be negative, and the shape is ")
+            put_sizes(d, rank)
+            return str_addr(sb_str())
+        if s != 0 and count > 1099511627776 / s
+            sb_reset()
+            sb_text("the shape ")
+            put_sizes(d, rank)
+            sb_text(" has too many elements")
+            return str_addr(sb_str())
+        count = count * s
+    if n != count
+        sb_reset()
+        put_int(n)
+        sb_text(" elements don't fill the shape ")
+        put_sizes(d, rank)
+        sb_text(", which holds ")
+        put_int(count)
+        return str_addr(sb_str())
+    0
+
+## `tensor.from(xs, shape)` once `tensor_shape_fault` found nothing wrong.
+fn tensor_from_shape(xs List[int], kind int, shape List[int]) int
+    q := list_addr(xs)
+    sp := list_addr(shape)
+    rank := load64(sp)
+    n := load64(q)
+    t := tensor_new(kind, rank, n)
+    tensor_copy_words(t + 32, load64(sp + 16), rank)
+    tensor_copy_words(tensor_data(t), load64(q + 16), n)
+    t
+
+## `t.to_list()`: the elements as a list (the words are the same for `int`
+## and `float`).
+fn tensor_to_list(t int) List[int]
+    n := load64(t + 16)
+    xs := list_alloc(n, 8)
+    q := list_addr(xs)
+    store64(q, n)
+    tensor_copy_words(load64(q + 16), tensor_data(t), n)
+    xs
+
+## `t.shape()`: the sizes of the axes.
+fn tensor_shape(t int) List[int]
+    rank := load64(t + 8)
+    xs := list_alloc(rank, 8)
+    q := list_addr(xs)
+    store64(q, rank)
+    tensor_copy_words(load64(q + 16), t + 32, rank)
+    xs
+
+## `a == b` (std.tensor.9): the same shape and equal elements, `float`
+## elements compared as `==` does (NaN is unequal to itself).
+fn tensor_eq(a int, b int) bool
+    rank := load64(a + 8)
+    n := load64(a + 16)
+    if load64(b + 8) != rank or load64(b + 16) != n or load64(b) != load64(a)
+        return false
+    for i in 0..rank
+        if load64(a + 32 + 8 * i) != load64(b + 32 + 8 * i)
+            return false
+    da := tensor_data(a)
+    db := tensor_data(b)
+    if load64(a) == 1
+        for i in 0..n
+            if loadf(da + 8 * i) != loadf(db + 8 * i)
+                return false
+        return true
+    for i in 0..n
+        if load64(da + 8 * i) != load64(db + 8 * i)
+            return false
+    true
+
+## The text of `t` (std.tensor.9): the call that rebuilds it.
+fn tensor_text(t int) str
+    n := load64(t + 16)
+    rank := load64(t + 8)
+    sb_reset()
+    sb_text("tensor.from([")
+    d := tensor_data(t)
+    for i in 0..n
+        if i > 0
+            sb_text(", ")
+        if load64(t) == 1
+            put_float(loadf(d + 8 * i))
+        else
+            put_int(load64(d + 8 * i))
+    sb_byte(93)
+    if rank != 1
+        sb_text(", ")
+        put_sizes(t + 32, rank)
+    sb_byte(41)
+    sb_str()
+
+fn out_tensor(t int)
+    out_str(tensor_text(t))

@@ -437,6 +437,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                         return Ty.List(e)
                     none
                 "Map" | "Set" => coll_type_of(name, args)
+                "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
                     if args.len() == 0
                         if k := type_key(name)
@@ -1352,6 +1353,7 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
             a
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
+        Tensor(_) => tensor_binary(o, a, b, pos)
         _ =>
             if eq := self.list_equal(o, a, b)
                 return eq
@@ -1578,6 +1580,7 @@ fn out_fn(t Ty) str
         Bool => "rt.out_bool"
         Str => "rt.out_str"
         Char => "rt.out_char"
+        Tensor(_) => "rt.out_tensor"
         List(e) =>
             match e
                 Int => "rt.out_list_int"
@@ -1622,6 +1625,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_os_method(om, name, npos, args)
     if name == "from_code" and is_module(recv, "char")
         return lower_char_from_code(args, npos)
+    if name == "from" and is_module(recv, "tensor")
+        return lower_tensor_from(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1642,6 +1647,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     r := lower_value(recv, none)?
     if r.ty.is_coll()
         return lower_coll_method(r, name, npos, args)
+    if r.ty.is_tensor()
+        return lower_tensor_method(r, name, npos, args)
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)

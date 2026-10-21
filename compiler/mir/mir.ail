@@ -25,6 +25,10 @@ pub enum Ty
     ## An enum (ADR 0602): an `int` when no variant has fields, else a
     ## pointer to a kind-5 object.
     Enum(name str)
+    ## `tensor.Tensor[T]` (ADR 0815): a pointer to a tensor object, `T` being
+    ## `int` or `float`. A tensor is never changed in place, so a copy of the
+    ## value shares the object.
+    Tensor(elem Ty)
     Unknown
     Unit
 
@@ -49,6 +53,11 @@ pub fn Ty.elem(self) Ty?
         List(e) => e
         _ => none
 
+pub fn Ty.is_tensor(self) bool
+    match self
+        Tensor(_) => true
+        _ => false
+
 ## A `Map` or a `Set`: a pointer to a table object (ADR 0568).
 pub fn Ty.is_coll(self) bool
     match self
@@ -66,6 +75,7 @@ pub fn Ty.name(self) str
         Map(k, v) => "Map[{k.name()}, {v.name()}]"
         Set(e) => "Set[{e.name()}]"
         Opt(t) => "{t.name()}?"
+        Tensor(e) => "Tensor[{e.name()}]"
         Struct(n) => n
         Enum(n) => n
         Unknown => "?"
