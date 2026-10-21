@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## `Channel[str]` (native.chan.1, conc.share.3-4, conc.share.7, conc.select.1; ADR 0599). A
-## channel is a record of nine words (heap kind 13, scanned conservatively),
+## channel is a record of ten words (heap kind 13, scanned conservatively),
 ## and a value is the record's address; a copy of the handle is the same
 ## channel. The queue is a ring of string pointers. All fields are guarded by
 ## the record's lock word; a thread that must wait releases the lock and
