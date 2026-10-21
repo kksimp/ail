@@ -456,42 +456,41 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
+| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
+| [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
+| [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
+| [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
+| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
+| [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
+| [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
+| [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
+| [0492](0492-bench-automation.md) | One command produces the before/after benchmark table for tokens and speed (`tools/bench/run.sh`) *(delegated)* | Accepted | 2026-10-20 |
+| [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
+| [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
+| [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
+| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
+| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
+| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
+| [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
+| [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
+| [0509](0509-tensor-indexing-and-slicing.md) | Tensor `t[i]` drops the first axis, `t[lo..hi]` keeps it; `item()` (AI, delegated) | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
 | [0511](0511-pdf-pages-read-on-demand.md) | The PDF reader reads pages on demand; search streams page by page (designer direction) | Accepted | 2026-10-20 |
 | [0512](0512-pdf-ocr-by-nearest-shape.md) | OCR of scanned PDF pages by nearest reference shape, on demand; shapes from DejaVu and OFL fonts (designer direction) | Accepted | 2026-10-20 |
 | [0513](0513-image-decoders-and-font-rasterizer-in-ail.md) | Image decoders (CCITT fax, JPEG) and a TrueType rasterizer written in AIL *(delegated)* | Accepted | 2026-10-20 |
 | [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
-| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
-| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
-| [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
-| [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
-| [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
-| [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
-| [0509](0509-tensor-indexing-and-slicing.md) | Tensor `t[i]` drops the first axis, `t[lo..hi]` keeps it; `item()` (AI, delegated) | Accepted | 2026-10-20 |
 | [0521](0521-tensor-conv2d.md) | `conv2d` on 2-D float tensors: valid, stride 1, no padding (AI, delegated) | Accepted | 2026-10-20 |
 | [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
 | [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
 | [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
-| [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
-| [0592](0592-std-math-float-methods.md) | Transcendental float methods (`sin`…`cbrt`), with a one-ulp bound (Designer) | Accepted | 2026-10-21 |
-| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
-| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
-| [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
-| [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
-| [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
-| [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
-| [0492](0492-bench-automation.md) | One command produces the before/after benchmark table for tokens and speed (`tools/bench/run.sh`) *(delegated)* | Accepted | 2026-10-20 |
-| [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
-| [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
-| [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |
-| [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
-| [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
-| [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
 | [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
 | [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
 | [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
+| [0565](0565-native-string-runtime-calls.md) | A native `str` method is one runtime call, and its traps carry constant text *(delegated)* | Accepted | 2026-10-20 |
+| [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
+| [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |
 | [0574](0574-native-optional-layout.md) | Native optionals: a pointer or 0, scalars boxed *(delegated)* | Accepted | 2026-10-20 |
 | [0575](0575-native-results-error-slot.md) | Native results: the error slot and a return trace *(delegated)* | Accepted | 2026-10-20 |
 | [0576](0576-native-error-values-messages.md) | Native error values: messages only, for now *(delegated)* | Accepted | 2026-10-20 |
@@ -504,12 +503,25 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
+| [0583](0583-native-coverage-tracker.md) | A native coverage tracker: which programs `ail build` handles, and why the rest fail *(delegated)* | Accepted | 2026-10-20 |
+| [0584](0584-native-coverage-classification.md) | Native coverage: status rules, construct keys and counting *(delegated)* | Accepted | 2026-10-20 |
+| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
+| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
+| [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
+| [0592](0592-std-math-float-methods.md) | Transcendental float methods (`sin`…`cbrt`), with a one-ulp bound (Designer) | Accepted | 2026-10-21 |
 | [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
 | [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
+| [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
+| [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
+| [0622](0622-loop-starts-steps-and-index-spans.md) | Versioned loops with computed starts and unchanging steps; index arithmetic bounded by a constant loop bound *(delegated)* | Accepted | 2026-10-21 |
+| [0623](0623-branch-and-codegen-peepholes.md) | Branch and codegen peepholes: flipped `not` branches, bit operations into the result register, direct spill moves *(delegated)* | Accepted | 2026-10-21 |
+| [0624](0624-loop-weighted-spill-choice.md) | Register allocation spills the value cheapest to keep in memory, weighted by loop depth *(delegated)* | Accepted | 2026-10-21 |
+| [0625](0625-address-folding.md) | Address folding: unchecked `base[y + k]` accesses carry the constant as a displacement *(delegated)* | Accepted | 2026-10-21 |
 | [0626](0626-std-csv.md) | `std.csv`: CSV as rows and records *(delegated)* | Accepted | 2026-10-21 |
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
@@ -541,6 +553,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
 | [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
 | [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
+| [0670](0670-explain-examples-from-tagged-blocks.md) | `ail explain` examples: worked examples count in the audit; a `rules=` block fills a rule with no example in its section *(delegated)* | Accepted | 2026-10-21 |
 | [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
 | [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
 | [0679](0679-native-test-runner.md) | `ail test --native`: build each `@test` function natively and compare it with the interpreter *(delegated)* | Accepted | 2026-10-21 |
