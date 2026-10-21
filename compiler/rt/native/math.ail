@@ -20,7 +20,8 @@ fn float_round(x float) float
 #
 # Algorithms after Sun's fdlibm (1993, permissive licence; the same code
 # FreeBSD's libm uses as msun), rewritten in the native subset: exp, ln,
-# sin, cos, tan, atan, atan2, pow, hypot, cbrt and log10. Each is accurate
+# sin, cos, tan, atan, atan2, pow, hypot, cbrt and log10; `expm1` and `tanh`
+# (fdlibm's s_expm1.c and s_tanh.c) serve the tensor activations. Each is accurate
 # to about one unit in the last place; `ail` tests compare them with the
 # platform's libm (see NOTICE and docs/decisions/0592).
 
@@ -121,6 +122,103 @@ fn fm_exp_dd(x float, xl float) float
         return 1.0 - ((r * c) / (c - 2.0) - r)
     y := 1.0 - ((lo - (r * c) / (2.0 - c)) - hi)
     fm_ldexp(y, k)
+
+## expm1(x) = e^x - 1 (fdlibm s_expm1.c): accurate near 0, where `exp(x) - 1`
+## loses every digit.
+fn float_expm1(x float) float
+    if x != x
+        return x
+    hx := fm_hi(x)
+    neg := fm_sign(x)
+    if hx >= 1078159482
+        if hx >= 1082535490
+            if x == fm_inf()
+                return x
+            if x == 0.0 - fm_inf()
+                return -1.0
+            if x > 7.09782712893383973096e+02
+                return fm_inf()
+        if neg
+            return -1.0
+    mut k := 0
+    mut c := 0.0
+    mut y := x
+    if hx > 1071001154
+        mut hi := 0.0
+        mut lo := 0.0
+        if hx < 1072734898
+            if not neg
+                hi = x - LN2HI
+                lo = LN2LO
+                k = 1
+            else
+                hi = x + LN2HI
+                lo = 0.0 - LN2LO
+                k = -1
+        else
+            k = (INVLN2 * x + (if neg then -0.5 else 0.5)).to_int()
+            t := k.to_float()
+            hi = x - t * LN2HI
+            lo = t * LN2LO
+        y = hi - lo
+        c = (hi - y) - lo
+    elif hx < 1016070144
+        return x
+    hfx := 0.5 * y
+    hxs := y * hfx
+    r1 := 1.0
+        + hxs
+            * (-3.33333333333331316428e-02 + hxs * (1.58730158725481460165e-03 + hxs * (-7.93650757867487942473e-05 + hxs * (4.00821782732936239552e-06 + hxs * (-2.01099218183624371326e-07)))))
+    t := 3.0 - r1 * hfx
+    mut e := hxs * ((r1 - t) / (6.0 - y * t))
+    if k == 0
+        return y - (y * e - hxs)
+    e = y * (e - c) - c
+    e = e - hxs
+    if k == -1
+        return 0.5 * (y - e) - 0.5
+    if k == 1
+        if y < -0.25
+            return -2.0 * (e - (y + 0.5))
+        return 1.0 + 2.0 * (y - e)
+    twopk := bits_float((1023 + k).shl(52))
+    if k <= -2 or k > 56
+        mut z := 1.0 - (e - y)
+        if k == 1024
+            z = z * 2.0 * 8.98846567431158e+307
+        else
+            z = z * twopk
+        return z - 1.0
+    if k < 20
+        sh := 2097152.shr(k)
+        tt := bits_float((1072693248 - sh).shl(32))
+        z := (tt - (e - y)) * twopk
+        return z
+    tt := bits_float((1023 - k).shl(52))
+    z := (y - (e + tt)) + 1.0
+    z * twopk
+
+## tanh(x) (fdlibm s_tanh.c).
+fn float_tanh(x float) float
+    if x != x
+        return x
+    ix := fm_hi(x)
+    neg := fm_sign(x)
+    mut z := 1.0
+    if ix >= 2146435072
+        return if neg then -1.0 else 1.0
+    if ix < 1077936128
+        if ix < 1015021568
+            return x * (1.0 + x)
+        if ix >= 1072693248
+            t := float_expm1(2.0 * x.abs())
+            z = 1.0 - 2.0 / (t + 2.0)
+        else
+            t := float_expm1(-2.0 * x.abs())
+            z = 0.0 - t / (t + 2.0)
+    if neg
+        return 0.0 - z
+    z
 
 ## ln(x) (fdlibm e_log.c): x = 2^k f with sqrt(1/2) <= f < sqrt(2).
 fn float_ln(x float) float

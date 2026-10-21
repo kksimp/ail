@@ -21,7 +21,7 @@ use crate::diag::{Diagnostic, Pos, json_str};
 /// Effects that order a loop's iterations (conc.par.2): output, `unsafe`,
 /// tasks, and every capability.
 fn ordering(e: &str) -> bool {
-    matches!(e, "io" | "unsafe" | "spawn") || CAPABILITIES.contains(&e)
+    matches!(e, "io" | "unsafe" | "hw" | "spawn") || CAPABILITIES.contains(&e)
 }
 
 /// Built-in methods that change their receiver (type.coll.5-11).

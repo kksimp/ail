@@ -1,0 +1,12 @@
+fn main()
+    words := ["pear", "fig", "apple", "fig"]
+    lens := {w for w in words}.sorted()
+    print(lens)
+    sizes := {w: w.len() for w in words if w != "pear"}
+    print(sizes.len())
+    print(sizes["apple"])
+    for n in {w.len() for w in words}.sorted()
+        print(n)
+    nested := {w: {c for c in w.chars()}.len() for w in words}
+    print(nested["apple"])
+    print(nested["fig"])

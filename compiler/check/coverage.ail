@@ -192,6 +192,7 @@ pub COVERED_RULES := [
     "type.struct.7",
     "unsafe.block.2",
     "unsafe.block.3",
+    "unsafe.hw.1",
     "unsafe.op.1",
     "unsafe.ptr.1",
     "unsafe.ptr.3",

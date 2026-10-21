@@ -46,6 +46,11 @@ pub struct Alloc
     pub wrap int
     pub region List[bool]
 
+## The operations the x86-64 code generator does in the operand's register.
+IN_PLACE := ["add", "sub", "band", "bor", "bxor"]
+
+COMMUTES := ["add", "band", "bor", "bxor"]
+
 ## Whether an instruction's value is rebuilt at each use instead of held.
 pub fn is_remat(i mir.Inst) bool
     i.op == "const" or i.op == "fconst" or i.op == "str" or i.op == "fnaddr"
@@ -142,6 +147,14 @@ pub fn allocate(f mir.Func, t Target) Alloc
         for i in blk.insts
             if i.op == "copy"
                 hints[i.dst].push(i.args[0])
+            elif i.dst >= 0 and IN_PLACE.contains(i.op)
+                # A result in its operand's register is one instruction
+                # fewer on x86-64 (`add d, y` with `d` already `x`).
+                hints[i.dst].push(i.args[0])
+                hints[i.args[0]].push(i.dst)
+                if COMMUTES.contains(i.op)
+                    hints[i.dst].push(i.args[1])
+                    hints[i.args[1]].push(i.dst)
     # A parameter that no hint places stays in the register it arrived in,
     # which saves the moves at the function's entry.
     mut arrive := [-1 for _ in 0..n]
@@ -156,6 +169,34 @@ pub fn allocate(f mir.Func, t Target) Alloc
             if ni < t.int_args.len()
                 arrive[p] = t.int_args[ni]
             ni += 1
+    # A value computed just before a call it dies at, and passed to it, goes
+    # in the argument register it is passed in, so the call needs no move.
+    for b in order
+        mut at := bstart[b] + 2
+        for i in f.blocks[b].insts
+            if i.op == "call" and not is_push(i)
+                mut ni2 := 0
+                mut nf2 := 0
+                for a in i.args
+                    if f.vals[a].is_float()
+                        if nf2 < t.float_args.len() and arrive[a] < 0 and short_lived(
+                            start,
+                            end,
+                            a,
+                            at,
+                        )
+                            arrive[a] = t.float_args[nf2]
+                        nf2 += 1
+                    else
+                        if ni2 < t.int_args.len() and arrive[a] < 0 and short_lived(
+                            start,
+                            end,
+                            a,
+                            at,
+                        )
+                            arrive[a] = t.int_args[ni2]
+                        ni2 += 1
+            at += 2
     mut loc := [NOWHERE for _ in 0..n]
     mut queue := List[int]()
     for v in 0..n
@@ -190,6 +231,11 @@ pub fn allocate(f mir.Func, t Target) Alloc
         wrap: shrink.wrap,
         region: shrink.region,
     )
+
+## Whether `v` dies at position `at` and was defined within a few
+## instructions before it.
+fn short_lived(start List[int], end List[int], v int, at int) bool
+    start[v] >= 0 and end[v] == at and at - start[v] <= 12
 
 ## The cost of keeping each value in memory: one per definition or use,
 ## times 8 for each loop around it (at most 4).
@@ -352,6 +398,14 @@ fn Scan.crosses(self, v int) bool
             k += 2
     false
 
+## Whether a hinted value that starts after `v` and is not placed yet lives
+## across a call.
+fn Scan.partner_crosses(self, v int) bool
+    for h in hints[v]
+        if loc[h] == NOWHERE and start[h] > end[v] and crosses(h)
+            return true
+    false
+
 ## Whether register `r` is free for all of `v`'s ranges.
 fn Scan.free(self, r int, v int) bool
     for a in active
@@ -366,7 +420,10 @@ fn Scan.assign(mut self, v int, float bool, t Target)
         if end[a] >= start[v]
             keep.push(a)
     active = keep
-    cross := crosses(v)
+    # A value whose later partner (an operand it flows into, a block
+    # parameter) lives across a call goes straight to a callee-saved
+    # register, so the partner can take the same one and no move is left.
+    cross := crosses(v) or partner_crosses(v)
     mut pool := List[int]()
     if float
         if not cross

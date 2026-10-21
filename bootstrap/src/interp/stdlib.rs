@@ -518,6 +518,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             ("mem", _) => return self.mem_call(f, &values, pos),
+            ("hw", _) => return self.hw_call(f, &values, pos),
             ("regex", _) => return self.regex_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());

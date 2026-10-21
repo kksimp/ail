@@ -38,7 +38,7 @@ position under this rule, all of them at once, and nothing is built.
 and the bit operations of expr.bit.1. Also: format specifications on numbers,
 `bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
 `.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
-`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`,
+`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`, `fs.walk`,
 `fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
 `env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
 `time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
@@ -89,7 +89,7 @@ whose type is expected (a function result, argument or field), in functions with
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
-`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
+`fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
@@ -99,12 +99,16 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
 and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
-`store`, `cas` and `add` (`native.task.1`); and the standard
+`store`, `cas` and `add` (`native.task.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
+`net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
+`close`, failing with `net.NetError` (std.net.4); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
+other host fails with kind `not_found`, as there is no DNS client yet), no TLS, a wait does not let other tasks run, the
+`bytes` forms are not built, and a message's wording may differ from the interpreter's (the `kind` is the same); and the standard
 modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log`). Any other construct is reported at its position under this rule, all of them
+`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830)*
 
 ```ail
 fn steps(n int) int
@@ -226,8 +230,10 @@ fn main()
 
 **native.bce.2** — An access `xs[i]` has no bounds check when `i` was
 already used to index `xs` on every path to it, or is `xs.len()` taken
-before a `push` to `xs` that is on every path to it. This holds while no
-operation in the program shortens a list. *(ADR 0578)*
+before a `push` to `xs` that is on every path to it, or is a constant, or a
+variable that only ever holds constants, below the number of `push` calls to
+`xs` that are on every path to it. This holds while no operation in the
+program shortens a list. *(ADR 0578, ADR 0816)*
 
 ```ail rules=native.bce.2
 fn main()
@@ -238,8 +244,9 @@ fn main()
 
 **native.bce.3** — A list's capacity is not observable: a native executable
 may allocate room for a list ahead of the pushes that fill it, at most 8 MiB
-of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list.
-*(ADR 0579, ADR 0816)*
+of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list. A
+list that fills its first block also grows straight to 16 elements before it
+doubles. *(ADR 0579, ADR 0816, ADR 0562)*
 
 ```ail rules=native.bce.3
 fn main()
