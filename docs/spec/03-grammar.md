@@ -117,3 +117,113 @@ The attributes known to the bootstrap are `@test`, `@pure`, `@inline` and
 @deprecated("use hash") fn old_hash(x u64) u64
     x * 17
 ```
+
+## Runnable examples for the rules above
+
+Blocks with `error=` must report their rule, and `rules=` lists the rules a
+block demonstrates (ADR 0498). Where a rule describes how the checker
+reports, the block shows one reported case; the rest of the rule is checked
+by the mistakes corpus (`bootstrap/tests/mistakes/`).
+
+```ail error=gram.syntax.1
+fn main()
+    while := 1          # `while` is a keyword, so this line doesn't parse
+```
+
+```ail error=gram.foreign.1 rules=gram.rec.1
+fn main()
+    print(1 & 2 ^ 3)    # two foreign operators on one line: one diagnostic, for the first
+```
+
+```ail error=expr.name.1 rules=gram.rec.2
+fn main()
+    print(f(1))         # the name `f` is unknown here, reported once
+    print(f(2))         # later uses of the same name add no more reports
+```
+
+```ail error=expr.name.1 rules=gram.rec.3
+fn main()
+    print(pr(1))        # two characters: no "did you mean" is offered
+```
+
+```ail error=gram.foreign.1 rules=gram.help.1
+fn main()
+    print(1 & 2)        # the help says what to write: `a.bit_and(b)`
+```
+
+```ail error=gram.foreign.1 rules=gram.help.2
+fn main()
+    print(~a)           # `ail fix` resolves this, and the result checks clean
+```
+
+```ail error=gram.fn.2 rules=gram.fn.2
+fn add(a: int) int      # a colon between name and type is not allowed
+    a
+```
+
+```ail rules=gram.fn.1,gram.fn.2
+fn add(a int, b int) int    # `fn`, a name, parameters as name then type, a return type with no arrow
+    a + b
+
+fn main()
+    print(add(1, 2))    # 3
+```
+
+```ail error=gram.fn.1 rules=gram.fn.1
+fn id<T>(x T) T         # a generic function is written with brackets, and its keyword is still `fn`
+    x
+```
+
+```ail rules=gram.list.1
+fn main()
+    xs := [
+        1,
+        2,              # a trailing comma is allowed when the list spans lines
+    ]
+    print(xs)           # [1, 2]
+```
+
+```ail error=gram.generic.1 rules=gram.generic.1
+fn f(xs List<int>) int  # angle brackets are not generics; use `List[int]`
+    xs.len()
+```
+
+```ail rules=gram.generic.1
+fn f(xs List[int]) int
+    xs.len()
+
+fn main()
+    print(f([1]))       # 1
+```
+
+```ail rules=gram.attr.1,gram.attr.2
+@deprecated("use sq2")  # `@name(arguments)`, on the line before the declaration
+fn sq(x int) int
+    x * x
+
+fn main()
+    print(sq(3))        # 9, with a deprecation warning
+```
+
+```ail rules=gram.attr.3
+@inline
+fn sq(x int) int
+    x * x
+
+fn main()
+    print(sq(3))        # 9; @inline never changes the result
+```
+
+```ail rules=gram.attr.4
+@deprecated("use sq2")
+fn sq(x int) int
+    x * x
+
+fn main()
+    print(sq(3))        # warns: sq is deprecated: use sq2; prints 9
+```
+
+```ail error=gram.syntax.1 rules=gram.attr.2
+fn main()
+    @inline fn_x := 1   # an attribute precedes a declaration, not a statement
+```

@@ -71,3 +71,35 @@ of multi-byte scalar values is little-endian, and programs MAY rely on this.
 
 > **Note:** Explicit-endianness conversion for file and network formats is
 > provided by the standard library, not by the language.
+
+## Runnable examples for the rules above
+
+Most platform rules describe the target, not a program's output, so their
+examples are checked but not run (`norun`). The integer width (`plat.ptr.2`)
+is observable and is run.
+
+```ail norun rules=plat.target.1
+fn main()
+    # Tier 1 targets: linux-x64, linux-arm64, windows-x64, windows-arm64, macos-arm64
+    print("five targets")
+```
+
+```ail norun rules=plat.isa.1,plat.isa.2,plat.isa.3
+fn main()
+    # The x86-64-v3 and ARMv8.2-A feature levels are baselines; below them, a program
+    # stops with a diagnostic naming the missing feature level (plat.isa.3).
+    print("baselines")
+```
+
+```ail norun rules=plat.ptr.1,plat.ptr.3,plat.endian.1
+fn main()
+    # Raw pointers are 64 bits; managed references may be narrower and aren't visible
+    # to safe code; all targets are little-endian.
+    print("layout")
+```
+
+```ail rules=plat.ptr.2
+fn main()
+    big := 9223372036854775807   # the largest int: 64 bits on every target
+    print(big)                   # 9223372036854775807
+```
