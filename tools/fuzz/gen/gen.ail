@@ -24,6 +24,8 @@ struct Gen
     mistake_at int
     mistake int
     stmts int
+    ## Whether the program has the module `geo` (a package, not a single file).
+    mods bool
 
 PRELUDE := [
     "struct Pt",
@@ -146,6 +148,24 @@ PRELUDE := [
     "",
 ]
 
+## Separates a package program's `main.ail` from its `geo/geo.ail`.
+MODULE_MARK := "#--- geo/geo.ail"
+
+GEO := [
+    "pub struct Vec2",
+    "    pub x int",
+    "    pub y int",
+    "",
+    "pub fn add(a int, b int) int",
+    "    a + b",
+    "",
+    "pub fn len2(v Vec2) int",
+    "    v.x * v.x + v.y * v.y",
+    "",
+    "fn hidden(a int) int",
+    "    a",
+]
+
 fn Gen.emit(mut self, s str)
     lines.push("{" ".repeat(4 * ind)}{s}")
 
@@ -265,7 +285,7 @@ fn Gen.stmt(mut self)
     if mistake > 0 and stmts == mistake_at
         wrong()
         return
-    k := random.int(0, 26)
+    k := random.int(0, 28)
     if k <= 2
         ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
         e := expr(ty, 2)
@@ -381,6 +401,12 @@ fn Gen.stmt(mut self)
         ind += 1
         emit("print(v)")
         ind -= 1
+    elif k == 27 and mods
+        emit("print(geo.add({expr("int", 1)}, {expr("int", 1)}))")
+    elif k == 28 and mods
+        v := name()
+        emit("{v} := geo.Vec2(x: 1, y: {expr("int", 1)})")
+        emit("print(geo.len2({v}) + {v}.x)")
     elif k == 11
         emit("print(chain({expr("int", 1)}) else 0)")
     elif k == 12
@@ -440,7 +466,13 @@ fn Gen.wrong(mut self)
         40 => emit("mut tot := 0\n{" ".repeat(4 * ind)}par for i in 0..3\n{" ".repeat(4 * ind)}    tot += i")
         41 => emit("{name()} := Atomic(0).add(\"x\")")
         42 => emit("{name()} := Channel[int](4).send(\"x\")")
-        _ => emit("{name()} := spawn nosuch(1)")
+        43 => emit("{name()} := spawn nosuch(1)")
+        44 => emit("{name()} := geo.hidden({iv})")
+        45 => emit("{name()} := geo.nosuch({iv})")
+        46 => emit("{name()} := geo.add(\"x\", {iv})")
+        47 => emit("{name()} := geo.Vec2(x: {iv})")
+        48 => emit("{name()} := add({iv}, 1)")
+        _ => emit("{name()} := nomod.add({iv}, 1)")
 
 fn program(seed int) str
     random.seed(seed)
@@ -453,9 +485,11 @@ fn program(seed int) str
         mistake_at: 0,
         mistake: 0,
         stmts: 0,
+        mods: false,
     )
+    g.mods = random.int(0, 4) == 0
     if random.int(0, 3) == 0
-        g.mistake = random.int(1, 43)
+        g.mistake = random.int(1, if g.mods then 49 else 43)
         g.mistake_at = random.int(1, 12)
     # a few helper functions of two ints, then main
     mut helpers := ""
@@ -469,6 +503,7 @@ fn program(seed int) str
             mistake_at: 0,
             mistake: 0,
             stmts: 0,
+            mods: false,
         )
         hg.vars.push(Var(name: "a", ty: "int", mutable: false))
         hg.vars.push(Var(name: "b", ty: "int", mutable: false))
@@ -481,7 +516,10 @@ fn program(seed int) str
         29 => "struct Bad\n    n int\n\nimpl Area for Bad\n    fn label(self) str\n        \"bad\"\n\n"
         30 => "struct Bad\n    n int\n\nimpl Area for Bad\n    fn area(self) str\n        \"bad\"\n\n"
         _ => ""
-    "{PRELUDE.join("\n")}\n{bad}{helpers}fn main()\n{g.lines.join("\n")}\n    print(0)\n"
+    text := "{PRELUDE.join("\n")}\n{bad}{helpers}fn main()\n{g.lines.join("\n")}\n    print(0)\n"
+    if g.mods
+        return "use geo\n\n{text}{MODULE_MARK}\n{GEO.join("\n")}\n"
+    text
 
 fn main() !
     args := env.args()
@@ -492,4 +530,12 @@ fn main() !
     seed := args[1].to_int() else 1
     fs.make_dir(args[2])?
     for k in 0..n
-        fs.write_text("{args[2]}/p{k}.ail", program(seed + k))?
+        text := program(seed + k)
+        if text.contains(MODULE_MARK)
+            parts := text.split(MODULE_MARK)
+            fs.make_dir("{args[2]}/p{k}")?
+            fs.make_dir("{args[2]}/p{k}/geo")?
+            fs.write_text("{args[2]}/p{k}/main.ail", parts[0])?
+            fs.write_text("{args[2]}/p{k}/geo/geo.ail", parts[1].trim_start())?
+        else
+            fs.write_text("{args[2]}/p{k}.ail", text)?

@@ -42,7 +42,7 @@ carry a mistake.
 ## Widened grammar
 
 Each slice added declarations, statements and mistake kinds to the generator,
-then ran about 2,000 programs (seeds 50000-83999, in four runs of 500):
+then ran about 2,000 programs (seeds 50000-93999, in four runs of 500):
 
 | Slice | Adds | Compared | Disagreements |
 |---|---|---|---|
@@ -50,15 +50,16 @@ then ran about 2,000 programs (seeds 50000-83999, in four runs of 500):
 | traits | trait with a default method, `impl`, `any Trait`, `[T Trait]`, bad impls | 1,989 | 0 |
 | function values | `fn(int) int` parameters and bindings, `mut` function as a value | 1,988 | 0 |
 | tasks | `spawn`/`wait`, `Atomic`, `Mutex`/`with`, `Channel`, `par for`, double wait | 1,991 | 0 |
+| modules | one program in five is a package (`main.ail` + `geo/geo.ail`): `pub` and private items, qualified calls, unknown member, missing `use` | 1,990 | 0 |
 
 AIL has no closures yet (the language card says "no lambdas"), so the third
-slice covers function values. Modules need multi-file packages, which the driver
-doesn't generate yet.
+slice covers function values. The modules slice makes the driver compare directories
+(package programs); diagnostics are compared with their file name.
 
 ## Limits
 
-Zero disagreements measures agreement on this grammar only. The generator has no
-modules, enums with payload mistakes beyond `Shape`, or string-heavy code.
+Zero disagreements measures agreement on this grammar only. The generator has one
+module with no nesting or aliases, no `use` cycles, and little string-heavy code.
 
 ## Rejected alternatives
 

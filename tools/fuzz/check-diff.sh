@@ -11,9 +11,9 @@ N=${1:-1000}; SEED=${2:-1}; SAVE=${3:-tools/fuzz/found/check}
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 CHUNK=250
 
-# "rule line col message" of each JSON diagnostic line on stdin.
+# "rule line col message @file" of each JSON diagnostic line on stdin.
 norm() {
-  sed 's/","\(help\|end_line\|fixes\)".*/"}/; s/.*"rule":"\([^"]*\)".*"line":\([0-9]*\),"col":\([0-9]*\),"message":"\(.*\)"}$/\1 \2 \3 \4/'
+  sed 's/","\(help\|end_line\|fixes\)".*/"}/; s/.*"rule":"\([^"]*\)","file":"\([^"]*\/\)\?\([^"\/]*\)","line":\([0-9]*\),"col":\([0-9]*\),"message":"\(.*\)"}$/\1 \4 \5 \6 @\3/'
 }
 
 # Oracle diagnostics of a program as "rule line col message" lines.
@@ -37,13 +37,13 @@ split_ail() {
 # Prints oracle-only lines with "<" and AIL-only lines with ">".
 compare() {
   n=$1
-  oracle "$W/$n.ail" > "$W/$n.o"
+  oracle "$(cat "$W/$n.path")" > "$W/$n.o"
   norm < "$W/ail/$n.diag" | sort > "$W/$n.a"
   # Only the rules the AIL side reports and the lines it checks, on both sides.
   counted() { awk -v rules="$(cat "$W/ail/$n.rules")" -v skips="$W/ail/$n.skip" '
     BEGIN { split(rules, r, " "); for (i in r) ok[r[i]]=1
-            while ((getline l < skips) > 0) { k=split(l, w, " "); a[++m]=w[k-1]; b[m]=w[k] } }
-    { if (!($1 in ok)) next; for (i=1;i<=m;i++) if ($2>=a[i] && $2<=b[i]) next; print }' "$1"; }
+            while ((getline l < skips) > 0) { k=split(l, w, " "); a[++m]=w[k-1]; b[m]=w[k]; f=w[k-2]; sub(/.*\//,"",f); sf[m]=f } }
+    { if (!($1 in ok)) next; for (i=1;i<=m;i++) if ($2>=a[i] && $2<=b[i] && "@" sf[i]==$NF) next; print }' "$1"; }
   counted "$W/$n.o" > "$W/$n.of"; counted "$W/$n.a" > "$W/$n.af"; mv "$W/$n.af" "$W/$n.a"
   # The AIL side has no `help` text, and the oracle's `help` is cut above.
   diff "$W/$n.of" "$W/$n.a" | grep '^[<>]' || true
@@ -54,16 +54,25 @@ ail_one() {
   ./ail run compiler check "$1" "$1" 2>/dev/null | split_ail
 }
 
-disagrees() {  # $1 program path in $W/min.ail; true if the checkers differ
-  cp "$1" "$W/min.ail"
-  ./ail api --ast --program "$W/min.ail" > "$W/min.json" 2>/dev/null || return 1
+# $1: replacement text for the case's main program (a file, or main.ail of a package).
+# True if the checkers still differ in the way $TARGET names.
+disagrees() {
+  if [ -d "$CASE" ]; then
+    rm -rf "$W/mindir"; cp -r "$CASE" "$W/mindir"; cp "$1" "$W/mindir/main.ail"
+    echo "$W/mindir" > "$W/min.path"
+  else
+    cp "$1" "$W/min.ail"; echo "$W/min.ail" > "$W/min.path"
+  fi
+  ./ail api --ast --program "$(cat "$W/min.path")" > "$W/min.json" 2>/dev/null || return 1
   [ "$(wc -l < "$W/min.json")" = 1 ] || return 1
   ail_one "$W/min.json"
   compare min | cut -d" " -f2,5- | grep -qxF -- "$TARGET"
 }
 
-minimise() {  # $1 program; writes the minimal one to $W/best.ail
-  cp "$1" "$W/best.ail"
+# $1: the case path. Writes the minimal main program to $W/best.ail.
+minimise() {
+  CASE=$1
+  if [ -d "$CASE" ]; then cp "$CASE/main.ail" "$W/best.ail"; else cp "$CASE" "$W/best.ail"; fi
   for size in 8 4 2 1; do
     i=$(wc -l < "$W/best.ail")
     while [ "$i" -ge 1 ]; do
@@ -83,9 +92,9 @@ for ((c=0; c<N; c+=CHUNK)); do
   list=()
   for ((k=c; k<c+CHUNK && k<N; k++)); do
     total=$((total+1))
-    f="$W/gen/p$k.ail"
+    f="$W/gen/p$k.ail"; [ -d "$W/gen/p$k" ] && f="$W/gen/p$k"
     ./ail api --ast --program "$f" > "$W/p$k.json" 2>/dev/null && [ "$(wc -l < "$W/p$k.json")" = 1 ] || continue
-    cp "$f" "$W/p$k.ail"; list+=("$W/p$k.json")
+    echo "$f" > "$W/p$k.path"; list+=("$W/p$k.json")
   done
   [ ${#list[@]} -ge 1 ] || continue
   [ ${#list[@]} -ge 2 ] || list+=("${list[0]}")
@@ -96,10 +105,16 @@ for ((c=0; c<N; c+=CHUNK)); do
     if [ -n "$d" ]; then
       bad=$((bad+1))
       TARGET=$(echo "$d" | head -1 | cut -d" " -f2,5-)
-      minimise "$W/$n.ail"
+      case=$(cat "$W/$n.path"); minimise "$case"
       sig=$(cksum < "$W/best.ail" | cut -d' ' -f1)
-      if [ ! -e "$SAVE/$sig.ail" ]; then cp "$W/best.ail" "$SAVE/$sig.ail"; saved=$((saved+1)); fi
-      echo "disagree: $n ($(wc -l < "$W/best.ail") lines) -> $SAVE/$sig.ail"; echo "$d" | head -4
+      if [ -d "$case" ]; then
+        dest="$SAVE/$sig"
+        if [ ! -e "$dest" ]; then cp -r "$case" "$dest"; cp "$W/best.ail" "$dest/main.ail"; saved=$((saved+1)); fi
+      else
+        dest="$SAVE/$sig.ail"
+        if [ ! -e "$dest" ]; then cp "$W/best.ail" "$dest"; saved=$((saved+1)); fi
+      fi
+      echo "disagree: $n ($(wc -l < "$W/best.ail") lines) -> $dest"; echo "$d" | head -4
     fi
   done
   echo "-- $checked checked of $total, $bad disagreements"
