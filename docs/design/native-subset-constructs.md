@@ -29,7 +29,6 @@ names the owner, so put the more specific rows first.
 | error structs and enums | error struct | lane 120 |
 | unique structs | unique struct | lane 120 |
 | comprehension of unknown type | comprehension whose | lane 179 |
-| else with a handler | else with a handler | - |
 | for mut | for mut | - |
 | char patterns | char patterns | - |
 | bytes literals | bytes literals | - |
