@@ -36,6 +36,9 @@ pub enum Ty
     ## The element type of a `Tensor[f32]` (ADR 0815); there is no scalar `f32`
     ## value in the native subset yet.
     F32
+    ## `(A, B, ...)` (ADR 0829): a struct object (kind 4) with one 8-byte slot
+    ## per element, in order.
+    Tuple(elems List[Ty])
     Unknown
     Unit
     ## A function value: the address of a declared function (ADR 0573).
@@ -99,6 +102,7 @@ pub fn Ty.name(self) str
         Opt(t) => "{t.name()}?"
         Tensor(e) => "Tensor[{e.name()}]"
         F32 => "f32"
+        Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
         Enum(n) => n
         Unknown => "?"

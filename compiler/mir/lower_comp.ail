@@ -28,6 +28,15 @@ fn comp_loops(inner List[ast.Stmt], clauses List[ast.CompFor], pos ast.Pos) List
                 else_err: none,
                 pos: pos,
             ))]
+        if c.unpack.len() > 0
+            # `for a, b in xs` takes each element apart first (type.tuple.5).
+            mut inner := [ast.Stmt.LetTuple(
+                names: c.unpack,
+                value: ast.Expr.Name(name: c.var, pos: pos),
+                pos: pos,
+            )]
+            inner.extend(body)
+            body = inner
         body = [ast.Stmt.For(
             is_par: false,
             var: c.var,

@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | Bytes | List | Struct | Enum => Ty.Opt(t)
+        Int | Float | Bool | Char | Str | Bytes | List | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -693,6 +693,7 @@ fn Lower.display_call(mut self, v Val) int?
     key := match v.ty
         Struct(k) => k
         Enum(k) => k
+        Tuple => return tuple_text(v)
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
