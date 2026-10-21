@@ -150,7 +150,7 @@ impl Lock {
         if self.failed || !self.stale() {
             return Ok(false);
         }
-        std::fs::write(&self.path, self.render()).map_err(|e| format!("can't write {}: {e}", self.path.display()))?;
+        std::fs::write(&self.path, self.render()).map_err(|e| format!("can't write {}: {e}", crate::shown::shown(&self.path)))?;
         Ok(true)
     }
 }
@@ -177,12 +177,12 @@ pub fn fetch(name: &str, source: &Source, locked: Option<&str>, offline: bool, p
     let err = |msg: String, help: &str| Err(Diagnostic::new("mod.pkg.7", pos, msg).help(help.to_string()));
     if offline {
         return err(
-            format!("dependency `{name}` isn't in the cache `{}`, and `--deny net` refuses to fetch it", deps.display()),
+            format!("dependency `{name}` isn't in the cache `{}`, and `--deny net` refuses to fetch it", crate::shown::shown(&deps)),
             "run the program once without `--deny net` or `--deterministic` to fetch it",
         );
     }
     if let Err(e) = std::fs::create_dir_all(&deps) {
-        return err(format!("can't create the cache `{}` for dependency `{name}`: {e}", deps.display()), "set `AIL_HOME` to a writable directory");
+        return err(format!("can't create the cache `{}` for dependency `{name}`: {e}", crate::shown::shown(&deps)), "set `AIL_HOME` to a writable directory");
     }
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     let tmp = deps.join(format!(".fetch-{name}-{}-{stamp}", std::process::id()));

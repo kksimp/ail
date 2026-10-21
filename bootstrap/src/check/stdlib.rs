@@ -172,6 +172,14 @@ impl<'p> Checker<'p> {
                 return Some(t);
             }
         }
+        if module == "hw" {
+            // unsafe.hw.1-2: hardware access is unsafe, and needs `unsafe driver`.
+            self.note_unsafe_op(&format!("`{what}`"), pos);
+            self.driver_opt_in(&format!("`{what}`"), pos);
+            if f == "at" {
+                return Some(self.hw_at(args, pos, expect));
+            }
+        }
         if module == "tensor" {
             return Some(self.tensor_call(f, args, pos, expect));
         }
@@ -284,6 +292,8 @@ impl<'p> Checker<'p> {
             // unsafe.mem.1: C strings in memory the program frees itself.
             ("mem", "cstr") => (vec![Str], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
+            // unsafe.hw.4: barriers take and return nothing.
+            ("hw", "fence" | "fence_io") => (vec![], Unit),
             ("mem", "null") => (vec![], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("net", "options") => (vec![], std_ty("net.Options")),
             ("net", "open") => (

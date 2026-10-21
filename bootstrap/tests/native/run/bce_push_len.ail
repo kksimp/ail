@@ -1,0 +1,77 @@
+# A push loop keeps the list's length in a register and stores it where the
+# loop exits (native.bce.6): the list must be right afterwards for one push
+# per iteration, several, floats, bools, strings, a loop that stops early,
+# pushes under a condition, and reads of the list inside the loop.
+fn squares(n int) List[int]
+    mut out := []
+    for i in 0..n
+        out.push(i * i)
+    out
+
+fn pairs(n int) List[int]
+    mut out := [100]
+    for i in 0..n
+        out.push(i)
+        out.push(0 - i)
+        out.push(i * 10)
+    out
+
+fn halves(n int) List[float]
+    mut out := []
+    for i in 0..n
+        out.push(i.to_float() / 2.0)
+    out
+
+fn marks(n int) List[bool]
+    mut out := [true]
+    for i in 0..n
+        out.push(i % 2 == 0)
+    out
+
+fn names(n int) List[str]
+    mut out := []
+    for i in 0..n
+        out.push("n{i}")
+    out
+
+fn early(n int, stop int) List[int]
+    mut out := []
+    for i in 0..n
+        if i == stop
+            break
+        out.push(i)
+    out
+
+fn evens(n int) List[int]
+    mut out := []
+    for i in 0..n
+        if i % 2 == 0
+            out.push(i)
+    out
+
+fn running(n int) List[int]
+    mut out := [1]
+    for i in 0..n
+        out.push(out[out.len() - 1] + i)
+    out
+
+fn copy_of(src List[int]) List[int]
+    mut out := []
+    for x in src
+        out.push(x)
+    out
+
+fn main()
+    print(squares(8))
+    print(squares(0))
+    print(pairs(4))
+    print(halves(5))
+    print(marks(5))
+    print(names(4))
+    print(early(100, 3))
+    print(evens(9))
+    print(running(6))
+    print(copy_of(pairs(3)))
+    big := squares(100000)
+    print(big.len())
+    print(big[99999])

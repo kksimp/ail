@@ -354,7 +354,7 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
         Wd::push(&mut body, ind, &format!("for i{l} in 0..{bound}"));
         for _ in 0..r.below(5) + 2 {
             let i = format!("i{l}");
-            let line: Vec<String> = match r.below(16) {
+            let line: Vec<String> = match r.below(18) {
                 0 => vec![format!("acc += run(ops[{i} % 4], acc)")],
                 1 => vec![format!("acc += run(ops[{}], {i})", if wild > 0 && r.chance(1, 3) { "5".to_string() } else { format!("{i} % 4") })],
                 2 => vec![format!("acc += o.inner.grow({i} * 7)")],
@@ -375,6 +375,8 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
                 13 if !pure => vec![format!("s = \"{{s}}{{acc % 10}}\""), format!("acc += s.len()")],
                 14 if !pure => vec![format!("acc += s.slice(0, {}).len()", if wild > 0 && r.chance(1, 2) { "100".to_string() } else { "s.len() / 2".to_string() })],
                 15 if !pure => vec![format!("print(\"{{o.inner.tag}} {{acc}} {{o.inner.n}}\")")],
+                16 => vec![format!("acc += [\"b{{{i} % 3}}\", \"a\", \"c{{acc % 4}}\"].sorted()[0].len()")],
+                17 => vec![format!("acc += o.xs.sorted()[0] % 9")],
                 _ => vec![format!("acc += {i}")],
             };
             for l in line {
@@ -409,4 +411,126 @@ impl Wd {
         out.push_str(line);
         out.push('\n');
     }
+}
+
+/// Tuples (type.tuple.*): literals, `a, b := t`, `t.0`, tuple patterns in `match`, tuple
+/// returns and parameters, tuples in lists and as map keys, `==` and `<`, and printing.
+/// Values stay small. With `break_it` one construct is made invalid, so the checker
+/// has something to reject.
+pub fn tuples(seed: u64, break_it: bool) -> String {
+    let mut r = Rng::new(seed ^ 0x7091_E5);
+    let mut out = String::from(
+        "fn pair(a int, b int) (int, int)\n    (a + b, a - b)\n\nfn triple(a int) (int, str, bool)\n    (a, \"t{a}\", a % 2 == 0)\n\nfn swap(t (int, str)) (str, int)\n    (t.1, t.0)\n\n",
+    );
+    out.push_str("fn main()\n    mut acc := 0\n    mut t := (1, \"a\")\n    mut p := (2, 3)\n    mut xs := [(1, 2), (3, 4)]\n    mut m := Map[(int, int), int]()\n");
+    let mut id = 0;
+    let bound = r.below(6) + 1;
+    out.push_str(&format!("    for i in 0..{bound}\n"));
+    let mut lines: Vec<String> = Vec::new();
+    for _ in 0..r.below(8) + 3 {
+        id += 1;
+        let n = id;
+        let wild = r.chance(1, 10);
+        let l: Vec<String> = match r.below(18) {
+            0 => vec![format!("a{n}, b{n} := pair(acc % 100, i)"), format!("acc += a{n} + b{n}")],
+            1 => vec![format!("p = (p.1, p.0 + i)")],
+            2 => vec!["match p".into(), "    (0, _) => acc += 1".into(), "    (k, w) => acc += k % 7 + w % 3".into()],
+            3 => vec![format!("t = (i, \"s{{i}}\")")],
+            4 => vec![format!("x{n}, y{n} := xs[{}]", if wild { "i + 5".to_string() } else { "i % xs.len()".to_string() }), format!("acc += x{n} + y{n}")],
+            5 => vec![format!("c{n}, mut d{n} := p"), format!("d{n} += 1"), format!("acc += c{n} + d{n}")],
+            6 => vec![format!("m[(i % 3, {})] += i", r.below(2))],
+            7 => vec![format!("s{n}, n{n} := swap(t)"), format!("acc += s{n}.len() + n{n}")],
+            8 => vec![format!("xs.push((i, acc % 10))")],
+            9 => vec!["if p == (1, 2) or p < (5, 5)".into(), "    acc += 1".into()],
+            10 => vec![format!("_, s{n}, ok{n} := triple(i)"), format!("if ok{n}"), format!("    acc += s{n}.len()")],
+            11 => vec![format!("for q{n}, v{n} in xs.enumerate()"), format!("    acc += q{n} * v{n}.0 % 50")],
+            12 => vec![format!("for e{n} in xs"), format!("    acc += e{n}.1 % 9")],
+            13 => vec![format!("acc += t.1.len() + t.0 % 5")],
+            14 => vec![format!("xs[i % xs.len()] = (acc % 7, i)")],
+            15 => vec![format!("print(t)"), format!("print(p)")],
+            16 => vec![format!("acc += (xs[0].0 + xs[0].1) * (p.0 % 3)")],
+            _ => vec![format!("if t == (i, \"s{{i}}\")"), format!("    acc += 2")],
+        };
+        lines.extend(l);
+    }
+    if break_it {
+        // One invalid construct, picked from a few the checker must reject.
+        let bad = match r.below(7) {
+            0 => "a9, b9, z9 := pair(1, 2)",
+            1 => "acc += p",
+            2 => "acc += p.2",
+            3 => "p = (1, \"x\")",
+            4 => "t = (1, 2, 3)",
+            5 => "match p\n    (0, _) => acc += 1",
+            _ => "s9, n9 := acc",
+        };
+        let at = r.below(lines.len() + 1);
+        for (k, l) in bad.lines().enumerate() {
+            lines.insert(at + k, l.to_string());
+        }
+    }
+    for l in lines {
+        out.push_str("        ");
+        out.push_str(&l);
+        out.push('\n');
+    }
+    out.push_str("    print(acc)\n    print(p)\n    print(t)\n    print(xs)\n    print(m.len())\n");
+    out
+}
+
+/// What the native backend grew next (fuzz.nat.*): `match` on `char` (literals, alternatives,
+/// ranges), `==`/`!=` between optionals and values, and error values: error enums and
+/// structs with fields, `return E.V(..)`, `else err` with `err.field`, `?` on fallible calls,
+/// and `else e` on a method.
+pub fn native_errs(seed: u64) -> String {
+    let mut r = Rng::new(seed ^ 0xE22_0A5);
+    let mut out = String::from(
+        "error enum E\n    A \"a\"\n    B(n int) \"b {n}\"\n    C(s str, k int) \"c {s} {k}\"\n\nerror struct S \"bad {path}\"\n    path str\n    code int\n\n\
+struct Box\n    v int\n\n\
+fn pick(n int) int?\n    if n % 3 == 0\n        return none\n    n % 5\n\n\
+fn f(n int) int ! E\n    if n % 4 == 0\n        return E.A\n    if n % 4 == 1\n        return E.B(n: n)\n    if n % 4 == 2\n        return E.C(s: \"x{n}\", k: n % 7)\n    n\n\n\
+fn g(n int) str ! S\n    if n % 3 == 0\n        return S(path: \"p{n}\", code: n)\n    \"ok{n}\"\n\n\
+fn h(n int) int ! E | S\n    a := f(n)?\n    b := g(n)?\n    a + b.len()\n\n\
+fn cls(c char) int\n    match c\n        'a' => 1\n        'b' | 'c' => 2\n        'd'..='f' => 3\n        'x'..'z' => 4\n        _ => 0\n\n\
+fn Box.get(self, n int) int ! E\n    f(n + v)?\n\n\
+fn main()\n    mut acc := 0\n    word := \"abcdexyz-\"\n",
+    );
+    let bound = r.below(7) + 2;
+    out.push_str(&format!("    for i in 0..{bound}\n"));
+    let mut id = 0;
+    let mut lines: Vec<String> = Vec::new();
+    for _ in 0..r.below(8) + 4 {
+        id += 1;
+        let n = id;
+        let l: Vec<String> = match r.below(19) {
+            5 | 12 if seed % 4 != 0 => vec![format!("acc += i")],
+            0 => vec![format!("r{n} := f(i) else err"), "    match err".into(), "        A => 0 - 1".into(), "        B(k) => k % 5".into(), "        C(s, k) => s.len() + k".into(), format!("acc += r{n}")],
+            1 => vec![format!("acc += f(i + {}) else 7", r.below(3))],
+            2 => vec![format!("t{n} := g(i) else err"), "    \"{err.path}-{err.code}\"".into(), format!("acc += t{n}.len()")],
+            3 => vec![format!("hv{n} := h(i) else err"), "    print(err)".into(), "    0 - 2".into(), format!("acc += hv{n}")],
+            4 => vec![format!("z{n} := f(i) else continue"), format!("acc += z{n}")],
+            5 => vec![format!("bx{n} := Box(v: i)"), format!("bv{n} := bx{n}.get(i) else e"), "    print(e)".into(), "    3".into(), format!("acc += bv{n}")],
+            6 => vec![format!("for ch{n} in word.chars()"), format!("    acc += cls(ch{n})")],
+            7 => vec![format!("acc += cls('{}')", r.pick(&["a", "b", "c", "e", "x", "y", "z", "q"]))],
+            8 => vec![format!("o{n} := pick(i)"), format!("if o{n} == {}", r.below(6)), "    acc += 1".into()],
+            9 => vec![format!("o{n} := pick(i)"), format!("if o{n} != none"), "    acc += 2".into()],
+            10 => vec![format!("o{n} := pick(i)"), format!("p{n} := pick(i + {})", r.below(3)), format!("if o{n} == p{n}"), "    acc += 3".into()],
+            11 => vec![format!("o{n} := pick(i)"), format!("if o{n} == none"), "    acc += 4".into(), "else".into(), "    acc += 5".into()],
+            12 => vec![format!("if v{n} := f(i)"), format!("    acc += v{n}"), "else err".into(), "    print(err)".into()],
+            13 => vec![format!("acc += pick(i) else 9")],
+            14 => vec![format!("x{n} := f(i) else err"), "    err.to_str().len()".into(), format!("acc += x{n}")],
+            15 => vec![format!("p{n} := pick(i)"), format!("if p{n} != pick(i + 1)"), "    acc += 6".into()],
+            16 => vec![format!("print(pick(i) else 0)")],
+            17 => vec![format!("m{n} := match word.chars()[i % 9]"), "    'a'..='c' => 1".into(), "    'd' | 'e' => 2".into(), "    _ => 3".into(), format!("acc += m{n}")],
+            _ => vec![format!("acc += i")],
+        };
+        lines.extend(l);
+    }
+    for l in lines {
+        out.push_str("        ");
+        out.push_str(&l);
+        out.push('\n');
+    }
+    out.push_str("    print(acc)\n");
+    out
 }

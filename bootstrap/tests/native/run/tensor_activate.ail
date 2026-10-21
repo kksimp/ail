@@ -1,0 +1,9 @@
+# std.tensor.13: relu and sigmoid.
+fn main()
+    a := tensor.from([-2.5, -0.0, 0.0, 0.5, 3.0, 1.0e3, -1.0e3, 0.0 / 0.0], [2, 4])
+    print(a.relu())
+    print(a.relu().shape())
+    b := tensor.from([0.0, 1.0, -1.0, 2.5, -7.25])
+    print(b.sigmoid().sum() > 2.0)
+    print((b.sigmoid() - b.sigmoid()).sum())
+    print(b.sigmoid().len())

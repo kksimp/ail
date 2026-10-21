@@ -48,3 +48,11 @@ different object) always take the second function.
 - The remaining per-call cost in `map_find`, `map_set` and `main` is code
   generation (argument shuffles at every function entry, loop-invariant
   constants rebuilt in loops); see the report for lane 120.
+
+## Update (2026-10-21)
+
+`map_find_h` and `map_probe` are gone: `map_find` computes the hash and runs the
+probe loop itself, so a lookup is one call (plus `map_key_eq` for keys that are
+not the same object). Strings of 1 to 8 bytes hash in one word without the loop
+(same value as the general path). `map_ops`: 279.7M to 213.6M instructions;
+`wordfreq` 1M: about 217M to 203.0M.

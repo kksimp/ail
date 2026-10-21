@@ -3,7 +3,8 @@
 Chapter key: `unsafe`
 
 > **Status:** Drafted (partial). Specified and implemented in the bootstrap:
-> unsafe blocks, unsafe functions, package opt-in. Specified: the set of
+> unsafe blocks, unsafe functions, package opt-in, `unsafe driver` and
+> `std.hw` (ADR 0820). Specified: the set of
 > unsafe operations, C calls and raw pointers (ADRs 0431–0435).
 > Not yet specified: the precise undefined-behaviour rules inside `unsafe`.
 
@@ -16,8 +17,8 @@ inside an `unsafe` block. *(ADR 0102)*
 an `unsafe` block. *(ADR 0102)*
 
 **unsafe.block.3** — A package may contain `unsafe` blocks and `unsafe fn`
-only if its manifest opts in: `unsafe allow` on its `package` line, or on the
-`dep` line that declares it (`mod.pkg.2`). A program with no `ail.pkg` may use
+only if its manifest opts in: `unsafe allow` (or `unsafe driver`, `unsafe.hw.1`)
+on its `package` line, or on the `dep` line that declares it (`mod.pkg.2`). A program with no `ail.pkg` may use
 `unsafe`. The error is at the block or the `unsafe fn`. *(ADR 0102, ADR 0430)*
 
 **unsafe.block.4** — An implementation MUST be able to list every `unsafe`
@@ -149,6 +150,64 @@ fn main()
             xs.offset(i).write(i * 10)
         print(xs.offset(2).read())
         mem.free(xs)
+```
+
+## Hardware access
+
+**unsafe.hw.1** — `std.hw` and the volatile pointer methods (`unsafe.hw.3`)
+reach hardware. They are unsafe operations (`unsafe.op.1`) and also need
+`unsafe driver` where `unsafe allow` would do for other unsafe code: the word on
+the `package` line of `ail.pkg` or on the `dep` line that grants the package.
+`unsafe driver` includes `unsafe allow`. A program with no `ail.pkg` needs
+`--unsafe driver` on `ail run`, `ail check` or `ail build`. Otherwise the error
+is at the use and names the manifest line to change. *(ADR 0820)*
+
+**unsafe.hw.2** — `hw.at(addr, example)` is a `*T` at the fixed address `addr`,
+where `T` is the type of `example` (`unsafe.ptr.1`). It is the only way from an
+`int` to a pointer. A negative address is a run-time trap. *(ADR 0820)*
+
+**unsafe.hw.3** — `p.read_volatile()` and `p.write_volatile(v)` read and write
+a `*T` like `read` and `write` (`unsafe.ptr.2`), in one access of the width of
+`T`. They are never merged, removed or reordered against each other. The
+address must be a multiple of the width, or it is a run-time trap. The checks
+of `unsafe.ptr.4–6` apply. *(ADR 0820)*
+
+**unsafe.hw.4** — `hw.fence()` orders all earlier memory accesses before all
+later ones. `hw.fence_io()` does the same for device accesses. Both are unsafe
+operations. *(ADR 0820)*
+
+**unsafe.hw.5** — A call of `std.hw` or of a volatile method gives the effect
+`hw`, which propagates like `unsafe` (`eff.infer.3`). `@pure` rejects it
+(`eff.pure.1`), and it orders the iterations of a loop (`conc.par.2`).
+*(ADR 0820)*
+
+```ail tool=run,--unsafe,driver,FILE expect=7 rules=unsafe.hw.2,unsafe.hw.3,unsafe.hw.4,unsafe.hw.5
+use std.mem
+
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0.to_u32())
+        xs.offset(1).write_volatile(7.to_u32())
+        hw.fence()
+        print(xs.offset(1).read_volatile())
+        mem.free(xs)
+```
+
+```ail error=unsafe.hw.1
+fn main()
+    unsafe
+        p := hw.at(4096, 0)
+        print(p.is_null())
+```
+
+```ail pkg=driver_denied tool=check,DIR status=2 expect=unsafe.hw.1 rules=unsafe.hw.1
+```
+
+```ail norun flags=--unsafe,driver rules=unsafe.hw.3
+fn main()
+    unsafe
+        p := hw.at(4097, 0)
+        print(p.read_volatile())
 ```
 
 ## Runnable examples for the rules above

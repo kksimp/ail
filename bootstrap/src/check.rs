@@ -2380,12 +2380,22 @@ impl<'p> Checker<'p> {
                 if t == Ty::Int {
                     self.error_help("expr.loop.4", iter.pos(), msg, "iterate over a range, e.g. `0..n`");
                 } else if matches!(t, Ty::Opt(_)) {
-                    self.error_help(
-                        "expr.loop.4",
-                        iter.pos(),
-                        msg,
+                    let mut d = Diagnostic::new("expr.loop.4", iter.pos(), msg).help(
                         "`recv()` gives one value or `none`; to receive until the channel is closed, write `for v in ch`",
                     );
+                    // `for v in ch.recv()` on a channel name: the loop is the receive.
+                    if let Expr::Method { recv, name, args, .. } = iter
+                        && name == "recv"
+                        && args.is_empty()
+                        && let Expr::Name(n, p) = &**recv
+                        && matches!(self.local(n).map(|l| &l.ty), Some(Ty::Conc(conc::Conc::Channel, _)))
+                    {
+                        d = d.fix(
+                            "receive until the channel is closed",
+                            vec![Edit::replace(*p, format!("{n}.recv()"), n.clone())],
+                        );
+                    }
+                    self.diags.push(d);
                 } else {
                     self.error_help(
                         "expr.loop.4",
