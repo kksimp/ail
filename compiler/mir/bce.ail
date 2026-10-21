@@ -481,6 +481,64 @@ fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
             check(emit("lt", [idx, emit("sub", [l, konst(nd.off)], Ty.Int)], Ty.Bool))
         _ => in_bounds(x, idx, none)
 
+## A value's range from the loops around it, when the loops are counted from
+## and to constants (or values with such ranges): `ok` says whether it is known.
+struct Iv
+    ok bool
+    lo int
+    hi int
+
+fn no_iv() Iv
+    Iv(ok: false, lo: 0, hi: 0)
+
+## Past this magnitude a bound isn't tracked, so products stay far from 2^63.
+IV_BIG := 2147483648
+
+fn iv_of(f Func, defs List[Def], loops List[LoopInfo], v int, depth int) Iv
+    if depth > 6
+        return no_iv()
+    if defs[v].at >= 0
+        i := inst_of(f, defs, v) else return no_iv()
+        if i.op == "const"
+            return Iv(ok: i.imm > 0 - IV_BIG and i.imm < IV_BIG, lo: i.imm, hi: i.imm)
+        if i.op != "add" and i.op != "sub" and i.op != "mul"
+            return no_iv()
+        a := iv_of(f, defs, loops, i.args[0], depth + 1)
+        b := iv_of(f, defs, loops, i.args[1], depth + 1)
+        if not a.ok or not b.ok
+            return no_iv()
+        if i.op == "add"
+            return iv_clamp(a.lo + b.lo, a.hi + b.hi)
+        if i.op == "sub"
+            return iv_clamp(a.lo - b.hi, a.hi - b.lo)
+        ps := [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi]
+        mut lo := ps[0]
+        mut hi := ps[0]
+        for x in ps
+            if x < lo
+                lo = x
+            if x > hi
+                hi = x
+        return iv_clamp(lo, hi)
+    for lp in loops
+        c := counted(f, defs, lp) else continue
+        if c.p != v
+            continue
+        if c.step >= 0
+            return no_iv()
+        cmp := inst_of(f, defs, f.blocks[lp.header].term.cond) else return no_iv()
+        if cmp.op != "lt" or cmp.args[0] != v
+            return no_iv()
+        a := iv_of(f, defs, loops, c.lo, depth + 1)
+        b := iv_of(f, defs, loops, c.hi, depth + 1)
+        if a.ok and b.ok
+            return iv_clamp(a.lo, if b.hi > a.lo then b.hi else a.lo)
+        return no_iv()
+    no_iv()
+
+fn iv_clamp(lo int, hi int) Iv
+    Iv(ok: lo > 0 - IV_BIG and hi < IV_BIG, lo: lo, hi: hi)
+
 fn cst(f Func, defs List[Def], v int) int?
     if v < defs.len() then const_of(f, defs, v) else none
 
@@ -742,11 +800,15 @@ fn version(
     )
     hd := inst_of(f, defs, c.bound)
     if cst(f, defs, c.lo) == none
-        # The start was computed before the loop: not negative, and small.
-        if gd.zero < 0
-            gd.zero = gd.konst(0)
-        gd.check(gd.emit("ge", [c.lo, gd.zero], Ty.Bool))
-        gd.within(c.lo)
+        # The start was computed before the loop: not negative, and small,
+        # unless the loops around it already say so.
+        lo_iv := iv_of(f, defs, loops, c.lo, 0)
+        if not (lo_iv.ok and lo_iv.lo >= 0)
+            if gd.zero < 0
+                gd.zero = gd.konst(0)
+            gd.check(gd.emit("ge", [c.lo, gd.zero], Ty.Bool))
+        if not (lo_iv.ok and lo_iv.hi <= LIMIT and lo_iv.lo >= 0 - LIMIT)
+            gd.within(c.lo)
     if c.step >= 0
         # A step computed before the loop: at least 1, and small.
         gd.check(gd.emit("ge", [c.step, gd.konst(1)], Ty.Bool))
@@ -761,6 +823,9 @@ fn version(
         if pr.limited.len() > 8
             return none
         for v in pr.limited
+            vi := iv_of(f, defs, loops, v, 0)
+            if vi.ok and vi.hi <= LIMIT and vi.lo >= 0 - LIMIT
+                continue
             gd.within(fresh_of(hoists, hidx, v))
     mut seen := Set[str]()
     mut floors := known

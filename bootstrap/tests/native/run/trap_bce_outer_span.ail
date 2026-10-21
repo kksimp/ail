@@ -1,0 +1,16 @@
+# The list is too short for the last pair: the trap names the same access as the
+# loop without a guard (type.coll.4).
+fn pairs(s List[float]) float
+    mut t := 0.0
+    for i in 0..5
+        bi := i * 7
+        for j in i + 1..5
+            bj := j * 7
+            t += s[bi + 1] * s[bj + 2]
+    t
+
+fn main()
+    mut s := List[float]()
+    for i in 0..30
+        s.push(i.to_float())
+    print(pairs(s))

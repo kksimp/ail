@@ -194,3 +194,11 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     `y < len - k` for the largest `k` per (list, `y`) (native.bce.10); the
     in-loop `y + k` additions lose their overflow check because the guard
     bounds `y`. nbody 49.3M to 38.0M instructions (-22.9%; C 28.3M).
+17. **A guard does not test what the loops around it already bound.** The
+    inner loop of nbody's `advance` starts at `i + 1` for an outer counter
+    over constants, and its guard still tested on every entry that the start
+    was not negative and within +-2^30, eight compares per outer iteration.
+    `iv_of` in `bce.ail` takes the range of a value from constants,
+    `+ - *` of such ranges and counted loops (step 1, `p < hi`) whose bounds
+    have ranges, and the guard leaves out the tests the range answers.
+    nbody 38.0M to 35.5M instructions (-6.6%, on top of item 13).
