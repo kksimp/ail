@@ -1479,13 +1479,15 @@ impl<'p> Checker<'p> {
             "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
         };
         self.error_help("err.use.1", pos, "this can fail, and the failure isn't handled", help);
+        // err.fix.1: where the failure sits, in a statement, a binding or an argument.
+        self.try_fix_at(t, pos);
         true
     }
 
     /// fix.edit.3: offer `?` after a statement-level fallible call when this
     /// function's error type already admits its errors. Adds the fix to the
     /// `err.use.1` diagnostic just reported.
-    fn try_fix(&mut self, t: &Ty, e: &Expr) {
+    fn try_fix_at(&mut self, t: &Ty, at: Pos) {
         let Ty::Res(_, errs) = t else { return };
         let errors = self.errs_of(errs);
         let admits = match &self.ret {
@@ -1495,17 +1497,14 @@ impl<'p> Checker<'p> {
         };
         // err.fix.1: a function that can't fail yet can be made to.
         let sig = if admits { None } else { self.signature_fix(&errors) };
-        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
-        if !matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
-            return;
-        }
+        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1" && d.fixes.is_empty()) else { return };
         if admits {
             d.fixes.push(Fix {
                 title: "pass the error on with `?`".into(),
-                edits: vec![Edit::at_line_end(e.pos(), "?")],
+                edits: vec![Edit::after_expr(at, "?")],
             });
         } else if let Some((title, edit)) = sig {
-            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::at_line_end(e.pos(), "?")] });
+            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::after_expr(at, "?")] });
         }
     }
 
@@ -1724,9 +1723,6 @@ impl<'p> Checker<'p> {
             }
             // err.use.1: a failure can't be discarded.
             if (!last || !need) && matches!(s, Stmt::Expr(_)) && self.reject_unhandled(&ty, s.pos()) {
-                if let Stmt::Expr(e) = s {
-                    self.try_fix(&ty, e);
-                }
                 ty = Ty::Err;
             }
         }
@@ -1766,7 +1762,6 @@ impl<'p> Checker<'p> {
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => {
-                        self.try_fix(&vt, value);
                         Self::ok_type(&vt)
                     }
                     None => vt,
