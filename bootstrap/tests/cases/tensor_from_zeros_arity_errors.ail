@@ -1,0 +1,4 @@
+fn main()
+    print(tensor.from())
+    print(tensor.zeros([1], [2]))
+    print(tensor.from([1.0], [1], [1]))

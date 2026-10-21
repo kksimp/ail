@@ -11,7 +11,7 @@ use crate::num::Num;
 use crate::stdlib::{StdCall, TENSOR_METHODS};
 
 impl<'p> Checker<'p> {
-    fn tensor_ty(&self, elem: Ty) -> Ty {
+    pub(super) fn tensor_ty(&self, elem: Ty) -> Ty {
         match self.types.get("tensor.Tensor") {
             Some(Def::Struct(s)) => Ty::Struct(*s, vec![elem]),
             _ => unreachable!("std/types.ail declares `Tensor`"),
