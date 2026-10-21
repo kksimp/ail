@@ -55,7 +55,7 @@ native kernels were *slower* than the interpreter's AVX2 and threaded ones
 AVX kernels of `compiler/x64/kernels.ail` (`matmul`'s inner loop and the
 elementwise operators, general loops that any tensor program uses) bring them to
 0.05 s and 0.26-0.30 s on x86-64, against 0.05 s and 0.34-0.42 s for `ail run`
-and 0.10-0.15 s and 0.24-0.37 s for NumPy. NEON kernels are the ARM64 half.
+and 0.10-0.15 s and 0.24-0.37 s for NumPy. The NEON kernels of `compiler/a64/kernels.ail` are the ARM64 half (two doubles at a time, the same operations and roundings).
 
 ## Rejected alternatives
 
