@@ -306,6 +306,11 @@ pub fn program(seed: u64, pure: bool) -> String {
 /// nested structs, inside the same kind of loops. Values stay small so most
 /// runs finish; `wild` sometimes leaves a list index or a map key unchecked.
 pub fn wide(seed: u64, pure: bool) -> String {
+    wide_for(seed, pure, false)
+}
+
+/// `nat`: keep to what `ail build` can be asked for next (no function values).
+pub fn wide_for(seed: u64, pure: bool, nat: bool) -> String {
     let mut r = Rng::new(seed ^ 0x5EED_1DE5);
     let wild = if r.chance(1, 4) { 6 } else { 0 };
     let mut out = String::from(
@@ -332,6 +337,7 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
                 4 => vec![format!("o.xs.push(acc % 100)"), format!("acc += o.xs.len()")],
                 5 => vec![format!("acc += o.xs[{}]", if wild > 0 && r.chance(1, 2) { format!("{i} + 3") } else { format!("{i} % o.xs.len()") })],
                 6 => vec![format!("o.xs[{i} % o.xs.len()] = acc % 50")],
+                7 | 8 | 9 if nat => vec![format!("acc += {i} % 7")],
                 7 => vec![format!("f = if {i} % 2 == 0 then dbl else inc")],
                 8 => vec![format!("acc = apply(f, acc % 1000)")],
                 9 => vec![format!("acc += f({i})")],
@@ -357,6 +363,13 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
     }
     out.push_str(&body);
     out.push_str("    print(acc)\n    print(o.inner.n)\n    print(o.xs.len())\n    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n    print(s)\n");
+    if nat {
+        out = out.replace("    mut f := dbl\n", "");
+        out = out.replace("fn apply(f fn(int) int, x int) int\n    f(f(x))\n\n", "");
+    }
+    if nat && !pure {
+        out = out.replace("    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n", "    print(m.len())\n");
+    }
     if pure {
         out = out.replace("    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n    print(s)\n", "");
         out = out.replace("    mut m := Map[str, int]()\n    mut s := \"\"\n", "");
