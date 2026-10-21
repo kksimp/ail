@@ -75,14 +75,33 @@ fn u8_skip(p int, at int, k int) int
         left -= 1
     i
 
-## The characters in bytes `from` up to `to` of the string object at `p`.
+## The continuation bytes (`10xxxxxx`) in the eight bytes of `w`: bit 7 set
+## and bit 6 clear, one bit per byte, added up by a multiply.
+fn u8_cont8(w int) int
+    c := w.bit_and(w.shl(1).bit_xor(-1)).bit_and(-9187201950435737472).shr(7).bit_and(72340172838076673)
+    (c * 72340172838076673).shr(56).bit_and(255)
+
+## The characters in bytes `from` up to `to` of the string object at `p`, eight
+## bytes at a time (ADR 0768): each word has 8 minus its continuation bytes, the
+## last partial word is masked to its bytes. Reading the whole last word is
+## safe, as in `map_hash_str` (ADR 0766).
 fn u8_count(p int, from int, to int) int
     mut n := 0
     mut i := from
-    while i < to
-        if load8(p + 16 + i).bit_and(192) != 128
-            n += 1
-        i += 1
+    while i + 8 <= to
+        w := load64(p + 16 + i)
+        if w.bit_and(-9187201950435737472) == 0
+            n += 8
+        else
+            n += 8 - u8_cont8(w)
+        i += 8
+    if i < to
+        r := to - i
+        w := load64(p + 16 + i).bit_and(1.shl(8 * r) - 1)
+        if w.bit_and(-9187201950435737472) == 0
+            n += r
+        else
+            n += r - u8_cont8(w)
     n
 
 ## The string object holding bytes `from` up to `to` of the one at `p`.
@@ -143,6 +162,75 @@ fn str_cat(a str, b str) str
     r := str_new(pn + load64(q), load64(p + 8) + load64(q + 8))
     copy_bytes(r + 16, p + 16, pn)
     copy_bytes(r + 16 + pn, q + 16, load64(q))
+    str_at(r)
+
+## The bytes of the string object at `p` written at `dst`; the end.
+fn str_put(dst int, p int) int
+    n := load64(p)
+    copy_bytes(dst, p + 16, n)
+    dst + n
+
+## `"{a}{b}{c}"` and longer interpolations: the pieces joined in one
+## allocation (ADR 0768).
+fn str_cat3(a str, b str, c str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    r := str_new(load64(p) + load64(q) + load64(t), load64(p + 8) + load64(q + 8) + load64(t + 8))
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    str_put(d, t)
+    str_at(r)
+
+fn str_cat4(a str, b str, c str, e str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    str_put(d, u)
+    str_at(r)
+
+fn str_cat5(a str, b str, c str, e str, f str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    v := str_addr(f)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u) + load64(v),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8) + load64(v + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    d = str_put(d, u)
+    str_put(d, v)
+    str_at(r)
+
+fn str_cat6(a str, b str, c str, e str, f str, g str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    v := str_addr(f)
+    w := str_addr(g)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u) + load64(v) + load64(w),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8) + load64(v + 8) + load64(w + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    d = str_put(d, u)
+    d = str_put(d, v)
+    str_put(d, w)
     str_at(r)
 
 ## `a == b`: the same UTF-8 bytes.
@@ -218,16 +306,44 @@ fn str_slice(s str, a int, b int, head str, tail str) str
     from := u8_skip(p, 0, a)
     str_sub(p, from, u8_skip(p, from, b - a))
 
+## Whether the bytes of `q` after its first match those of `p` at `i`.
+fn bytes_tail_eq(p int, q int, i int, m int) bool
+    mut k := 1
+    while k < m and load8(p + 16 + i + k) == load8(q + 16 + k)
+        k += 1
+    k == m
+
 ## The byte offset of the first `sub` in `s` at or after byte `from`, or -1.
+## Eight bytes at a time look for the first byte of `sub`: a word xored with
+## it has a zero byte where it occurs, found by the usual subtract-and-mask
+## test, whose lowest flagged byte is exact (ADR 0768).
 fn bytes_find(p int, q int, from int) int
     n := load64(p)
     m := load64(q)
+    if m == 0
+        return if from <= n then from else -1
+    c := load8(q + 16)
+    pat := c * 72340172838076673
+    last := n - m
     mut i := from
-    while i + m <= n
-        mut k := 0
-        while k < m and load8(p + 16 + i + k) == load8(q + 16 + k)
-            k += 1
-        if k == m
+    while i <= last
+        if i + 8 <= n
+            x := load64(p + 16 + i).bit_xor(pat)
+            mut z := (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472)
+            if z == 0
+                i += 8
+                continue
+            mut k := 0
+            while z.bit_and(128) == 0
+                z = z.shr(8)
+                k += 1
+            i += k
+            if i > last
+                return -1
+        elif load8(p + 16 + i) != c
+            i += 1
+            continue
+        if bytes_tail_eq(p, q, i, m)
             return i
         i += 1
     -1
