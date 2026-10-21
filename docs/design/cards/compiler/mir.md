@@ -107,6 +107,7 @@ pub enum mir.Ty
     Fn(params List[mir.Ty], ret mir.Ty)
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
+    pub fn mir.Ty.is_fn(self) bool
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
@@ -189,4 +190,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1901); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1913); dropped: private items, doc comments
