@@ -420,7 +420,7 @@ no `break` can end a function too.
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
   `if n != 0`, not `if n`.
-- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). No mixing
+- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). Math methods (`std.math`, type.num.16): `x.sin()`, `cos`, `tan`, `atan`, `exp`, `ln`, `log10`, `cbrt`; `x.atan2(y)`, `x.pow(y)`, `x.hypot(y)` (`x` first). No mixing
   with `int`: `n.to_float()`, `x.to_int()` (truncates; traps on NaN). An int
   literal works where a float is expected: `x * 2`, `total: 0`. `round()`
   rounds halves away from zero and gives a float: `2.5.round()` is `3.0`.
