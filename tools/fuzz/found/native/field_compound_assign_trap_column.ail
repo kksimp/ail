@@ -1,0 +1,8 @@
+# fuzz.nat.1: a field compound assignment (p.a += 1) traps at the field name's column natively (6:7) but at the operator's column in ail run (6:9). Owner: lane 120 (structs); compiler/mir/lower.ail lower_assign passes mpos, not pos, to assign_member.
+struct P
+    a int
+
+fn main()
+    mut p := P(a: 9223372036854775807)
+    p.a += 1
+    print(p.a)
