@@ -124,6 +124,10 @@ fn lower_file(path str, rt ast.Program?) !mir.Module
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
+            if p.rule == "native.subset.1"
+                help := mir.subset_help(p.message)
+                if help != ""
+                    io.eprint("help: {help}")
         io.exit(1)
         return mir.Module(
             path: path,

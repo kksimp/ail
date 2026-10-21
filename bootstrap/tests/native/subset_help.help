@@ -1,0 +1,13 @@
+bootstrap/tests/native/subset_help.ail:11:7: error[native.subset.1]: not in the native subset yet: `.lines()` on `str`
+help: string methods beyond `chars` and `join` aren't native yet (owner: #184); `ail run` runs them
+bootstrap/tests/native/subset_help.ail:13:4: error[native.subset.1]: expected `bool`, found `str`
+bootstrap/tests/native/subset_help.ail:14:7: error[native.subset.1]: `==` on `str` isn't in the native subset yet
+help: string equality isn't native yet (owner: #184); compare the parts you need, or use `ail run`
+bootstrap/tests/native/subset_help.ail:17:5: error[native.subset.1]: not in the native subset yet: string interpolation outside `print`
+help: interpolation is native only inside `print`; print the parts, or build the text with `xs.join(", ")`
+bootstrap/tests/native/subset_help.ail:20:7: error[native.subset.1]: not in the native subset yet: `.to_int()` on `str`
+help: string methods beyond `chars` and `join` aren't native yet (owner: #184); `ail run` runs them
+bootstrap/tests/native/subset_help.ail:24:5: error[native.subset.1]: `for mut` isn't in the native subset yet
+help: loop by index instead: `for i in 0..xs.len()` and `xs[i] = ...`
+bootstrap/tests/native/subset_help.ail:29:10: error[native.subset.1]: not in the native subset yet: `Map[...]`
+help: maps aren't native yet (owner: #180); keep a `List` of pairs or a struct list, or use `ail run`

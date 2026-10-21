@@ -62,6 +62,30 @@ fn mir_matches_the_expected_dumps() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
+/// ADR 0722: each `native.subset.1` problem of `subset_help.ail` is followed by
+/// its `help:` line, exactly as in `subset_help.help`.
+#[test]
+fn subset_problems_print_their_help_lines() {
+    let case = root().join("bootstrap/tests/native/subset_help.ail");
+    let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
+    let (_, _, err) = compiler(&["mir", &rel]);
+    let want = fs::read_to_string(case.with_extension("help")).unwrap();
+    let mut lines = Vec::new();
+    let mut prev_is_problem = false;
+    for l in err.lines() {
+        if l.starts_with(&rel) {
+            lines.push(l);
+            prev_is_problem = true;
+        } else if prev_is_problem && l.starts_with("help:") {
+            lines.push(l);
+            prev_is_problem = false;
+        } else {
+            prev_is_problem = false;
+        }
+    }
+    assert_eq!(lines.join("\n") + "\n", want, "help lines differ");
+}
+
 /// `ail build` on each `tests/native/run/NAME.ail`, then the executable's
 /// output against `ail run`'s: stdout, the exit code, and a trap's message
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
