@@ -82,4 +82,4 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 | 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
 
 The other chapters are unchanged: 382 uncovered rules before lane 223's first
-PR, 357 after chapters 01-03 (07-21, std and the rest still to do).
+PR, 339 after chapters 01-03 (07-21, std and the rest still to do).
