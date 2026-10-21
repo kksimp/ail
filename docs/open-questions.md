@@ -416,3 +416,25 @@ round-4 programs. Cons: two kinds of equality, and a mixed `==` that a reader
 could take for a conversion. Recommendation: (a) until a larger corpus shows
 the cost; the saving is small and the rule is simpler. Decided by the
 integrator with a measurement, not by this lane.
+## OQ-124 — Pairs: tuples, `zip`, `enumerate` and map `items`
+AIL has no tuple or pair type. Agent code reaches for `zip(a, b)`,
+`enumerate(xs)` and `m.items()` (lane 192's std-parity twins, round 4).
+A two-variable `for i, x in xs` alone was measured in
+[ADR 0675](decisions/0675-round-4-syntax-candidates.md): 46 tokens on a
+23,004-token corpus (0.2%), a tie, so it is not proposed by itself. Pairs
+change the type model (value semantics, patterns, `==`, map keys,
+`type.*` rules), so the designer decides.
+- **a.** No pairs. Loop over indexes or `keys()`; use structs for paired
+  data. Nothing changes; agents keep writing `for i in 0..xs.len()`.
+- **b.** Anonymous tuples `(a, b)` with `.0`/`.1` and destructuring in
+  `let`, `for` and `match`; then `zip`, `enumerate`, `m.items()` are library
+  methods. Largest benefit (also two results from one call), largest
+  surface: the card grows and every checker, formatter and native pass sees a
+  new type.
+- **c.** Only `for i, x in xs` and `for k, v in m` as loop syntax: no new
+  type, covers the common case, but `zip` still cannot exist and the card
+  grows for 0.2%.
+Recommendation: **a** until a program needs paired data in more than a
+loop; if the designer wants parity with Python here, **b** and not **c**,
+because **c** pays syntax for the smallest slice. Measure b with the 40-program
+corpus first.
