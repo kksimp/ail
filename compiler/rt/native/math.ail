@@ -15,3 +15,658 @@ fn float_round(x float) float
     if d <= -0.5
         return t - 1.0
     t
+
+# ---- std.math: float methods the interpreter has (type.num.16, ADR 0592) ----
+#
+# Algorithms after Sun's fdlibm (1993, permissive licence; the same code
+# FreeBSD's libm uses as msun), rewritten in the native subset: exp, ln,
+# sin, cos, tan, atan, atan2, pow, hypot, cbrt and log10. Each is accurate
+# to about one unit in the last place; `ail` tests compare them with the
+# platform's libm (see NOTICE and docs/decisions/0592).
+
+LN2HI := 6.93147180369123816490e-01
+LN2LO := 1.90821492927058770002e-10
+INVLN2 := 1.44269504088896338700e+00
+PIO4 := 7.85398163397448278999e-01
+PIO4LO := 3.06161699786838301793e-17
+PIO2 := 1.57079632679489655800e+00
+PI := 3.1415926535897931160e+00
+PILO := 1.2246467991473531772e-16
+INVLN10_HI := 4.342944819032518e-01
+INVLN10_LO := 1.098319650216765e-17
+INVLN10 := 4.342944819032518e-01
+LOG10_2HI := 3.01029995663611771306e-01
+LOG10_2LO := 3.69423907715893078616e-13
+
+fn fm_inf() float
+    1.0 / 0.0
+
+fn fm_nan() float
+    0.0 / 0.0
+
+## 2^k for -1022 <= k <= 1023.
+fn fm_pow2(k int) float
+    bits_float((k + 1023).shl(52))
+
+## y * 2^k, in steps that keep every factor normal.
+fn fm_ldexp(y float, k int) float
+    mut r := y
+    mut n := k
+    while n > 1000
+        r = r * fm_pow2(1000)
+        n -= 1000
+    while n < -1000
+        r = r * fm_pow2(-1000)
+        n += 1000
+    r * fm_pow2(n)
+
+## The unbiased exponent of a normal `x`.
+fn fm_exponent(x float) int
+    float_bits(x).shr(52).bit_and(2047) - 1023
+
+## The high 32 bits of `x`, without the sign.
+fn fm_hi(x float) int
+    float_bits(x).shr(32).bit_and(2147483647)
+
+## `x` with its low 32 bits cleared: a 21-bit head (fdlibm's trick).
+fn fm_head(x float) float
+    bits_float(float_bits(x).bit_and(-4294967296))
+
+fn fm_sign(x float) bool
+    float_bits(x) < 0
+
+## Is `y` an odd integer? (Only meaningful for `y` integral.)
+fn fm_odd_int(y float) bool
+    if y.abs() >= 9007199254740992.0
+        return false
+    y.floor() == y and (y.floor().to_int()).bit_and(1) == 1
+
+## Is `y` an integer?
+fn fm_is_int(y float) bool
+    y.floor() == y
+
+## exp(x) (fdlibm e_exp.c): reduce x = k ln2 + r, |r| <= ln2/2, then 2^k * e^r.
+fn float_exp(x float) float
+    fm_exp_dd(x, 0.0)
+
+## exp(x + xl) for a small tail `xl`: the tail joins the reduced argument,
+## so the result keeps the accuracy of the sum (used by pow).
+fn fm_exp_dd(x float, xl float) float
+    if x != x
+        return x
+    if x > 709.782712893384
+        return fm_inf()
+    if x < -745.1332191019412
+        return 0.0
+    if x.abs() < 3.725290298461914e-09
+        return 1.0 + x + xl
+    mut k := 0
+    mut hi := x
+    mut lo := -xl
+    if x.abs() > 0.34657359027997264
+        mut kf := 0.0
+        if x.abs() < 1.0397207708399179
+            kf = if x > 0.0 then 1.0 else -1.0
+        else
+            kf = if x > 0.0 then (INVLN2 * x + 0.5).floor() else (INVLN2 * x - 0.5).ceil()
+        k = kf.to_int()
+        hi = x - kf * LN2HI
+        lo = kf * LN2LO - xl
+    r := hi - lo
+    t := r * r
+    c := r - t * (1.66666666666666019037e-01 + t * (-2.77777777770155933842e-03 + t * (6.61375632143793436117e-05 + t * (-1.65339022054652515390e-06 + t * 4.13813679705723846039e-08))))
+    if k == 0
+        return 1.0 - ((r * c) / (c - 2.0) - r)
+    y := 1.0 - ((lo - (r * c) / (2.0 - c)) - hi)
+    fm_ldexp(y, k)
+
+## ln(x) (fdlibm e_log.c): x = 2^k f with sqrt(1/2) <= f < sqrt(2).
+fn float_ln(x float) float
+    if x != x
+        return x
+    if x < 0.0
+        return fm_nan()
+    if x == 0.0
+        return -fm_inf()
+    if x == fm_inf()
+        return x
+    mut k := 0
+    mut v := x
+    if float_bits(v).shr(52).bit_and(2047) == 0
+        v = v * 18014398509481984.0
+        k = -54
+    k += fm_exponent(v)
+    m := float_bits(v).bit_and(4503599627370495)
+    mut i := 0
+    if m.shr(32) >= 434332
+        i = 1
+    k += i
+    f := bits_float(m.bit_or(if i == 1 then 4602678819172646912 else 4607182418800017408)) - 1.0
+    hfsq := 0.5 * f * f
+    s := f / (2.0 + f)
+    z := s * s
+    w := z * z
+    t1 := w * (3.999999999940941908e-01 + w * (2.222219843214978396e-01 + w * 1.531383769920937332e-01))
+    t2 := z * (6.666666666666735130e-01 + w * (2.857142874366239149e-01 + w * (1.818357216161805012e-01 + w * 1.479819860511658591e-01)))
+    rr := t1 + t2
+    dk := k.to_float()
+    if k == 0
+        return f - (hfsq - s * (hfsq + rr))
+    dk * LN2HI - ((hfsq - (s * (hfsq + rr) + dk * LN2LO)) - f)
+
+INVPIO2 := 6.36619772367581382433e-01
+PIO2_1 := 1.57079632673412561417e+00
+PIO2_1T := 6.07710050650619224932e-11
+PIO2_2 := 6.07710050630396597660e-11
+PIO2_2T := 2.02226624879595063154e-21
+PIO2_3 := 2.02226624871116645580e-21
+PIO2_3T := 8.47842766036889956997e-32
+
+## Above BIGX the reduction is Payne-Hanek: x * (2/pi) is multiplied out
+## exactly, with 2/pi as 1200 bits (40 limbs of 30 bits, least significant
+## first; generated with mpmath, the first 1200 bits of 2/pi).
+PIO2_HI := 1.5707963267948966
+PIO2_LO := 6.123233995736766e-17
+
+## Above this, x is reduced by fm_huge_* (Payne-Hanek). 2^20 * pi/2.
+BIGX := 1647099.3
+
+fn fm_two_over_pi() List[int]
+    [809958523, 874600460, 991033557, 983236311, 931811986, 754195687, 1052663575, 491384497, 509602349, 1025047962, 1018207092, 228570057, 174923629, 1011232104, 427884274, 637532033, 674963448, 1043265508, 524929093, 241226958, 20550102, 449936889, 244958978, 196006177, 679622133, 78028027, 568242635, 879003455, 154069513, 927694873, 115581988, 827878857, 598466235, 17299781, 429114425, 808900773, 301282525, 670080351, 618938706, 683565275]
+
+## The limbs of mant * (2/pi) * 2^1200 for |x| = mant * 2^E (see fm_huge_*).
+fn fm_huge_limbs(ax float) List[int]
+    w := fm_two_over_pi()
+    b := float_bits(ax)
+    mant := b.bit_and(4503599627370495).bit_or(4503599627370496)
+    m0 := mant.bit_and(1073741823)
+    m1 := mant.shr(30)
+    mut ys := List[int]()
+    for _ in 0..w.len() + 2
+        ys.push(0)
+    for j in 0..w.len()
+        ys[j] = ys[j] + w[j] * m0
+        ys[j + 1] = ys[j + 1] + w[j] * m1
+    for k in 0..w.len() + 1
+        carry := ys[k].shr(30)
+        ys[k] = ys[k].bit_and(1073741823)
+        ys[k + 1] = ys[k + 1] + carry
+    ys
+
+## Bit `k` of a limb list (0 below the bottom).
+fn fm_huge_bit(ys List[int], k int) int
+    if k < 0
+        return 0
+    ys[k / 30].shr(k % 30).bit_and(1)
+
+## The binary point of x * (2/pi) in fm_huge_limbs: the fraction is below bit `s`.
+fn fm_huge_shift(ax float) int
+    b := float_bits(ax)
+    1200 - (b.shr(52).bit_and(2047) - 1075)
+
+## The fraction of x * (2/pi), centred on [-1/2, 1/2): its high part (`part`
+## 0) or its low part (`part` 1), each 53 bits.
+fn fm_huge_frac(ax float, part int) float
+    ys := fm_huge_limbs(ax)
+    s := fm_huge_shift(ax)
+    mut hi := 0
+    mut lo := 0
+    for i in 0..53
+        hi = hi.shl(1) + fm_huge_bit(ys, s - 1 - i)
+    for i in 0..53
+        lo = lo.shl(1) + fm_huge_bit(ys, s - 54 - i)
+    h := hi.to_float() * fm_pow2(-53)
+    if part == 1
+        return lo.to_float() * fm_pow2(-106)
+    if h >= 0.5
+        return h - 1.0
+    h
+
+## The quadrant of x mod pi/2 for |x| above BIGX, sign included.
+fn fm_huge_quad(x float) int
+    ys := fm_huge_limbs(x.abs())
+    s := fm_huge_shift(x.abs())
+    mut q := fm_huge_bit(ys, s) + 2 * fm_huge_bit(ys, s + 1)
+    if fm_huge_bit(ys, s - 1) == 1
+        q += 1
+    if x < 0.0
+        q = 4 - q
+    q.bit_and(3)
+
+## The leading part of x - n * pi/2 for |x| above BIGX (its sign included).
+fn fm_huge_y0(x float) float
+    f := fm_huge_frac(x.abs(), 0)
+    fl := fm_huge_frac(x.abs(), 1)
+    p := f * PIO2_HI
+    e := fm_two_prod_err(f, PIO2_HI, p)
+    lo := e + (f * PIO2_LO + fl * PIO2_HI)
+    r := p + lo
+    if x < 0.0
+        return -r
+    r
+
+## The trailing part of that reduction.
+fn fm_huge_y1(x float) float
+    f := fm_huge_frac(x.abs(), 0)
+    fl := fm_huge_frac(x.abs(), 1)
+    p := f * PIO2_HI
+    e := fm_two_prod_err(f, PIO2_HI, p)
+    lo := e + (f * PIO2_LO + fl * PIO2_HI)
+    r := p + lo
+    t := (p - r) + lo
+    if x < 0.0
+        return -t
+    t
+
+## The quadrant and the two parts of x mod pi/2, for any finite x.
+fn fm_quad(x float) int
+    if x.abs() > BIGX
+        return fm_huge_quad(x)
+    n := fm_rem_n(x)
+    (n - 4.0 * (n / 4.0).floor()).to_int()
+
+fn fm_y0(x float) float
+    if x.abs() > BIGX
+        return fm_huge_y0(x)
+    fm_rem_hi(x, fm_rem_n(x))
+
+fn fm_y1(x float) float
+    if x.abs() > BIGX
+        return fm_huge_y1(x)
+    fm_rem_lo(x, fm_rem_n(x))
+
+## The quadrant n of x / (pi/2), rounded to nearest, as a float (fdlibm e_rem_pio2).
+fn fm_rem_n(x float) float
+    (x * INVPIO2 + 0.5).floor()
+
+## Which of the three pi/2 splits the reduction of x by n needs (1 to 3).
+fn fm_rem_stage(x float, fnf float) int
+    r1 := x - fnf * PIO2_1
+    w1 := fnf * PIO2_1T
+    if fm_exponent(x) - fm_exponent(r1 - w1) <= 16
+        return 1
+    r2 := r1 - fnf * PIO2_2
+    w2 := fnf * PIO2_2T - ((r1 - r2) - fnf * PIO2_2)
+    if fm_exponent(x) - fm_exponent(r2 - w2) <= 49
+        return 2
+    3
+
+## The leading part of x - n * pi/2 (fdlibm's y0), for |x| up to about 2^20 * pi/2.
+fn fm_rem_hi(x float, fnf float) float
+    stage := fm_rem_stage(x, fnf)
+    r1 := x - fnf * PIO2_1
+    w1 := fnf * PIO2_1T
+    if stage == 1
+        return r1 - w1
+    r2 := r1 - fnf * PIO2_2
+    w2 := fnf * PIO2_2T - ((r1 - r2) - fnf * PIO2_2)
+    if stage == 2
+        return r2 - w2
+    r3 := r2 - fnf * PIO2_3
+    w3 := fnf * PIO2_3T - ((r2 - r3) - fnf * PIO2_3)
+    r3 - w3
+
+## The trailing part of the reduction (fdlibm's y1).
+fn fm_rem_lo(x float, fnf float) float
+    stage := fm_rem_stage(x, fnf)
+    r1 := x - fnf * PIO2_1
+    w1 := fnf * PIO2_1T
+    mut r := r1
+    mut w := w1
+    if stage >= 2
+        r = r1 - fnf * PIO2_2
+        w = fnf * PIO2_2T - ((r1 - r) - fnf * PIO2_2)
+    if stage == 3
+        r3 := r - fnf * PIO2_3
+        w = fnf * PIO2_3T - ((r - r3) - fnf * PIO2_3)
+        r = r3
+    y0 := r - w
+    (r - y0) - w
+
+## sin(x) on [-pi/4, pi/4] (fdlibm k_sin.c); `y` is the reduction's tail.
+fn fm_ksin(x float, y float, tail bool) float
+    if x.abs() < 3.725290298461914e-09
+        return x
+    z := x * x
+    v := z * x
+    r := 8.33333333332248946124e-03 + z * (-1.98412698298579493134e-04 + z * (2.75573137070700676789e-06 + z * (-2.50507602534068634195e-08 + z * 1.58969099521155010221e-10)))
+    if not tail
+        return x + v * (-1.66666666666666324348e-01 + z * r)
+    x - ((z * (0.5 * y - v * r) - y) - v * (-1.66666666666666324348e-01))
+
+## cos(x) on [-pi/4, pi/4] (fdlibm k_cos.c); `y` is the reduction's tail.
+fn fm_kcos(x float, y float) float
+    ax := x.abs()
+    if ax < 3.725290298461914e-09
+        return 1.0
+    z := x * x
+    r := z * (4.16666666666666019037e-02 + z * (-1.38888888888741095749e-03 + z * (2.48015872894767294178e-05 + z * (-2.75573143513906633035e-07 + z * (2.08757232129817482790e-09 + z * (-1.13596475577881948265e-11))))))
+    if ax < 0.3
+        return 1.0 - (0.5 * z - (z * r - x * y))
+    qx := if ax > 0.78125 then 0.28125 else 0.25 * z
+    hz := 0.5 * z - qx
+    a := 1.0 - qx
+    a - (hz - (z * r - x * y))
+
+## tan(x) on [-pi/4, pi/4] when `iy` is 1, or -1/tan(x) when it is -1 (fdlibm k_tan.c).
+fn fm_ktan(x0 float, y0 float, iy int) float
+    if x0.abs() < 3.725290298461914e-09
+        if iy == 1
+            return x0
+        return -1.0 / (x0 + y0)
+    mut x := x0
+    mut y := y0
+    neg := x < 0.0
+    big := x.abs() >= 0.6744
+    if big
+        if neg
+            x = -x
+            y = -y
+        z0 := PIO4 - x
+        w0 := PIO4LO - y
+        x = z0 + w0
+        y = 0.0
+    z := x * x
+    w := z * z
+    r := 1.33333333333201242699e-01 + w * (2.18694882948595424599e-02 + w * (3.59207910759131235356e-03 + w * (5.88041240820264096874e-04 + w * (7.81794442939557092300e-05 + w * (-1.85586374855275456654e-05)))))
+    v := z * (5.39682539762260521377e-02 + w * (8.86323982359930005737e-03 + w * (1.45620945432529025516e-03 + w * (2.46463134818469906812e-04 + w * (7.14072491382608190305e-05 + w * 2.59073051863633712884e-05)))))
+    s := z * x
+    mut rr := y + z * (s * (r + v) + y)
+    rr = rr + 3.33333333333334091986e-01 * s
+    wx := x + rr
+    if big
+        iv := iy.to_float()
+        t := iv - 2.0 * (x - (wx * wx / (wx + iv) - rr))
+        if neg
+            return -t
+        return t
+    if iy == 1
+        return wx
+    zh := fm_head(wx)
+    vv := rr - (zh - x)
+    a := -1.0 / wx
+    th := fm_head(a)
+    sh := 1.0 + th * zh
+    th + a * (sh + th * vv)
+
+## sin(x) (type.num.16).
+fn float_sin(x float) float
+    if x != x
+        return x
+    if x.abs() >= fm_inf()
+        return fm_nan()
+    if x.abs() <= PIO4
+        return fm_ksin(x, 0.0, false)
+    q := fm_quad(x)
+    y0 := fm_y0(x)
+    y1 := fm_y1(x)
+    if q == 0
+        return fm_ksin(y0, y1, true)
+    if q == 1
+        return fm_kcos(y0, y1)
+    if q == 2
+        return -fm_ksin(y0, y1, true)
+    -fm_kcos(y0, y1)
+
+## cos(x) (type.num.16).
+fn float_cos(x float) float
+    if x != x
+        return x
+    if x.abs() >= fm_inf()
+        return fm_nan()
+    if x.abs() <= PIO4
+        return fm_kcos(x, 0.0)
+    q := fm_quad(x)
+    y0 := fm_y0(x)
+    y1 := fm_y1(x)
+    if q == 0
+        return fm_kcos(y0, y1)
+    if q == 1
+        return -fm_ksin(y0, y1, true)
+    if q == 2
+        return -fm_kcos(y0, y1)
+    fm_ksin(y0, y1, true)
+
+## tan(x) (type.num.16).
+fn float_tan(x float) float
+    if x != x
+        return x
+    if x.abs() >= fm_inf()
+        return fm_nan()
+    if x.abs() <= PIO4
+        return fm_ktan(x, 0.0, 1)
+    q := fm_quad(x).bit_and(1)
+    y0 := fm_y0(x)
+    y1 := fm_y1(x)
+    fm_ktan(y0, y1, 1 - 2 * q)
+
+## `x` with the sign of `s` (C's copysign).
+fn fm_copysign(x float, s float) float
+    if fm_sign(s)
+        return -x.abs()
+    x.abs()
+
+fn fm_atanhi(id int) float
+    if id == 0
+        return 4.63647609000806093515e-01
+    if id == 1
+        return 7.85398163397448278999e-01
+    if id == 2
+        return 9.82793723247329054082e-01
+    1.57079632679489655800e+00
+
+fn fm_atanlo(id int) float
+    if id == 0
+        return 2.26987774529616870924e-17
+    if id == 1
+        return 3.06161699786838301793e-17
+    if id == 2
+        return 1.39033110312309984516e-17
+    6.12323399573676588613e-17
+
+## atan(x) (fdlibm s_atan.c, type.num.16).
+fn float_atan(x float) float
+    if x != x
+        return x
+    ax := x.abs()
+    if ax >= 73786976294838206464.0
+        z := PIO2 + 6.12323399573676588613e-17
+        return fm_copysign(z, x)
+    mut id := -1
+    mut v := ax
+    if ax < 0.4375
+        if ax < 3.725290298461914e-09
+            return x
+    elif ax < 1.1875
+        if ax < 0.6875
+            id = 0
+            v = (2.0 * ax - 1.0) / (2.0 + ax)
+        else
+            id = 1
+            v = (ax - 1.0) / (ax + 1.0)
+    elif ax < 2.4375
+        id = 2
+        v = (ax - 1.5) / (1.0 + 1.5 * ax)
+    else
+        id = 3
+        v = -1.0 / ax
+    z := v * v
+    w := z * z
+    s1 := z * (3.33333333333329318027e-01 + w * (1.42857142725034663711e-01 + w * (9.09088713343650656196e-02 + w * (6.66107313738753120669e-02 + w * (4.97687799461593236017e-02 + w * 1.62858201153657823623e-02)))))
+    s2 := w * (-1.99999999998764832476e-01 + w * (-1.11111104054623557880e-01 + w * (-7.69187620504482999495e-02 + w * (-5.83357013379057348645e-02 + w * (-3.65315727442169155270e-02)))))
+    if id < 0
+        return x - x * (s1 + s2)
+    r := fm_atanhi(id) - ((v * (s1 + s2) - fm_atanlo(id)) - v)
+    if fm_sign(x)
+        return -r
+    r
+
+## atan2(y, x) (fdlibm e_atan2.c, type.num.16): the angle of the point (x, y).
+fn float_atan2(y float, x float) float
+    if x != x or y != y
+        return x + y
+    if x == 1.0
+        return float_atan(y)
+    if y == 0.0
+        if x > 0.0 or (x == 0.0 and not fm_sign(x))
+            return y
+        return fm_copysign(PI, y)
+    if x == 0.0
+        return fm_copysign(PIO2, y)
+    if x.abs() >= fm_inf()
+        if y.abs() >= fm_inf()
+            q := if x > 0.0 then PIO4 else 3.0 * PIO4
+            return fm_copysign(q, y)
+        if x > 0.0
+            return fm_copysign(0.0, y)
+        return fm_copysign(PI, y)
+    if y.abs() >= fm_inf()
+        return fm_copysign(PIO2, y)
+    k := fm_exponent(y.abs()) - fm_exponent(x.abs())
+    mut z := 0.0
+    if k > 60
+        z = PIO2 + 0.5 * PILO
+    elif x < 0.0 and k < -60
+        z = 0.0
+    else
+        z = float_atan((y / x).abs())
+    m := (if x < 0.0 then 2 else 0) + (if y < 0.0 then 1 else 0)
+    if m == 0
+        return z
+    if m == 1
+        return -z
+    if m == 2
+        return PI - (z - PILO)
+    (z - PILO) - PI
+
+## Dekker's exact product: a * b = p + e.
+fn fm_two_prod_err(a float, b float, p float) float
+    c := 134217729.0 * a
+    ah := c - (c - a)
+    al := a - ah
+    d := 134217729.0 * b
+    bh := d - (d - b)
+    bl := b - bh
+    ((ah * bh - p) + ah * bl + al * bh) + al * bl
+
+## sqrt(x^2 + y^2) (fdlibm e_hypot.c's job, here with an exact sum of squares).
+fn float_hypot(x float, y float) float
+    ax := x.abs()
+    ay := y.abs()
+    if ax >= fm_inf() or ay >= fm_inf()
+        return fm_inf()
+    if ax != ax or ay != ay
+        return fm_nan()
+    big := if ax > ay then ax else ay
+    if big == 0.0
+        return 0.0
+    e := fm_exponent(big)
+    sx := fm_ldexp(ax, -e)
+    sy := fm_ldexp(ay, -e)
+    p1 := sx * sx
+    p2 := sy * sy
+    e1 := fm_two_prod_err(sx, sx, p1)
+    e2 := fm_two_prod_err(sy, sy, p2)
+    s := p1 + p2
+    bb := s - p1
+    t := (p1 - (s - bb)) + (p2 - bb)
+    lo := t + e1 + e2
+    h := s.sqrt()
+    hh := h * h
+    hl := fm_two_prod_err(h, h, hh)
+    corr := ((s - hh) - hl + lo) / (2.0 * h)
+    fm_ldexp(h + corr, e)
+
+## Cube root (type.num.16): a power from exp and ln, then Newton steps.
+fn float_cbrt(x float) float
+    if x != x or x.abs() >= fm_inf() or x == 0.0
+        return x
+    ax := x.abs()
+    mut y := float_exp(float_ln(ax) / 3.0)
+    y = (2.0 * y + ax / (y * y)) / 3.0
+    y = (2.0 * y + ax / (y * y)) / 3.0
+    fm_copysign(y, x)
+
+## log10(x) (type.num.16): log10 x = ln x / ln 10 with ln x in double-double.
+fn float_log10(x float) float
+    if x != x or x <= 0.0 or x >= fm_inf()
+        return float_ln(x) * INVLN10
+    lh := fm_ln_part(x, 0)
+    ll := fm_ln_part(x, 1)
+    p := INVLN10_HI * lh
+    p + (fm_two_prod_err(INVLN10_HI, lh, p) + (INVLN10_HI * ll + INVLN10_LO * lh))
+
+## ln(x) for finite x > 0 as a double-double: its high part (`part` 0) or
+## its low part (`part` 1), each good to about 2^-60 relative. ln x is
+## k ln 2 + 2 s (1 + T) with s = (f - 1) / (f + 1) for f in [sqrt(1/2), sqrt 2).
+fn fm_ln_part(x float, part int) float
+    mut v := x
+    mut k := 0
+    if float_bits(v).shr(52).bit_and(2047) == 0
+        v = v * 18014398509481984.0
+        k = -54
+    k += fm_exponent(v)
+    mut f := fm_ldexp(v, -fm_exponent(v))
+    if f >= 1.4142135623730951
+        f = f * 0.5
+        k += 1
+    fm1 := f - 1.0
+    den := f + 1.0
+    bb := den - f
+    eden := (f - (den - bb)) + (1.0 - bb)
+    q := fm1 / den
+    qp := q * den
+    qe := fm_two_prod_err(q, den, qp)
+    rem := ((fm1 - qp) - qe) - q * eden
+    sh := q
+    sl := rem / den
+    z := sh * sh
+    t := z * (0.333333333333333314830 + z * (0.2 + z * (0.142857142857142849 + z * (0.111111111111111110 + z * (0.0909090909090909090 + z * (0.0769230769230769231 + z * (0.0666666666666666667 + z * (0.0588235294117647059 + z * (0.0526315789473684211 + z * (0.0476190476190476190 + z * (0.0434782608695652174 + z * (0.04 + z * (0.0370370370370370370 + z * (0.0344827586206896552))))))))))))))
+    dk := k.to_float()
+    a := dk * LN2HI
+    b := 2.0 * sh
+    hi := a + b
+    bl := hi - a
+    e := (a - (hi - bl)) + (b - bl)
+    if part == 0
+        return hi
+    e + (2.0 * sl + 2.0 * sh * t + dk * LN2LO)
+
+## pow(x, y) (type.num.16): x^y = exp(y ln x), with ln x in double-double,
+## so the product y ln x keeps about 2^-60 relative accuracy.
+fn float_pow(x float, y float) float
+    if y == 0.0 or x == 1.0
+        return 1.0
+    if x != x or y != y
+        return x + y
+    ax := x.abs()
+    if y.abs() >= fm_inf()
+        if ax == 1.0
+            return 1.0
+        if (ax < 1.0) == (y > 0.0)
+            return 0.0
+        return fm_inf()
+    odd := fm_odd_int(y)
+    neg := fm_sign(x) and odd
+    if x == 0.0
+        if y < 0.0
+            return fm_copysign(fm_inf(), if neg then -1.0 else 1.0)
+        return fm_copysign(0.0, if neg then -1.0 else 1.0)
+    if ax >= fm_inf()
+        if y > 0.0
+            return fm_copysign(fm_inf(), if neg then -1.0 else 1.0)
+        return fm_copysign(0.0, if neg then -1.0 else 1.0)
+    if x < 0.0 and not fm_is_int(y)
+        return fm_nan()
+    lh := fm_ln_part(ax, 0)
+    ll := fm_ln_part(ax, 1)
+    th := y * lh
+    if th > 709.8
+        return if neg then -fm_inf() else fm_inf()
+    if th < -745.2
+        return if neg then -0.0 else 0.0
+    tl := if lh == 0.0 then 0.0 else fm_two_prod_err(y, lh, th) + y * ll
+    r := fm_exp_dd(th, tl)
+    if neg
+        return -r
+    r
