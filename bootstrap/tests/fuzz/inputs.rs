@@ -11,8 +11,8 @@ pub struct Input {
     pub int: i64,
 }
 
-pub const KINDS: [&str; 9] = ["text", "json", "bytes", "regex", "date", "http", "compress", "csv", "args"];
-pub const KINDS: [&str; 9] = ["text", "json", "bytes", "regex", "date", "http", "compress", "cookie", "httpresp"];
+pub const KINDS: [&str; 11] =
+    ["text", "json", "bytes", "regex", "date", "http", "compress", "csv", "args", "cookie", "httpresp"];
 
 pub fn generate(kind: &str, seed: u64) -> Input {
     let mut r = Rng::new(seed ^ 0x5EED_F00D);
