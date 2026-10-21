@@ -597,6 +597,47 @@ fn tensor_activate(a int, kind int) int
         storef(out + 8 * i, elem_round(ek, y))
     t
 
+## The message of the fault `softmax` raises (std.tensor.24), or 0.
+fn tensor_softmax_fault(a int) int
+    if load64(a + 8) == 0
+        sb_reset()
+        sb_text("`softmax` needs a tensor with at least one axis")
+        return str_addr(sb_str())
+    if load64(a + 32 + 8 * (load64(a + 8) - 1)) == 0
+        sb_reset()
+        sb_text("`softmax` over an empty last axis")
+        return str_addr(sb_str())
+    0
+
+## `t.softmax()` (std.tensor.24): per row of the last axis, `exp(x - top)`
+## (top: the largest element, a NaN skipped) over their sum in element order,
+## computed in `float` and rounded once for `f32`.
+fn tensor_softmax(a int) int
+    ek := load64(a)
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    w := load64(a + 32 + 8 * (rank - 1))
+    t := tensor_new(ek, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    mut base := 0
+    while base < n
+        mut top := 0.0 - fm_inf()
+        for j in 0..w
+            x := loadf(da + 8 * (base + j))
+            if x > top
+                top = x
+        mut total := 0.0
+        for j in 0..w
+            e := float_exp(loadf(da + 8 * (base + j)) - top)
+            storef(out + 8 * (base + j), e)
+            total += e
+        for j in 0..w
+            storef(out + 8 * (base + j), elem_round(ek, loadf(out + 8 * (base + j)) / total))
+        base += w
+    t
+
 ## `t.to_f32()` (std.tensor.22): each element rounded to `f32`.
 fn tensor_to_f32(a int) int
     n := load64(a + 16)
