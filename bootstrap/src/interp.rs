@@ -653,7 +653,7 @@ pub(crate) fn float_text(x: f64) -> String {
 }
 
 /// An `f32`'s text form: the same shape, from the shortest digits that read back as an `f32`.
-fn float_text32(x: f32) -> String {
+pub(crate) fn float_text32(x: f32) -> String {
     float_shape(x.is_nan(), x.is_infinite(), x.is_sign_negative(), format!("{:e}", x.abs()))
 }
 
@@ -1771,7 +1771,7 @@ impl<'a, W: Write> Interp<'a, W> {
         {
             let is_map = matches!(env[slot].1, Value::Map(_));
             let i = self.eval(index, env)?;
-            // type.map.7: `m[k] op= v` on a missing key starts from zero.
+            // type.map.7, std.count.1: `m[k] op= v` on a missing key starts from zero.
             let missing = op.is_some() && matches!(&env[slot].1, Value::Map(t) if t.get(&i).is_none());
             let steps = [if is_map { Step::Key(i, *at) } else { Step::Index(i.int(), *at) }];
             let v = match op {

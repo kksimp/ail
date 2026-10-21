@@ -388,3 +388,95 @@ fn map_at(m int, k int, head str, tail str) int
     flush_to(2)
     sys_exit(1)
     0
+
+# ---- counting and set algebra (std.count.2, type.coll.16) ----
+
+## Entry numbers `lo..hi` of `idx` merged into `dst`, largest value first;
+## equal values keep their order.
+fn map_top_sort(ents int, idx int, n int)
+    mut src := idx
+    mut dst := alloc_raw(8 * n, 11)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut k := lo
+            while a < mid and b < hi
+                va := load64(ents + 24 * load64(src + 8 * a) + 16)
+                vb := load64(ents + 24 * load64(src + 8 * b) + 16)
+                if vb > va
+                    store64(dst + 8 * k, load64(src + 8 * b))
+                    b += 1
+                else
+                    store64(dst + 8 * k, load64(src + 8 * a))
+                    a += 1
+                k += 1
+            while a < mid
+                store64(dst + 8 * k, load64(src + 8 * a))
+                a += 1
+                k += 1
+            while b < hi
+                store64(dst + 8 * k, load64(src + 8 * b))
+                b += 1
+                k += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    if src != idx
+        copy_bytes(idx, src, 8 * n)
+
+## `m.top(n)` on a `Map[K, int]`: the `n` keys with the largest counts.
+fn map_top(m int, n int) List[int]
+    live := load64(m)
+    k := if n < live then n else live
+    out := list_new(if k > 0 then k else 0)
+    if k <= 0
+        return out
+    ents := load64(m + 40)
+    idx := alloc_raw(8 * live, 11)
+    mut j := 0
+    for i in 0..load64(m + 8)
+        if load64(ents + 24 * i) >= 0
+            store64(idx + 8 * j, i)
+            j += 1
+    map_top_sort(ents, idx, live)
+    for i in 0..k
+        list_push(out, load64(ents + 24 * load64(idx + 8 * i) + 8))
+    out
+
+## A set of the elements of a list of `int` or `str`.
+fn set_from_list(kind int, xs List[int]) int
+    s := map_new(kind, 0, 0)
+    q := list_addr(xs)
+    data := load64(q + 16)
+    for i in 0..load64(q)
+        map_add(s, load64(data + 8 * i))
+    s
+
+## `a.union(b)`: `a`'s elements, then `b`'s new ones.
+fn set_union(a int, b int) int
+    r := map_copy(a)
+    ents := load64(b + 40)
+    for i in 0..load64(b + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            map_add(r, load64(e + 8))
+    r
+
+## `a.intersect(b)` (`keep` 1) and `a.difference(b)` (`keep` 0): the elements
+## of `a` that are, or are not, in `b`.
+fn set_filter(a int, b int, keep int) int
+    r := map_new(load64(a + 32), 0, 0)
+    ents := load64(a + 40)
+    for i in 0..load64(a + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            if map_has(b, load64(e + 8)) == (keep != 0)
+                map_add(r, load64(e + 8))
+    r

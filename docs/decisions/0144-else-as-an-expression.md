@@ -42,7 +42,7 @@ agents wrote it unprompted.
    At the start of a statement, `e else return ...` is the statement form;
    to use it as a function's value, write `(e else return ...)`.
 
-```ail
+```ail excerpt
 match a
     Min => nums.min() else 0
 count := (m.get(k) else 0) + 1

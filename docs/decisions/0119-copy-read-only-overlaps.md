@@ -13,7 +13,7 @@ Under ADR 0064, any argument overlapping a `mut` argument of the same call was
 an error. Implementing it showed that this rejects natural code that has one
 obvious meaning:
 
-```ail
+```ail excerpt
 xs.push(xs[0])          # the receiver is `mut`, and xs[0] is part of xs
 total.add(total.x)
 ```

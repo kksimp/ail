@@ -488,6 +488,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
 | [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
 | [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
+| [0797](0797-tensor-f32-rounding-and-text.md) | `Tensor[f32]` rounding, scalars and text form (AI, delegated) | Accepted | 2026-10-21 |
+| [0798](0798-tensor-f32-conversions.md) | `to_f32()` and `to_float()`; mixing and traces (AI, delegated) | Accepted | 2026-10-21 |
 | [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
 | [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
 | [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
@@ -503,6 +505,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
+| [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
 | [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
 | [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
 | [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
@@ -512,7 +515,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
-| [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
 | [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
 | [0626](0626-std-csv.md) | `std.csv`: CSV as rows and records *(delegated)* | Accepted | 2026-10-21 |
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
@@ -576,12 +578,25 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
 | [0757](0757-fuzz-math-special-values.md) | A fuzzer for `std.math` special values; the fuzz budget stays in the harness *(delegated)* | Accepted | 2026-10-21 |
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
+| [0802](0802-native-list-queries.md) | Native `sum`, `min`, `max`, `first`, `last`, `index_of`, `swap` on lists and `Set.sorted` *(delegated)* | Accepted | 2026-10-21 |
+| [0803](0803-native-map-top-and-set-algebra.md) | Native `Map.top` and set algebra (`union`, `intersect`, `difference`) *(delegated)* | Accepted | 2026-10-21 |
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
 | [0766](0766-native-string-hash-by-words.md) | Native string map keys are hashed eight bytes at a time: `map_hash` 64 to 44 instructions per word *(delegated)* | Accepted | 2026-10-21 |
 | [0767](0767-map-first-probe.md) | The native map lookup tries one probe without saved registers, then falls back to the full probe *(delegated)* | Accepted | 2026-10-21 |
+| [0770](0770-native-proc-run.md) | Native `proc.run` and `proc.which` on Linux: `clone`, `execve`, pipes and `ppoll`, optional trailing parameters, the `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
+| [0763](0763-comprehensions-compile-to-loops.md) | Comprehensions compile to loops in the bytecode tier: tensor_ops_loops 0.380 s to 0.214 s *(delegated)* | Accepted | 2026-10-21 |
+| [0786](0786-syntax-diagnostic-text-and-fmt-check.md) | The self-hosted front end prints diagnostic help and fixes; `fmt --check` fails on broken sources *(delegated)* | Accepted | 2026-10-21 |
+| [0771](0771-native-proc-output-methods.md) | Native `Output.ok()` and `Output.text()`: two inline lowerings on the registered `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
 | [0804](0804-native-error-values-are-structs-and-enums.md) | Native error values are ordinary structs and enums *(delegated)* | Accepted | 2026-10-21 |
 | [0805](0805-native-error-message-method.md) | The message of an error type is a method *(delegated)* | Accepted | 2026-10-21 |
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
+| [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
+| [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
+| [0776](0776-fieldinfo-doc.md) | `FieldInfo.doc` carries a field's `##` comment (integrator choice) | Accepted | 2026-10-21 |
+| [0782](0782-fix-text-plus-chains.md) | `ail fix` joins text with interpolation across a `+` chain and around calls with strings *(delegated)* | Accepted | 2026-10-21 |
+| [0768](0768-native-string-scans-by-words.md) | Native strings: character counts and separator search a word at a time, interpolation joined in one allocation; `lines_split` -27% instructions *(delegated)* | Accepted | 2026-10-21 |
+| [0814](0814-selftest-speed.md) | Selftest speed: native builds on four threads, then parallel test binaries, then one compiler load for many builds (AI, delegated ADR 0076, integrator-approved) | Accepted | 2026-10-21 |
+| [0809](0809-fix-contract-keywords.md) | `ail fix` moves `requires result` to `ensures` and unwraps `old()` in `requires` *(delegated)* | Accepted | 2026-10-21 |

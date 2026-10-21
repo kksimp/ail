@@ -66,7 +66,7 @@ own instructions are unchanged.
 ## Measurements
 
 Callgrind instruction counts and wall time are in the PR body and in
-[interpreter-performance.md](../design/interpreter-performance.md#watch-on-the-tier-lane-142).
+[interpreter-performance.md](../design/interpreter-performance.md#watch-on-the-bytecode-tier-lane-142).
 
 ## Rejected alternatives
 

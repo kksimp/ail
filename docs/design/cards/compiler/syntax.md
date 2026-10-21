@@ -7,6 +7,7 @@ pub fn syntax.diag_lines(diags List[syntax.Diag], mut out List[str]) [mutates]
 pub fn syntax.one_per_line(diags List[syntax.Diag]) List[syntax.Diag]  ## One syntax diagnostic per line (gram.rec.1, ADR 0263): the leftmost one
 pub fn syntax.quote(s str) str  ## A string in JSON, as the prelude's `json_quote` writes it.
 pub fn syntax.ast_text(lexed syntax.Lexed, parsed syntax.Parsed) str  ## The tree of `ail api --ast` (api.ast.1-2): the program as one line of
+pub fn syntax.report_text(path str, text str, diags List[syntax.Diag]) str  ## The syntax diagnostics of one file as `ail check` prints them (the text
 pub enum syntax.Tok  ## A token's kind and value.
     Ident(name str)
     Kw(word str)
@@ -40,6 +41,8 @@ pub struct syntax.Diag  ## A mistake: the rule it breaks and where. The parser k
     pub pos ast.Pos
     pub msg str
     pub fixed bool
+    pub help str
+    pub fix str
 pub struct syntax.Comment  ## A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
     pub pos ast.Pos
     pub text str
@@ -54,4 +57,4 @@ pub struct syntax.Parsed  ## The tree of a file and the diagnostics found making
 pub fn syntax.parse(tokens List[syntax.Token]) syntax.Parsed  ## Parse a file's tokens (the lexer's, ending in `Eof`).
 ```
 
-trimmed to fit 2000 tokens (~926); dropped: private items
+trimmed to fit 2000 tokens (~982); dropped: private items

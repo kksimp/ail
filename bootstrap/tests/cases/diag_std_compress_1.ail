@@ -1,0 +1,4 @@
+use std.compress
+
+fn main() !
+    print(compress.gzip(5).len())

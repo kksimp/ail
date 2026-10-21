@@ -56,7 +56,7 @@ code. **AI understanding** costs little:
 6. The bounds declared on a type's parameters apply wherever the type is
    used, and are assumed in its methods and `impl`s.
 
-```ail
+```ail excerpt
 struct Stack[T]
     items List[T]
 
