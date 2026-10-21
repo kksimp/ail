@@ -30,7 +30,7 @@ span and, where the fix is obvious, `fixes` to apply by line and column.
 
 ```ail
 fn area(w int, h int) int
-    todo     # warning: hole: expected `int`; in scope: `h int`, `w int`
+    todo     # warning: expected `int`; in scope: `h`, `w`
 ```
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -91,7 +91,6 @@ value may call functions that do no I/O and use no capability
 ```ail
 MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}     # a Set[str]
-WORDS := "fn if else".split(" ")
 SQUARES := squares(8)                   # squares must be free of I/O
 
 fn squares(n int) List[int]
@@ -152,12 +151,9 @@ fn area(s Shape) int
     match s
         Circle(r) => 3 * r * r
         Rect(w, _) => w * w       # `_` skips a field
-
-fn round(s Shape) bool
-    match s
-        Circle => true            # bare: any fields, binds none
-        Rect => false
 ```
+
+A bare variant pattern matches any fields and binds none (`Circle => true`).
 
 ## Absence and errors
 
@@ -204,7 +200,7 @@ fn main() !                                 # main can fail; the error is report
   also works on optionals and in `elif`.
 - `else` works in expressions: `Min => nums.min() else 0`, `(m.get(k) else 0) + 1`,
   `for x in j.arr("items") else []`.
-- - `?` on an optional works in a function returning an optional, or before an
+- `?` on an optional works in a function returning an optional, or before an
   `else` that catches the `none`: `j.get("u")?.str("name") else "?"`.
 - Inferred-error functions and tests: `?` on `none` fails with the prelude error
   `Absent`, with context: `text.to_int()? "port {text}"`. `T ! E` needs `else`.
@@ -293,7 +289,6 @@ fn main()
     scene := Scene(shapes: [c, Square(side: 3)])
     for sh in scene.shapes
         print(sh.describe())
-    print(Version(major: 1, minor: 9) < Version(major: 2, minor: 0))
     print(bigger(c, Square(side: 1)))
     print(Shape.area(c))             # the qualified form of `c.area()`
 ```
