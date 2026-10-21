@@ -11,7 +11,7 @@ fn main() !
         ])? "diffing {name}"
         for line in r.out.lines()
             d := parse_json(line) else continue
-            summary := d.bool("summary") else false
+            summary := d.flag("summary", false)
             if summary
                 added := d.int("added") else 0
                 removed := d.int("removed") else 0

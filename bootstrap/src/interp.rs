@@ -2916,6 +2916,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Output(m)) = site.std {
+            return self.output_method(m, recv, env);
+        }
         if let Some(crate::stdlib::StdCall::Ptr(m, elem)) = site.std {
             return self.ptr_method(m, elem, recv, args, pos, env);
         }
@@ -2933,7 +2936,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Output(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),

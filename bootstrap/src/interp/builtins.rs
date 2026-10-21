@@ -523,6 +523,17 @@ impl<'a, W: Write> Interp<'a, W> {
                 "is_empty" => Value::Bool(t.len() == 0),
                 "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
+                // std.count.2: the `n` keys with the largest values, ties in insertion order.
+                "top" => {
+                    let Value::Int(count) = a[0] else { unreachable!("checked: an int count") };
+                    let mut pairs: Vec<(i64, Value)> = t
+                        .entries()
+                        .map(|(k, v)| (if let Value::Int(c) = v { *c } else { 0 }, k.clone()))
+                        .collect();
+                    pairs.sort_by(|x, y| y.0.cmp(&x.0));
+                    let keys = pairs.into_iter().take(count.max(0) as usize).map(|(_, k)| k).collect();
+                    Value::List(Rc::new(keys))
+                }
                 "keys" => Value::List(Rc::new(t.key_list())),
                 "values" => Value::List(Rc::new(t.val_list())),
                 _ => unreachable!("checked: Map.{name}"),

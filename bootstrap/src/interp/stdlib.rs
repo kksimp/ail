@@ -50,6 +50,7 @@ impl<'a, W: Write> Interp<'a, W> {
             StdCall::Const(_) => unreachable!("interp::eval reads module constants"),
             StdCall::Tensor(_) => unreachable!("interp::method_call runs tensor methods"),
             StdCall::Ptr(..) => unreachable!("interp::method_call runs pointer methods"),
+            StdCall::Output(_) => unreachable!("interp::method_call runs `proc.Output` methods"),
         };
         if module == "tensor" {
             return self.tensor_call(f, args, pos, env);

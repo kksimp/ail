@@ -146,3 +146,48 @@ measurement before it becomes an open question.
 - `garlic_pages` and `pdf_*` need the Garlic and PDF tools to run from the
   repository root.
 - Time measures a single machine. Token counts are tokbench means and are not per model.
+
+
+## Library additions (lane 234): before and after
+
+The three proposals above are now in the language (ADRs 0732 and 0733):
+`m.top(n)`, `j.text(key, default)`, `j.flag(key, default)`,
+`parse_json_lines(text)`, and `r.ok()` and `r.text()` on a `proc.Output`. Each
+program that uses a pattern they replace was rewritten with the helper, and its
+expected output was checked: identical, except `check_rules`, whose ties now keep
+insertion order (its twin was changed to match). Counts are tokbench, mean of five
+tokenizers, the committed version against the rewritten one.
+
+| Program | AIL before | AIL after | change |
+|---|---:|---:|---:|
+| `poller (r4)` | 234.0 | 234.4 | +0% |
+| `runner (r4)` | 290.0 | 287.0 | -1% |
+| `supervise (r4)` | 265.6 | 264.4 | -0% |
+| `tasks (r4)` | 596.0 | 597.0 | +0% |
+| `api_signatures` | 197.8 | 193.8 | -2% |
+| `check_rules` | 206.0 | 190.0 | -8% |
+| `check_summary` | 237.2 | 236.2 | -0% |
+| `diff_lines` | 184.6 | 182.2 | -1% |
+| `diff_summary` | 206.6 | 206.2 | -0% |
+| `edit_preview` | 183.0 | 182.6 | -0% |
+| `effects_table` | 221.0 | 207.4 | -6% |
+| `explain_chapters` | 221.6 | 183.4 | -17% |
+| `explain_rules` | 120.8 | 119.0 | -1% |
+| `fix_preview` | 152.0 | 142.8 | -6% |
+| `fmt_check` | 165.6 | 163.2 | -1% |
+| `test_coverage` | 109.6 | 105.0 | -4% |
+
+Sixteen programs changed: twelve round-5 tools and four round-4 examples. Their AIL
+total is 3,591.4 before and 3,494.6 after (−2.7%); the twelve round-5 tools account
+for −94.0 tokens. The largest saving is `explain_chapters`: 221.6 → 183.4, which
+moves it from a tie with Python to 17% below it. `check_rules` drops by 8%,
+`effects_table` by 6% and `fix_preview` by 6%. The three counting programs were
+measured with `m[k] += 1` instead of `m.bump(k)`, which was dropped in review as a
+duplicate; it had saved about 2 tokens per program.
+The round-4 examples `poller` and `tasks` are a little larger: `j.text(k, default)`
+is about as long as `j.str(k) else default`, so those two gain nothing.
+
+Twenty programs, with the rewritten round-5 tools: AIL 3,395.6 against Python 5,340
+(−36.4%, was −34.7%). Both pay, the language card (now about 7,130 tokens, was 7,044,
+under the 8,000 budget) counted once: AIL 10,525 against Python 12,153 (−13.4%, was
+−13.3%). The new card lines cost about 85 tokens; the twelve program changes save about 94.

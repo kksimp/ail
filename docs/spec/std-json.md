@@ -124,6 +124,32 @@ fn main()
 
 ## Derives
 
+**json.query.5** — `j.text(key str, default str) str` is the text of member
+`key` when it holds a string, and `default` otherwise: when the member is missing,
+or holds another kind. It never fails. *(ADR 0732)*
+
+**json.query.6** — `j.flag(key str, default bool) bool` is the same for a bool
+member: `j.bool(key)` or `default`. *(ADR 0732)*
+
+```ail rules=json.query.5,json.query.6
+fn main() !
+    doc := parse_json("\{\"name\": \"ada\", \"admin\": true}")?
+    print(doc.text("name", "anon"))       # ada
+    print(doc.text("email", "none"))      # none
+    print(doc.flag("admin", false))       # true
+    print(doc.flag("active", false))      # false
+```
+
+**json.lines.1** — `parse_json_lines(text str) List[Json]` is each line of `text`
+that parses as one JSON document, in order. A line that doesn't parse is skipped,
+so a log with some broken lines still gives the good ones. *(ADR 0732)*
+
+```ail rules=json.lines.1
+fn main()
+    docs := parse_json_lines("1\nnot json\n\"two\"\n")
+    print(docs.len())                     # 2
+```
+
 **json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the
 generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
 `Json` and `List[T ToJson]` implement it. A derived struct gives an object of

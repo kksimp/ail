@@ -86,7 +86,7 @@ Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)
 `t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])` (or `tensor.zeros(shape)`): `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
-`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()` (status 0) and `.text()` (out then err).
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`get_bytes`/`post_bytes`/`request_bytes` give `.data` as `bytes`; `proc.run_bytes`) (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
@@ -409,7 +409,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`). Keys can't be floats.
+Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up and `m.top(n)` gives the `n` keys with the largest counts, ties in insertion order. Keys can't be floats.
 
 ## Values and `mut`
 
@@ -531,3 +531,20 @@ A window is a grid of text cells: `ui.open(title, cols, rows)` gives `w`, then `
 
 `Json`, `parse_json(text)?` and the
 `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
+```ail
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)      # col, row, text, fg, bg
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, _, _, _) =>                   # "a", "enter"; (key, ctrl, alt, shift)
+                if key == "escape"
+                    break
+            Close => break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
+```
+
+A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
+`matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
+`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses.

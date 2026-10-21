@@ -11,9 +11,9 @@ fn main() !
         ])? "diffing {name}"
         for line in r.out.lines()
             d := parse_json(line) else continue
-            summary := d.bool("summary") else false
+            summary := d.flag("summary", false)
             if not summary
-                op := d.str("op") else ""
-                id := d.str("id") else ""
+                op := d.text("op", "")
+                id := d.text("id", "")
                 touched := (d.arr("lines") else []).len()
                 print("{op} {id} lines {touched}")
