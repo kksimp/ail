@@ -39,12 +39,28 @@ fn std_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Standard modules written in AIL that only the native build compiles (ADR 0819).
+const NATIVE_ONLY: &[&str] = &["regex/regex.ail"];
+
+#[test]
+fn native_only_std_sources_check() {
+    for n in NATIVE_ONLY {
+        let out = ail().arg("check").arg(std_dir().join(n)).output().unwrap();
+        let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        // A module has no `main`.
+        let errors: Vec<&str> = text.lines().filter(|l| l.contains("error[") && !l.contains("mod.main.1")).collect();
+        assert!(errors.is_empty(), "{n} fails `ail check`:\n{}", errors.join("\n"));
+    }
+}
+
 #[test]
 fn every_std_source_is_registered() {
     let mut files = Vec::new();
     std_sources(&std_dir(), &mut files);
     // `types.ail` is read with the prelude, not as a module.
     files.retain(|p| p.file_name().is_some_and(|n| n != "types.ail"));
+    // Modules only `ail build` reads (ADR 0819); the interpreter keeps its own engine.
+    files.retain(|p| !NATIVE_ONLY.iter().any(|n| p.ends_with(n)));
     assert_eq!(
         files.len(),
         registered_modules().len(),

@@ -83,3 +83,12 @@ Results (D1 read misses, cachegrind, `matmul`):
 the class sizes (no change in misses), separate header and data arenas (not needed: the
 footprint of a column walk fits once the pages stop repeating), and a random colour per page (the slack
 in a page is too small to colour).
+
+## Addendum 2026-10-21: list growth and bulk copy
+
+Profiling `binarytrees` (334 M instructions against 116 M for the C twin) put the collector at about 0% and list growth by `push` at 21%. Two runtime-wide changes follow, both in `core.ail`:
+
+- **First grow to 16 elements.** A list that fills a block of fewer than 8 elements grows to 16 elements; from 8 it doubles as before. Cost: a list that reaches 5 to 8 elements holds up to 64 bytes more than before (a `List[int]` block of 128 bytes instead of 64), and for `List[bool]` 16 bytes. It saves one or two small grows per list. `binarytrees` 327.9 M to 316.7 M instructions, `fasta` 70.4 M to 68.7 M. Capacity is not observable (native.bce.3).
+- **`copy_big`.** List growth and `extend` copy blocks of 256 bytes or more 64 bytes per round with two moving pointers (about 3 instructions per word, was about 5). `copy_bytes` itself is unchanged: it must stay under the inlining limit (ADR 0391), and wrapping it in a call made `fasta` 12% slower.
+
+Rejected: `rep movsq` through a new prim (needs both back ends and a `lower.ail` slot, and gains nothing for the small copies that dominate string code); a 64-byte round inside `copy_bytes` (breaks inlining); starting every list at 8 elements (costs memory on the many one-element lists).

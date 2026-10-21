@@ -540,7 +540,7 @@ pub(super) fn at_revision(rev: &str, path: &str) -> Result<Checkout, String> {
     };
     let tmp = std::env::temp_dir().join(format!("ail-diff-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).map_err(|e| format!("can't create {}: {e}", tmp.display()))?;
+    std::fs::create_dir_all(&tmp).map_err(|e| format!("can't create {}: {e}", crate::shown::shown(&tmp)))?;
     let mut checkout = Checkout { dir: tmp.clone(), path: String::new() };
     let tar = git(&["archive", "--format=tar", rev, "."], dir)?;
     let mut untar = Command::new("tar")
