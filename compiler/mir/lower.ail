@@ -1522,7 +1522,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if name == "unreachable" and not is_rt and lookup(name) == none
                 return lower_unreachable(args, pos)
             if k := lookup(name)
-                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, pos)
+                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, npos)
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
@@ -1565,7 +1565,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             unsupported(tpos, "`{name}[...]`")
         _ =>
             f := lower_value(callee, none)?
-            call_value(f, args, pos)
+            call_value(f, args, expr_pos(callee))
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     mut vs := List[int]()
