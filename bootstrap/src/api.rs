@@ -1414,7 +1414,7 @@ fn main()
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|x| x == "ail") {
                 let src = std::fs::read_to_string(&path).unwrap();
-                let p = path.display().to_string();
+                let p = crate::shown::shown(&path);
                 for (symbols, form) in [(false, Form::Json), (true, Form::Pretty), (true, Form::Text)] {
                     if let Err(d) = outline(&p, &src, symbols, form) {
                         panic!("{p}: {d:?}");

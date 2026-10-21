@@ -11,11 +11,8 @@ names the owner, so put the more specific rows first.
 | Construct | Wording | Owner |
 |---|---|---|
 | interpolation outside print | string interpolation outside | #184, #204 |
-| split, lines, to_int, to_float on str | split() on str | #184 |
-| lines on str | lines() on str | #184 |
+| to_int, to_float on str | to_int() on str | #184 |
 | == and != on str | == on str | #184 |
-| maps | yet: maps | lane 173 |
-| sets | yet: sets | lane 173 |
 | Map[...] | Map[ | lane 173 |
 | list contains and extend | .{name}() on | #197 |
 | channels | Channel[ | #194 |

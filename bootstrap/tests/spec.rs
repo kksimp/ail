@@ -43,6 +43,8 @@
 //! Every program that checks clean and has a `main` also runs under both
 //! interpreter tiers (ADR 0361); the two outputs must match exactly.
 
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -433,6 +435,16 @@ fn spec_examples() {
         }
     }
     eprintln!("spec examples: {run} checked, {skipped} skipped (skip=bootstrap)");
+    let failures: Vec<String> = failures
+        .into_iter()
+        .filter(|f| match common::windows_gap(f) {
+            Some(why) => {
+                eprintln!("skipped a spec example on Windows: {why}");
+                false
+            }
+            None => true,
+        })
+        .collect();
     assert!(failures.is_empty(), "{} spec example(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
     // Each rule ID the chapter files define that no example demonstrates, for the batch chapters
     // (ADR 0002). `AIL_LIST_UNCOVERED=1` prints the list for every chapter instead.

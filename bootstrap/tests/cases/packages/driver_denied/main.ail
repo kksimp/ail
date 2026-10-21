@@ -1,0 +1,7 @@
+use dev
+
+fn main()
+    print(dev.peek())
+    unsafe
+        p := hw.at(4096, 0)
+        print(p.is_null())

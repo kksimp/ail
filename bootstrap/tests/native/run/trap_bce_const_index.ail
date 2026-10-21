@@ -1,0 +1,14 @@
+# One push fewer than the largest constant the index can hold: the check
+# stays and traps (type.coll.4).
+fn pick(n int) int
+    mut xs := []
+    xs.push(10)
+    xs.push(20)
+    mut k := 1
+    if n > 0
+        k = 2
+    xs[k]
+
+fn main()
+    print(pick(0))
+    print(pick(1))

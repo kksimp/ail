@@ -1,0 +1,4 @@
+# std.tensor.7: the inner sizes must be equal.
+fn main()
+    a := tensor.from([1, 2, 3, 4, 5, 6], [2, 3])
+    print(a.matmul(a))

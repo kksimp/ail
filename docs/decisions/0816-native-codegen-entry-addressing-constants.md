@@ -60,6 +60,64 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    on the batch head (124.4M to 79.4M before chain E, which already
    removed part of the collector's scan); fannkuch 9 is unchanged.
 
+4. **Push loops keep the length in a register.** In a versioned loop whose
+   pushes have room guaranteed (native.bce.6), each push still loaded the
+   list's length and element pointer and stored the length again: five
+   instructions where a copy loop in C has one store. `keep_lengths`
+   (`pushes.ail`, after `bce`) rewrites a loop that calls nothing but those
+   pushes, has one latch and leaves only through its header, when no other
+   instruction or edge in it mentions the list and every push runs once per
+   iteration (its block dominates the latch). The element pointer (`data`)
+   and the length are read in the preheader; the length is a block
+   parameter of the header, each push becomes `stx data, length, v` and an
+   add, and a new block on the loop's exit edge stores the length back. The
+   loop allocates nothing, so the collector cannot see the stale length. A
+   loop with a conditional push, a read of the list, or a call keeps the
+   old code. sieve 3,000,000: 79.4M to 70.4M; fannkuch 9: 251.5M to
+   244.6M; matmul 116.60M to 116.37M.
+
+5. **Unchecked `add` and `sub` into any register are one `lea` on
+   x86-64.** `Gen.arith` copied `x` into the result's register and added
+   `y`, and when the result register was `y`'s it went through a scratch
+   register and a third move (the `mov r11, base; add r11, idx; mov idx,
+   r11` before every `base + i * 24` load in `rt.map_find_h`). An add with
+   no overflow check (site -1: range guards, address arithmetic, loop
+   counters) with `x` in a register is now `lea d, [x + y]` or
+   `lea d, [x + k]`, and an unchecked `sub` of a constant `lea d, [x - k]`;
+   `lea` reads both operands before it writes, so the result register can be
+   either. Checked adds keep the old form because the overflow stub recovers
+   operands from the flags. ARM64's three-operand `add` never needed it.
+   Instructions (x86-64): wordfreq 214.4M to 209.1M, binarytrees 335.1M to
+   323.8M, fannkuch 244.6M to 235.3M, fasta 70.2M to 66.9M, sieve and matmul
+   unchanged.
+
+6. **Constant indexes are checked against the pushes before them.**
+   `dominated` (bce.ail) now also drops the check on `xs[c]` for a constant
+   `c`, or for a block parameter that every edge passes a constant to
+   (`base := 3`, then `base = 0` under `if`), when more than `c` pushes to
+   `xs` are on every path to the access: the list has at least that many
+   elements and, where no operation shortens a list, never fewer. fasta's
+   `counts[base] += 1` and `letters[base]` lose their checks, as do the
+   constant-index reads of a list literal after a loop. fasta 66.9M to
+   65.9M instructions.
+
+7. **The allocator puts values where their partners are.** About a fifth
+   of the executed instructions in wordfreq and binarytrees were
+   register-to-register moves. Three causes are fixed in
+   `codegen/alloc.ail` and one in the x86-64 `add`: (a) the result of
+   `add`, `sub`, `band`, `bor` and `bxor` is hinted to its operand's register
+   (and, for the commutative ones, to the second operand's), so x86-64's
+   in-place form applies; (b) a value whose hinted partner (that operand
+   result, a block parameter) is placed later and lives across a call goes
+   straight to a callee-saved register, so the partner takes the same one
+   and no move is left (`mov %rax,%rsi; mov %rsi,%r14`); (c) a value
+   computed within a few instructions of a call it dies at, and passed to
+   it, prefers the argument register it is passed in; (d) `1 + n` (a
+   constant first operand) is `add d, 1` in `n`'s register, with the
+   overflow stub recovering `n` from the sum (`undo` 3). Instructions
+   (x86-64): wordfreq 209.1M to 204.8M, binarytrees 323.8M to 318.8M,
+   fasta 65.9M to 64.9M, nbody unchanged.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
