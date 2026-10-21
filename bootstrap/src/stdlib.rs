@@ -158,6 +158,9 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
 const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.args", "<std>/args/args.ail", include_str!("std/args/args.ail")),
+    ("std.csv", "<std>/csv/csv.ail", include_str!("std/csv/csv.ail")),
+    ("std.log", "<std>/log/log.ail", include_str!("std/log/log.ail")),
     ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
     ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),

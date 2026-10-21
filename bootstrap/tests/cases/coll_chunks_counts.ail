@@ -1,0 +1,10 @@
+## type.coll.17-18, type.str.16: chunks, windows, counts, center.
+fn main()
+    xs := [1, 2, 3, 4, 5]
+    print(xs.chunks(2))
+    print(xs.windows(3))
+    print(xs.windows(9))
+    print("a b a c a".split(" ").counts())
+    print([3, 3].counts()[3])
+    print("[{"ab".center(7, '*')}]")
+    print("[{"abc".center(2, '*')}]")

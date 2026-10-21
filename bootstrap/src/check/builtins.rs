@@ -47,6 +47,12 @@ pub(super) const STR_METHODS: &[&str] = &[
     "repeat",
     "pad_left",
     "pad_right",
+    "center",
+    "words",
+    "trim_start",
+    "trim_end",
+    "count",
+    "rfind",
     "lines",
     "len",
     "byte_len",
@@ -103,7 +109,8 @@ pub(super) const F32_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt
 pub(super) const LIST_METHODS: &[&str] =
     &[
         "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
-        "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference",
+        "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference", "chunks",
+        "windows", "counts", "flatten",
     ];
 pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
 pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
@@ -126,7 +133,10 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "to_int" => read(vec![], opt(Int)),
             "to_float" => read(vec![], opt(Float)),
             "chars" => read(vec![], list(Char)),
-            "trim" | "to_lower" | "to_upper" => read(vec![], Str),
+            "trim" | "trim_start" | "trim_end" | "to_lower" | "to_upper" => read(vec![], Str),
+            "words" => read(vec![], list(Str)),
+            "count" => read(vec![Str], Int),
+            "rfind" => read(vec![Str], opt(Int)),
             "slice" => read(vec![Int, Int], Str),
             "find" => read(vec![Str], opt(Int)),
             "replace" => read(vec![Str, Str], Str),
@@ -134,7 +144,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "starts_with" | "ends_with" | "contains" => read(vec![Str], Bool),
             "strip_prefix" | "strip_suffix" => read(vec![Str], opt(Str)),
             "repeat" => read(vec![Int], Str),
-            "pad_left" | "pad_right" => read(vec![Int, Char], Str),
+            "pad_left" | "pad_right" | "center" => read(vec![Int, Char], Str),
             "lines" => read(vec![], list(Str)),
             "len" | "byte_len" => read(vec![], Int),
             "to_bytes" => read(vec![], Ty::Bytes),
@@ -222,6 +232,12 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
                 "last" | "first" => read(vec![], opt(e)),
                 "take" => read(vec![Int], list(e)),
+                "chunks" | "windows" => read(vec![Int], list(list(e))),
+                "flatten" => match &e {
+                    Ty::List(inner) => read(vec![], list((**inner).clone())),
+                    _ => None,
+                },
+                "counts" => make(false, vec![], Ty::Map(Box::new(e), Box::new(Int)), Need::Hash),
                 "union" | "intersect" | "difference" => make(false, vec![list(e.clone())], Ty::Set(Box::new(e)), Need::Hash),
                 "insert" => make(true, vec![Int, e], Unit, Need::Nothing),
                 "remove_at" => make(true, vec![Int], e, Need::Nothing),
