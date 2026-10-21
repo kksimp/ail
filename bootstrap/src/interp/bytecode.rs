@@ -921,6 +921,32 @@ fn has_try(e: &Expr) -> bool {
     }
 }
 
+/// Whether a part of a comprehension can't leave it early: no `?`, `break`, `continue`, `return` or
+/// leaving `else`, looking through `if` and `match` whose arms only compute values.
+fn comp_part_plain(e: &Expr) -> bool {
+    fn block(b: &Block) -> bool {
+        b.iter().all(|s| match s {
+            Stmt::Expr(e) => comp_part_plain(e),
+            Stmt::Let { value, otherwise: None, .. } => comp_part_plain(value),
+            _ => false,
+        })
+    }
+    match e {
+        Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(comp_part_plain) && hi.as_deref().is_none_or(comp_part_plain),
+        Expr::If { branches, els, .. } => {
+            branches.iter().all(|(c, b)| {
+                (match c {
+                    Cond::Expr(e) | Cond::Bind { value: e, .. } => comp_part_plain(e),
+                }) && block(b)
+            }) && els.as_ref().is_none_or(block)
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            comp_part_plain(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(comp_part_plain) && block(&a.body))
+        }
+        e => !has_try(e),
+    }
+}
+
 struct Compiler<'c, 'a, W: Write> {
     it: &'c mut Interp<'a, W>,
     ins: Vec<Ins<'a>>,
@@ -1597,10 +1623,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it
     /// (the walker runs those), and no hook or trace that expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
-        let plain = |e: &Expr| match e {
-            Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(|x| !has_try(x)) && hi.as_deref().is_none_or(|x| !has_try(x)),
-            e => !has_try(e),
-        };
+        let plain = comp_part_plain;
         !self.it.hook
             && self.it.tracing == 0
             && plain(elem)
@@ -3530,7 +3553,21 @@ match {
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
-                    if matches!(env[at].1, Value::List(_)) {
+                    // `len` of text, a map, a set or bytes: the walker's count, without its call.
+                    let other_len = if *push {
+                        None
+                    } else {
+                        match &env[at].1 {
+                            Value::Str(t) => Some(t.chars().count()),
+                            Value::Map(t) | Value::Set(t) => Some(t.len()),
+                            Value::Bytes(b) => Some(b.len()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(n) = other_len {
+                        put_int(*dst, n as i64, env, base, regs);
+                        pc = *done as usize;
+                    } else if matches!(env[at].1, Value::List(_)) {
                         if *push {
                             let v = take!(*val);
                             let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
