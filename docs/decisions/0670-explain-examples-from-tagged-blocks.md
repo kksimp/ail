@@ -33,9 +33,15 @@ example. Two causes, neither a missing example in the text:
   not an error, or a `norun` block for a trap. Each is checked by the spec
   harness (`./ail selftest --test spec`), which requires an `error=` block to
   report its rule and an untagged block to check clean.
-- The mean `ail explain` entry is kept under 400 characters (the test in
-  `explain_coverage.rs`). Examples are trimmed to the shortest program that
-  shows the rule; the tagged-block fallback shows three lines.
+- A plain example shows four lines of code, not six (`EXAMPLE_LINES`), and a
+  tagged-block fallback shows three. The full block is in the spec, and
+  `ail explain RULE --json` returns it whole. Four lines is the largest cut
+  that keeps the mean below the batch head's own (377.7 characters before
+  this ADR's examples, about 373 after). Token usage is the first criterion
+  (ADR 0076). The change is delegated and reversible.
+- The mean `ail explain` entry must stay under 400 characters (the test in
+  `explain_coverage.rs`, ADR 0336's 120 tokens). Examples are trimmed to the
+  shortest program that shows the rule.
 
 ## Rejected alternatives
 
@@ -53,10 +59,9 @@ example. Two causes, neither a missing example in the text:
 
 ## Consequences
 
-- The mean `ail explain` entry rises from 375.6 to 399.1 characters, under
-  the test's 400 limit (about 120 tokens) with about 1 character to spare.
-  Any later growth fails `explain_entries_stay_short`; the designer should
-  decide whether to raise the limit or shorten explanations.
+- Before the four-line cut the mean was about 400.7 (over the limit) with the
+  merged head's 852 rules. After it, about 373. Later examples must stay
+  within the same budget.
 - `ail explain` shows an example for every rule whose text is covered by a
   tagged block. Before this ADR, 386 rules had none; after it, 102 remain
   (the list is in the PR body). Those are mostly the older chapters (09, 10,

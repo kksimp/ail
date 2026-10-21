@@ -64,7 +64,7 @@ fn shorten(text: &str) -> String {
 }
 
 /// Longest example printed in the text form (explain.cover.4); `--json` has it whole.
-const EXAMPLE_LINES: usize = 6;
+const EXAMPLE_LINES: usize = 4;
 
 pub struct Explanation {
     pub rule: String,
