@@ -79,7 +79,7 @@ fn cse(f Func) Func
 ## does nothing else, but perhaps trap.
 fn same_each_time(i Inst) bool
     # A list's length changes with `push`.
-    if i.op == "len"
+    if i.op == "len" or i.op == "cap"
         return false
     if i.is_pure()
         return true

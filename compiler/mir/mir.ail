@@ -77,6 +77,7 @@ pub fn Ty.name(self) str
 ## | `get` | list, index | `xs[i]`, bounds-checked at `site` (type.coll.4); `site` -1: known in bounds |
 ## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
 ## | `len` | list | `xs.len()` |
+## | `cap` | list | how many elements `xs` has room for before `push` regrows it |
 ## | `copy` | a | the same value |
 ## | `data` | list | the address of `xs`'s elements (the word at +16); `push` can move them |
 ## | `ldx` | base, index | the element `index` of the elements at `base`, `imm` bytes each (8, or 1 for a `List[bool]`); not checked |
@@ -176,7 +177,7 @@ pub fn Inst.is_pure(self) bool
         "const" | "fconst" | "str" | "fadd" | "fsub" | "fmul" | "fdiv" => true
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
-        "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "copy" => true
+        "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true
         "band" | "bor" | "bxor" | "bnot" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => site < 0
         _ => false

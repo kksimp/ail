@@ -133,6 +133,7 @@ GROWS := [
     "rt.list_join",
     "rt.list_reserve",
     "rt.list_rows_min",
+    "rt.list_new_for",
     "rt.list_alloc",
     "rt.list_grow",
 ]
@@ -191,6 +192,8 @@ fn reserve_lists(f Func) Func
     defs := defs_of(f)
     dom := dominators(f)
     mut g := f
+    mut patches := List[Sized]()
+    mut sized := Set[int]()
     for lp in loops
         c := counted(f, defs, lp) else continue
         if c.q >= 0
@@ -228,11 +231,82 @@ fn reserve_lists(f Func) Func
             if per[k] > MAX_PER
                 continue
             p := lp.pre
+            if made_for(f, defs, dom, lp, c, lists[k], per[k], mut patches, mut sized)
+                continue
             n1 := konst_in(mut g, p, per[k])
             n2 := konst_in(mut g, p, size[k])
             g.blocks[p].insts.push(inst(-1, "call", [lists[k], c.lo, c.hi, n1, n2]))
             g.blocks[p].insts[g.blocks[p].insts.len() - 1].name = "rt.list_reserve"
+    # Largest position first, so the earlier ones keep theirs.
+    mut done := [false for _ in 0..patches.len()]
+    for _ in 0..patches.len()
+        mut best := -1
+        for k in 0..patches.len()
+            if done[k]
+                continue
+            if best < 0 or patches[k].b > patches[best].b
+                best = k
+            elif patches[k].b == patches[best].b and patches[k].at > patches[best].at
+                best = k
+        done[best] = true
+        pt := patches[best]
+        konst_in(mut g, pt.b, pt.lo)
+        konst_in(mut g, pt.b, pt.per)
+        mut made := g.blocks[pt.b].insts
+        c2 := made.pop() else break
+        c1 := made.pop() else break
+        mut call := made[pt.at]
+        call.name = "rt.list_new_for"
+        call.args = [c1.dst, pt.hi, c2.dst]
+        mut out := [made[k] for k in 0..pt.at]
+        out.push(c1)
+        out.push(c2)
+        out.push(call)
+        for k in pt.at + 1..made.len()
+            out.push(made[k])
+        g.blocks[pt.b].insts = out
     g
+
+## A list to be sized at creation (`list_new_for`) instead of reserved.
+struct Sized
+    b int
+    at int
+    lo int
+    hi int
+    per int
+
+## Whether the list `x`, made empty by `list_new(0)` before a counted loop
+## whose bound `hi` is known there, is sized where it is made. True when
+## the loop's `list_reserve` is then not needed: the list is made in the
+## loop's preheader and nothing there touches it after.
+fn made_for(
+    f Func,
+    defs List[Def],
+    dom List[List[bool]],
+    lp LoopInfo,
+    c Counted,
+    x int,
+    per int,
+    mut patches List[Sized],
+    mut sized Set[int],
+) bool
+    nw := inst_of(f, defs, x) else return false
+    if nw.op != "call" or nw.name != "rt.list_new" or const_of(f, defs, nw.args[0]) != 0
+        return false
+    start := const_of(f, defs, c.lo) else return false
+    d := defs[x]
+    h := defs[c.hi]
+    if not earlier(dom, At(b: h.block, k: h.at), At(b: d.block, k: d.at))
+        return false
+    if not sized.contains(x)
+        sized.add(x)
+        patches.push(Sized(b: d.block, at: d.at, lo: start, hi: c.hi, per: per))
+    if d.block != lp.pre
+        return false
+    for k in d.at + 1..f.blocks[d.block].insts.len()
+        if f.blocks[d.block].insts[k].args.contains(x)
+            return false
+    not f.blocks[d.block].term.uses().contains(x)
 
 fn konst_in(mut g Func, block int, n int) int
     g.vals.push(Ty.Int)
@@ -256,6 +330,7 @@ struct Guard
     slow_args List[int]
     lens Map[int, int]
     zero int
+    ranged Set[int]
 
 fn Guard.value(mut self, t Ty) int
     f.vals.push(t)
@@ -308,6 +383,9 @@ fn Guard.in_bounds(mut self, x int, idx int, k int?)
 
 ## `-LIMIT <= x <= LIMIT`.
 fn Guard.within(mut self, x int)
+    if ranged.contains(x)
+        return
+    ranged.add(x)
     check(emit("ge", [x, konst(0 - LIMIT)], Ty.Bool))
     check(emit("le", [x, konst(LIMIT)], Ty.Bool))
 
@@ -382,6 +460,57 @@ fn version(
                 taint(f, defs, i.args[0], mut et)
                 if holds_lists(f.vals[i.args[0]])
                     taint(f, defs, i.args[0], mut lt)
+    # Lists the loop pushes to once or more per iteration and does nothing
+    # else to: the guard checks their room for the whole loop, and the
+    # pushes lose the check that the list is full (native.bce.6).
+    mut roomy := List[int]()
+    mut per := List[int]()
+    mut roomy_keys := Set[str]()
+    if c.q < 0
+        dom := dominators(f)
+        mut nl := [false for _ in 0..nv]
+        mut bad := Set[int]()
+        for b in lp.blocks
+            for i in f.blocks[b].insts
+                if (i.op == "call" or i.op == "prim") and not is_push(i)
+                    for a in i.args
+                        if is_list(f.vals[a])
+                            taint(f, defs, a, mut nl)
+        mut counted_at := Map[int, int]()
+        for b in lp.blocks
+            mut every := b != lp.header
+            for l in lp.latches
+                if not dom[l][b]
+                    every = false
+            for i in f.blocks[b].insts
+                if not is_push(i) or inl[defs[i.args[0]].block]
+                    continue
+                x := i.args[0]
+                if not every
+                    bad.add(x)
+                    continue
+                if not counted_at.contains(x)
+                    counted_at[x] = roomy.len()
+                    roomy.push(x)
+                    per.push(0)
+                per[counted_at[x]] += 1
+        mut keep := List[int]()
+        for k in 0..roomy.len()
+            if bad.contains(roomy[k]) or not clean(f, defs, roomy[k], nl) or per[k] > MAX_PER
+                continue
+            keep.push(k)
+        mut r2 := List[int]()
+        mut p2 := List[int]()
+        for k in keep
+            r2.push(roomy[k])
+            p2.push(per[k])
+        roomy = r2
+        per = p2
+        for b in lp.blocks
+            for k in 0..f.blocks[b].insts.len()
+                i := f.blocks[b].insts[k]
+                if is_push(i) and roomy.contains(i.args[0]) and not bad.contains(i.args[0])
+                    roomy_keys.add(k_of(b, k))
     # Loads of an unchanging element, which the guard does once.
     mut hoists := List[Hoist]()
     mut hidx := Map[int, int]()
@@ -462,7 +591,7 @@ fn version(
     pr := prove(f, defs, lp, c, rpo(f), fx)
     # Worth the guard on the operands: two checks, or one in a loop that is
     # versioned anyway.
-    versioned := needs.len() > 0 or hoists.len() > 0
+    versioned := needs.len() > 0 or hoists.len() > 0 or roomy.len() > 0
     use_ranges := pr.sites.len() >= 2 or (pr.sites.len() == 1 and versioned)
     if use_ranges
         for key in pr.sites
@@ -507,6 +636,7 @@ fn version(
         slow_args: pre_args,
         lens: Map[int, int](),
         zero: -1,
+        ranged: Set[int](),
     )
     hd := inst_of(f, defs, c.bound)
     for h in 0..hoists.len()
@@ -524,9 +654,14 @@ fn version(
     mut floors := known
     mut floor_pre := List[int]()
     mut floor_call := List[Inst]()
+    # `hi <= len - off` is stronger than `hi <= len`.
+    mut shifted := Set[int]()
+    for nd in needs
+        if nd.kind == "off"
+            shifted.add(nd.x)
     for nd in needs
         key := "{nd.kind}|{nd.x}|{nd.arg}"
-        if seen.contains(key)
+        if seen.contains(key) or (nd.kind == "index" and shifted.contains(nd.x))
             continue
         seen.add(key)
         if nd.kind == "row"
@@ -553,6 +688,21 @@ fn version(
             hi_is_len = d.op == "len" and d.args[0] == nd.x
         idx := if nd.kind == "inv" then fresh_of(hoists, hidx, nd.arg) else nd.arg
         gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
+    if roomy.len() > 0
+        # Room for every push of the loop: `(hi - lo) * per` more elements.
+        # `hi` is within +-2^30 and `per` at most 8, so nothing here wraps.
+        gd.within(fresh_of(hoists, hidx, c.bound))
+        for k in 0..roomy.len()
+            x := roomy[k]
+            held := gd.len_of(x)
+            cp := gd.emit("cap", [x], Ty.Int)
+            free := gd.emit("sub", [cp, held], Ty.Int)
+            mut want := c.bound
+            if cst(f, defs, c.lo) != 0
+                want = gd.emit("sub", [want, c.lo], Ty.Int)
+            if per[k] > 1
+                want = gd.emit("mul", [want, gd.konst(per[k])], Ty.Int)
+            gd.check(gd.emit("le", [want, free], Ty.Bool))
     # The address of each fixed list's elements, taken once.
     mut data := Map[int, int]()
     for key in via.keys()
@@ -623,6 +773,8 @@ fn version(
             r.args = [vm[a] for a in i.args]
             if relax.contains("{b}:{k}")
                 r.site = -1
+            if roomy_keys.contains(k_of(b, k))
+                r.imm = 1
             if r.site < 0 and (i.op == "get" or i.op == "set") and via.contains(k_of(b, k))
                 base := data[fresh_of(hoists, hidx, via[k_of(b, k)])]
                 if i.op == "get"
