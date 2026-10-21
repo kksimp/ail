@@ -1,0 +1,4 @@
+use std.hash
+
+fn main()
+    print("{hash.crc32("abc")}x")

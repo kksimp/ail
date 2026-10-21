@@ -24,7 +24,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn ail() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_ail"))
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ail"));
+    // Programs that start `./ail` themselves use this binary, not a rebuilt one.
+    cmd.env("AIL_BINARY", env!("CARGO_BIN_EXE_ail"));
+    cmd
 }
 
 fn ail_files(dir: &Path) -> Vec<PathBuf> {

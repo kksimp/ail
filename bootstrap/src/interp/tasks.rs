@@ -156,7 +156,8 @@ impl Sched {
 
     /// std.proc.5: move what children's streams produced into their
     /// channels, close those that ended, and wake the tasks waiting on them.
-    fn pump(st: &mut State) {
+    /// Returns the tasks taken off a channel's waiters, whether or not they were blocked.
+    fn pump(st: &mut State) -> Vec<usize> {
         let mut wake = Vec::new();
         for ch in st.chans.iter_mut().filter(|c| !c.closed) {
             let Some(ext) = &ch.ext else { continue };
@@ -168,9 +169,10 @@ impl Sched {
             ch.closed = eof;
             wake.append(&mut ch.waiters);
         }
-        for w in wake {
+        for &w in &wake {
             Sched::wake(st, w);
         }
+        wake
     }
 
     /// Nothing is ready, but a task waits on a child's stream: sleep until
@@ -254,7 +256,12 @@ impl Sched {
             return Err(cancelled(pos));
         }
         st.tasks[me].waiting = waiting;
-        Sched::pump(&mut st);
+        // conc.task.7: output that arrived since the caller last looked has taken `me` off
+        // its channel's waiters without a wake (it was running), so look again instead of
+        // calling a task with data ready, or a child still running, deadlocked.
+        if Sched::pump(&mut st).contains(&me) {
+            return Ok(st);
+        }
         let next = match Sched::next_ready(&mut st) {
             Some(n) => Some(n),
             None => Sched::wait_external(&mut st, Some(me)),
@@ -973,5 +980,42 @@ impl<'a, W: Write> Interp<'a, W> {
             Some(trap) => Err(trap),
             None => Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// conc.task.7: output and the end of both of a child's streams arrive after the main
+    /// task last looked and before it blocks. `block` must hand control back so the caller
+    /// sees the data, not report a deadlock.
+    #[test]
+    fn output_that_arrives_before_blocking_is_not_a_deadlock() {
+        let mut out = Chan::new(0);
+        out.ext = Some(super::super::spawn::Ext::ended_with(&["second"]));
+        out.waiters.push(0);
+        let mut err = Chan::new(0);
+        err.ext = Some(super::super::spawn::Ext::ended_with(&["third"]));
+        err.waiters.push(0);
+        let state = State {
+            current: 0,
+            ready: VecDeque::new(),
+            tasks: vec![new_task(Status::Running)],
+            chans: vec![out, err],
+            cells: Vec::new(),
+            groups: Vec::new(),
+            groups_cancelled: Vec::new(),
+            rng: None,
+            output: Vec::new(),
+            shutdown: false,
+            threads: Vec::new(),
+        };
+        let sched = Sched { state: Mutex::new(state), turn: Condvar::new() };
+        let st = sched.lock();
+        let pos = Pos { line: 1, col: 1 };
+        let st = sched.block(st, 0, "a value from one of several channels", pos).unwrap_or_else(|t| panic!("{}", t.message));
+        assert_eq!(st.chans[0].items.len(), 1);
+        assert_eq!(st.chans[1].items.len(), 1);
     }
 }

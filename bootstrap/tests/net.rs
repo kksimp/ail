@@ -85,6 +85,37 @@ fn net_is_a_capability() {
 /// chain for `localhost` (bootstrap/src/net/x509/testdata) and the test
 /// root is the only trusted one (SSL_CERT_FILE). Skips without OpenSSL
 /// 1.1.1 or 3 (macOS's `openssl` is LibreSSL).
+/// Starts `openssl s_server` on a free local port and returns once it accepts a connection.
+/// The port is picked and then released, so another process may take it before `s_server`
+/// binds. A server that exits without binding is retried on a fresh port. `s_server` has no
+/// `-naccept`, so it keeps accepting after the readiness probe: the probe costs nothing.
+fn start_tls_server(data: &str) -> (std::process::Child, u16) {
+    for _ in 0..5 {
+        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let mut server = Command::new("openssl")
+            .args(["s_server", "-quiet", "-www", "-tls1_3", "-accept", &port.to_string()])
+            .args(["-key", "localhost_leaf.key.pem", "-cert", "localhost_leaf.pem", "-cert_chain", "inter.pem"])
+            .current_dir(data)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let start = std::time::Instant::now();
+        loop {
+            if server.try_wait().unwrap().is_some() {
+                break;
+            }
+            if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                return (server, port);
+            }
+            assert!(start.elapsed().as_secs() < 30, "openssl s_server didn't start");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+    panic!("openssl s_server didn't bind a free port in 5 tries");
+}
+
 #[test]
 fn https_against_a_local_tls_server() {
     let version = Command::new("openssl").arg("version").output();
@@ -98,21 +129,7 @@ fn https_against_a_local_tls_server() {
         return;
     }
     let data = concat!(env!("CARGO_MANIFEST_DIR"), "/src/net/x509/testdata");
-    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let mut server = Command::new("openssl")
-        .args(["s_server", "-quiet", "-www", "-tls1_3", "-accept", &port.to_string()])
-        .args(["-key", "localhost_leaf.key.pem", "-cert", "localhost_leaf.pem", "-cert_chain", "inter.pem"])
-        .current_dir(data)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .unwrap();
-    let start = std::time::Instant::now();
-    while TcpStream::connect(("127.0.0.1", port)).is_err() {
-        assert!(start.elapsed().as_secs() < 30, "openssl s_server didn't start");
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
+    let (mut server, port) = start_tls_server(data);
     let run = |roots: &str, urls: &[String]| {
         let mut args = vec!["run".to_string(), "bootstrap/tests/net/https.ail".to_string()];
         args.extend_from_slice(urls);
@@ -160,21 +177,7 @@ fn tls_conn_against_a_local_tls_server() {
         return;
     }
     let data = concat!(env!("CARGO_MANIFEST_DIR"), "/src/net/x509/testdata");
-    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let mut server = Command::new("openssl")
-        .args(["s_server", "-quiet", "-www", "-tls1_3", "-accept", &port.to_string()])
-        .args(["-key", "localhost_leaf.key.pem", "-cert", "localhost_leaf.pem", "-cert_chain", "inter.pem"])
-        .current_dir(data)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .unwrap();
-    let start = std::time::Instant::now();
-    while TcpStream::connect(("127.0.0.1", port)).is_err() {
-        assert!(start.elapsed().as_secs() < 30, "openssl s_server didn't start");
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
+    let (mut server, port) = start_tls_server(data);
     let out = Command::new(env!("CARGO_BIN_EXE_ail"))
         .args(["run", "bootstrap/tests/net/tls_conn.ail", &port.to_string()])
         .env("SSL_CERT_FILE", format!("{data}/root.pem"))

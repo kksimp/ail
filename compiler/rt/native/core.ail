@@ -614,6 +614,10 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 14
+        # `unreachable(message)` (err.model.2): `a` is the message
+        out_str("unreachable: ")
+        out_str(str_at(a))
     out_byte(10)
     out_str(tail)
     flush_to(2)
