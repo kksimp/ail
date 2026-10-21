@@ -153,6 +153,7 @@ pub fn call_hint(name: &str, args: usize) -> Option<CallHint> {
         ("min", 2) => h("$r1.min($2)", "a.min(b)", "`min` is a method: write `a.min(b)`"),
         ("sum", 1) => h("$r1.sum()", "xs.sum()", "`sum` is a method: write `xs.sum()`"),
         ("sorted", 1) => h("$r1.sorted()", "xs.sorted()", "`sorted` is a method: write `xs.sorted()`"),
+        ("enumerate", 1) => h("$r1.enumerate()", "xs.enumerate()", "`enumerate` is a method: write `xs.enumerate()`"),
         ("range", 1) => h("0..$1", "0..n", "a range is written `0..n` (excludes `n`) or `1..=n` (includes it)"),
         ("range", 2) => h("$1..$2", "a..b", "a range is written `a..b` (excludes `b`) or `a..=b` (includes it)"),
         _ => None,
@@ -188,8 +189,7 @@ pub fn call_help(name: &str) -> Option<&'static str> {
         "printf" | "fmt.Printf" | "format" => {
             "build the text with interpolation, `print(\"n is {n}\")`; a width or precision goes after a colon: `{n:>6}`, `{x:.2}`"
         }
-        "enumerate" => "loop over the indexes and index the list: `for i in 0..xs.len()` then `xs[i]`",
-        "zip" => "loop over the indexes of the shorter list: `for i in 0..a.len()` then `a[i]` and `b[i]`",
+        "enumerate" => "each element with its index is `xs.enumerate()`: `for i, x in xs.enumerate()`",
         "list" | "dict" | "set" | "array" | "vec" | "Vec" => {
             "build collections with literals or typed constructors: `[1, 2]`, `{\"a\": 1}`, `Set[int]()`, `List[int]()`"
         }

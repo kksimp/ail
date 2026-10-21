@@ -120,6 +120,12 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
                 problem(vpos, "`{n}` has no variant `{name}`")
                 return false
             branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+        TuplePat(_, tpos) =>
+            problem(tpos, "tuples aren't in the native subset yet")
+            return false
+        BindName(_, bpos) =>
+            problem(bpos, "tuples aren't in the native subset yet")
+            return false
     true
 
 ## The `bool` that says whether `s` equals literal `lit` (expr.match.7).

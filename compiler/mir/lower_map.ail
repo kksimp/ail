@@ -12,9 +12,10 @@ use ast
 # ---- types ----
 
 fn is_key_ty(t Ty) bool
-    t == Ty.Int or t == Ty.Bool or t == Ty.Str
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char
 
 fn is_value_ty(t Ty) bool
+    is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll()
     is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t)
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
@@ -31,11 +32,12 @@ fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
             return Ty.Set(e)
     none
 
-## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`.
+## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`, 4 `char`.
 fn key_kind(t Ty) int
     match t
         Str => 1
         Bool => 2
+        Char => 4
         _ => 0
 
 ## How the runtime prints a scalar: 0 `int`, 1 `str`, 2 `bool`, 3 `float`,
@@ -46,6 +48,7 @@ fn scalar_kind(t Ty) int
         Str => 1
         Bool => 2
         Float => 3
+        Char => 4
         _ => -1
 
 ## How a copy of a table treats its values: `[mode, info]`, with mode 1 for
@@ -361,7 +364,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                     id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool),
                     ty: Ty.Bool,
                 )
-            if name == "sorted" and vs.len() == 0 and (et == Ty.Int or et == Ty.Str)
+            if name == "sorted"
+                and vs.len() == 0
+                and (et == Ty.Int or et == Ty.Str or et == Ty.Char)
                 keys := call("rt.map_keys", [r.id], Ty.List(et))
                 call("rt.list_sort", [keys, konst(if et == Ty.Str then 1 else 0, Ty.Int)], Ty.Unit)
                 return Val(id: keys, ty: Ty.List(et))
@@ -443,7 +448,7 @@ fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
         Set(x) => x
         List(x) => x
         _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
-    if e != Ty.Int and e != Ty.Str
+    if e != Ty.Int and e != Ty.Str and e != Ty.Char
         return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
     want := Ty.Set(e)
     sa := as_set(a, e, pos)?

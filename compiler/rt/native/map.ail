@@ -10,7 +10,7 @@
 ## Object (a Set uses the same layout and ignores the value word):
 ##   +0 len     live entries        +8 used     array slots used, live or dead
 ##   +16 ecap   array capacity      +24 mask    index size - 1 (a power of two)
-##   +32 kind   0 int, 1 str, 2 bool keys
+##   +32 kind   0 int, 1 str, 2 bool, 4 char keys
 ##   +40 ents   ecap * 24 bytes: hash (-1 when dead), key, value
 ##   +48 index  (mask + 1) * 8 bytes: 0 empty, else entry number + 1
 ##   +56 vmode  0 plain values, 1 lists (copied on copy), 2 maps and sets
@@ -331,10 +331,15 @@ fn map_out_quoted(s int)
             out_byte(c)
     out_byte(34)
 
-## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float.
+## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float,
+## 4 char.
 fn out_scalar(kind int, v int)
     if kind == 1
         map_out_quoted(v)
+    elif kind == 4
+        out_byte(39)
+        out_escaped(v, 39)
+        out_byte(39)
     elif kind == 2
         out_bool(v != 0)
     elif kind == 3

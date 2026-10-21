@@ -69,6 +69,7 @@ typed when the function names one error type, a failing
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
+`Map[K, V]` and `Set[T]` over `int`, `bool`, `char` and `str` keys (`Map[K, V]()`,
 `Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
 include structs and enums, and lists of maps and sets (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
@@ -79,7 +80,8 @@ list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 `float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
 and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
-sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
+sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
+whose type is expected (a function result, argument or field), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
