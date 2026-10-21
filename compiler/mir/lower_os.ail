@@ -222,9 +222,11 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     match v.ty
         Int | Sized(_) =>
             text = call(if spec.hex then "rt.fmt_hex" else "rt.fmt_int", [v.id], Ty.Str)
-        Float =>
+        Float | F32 =>
             if n >= 0
                 text = call("rt.fmt_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Str)
+            elif v.ty == Ty.F32
+                text = call("rt.fmt_f32", [v.id], Ty.Str)
             else
                 text = call("rt.fmt_float", [v.id], Ty.Str)
         Bool => text = call("rt.fmt_bool", [v.id], Ty.Str)

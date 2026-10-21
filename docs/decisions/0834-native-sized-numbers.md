@@ -51,3 +51,12 @@ interpreter behaviour is the spec (`type.num.13-15`).
 Programs that use sized numbers start to build natively. Arithmetic on them
 is still `native.subset.1` until PR 2. Tests `sized_basics` and `sized_trap`
 in `bootstrap/tests/native/run/` check the executable against `ail run`.
+
+Part 3 adds scalar `f32` as `Ty.F32` in a float register (`is_float` is true
+for it), in `lower_f32.ail`. `+ - * /` are the `float` operation followed by
+the `f32_round` primitive, `to_f32` rounds once (an `int` through
+`rt.int_to_f32`, which folds the bits below a `float`'s 53 into a sticky bit so
+no value rounds twice), and the text is the shortest digits that read back as an
+`f32` (`digits_of_f32` in `rt/native/fmt.ail`), in the interpreter's shape.
+`f32` in lists, maps, `Opt` and tuples, `min`, `max`, `cmp` and the
+transcendental methods are `native.subset.1` until part 4.

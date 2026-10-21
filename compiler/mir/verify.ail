@@ -57,6 +57,8 @@ pub fn verify(f Func) List[str]
 fn register_kind(t Ty) str
     if t == Ty.Char or t.is_sized()
         return "int"
+    if t == Ty.F32
+        return "float"
     t.name()
 
 fn check_use(

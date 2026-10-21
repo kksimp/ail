@@ -80,6 +80,7 @@ fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
         Str => v.id
         Int | Sized(_) => call("rt.fmt_int", [v.id], Ty.Str)
         Float => call("rt.fmt_float", [v.id], Ty.Str)
+        F32 => call("rt.fmt_f32", [v.id], Ty.Str)
         Bool => call("rt.fmt_bool", [v.id], Ty.Str)
         Char => call("rt.str_char", [v.id], Ty.Str)
         Tensor(e) =>

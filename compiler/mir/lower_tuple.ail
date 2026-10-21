@@ -19,7 +19,7 @@ fn tuple_elems(t Ty) List[Ty]?
 ## table or a function value is not (its copy would share state).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | Unit | Unknown => false
+        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | F32 | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
