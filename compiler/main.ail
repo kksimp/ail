@@ -99,6 +99,9 @@ fn runtime_with(dir str, ms str, mb str) !ast.Program
         if name.ends_with(".ail") and not ["prim.ail", "core.ail", "math.ail"].contains(name)
             text := fs.read_text("{dir}/{name}")?
             texts.push(text.replace("0 # BAKED_TIMEOUT_MS", ms).replace("0 # BAKED_MEMORY_MB", mb))
+    # A baked time limit also makes `while` loops check it (run.limit.6).
+    if ms != "0"
+        texts.push("fn lim_loop_polls() bool\n    true\n")
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 
 ## Parse a program and the modules it imports, and lower them to MIR

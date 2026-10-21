@@ -931,10 +931,34 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
 fn Lower.bounds_site(mut self, pos ast.Pos) int
     site("type.coll.4", "bounds", "", pos)
 
+## The runtime's `LIM_TICK` slot (rt/native/limits.ail): zero unless a time
+## limit is on.
+LIM_TICK_SLOT := 45
+
+## A `while` loop's safepoint (run.limit.6): while a time limit is on, each
+## turn calls the runtime, which reads the clock every 256 turns. It is
+## emitted only when `ail build --timeout` baked a limit in.
+fn Lower.poll_limits(mut self)
+    # Only a build with a baked time limit pays for it (ADR 0729).
+    if not sigs.contains("rt.lim_loop_polls")
+        return
+    t := load(global_addr(LIM_TICK_SLOT), 0, Ty.Int)
+    on := op("ne", [t, konst(0, Ty.Int)], Ty.Bool)
+    slow := new_block()
+    rest := new_block()
+    branch(on, slow, [], rest, [])
+    seal(slow)
+    cur = slow
+    call("rt.limits_poll", [], Ty.Unit)
+    jump(rest, [])
+    seal(rest)
+    cur = rest
+
 fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
     head := new_block()
     jump(head, [])
     cur = head
+    poll_limits()
     c := lower_value(cond, Ty.Bool) else return
     inner := new_block()
     exit := new_block()
