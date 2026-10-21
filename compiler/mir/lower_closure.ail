@@ -103,7 +103,7 @@ fn Lower.fn_value(mut self, name str) Val?
 ## `f(args)` where `f` is a function value (type.fn.3): an indirect call.
 fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
     sig := match f.ty
-        Fn(ps, r) => Sig(params: ps, ret: r)
+        Fn(ps, r) => Sig(params: ps, ret: r, fails: false)
         _ => return unsupported(pos, "calling a `{f.ty.name()}`")
     if args.len() != sig.params.len()
         return unsupported(pos, "this call")

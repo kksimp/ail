@@ -618,7 +618,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             put_gpr(i.dst, d)
         "call" => call(i)
         "icall" => call_out(i)
-        "utrap" => a.b(stub(7, i.args[0], i.args[0], i.site, ""))
+        "utrap" => a.b(stub(11, i.args[0], i.args[0], i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
@@ -829,14 +829,12 @@ fn Gen.call_out(mut self, i mir.Inst)
     # A call through a value (`icall`) takes the callee first, into the scratch register
     # that moves don't use (a float constant goes through `S0`).
     indirect := i.op == "icall"
+    mut extra := List[int]()
     for k in 0..i.args.len()
         v := i.args[k]
         if indirect and k == 0
             moves.push(move_of(S2, v))
         elif f.vals[v].is_float()
-    mut extra := List[int]()
-    for v in i.args
-        if f.vals[v].is_float()
             moves.push(move_of(FB + nf, v))
             nf += 1
         elif ni < INT_ARGS
@@ -857,7 +855,6 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.blr(S2)
     else
         a.bl(i.name)
-    a.bl(i.name)
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0

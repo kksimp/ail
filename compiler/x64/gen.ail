@@ -681,7 +681,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             put_gpr(i.dst, S1)
         "call" => call(i)
         "icall" => call_out(i)
-        "utrap" => a.jmp(stub(7, i.args[0], i.args[0], i.site, ""))
+        "utrap" => a.jmp(stub(11, i.args[0], i.args[0], i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
@@ -984,14 +984,12 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut nf := 0
     # A call through a value (`icall`) takes the callee first, into the scratch register.
     indirect := i.op == "icall"
+    mut extra := List[int]()
     for k in 0..i.args.len()
         v := i.args[k]
         if indirect and k == 0
             moves.push(move_of(S0, v))
         elif f.vals[v].is_float()
-    mut extra := List[int]()
-    for v in i.args
-        if f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
         elif ni < INT_ARGS.len()
@@ -1011,7 +1009,6 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.call_reg(S0)
     else
         a.call_sym(i.name)
-    a.call_sym(i.name)
     if room > 0
         a.alu_ri("add", RSP, room)
     if i.dst >= 0
