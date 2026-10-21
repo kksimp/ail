@@ -49,7 +49,9 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
-`float`, `bool` or `str` (not `by:` keys), in functions with at most eight
+`float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
+and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
+sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
 `float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
@@ -58,9 +60,13 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path). Any other construct is reported at its position under this rule, all of them
+(std.fs, std.env, std.io, std.time, std.path); on Linux, `proc.run` (with
+`input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
+`Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
+(std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
+readable yet, and on macOS the program traps at `proc.run`). Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605)*
+0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
 
 ```ail
 fn steps(n int) int
@@ -356,14 +362,11 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-struct Tag
-    n int
-
-fn Tag.pick[T](self, xs List[T]) T
-    xs[n]
+fn first[T](xs List[T]) T
+    xs[0]
 
 fn main()
-    print(Tag(n: 0).pick([1, 2]))
+    print(first([1, 2]))
 ```
 
 ```ail norun rules=native.build.2

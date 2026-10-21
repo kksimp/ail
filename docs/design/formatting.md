@@ -37,7 +37,7 @@ head on one line. Elements still too long split the same way. Parenthesised
 expressions, indexes and type arguments aren't split; a statement with
 nothing to split stays long.
 
-```ail
+```ail excerpt
 print(count(
     [Name(text: "x", id: 1), Name(text: "y", id: 2), Name(text: "x", id: 3)],
     Name(text: "x", id: 0),
@@ -79,13 +79,13 @@ may not start with it; `<` and `>` are never split points (they bracket type
 arguments). A line with a top-level closure is left alone. Each piece lays out
 again, so a piece that is still long splits by the other rules.
 
-```ail
+```ail excerpt
 if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000
     or alpha_value == beta_value
     or beta_value == 77
 ```
 
-```ail
+```ail excerpt
 names := people
     .filter(|p| p.age >= 18)
     .map(|p| p.name)

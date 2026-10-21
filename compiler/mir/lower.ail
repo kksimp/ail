@@ -447,6 +447,14 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         if k := enum_key(name)
                             return Ty.Enum(k)
                     none
+        FnType(fparams, fret) =>
+            mut ps := List[Ty]()
+            for p in fparams
+                ps.push(type_of(p)?)
+            mut r := Ty.Unit
+            if rt := fret
+                r = type_of(rt)?
+            Ty.Fn(params: ps, ret: r)
         _ => none
 
 fn is_literal(e ast.Expr) bool
@@ -1174,6 +1182,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 if k >= 0
                     t := structs[self_ty][k].ty
                     return Val(id: load(self_value(), k, t), ty: t)
+                if v := fn_value(name)
+                    return v
                 if globals.contains("{prefix}{name}")
                     return global_const("{prefix}{name}")
                 if v := bare_variant(name, want)
@@ -1512,6 +1522,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_print(args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
+            if name == "unreachable" and not is_rt and lookup(name) == none
+                return lower_unreachable(args, pos)
+            if k := lookup(name)
+                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, pos)
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
@@ -1554,7 +1568,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     return unsupported(tpos, "this list type")
                 return Val(id: call("rt.list_new", [konst(0, Ty.Int)], t), ty: t)
             unsupported(tpos, "`{name}[...]`")
-        _ => unsupported(pos, "this call")
+        _ =>
+            f := lower_value(callee, none)?
+            call_value(f, args, pos)
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     mut vs := List[int]()
@@ -1667,6 +1683,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if is_sorting(name, args) and r.ty.elem() != none
+        return lower_sorted(r, name, args, npos)
     if r.ty.is_coll()
         return lower_coll_method(r, name, npos, args)
     if s := struct_name(r.ty)

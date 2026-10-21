@@ -6,6 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -95,12 +96,47 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
     let dir = root().join("bootstrap/tests/native/run");
     let mut cases: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
     cases.sort();
+    let cases: Vec<PathBuf> = cases.into_iter().filter(|p| p.extension().is_some_and(|x| x == "ail")).collect();
     let tmp = std::env::temp_dir().join(format!("ail-native-{}-{}", target.unwrap_or("host"), std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
+    // Four workers take programs in turn. Each failure is kept with its index,
+    // so the report reads in the same sorted order as a serial run.
+    let next = AtomicUsize::new(0);
+    let mut failures: Vec<(usize, String)> = std::thread::scope(|s| {
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                s.spawn(|| {
+                    let mut found = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(case) = cases.get(i) else { break };
+                        if let Some(failure) = executable_matches(case, &tmp, target, runner) {
+                            found.push((i, failure));
+                        }
+                    }
+                    found
+                })
+            })
+            .collect();
+        workers.into_iter().flat_map(|w| w.join().unwrap()).collect()
+    });
+    failures.sort_by_key(|(i, _)| *i);
+    let _ = fs::remove_dir_all(&tmp);
+    let failures: Vec<String> = failures.into_iter().map(|(_, f)| f).collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+/// Builds one `tests/native/run` program and compares its executable with
+/// `ail run`. Returns the failure report, or `None` when they agree. Every
+/// path it writes is named after the program, so programs can run at once.
+fn executable_matches(case: &Path, tmp: &Path, target: Option<&str>, runner: Option<&str>) -> Option<String> {
+    let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
+    let stem = case.file_stem().unwrap();
+    let exe = tmp.join(stem);
     // Scratch paths for the `os_*` programs, which can't build a path yet
     // (std.fs, ADR 0580): a file, a second file, a directory with a nested
-    // one, and a file inside it.
-    let scratch = tmp.join("scratch");
+    // one, and a file inside it. Each program gets its own directory.
+    let scratch = tmp.join(format!("scratch-{}", stem.to_string_lossy()));
     fs::create_dir_all(&scratch).unwrap();
     let scratch_env = [
         ("AIL_TEST_A", scratch.join("a.txt")),
@@ -110,57 +146,49 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
         ("AIL_TEST_DEEP", scratch.join("d1/d2/d3")),
         ("AIL_TEST_IN", scratch.join("d1/f.txt")),
     ];
-    let mut failures = Vec::new();
-    for case in cases.iter().filter(|p| p.extension().is_some_and(|x| x == "ail")) {
-        let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
-        let exe = tmp.join(case.file_stem().unwrap());
-        let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
-        build.current_dir(root()).args(["build", &rel, "-o"]).arg(&exe);
-        if let Some(t) = target {
-            build.args(["--target", t]);
-        }
-        let built = build.output().unwrap();
-        if !built.status.success() {
-            failures.push(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
-            continue;
-        }
-        // Standard input is `NAME.in` when there is one, else empty.
-        let input = || match fs::File::open(case.with_extension("in")) {
-            Ok(f) => Stdio::from(f),
-            Err(_) => Stdio::null(),
-        };
-        let want = Command::new(env!("CARGO_BIN_EXE_ail"))
-            .current_dir(root())
-            .envs(scratch_env.clone())
-            .stdin(input())
-            .args(["run", &rel])
-            .output()
-            .unwrap();
-        let got = match runner {
-            Some(r) => {
-                Command::new(r).arg(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap()
-            }
-            None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
-        };
-        let snapshot = |l: &&str| {
-            !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"))
-        };
-        let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
-        let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();
-        if want.stdout != got.stdout || want.status.code() != got.status.code() || want_err != got_err {
-            failures.push(format!(
-                "{rel}: differs from `ail run`\n--- ail run (exit {:?}):\n{}{}\n--- native (exit {:?}):\n{}{}",
-                want.status.code(),
-                String::from_utf8_lossy(&want.stdout),
-                want_err.join("\n"),
-                got.status.code(),
-                String::from_utf8_lossy(&got.stdout),
-                got_err.join("\n"),
-            ));
-        }
+    let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
+    build.current_dir(root()).args(["build", &rel, "-o"]).arg(&exe);
+    if let Some(t) = target {
+        build.args(["--target", t]);
     }
-    let _ = fs::remove_dir_all(&tmp);
-    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+    let built = build.output().unwrap();
+    if !built.status.success() {
+        return Some(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
+    }
+    // Standard input is `NAME.in` when there is one, else empty.
+    let input = || match fs::File::open(case.with_extension("in")) {
+        Ok(f) => Stdio::from(f),
+        Err(_) => Stdio::null(),
+    };
+    let want = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .envs(scratch_env.clone())
+        .stdin(input())
+        .args(["run", &rel])
+        .output()
+        .unwrap();
+    let got = match runner {
+        Some(r) => {
+            Command::new(r).arg(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap()
+        }
+        None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
+    };
+    let snapshot =
+        |l: &&str| !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"));
+    let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
+    let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();
+    if want.stdout == got.stdout && want.status.code() == got.status.code() && want_err == got_err {
+        return None;
+    }
+    Some(format!(
+        "{rel}: differs from `ail run`\n--- ail run (exit {:?}):\n{}{}\n--- native (exit {:?}):\n{}{}",
+        want.status.code(),
+        String::from_utf8_lossy(&want.stdout),
+        want_err.join("\n"),
+        got.status.code(),
+        String::from_utf8_lossy(&got.stdout),
+        got_err.join("\n"),
+    ))
 }
 
 // native.build.1, expr.arith.1, expr.arith.3, type.coll.4, type.num.9, expr.bit.2

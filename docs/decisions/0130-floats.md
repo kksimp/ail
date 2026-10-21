@@ -95,7 +95,7 @@ Token usage **ties** on every detail. **AI understanding** decides:
 7. `float` implements `Eq`, `Ord` and `ToStr`, not `Hash` (ADR 0133). Float
    literal patterns are an error (expr.match.7). `f32` stays unimplemented.
 
-```ail
+```ail fragment
 x := 0.1 + 0.2
 print(x)                      # 0.30000000000000004
 print(1e16)                   # 1e+16

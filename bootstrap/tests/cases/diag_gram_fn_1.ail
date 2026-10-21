@@ -1,0 +1,3 @@
+fn main()
+requires x > 0
+    print(1)

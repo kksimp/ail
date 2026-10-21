@@ -6,6 +6,7 @@
 #   tools/tokbench/run.sh --claude         # also count with the current Claude tokenizer
 #                                          # (needs ANTHROPIC_API_KEY or `ant auth login`)
 #   tools/tokbench/run.sh --json           # machine-readable output
+#   tools/tokbench/run.sh --check-budgets  # language card and quick reference vs their budgets (exit 1 if over)
 #
 # The first run creates a private Python environment in tools/tokbench/.venv
 # and downloads tokenizer files into tools/tokbench/.cache. Nothing is
