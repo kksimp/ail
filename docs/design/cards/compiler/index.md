@@ -5,9 +5,6 @@ ast  129 items
 check  304 items
 codegen  39 items
 mir  271 items
-check  303 items
-codegen  36 items
-mir  210 items
 obj  53 items
 syntax  99 items
 x64  69 items
