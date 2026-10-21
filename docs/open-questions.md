@@ -331,6 +331,8 @@ expr.call.1).
 
 ## OQ-118 — Which transcendental functions the language and the native backend need
 
+**Answered** by the designer on 2026-10-21: the full `std.math` set (`sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`, `cbrt`) as float methods, with a stated tolerance. The ADR is pending: lane 184 writes it and adds the link here.
+
 The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
 or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
 (`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
