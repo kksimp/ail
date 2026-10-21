@@ -2,9 +2,9 @@
 //! of the output. PDF Flate streams, PNG and HTTP `deflate` use this
 //! wrapper (std.compress.7, ADR 0443).
 
+use super::CodecError;
 use super::deflate::deflate;
 use super::inflate::inflate_prefix;
-use super::CodecError;
 
 pub fn adler32(data: &[u8]) -> u32 {
     let (mut a, mut b) = (1u32, 0u32);

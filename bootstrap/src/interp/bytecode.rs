@@ -33,10 +33,7 @@ pub fn set_enabled(on: bool) {
 pub(super) fn usable(prog: &Program, unique: bool, defer: bool) -> bool {
     let contracts = prog.fns.iter().any(|f| !f.contracts.is_empty() || f.inherits.is_some())
         || prog.structs.iter().any(|s| !s.invariants.is_empty());
-    ENABLED.load(AtomicOrdering::Relaxed)
-        && !unique
-        && !defer
-        && !(contracts && contracts::enabled())
+    ENABLED.load(AtomicOrdering::Relaxed) && !unique && !defer && !(contracts && contracts::enabled())
 }
 
 /// Counts of what ran where, printed to standard error at the end of `ail
@@ -759,7 +756,13 @@ fn writes(e: &Expr, t: Option<&str>, moves: &crate::fasthash::FastMap<Pos, &'sta
     };
     let arg = |a: &Arg| ((a.mutable || a.moved) && hits(&a.value)) || (t.is_none() && a.param.is_some()) || w(&a.value);
     match e {
-        Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => false,
+        Expr::Int(..)
+        | Expr::Float(..)
+        | Expr::Str(..)
+        | Expr::Bytes(..)
+        | Expr::Char(..)
+        | Expr::Bool(..)
+        | Expr::None(_) => false,
         Expr::Name(n, pos) => moves.contains_key(pos) && t.is_none_or(|t| t == n),
         Expr::Binary { lhs, rhs, .. } => w(lhs) || w(rhs),
         Expr::Unary { op: UnOp::Neg | UnOp::Not, operand, .. } => w(operand),
@@ -810,7 +813,9 @@ fn compilable(b: &Block) -> bool {
                     expr(c) && compilable(b)
                 }) && els.as_ref().is_none_or(|b| compilable(b))
             }
-            Expr::Match { scrutinee, arms, .. } => expr(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(expr) && compilable(&a.body)),
+            Expr::Match { scrutinee, arms, .. } => {
+                expr(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(expr) && compilable(&a.body))
+            }
             Expr::Binary { lhs, rhs, .. } => expr(lhs) && expr(rhs),
             Expr::Unary { operand, .. } => expr(operand),
             Expr::Method { recv, args, .. } => expr(recv) && args.iter().all(|a| expr(&a.value)),
@@ -896,7 +901,9 @@ fn has_try(e: &Expr) -> bool {
                 Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(has_try) || hi.as_deref().is_none_or(has_try),
                 e => has_try(e),
             };
-            part(elem) || value.as_deref().is_some_and(part) || clauses.iter().any(|c| part(&c.iter) || c.cond.as_ref().is_some_and(part))
+            part(elem)
+                || value.as_deref().is_some_and(part)
+                || clauses.iter().any(|c| part(&c.iter) || c.cond.as_ref().is_some_and(part))
         }
         Expr::Interp(parts, _) => parts.iter().any(|p| match p {
             InterpPart::Lit(_) => false,
@@ -1018,7 +1025,13 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// The constant an expression always has, as the walker computes it.
     fn literal(&mut self, e: &'a Expr) -> Option<Opnd> {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
+            Expr::Int(..)
+            | Expr::Float(..)
+            | Expr::Str(..)
+            | Expr::Bytes(..)
+            | Expr::Char(..)
+            | Expr::Bool(..)
+            | Expr::None(_) => {
                 let v = self.it.eval(e, &mut Vec::new()).ok()?;
                 Some(self.konst(v))
             }
@@ -1097,14 +1110,18 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             return;
         }
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
-                match self.literal(e) {
-                    Some(k) => {
-                        self.emit(Ins::Move { dst, src: k });
-                    }
-                    None => self.delegate(e, dst),
+            Expr::Int(..)
+            | Expr::Float(..)
+            | Expr::Str(..)
+            | Expr::Bytes(..)
+            | Expr::Char(..)
+            | Expr::Bool(..)
+            | Expr::None(_) => match self.literal(e) {
+                Some(k) => {
+                    self.emit(Ins::Move { dst, src: k });
                 }
-            }
+                None => self.delegate(e, dst),
+            },
             Expr::Name(n, pos) => match self.local(n) {
                 Some(slot) if self.it.resolved.moves.contains_key(pos) => {
                     self.emit(Ins::MoveOut { dst, slot });
@@ -1390,7 +1407,11 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             && it.tracing & trace::WATCH == 0
             && !matches!(callee, Expr::TypeArgs { .. })
             && args.iter().all(|a| {
-                a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &it.resolved.moves)
+                a.label.is_none()
+                    && a.param.is_none()
+                    && !a.mutable
+                    && !a.moved
+                    && !writes_locals(&a.value, &it.resolved.moves)
             })
         {
             let guard = self.emit(Ins::FnGuard { slot: ls, n: args.len() as u32, t: 0 });
@@ -1452,7 +1473,14 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         if moves.is_empty() {
             self.emit(Ins::Call { f, dst, args: first, pos: callee.pos(), code: Default::default() });
         } else {
-            self.emit(Ins::CallMut { f, dst, args: first, moves: moves.into(), pos: callee.pos(), code: Default::default() });
+            self.emit(Ins::CallMut {
+                f,
+                dst,
+                args: first,
+                moves: moves.into(),
+                pos: callee.pos(),
+                code: Default::default(),
+            });
         }
     }
 
@@ -1598,7 +1626,9 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     /// (the walker runs those), and no hook or trace that expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
         let plain = |e: &Expr| match e {
-            Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(|x| !has_try(x)) && hi.as_deref().is_none_or(|x| !has_try(x)),
+            Expr::Range { lo, hi, .. } => {
+                lo.as_deref().is_none_or(|x| !has_try(x)) && hi.as_deref().is_none_or(|x| !has_try(x))
+            }
             e => !has_try(e),
         };
         !self.it.hook
@@ -1609,7 +1639,14 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     }
 
     /// The loops of a comprehension's clauses around its element, collected into `acc`.
-    fn comp_clauses(&mut self, kind: CompKind, clauses: &'a [CompFor], elem: &'a Expr, value: Option<&'a Expr>, acc: Opnd) {
+    fn comp_clauses(
+        &mut self,
+        kind: CompKind,
+        clauses: &'a [CompFor],
+        elem: &'a Expr,
+        value: Option<&'a Expr>,
+        acc: Opnd,
+    ) {
         let Some((c, rest)) = clauses.split_first() else {
             match value {
                 Some(v) => {
@@ -1816,14 +1853,8 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     self.block(body, NONE);
                     self.scope.truncate(depth as usize);
                     self.emit(Ins::Truncate(depth + 1));
-                    let next = self.emit(Ins::RangeNext {
-                        i,
-                        hi: h,
-                        inclusive: *inclusive,
-                        var: depth,
-                        end: 0,
-                        top: top + 1,
-                    });
+                    let next =
+                        self.emit(Ins::RangeNext { i, hi: h, inclusive: *inclusive, var: depth, end: 0, top: top + 1 });
                     self.loop_end();
                     let end = self.here();
                     self.patch(top, end);
@@ -1922,11 +1953,14 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             && !r.std_calls.contains_key(&pos)
             && !r.type_args.contains_key(&pos)
             && pure_index(index, &self.scope)
-            && args.iter().all(|a| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &r.moves))
+            && args.iter().all(|a| {
+                a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &r.moves)
+            })
         {
             let ix = self.reg();
             self.expr_to(index, ix);
-            let guard = self.emit(Ins::ElemGuard { slot: ls, ix, name, n: args.len() as u32, t: 0, cache: Cell::new(None) });
+            let guard =
+                self.emit(Ins::ElemGuard { slot: ls, ix, name, n: args.len() as u32, t: 0, cache: Cell::new(None) });
             let first = self.next_reg;
             let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
             for (a, r) in args.iter().zip(regs) {
@@ -2092,7 +2126,13 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     fn effect_free(&self, e: &Expr) -> bool {
         match e {
-            Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => true,
+            Expr::Int(..)
+            | Expr::Float(..)
+            | Expr::Str(..)
+            | Expr::Bytes(..)
+            | Expr::Char(..)
+            | Expr::Bool(..)
+            | Expr::None(_) => true,
             Expr::Name(n, pos) => self.local(n).is_some() && !self.it.resolved.moves.contains_key(pos),
             _ => false,
         }
@@ -2392,113 +2432,109 @@ impl<'a, W: Write> Interp<'a, W> {
                 take($o, env, base, regs, consts)
             };
         }
-            let place = *recv & KIND == LOCAL;
-            let at = base + (*recv & !KIND) as usize;
-            // type.coll.5, type.coll.6, type.map.4: `push`, `get`, `contains` and `len` on a list or
-            // map local, with no argument vector.
-            if place && path.is_empty() && self.tracing & super::trace::WATCH == 0 {
-                match &mut env[at].1 {
-                    Value::List(items) => {
-                        if *n == 1 && *name == "push" {
-                            let v = std::mem::replace(&mut regs[*args as usize], Value::Unit);
-                            Rc::make_mut(items).push(v);
-                            put(*dst, Value::Unit, env, base, regs);
-                            return Ok(());
-                        }
-                        if *n == 0 && *name == "len" {
-                            let len = items.len() as i64;
-                            put_int(*dst, len, env, base, regs);
-                            return Ok(());
-                        }
+        let place = *recv & KIND == LOCAL;
+        let at = base + (*recv & !KIND) as usize;
+        // type.coll.5, type.coll.6, type.map.4: `push`, `get`, `contains` and `len` on a list or
+        // map local, with no argument vector.
+        if place && path.is_empty() && self.tracing & super::trace::WATCH == 0 {
+            match &mut env[at].1 {
+                Value::List(items) => {
+                    if *n == 1 && *name == "push" {
+                        let v = std::mem::replace(&mut regs[*args as usize], Value::Unit);
+                        Rc::make_mut(items).push(v);
+                        put(*dst, Value::Unit, env, base, regs);
+                        return Ok(());
                     }
-                    Value::Map(t) => {
-                        if *n == 1 && (*name == "get" || *name == "contains") {
-                            let found = t.get(&regs[*args as usize]);
-                            let r = match (found, *name == "get") {
-                                (Some(i), true) => Value::present(t.val(i).clone()),
-                                (None, true) => Value::None,
-                                (found, false) => Value::Bool(found.is_some()),
-                            };
-                            assign(&mut regs[*args as usize], Value::Unit);
-                            put(*dst, r, env, base, regs);
-                            return Ok(());
-                        }
-                        if *n == 0 && *name == "len" {
-                            let len = t.len() as i64;
-                            put_int(*dst, len, env, base, regs);
-                            return Ok(());
-                        }
+                    if *n == 0 && *name == "len" {
+                        let len = items.len() as i64;
+                        put_int(*dst, len, env, base, regs);
+                        return Ok(());
                     }
-                    _ => {}
                 }
+                Value::Map(t) => {
+                    if *n == 1 && (*name == "get" || *name == "contains") {
+                        let found = t.get(&regs[*args as usize]);
+                        let r = match (found, *name == "get") {
+                            (Some(i), true) => Value::present(t.val(i).clone()),
+                            (None, true) => Value::None,
+                            (found, false) => Value::Bool(found.is_some()),
+                        };
+                        assign(&mut regs[*args as usize], Value::Unit);
+                        put(*dst, r, env, base, regs);
+                        return Ok(());
+                    }
+                    if *n == 0 && *name == "len" {
+                        let len = t.len() as i64;
+                        put_int(*dst, len, env, base, regs);
+                        return Ok(());
+                    }
+                }
+                _ => {}
             }
-            // A register receiver is moved out; a local's is read in place.
-            let owned = if place { None } else { Some(take!(*recv)) };
-            let me = match &owned {
-                Some(v) => v,
-                None => self.recv_at(env, at, path).expect("checked by the guard"),
-            };
-            let user = match me {
-                Value::Struct(s, _) => Some((false, *s)),
-                Value::Enum(e, _, _) => Some((true, *e)),
-                _ => None,
-            };
-            let (first, n) = (*args as usize, *n as usize);
-            let result = match user {
-                // trait.method.2: the receiver's type's method, as `invoke` calls it.
-                Some((is_enum, index)) => {
-                    let Ins::MethodGuard { cache, .. } = &code.ins[*guard as usize] else {
-                        unreachable!("a guard")
-                    };
-                    let Some((e, i, f)) = cache.get() else { unreachable!("set by the guard") };
-                    debug_assert!(e == is_enum && i == index);
-                    let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
-                    let moved = f.receiver.is_some_and(|r| r.mutable);
-                    let me = match owned {
-                        Some(v) => v,
-                        None if moved => Value::Unit,
-                        None => self.recv_at(env, at, path).expect("checked by the guard").clone(),
-                    };
-                    callee.push(("self", me));
-                    for (k, p) in f.params.iter().enumerate() {
-                        callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
-                    }
-                    // trait.method.3: a `mut self` receiver moves into the call and back.
-                    if moved {
-                        callee[0].1 = std::mem::replace(self.place_mut(env, at, path), Value::Unit);
-                    }
-                    let result = self.run_body(f, &mut callee, *pos)?;
-                    if moved {
-                        *self.place_mut(env, at, path) = std::mem::replace(&mut callee[0].1, Value::Unit);
-                    }
-                    callee.clear();
-                    self.env_pool.push(callee);
-                    result
+        }
+        // A register receiver is moved out; a local's is read in place.
+        let owned = if place { None } else { Some(take!(*recv)) };
+        let me = match &owned {
+            Some(v) => v,
+            None => self.recv_at(env, at, path).expect("checked by the guard"),
+        };
+        let user = match me {
+            Value::Struct(s, _) => Some((false, *s)),
+            Value::Enum(e, _, _) => Some((true, *e)),
+            _ => None,
+        };
+        let (first, n) = (*args as usize, *n as usize);
+        let result = match user {
+            // trait.method.2: the receiver's type's method, as `invoke` calls it.
+            Some((is_enum, index)) => {
+                let Ins::MethodGuard { cache, .. } = &code.ins[*guard as usize] else { unreachable!("a guard") };
+                let Some((e, i, f)) = cache.get() else { unreachable!("set by the guard") };
+                debug_assert!(e == is_enum && i == index);
+                let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                let moved = f.receiver.is_some_and(|r| r.mutable);
+                let me = match owned {
+                    Some(v) => v,
+                    None if moved => Value::Unit,
+                    None => self.recv_at(env, at, path).expect("checked by the guard").clone(),
+                };
+                callee.push(("self", me));
+                for (k, p) in f.params.iter().enumerate() {
+                    callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
                 }
-                None => {
-                    let mut a = self.arg_pool.pop().unwrap_or_default();
-                    a.extend(regs[first..first + n].iter_mut().map(|r| std::mem::replace(r, Value::Unit)));
-                    let recv = match owned {
-                        Some(v) => Operand::Value(v),
-                        None if *mutating => {
-                            let mut p = Place::local(at);
-                            let mut v = &env[at].1;
-                            for name in path.iter() {
-                                let Value::Struct(s, fields) = v else { unreachable!("checked by the guard") };
-                                let i = self.field_index(*s, name);
-                                p.path.push(Step::Field(i));
-                                v = &fields[i];
-                            }
-                            Operand::Place(p)
-                        }
-                        None => {
-                            Operand::Value(self.recv_at(env, at, path).expect("checked by the guard").clone())
-                        }
-                    };
-                    self.builtin_with(recv, name, a, *pos, env)?
+                // trait.method.3: a `mut self` receiver moves into the call and back.
+                if moved {
+                    callee[0].1 = std::mem::replace(self.place_mut(env, at, path), Value::Unit);
                 }
-            };
-            put(*dst, result, env, base, regs);
+                let result = self.run_body(f, &mut callee, *pos)?;
+                if moved {
+                    *self.place_mut(env, at, path) = std::mem::replace(&mut callee[0].1, Value::Unit);
+                }
+                callee.clear();
+                self.env_pool.push(callee);
+                result
+            }
+            None => {
+                let mut a = self.arg_pool.pop().unwrap_or_default();
+                a.extend(regs[first..first + n].iter_mut().map(|r| std::mem::replace(r, Value::Unit)));
+                let recv = match owned {
+                    Some(v) => Operand::Value(v),
+                    None if *mutating => {
+                        let mut p = Place::local(at);
+                        let mut v = &env[at].1;
+                        for name in path.iter() {
+                            let Value::Struct(s, fields) = v else { unreachable!("checked by the guard") };
+                            let i = self.field_index(*s, name);
+                            p.path.push(Step::Field(i));
+                            v = &fields[i];
+                        }
+                        Operand::Place(p)
+                    }
+                    None => Operand::Value(self.recv_at(env, at, path).expect("checked by the guard").clone()),
+                };
+                self.builtin_with(recv, name, a, *pos, env)?
+            }
+        };
+        put(*dst, result, env, base, regs);
         Ok(())
     }
 
@@ -2526,14 +2562,14 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let Ins::Fused { dst, srcs, prog } = ins else { unreachable!("Fused") };
 
-            pc += 1;
-            let vals: Vec<Value> = srcs.iter().map(|s| get!(*s).clone()).collect();
-            for s in srcs.iter() {
-                done(*s, regs);
-            }
-            let v = self.fused_values(prog, &vals)?;
-            put(*dst, v, env, base, regs);
-        
+        pc += 1;
+        let vals: Vec<Value> = srcs.iter().map(|s| get!(*s).clone()).collect();
+        for s in srcs.iter() {
+            done(*s, regs);
+        }
+        let v = self.fused_values(prog, &vals)?;
+        put(*dst, v, env, base, regs);
+
         Ok(pc)
     }
 
@@ -2561,28 +2597,28 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let Ins::Neg { dst, src, pos } = ins else { unreachable!("Neg") };
 
-            pc += 1;
-            let v = match take!(*src) {
-                Value::Float(x) => Value::Float(-x),
-                Value::Num(k, bits) => negate(k, bits, *pos)?,
-                // std.tensor.14: elementwise on a tensor.
-                Value::Tensor(t) => match t.neg() {
-                    Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
-                    Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
-                },
-                v => {
-                    let v = v.int();
-                    match v.checked_neg() {
-                        Some(r) => Value::Int(r),
-                        None => {
-                            let message = format!("`-({v})` overflows `int`");
-                            return Err(Trap { rule: "expr.arith.1", pos: *pos, message }.into());
-                        }
+        pc += 1;
+        let v = match take!(*src) {
+            Value::Float(x) => Value::Float(-x),
+            Value::Num(k, bits) => negate(k, bits, *pos)?,
+            // std.tensor.14: elementwise on a tensor.
+            Value::Tensor(t) => match t.neg() {
+                Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+                Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+            },
+            v => {
+                let v = v.int();
+                match v.checked_neg() {
+                    Some(r) => Value::Int(r),
+                    None => {
+                        let message = format!("`-({v})` overflows `int`");
+                        return Err(Trap { rule: "expr.arith.1", pos: *pos, message }.into());
                     }
                 }
-            };
-            put(*dst, v, env, base, regs);
-        
+            }
+        };
+        put(*dst, v, env, base, regs);
+
         Ok(pc)
     }
 
@@ -2610,10 +2646,10 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let Ins::Print { src, pos } = ins else { unreachable!("Print") };
 
-            pc += 1;
-            let v = take!(*src);
-            self.print(&v, *pos)?;
-        
+        pc += 1;
+        let v = take!(*src);
+        self.print(&v, *pos)?;
+
         Ok(pc)
     }
 
@@ -2640,7 +2676,7 @@ impl<'a, W: Write> Interp<'a, W> {
             };
         }
         let Ins::Try { dst, src, context, absent, optional, pos, exit } = ins else { unreachable!("Try") };
-match take!(*src) {
+        match take!(*src) {
             Value::None if *absent => {
                 let how = self.absent(*context, *pos, env)?;
                 pc = self.leave(code, *exit, how, env, base)?;
@@ -2694,21 +2730,21 @@ match take!(*src) {
         }
         let Ins::SetField { slot, name, val, op, pos } = ins else { unreachable!("SetField") };
 
-            pc += 1;
-            let at = base + *slot as usize;
-            let Value::Struct(s, fields) = &env[at].1 else { unreachable!("checked by the guard") };
-            let index = self.field_index(*s, name);
-            let v = match op {
-                None => take!(*val),
-                Some(op) => {
-                    let old = fields[index].clone();
-                    let rhs = take!(*val);
-                    self.binop(*op, old, rhs, *pos)?
-                }
-            };
-            let Value::Struct(_, fields) = &mut env[at].1 else { unreachable!("checked: struct") };
-            Rc::make_mut(fields)[index] = v;
-        
+        pc += 1;
+        let at = base + *slot as usize;
+        let Value::Struct(s, fields) = &env[at].1 else { unreachable!("checked by the guard") };
+        let index = self.field_index(*s, name);
+        let v = match op {
+            None => take!(*val),
+            Some(op) => {
+                let old = fields[index].clone();
+                let rhs = take!(*val);
+                self.binop(*op, old, rhs, *pos)?
+            }
+        };
+        let Value::Struct(_, fields) = &mut env[at].1 else { unreachable!("checked: struct") };
+        Rc::make_mut(fields)[index] = v;
+
         Ok(pc)
     }
 
@@ -2736,20 +2772,20 @@ match take!(*src) {
         }
         let Ins::Arm { src, pat, t } = ins else { unreachable!("Arm") };
 
-            let v = &regs[(*src & !KIND) as usize];
-            if !self.matches(pat, v) {
-                pc = *t as usize;
-            } else {
-                pc += 1;
-                if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (pat, v) {
-                    for ((n, _), value) in names.iter().zip(fields.iter()) {
-                        if n != "_" {
-                            env.push((n.as_str(), value.clone()));
-                        }
+        let v = &regs[(*src & !KIND) as usize];
+        if !self.matches(pat, v) {
+            pc = *t as usize;
+        } else {
+            pc += 1;
+            if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (pat, v) {
+                for ((n, _), value) in names.iter().zip(fields.iter()) {
+                    if n != "_" {
+                        env.push((n.as_str(), value.clone()));
                     }
                 }
             }
-        
+        }
+
         Ok(pc)
     }
 
@@ -2777,22 +2813,22 @@ match take!(*src) {
         }
         let Ins::Interp { dst, parts, args } = ins else { unreachable!("Interp") };
 
-            pc += 1;
-            let mut text = String::new();
-            let mut k = *args as usize;
-            for part in parts.iter() {
-                match part {
-                    InterpPart::Lit(t) => text.push_str(t),
-                    InterpPart::Expr(_) | InterpPart::Fmt(..) => {
-                        let Value::Str(t) = &regs[k] else { unreachable!("a part's text") };
-                        text.push_str(t);
-                        regs[k] = Value::Unit;
-                        k += 1;
-                    }
+        pc += 1;
+        let mut text = String::new();
+        let mut k = *args as usize;
+        for part in parts.iter() {
+            match part {
+                InterpPart::Lit(t) => text.push_str(t),
+                InterpPart::Expr(_) | InterpPart::Fmt(..) => {
+                    let Value::Str(t) = &regs[k] else { unreachable!("a part's text") };
+                    text.push_str(t);
+                    regs[k] = Value::Unit;
+                    k += 1;
                 }
             }
-            put(*dst, Value::Str(Rc::from(text)), env, base, regs);
-        
+        }
+        put(*dst, Value::Str(Rc::from(text)), env, base, regs);
+
         Ok(pc)
     }
 
@@ -2820,17 +2856,17 @@ match take!(*src) {
         }
         let Ins::Text { r, spec, pos } = ins else { unreachable!("Text") };
 
-            pc += 1;
-            let r = (*r & !KIND) as usize;
-            if spec.is_some() || !matches!(regs[r], Value::Str(_)) {
-                let v = std::mem::replace(&mut regs[r], Value::Unit);
-                let t = match spec {
-                    None => self.text(&v, *pos)?,
-                    Some(spec) => self.formatted(&v, spec, *pos)?,
-                };
-                regs[r] = Value::Str(Rc::from(t));
-            }
-        
+        pc += 1;
+        let r = (*r & !KIND) as usize;
+        if spec.is_some() || !matches!(regs[r], Value::Str(_)) {
+            let v = std::mem::replace(&mut regs[r], Value::Unit);
+            let t = match spec {
+                None => self.text(&v, *pos)?,
+                Some(spec) => self.formatted(&v, spec, *pos)?,
+            };
+            regs[r] = Value::Str(Rc::from(t));
+        }
+
         Ok(pc)
     }
 
@@ -2858,23 +2894,23 @@ match take!(*src) {
         }
         let Ins::Build { dst, what, slots, args } = ins else { unreachable!("Build") };
 
-            pc += 1;
-            let first = *args as usize;
-            let n = match what {
-                Built::Struct(s) => self.prog.structs[*s].fields.len(),
-                Built::Variant(e, v) | Built::Qualified(e, v) => self.prog.enums[*e].variants[*v].fields.len(),
-            };
-            let mut values = vec![Value::Unit; n];
-            for (k, &slot) in slots.iter().enumerate() {
-                values[slot] = std::mem::replace(&mut regs[first + k], Value::Unit);
-            }
-            let v = match what {
-                Built::Struct(s) => Value::Struct(*s, Rc::new(values)),
-                Built::Variant(e, v) if values.is_empty() => Value::Enum(*e, *v, Rc::clone(&self.no_fields)),
-                Built::Variant(e, v) | Built::Qualified(e, v) => Value::Enum(*e, *v, Rc::new(values)),
-            };
-            put(*dst, v, env, base, regs);
-        
+        pc += 1;
+        let first = *args as usize;
+        let n = match what {
+            Built::Struct(s) => self.prog.structs[*s].fields.len(),
+            Built::Variant(e, v) | Built::Qualified(e, v) => self.prog.enums[*e].variants[*v].fields.len(),
+        };
+        let mut values = vec![Value::Unit; n];
+        for (k, &slot) in slots.iter().enumerate() {
+            values[slot] = std::mem::replace(&mut regs[first + k], Value::Unit);
+        }
+        let v = match what {
+            Built::Struct(s) => Value::Struct(*s, Rc::new(values)),
+            Built::Variant(e, v) if values.is_empty() => Value::Enum(*e, *v, Rc::clone(&self.no_fields)),
+            Built::Variant(e, v) | Built::Qualified(e, v) => Value::Enum(*e, *v, Rc::new(values)),
+        };
+        put(*dst, v, env, base, regs);
+
         Ok(pc)
     }
 
@@ -2902,16 +2938,16 @@ match take!(*src) {
         }
         let Ins::Map { dst, args, n, set } = ins else { unreachable!("Map") };
 
-            pc += 1;
-            let first = *args as usize;
-            let mut t = Table::default();
-            for kv in regs[first..first + 2 * *n as usize].chunks_mut(2) {
-                let k = std::mem::replace(&mut kv[0], Value::Unit);
-                t.insert(k, Some(std::mem::replace(&mut kv[1], Value::Unit)));
-            }
-            let v = if *set { Value::Set(Rc::new(t)) } else { Value::Map(Rc::new(t)) };
-            put(*dst, v, env, base, regs);
-        
+        pc += 1;
+        let first = *args as usize;
+        let mut t = Table::default();
+        for kv in regs[first..first + 2 * *n as usize].chunks_mut(2) {
+            let k = std::mem::replace(&mut kv[0], Value::Unit);
+            t.insert(k, Some(std::mem::replace(&mut kv[1], Value::Unit)));
+        }
+        let v = if *set { Value::Set(Rc::new(t)) } else { Value::Map(Rc::new(t)) };
+        put(*dst, v, env, base, regs);
+
         Ok(pc)
     }
 
@@ -2939,14 +2975,12 @@ match take!(*src) {
         }
         let Ins::List { dst, args, n } = ins else { unreachable!("List") };
 
-            pc += 1;
-            let first = *args as usize;
-            let items: Vec<Value> = regs[first..first + *n as usize]
-                .iter_mut()
-                .map(|r| std::mem::replace(r, Value::Unit))
-                .collect();
-            put(*dst, Value::List(Rc::new(items)), env, base, regs);
-        
+        pc += 1;
+        let first = *args as usize;
+        let items: Vec<Value> =
+            regs[first..first + *n as usize].iter_mut().map(|r| std::mem::replace(r, Value::Unit)).collect();
+        put(*dst, Value::List(Rc::new(items)), env, base, regs);
+
         Ok(pc)
     }
 
@@ -2974,39 +3008,39 @@ match take!(*src) {
         }
         let Ins::TraitGuard { recv, tr, name, t, cache, now } = ins else { unreachable!("TraitGuard") };
 
-            let v = get!(*recv);
-            // What `dispatch` decides by: the value's type constructor.
-            let key = match v {
-                Value::Ref(_) | Value::Handle(_) | Value::Atomic(_) => None,
-                Value::Struct(s, _) => Some((0, *s)),
-                Value::Enum(e, _, _) => Some((1, *e)),
-                Value::Int(_) => Some((2, 0)),
-                Value::Float(_) => Some((3, 0)),
-                Value::Str(_) => Some((4, 0)),
-                Value::Char(_) => Some((5, 0)),
-                Value::Bool(_) => Some((6, 0)),
-                Value::List(_) => Some((7, 0)),
-                _ => Some((8, 0)),
-            };
-            let pick = key.map(|(k, i)| match cache.get() {
-                Some((ck, ci, f)) if ck == k && ci == i => f,
-                _ => {
-                    let f = self.dispatch(*tr, name, v);
-                    cache.set(Some((k, i, f)));
-                    f
-                }
-            });
-            // A `mut` receiver or parameter takes the walker's path.
-            let ok = pick.is_some_and(|f| {
-                f.is_none_or(|f| f.receiver.is_none_or(|r| !r.mutable) && f.params.iter().all(|p| !p.mutable))
-            });
-            if ok {
-                now.set(pick.flatten());
-                pc += 1;
-            } else {
-                pc = *t as usize;
+        let v = get!(*recv);
+        // What `dispatch` decides by: the value's type constructor.
+        let key = match v {
+            Value::Ref(_) | Value::Handle(_) | Value::Atomic(_) => None,
+            Value::Struct(s, _) => Some((0, *s)),
+            Value::Enum(e, _, _) => Some((1, *e)),
+            Value::Int(_) => Some((2, 0)),
+            Value::Float(_) => Some((3, 0)),
+            Value::Str(_) => Some((4, 0)),
+            Value::Char(_) => Some((5, 0)),
+            Value::Bool(_) => Some((6, 0)),
+            Value::List(_) => Some((7, 0)),
+            _ => Some((8, 0)),
+        };
+        let pick = key.map(|(k, i)| match cache.get() {
+            Some((ck, ci, f)) if ck == k && ci == i => f,
+            _ => {
+                let f = self.dispatch(*tr, name, v);
+                cache.set(Some((k, i, f)));
+                f
             }
-        
+        });
+        // A `mut` receiver or parameter takes the walker's path.
+        let ok = pick.is_some_and(|f| {
+            f.is_none_or(|f| f.receiver.is_none_or(|r| !r.mutable) && f.params.iter().all(|p| !p.mutable))
+        });
+        if ok {
+            now.set(pick.flatten());
+            pc += 1;
+        } else {
+            pc = *t as usize;
+        }
+
         Ok(pc)
     }
 
@@ -3034,42 +3068,42 @@ match take!(*src) {
         }
         let Ins::TraitRun { recv, tr, args, n, dst, pos, guard } = ins else { unreachable!("TraitRun") };
 
-            pc += 1;
-            let Ins::TraitGuard { now, .. } = &code.ins[*guard as usize] else { unreachable!("a guard") };
-            let me = take!(*recv);
-            let first = *args as usize;
-            let result = match now.get() {
-                // trait.method.2: the implementation, as `invoke` calls it.
-                Some(f) => {
-                    let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
-                    callee.push(("self", me));
-                    for (k, p) in f.params.iter().enumerate() {
-                        callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
-                    }
-                    let result = self.run_body(f, &mut callee, *pos)?;
-                    callee.clear();
-                    self.env_pool.push(callee);
-                    result
+        pc += 1;
+        let Ins::TraitGuard { now, .. } = &code.ins[*guard as usize] else { unreachable!("a guard") };
+        let me = take!(*recv);
+        let first = *args as usize;
+        let result = match now.get() {
+            // trait.method.2: the implementation, as `invoke` calls it.
+            Some(f) => {
+                let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                callee.push(("self", me));
+                for (k, p) in f.params.iter().enumerate() {
+                    callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
                 }
-                // trait.std.1-3: the built-in `to_str`, `eq` and `cmp`, as `trait_method` makes them.
-                None => {
-                    let std = self.resolved.std;
-                    if *tr == std.to_str {
-                        Value::Str(Rc::from(self.text(&me, *pos)?))
+                let result = self.run_body(f, &mut callee, *pos)?;
+                callee.clear();
+                self.env_pool.push(callee);
+                result
+            }
+            // trait.std.1-3: the built-in `to_str`, `eq` and `cmp`, as `trait_method` makes them.
+            None => {
+                let std = self.resolved.std;
+                if *tr == std.to_str {
+                    Value::Str(Rc::from(self.text(&me, *pos)?))
+                } else {
+                    debug_assert!(*n == 1);
+                    let other = std::mem::replace(&mut regs[first], Value::Unit);
+                    if *tr == std.eq {
+                        Value::Bool(self.equal(&me, &other, *pos)?)
                     } else {
-                        debug_assert!(*n == 1);
-                        let other = std::mem::replace(&mut regs[first], Value::Unit);
-                        if *tr == std.eq {
-                            Value::Bool(self.equal(&me, &other, *pos)?)
-                        } else {
-                            let o = self.compare(&me, &other, *pos)?;
-                            self.ordering_value(o)
-                        }
+                        let o = self.compare(&me, &other, *pos)?;
+                        self.ordering_value(o)
                     }
                 }
-            };
-            put(*dst, result, env, base, regs);
-        
+            }
+        };
+        put(*dst, result, env, base, regs);
+
         Ok(pc)
     }
 
@@ -3096,7 +3130,7 @@ match take!(*src) {
             };
         }
         let Ins::MethodOn { recv, e, dst, exit } = ins else { unreachable!("MethodOn") };
-match {
+        match {
             self.stats.handoffs += 1;
             if let Some(k) = &mut self.stats.kinds {
                 *k.entry(kind_of_expr(e)).or_default() += 1;
@@ -3151,28 +3185,26 @@ match {
     fn op_elemguard(&mut self, ins: &Ins<'a>, env: &Env<'a>, base: usize, regs: &mut [Value], pc: usize) -> usize {
         let Ins::ElemGuard { slot, ix, name, n, t, cache } = ins else { unreachable!("ElemGuard") };
         let found = match (&env[base + *slot as usize].1, &regs[(*ix & !KIND) as usize]) {
-            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
-                Some((i, Value::Struct(s, _))) => self
-                    .methods
-                    .get(self.prog.structs[*s].name.as_str())
-                    .and_then(|m| m.get(*name))
-                    .copied()
-                    .filter(|f| {
-                        f.receiver.is_some_and(|r| r.mutable)
-                            && f.params.len() == *n as usize
-                            && f.params.iter().all(|p| !p.mutable)
-                    })
-                    .map(|f| (i, f)),
-                _ => None,
-            },
+            (Value::List(items), Value::Int(i)) => {
+                match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
+                    Some((i, Value::Struct(s, _))) => self
+                        .methods
+                        .get(self.prog.structs[*s].name.as_str())
+                        .and_then(|m| m.get(*name))
+                        .copied()
+                        .filter(|f| {
+                            f.receiver.is_some_and(|r| r.mutable)
+                                && f.params.len() == *n as usize
+                                && f.params.iter().all(|p| !p.mutable)
+                        })
+                        .map(|f| (i, f)),
+                    _ => None,
+                }
+            }
             _ => None,
         };
         cache.set(found);
-        if found.is_some() {
-            pc + 1
-        } else {
-            *t as usize
-        }
+        if found.is_some() { pc + 1 } else { *t as usize }
     }
 
     #[inline(never)]
@@ -3198,7 +3230,7 @@ match {
             };
         }
         let Ins::Expr { e, dst, exit } = ins else { unreachable!("Expr") };
-match {
+        match {
             self.stats.handoffs += 1;
             if let Some(k) = &mut self.stats.kinds {
                 *k.entry(kind_of_expr(e)).or_default() += 1;
@@ -3237,7 +3269,7 @@ match {
             };
         }
         let Ins::Stmt { s, exit } = ins else { unreachable!("Stmt") };
-match {
+        match {
             self.stats.handoffs += 1;
             if let Some(k) = &mut self.stats.kinds {
                 *k.entry(Cow::Borrowed(kind_of_stmt(s))).or_default() += 1;
@@ -3587,10 +3619,12 @@ match {
                 Ins::Index2 { dst, recv, i, k, pos1, pos2 } => {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i), get!(*k)) {
-                        (Value::List(rows), Value::Int(i), Value::Int(k)) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
-                            Some(Value::List(row)) => Some(elem(row, *k, *pos2)?.clone()),
-                            _ => None,
-                        },
+                        (Value::List(rows), Value::Int(i), Value::Int(k)) => {
+                            match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
+                                Some(Value::List(row)) => Some(elem(row, *k, *pos2)?.clone()),
+                                _ => None,
+                            }
+                        }
                         _ => None,
                     };
                     let v = match fast {

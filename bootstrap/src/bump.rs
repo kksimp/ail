@@ -340,7 +340,8 @@ unsafe impl GlobalAlloc for FrontEnd {
         if !self.on.load(Ordering::Relaxed) || !self.owns(ptr) {
             return unsafe { System.realloc(ptr, layout, new_size) };
         }
-        let old = if layout.size() <= SMALL { (class(layout.size()) + 1) * 16 } else { layout.size().next_multiple_of(16) };
+        let old =
+            if layout.size() <= SMALL { (class(layout.size()) + 1) * 16 } else { layout.size().next_multiple_of(16) };
         // The block already has room; freeing it later by its new size
         // returns it to a class no larger than it is.
         if new_size <= old {

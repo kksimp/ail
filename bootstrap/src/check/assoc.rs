@@ -54,14 +54,18 @@ impl<'p> Checker<'p> {
         let found = traits.iter().find_map(|&tr| self.assoc_fn(tr, name).map(|f| (tr, f)));
         let Some((tr, f)) = found else {
             self.args_only(args);
-            let bounds: Vec<String> = self.tparams[p].bounds.iter().map(|&b| format!("`{}`", self.prog.traits[b].name)).collect();
+            let bounds: Vec<String> =
+                self.tparams[p].bounds.iter().map(|&b| format!("`{}`", self.prog.traits[b].name)).collect();
             let offer = (0..self.prog.traits.len()).find(|&t| self.assoc_fn(t, name).is_some());
             let help = if let Some(t) = offer {
                 format!("add the bound `{}` to `{tn}`, whose trait declares `fn {name}`", self.prog.traits[t].name)
             } else if bounds.is_empty() {
                 format!("add a bound whose trait declares `fn {name}(...)`: `[{tn} Trait]`")
             } else {
-                format!("`{tn}` is bound by {}; add a bound whose trait declares `fn {name}(...)` without `self`", bounds.join(", "))
+                format!(
+                    "`{tn}` is bound by {}; add a bound whose trait declares `fn {name}(...)` without `self`",
+                    bounds.join(", ")
+                )
             };
             self.error_help("trait.assoc.2", pos, format!("`{tn}` has no associated function `{name}`"), help);
             // Type the call as the trait that declares it would, so its

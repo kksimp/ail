@@ -264,7 +264,11 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
         ("spin", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
     ] {
         let src = format!("bootstrap/tests/native/limits/{name}.ail");
-        let want = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", option, value, &src]).output().unwrap();
+        let want = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["run", option, value, &src])
+            .output()
+            .unwrap();
         for baked in [false, true] {
             let exe = tmp.join(format!("{name}{}", if baked { "-baked" } else { "" }));
             let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
@@ -349,4 +353,3 @@ fn runtime_sources_parse() {
     }
     assert!(bad.is_empty(), "runtime sources with syntax errors:\n{}", bad.join("\n"));
 }
-

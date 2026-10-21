@@ -138,7 +138,17 @@ struct Gen {
 
 /// A whole program for `seed`.
 pub fn program(seed: u64) -> String {
-    let mut g = Gen { rng: Rng::new(seed), out: String::from(PRELUDE), vars: Vec::new(), fresh: 0, helpers: 0, callable: 0, ind: 0, loops: 0, in_helper: false };
+    let mut g = Gen {
+        rng: Rng::new(seed),
+        out: String::from(PRELUDE),
+        vars: Vec::new(),
+        fresh: 0,
+        helpers: 0,
+        callable: 0,
+        ind: 0,
+        loops: 0,
+        in_helper: false,
+    };
     g.helpers = g.rng.below(4);
     for i in 0..g.helpers {
         g.callable = i;
@@ -479,7 +489,11 @@ impl Gen {
             Ty::Int => self.int_expr(d),
             Ty::Bool => match self.rng.below(8) {
                 0 | 1 => {
-                    let (a, b, op) = (self.expr(Ty::Int, d), self.expr(Ty::Int, d), *self.rng.pick(&["<", "<=", "==", "!=", ">", ">="]));
+                    let (a, b, op) = (
+                        self.expr(Ty::Int, d),
+                        self.expr(Ty::Int, d),
+                        *self.rng.pick(&["<", "<=", "==", "!=", ">", ">="]),
+                    );
                     format!("{a} {op} {b}")
                 }
                 2 => {
@@ -487,7 +501,12 @@ impl Gen {
                     format!("{a} == {b}")
                 }
                 3 => format!("not ({})", self.expr(Ty::Bool, d)),
-                4 => format!("({}) {} ({})", self.expr(Ty::Bool, d), self.rng.pick(&["and", "or"]), self.expr(Ty::Bool, d)),
+                4 => format!(
+                    "({}) {} ({})",
+                    self.expr(Ty::Bool, d),
+                    self.rng.pick(&["and", "or"]),
+                    self.expr(Ty::Bool, d)
+                ),
                 5 => format!("{}.contains({})", self.expr(Ty::ListInt, d), self.expr(Ty::Int, d)),
                 6 => format!("{}.contains(\"{}\")", self.expr(Ty::Str, d), self.rng.pick(&["a", "b", " "])),
                 _ => format!("{}.contains(\"a\")", self.expr(Ty::MapSI, d)),
@@ -593,7 +612,11 @@ impl Gen {
             17 => format!("({}).to_int()", self.expr(Ty::Float, d)),
             18 => format!("largest([{}, {}, 1])", self.expr(Ty::Int, d), self.expr(Ty::Int, d)),
             19 => format!("{}.weight()", self.expr(Ty::Pt, d)),
-            20 => format!("({}.slice(0, 0).len() + ({}.find(\"a\") else 1))", self.expr(Ty::Str, d), self.expr(Ty::Str, d)),
+            20 => format!(
+                "({}.slice(0, 0).len() + ({}.find(\"a\") else 1))",
+                self.expr(Ty::Str, d),
+                self.expr(Ty::Str, d)
+            ),
             _ => self.lit(Ty::Int),
         }
     }
@@ -604,9 +627,22 @@ impl Gen {
 // negative, empty, non-ASCII) through the operations most likely to trap. A
 // trap is the right answer; a panic of the interpreter is the finding.
 
-const EDGE_INTS: [&str; 12] =
-    ["0", "1", "-1", "2", "7", "100", "255", "65536", "9223372036854775807", "-9223372036854775807", "4294967296", "-100"];
-const EDGE_STRS: [&str; 8] = ["\"\"", "\"a\"", "\"héllo\"", "\"日本語\"", "\"a,b,,c\"", "\" x \"", "\"line1\\nline2\"", "\"😀x\""];
+const EDGE_INTS: [&str; 12] = [
+    "0",
+    "1",
+    "-1",
+    "2",
+    "7",
+    "100",
+    "255",
+    "65536",
+    "9223372036854775807",
+    "-9223372036854775807",
+    "4294967296",
+    "-100",
+];
+const EDGE_STRS: [&str; 8] =
+    ["\"\"", "\"a\"", "\"héllo\"", "\"日本語\"", "\"a,b,,c\"", "\" x \"", "\"line1\\nline2\"", "\"😀x\""];
 const EDGE_LISTS: [&str; 5] = ["List[int]()", "[1]", "[3, 1, 2]", "[9223372036854775807, 1]", "[-5, 0, 5, 10]"];
 
 const PROBE_DEFS: &str = "
@@ -709,7 +745,30 @@ pub fn probe(seed: u64) -> String {
 // Mutation (fuzz.mut.1)
 
 const POOL: [&str; 24] = [
-    "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", ":=", "=", "==", "..", ",", "\"", "fn", "mut", "match", "else", "?", "0", "9999999999999999999", "spawn",
+    "(",
+    ")",
+    "[",
+    "]",
+    "{",
+    "}",
+    "+",
+    "-",
+    "*",
+    "/",
+    ":=",
+    "=",
+    "==",
+    "..",
+    ",",
+    "\"",
+    "fn",
+    "mut",
+    "match",
+    "else",
+    "?",
+    "0",
+    "9999999999999999999",
+    "spawn",
 ];
 
 /// Split into whitespace and non-whitespace pieces so they concatenate back.
@@ -733,7 +792,20 @@ fn pieces(src: &str) -> Vec<String> {
             while j < chars.len() && chars[j] == c {
                 j += 1;
             }
-        } else if j < chars.len() && matches!((c, chars[j]), (':', '=') | ('=', '=') | ('!', '=') | ('<', '=') | ('>', '=') | ('.', '.') | ('+', '=') | ('-', '=') | ('=', '>')) {
+        } else if j < chars.len()
+            && matches!(
+                (c, chars[j]),
+                (':', '=')
+                    | ('=', '=')
+                    | ('!', '=')
+                    | ('<', '=')
+                    | ('>', '=')
+                    | ('.', '.')
+                    | ('+', '=')
+                    | ('-', '=')
+                    | ('=', '>')
+            )
+        {
             j += 1;
         }
         out.push(chars[i..j.min(chars.len())].iter().collect());

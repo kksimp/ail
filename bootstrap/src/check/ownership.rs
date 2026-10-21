@@ -154,7 +154,8 @@ impl<'p> Checker<'p> {
             },
             _ if place_path(e).is_some() && matches!(rule, "own.move.2" | "own.move.6") => {
                 let root = place_path(e).map_or("", |(r, _)| r);
-                let help = self.take_out_help(e, root).unwrap_or_else(|| format!("move `{root}` itself, or pass a new value"));
+                let help =
+                    self.take_out_help(e, root).unwrap_or_else(|| format!("move `{root}` itself, or pass a new value"));
                 self.error_help(
                     "own.move.3",
                     e.pos(),

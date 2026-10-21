@@ -10,9 +10,9 @@
 //! (trait.std.1-4, trait.auto.1-2, trait.derive.1).
 
 use crate::fasthash::FastMap as HashMap;
+use std::cell::RefCell;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use std::cmp::Ordering;
@@ -23,40 +23,40 @@ mod atomic;
 mod builtins;
 mod bytecode;
 mod bytes;
+mod codec;
+mod contracts;
 mod ffi;
 mod json;
 mod keyfn;
 pub mod limits;
-mod contracts;
-pub mod parallel;
 mod net;
 mod netsock;
 mod osext;
-mod spawn;
-mod codec;
+pub mod parallel;
 mod random;
-mod tz;
 mod regex;
 pub mod replay;
+mod spawn;
 mod stdlib;
 mod tasks;
 mod tensor;
 mod trace;
+mod tz;
 
 pub use bytecode::set_enabled as set_bytecode;
 pub use contracts::set_enabled as set_contracts;
-pub use random::seed as set_seed;
 pub use json::install as install_native_json;
+pub use random::seed as set_seed;
 pub use stdlib::set_program;
 pub use tasks::{schedule_seed, set_schedule};
+mod generate;
 mod prop;
 mod testing;
-mod generate;
 mod ui;
+pub use generate::generate;
 pub use prop::PropInfo;
 pub use testing::run_tests;
-pub use generate::generate;
-pub use trace::{render_trap, take_options as take_trace_options, option_words as trace_option_words, take_snapshot};
+pub use trace::{option_words as trace_option_words, render_trap, take_options as take_trace_options, take_snapshot};
 
 use builtins::{Key, Table, map_value};
 use tasks::Handle;
@@ -417,11 +417,14 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
                 || prog.traits[tr].methods.iter().any(|&m| prog.fns[m].name == name && prog.fns[m].body.is_some())
         });
     let mut mutating: crate::fasthash::FastSet<&str> =
-        ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
+        ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"]
+            .into_iter()
+            .collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
     // A standard module's unique type (`proc.Child`) has no cleanup to run, so
     // it doesn't slow programs that don't declare one (std.proc.7).
-    let has_unique = prog.structs.iter().any(|s| s.unique && !s.name.contains('.')) || prog.enums.iter().any(|e| e.unique);
+    let has_unique =
+        prog.structs.iter().any(|s| s.unique && !s.name.contains('.')) || prog.enums.iter().any(|e| e.unique);
     let has_defer = prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b));
     Interp {
         prog,
@@ -447,7 +450,11 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         mutating,
         field_slots: HashMap::default(),
         str_lits: HashMap::default(),
-        lit_mask: resolved.float_literals.iter().chain(resolved.sized_literals.keys()).fold(0, |m, p| m | 1 << (p.line & 63)),
+        lit_mask: resolved
+            .float_literals
+            .iter()
+            .chain(resolved.sized_literals.keys())
+            .fold(0, |m, p| m | 1 << (p.line & 63)),
         has_unique,
         has_invariants: prog.structs.iter().any(|s| !s.invariants.is_empty()),
         has_defer,
@@ -1330,7 +1337,10 @@ impl<'a, W: Write> Interp<'a, W> {
             // A new unique value nobody took is released at once.
             if i + 1 < stmts.len()
                 && let Stmt::Expr(e) = s
-                && !matches!(e, Expr::Name(..) | Expr::Field { .. } | Expr::Index { .. } | Expr::If { .. } | Expr::Match { .. })
+                && !matches!(
+                    e,
+                    Expr::Name(..) | Expr::Field { .. } | Expr::Index { .. } | Expr::If { .. } | Expr::Match { .. }
+                )
                 && let Ok(v) = &mut result
             {
                 let v = std::mem::replace(v, Value::Unit);
@@ -1371,7 +1381,9 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Struct(s, _) => self.prog.structs[*s].unique,
             Value::Enum(e, _, _) => self.prog.enums[*e].unique,
             Value::List(items) => items.iter().find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
-            Value::Map(t) => t.entries().map(|(_, x)| x).find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
+            Value::Map(t) => {
+                t.entries().map(|(_, x)| x).find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x))
+            }
             _ => false,
         }
     }
@@ -1492,7 +1504,8 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `none` makes the whole value `none` (err.prop.4, ADR 0252).
     fn else_value(&mut self, value: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
         match self.eval(value, env) {
-            Err(Exit::Return) if matches!(&self.returned, Some((Value::None, pos)) if self.resolved.else_try.contains(pos)) => {
+            Err(Exit::Return) if matches!(&self.returned, Some((Value::None, pos)) if self.resolved.else_try.contains(pos)) =>
+            {
                 self.returned = None;
                 Ok(Value::None)
             }
@@ -1626,7 +1639,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
                 Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
-                Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
+                Value::Handle(Handle::Channel(ch)) => {
+                    return self.comp_channel(ch, c, rest, elem, value, set, env, acc);
+                }
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
         };
@@ -1886,7 +1901,9 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
                 self.eval_binary(*op, lhs, rhs, *pos, env)
             }
-            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => Ok(Value::Int(*v)),
+            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => {
+                Ok(Value::Int(*v))
+            }
             Expr::Bool(b, _) => Ok(Value::Bool(*b)),
             Expr::Char(c, _) => Ok(Value::Char(*c)),
             Expr::Name(n, pos) if !self.has_moves || !self.resolved.moves.contains_key(pos) => match lookup(env, n) {
@@ -2063,7 +2080,9 @@ impl<'a, W: Write> Interp<'a, W> {
                     return Ok(v.clone());
                 }
             }
-            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => return Ok(Value::Int(*v)),
+            Expr::Int(v, pos) if !self.lit_maybe(pos) || !self.resolved.float_literals.contains(pos) => {
+                return Ok(Value::Int(*v));
+            }
             _ => {}
         }
         self.eval(e, env)
@@ -2134,7 +2153,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 sized_literal(self.resolved.sized_literals[pos], *v, 0)
             }
             // type.num.10
-            Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.float_literals.contains(pos) => Value::Float(*v as f64),
+            Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.float_literals.contains(pos) => {
+                Value::Float(*v as f64)
+            }
             Expr::Int(v, _) => Value::Int(*v),
             Expr::Float(v, _) => Value::Float(*v),
             Expr::Char(c, _) => Value::Char(*c),
@@ -2952,7 +2973,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Output(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
+                        Some(
+                            &c @ (crate::stdlib::StdCall::Method(_)
+                            | crate::stdlib::StdCall::Tensor(_)
+                            | crate::stdlib::StdCall::Output(_)
+                            | crate::stdlib::StdCall::Ptr(..)),
+                        ) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),

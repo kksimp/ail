@@ -28,18 +28,20 @@ impl<W: Write> Interp<'_, W> {
             Err(e) => stop(
                 "std.regex.2",
                 pos,
-                format!("`regex.Regex(pat: ...)` holds a pattern that doesn't compile ({}): make a regex with `regex.compile`", e.message),
+                format!(
+                    "`regex.Regex(pat: ...)` holds a pattern that doesn't compile ({}): make a regex with `regex.compile`",
+                    e.message
+                ),
             ),
         }
     }
 
     fn match_value(&self, chars: &[char], m: &[usize]) -> Value {
         let s = self.structs["regex.Match"];
-        Value::Struct(s, Rc::new(vec![
-            Value::Int(m[0] as i64),
-            Value::Int(m[1] as i64),
-            text(regex::slice(chars, m[0], m[1])),
-        ]))
+        Value::Struct(
+            s,
+            Rc::new(vec![Value::Int(m[0] as i64), Value::Int(m[1] as i64), text(regex::slice(chars, m[0], m[1]))]),
+        )
     }
 
     pub(super) fn regex_call(&mut self, f: &str, values: &[Value], pos: Pos) -> Flow<Value> {
@@ -55,13 +57,16 @@ impl<W: Write> Interp<'_, W> {
                     // std.regex.23: a `RegexError` has pattern, at, kind, rule and message.
                     let s = self.structs["regex.RegexError"];
                     fail(
-                        Value::Struct(s, Rc::new(vec![
-                            Value::Str(pat),
-                            Value::Int(e.at as i64),
-                            text(e.kind),
-                            text(regex::kind_rule(e.kind)),
-                            text(e.message),
-                        ])),
+                        Value::Struct(
+                            s,
+                            Rc::new(vec![
+                                Value::Str(pat),
+                                Value::Int(e.at as i64),
+                                text(e.kind),
+                                text(regex::kind_rule(e.kind)),
+                                text(e.message),
+                            ]),
+                        ),
                         pos,
                     )
                 }
@@ -95,7 +100,13 @@ impl<W: Write> Interp<'_, W> {
                 let ms = prog.find_all(&chars, 2 * prog.groups, usize::MAX);
                 Value::List(Rc::new(
                     ms.iter()
-                        .map(|m| if m[2 * g] == UNSET { text("") } else { text(regex::slice(&chars, m[2 * g], m[2 * g + 1])) })
+                        .map(|m| {
+                            if m[2 * g] == UNSET {
+                                text("")
+                            } else {
+                                text(regex::slice(&chars, m[2 * g], m[2 * g + 1]))
+                            }
+                        })
                         .collect(),
                 ))
             }
@@ -111,12 +122,15 @@ impl<W: Write> Interp<'_, W> {
                         }
                     }
                     let s = self.structs["regex.Captures"];
-                    Value::Struct(s, Rc::new(vec![
-                        Value::Int(m[0] as i64),
-                        Value::Int(m[1] as i64),
-                        Value::List(Rc::new(groups)),
-                        Value::Map(Rc::new(named)),
-                    ]))
+                    Value::Struct(
+                        s,
+                        Rc::new(vec![
+                            Value::Int(m[0] as i64),
+                            Value::Int(m[1] as i64),
+                            Value::List(Rc::new(groups)),
+                            Value::Map(Rc::new(named)),
+                        ]),
+                    )
                 }
             },
             "replace" | "replace_first" => {

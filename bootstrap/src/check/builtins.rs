@@ -98,23 +98,70 @@ pub(super) const INT_METHODS: &[&str] = &[
     "to_f32",
 ];
 pub(super) const FLOAT_METHODS: &[&str] = &[
-    "abs", "floor", "ceil", "round", "sqrt", "sin", "cos", "tan", "atan", "atan2", "exp", "ln", "log10", "pow", "hypot",
-    "cbrt", "to_int", "to_f32",
+    "abs", "floor", "ceil", "round", "sqrt", "sin", "cos", "tan", "atan", "atan2", "exp", "ln", "log10", "pow",
+    "hypot", "cbrt", "to_int", "to_f32",
 ];
 pub(super) const SIZED_INT_METHODS: &[&str] = &[
-    "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem", "checked_neg", "wrapping_add",
-    "wrapping_sub", "wrapping_mul", "wrapping_neg", "saturating_add", "saturating_sub", "saturating_mul", "abs",
-    "to_int", "to_float", "to_hex", "to_i8", "to_i16", "to_i32", "to_u8", "to_u16", "to_u32", "to_u64", "to_f32",
+    "checked_add",
+    "checked_sub",
+    "checked_mul",
+    "checked_div",
+    "checked_rem",
+    "checked_neg",
+    "wrapping_add",
+    "wrapping_sub",
+    "wrapping_mul",
+    "wrapping_neg",
+    "saturating_add",
+    "saturating_sub",
+    "saturating_mul",
+    "abs",
+    "to_int",
+    "to_float",
+    "to_hex",
+    "to_i8",
+    "to_i16",
+    "to_i32",
+    "to_u8",
+    "to_u16",
+    "to_u32",
+    "to_u64",
+    "to_f32",
 ];
 pub(super) const F32_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_float"];
-pub(super) const LIST_METHODS: &[&str] =
-    &[
-        "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
-        "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference", "chunks",
-        "windows", "counts", "flatten", "is_empty",
-    ];
+pub(super) const LIST_METHODS: &[&str] = &[
+    "len",
+    "push",
+    "swap",
+    "pop",
+    "last",
+    "first",
+    "insert",
+    "remove_at",
+    "extend",
+    "clear",
+    "reverse",
+    "contains",
+    "index_of",
+    "join",
+    "sum",
+    "min",
+    "max",
+    "sorted",
+    "sort",
+    "take",
+    "union",
+    "intersect",
+    "difference",
+    "chunks",
+    "windows",
+    "counts",
+    "flatten",
+    "is_empty",
+];
 pub(super) const MAP_METHODS: &[&str] = &["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"];
-pub(super) const SET_METHODS: &[&str] = &["len", "is_empty", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
+pub(super) const SET_METHODS: &[&str] =
+    &["len", "is_empty", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
 
 /// `to_i8` ... `to_f32`: the sized type a conversion method names (type.num.15).
 fn convert(name: &str) -> Option<Num> {
@@ -183,7 +230,9 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "shl" | "shr" => read(vec![Int], Int),
             "to_float" => read(vec![], Float),
             "to_hex" => read(vec![], Str),
-            _ => convert(name).map(|k| Builtin { mutates: false, params: vec![], ret: Ty::Num(k), need: Need::Nothing }),
+            _ => {
+                convert(name).map(|k| Builtin { mutates: false, params: vec![], ret: Ty::Num(k), need: Need::Nothing })
+            }
         },
         Ty::Float => match name {
             "abs" | "floor" | "ceil" | "round" | "sqrt" | "sin" | "cos" | "tan" | "atan" | "exp" | "ln" | "log10"
@@ -241,7 +290,9 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                     _ => None,
                 },
                 "counts" => make(false, vec![], Ty::Map(Box::new(e), Box::new(Int)), Need::Hash),
-                "union" | "intersect" | "difference" => make(false, vec![list(e.clone())], Ty::Set(Box::new(e)), Need::Hash),
+                "union" | "intersect" | "difference" => {
+                    make(false, vec![list(e.clone())], Ty::Set(Box::new(e)), Need::Hash)
+                }
                 "insert" => make(true, vec![Int, e], Unit, Need::Nothing),
                 "remove_at" => make(true, vec![Int], e, Need::Nothing),
                 "extend" => make(true, vec![list(e)], Unit, Need::Nothing),
@@ -324,7 +375,8 @@ impl<'p> Checker<'p> {
         }
         let b = builtin(rt, name).expect("a built-in method");
         // type.str.6: these take a `str` or a `char`.
-        if *rt == Ty::Str && matches!(name, "contains" | "starts_with" | "ends_with" | "split")
+        if *rt == Ty::Str
+            && matches!(name, "contains" | "starts_with" | "ends_with" | "split")
             && (args.len() == 1 || (name == "split" && args.len() == 2))
         {
             let a = &args[0];
@@ -458,7 +510,9 @@ pub(super) fn method_help(t: &Ty, name: &str) -> Option<&'static str> {
         (Ty::Char, "to_int") => "write `c.code()` for its scalar value, or `c.to_digit(10)` for a digit's value",
         (Ty::Char, "to_uppercase") => "write `c.to_upper()`",
         (Ty::Char, "to_lowercase") => "write `c.to_lower()`",
-        (Ty::Map(..), "push") => "`m.push(k, x)` needs a map whose values are lists, `Map[K, List[T]]`; for other values write `m[k] = v`",
+        (Ty::Map(..), "push") => {
+            "`m.push(k, x)` needs a map whose values are lists, `Map[K, List[T]]`; for other values write `m[k] = v`"
+        }
         (Ty::List(_), "append" | "add") => "write `xs.push(x)`",
         (Ty::List(_), "length" | "size" | "count") => "write `xs.len()`",
         (Ty::List(_), "index" | "find" | "indexOf") => "write `xs.index_of(x)`, which gives `int?` (`none` if absent)",

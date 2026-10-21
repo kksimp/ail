@@ -9,19 +9,19 @@
 //! smoke) from `AIL_FUZZ_SEED` (default 1); `AIL_FUZZ_OUT` is where minimised
 //! disagreements go. `tools/fuzz/native-wide.sh N [SEED]` runs it.
 
+#[path = "fuzz/bcprogs.rs"]
+mod bcprogs;
 #[path = "fuzz/progs.rs"]
 #[allow(dead_code)]
 mod progs;
-#[path = "fuzz/bcprogs.rs"]
-mod bcprogs;
 #[path = "fuzz/runner.rs"]
 mod runner;
 
-use runner::{exec_program_env, Out};
+use runner::{Out, exec_program_env};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 static TRAPPED: AtomicU64 = AtomicU64::new(0);
 static COLUMN_ONLY: AtomicUsize = AtomicUsize::new(0);
@@ -63,12 +63,21 @@ fn disagreement(dir: &Path, src: &str, _pure: bool) -> Option<String> {
             _ => s,
         }
     };
-    if nat.code == walker.code && nat.stdout == walker.stdout && first(&nat) != first(&walker) && nocol(first(&nat)) == nocol(first(&walker)) {
+    if nat.code == walker.code
+        && nat.stdout == walker.stdout
+        && first(&nat) != first(&walker)
+        && nocol(first(&nat)) == nocol(first(&walker))
+    {
         COLUMN_ONLY.fetch_add(1, Ordering::SeqCst);
     } else if nat.code != walker.code || nat.stdout != walker.stdout || first(&nat) != first(&walker) {
         return Some(format!(
             "fuzz.nat.1 native differs\n--- walker (exit {:?})\n{}{}\n--- native (exit {:?})\n{}{}",
-            walker.code, walker.stdout, first(&walker), nat.code, nat.stdout, first(&nat)
+            walker.code,
+            walker.stdout,
+            first(&walker),
+            nat.code,
+            nat.stdout,
+            first(&nat)
         ));
     }
     None
@@ -110,7 +119,8 @@ fn fuzz_native_wide() {
     let n: u64 = std::env::var("AIL_FUZZ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(24);
     let first: u64 = std::env::var("AIL_FUZZ_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let out_dir = std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/native"));
+    let out_dir =
+        std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/native"));
     let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-native-wide");
     let _ = fs::remove_dir_all(&scratch);
     let next = AtomicUsize::new(0);
@@ -131,15 +141,27 @@ fn fuzz_native_wide() {
                     }
                     let seed = first + k;
                     let pure = seed % 3 == 0;
-                    let src = if (seed / 3) % 2 == 1 { bcprogs::wide_for(seed, pure, true) } else { bcprogs::program(seed, pure) };
+                    let src = if (seed / 3) % 2 == 1 {
+                        bcprogs::wide_for(seed, pure, true)
+                    } else {
+                        bcprogs::program(seed, pure)
+                    };
                     let p = dir.join("p.ail");
                     fs::write(&p, &src).unwrap();
                     // A program the checker rejects tests nothing.
-                    let chk = runner::exec_program_env(Path::new(env!("CARGO_BIN_EXE_ail")), &["check", p.to_str().unwrap()], &[], 30);
+                    let chk = runner::exec_program_env(
+                        Path::new(env!("CARGO_BIN_EXE_ail")),
+                        &["check", p.to_str().unwrap()],
+                        &[],
+                        30,
+                    );
                     if chk.code != Some(0) {
                         rejected.fetch_add(1, Ordering::SeqCst);
                         if std::env::var_os("AIL_FUZZ_SHOW_REJECTED").is_some() {
-                            eprintln!("rejected seed {seed}: {}", chk.stdout.lines().chain(chk.stderr.lines()).next().unwrap_or(""));
+                            eprintln!(
+                                "rejected seed {seed}: {}",
+                                chk.stdout.lines().chain(chk.stderr.lines()).next().unwrap_or("")
+                            );
                         }
                         continue;
                     }

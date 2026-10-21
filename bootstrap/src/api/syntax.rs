@@ -286,33 +286,43 @@ fn program(p: &Program) -> J {
         ("enums", arr(&p.enums, enum_decl)),
         ("traits", arr(&p.traits, trait_decl)),
         ("impls", arr(&p.impls, impl_decl)),
-        ("consts", arr(&p.consts, |c| {
-            J::Obj(vec![("name", s(&c.name)), ("pos", pos(c.pos)), ("doc", doc(&c.doc)), ("value", expr(&c.value))])
-        })),
-        ("uses", arr(&p.uses, |u| {
-            J::Obj(vec![("path", arr(&u.path, pair)), ("alias", opt(&u.alias, pair)), ("pos", pos(u.pos))])
-        })),
+        (
+            "consts",
+            arr(&p.consts, |c| {
+                J::Obj(vec![("name", s(&c.name)), ("pos", pos(c.pos)), ("doc", doc(&c.doc)), ("value", expr(&c.value))])
+            }),
+        ),
+        (
+            "uses",
+            arr(&p.uses, |u| {
+                J::Obj(vec![("path", arr(&u.path, pair)), ("alias", opt(&u.alias, pair)), ("pos", pos(u.pos))])
+            }),
+        ),
         ("public", arr(&public, |l| n(*l))),
-        ("files", arr(&p.files, |f| {
-            J::Obj(vec![("path", s(&f.path)), ("module", s(&f.module)), ("base", n(f.base))])
-        })),
-        ("grants", arr(&p.grants, |g| {
-            J::Obj(vec![
-                ("package", s(&g.package)),
-                ("caps", arr(&g.caps, |c| s(c))),
-                ("pos", pos(g.pos)),
-                ("own", J::Bool(g.own)),
-            ])
-        })),
+        ("files", arr(&p.files, |f| J::Obj(vec![("path", s(&f.path)), ("module", s(&f.module)), ("base", n(f.base))]))),
+        (
+            "grants",
+            arr(&p.grants, |g| {
+                J::Obj(vec![
+                    ("package", s(&g.package)),
+                    ("caps", arr(&g.caps, |c| s(c))),
+                    ("pos", pos(g.pos)),
+                    ("own", J::Bool(g.own)),
+                ])
+            }),
+        ),
         ("unsafe_allowed", opt(&p.unsafe_allowed, |l| arr(l, |p| s(p)))),
-        ("generated", arr(&p.generated, |g| {
-            J::Obj(vec![
-                ("file", n(g.file)),
-                ("impl_pos", pos(g.impl_pos)),
-                ("label", s(&g.label)),
-                ("generator", s(&g.generator)),
-            ])
-        })),
+        (
+            "generated",
+            arr(&p.generated, |g| {
+                J::Obj(vec![
+                    ("file", n(g.file)),
+                    ("impl_pos", pos(g.impl_pos)),
+                    ("label", s(&g.label)),
+                    ("generator", s(&g.generator)),
+                ])
+            }),
+        ),
     ])
 }
 
@@ -363,14 +373,17 @@ fn enum_decl(d: &EnumDecl) -> J {
         ("is_error", J::Bool(d.is_error)),
         ("is_unique", J::Bool(d.unique)),
         ("generics", arr(&d.generics, generic)),
-        ("variants", arr(&d.variants, |v| {
-            J::Obj(vec![
-                ("name", s(&v.name)),
-                ("pos", pos(v.pos)),
-                ("doc", doc(&v.doc)),
-                ("fields", arr(&v.fields, field)),
-            ])
-        })),
+        (
+            "variants",
+            arr(&d.variants, |v| {
+                J::Obj(vec![
+                    ("name", s(&v.name)),
+                    ("pos", pos(v.pos)),
+                    ("doc", doc(&v.doc)),
+                    ("fields", arr(&v.fields, field)),
+                ])
+            }),
+        ),
     ])
 }
 
@@ -397,31 +410,38 @@ fn impl_decl(i: &ImplDecl) -> J {
 
 fn function(f: &FnDecl) -> J {
     J::Obj(vec![
-        ("attrs", arr(&f.attrs, |a| {
-            J::Obj(vec![("name", s(&a.name)), ("pos", pos(a.pos)), ("arg", opt(&a.arg, |t| s(t)))])
-        })),
+        (
+            "attrs",
+            arr(&f.attrs, |a| J::Obj(vec![("name", s(&a.name)), ("pos", pos(a.pos)), ("arg", opt(&a.arg, |t| s(t)))])),
+        ),
         ("owner", opt(&f.owner, owner)),
         ("name", s(&f.name)),
         ("pos", pos(f.pos)),
         ("doc", doc(&f.doc)),
         ("generics", arr(&f.generics, generic)),
         ("receiver", opt(&f.receiver, |r| J::Obj(vec![("mutable", J::Bool(r.mutable)), ("moved", J::Bool(r.moved))]))),
-        ("params", arr(&f.params, |p| {
-            J::Obj(vec![
-                ("name", s(&p.name)),
-                ("pos", pos(p.pos)),
-                ("mutable", J::Bool(p.mutable)),
-                ("moved", J::Bool(p.moved)),
-                ("ty", ty(&p.ty)),
-            ])
-        })),
+        (
+            "params",
+            arr(&f.params, |p| {
+                J::Obj(vec![
+                    ("name", s(&p.name)),
+                    ("pos", pos(p.pos)),
+                    ("mutable", J::Bool(p.mutable)),
+                    ("moved", J::Bool(p.moved)),
+                    ("ty", ty(&p.ty)),
+                ])
+            }),
+        ),
         ("ret", opt(&f.ret, ty)),
         ("body", opt(&f.body, |b| block(b))),
-        ("within", match f.within {
-            Within::TopLevel => s("TopLevel"),
-            Within::Trait(i) => variant("InTrait", vec![("index", n(i))]),
-            Within::Impl(i) => variant("InImpl", vec![("index", n(i))]),
-        }),
+        (
+            "within",
+            match f.within {
+                Within::TopLevel => s("TopLevel"),
+                Within::Trait(i) => variant("InTrait", vec![("index", n(i))]),
+                Within::Impl(i) => variant("InImpl", vec![("index", n(i))]),
+            },
+        ),
         ("contracts", arr(&f.contracts, contract)),
         ("inherits", opt(&f.inherits, |i| n(*i))),
         ("unsafe_fn", J::Bool(f.unsafe_fn)),
@@ -434,10 +454,9 @@ fn ty(t: &TypeRef) -> J {
     let shape = match &t.kind {
         TypeKind::Named { name, args } => variant("Named", vec![("name", s(name)), ("args", arr(args, ty))]),
         TypeKind::Optional(inner) => variant("Optional", vec![("inner", ty(inner))]),
-        TypeKind::Fallible { ok, errors } => variant(
-            "Fallible",
-            vec![("ok", opt(ok, |t| ty(t))), ("errors", opt(errors, |es| arr(es, ty)))],
-        ),
+        TypeKind::Fallible { ok, errors } => {
+            variant("Fallible", vec![("ok", opt(ok, |t| ty(t))), ("errors", opt(errors, |es| arr(es, ty)))])
+        }
         TypeKind::Any(name) => variant("AnyTrait", vec![("trait_name", s(name))]),
         TypeKind::Ref(inner) => variant("RefTo", vec![("inner", ty(inner))]),
         TypeKind::Ptr(inner) => variant("PtrTo", vec![("inner", ty(inner))]),
@@ -553,11 +572,16 @@ fn expr(e: &Expr) -> J {
         Expr::Interp(parts, p) => variant(
             "Interp",
             vec![
-                ("parts", arr(parts, |part| match part {
-                    InterpPart::Lit(t) => variant("Lit", vec![("text", s(t))]),
-                    InterpPart::Expr(e) => variant("Hole", vec![("value", expr(e))]),
-                    InterpPart::Fmt(e, spec) => variant("Fmt", vec![("value", expr(e)), ("spec", format_spec(spec))]),
-                })),
+                (
+                    "parts",
+                    arr(parts, |part| match part {
+                        InterpPart::Lit(t) => variant("Lit", vec![("text", s(t))]),
+                        InterpPart::Expr(e) => variant("Hole", vec![("value", expr(e))]),
+                        InterpPart::Fmt(e, spec) => {
+                            variant("Fmt", vec![("value", expr(e)), ("spec", format_spec(spec))])
+                        }
+                    }),
+                ),
                 ("pos", pos(*p)),
             ],
         ),
@@ -588,19 +612,21 @@ fn expr(e: &Expr) -> J {
         Expr::Unary { op, operand, pos: p } => variant(
             "Unary",
             vec![
-                ("op", s(match op {
-                    UnOp::Neg => "Neg",
-                    UnOp::Not => "Not",
-                    UnOp::Spawn => "Spawn",
-                })),
+                (
+                    "op",
+                    s(match op {
+                        UnOp::Neg => "Neg",
+                        UnOp::Not => "Not",
+                        UnOp::Spawn => "Spawn",
+                    }),
+                ),
                 ("operand", expr(operand)),
                 ("pos", pos(*p)),
             ],
         ),
-        Expr::Binary { op, lhs, rhs, pos: p } => variant(
-            "Binary",
-            vec![("op", bin_op(*op)), ("lhs", expr(lhs)), ("rhs", expr(rhs)), ("pos", pos(*p))],
-        ),
+        Expr::Binary { op, lhs, rhs, pos: p } => {
+            variant("Binary", vec![("op", bin_op(*op)), ("lhs", expr(lhs)), ("rhs", expr(rhs)), ("pos", pos(*p))])
+        }
         Expr::Range { lo, hi, inclusive, pos: p } => variant(
             "Range",
             vec![
@@ -631,40 +657,49 @@ fn expr(e: &Expr) -> J {
             "Match",
             vec![
                 ("scrutinee", expr(scrutinee)),
-                ("arms", arr(arms, |a| J::Obj(vec![("pat", pattern(&a.pat)), ("guard", opt(&a.guard, expr)), ("body", block(&a.body))]))),
+                (
+                    "arms",
+                    arr(arms, |a| {
+                        J::Obj(vec![("pat", pattern(&a.pat)), ("guard", opt(&a.guard, expr)), ("body", block(&a.body))])
+                    }),
+                ),
                 ("pos", pos(*p)),
             ],
         ),
-        Expr::Try { expr: inner, context, pos: p } => variant(
-            "Try",
-            vec![("expr", expr(inner)), ("context", opt(context, |c| expr(c))), ("pos", pos(*p))],
-        ),
+        Expr::Try { expr: inner, context, pos: p } => {
+            variant("Try", vec![("expr", expr(inner)), ("context", opt(context, |c| expr(c))), ("pos", pos(*p))])
+        }
         Expr::Comp { kind, elem, value, clauses, pos: p } => variant(
             "Comp",
             vec![
-                ("form", s(match kind {
-                    CompKind::List => "ListComp",
-                    CompKind::Set => "SetComp",
-                    CompKind::Map => "MapComp",
-                })),
+                (
+                    "form",
+                    s(match kind {
+                        CompKind::List => "ListComp",
+                        CompKind::Set => "SetComp",
+                        CompKind::Map => "MapComp",
+                    }),
+                ),
                 ("elem", expr(elem)),
                 ("value", opt(value, |v| expr(v))),
-                ("clauses", arr(clauses, |c| {
-                    J::Obj(vec![
-                        ("is_par", J::Bool(c.par)),
-                        ("var", s(&c.var)),
-                        ("var_pos", pos(c.var_pos)),
-                        ("iter", expr(&c.iter)),
-                        ("cond", opt(&c.cond, expr)),
-                    ])
-                })),
+                (
+                    "clauses",
+                    arr(clauses, |c| {
+                        J::Obj(vec![
+                            ("is_par", J::Bool(c.par)),
+                            ("var", s(&c.var)),
+                            ("var_pos", pos(c.var_pos)),
+                            ("iter", expr(&c.iter)),
+                            ("cond", opt(&c.cond, expr)),
+                        ])
+                    }),
+                ),
                 ("pos", pos(*p)),
             ],
         ),
-        Expr::Else { value, otherwise, pos: p } => variant(
-            "OrElse",
-            vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise)), ("pos", pos(*p))],
-        ),
+        Expr::Else { value, otherwise, pos: p } => {
+            variant("OrElse", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise)), ("pos", pos(*p))])
+        }
         Expr::Ref { value, pos: p } => variant("NewRef", vec![("value", expr(value)), ("pos", pos(*p))]),
     }
 }

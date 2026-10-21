@@ -114,11 +114,9 @@ impl Parser<'_> {
             '[' => self.array(mk),
             '"' => Ok(mk.node(STR, vec![Value::Str(self.string()?)])),
             _ => {
-                for (word, variant, fields) in [
-                    ("true", BOOL, Some(true)),
-                    ("false", BOOL, Some(false)),
-                    ("null", NULL, None),
-                ] {
+                for (word, variant, fields) in
+                    [("true", BOOL, Some(true)), ("false", BOOL, Some(false)), ("null", NULL, None)]
+                {
                     if self.b[self.pos..].starts_with(word.as_bytes()) {
                         self.pos += word.len();
                         return Ok(match fields {
@@ -446,7 +444,11 @@ impl<W: Write> Interp<'_, W> {
             }
             _ => {
                 let Value::Str(text) = &env[0].1 else { unreachable!("checked: a str") };
-                let mk = Mk { json: self.enums["Json"], member: self.structs["JsonMember"], no_fields: Rc::clone(&self.no_fields) };
+                let mk = Mk {
+                    json: self.enums["Json"],
+                    member: self.structs["JsonMember"],
+                    no_fields: Rc::clone(&self.no_fields),
+                };
                 // `parse_json`, `document` and `value` take three frames, then
                 // two for each container.
                 let max_open = MAX_DEPTH.saturating_sub(self.depth + 4) / 2;
@@ -458,7 +460,10 @@ impl<W: Write> Interp<'_, W> {
                     }
                     Err(e) => {
                         let at = text[..e.at].chars().count() as i64;
-                        let err = Value::Struct(self.structs["JsonError"], Rc::new(vec![Value::Int(at), Value::Str(e.message.into())]));
+                        let err = Value::Struct(
+                            self.structs["JsonError"],
+                            Rc::new(vec![Value::Int(at), Value::Str(e.message.into())]),
+                        );
                         Ok(fail(err, pos))
                     }
                 }

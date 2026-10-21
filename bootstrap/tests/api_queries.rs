@@ -27,7 +27,10 @@ fn refs_cross_user_modules() {
     let text = String::from_utf8(out.stdout).unwrap();
     assert!(text.contains("\"symbol\":\"fn:geo.origin\""), "{text}");
     let shapes = dir.join("geo/shapes.ail");
-    assert!(text.contains(&format!("{{\"file\":{:?},\"line\":4,\"col\":8,\"def\":true}}", shapes.to_str().unwrap())), "{text}");
+    assert!(
+        text.contains(&format!("{{\"file\":{:?},\"line\":4,\"col\":8,\"def\":true}}", shapes.to_str().unwrap())),
+        "{text}"
+    );
     assert!(text.contains("\"line\":4,\"col\":10,\"def\":false"), "{text}");
 }
 
@@ -37,7 +40,10 @@ fn type_of_a_call_into_a_module_names_the_callee() {
     let out = ail().args(["api", "--type"]).arg(dir.join("main.ail")).args(["4", "12"]).output().unwrap();
     let text = String::from_utf8(out.stdout).unwrap();
     assert!(text.contains("\"type\":\"geo.P\""), "{text}");
-    assert!(text.contains("\"signature\":\"fn geo.origin() P\"") || text.contains("\"id\":\"fn:geo.origin\""), "{text}");
+    assert!(
+        text.contains("\"signature\":\"fn geo.origin() P\"") || text.contains("\"id\":\"fn:geo.origin\""),
+        "{text}"
+    );
 }
 
 #[test]
@@ -74,7 +80,8 @@ fn every_example_answers_locals() {
 
 fn big_package(name: &str) -> std::path::PathBuf {
     let dir = package(name);
-    fs::write(dir.join("main.ail"), "use geo\n\nfn main()\n    p := geo.origin()\n    print(\"{p.x} {far()}\")\n").unwrap();
+    fs::write(dir.join("main.ail"), "use geo\n\nfn main()\n    p := geo.origin()\n    print(\"{p.x} {far()}\")\n")
+        .unwrap();
     fs::write(dir.join("util.ail"), "use geo\n\npub fn far() int\n    geo.origin().x\n").unwrap();
     dir
 }
@@ -88,7 +95,9 @@ fn outline_of_a_package_directory() {
     assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8(out.stdout).unwrap();
     assert!(text.starts_with("{\"api\":1,\"package\":"), "{text}");
-    for want in ["\"id\":\"fn:geo.origin\"", "\"id\":\"type:geo.P\"", "\"id\":\"fn:far\"", "\"module\":\"geo\"", "util.ail"] {
+    for want in
+        ["\"id\":\"fn:geo.origin\"", "\"id\":\"type:geo.P\"", "\"id\":\"fn:far\"", "\"module\":\"geo\"", "util.ail"]
+    {
         assert!(text.contains(want), "{want} in {text}");
     }
     let symbols = ail().args(["api", "--symbols"]).arg(&dir).output().unwrap();

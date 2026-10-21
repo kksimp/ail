@@ -7,12 +7,7 @@ use std::process::Command;
 
 fn test_runtime(extra: &[&str]) {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../compiler/rt/rt.ail");
-    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
-        .arg("test")
-        .args(extra)
-        .arg(&file)
-        .output()
-        .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_ail")).arg("test").args(extra).arg(&file).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "ail test failed:\n{text}{}", String::from_utf8_lossy(&out.stderr));
     assert!(text.contains(" 0 failed"), "{text}");

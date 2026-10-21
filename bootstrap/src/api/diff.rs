@@ -105,7 +105,8 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
 
 /// Load, check and outline `path`, and run its tests (diff.out.1).
 fn side(path: &str, run_tests: bool) -> Result<Side, String> {
-    let root = if std::path::Path::new(path).is_dir() { format!("{}/", path.trim_end_matches('/')) } else { path.to_string() };
+    let root =
+        if std::path::Path::new(path).is_dir() { format!("{}/", path.trim_end_matches('/')) } else { path.to_string() };
     let dir = std::path::Path::new(path).is_dir();
     let (mut prog, mut diags) = modules::load(path).map_err(|e| e.to_string())?;
     let mut resolved = Resolved::default();
@@ -252,11 +253,8 @@ fn flatten(prog: &crate::ast::Program, item: Item, out: &mut Vec<Decl>) {
 /// Each test's outcome, from `ail test --json` in a child (diff.out.4).
 fn tests_of(path: &str) -> Option<Vec<(String, bool, String)>> {
     let exe = std::env::current_exe().ok()?;
-    let out = Command::new(exe)
-        .args(["test", "--json", "--timeout", "10000", path])
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
+    let out =
+        Command::new(exe).args(["test", "--json", "--timeout", "10000", path]).stdin(Stdio::null()).output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout);
     let mut tests = Vec::new();
     for line in text.lines() {
@@ -311,7 +309,11 @@ fn render(old: &str, new: &str, a: &Side, b: &Side, json: bool) -> (String, usiz
                         let diffs = prop_changes(o, d);
                         if !diffs.is_empty() {
                             changed += 1;
-                            let lines_changed = if diffs.iter().any(|(k, _, _)| *k == "body") { hunk(&o.body, &d.body) } else { Vec::new() };
+                            let lines_changed = if diffs.iter().any(|(k, _, _)| *k == "body") {
+                                hunk(&o.body, &d.body)
+                            } else {
+                                Vec::new()
+                            };
                             lines.push(changed_line(d, &diffs, &lines_changed, json));
                         }
                     }
@@ -325,7 +327,10 @@ fn render(old: &str, new: &str, a: &Side, b: &Side, json: bool) -> (String, usiz
         _ => {
             let which = if a.decls.is_none() { old } else { new };
             lines.push(if json {
-                format!("{{\"change\":\"api\",\"op\":\"unavailable\",\"reason\":{}}}", json_str(&format!("{which} has errors")))
+                format!(
+                    "{{\"change\":\"api\",\"op\":\"unavailable\",\"reason\":{}}}",
+                    json_str(&format!("{which} has errors"))
+                )
             } else {
                 format!("api: not compared, {which} has errors")
             });
@@ -528,11 +533,8 @@ pub(super) fn at_revision(rev: &str, path: &str) -> Result<Checkout, String> {
         (p.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")), p.file_name())
     };
     let git = |args: &[&str], cwd: &std::path::Path| -> Result<Vec<u8>, String> {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(cwd)
-            .output()
-            .map_err(|e| format!("can't run git: {e}"))?;
+        let out =
+            Command::new("git").args(args).current_dir(cwd).output().map_err(|e| format!("can't run git: {e}"))?;
         if !out.status.success() {
             return Err(format!("git {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
         }

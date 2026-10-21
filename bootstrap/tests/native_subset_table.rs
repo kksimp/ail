@@ -53,9 +53,11 @@ fn every_wording_occurs_in_a_diagnostic_or_the_coverage_report() {
     let mut files = Vec::new();
     ail_files(&repo().join("compiler"), &mut files);
     let mut text = String::new();
-    for f in files.iter().map(PathBuf::as_path).chain(std::iter::once(
-        repo().join("docs/design/native-coverage.md").as_path(),
-    )) {
+    for f in files
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(std::iter::once(repo().join("docs/design/native-coverage.md").as_path()))
+    {
         text.push_str(&fs::read_to_string(f).unwrap_or_default().replace('`', ""));
     }
     for row in rows() {

@@ -137,9 +137,7 @@ mod tests {
     // RFC 8439 §2.6.2: the Poly1305 one-time key is block 0's first half.
     #[test]
     fn rfc8439_one_time_key() {
-        let key: [u8; 32] = hex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f")
-            .try_into()
-            .unwrap();
+        let key: [u8; 32] = hex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f").try_into().unwrap();
         let nonce: [u8; 12] = hex("000000000001020304050607").try_into().unwrap();
         assert_eq!(
             block(&key, 0, &nonce)[..32].to_vec(),
@@ -150,9 +148,7 @@ mod tests {
     // RFC 8439 §2.8.2.
     #[test]
     fn rfc8439_aead() {
-        let key: [u8; 32] = hex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f")
-            .try_into()
-            .unwrap();
+        let key: [u8; 32] = hex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f").try_into().unwrap();
         let nonce: [u8; 12] = hex("070000004041424344454647").try_into().unwrap();
         let aad = hex("50515253c0c1c2c3c4c5c6c7");
         let sealed = seal(&key, &nonce, &aad, SUNSCREEN);

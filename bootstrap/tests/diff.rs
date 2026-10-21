@@ -69,7 +69,10 @@ fn json_lines() {
     let (old, new) = pair("json");
     let o = text(&ail(&["diff", "--json", &old, &new]).stdout);
     assert!(o.contains("{\"change\":\"api\",\"op\":\"added\",\"id\":\"fn:fresh\",\"kind\":\"fn\",\"signature\":\"fn fresh() int\"}\n"), "{o}");
-    assert!(o.contains("{\"change\":\"test\",\"test\":\"adds\",\"old\":\"pass\",\"new\":\"fail\",\"status\":\"fail\","), "{o}");
+    assert!(
+        o.contains("{\"change\":\"test\",\"test\":\"adds\",\"old\":\"pass\",\"new\":\"fail\",\"status\":\"fail\","),
+        "{o}"
+    );
     assert!(o.contains("\"pub\":{\"old\":\"false\",\"new\":\"true\"}"), "{o}");
     let last = o.lines().last().unwrap();
     assert!(last.starts_with("{\"summary\":true,"), "{last}");
@@ -101,7 +104,11 @@ fn against_a_git_revision() {
         .output()
         .unwrap();
     let o = text(&out.stdout);
-    assert!(o.ends_with("1 added, 1 removed, 3 changed; diagnostics +1 -0; tests not run\n"), "{o}{}", text(&out.stderr));
+    assert!(
+        o.ends_with("1 added, 1 removed, 3 changed; diagnostics +1 -0; tests not run\n"),
+        "{o}{}",
+        text(&out.stderr)
+    );
     let bad = Command::new(env!("CARGO_BIN_EXE_ail"))
         .args(["diff", "--rev", "nosuchrev", "p.ail"])
         .current_dir(&d)

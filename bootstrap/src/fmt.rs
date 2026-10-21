@@ -95,7 +95,9 @@ fn attributes_canonical(toks: Vec<String>) -> Vec<String> {
                     }
                 }
                 groups.push(toks[from..i.min(toks.len())].to_vec());
-                if toks.get(i).is_some_and(|t| t == "Newline") && toks.get(i + 1).is_some_and(|t| t == at || t == "Kw(\"fn\")") {
+                if toks.get(i).is_some_and(|t| t == "Newline")
+                    && toks.get(i + 1).is_some_and(|t| t == at || t == "Kw(\"fn\")")
+                {
                     i += 1;
                 }
             }
@@ -658,7 +660,8 @@ fn chain_dots(toks: &[FTok]) -> Vec<usize> {
     let mut out: Vec<usize> = Vec::new();
     for (i, t) in toks.iter().enumerate() {
         // An operator after the first call ends the chain's shape: `a.b() or c.d()` isn't a chain.
-        if level == 0 && !out.is_empty() && !(t.is(".") || t.is("?") || t.kind == Kind::Word || t.opens() || t.closes()) {
+        if level == 0 && !out.is_empty() && !(t.is(".") || t.is("?") || t.kind == Kind::Word || t.opens() || t.closes())
+        {
             return Vec::new();
         }
         if t.opens() {
@@ -1188,7 +1191,8 @@ fn is_negative_test(file: &str) -> bool {
     if ["err", "rules", "trap"].iter().any(|ext| path.with_extension(ext).is_file()) {
         return true;
     }
-    path.ancestors().skip(1).take(3).any(|dir| {
-        ["err", "rules", "trap"].iter().any(|ext| dir.join(format!("expected.{ext}")).is_file())
-    })
+    path.ancestors()
+        .skip(1)
+        .take(3)
+        .any(|dir| ["err", "rules", "trap"].iter().any(|ext| dir.join(format!("expected.{ext}")).is_file()))
 }

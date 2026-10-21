@@ -22,10 +22,7 @@ fn registered_modules() -> Vec<String> {
     let start = table.find("const AIL_MODULES").expect("AIL_MODULES");
     let body = &table[start..];
     let body = &body[..body.find("];").unwrap()];
-    body.lines()
-        .filter_map(|l| l.trim().strip_prefix("(\""))
-        .map(|l| l[..l.find('"').unwrap()].to_string())
-        .collect()
+    body.lines().filter_map(|l| l.trim().strip_prefix("(\"")).map(|l| l[..l.find('"').unwrap()].to_string()).collect()
 }
 
 fn std_sources(dir: &Path, out: &mut Vec<PathBuf>) {

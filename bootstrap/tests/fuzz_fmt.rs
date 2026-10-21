@@ -9,19 +9,19 @@
 //! `AIL_FUZZ_N` programs (default 24, the selftest smoke) from `AIL_FUZZ_SEED`;
 //! `AIL_FUZZ_OUT` is where minimised disagreements go. `tools/fuzz/fmt-diff.sh N [SEED]`.
 
+#[path = "fuzz/bcprogs.rs"]
+mod bcprogs;
 #[path = "fuzz/progs.rs"]
 #[allow(dead_code)]
 mod progs;
-#[path = "fuzz/bcprogs.rs"]
-mod bcprogs;
 #[path = "fuzz/runner.rs"]
 mod runner;
 
-use runner::{exec_program_env, Out};
+use runner::{Out, exec_program_env};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 static CHANGED: AtomicUsize = AtomicUsize::new(0);
 static COMPARED: AtomicUsize = AtomicUsize::new(0);
@@ -101,7 +101,13 @@ fn disagreement(dir: &Path, src: &str, seed: u64) -> Option<String> {
     COMPARED.fetch_add(1, Ordering::SeqCst);
     let (ca, cb) = (ail(&["check", p.to_str().unwrap()]), ail(&["check", q.to_str().unwrap()]));
     if ca.code != cb.code || rules(&ca) != rules(&cb) {
-        return Some(format!("fuzz.fmt.2 check differs: {:?} {} against {:?} {}", ca.code, rules(&ca), cb.code, rules(&cb)));
+        return Some(format!(
+            "fuzz.fmt.2 check differs: {:?} {} against {:?} {}",
+            ca.code,
+            rules(&ca),
+            cb.code,
+            rules(&cb)
+        ));
     }
     if ca.code != Some(0) {
         return None;
@@ -109,7 +115,10 @@ fn disagreement(dir: &Path, src: &str, seed: u64) -> Option<String> {
     RAN.fetch_add(1, Ordering::SeqCst);
     for tier in [false, true] {
         if meaning(&p, tier) != meaning(&q, tier) {
-            return Some(format!("fuzz.fmt.2 `ail run{}` differs after formatting", if tier { "" } else { " --no-bytecode" }));
+            return Some(format!(
+                "fuzz.fmt.2 `ail run{}` differs after formatting",
+                if tier { "" } else { " --no-bytecode" }
+            ));
         }
     }
     None
@@ -151,7 +160,8 @@ fn fuzz_fmt() {
     let n: u64 = std::env::var("AIL_FUZZ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(24);
     let first: u64 = std::env::var("AIL_FUZZ_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let out_dir = std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/fmt"));
+    let out_dir =
+        std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/fmt"));
     let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-fmt");
     let _ = fs::remove_dir_all(&scratch);
     let next = AtomicUsize::new(0);
@@ -170,7 +180,11 @@ fn fuzz_fmt() {
                     }
                     let seed = first + k;
                     let pure = seed % 3 == 0;
-                    let base = if (seed / 3) % 2 == 1 { bcprogs::wide_for(seed, pure, true) } else { bcprogs::program(seed, pure) };
+                    let base = if (seed / 3) % 2 == 1 {
+                        bcprogs::wide_for(seed, pure, true)
+                    } else {
+                        bcprogs::program(seed, pure)
+                    };
                     let src = mess(&base, seed);
                     let Some(msg) = disagreement(&dir, &src, seed) else {
                         continue;
@@ -185,7 +199,12 @@ fn fuzz_fmt() {
             });
         }
     });
-    eprintln!("fuzz-fmt: {n} programs from seed {first}: {} compared, {} of them run before and after, {} changed by the formatter", COMPARED.load(Ordering::SeqCst), RAN.load(Ordering::SeqCst), CHANGED.load(Ordering::SeqCst));
+    eprintln!(
+        "fuzz-fmt: {n} programs from seed {first}: {} compared, {} of them run before and after, {} changed by the formatter",
+        COMPARED.load(Ordering::SeqCst),
+        RAN.load(Ordering::SeqCst),
+        CHANGED.load(Ordering::SeqCst)
+    );
     let found = found.into_inner().unwrap();
     assert!(found.is_empty(), "{} disagreement(s):\n{}", found.len(), found.join("\n\n"));
 }

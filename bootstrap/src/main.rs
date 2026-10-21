@@ -5,30 +5,29 @@
 
 mod api;
 mod ast;
+mod budget;
 mod build;
 mod build_cache;
-mod budget;
 mod bump;
 mod check;
+mod codec;
 mod derive;
 mod diag;
-mod explain;
-mod fasthash;
-mod fuse;
-mod tensor32;
+mod docs;
 mod doctest;
 mod edit;
-mod docs;
+mod explain;
+mod fasthash;
 mod fix;
-mod foreign;
 mod fmt;
+mod foreign;
+mod fuse;
 mod implicit_self;
-mod named_args;
 mod interp;
 mod lexer;
 mod modules;
+mod named_args;
 mod native_test;
-mod codec;
 mod net;
 mod num;
 mod packages;
@@ -37,6 +36,7 @@ mod regex;
 mod snapshot;
 mod stdlib;
 mod tensor;
+mod tensor32;
 mod ui;
 
 use std::process::ExitCode;
@@ -147,7 +147,9 @@ fn main() -> ExitCode {
             "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
-            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
+            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => {
+                i += 1
+            }
             // budget.out.5: `--budget` may stand alone (the command's default).
             "--budget" if args.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())) => i += 1,
             "--budget" => {}
@@ -288,7 +290,9 @@ fn main() -> ExitCode {
             }
         },
         ["effects", file] if deny.is_empty() => effects_file(file, json),
-        ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => parallel_file(file, json),
+        ["effects", "--parallel", file] | ["effects", file, "--parallel"] if deny.is_empty() => {
+            parallel_file(file, json)
+        }
         ["pkg", "update", names @ ..] => packages::update_command(names, json),
         ["fix", rest @ ..] => fix::command(rest, json),
         ["explain"] => explain::list(json),
@@ -352,7 +356,9 @@ fn take_limit_options(rest: &mut Vec<&str>) -> Result<Option<bool>, String> {
                 rest.remove(i);
             }
             a if a.starts_with("--coverage=") => {
-                return Err(format!("`{a}` isn't a coverage mode; use `--coverage` or `--coverage=lines` (test.cover.2)"));
+                return Err(format!(
+                    "`{a}` isn't a coverage mode; use `--coverage` or `--coverage=lines` (test.cover.2)"
+                ));
             }
             _ => i += 1,
         }
@@ -437,7 +443,8 @@ fn take_replay(rest: &mut Vec<&str>, program_args: &[String]) -> Result<Option<V
         // replay.rec.5: one thread, so effects happen in one order.
         interp::parallel::set_mode(interp::parallel::Mode::Off);
         if flag == "--record" {
-            let seed = rest.iter().position(|a| *a == "--seed").and_then(|i| rest.get(i + 1)).and_then(|s| s.parse().ok());
+            let seed =
+                rest.iter().position(|a| *a == "--seed").and_then(|i| rest.get(i + 1)).and_then(|s| s.parse().ok());
             let program = rest.get(1).copied().unwrap_or_default();
             interp::set_seed(interp::replay::start_record(&path, program, program_args, seed));
             return Ok(None);
@@ -769,7 +776,10 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
                 missed.join(",")
             );
         } else {
-            println!("coverage {}: lines {}/{} ({pct}%), functions {}/{}", c.file, c.lines_hit, c.lines, c.fns_hit, c.fns);
+            println!(
+                "coverage {}: lines {}/{} ({pct}%), functions {}/{}",
+                c.file, c.lines_hit, c.lines, c.fns_hit, c.fns
+            );
             if coverage == Some(true) && !ranges.is_empty() {
                 println!("  not run: {}", ranges.join(", "));
             }

@@ -58,7 +58,14 @@ pub fn list(json: bool) -> ExitCode {
         let mut s = format!("{{\"api\":1,\"count\":{},\"fixable\":{fixes},\"rules\":[", rules.len());
         for (i, (r, c, f)) in rules.iter().enumerate() {
             let sep = if i > 0 { "," } else { "" };
-            let _ = write!(s, "{sep}{{\"rule\":{},\"chapter\":{},\"file\":{},\"fix\":{}}}", json_str(r), json_str(c), json_str(f), fixable(r));
+            let _ = write!(
+                s,
+                "{sep}{{\"rule\":{},\"chapter\":{},\"file\":{},\"fix\":{}}}",
+                json_str(r),
+                json_str(c),
+                json_str(f),
+                fixable(r)
+            );
         }
         println!("{s}]}}");
     } else {
@@ -168,7 +175,11 @@ pub fn explain(rule: &str) -> Option<Explanation> {
         }
         let (rejected, fixed) = worked_example(rule).unzip();
         // A worked example replaces the nearest example, which may belong to another rule.
-        let example = if rejected.is_some() { None } else { example.filter(|x| !x.trim().is_empty()).or_else(|| tagged_example(rule)) };
+        let example = if rejected.is_some() {
+            None
+        } else {
+            example.filter(|x| !x.trim().is_empty()).or_else(|| tagged_example(rule))
+        };
         return Some(Explanation {
             rule: rule.into(),
             file: format!("docs/spec/{name}"),
@@ -192,7 +203,9 @@ fn worked_example(rule: &str) -> Option<(String, Option<String>)> {
         let block = |at: usize| -> String {
             lines[at + 1..].iter().take_while(|l| !l.starts_with("```")).copied().collect::<Vec<_>>().join("\n")
         };
-        let Some(open) = lines.iter().position(|l| l.strip_prefix("```ail ").is_some_and(|t| t.split_whitespace().any(|w| w == tag)))
+        let Some(open) = lines
+            .iter()
+            .position(|l| l.strip_prefix("```ail ").is_some_and(|t| t.split_whitespace().any(|w| w == tag)))
         else {
             continue;
         };
@@ -223,7 +236,8 @@ fn tagged_example(rule: &str) -> Option<String> {
         for (i, l) in lines.iter().enumerate() {
             let Some(tags) = l.strip_prefix("```ail ") else { continue };
             let words: Vec<&str> = tags.split_whitespace().collect();
-            let named = words.iter().any(|w| w.strip_prefix("rules=").is_some_and(|ids| ids.split(',').any(|id| id == rule)));
+            let named =
+                words.iter().any(|w| w.strip_prefix("rules=").is_some_and(|ids| ids.split(',').any(|id| id == rule)));
             if !named {
                 continue;
             }
@@ -370,7 +384,9 @@ fn to_text(e: &Explanation) -> String {
     // may be on any line. A plain example is cut. The subset rule's table
     // (ADR 0746) takes the place of its example.
     let example = if e.rule == SUBSET_RULE { None } else { e.example.clone() };
-    for (label, code, cut) in [("example", &example, true), ("rejected example", &e.rejected, false), ("repaired", &e.fixed, false)] {
+    for (label, code, cut) in
+        [("example", &example, true), ("rejected example", &e.rejected, false), ("repaired", &e.fixed, false)]
+    {
         if let Some(x) = code {
             let _ = write!(s, "\n{label}:\n");
             let keep = if cut { EXAMPLE_LINES } else { usize::MAX };

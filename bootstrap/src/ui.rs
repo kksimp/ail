@@ -132,14 +132,29 @@ fn color(v: i64) -> u32 {
 /// A window event (std.ui.6), as the interpreter turns it into `ui.Event`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
-    Key { key: String, ctrl: bool, alt: bool, shift: bool },
-    Resize { cols: usize, rows: usize },
+    Key {
+        key: String,
+        ctrl: bool,
+        alt: bool,
+        shift: bool,
+    },
+    Resize {
+        cols: usize,
+        rows: usize,
+    },
     Close,
     /// std.ui.10: `button` is `left`, `right` or `middle`; `kind` is
     /// `down`, `up` or `drag`.
-    Mouse { col: i64, row: i64, button: &'static str, kind: &'static str },
+    Mouse {
+        col: i64,
+        row: i64,
+        button: &'static str,
+        kind: &'static str,
+    },
     /// std.ui.11: lines to scroll, positive towards the end.
-    Scroll { lines: i64 },
+    Scroll {
+        lines: i64,
+    },
 }
 
 /// Ctrl, Alt and Shift as they were when an event happened (std.ui.14).
@@ -185,8 +200,17 @@ thread_local! {
 
 /// A request from the interpreter thread to the host.
 enum Msg {
-    Open { title: String, cols: usize, rows: usize, reply: Sender<Result<(), OpenError>> },
-    Present { grid: Grid, cursor: (i64, i64), shape: CaretShape },
+    Open {
+        title: String,
+        cols: usize,
+        rows: usize,
+        reply: Sender<Result<(), OpenError>>,
+    },
+    Present {
+        grid: Grid,
+        cursor: (i64, i64),
+        shape: CaretShape,
+    },
     Title(String),
     Font(i64),
     Poll(Sender<Option<Tagged>>),
@@ -222,7 +246,15 @@ pub fn open(title: &str, cols: i64, rows: i64) -> Result<i64, OpenError> {
         *n += 1;
         *n - 1
     });
-    SESSION.set(Some(Session { id, grid: Grid::new(cols, rows), cursor: (-1, -1), shape: CaretShape::Bar, closed: false, mods: [false; 3], font_size: DEFAULT_FONT_SIZE }));
+    SESSION.set(Some(Session {
+        id,
+        grid: Grid::new(cols, rows),
+        cursor: (-1, -1),
+        shape: CaretShape::Bar,
+        closed: false,
+        mods: [false; 3],
+        font_size: DEFAULT_FONT_SIZE,
+    }));
     Ok(id)
 }
 
@@ -375,12 +407,8 @@ pub fn clipboard_set(text: &str) {
         return;
     }
     for (cmd, args) in clipboard_tools().0 {
-        let child = Command::new(cmd)
-            .args(&args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
+        let child =
+            Command::new(cmd).args(&args).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
         let Ok(mut child) = child else { continue };
         let wrote = child.stdin.take().is_some_and(|mut i| i.write_all(text.as_bytes()).is_ok());
         if wrote && child.wait().is_ok_and(|s| s.success()) {
@@ -691,19 +719,14 @@ mod backend {
     impl Backend {
         /// std.ui.1: `no_display` when there is nowhere to show a window.
         pub fn open(title: &str, cols: usize, rows: usize) -> Result<Backend, OpenError> {
-            if cfg!(all(unix, not(target_os = "macos")))
-                && std::env::var_os("DISPLAY").is_none_or(|d| d.is_empty())
-            {
+            if cfg!(all(unix, not(target_os = "macos"))) && std::env::var_os("DISPLAY").is_none_or(|d| d.is_empty()) {
                 return Err(("no_display", "no X11 display: DISPLAY is not set".to_string()));
             }
             let (font, scale) = font(super::DEFAULT_FONT_SIZE);
             let (cw, ch) = (font.character_size.width as usize * scale, font.character_size.height as usize * scale);
             let (w, h) = (cols * cw, rows * ch);
-            let options = WindowOptions {
-                resize: true,
-                scale_mode: minifb::ScaleMode::UpperLeft,
-                ..WindowOptions::default()
-            };
+            let options =
+                WindowOptions { resize: true, scale_mode: minifb::ScaleMode::UpperLeft, ..WindowOptions::default() };
             let made = std::panic::catch_unwind(|| Window::new(title, w, h, options));
             let mut window = match made {
                 Ok(Ok(w)) => w,
@@ -849,7 +872,9 @@ mod backend {
                         key_name(k, m.ctrl)
                     }
                     // Text comes as characters, except in Ctrl chords.
-                    Input::Char(c) => char::from_u32(c).filter(|c| !m.ctrl && *c >= ' ' && *c != '\u{7f}').map(String::from),
+                    Input::Char(c) => {
+                        char::from_u32(c).filter(|c| !m.ctrl && *c >= ' ' && *c != '\u{7f}').map(String::from)
+                    }
                 };
                 if let Some(key) = key {
                     let (ctrl, alt, shift) = (m.ctrl, m.alt, m.shift);
@@ -899,7 +924,10 @@ mod backend {
                 return;
             }
             let font = self.font;
-            let bitmap = self.glyphs.entry((cell.ch, cell.style)).or_insert_with(|| styled(render(font, cell.ch), font, cell.style));
+            let bitmap = self
+                .glyphs
+                .entry((cell.ch, cell.style))
+                .or_insert_with(|| styled(render(font, cell.ch), font, cell.style));
             let caret_color = contrast(cell.bg);
             let gw = cw / scale;
             // std.ui.18: a block caret swaps the cell's colors.

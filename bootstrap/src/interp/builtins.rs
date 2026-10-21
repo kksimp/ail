@@ -1,8 +1,8 @@
 //! Built-in methods (`check/builtins.rs` has their signatures), and the
 //! insertion-ordered table behind `Map` and `Set` (type.map.1).
 
-use std::cmp::Ordering;
 use crate::fasthash::FastMap as HashMap;
+use std::cmp::Ordering;
 use std::io::Write;
 use std::rc::Rc;
 
@@ -279,7 +279,10 @@ impl<'a, W: Write> Interp<'a, W> {
         env: &mut Env<'a>,
     ) -> Flow<Value> {
         let mutating = |v: &Value| match v {
-            Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
+            Value::List(_) => matches!(
+                name,
+                "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"
+            ),
             Value::Map(_) => matches!(name, "remove" | "push"),
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
@@ -324,75 +327,76 @@ impl<'a, W: Write> Interp<'a, W> {
             self.release(old, pos)?;
             return Ok(Value::Unit);
         }
-        let watching = if self.tracing & super::trace::WATCH != 0 { self.watch_before(env, &p, name, &a) } else { None };
+        let watching =
+            if self.tracing & super::trace::WATCH != 0 { self.watch_before(env, &p, name, &a) } else { None };
         let result = with_slot(env, &p, false, |slot| -> Result<Value, Trap> {
             Ok(match (slot, name) {
-            (Value::List(items), "push") => {
-                Rc::make_mut(items).push(a.pop().expect("checked: one argument"));
-                Value::Unit
-            }
-            (Value::List(items), "swap") => {
-                let (i, j) = (a[0].int(), a[1].int());
-                element(items, i, pos)?;
-                element(items, j, pos)?;
-                Rc::make_mut(items).swap(i as usize, j as usize);
-                Value::Unit
-            }
-            (Value::List(items), "pop") => opt(Rc::make_mut(items).pop()),
-            // type.coll.14: `insert` allows the index `len`, `remove_at` doesn't.
-            (Value::List(items), "insert") => {
-                let i = a[0].int();
-                if usize::try_from(i).map_or(true, |u| u > items.len()) {
-                    trap::<()>(
-                        "type.coll.4",
-                        pos,
-                        format!("insert index {i} is out of bounds for a list of length {}", items.len()),
-                    )?;
+                (Value::List(items), "push") => {
+                    Rc::make_mut(items).push(a.pop().expect("checked: one argument"));
+                    Value::Unit
                 }
-                let x = a.pop().expect("checked: two arguments");
-                Rc::make_mut(items).insert(i as usize, x);
-                Value::Unit
-            }
-            (Value::List(items), "remove_at") => {
-                let i = a[0].int();
-                element(items, i, pos)?;
-                Rc::make_mut(items).remove(i as usize)
-            }
-            (Value::List(items), "extend") => {
-                let Value::List(more) = &a[0] else { unreachable!("checked: a list") };
-                Rc::make_mut(items).extend(more.iter().cloned());
-                Value::Unit
-            }
-            (Value::List(items), "clear") => {
-                Rc::make_mut(items).clear();
-                Value::Unit
-            }
-            (Value::List(items), "reverse") => {
-                Rc::make_mut(items).reverse();
-                Value::Unit
-            }
-            // type.map.8: append to the list at `k`, starting an empty one.
-            (Value::Map(t), "push") => {
-                let x = a.pop().expect("checked: two arguments");
-                let table = Rc::make_mut(t);
-                let i = match table.get(&a[0]) {
-                    Some(i) => i,
-                    None => table.insert(a[0].clone(), Some(Value::List(Rc::new(Vec::new())))),
-                };
-                let Value::List(items) = table.val_mut(i) else { unreachable!("checked: a list value") };
-                Rc::make_mut(items).push(x);
-                Value::Unit
-            }
-            (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
-            (Value::Set(t), "add") => {
-                let x = a.pop().expect("checked: one argument");
-                let new = t.get(&x).is_none();
-                Rc::make_mut(t).insert(x, None);
-                Value::Bool(new)
-            }
-            (Value::Set(t), "remove") => Value::Bool(Rc::make_mut(t).remove(&a[0]).is_some()),
-            (other, _) => unreachable!("checked: `{name}` on {other:?}"),
-        })
+                (Value::List(items), "swap") => {
+                    let (i, j) = (a[0].int(), a[1].int());
+                    element(items, i, pos)?;
+                    element(items, j, pos)?;
+                    Rc::make_mut(items).swap(i as usize, j as usize);
+                    Value::Unit
+                }
+                (Value::List(items), "pop") => opt(Rc::make_mut(items).pop()),
+                // type.coll.14: `insert` allows the index `len`, `remove_at` doesn't.
+                (Value::List(items), "insert") => {
+                    let i = a[0].int();
+                    if usize::try_from(i).map_or(true, |u| u > items.len()) {
+                        trap::<()>(
+                            "type.coll.4",
+                            pos,
+                            format!("insert index {i} is out of bounds for a list of length {}", items.len()),
+                        )?;
+                    }
+                    let x = a.pop().expect("checked: two arguments");
+                    Rc::make_mut(items).insert(i as usize, x);
+                    Value::Unit
+                }
+                (Value::List(items), "remove_at") => {
+                    let i = a[0].int();
+                    element(items, i, pos)?;
+                    Rc::make_mut(items).remove(i as usize)
+                }
+                (Value::List(items), "extend") => {
+                    let Value::List(more) = &a[0] else { unreachable!("checked: a list") };
+                    Rc::make_mut(items).extend(more.iter().cloned());
+                    Value::Unit
+                }
+                (Value::List(items), "clear") => {
+                    Rc::make_mut(items).clear();
+                    Value::Unit
+                }
+                (Value::List(items), "reverse") => {
+                    Rc::make_mut(items).reverse();
+                    Value::Unit
+                }
+                // type.map.8: append to the list at `k`, starting an empty one.
+                (Value::Map(t), "push") => {
+                    let x = a.pop().expect("checked: two arguments");
+                    let table = Rc::make_mut(t);
+                    let i = match table.get(&a[0]) {
+                        Some(i) => i,
+                        None => table.insert(a[0].clone(), Some(Value::List(Rc::new(Vec::new())))),
+                    };
+                    let Value::List(items) = table.val_mut(i) else { unreachable!("checked: a list value") };
+                    Rc::make_mut(items).push(x);
+                    Value::Unit
+                }
+                (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
+                (Value::Set(t), "add") => {
+                    let x = a.pop().expect("checked: one argument");
+                    let new = t.get(&x).is_none();
+                    Rc::make_mut(t).insert(x, None);
+                    Value::Bool(new)
+                }
+                (Value::Set(t), "remove") => Value::Bool(Rc::make_mut(t).remove(&a[0]).is_some()),
+                (other, _) => unreachable!("checked: `{name}` on {other:?}"),
+            })
         })??;
         if let Some(before) = watching {
             self.watch_after(env, &p, name, before, pos);
@@ -562,10 +566,8 @@ impl<'a, W: Write> Interp<'a, W> {
                 // std.count.2: the `n` keys with the largest values, ties in insertion order.
                 "top" => {
                     let Value::Int(count) = a[0] else { unreachable!("checked: an int count") };
-                    let mut pairs: Vec<(i64, Value)> = t
-                        .entries()
-                        .map(|(k, v)| (if let Value::Int(c) = v { *c } else { 0 }, k.clone()))
-                        .collect();
+                    let mut pairs: Vec<(i64, Value)> =
+                        t.entries().map(|(k, v)| (if let Value::Int(c) = v { *c } else { 0 }, k.clone())).collect();
                     pairs.sort_by(|x, y| y.0.cmp(&x.0));
                     let keys = pairs.into_iter().take(count.max(0) as usize).map(|(_, k)| k).collect();
                     Value::List(Rc::new(keys))
@@ -617,7 +619,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 if a.len() == 2 {
                     let limit = a[1].int();
                     if limit < 1 {
-                        return trap("type.str.4", pos, format!("the limit of `split` must be at least 1, not {limit}"));
+                        return trap(
+                            "type.str.4",
+                            pos,
+                            format!("the limit of `split` must be at least 1, not {limit}"),
+                        );
                     }
                     return Ok(Value::List(Rc::new(text.splitn(limit as usize, sep).map(s).collect())));
                 }
@@ -681,9 +687,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let (lo, hi) = (a[0].int(), a[1].int());
                 let n = text.chars().count();
                 match (usize::try_from(lo), usize::try_from(hi)) {
-                    (Ok(l), Ok(h)) if l <= h && h <= n => {
-                        s(text.chars().skip(l).take(h - l).collect::<String>())
-                    }
+                    (Ok(l), Ok(h)) if l <= h && h <= n => s(text.chars().skip(l).take(h - l).collect::<String>()),
                     _ => {
                         return trap(
                             "type.str.13",
@@ -712,7 +716,11 @@ impl<'a, W: Write> Interp<'a, W> {
             "strip_suffix" => opt(text.strip_suffix(&*arg_str(0)).map(s)),
             "repeat" => match usize::try_from(a[0].int()) {
                 Ok(n) if n.saturating_mul(text.len()) > MAX_TEXT_BYTES => {
-                    return trap("type.str.15", pos, format!("`repeat` would build a text over {MAX_TEXT_BYTES} bytes"));
+                    return trap(
+                        "type.str.15",
+                        pos,
+                        format!("`repeat` would build a text over {MAX_TEXT_BYTES} bytes"),
+                    );
                 }
                 Ok(n) => s(text.repeat(n)),
                 Err(_) => {
@@ -728,7 +736,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 let width = usize::try_from(a[0].int()).unwrap_or(0);
                 let fill_len = a[1].char().len_utf8().saturating_mul(width);
                 if fill_len > MAX_TEXT_BYTES {
-                    return trap("type.str.15", pos, format!("`{name}` would build a text over {MAX_TEXT_BYTES} bytes"));
+                    return trap(
+                        "type.str.15",
+                        pos,
+                        format!("`{name}` would build a text over {MAX_TEXT_BYTES} bytes"),
+                    );
                 }
                 let fill = a[1].char().to_string().repeat(width.saturating_sub(text.chars().count()));
                 if name == "center" {
@@ -885,7 +897,9 @@ fn sized_method(k: Num, bits: i64, name: &str, a: &[Value], pos: Pos) -> Result<
         "wrapping_neg" => value(wrap(-n)),
         "saturating_add" => value((n + m()).clamp(lo, hi)),
         "saturating_sub" => value((n - m()).clamp(lo, hi)),
-        "saturating_mul" => value(n.checked_mul(m()).map_or(if (n < 0) == (m() < 0) { hi } else { lo }, |v| v.clamp(lo, hi))),
+        "saturating_mul" => {
+            value(n.checked_mul(m()).map_or(if (n < 0) == (m() < 0) { hi } else { lo }, |v| v.clamp(lo, hi)))
+        }
         "abs" if k.fits(n.abs()) => value(n.abs()),
         "abs" => return trap("type.num.14", pos, format!("`({n}).abs()` overflows `{}`", k.name())),
         "to_int" => match i64::try_from(n) {

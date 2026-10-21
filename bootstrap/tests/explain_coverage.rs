@@ -94,7 +94,10 @@ fn every_emitted_rule_has_an_explain_entry() {
     let spec = spec_rules();
     let missing: Vec<String> =
         emitted_rules().into_iter().filter(|r| !spec.contains(r) && !NOT_RULES.contains(&r.as_str())).collect();
-    assert!(missing.is_empty(), "rule IDs in src/ with no rule in docs/spec (add the rule, then `ail explain` has it): {missing:?}");
+    assert!(
+        missing.is_empty(),
+        "rule IDs in src/ with no rule in docs/spec (add the rule, then `ail explain` has it): {missing:?}"
+    );
 }
 
 // explain.cover.2
@@ -160,5 +163,10 @@ fn explain_entries_stay_short() {
         }
     }
     let mean = total / spec.len();
-    assert!(mean < 400, "mean explain entry is {mean} characters (about 120 tokens is 400); longest is {} ({} chars)", longest.1, longest.0);
+    assert!(
+        mean < 400,
+        "mean explain entry is {mean} characters (about 120 tokens is 400); longest is {} ({} chars)",
+        longest.1,
+        longest.0
+    );
 }

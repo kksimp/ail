@@ -20,16 +20,15 @@ pub(super) fn hex_decode(s: &str) -> Option<Vec<u8>> {
     if s.len() % 2 != 0 {
         return None;
     }
-    s.chunks(2)
-        .map(|p| Some(((p[0] as char).to_digit(16)? * 16 + (p[1] as char).to_digit(16)?) as u8))
-        .collect()
+    s.chunks(2).map(|p| Some(((p[0] as char).to_digit(16)? * 16 + (p[1] as char).to_digit(16)?) as u8)).collect()
 }
 
 /// type.bytes.12: standard base64 (RFC 4648) with `=` padding.
 pub(super) fn base64_encode(b: &[u8]) -> String {
     let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
+        let n =
+            (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
         for i in 0..4 {
             if i <= c.len() {
                 out.push(B64[(n >> (18 - 6 * i) & 63) as usize] as char);
@@ -110,11 +109,9 @@ pub(super) fn slice(b: &[u8], lo: i64, hi: i64, inclusive: bool, pos: Pos) -> Re
     let dots = if inclusive { "..=" } else { ".." };
     match (usize::try_from(lo), end.and_then(|e| usize::try_from(e).ok())) {
         (Ok(a), Some(e)) if a <= e && e <= b.len() => Ok(bytes_value(b[a..e].to_vec())),
-        _ => trap(
-            "type.bytes.4",
-            pos,
-            format!("slice {lo}{dots}{hi} is out of bounds for bytes of length {}", b.len()),
-        ),
+        _ => {
+            trap("type.bytes.4", pos, format!("slice {lo}{dots}{hi} is out of bounds for bytes of length {}", b.len()))
+        }
     }
 }
 

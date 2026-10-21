@@ -186,7 +186,9 @@ fn parse_server_hello(body: &[u8], session_id: &[u8]) -> Result<ServerHello, Tls
             None if legacy_version <= 0x0303 => {
                 "the server only speaks TLS 1.2 or older; AIL supports TLS 1.3 only (ADR 0360)".to_string()
             }
-            v => format!("the server chose TLS version {:#06x}, not 1.3 (protocol_version)", v.unwrap_or(legacy_version)),
+            v => {
+                format!("the server chose TLS version {:#06x}, not 1.3 (protocol_version)", v.unwrap_or(legacy_version))
+            }
         }));
     }
     if echoed != session_id {
@@ -196,7 +198,9 @@ fn parse_server_hello(body: &[u8], session_id: &[u8]) -> Result<ServerHello, Tls
         return Err(TlsError::protocol("the server chose compression (illegal_parameter)"));
     }
     let suite = Suite::from_code(code).ok_or_else(|| {
-        TlsError::protocol(format!("the server chose cipher suite {code:#06x}, which wasn't offered (illegal_parameter)"))
+        TlsError::protocol(format!(
+            "the server chose cipher suite {code:#06x}, which wasn't offered (illegal_parameter)"
+        ))
     })?;
     Ok(ServerHello { retry, suite, share, asked_group, cookie })
 }
@@ -339,7 +343,9 @@ fn handshake_with<S: Read + Write>(
             return Err(TlsError::protocol("the server sent a second HelloRetryRequest (unexpected_message)"));
         }
         if sh.suite != first_suite {
-            return Err(TlsError::protocol("the server changed cipher suite after HelloRetryRequest (illegal_parameter)"));
+            return Err(TlsError::protocol(
+                "the server changed cipher suite after HelloRetryRequest (illegal_parameter)",
+            ));
         }
     }
     transcript.add(&sh_msg);

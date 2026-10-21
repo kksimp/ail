@@ -22,8 +22,14 @@ pub struct WebVerifier<'a> {
 }
 
 impl Verifier for WebVerifier<'_> {
-    fn verify(&self, host: &str, chain: &[Vec<u8>], scheme: u16, signed: &[u8], signature: &[u8])
-    -> Result<(), TlsError> {
+    fn verify(
+        &self,
+        host: &str,
+        chain: &[Vec<u8>],
+        scheme: u16,
+        signed: &[u8],
+        signature: &[u8],
+    ) -> Result<(), TlsError> {
         let now = self.now.unwrap_or_else(|| {
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
         });
@@ -90,7 +96,11 @@ pub fn verify_chain(chain: &[Vec<u8>], roots: &[Cert], host: &str, now: i64) -> 
 
 fn check_dates(c: &Cert, now: i64) -> Result<(), String> {
     if now < c.not_before {
-        return Err(format!("the certificate for `{}` isn't valid until {}", c.display_name(), der::date(c.not_before)));
+        return Err(format!(
+            "the certificate for `{}` isn't valid until {}",
+            c.display_name(),
+            der::date(c.not_before)
+        ));
     }
     if now > c.not_after {
         return Err(format!("the certificate for `{}` expired on {}", c.display_name(), der::date(c.not_after)));
@@ -181,7 +191,9 @@ impl<'a> Search<'a> {
         if let Some(limit) = ca.path_len
             && below > limit
         {
-            return Err(format!("`{name}` allows {limit} intermediate certificate(s) below it, and the chain has more"));
+            return Err(format!(
+                "`{name}` allows {limit} intermediate certificate(s) below it, and the chain has more"
+            ));
         }
         Ok(())
     }

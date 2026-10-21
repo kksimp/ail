@@ -5,9 +5,9 @@
 
 mod parse;
 mod props;
-mod vm;
 #[cfg(test)]
 mod vectors;
+mod vm;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

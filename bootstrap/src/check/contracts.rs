@@ -19,7 +19,13 @@ impl<'p> Checker<'p> {
             self.locals.push(Local { name: "self".into(), ty, mutable, kind: Kind::SelfParam, decl: None });
         }
         for (p, (_, ty)) in f.params.iter().zip(&sig.params) {
-            self.locals.push(Local { name: p.name.clone(), ty: ty.clone(), mutable: p.mutable, kind: Kind::Param, decl: None });
+            self.locals.push(Local {
+                name: p.name.clone(),
+                ty: ty.clone(),
+                mutable: p.mutable,
+                kind: Kind::Param,
+                decl: None,
+            });
         }
         self.check_contracts(f, &sig.ret);
     }

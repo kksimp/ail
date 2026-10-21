@@ -66,8 +66,14 @@ impl std::fmt::Display for TlsError {
 /// first, DER) is trusted for `host`, and that `signature` under the leaf's
 /// key and `scheme` covers `signed`.
 pub trait Verifier {
-    fn verify(&self, host: &str, chain: &[Vec<u8>], scheme: u16, signed: &[u8], signature: &[u8])
-    -> Result<(), TlsError>;
+    fn verify(
+        &self,
+        host: &str,
+        chain: &[Vec<u8>],
+        scheme: u16,
+        signed: &[u8],
+        signature: &[u8],
+    ) -> Result<(), TlsError>;
 }
 
 /// Signature schemes offered in `signature_algorithms` (RFC 8446 §4.2.3),

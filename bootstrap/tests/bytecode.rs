@@ -100,6 +100,13 @@ fn run(job: &[String], walker: bool) -> Result<Output, String> {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ail"));
     // A program that starts `./ail` itself gets this binary, not one the wrapper rebuilt mid-run.
     cmd.env("AIL_BINARY", env!("CARGO_BIN_EXE_ail"));
+    // `proc.which("ail")` finds this binary too, so a program that looks for `ail` never reaches the wrapper.
+    let bin = Path::new(env!("CARGO_BIN_EXE_ail")).parent().unwrap().to_path_buf();
+    let path = std::env::join_paths(
+        std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())),
+    )
+    .unwrap();
+    cmd.env("PATH", path);
     cmd.arg(&job[0]);
     if walker {
         cmd.arg("--no-bytecode");

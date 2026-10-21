@@ -112,7 +112,11 @@ impl Cert {
     /// Whether `issuer_key` signed this certificate.
     pub fn signed_by(&self, issuer_key: &PublicKey) -> Result<(), String> {
         let Some(alg) = self.sig_alg else {
-            return Err(format!("`{}` is signed with {}, which AIL's TLS doesn't support", self.display_name(), self.sig_alg_name));
+            return Err(format!(
+                "`{}` is signed with {}, which AIL's TLS doesn't support",
+                self.display_name(),
+                self.sig_alg_name
+            ));
         };
         if verify_signature(issuer_key, alg, &self.tbs, &self.signature) {
             Ok(())
@@ -179,7 +183,9 @@ fn sig_alg(body: &[u8]) -> R<Result<SigAlg, String>> {
         OID_ECDSA_SHA256 => Ok(SigAlg::Ecdsa(HashAlg::Sha256)),
         OID_ECDSA_SHA384 => Ok(SigAlg::Ecdsa(HashAlg::Sha384)),
         OID_ECDSA_SHA512 => Ok(SigAlg::Ecdsa(HashAlg::Sha512)),
-        OID_RSA_PSS => pss_params(&mut d)?.map(SigAlg::Pss).ok_or_else(|| "RSA-PSS with unusual parameters".to_string()),
+        OID_RSA_PSS => {
+            pss_params(&mut d)?.map(SigAlg::Pss).ok_or_else(|| "RSA-PSS with unusual parameters".to_string())
+        }
         // Unknown (SHA-1, MD5, Ed25519, ...): its parameters aren't ours to
         // check. Roots signed this way still serve as trust anchors.
         _ => {

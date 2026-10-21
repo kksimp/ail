@@ -11,9 +11,47 @@ pub const UNSUPPORTED: &str = "bootstrap.unsupported";
 
 /// Reserved words (lex.kw.1, ADR 0114, ADR 0120, ADR 0210). `c` is deliberately absent (lex.kw.2).
 pub const KEYWORDS: &[&str] = &[
-    "and", "any", "as", "break", "continue", "defer", "elif", "else", "ensures", "enum", "error", "extern", "false",
-    "fn", "for", "if", "impl", "in", "invariant", "match", "move", "mut", "none", "not", "or", "par", "pub", "ref", "requires",
-    "return", "self", "spawn", "struct", "todo", "trait", "true", "unique", "unsafe", "use", "while", "with",
+    "and",
+    "any",
+    "as",
+    "break",
+    "continue",
+    "defer",
+    "elif",
+    "else",
+    "ensures",
+    "enum",
+    "error",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "invariant",
+    "match",
+    "move",
+    "mut",
+    "none",
+    "not",
+    "or",
+    "par",
+    "pub",
+    "ref",
+    "requires",
+    "return",
+    "self",
+    "spawn",
+    "struct",
+    "todo",
+    "trait",
+    "true",
+    "unique",
+    "unsafe",
+    "use",
+    "while",
+    "with",
 ];
 
 /// Symbols, longest first so that `..=` wins over `..` and `.`.
@@ -323,11 +361,16 @@ fn lex_scaled(src: &str, scale: usize) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comm
         let mut d = Diagnostic::new("lex.stmt.2", pos, format!("this `{c}` is never closed"));
         // Close the brackets where the line ends, when they all opened on it.
         if lx.open.iter().all(|(_, p)| p.line == pos.line) {
-            let closers: String = lx.open.iter().rev().map(|(c, _)| match c {
-                '(' => ')',
-                '[' => ']',
-                _ => '}',
-            }).collect();
+            let closers: String = lx
+                .open
+                .iter()
+                .rev()
+                .map(|(c, _)| match c {
+                    '(' => ')',
+                    '[' => ']',
+                    _ => '}',
+                })
+                .collect();
             d = d.fix("close the brackets at the end of the line", vec![Edit::at_line_end(pos, closers)]);
         }
         lx.diags.push(d);
@@ -440,7 +483,9 @@ impl Lexer {
             let edits: Vec<Edit> = self
                 .tabs
                 .iter()
-                .map(|&(l, n, w)| Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / UNIT * UNIT)))
+                .map(|&(l, n, w)| {
+                    Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / UNIT * UNIT))
+                })
                 .collect();
             self.diags.push(
                 Diagnostic::new("lex.block.4", Pos { line, col: 1 }, "tab character in indentation")
@@ -459,12 +504,18 @@ impl Lexer {
             .logical
             .iter()
             .filter(|x| x.2 > 0)
-            .map(|&(l, n, w)| Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / g * UNIT)))
+            .map(|&(l, n, w)| {
+                Edit::span(Pos { line: l, col: 1 }, Pos { line: l, col: n + 1 }, " ".repeat(w / g * UNIT))
+            })
             .collect();
         self.diags.push(
-            Diagnostic::new("lex.block.2", Pos { line: first, col: 1 }, format!("this file indents by {g} spaces; a block is indented by exactly 4"))
-                .help("use 4 spaces per level")
-                .fix(format!("re-indent the file from {g} to 4 spaces per level"), edits),
+            Diagnostic::new(
+                "lex.block.2",
+                Pos { line: first, col: 1 },
+                format!("this file indents by {g} spaces; a block is indented by exactly 4"),
+            )
+            .help("use 4 spaces per level")
+            .fix(format!("re-indent the file from {g} to 4 spaces per level"), edits),
         );
         None
     }
@@ -537,13 +588,10 @@ impl Lexer {
                 }
                 '/' if line.get(i + 1) == Some(&'/') => {
                     let first = line[..i].iter().all(|c| *c == ' ' || *c == '\t');
-                    let mut d = Diagnostic::new(
-                        "gram.foreign.1",
-                        pos,
-                        "`//` isn't a comment or an operator in AIL",
-                    );
+                    let mut d = Diagnostic::new("gram.foreign.1", pos, "`//` isn't a comment or an operator in AIL");
                     d = if first {
-                        d.help("comments start with `#`").fix("write `#`", vec![Edit::span(pos, Pos { line: line_no, col: i + 3 }, "#")])
+                        d.help("comments start with `#`")
+                            .fix("write `#`", vec![Edit::span(pos, Pos { line: line_no, col: i + 3 }, "#")])
                     } else {
                         d.help("write `#` for a comment; `/` is integer division and rounds toward zero")
                     };
@@ -595,9 +643,16 @@ impl Lexer {
                     let word: String = line[i..end].iter().collect();
                     if matches!(word.as_str(), "f" | "u") && line.get(end) == Some(&'"') {
                         self.diags.push(
-                            Diagnostic::new("gram.foreign.1", pos, format!("`{word}\"...\"` isn't a string prefix in AIL"))
-                                .help("every string interpolates `{expression}`; write the string without the prefix")
-                                .fix(format!("remove the `{word}`"), vec![Edit::span(pos, Pos { line: line_no, col: i + 2 }, "")]),
+                            Diagnostic::new(
+                                "gram.foreign.1",
+                                pos,
+                                format!("`{word}\"...\"` isn't a string prefix in AIL"),
+                            )
+                            .help("every string interpolates `{expression}`; write the string without the prefix")
+                            .fix(
+                                format!("remove the `{word}`"),
+                                vec![Edit::span(pos, Pos { line: line_no, col: i + 2 }, "")],
+                            ),
                         );
                         i = end;
                         continue;
@@ -633,10 +688,8 @@ impl Lexer {
                                 .help("bitwise not is a method: `a.bit_not()` (expr.bit.1)");
                             if atom {
                                 let end = Pos { line: line_no, col: i + 2 + word.chars().count() };
-                                d = d.fix(
-                                    "write `.bit_not()`",
-                                    vec![Edit::span(pos, end, format!("{word}.bit_not()"))],
-                                );
+                                d = d
+                                    .fix("write `.bit_not()`", vec![Edit::span(pos, end, format!("{word}.bit_not()"))]);
                             }
                             // The name after `~` is lexed as usual, so the token stream is unchanged.
                             i += 1;
@@ -730,8 +783,12 @@ impl Lexer {
                 }
                 c => {
                     self.diags.push(
-                        Diagnostic::new("lex.bytes.1", here, format!("`{c}` is not ASCII, so it can't be in a `bytes` literal"))
-                            .help("write its UTF-8 bytes as `\\xHH` escapes, or use `\"...\".to_bytes()`"),
+                        Diagnostic::new(
+                            "lex.bytes.1",
+                            here,
+                            format!("`{c}` is not ASCII, so it can't be in a `bytes` literal"),
+                        )
+                        .help("write its UTF-8 bytes as `\\xHH` escapes, or use `\"...\".to_bytes()`"),
                     );
                     i += 1;
                 }
@@ -978,11 +1035,15 @@ impl Lexer {
         let mut d = Diagnostic::new("lex.str.4", pos, "a character literal holds exactly one character")
             .help("write a string in double quotes: \"...\"");
         let body = &line[start + 1..end.saturating_sub(1).max(start + 1)];
-        if end <= line.len() && line.get(end - 1) == Some(&'\'') && !body.iter().any(|c| matches!(c, '"' | '\\' | '{')) {
+        if end <= line.len() && line.get(end - 1) == Some(&'\'') && !body.iter().any(|c| matches!(c, '"' | '\\' | '{'))
+        {
             let close = Pos { line: line_no, col: end };
             d = d.fix(
                 "write it as a string",
-                vec![Edit::span(pos, Pos { line: line_no, col: start + 2 }, "\""), Edit::span(close, Pos { line: line_no, col: end + 1 }, "\"")],
+                vec![
+                    Edit::span(pos, Pos { line: line_no, col: start + 2 }, "\""),
+                    Edit::span(close, Pos { line: line_no, col: end + 1 }, "\""),
+                ],
             );
         }
         self.diags.push(d);

@@ -110,7 +110,9 @@ impl<'a, W: Write> Interp<'a, W> {
                 1 => rng.range(-(1 << 31), 1 << 31),
                 _ => rng.range(-bound, bound),
             }),
-            G::Float => Value::Float(if rng.below(20) == 0 { 0.0 } else { rng.range(-bound * 100, bound * 100) as f64 / 100.0 }),
+            G::Float => {
+                Value::Float(if rng.below(20) == 0 { 0.0 } else { rng.range(-bound * 100, bound * 100) as f64 / 100.0 })
+            }
             G::Bool => Value::Bool(rng.below(2) == 0),
             G::Char => Value::Char(self.gen_char(rng)),
             G::Str => {
@@ -120,12 +122,16 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Bytes => {
                 let n = rng.below((size / 4) as u64 + 2);
                 // Mostly any byte, sometimes the edges, so UTF-8 and text paths both get exercised.
-                super::bytes::bytes_value((0..n).map(|_| match rng.below(8) {
-                    0 => 0,
-                    1 => 255,
-                    2 => b'a' + rng.below(26) as u8,
-                    _ => rng.below(256) as u8,
-                }).collect())
+                super::bytes::bytes_value(
+                    (0..n)
+                        .map(|_| match rng.below(8) {
+                            0 => 0,
+                            1 => 255,
+                            2 => b'a' + rng.below(26) as u8,
+                            _ => rng.below(256) as u8,
+                        })
+                        .collect(),
+                )
             }
             G::List(inner) => {
                 let n = items(rng);
@@ -149,11 +155,16 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Map(Rc::new(t))
             }
             G::Opt(inner) => {
-                if depth >= MAX_DEPTH || rng.below(4) == 0 { Value::None } else { self.generate(inner, rng, size, depth + 1) }
+                if depth >= MAX_DEPTH || rng.below(4) == 0 {
+                    Value::None
+                } else {
+                    self.generate(inner, rng, size, depth + 1)
+                }
             }
-            G::Struct(i) => {
-                Value::Struct(*i, Rc::new(self.struct_gens(*i).iter().map(|g| self.generate(g, rng, size, depth + 1)).collect()))
-            }
+            G::Struct(i) => Value::Struct(
+                *i,
+                Rc::new(self.struct_gens(*i).iter().map(|g| self.generate(g, rng, size, depth + 1)).collect()),
+            ),
             G::Enum(e) => {
                 let n = self.prog.enums[*e].variants.len();
                 let v = if depth >= MAX_DEPTH { self.simplest_variant(*e) } else { rng.below(n as u64) as usize };
@@ -340,7 +351,6 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         out
     }
-
 }
 
 impl<'a> Interp<'a, Vec<u8>> {

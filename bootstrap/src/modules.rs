@@ -147,7 +147,8 @@ fn load_package(
     if let Some((tokens, files)) = again
         && !diags.iter().any(|d| !d.warning)
     {
-        (prog, diags) = crate::derive::expand(prog, diags, tokens, files, &|t, f| assemble(t, f, &packages, Vec::new()));
+        (prog, diags) =
+            crate::derive::expand(prog, diags, tokens, files, &|t, f| assemble(t, f, &packages, Vec::new()));
     }
     packages.finish(&mut prog, &mut diags);
     Ok((prog, diags))

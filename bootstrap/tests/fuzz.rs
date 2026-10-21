@@ -17,17 +17,17 @@
 //! 10,000. A failure is minimised (by lines) and saved under
 //! `$AIL_FUZZ_OUT` (default: the test scratch directory) as `seed-N.ail`.
 
-#[path = "fuzz/progs.rs"]
-mod progs;
 #[path = "fuzz/json.rs"]
 mod json;
+#[path = "fuzz/progs.rs"]
+mod progs;
 
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 /// Probes that checked clean and ran (the rest were rejected as ill-typed).
@@ -163,12 +163,17 @@ fn generated(r: &Runner, src: &str) -> Result<bool, String> {
         }
         let (n1, n2) = (
             json::normalise(&a1.stdout).map_err(|e| format!("fuzz.prop.4 api is not JSON: {e}"))?,
-            json::normalise(&a2.stdout).map_err(|e| format!("fuzz.prop.4 api of the formatted program is not JSON: {e}"))?,
+            json::normalise(&a2.stdout)
+                .map_err(|e| format!("fuzz.prop.4 api of the formatted program is not JSON: {e}"))?,
         );
         if n1 != n2 {
             return Err("fuzz.prop.2 fmt changed the program's outline".into());
         }
-        let variants: &[&[&str]] = if smoke() { &[&["api", "--symbols"]] } else { &[&["api", "--pretty"], &["api", "--text"], &["api", "--symbols"]] };
+        let variants: &[&[&str]] = if smoke() {
+            &[&["api", "--symbols"]]
+        } else {
+            &[&["api", "--pretty"], &["api", "--text"], &["api", "--symbols"]]
+        };
         for extra in variants.iter().copied() {
             let o = r.exec(extra, &p);
             if let Some(m) = o.crashed() {
@@ -250,7 +255,10 @@ fn mutated(r: &Runner, src: &str) -> Result<(), String> {
     for line in c1.stdout.lines().chain(c1.stderr.lines()) {
         json::normalise(line).map_err(|e| format!("fuzz.mut.1 diagnostic is not JSON: {e}"))?;
     }
-    if c1.code == Some(2) && !c1.stdout.contains("\"severity\":\"error\"") && !c1.stderr.contains("\"severity\":\"error\"") {
+    if c1.code == Some(2)
+        && !c1.stdout.contains("\"severity\":\"error\"")
+        && !c1.stderr.contains("\"severity\":\"error\"")
+    {
         return Err("fuzz.mut.1 rejected with no error diagnostic".into());
     }
     if c1.code == Some(0) {
@@ -331,7 +339,8 @@ fn fuzz_generated_and_mutated_programs() {
     let rejects: Mutex<Vec<u64>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for w in 0..workers {
-            let (next, failures, rejected, clean, rejects, root, out_dir) = (&next, &failures, &rejected, &clean, &rejects, &root, &out_dir);
+            let (next, failures, rejected, clean, rejects, root, out_dir) =
+                (&next, &failures, &rejected, &clean, &rejects, &root, &out_dir);
             s.spawn(move || {
                 let dir = root.join(format!("w{w}"));
                 fs::create_dir_all(&dir).unwrap();
@@ -348,7 +357,11 @@ fn fuzz_generated_and_mutated_programs() {
                         let small = minimise(text, kind(&msg), f);
                         let file = out_dir.join(format!("{tag}-{seed}.ail"));
                         fs::write(&file, &small).unwrap();
-                        failures.lock().unwrap().push(format!("seed {seed} ({tag}): {msg}\n  minimised to {} lines: {}", small.lines().count(), file.display()));
+                        failures.lock().unwrap().push(format!(
+                            "seed {seed} ({tag}): {msg}\n  minimised to {} lines: {}",
+                            small.lines().count(),
+                            file.display()
+                        ));
                     };
                     match generated(&r, &src) {
                         Ok(true) => {
@@ -388,7 +401,12 @@ fn fuzz_generated_and_mutated_programs() {
         PROBES_RUN.load(Ordering::SeqCst),
         failures.len()
     );
-    assert!(failures.is_empty(), "{} fuzz failures (fuzz.policy.1: each becomes a case)\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} fuzz failures (fuzz.policy.1: each becomes a case)\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     // The generator is well-typed by construction (fuzz.gen.1): a rejection is a bug in it or the checker.
     assert!(rejected * 50 <= n, "{rejected} of {n} generated programs were rejected, e.g. seed {:?}", rejects.first());
 }

@@ -11,10 +11,10 @@
 //! hand-written ones (ct.gen.1), and `remap` reports a problem in them at
 //! the `impl` with a note in the generated text (ct.gen.3).
 
-use std::collections::HashMap;
 use crate::ast::*;
 use crate::diag::{Diagnostic, Note, Pos};
 use crate::lexer::{Part, Tok, Token, lex};
+use std::collections::HashMap;
 
 /// Whether the tokens may hold a deriving `impl` for a generator trait: an
 /// `impl`, and `@derive` or a prelude generator trait's name.
@@ -249,7 +249,9 @@ fn type_info(prog: &Program, docs: &HashMap<usize, String>, name: &str, module: 
     };
     let params = |g: &[GenericParam]| list(g.iter().map(|p| quote(&p.name)).collect(), "str");
     let (pos, kind, error, generics, fields, variants) = match (s, e) {
-        (Some(s), _) => (s.pos, "Struct", s.is_error, params(&s.generics), s.fields.iter().map(field).collect(), Vec::new()),
+        (Some(s), _) => {
+            (s.pos, "Struct", s.is_error, params(&s.generics), s.fields.iter().map(field).collect(), Vec::new())
+        }
         (None, Some(e)) => {
             let variants = e
                 .variants
@@ -341,22 +343,25 @@ fn generate(
             );
             continue;
         }
-        let Some(f) = gen_prog.fns.iter().position(|f| f.name == names[k] && f.owner.is_none() && in_wrapper(f.pos)) else {
+        let Some(f) = gen_prog.fns.iter().position(|f| f.name == names[k] && f.owner.is_none() && in_wrapper(f.pos))
+        else {
             continue;
         };
         // ct.derive.3: a generator is compile-time-safe.
         let wrapper = format!("{} -> ", names[k]);
         let fx = effects.get_or_insert_with(|| crate::check::effects::Effects::infer(&gen_prog, &resolved));
-        let impure: Vec<String> = crate::check::effects::impure_chains(fx, f)
-            .into_iter()
-            .map(|c| c.replace(&wrapper, ""))
-            .collect();
+        let impure: Vec<String> =
+            crate::check::effects::impure_chains(fx, f).into_iter().map(|c| c.replace(&wrapper, "")).collect();
         if !impure.is_empty() {
             errors.push(
                 Diagnostic::new(
                     "ct.derive.3",
                     at,
-                    format!("the derive generator `{}` runs at compile time but has {}", job.generator, impure.join("; ")),
+                    format!(
+                        "the derive generator `{}` runs at compile time but has {}",
+                        job.generator,
+                        impure.join("; ")
+                    ),
                 )
                 .help("a generator may not do I/O or use a capability; compute the text from its `TypeInfo` only"),
             );
@@ -395,7 +400,11 @@ fn generate(
                 Diagnostic::new(
                     "ct.derive.4",
                     prog.impls[job.imp].pos,
-                    format!("`{}` can't be derived for `{}`: {message}", last(&prog.impls[job.imp].trait_name), job.type_name),
+                    format!(
+                        "`{}` can't be derived for `{}`: {message}",
+                        last(&prog.impls[job.imp].trait_name),
+                        job.type_name
+                    ),
                 )
                 .help(format!("define the methods in this `impl`, or change `{}`", job.generator)),
             ),
@@ -407,12 +416,7 @@ fn generate(
 /// Split generated tokens into the methods of the `impl` and the associated
 /// functions `fn T.name` of its type (ct.gen.1). `None`, with an error, for
 /// anything else at the top level.
-fn split(
-    toks: Vec<Token>,
-    job: &Job,
-    at: Pos,
-    errors: &mut Vec<Diagnostic>,
-) -> Option<(Vec<Token>, Vec<Token>)> {
+fn split(toks: Vec<Token>, job: &Job, at: Pos, errors: &mut Vec<Diagnostic>) -> Option<(Vec<Token>, Vec<Token>)> {
     let mut starts = Vec::new();
     let mut depth = 0usize;
     for (i, t) in toks.iter().enumerate() {

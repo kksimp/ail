@@ -662,7 +662,10 @@ impl<'p> Checker<'p> {
                 self.error_help(
                     "trait.super.2",
                     imp.pos,
-                    format!("{} implements `{tn}`, which requires `{sn}`, but it doesn't implement `{sn}`", self.show(&target)),
+                    format!(
+                        "{} implements `{tn}`, which requires `{sn}`, but it doesn't implement `{sn}`",
+                        self.show(&target)
+                    ),
                     format!("add `impl {sn} for {}`", imp.target.name),
                 );
             }

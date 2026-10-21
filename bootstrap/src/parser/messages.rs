@@ -30,7 +30,14 @@ impl Parser {
 
     /// err.msg.2: every variant has a message, or none does. Splices the
     /// `impl ToStr` that the messages define after the declaration.
-    pub(super) fn splice_messages(&mut self, name: &str, pos: Pos, generic: bool, arms: Vec<(String, Vec<String>, Option<Token>)>, whole: Option<Token>) {
+    pub(super) fn splice_messages(
+        &mut self,
+        name: &str,
+        pos: Pos,
+        generic: bool,
+        arms: Vec<(String, Vec<String>, Option<Token>)>,
+        whole: Option<Token>,
+    ) {
         let with = arms.iter().filter(|(_, _, m)| m.is_some()).count();
         if whole.is_none() && with == 0 {
             return;

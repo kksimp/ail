@@ -3,10 +3,10 @@
 //! name, a fixed 1980-01-01 timestamp. Reading checks every CRC-32 and
 //! refuses names that would escape the target directory.
 
+use super::CodecError;
 use super::crc32::crc32;
 use super::deflate::deflate;
 use super::inflate::inflate;
-use super::CodecError;
 
 /// One file in an archive: its `/`-separated relative name and contents.
 #[derive(Debug)]
@@ -81,7 +81,9 @@ fn u16_at(d: &[u8], p: usize) -> Result<usize, CodecError> {
     d.get(p..p + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize).ok_or_else(|| bad("truncated zip data"))
 }
 fn u32_at(d: &[u8], p: usize) -> Result<usize, CodecError> {
-    d.get(p..p + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize).ok_or_else(|| bad("truncated zip data"))
+    d.get(p..p + 4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize)
+        .ok_or_else(|| bad("truncated zip data"))
 }
 
 /// std.compress.5: a name is safe when it is relative and has no `..`

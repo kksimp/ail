@@ -154,7 +154,9 @@ impl Plain {
     fn has_atomic(&self) -> bool {
         match self {
             Plain::Atomic(_) => true,
-            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) => ps.iter().any(Plain::has_atomic),
+            Plain::Struct(_, ps) | Plain::Enum(_, _, ps) | Plain::List(ps) | Plain::Set(ps) => {
+                ps.iter().any(Plain::has_atomic)
+            }
             Plain::Map(kvs) => kvs.iter().any(|(k, v)| k.has_atomic() || v.has_atomic()),
             Plain::Fail(e, _, _) => e.has_atomic(),
             _ => false,

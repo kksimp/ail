@@ -404,7 +404,9 @@ fn parse_head(buf: &[u8]) -> Result<Option<Head>, Bad> {
         "HTTP/1.0" => false,
         _ => return Err((505, "only HTTP/1.0 and HTTP/1.1 are supported")),
     };
-    if !(target.starts_with('/') || (target == "*" && method == "OPTIONS")) || target.bytes().any(|b| b < 0x21 || b == 0x7f) {
+    if !(target.starts_with('/') || (target == "*" && method == "OPTIONS"))
+        || target.bytes().any(|b| b < 0x21 || b == 0x7f)
+    {
         return Err((400, "the request target must be an absolute path"));
     }
     let mut headers: Vec<(String, String)> = Vec::new();
@@ -581,7 +583,13 @@ fn reason(status: i64) -> &'static str {
 
 /// The bytes of a response (std.net.11). `head_only` omits the body of a
 /// reply to `HEAD`. Headers the server owns are not taken from the program.
-fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_only: bool, keep: bool) -> Result<Vec<u8>, String> {
+fn response_bytes(
+    status: i64,
+    headers: &[(String, String)],
+    body: &[u8],
+    head_only: bool,
+    keep: bool,
+) -> Result<Vec<u8>, String> {
     if !(100..=599).contains(&status) {
         return Err(format!("{status} is not an HTTP status; use 100 to 599"));
     }
@@ -721,7 +729,10 @@ impl Server {
                         None => (head.target.clone(), Vec::new()),
                     };
                     let parsed = Parsed { method: head.method.clone(), path, query, headers: head.headers, body };
-                    return Poll::Ready(parsed, Exchange { stream: p.stream, method: head.method, peer: p.peer, keep, server: -1 });
+                    return Poll::Ready(
+                        parsed,
+                        Exchange { stream: p.stream, method: head.method, peer: p.peer, keep, server: -1 },
+                    );
                 }
                 Ok(None) if !eof && p.since.elapsed() < if p.idle { KEEP_IDLE } else { REQUEST_TIME } => i += 1,
                 Ok(None) => {
@@ -797,7 +808,8 @@ fn kind_of(e: &io::Error) -> &'static str {
 }
 
 fn resolve_addr(addr: &str) -> Result<SocketAddr, (&'static str, String)> {
-    let mut it = addr.to_socket_addrs().map_err(|e| ("bad_url", format!("`{addr}` is not an address (HOST:PORT): {e}")))?;
+    let mut it =
+        addr.to_socket_addrs().map_err(|e| ("bad_url", format!("`{addr}` is not an address (HOST:PORT): {e}")))?;
     it.next().ok_or(("not_found", format!("`{addr}` has no address")))
 }
 
@@ -913,7 +925,14 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// The methods of `Server`, `Exchange`, `Listener` and `Conn` (std.net.9-12).
-    pub(super) fn net_method(&mut self, m: &str, recv: &'a Expr, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+    pub(super) fn net_method(
+        &mut self,
+        m: &str,
+        recv: &'a Expr,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
         let Value::Struct(_, fields) = self.eval(recv, env)? else { unreachable!("checked: a net handle") };
         // An `Exchange` holds its request first, then its handle.
         let id = fields[fields.len() - 1].int();
@@ -933,7 +952,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 self.flush(pos)?;
                 let max = values[0].int();
                 if max <= 0 {
-                    return Ok(self.net_error("", "other", format!("`read_bytes` needs a size of at least 1, not {max}"), pos));
+                    return Ok(self.net_error(
+                        "",
+                        "other",
+                        format!("`read_bytes` needs a size of at least 1, not {max}"),
+                        pos,
+                    ));
                 }
                 let taken = {
                     let mut t = sockets();
@@ -993,7 +1017,10 @@ impl<'a, W: Write> Interp<'a, W> {
                                     Value::Int(id),
                                 ]),
                             );
-                            return Ok(Value::Struct(self.structs["net.Exchange"], Rc::new(vec![request, Value::Int(slot)])));
+                            return Ok(Value::Struct(
+                                self.structs["net.Exchange"],
+                                Rc::new(vec![request, Value::Int(slot)]),
+                            ));
                         }
                         Poll::Closed => return Ok(closed(self, "server")),
                         Poll::Pending => {
@@ -1020,7 +1047,13 @@ impl<'a, W: Write> Interp<'a, W> {
                                 Err(e) => return Ok(self.net_error("", kind_of(&e), e.to_string(), pos)),
                             };
                             let timeout = Arc::clone(&coop.timeout);
-                            let conn = Conn { io: Box::new(coop), buf: Vec::new(), eof: false, timeout, peer: peer.to_string() };
+                            let conn = Conn {
+                                io: Box::new(coop),
+                                buf: Vec::new(),
+                                eof: false,
+                                timeout,
+                                peer: peer.to_string(),
+                            };
                             return Ok(self.handle_struct("net.Conn", add(Slot::Conn(conn))));
                         }
                         Some(Err(e)) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -1035,7 +1068,12 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             "Exchange.respond" | "Exchange.respond_bytes" => {
                 let Some(ex) = take_exchange(id) else {
-                    return Ok(self.net_error("", "other", "this exchange has already been answered or is closed", pos));
+                    return Ok(self.net_error(
+                        "",
+                        "other",
+                        "this exchange has already been answered or is closed",
+                        pos,
+                    ));
                 };
                 // std.net.16: `respond_bytes(status, headers, data)` sends bytes as they are.
                 let (status, headers, body): (i64, Vec<(String, String)>, Vec<u8>) = if m == "Exchange.respond_bytes" {
@@ -1054,7 +1092,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     (r[0].int(), h, body.as_bytes().to_vec())
                 };
                 // std.net.19: a final response to a request that asked for it keeps the connection.
-                let draining = matches!(sockets().get(ex.server as usize), Some(Slot::Server(s)) if s.listener.is_none());
+                let draining =
+                    matches!(sockets().get(ex.server as usize), Some(Slot::Server(s)) if s.listener.is_none());
                 let keep = ex.keep && status >= 200 && ex.server >= 0 && !draining && !headers_close(&headers);
                 let sent = response_bytes(status, &headers, &body, ex.method == "HEAD", keep);
                 let result = match sent {
@@ -1102,7 +1141,12 @@ impl<'a, W: Write> Interp<'a, W> {
             "Conn.set_timeout" => {
                 let ms = values[0].int();
                 if ms <= 0 {
-                    return Ok(self.net_error("", "other", format!("a timeout is at least 1 millisecond, not {ms}"), pos));
+                    return Ok(self.net_error(
+                        "",
+                        "other",
+                        format!("a timeout is at least 1 millisecond, not {ms}"),
+                        pos,
+                    ));
                 }
                 if let Some(Slot::Conn(c)) = sockets().get(id as usize) {
                     c.timeout.store(ms as u64, Ordering::Relaxed);
@@ -1120,7 +1164,12 @@ impl<'a, W: Write> Interp<'a, W> {
                         let max = values[0].int();
                         if max <= 0 {
                             put_back(id, Slot::Conn(c));
-                            return Ok(self.net_error(&peer, "other", format!("`read` needs a size of at least 1, not {max}"), pos));
+                            return Ok(self.net_error(
+                                &peer,
+                                "other",
+                                format!("`read` needs a size of at least 1, not {max}"),
+                                pos,
+                            ));
                         }
                         if m == "Conn.read_bytes" {
                             c.read_raw(max as usize).map(super::bytes::bytes_value)
@@ -1230,7 +1279,9 @@ mod tests {
     fn responses() {
         let r = response_bytes(200, &[("X-A".into(), "1".into())], b"hi", false, false).unwrap();
         let t = String::from_utf8(r).unwrap();
-        assert!(t.starts_with("HTTP/1.1 200 OK\r\nX-A: 1\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 2\r\n"));
+        assert!(t.starts_with(
+            "HTTP/1.1 200 OK\r\nX-A: 1\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 2\r\n"
+        ));
         assert!(t.ends_with("\r\n\r\nhi"));
         let t = String::from_utf8(response_bytes(204, &[], b"ignored", false, false).unwrap()).unwrap();
         assert!(!t.contains("Content-Length") && t.ends_with("\r\n\r\n"));
@@ -1240,7 +1291,10 @@ mod tests {
         assert!(response_bytes(200, &[("X".into(), "a\r\nB: c".into())], b"", false, false).is_err());
         assert!(response_bytes(200, &[("X Y".into(), "a".into())], b"", false, false).is_err());
         // The server owns the framing headers.
-        let t = String::from_utf8(response_bytes(200, &[("Content-Length".into(), "9".into())], b"hi", false, false).unwrap()).unwrap();
+        let t = String::from_utf8(
+            response_bytes(200, &[("Content-Length".into(), "9".into())], b"hi", false, false).unwrap(),
+        )
+        .unwrap();
         assert_eq!(t.matches("Content-Length").count(), 1);
     }
 

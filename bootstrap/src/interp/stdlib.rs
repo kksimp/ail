@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 
 use super::builtins::Table;
-use super::{random, slot_mut, Env, Exit, Failure, Flow, Interp, Trap, Value};
+use super::{Env, Exit, Failure, Flow, Interp, Trap, Value, random, slot_mut};
 use crate::ast::Arg;
 use crate::diag::Pos;
 use crate::stdlib::{StdCall, error_kind};
@@ -384,13 +384,19 @@ impl<'a, W: Write> Interp<'a, W> {
                         let e = super::spawn::kill(pid);
                         let cmd = e.map_or_else(String::new, |e| e.cmd);
                         let s = self.structs["proc.ProcError"];
-                        return Ok(fail(Value::Struct(s, Rc::new(vec![Value::Str(cmd.into()), text("cancelled")])), pos));
+                        return Ok(fail(
+                            Value::Struct(s, Rc::new(vec![Value::Str(cmd.into()), text("cancelled")])),
+                            pos,
+                        ));
                     }
                     self.yield_turn(pos)?;
                 };
                 if ended.timed_out {
                     let s = self.structs["proc.ProcError"];
-                    return Ok(fail(Value::Struct(s, Rc::new(vec![Value::Str(ended.cmd.into()), text("timed_out")])), pos));
+                    return Ok(fail(
+                        Value::Struct(s, Rc::new(vec![Value::Str(ended.cmd.into()), text("timed_out")])),
+                        pos,
+                    ));
                 }
                 Value::Int(exit_status(&ended.status))
             }
@@ -413,7 +419,9 @@ impl<'a, W: Write> Interp<'a, W> {
             ("proc", "which") => super::osext::which(&str_arg(0)).map_or(Value::None, text),
             ("net", "serve") => self.net_serve(&str_arg(0), pos),
             ("net", "listen") => self.net_listen(&str_arg(0), pos),
-            ("net", "connect" | "connect_tls") => self.net_connect(&str_arg(0), values[1].int(), f == "connect_tls", pos),
+            ("net", "connect" | "connect_tls") => {
+                self.net_connect(&str_arg(0), values[1].int(), f == "connect_tls", pos)
+            }
             ("net", "options") => {
                 let s = self.structs["net.Options"];
                 let empty = || Value::Map(Rc::new(Table::default()));
@@ -454,7 +462,9 @@ impl<'a, W: Write> Interp<'a, W> {
                             return stop(
                                 "std.net.6",
                                 pos,
-                                format!("`timeout_ms` is at least 1 and `max_redirects` at least 0, not {timeout_ms} and {redirects}"),
+                                format!(
+                                    "`timeout_ms` is at least 1 and `max_redirects` at least 0, not {timeout_ms} and {redirects}"
+                                ),
                             );
                         }
                         let (connect_ms, total_ms) = (o[6].int(), o[7].int());
@@ -462,7 +472,9 @@ impl<'a, W: Write> Interp<'a, W> {
                             return stop(
                                 "std.net.19",
                                 pos,
-                                format!("`connect_ms` and `total_ms` are at least 0 (0 means no separate limit), not {connect_ms} and {total_ms}"),
+                                format!(
+                                    "`connect_ms` and `total_ms` are at least 0 (0 means no separate limit), not {connect_ms} and {total_ms}"
+                                ),
                             );
                         }
                         let opts = super::net::Opts {
@@ -482,7 +494,10 @@ impl<'a, W: Write> Interp<'a, W> {
                                 Ok((r, st)) => self.net_body(r, st),
                                 Err(e) => {
                                     let s = self.structs["net.NetError"];
-                                    fail(Value::Struct(s, Rc::new(vec![text(e.url), text(e.kind), text(e.message)])), pos)
+                                    fail(
+                                        Value::Struct(s, Rc::new(vec![text(e.url), text(e.kind), text(e.message)])),
+                                        pos,
+                                    )
                                 }
                             });
                         }
@@ -503,12 +518,20 @@ impl<'a, W: Write> Interp<'a, W> {
                         let all = Value::Map(Rc::new(all));
                         if raw {
                             let s = self.structs["net.RawResponse"];
-                            let fields = vec![Value::Int(r.status), Value::Map(Rc::new(headers)), super::bytes::bytes_value(r.body), all];
+                            let fields = vec![
+                                Value::Int(r.status),
+                                Value::Map(Rc::new(headers)),
+                                super::bytes::bytes_value(r.body),
+                                all,
+                            ];
                             Value::Struct(s, Rc::new(fields))
                         } else {
                             let s = self.structs["net.Response"];
                             let body = text(String::from_utf8_lossy(&r.body).into_owned());
-                            Value::Struct(s, Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), body, all]))
+                            Value::Struct(
+                                s,
+                                Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), body, all]),
+                            )
                         }
                     }
                     Err(e) => {

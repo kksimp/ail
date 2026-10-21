@@ -82,11 +82,9 @@ mod crosscheck {
                     let len = u16::from_be_bytes([v[3][0], v[3][1]]) as usize;
                     hkdf::expand::<Sha256>(&hkdf::extract::<Sha256>(&v[0], &v[1]), &v[2], len)
                 }
-                "x25519" => x25519::x25519(
-                    v[0].as_slice().try_into().unwrap(),
-                    v[1].as_slice().try_into().unwrap(),
-                )
-                .to_vec(),
+                "x25519" => {
+                    x25519::x25519(v[0].as_slice().try_into().unwrap(), v[1].as_slice().try_into().unwrap()).to_vec()
+                }
                 other => panic!("unknown vector `{other}`"),
             };
             assert_eq!(&got, v.last().unwrap(), "{line}");

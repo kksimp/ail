@@ -208,19 +208,35 @@ fn public_sites() {
     }
     let roots = roots::system().expect("system roots");
     let sites = [
-        "example.com", "www.google.com", "github.com", "api.github.com", "www.cloudflare.com",
-        "letsencrypt.org", "en.wikipedia.org", "www.apple.com", "www.microsoft.com", "pypi.org",
-        "crates.io", "www.amazon.com", "news.ycombinator.com", "www.rust-lang.org",
+        "example.com",
+        "www.google.com",
+        "github.com",
+        "api.github.com",
+        "www.cloudflare.com",
+        "letsencrypt.org",
+        "en.wikipedia.org",
+        "www.apple.com",
+        "www.microsoft.com",
+        "pypi.org",
+        "crates.io",
+        "www.amazon.com",
+        "news.ycombinator.com",
+        "www.rust-lang.org",
     ];
     let mut failed = Vec::new();
     for host in sites {
         let result = (|| -> Result<String, String> {
-            let addr = std::net::ToSocketAddrs::to_socket_addrs(&(host, 443)).map_err(|e| e.to_string())?.next().ok_or("no address")?;
-            let s = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)).map_err(|e| e.to_string())?;
+            let addr = std::net::ToSocketAddrs::to_socket_addrs(&(host, 443))
+                .map_err(|e| e.to_string())?
+                .next()
+                .ok_or("no address")?;
+            let s = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10))
+                .map_err(|e| e.to_string())?;
             s.set_read_timeout(Some(std::time::Duration::from_secs(20))).unwrap();
             let verifier = WebVerifier { roots: &roots.certs, now: None };
             let mut tls = connect(s, &Config { host, verifier: &verifier }).map_err(|e| e.message)?;
-            write!(tls, "HEAD / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nUser-Agent: ail\r\n\r\n").map_err(|e| e.to_string())?;
+            write!(tls, "HEAD / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nUser-Agent: ail\r\n\r\n")
+                .map_err(|e| e.to_string())?;
             let mut head = [0u8; 12];
             tls.read_exact(&mut head).map_err(|e| e.to_string())?;
             Ok(format!("{} {}", tls.suite(), String::from_utf8_lossy(&head)))

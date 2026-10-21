@@ -27,6 +27,13 @@ fn ail() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ail"));
     // Programs that start `./ail` themselves use this binary, not a rebuilt one.
     cmd.env("AIL_BINARY", env!("CARGO_BIN_EXE_ail"));
+    // `proc.which("ail")` finds this binary too, so a program that looks for `ail` never reaches the wrapper.
+    let bin = Path::new(env!("CARGO_BIN_EXE_ail")).parent().unwrap().to_path_buf();
+    let path = std::env::join_paths(
+        std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())),
+    )
+    .unwrap();
+    cmd.env("PATH", path);
     cmd
 }
 
@@ -243,7 +250,13 @@ fn api_outlines_every_accepted_program() {
     for path in files {
         for extra in [None, Some("--symbols"), Some("--pretty"), Some("--text")] {
             let out = ail().arg("api").args(extra).arg(&path).output().unwrap();
-            assert_eq!(out.status.code(), Some(0), "{} {extra:?}: {}", path.display(), String::from_utf8_lossy(&out.stderr));
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{} {extra:?}: {}",
+                path.display(),
+                String::from_utf8_lossy(&out.stderr)
+            );
         }
     }
     let rejected = root.join("tests/cases/condition_not_bool.ail");

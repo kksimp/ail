@@ -147,7 +147,10 @@ impl<'a> Der<'a> {
 /// RFC 5280 §4.1.2.5 allows (`YYMMDDHHMMSSZ`, `YYYYMMDDHHMMSSZ`).
 pub fn time(tag: u8, body: &[u8]) -> R<i64> {
     let digits = |s: &[u8]| -> R<i64> {
-        s.iter().try_fold(0i64, |a, &c| if c.is_ascii_digit() { Ok(a * 10 + (c - b'0') as i64) } else { Err(Bad("bad time")) })
+        s.iter().try_fold(
+            0i64,
+            |a, &c| if c.is_ascii_digit() { Ok(a * 10 + (c - b'0') as i64) } else { Err(Bad("bad time")) },
+        )
     };
     let (year, rest) = match (tag, body.len()) {
         (UTC_TIME, 13) => {

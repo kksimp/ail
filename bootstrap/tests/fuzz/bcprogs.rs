@@ -10,7 +10,18 @@
 use super::progs::Rng;
 
 const EDGES: [&str; 12] = [
-    "0", "1", "2", "-1", "7", "255", "1000", "3037000500", "4611686018427387904", "9223372036854775807", "-9223372036854775807", "-4611686018427387904",
+    "0",
+    "1",
+    "2",
+    "-1",
+    "7",
+    "255",
+    "1000",
+    "3037000500",
+    "4611686018427387904",
+    "9223372036854775807",
+    "-9223372036854775807",
+    "-4611686018427387904",
 ];
 const FLOATS: [&str; 8] = ["0.0", "0.5", "1.5", "-2.25", "100.0", "1e10", "1e300", "-0.0"];
 
@@ -108,7 +119,7 @@ impl G<'_> {
         match self.r.below(5) {
             0 => {
                 let (i, e) = (self.index(), self.expr(1));
-                
+
                 Self::push(out, ind, &format!("{tgt} += xs[{i}].bump({e})"));
             }
             1 => {
@@ -124,7 +135,12 @@ impl G<'_> {
             }
             _ => {
                 let i = if self.wild > 0 && self.r.chance(1, 2) { "bag.n".to_string() } else { "0".to_string() };
-                Self::push(out, ind, &format!("if bag.n > 0\n{}{tgt} += bag.items[{i}]", "    ".repeat(ind + 1)).replace("\n", &format!("\n")));
+                Self::push(
+                    out,
+                    ind,
+                    &format!("if bag.n > 0\n{}{tgt} += bag.items[{i}]", "    ".repeat(ind + 1))
+                        .replace("\n", &format!("\n")),
+                );
             }
         }
     }
@@ -157,7 +173,7 @@ impl G<'_> {
                 // Known (found/bytecode/elem_call_arg_before_bounds.ail): an argument that traps beside
                 // an index that traps is evaluated in the other order on the tier. Keep them apart.
                 let (i, e) = (self.index(), self.expr(1));
-                
+
                 Self::push(out, ind, &format!("xs[{i}].step({e})"));
             }
             4 => {
@@ -184,7 +200,11 @@ impl G<'_> {
                 } else {
                     match self.r.below(5) {
                         0 => Self::push(out, ind, &format!("print({tgt})")),
-                        1 => Self::push(out, ind, &format!("{tgt} += \"{}\".to_int() else 3", self.r.pick(&["12", "x", "-4", ""]))),
+                        1 => Self::push(
+                            out,
+                            ind,
+                            &format!("{tgt} += \"{}\".to_int() else 3", self.r.pick(&["12", "x", "-4", ""])),
+                        ),
                         2 => {
                             let n = self.id();
                             Self::push(out, ind, &format!("s{n} := \"n{{{tgt}}}\""));
@@ -260,7 +280,18 @@ pub fn program(seed: u64, pure: bool) -> String {
     // The `mut self` method.
     out.push_str("fn Acc.step(mut self, d int)\n");
     {
-        let mut g = G { r: &mut r, edgy, pure: true, in_work: false, flat: true, tgt: "t", wild: 0, ints: vec!["self.a".into(), "self.b".into(), "d".into()], loops: 0, next_id: 0 };
+        let mut g = G {
+            r: &mut r,
+            edgy,
+            pure: true,
+            in_work: false,
+            flat: true,
+            tgt: "t",
+            wild: 0,
+            ints: vec!["self.a".into(), "self.b".into(), "d".into()],
+            loops: 0,
+            next_id: 0,
+        };
         out.push_str("    mut t := 0\n");
         let mut body = String::new();
         let k = g.r.below(3) + 1;
@@ -278,7 +309,18 @@ pub fn program(seed: u64, pure: bool) -> String {
         out.push_str("    mut m := Map[str, int]()\n");
     }
     {
-        let mut g = G { r: &mut r, edgy, pure, in_work: true, flat: false, tgt: "t", wild, ints: vec!["t".into(), "n".into(), "k".into(), "acc".into()], loops: 0, next_id: 100 };
+        let mut g = G {
+            r: &mut r,
+            edgy,
+            pure,
+            in_work: true,
+            flat: false,
+            tgt: "t",
+            wild,
+            ints: vec!["t".into(), "n".into(), "k".into(), "acc".into()],
+            loops: 0,
+            next_id: 100,
+        };
         let mut body = String::new();
         let k = g.r.below(5) + 3;
         g.block(3, 1, &mut body, k);
@@ -290,7 +332,18 @@ pub fn program(seed: u64, pure: bool) -> String {
         out.push_str("    mut m := Map[str, int]()\n");
     }
     {
-        let mut g = G { r: &mut r, edgy, pure, in_work: false, flat: false, tgt: "acc", wild, ints: vec!["acc".into(), "xs[0].b".into()], loops: 0, next_id: 200 };
+        let mut g = G {
+            r: &mut r,
+            edgy,
+            pure,
+            in_work: false,
+            flat: false,
+            tgt: "acc",
+            wild,
+            ints: vec!["acc".into(), "xs[0].b".into()],
+            loops: 0,
+            next_id: 200,
+        };
         let mut body = String::new();
         let k = g.r.below(6) + 3;
         g.block(3, 1, &mut body, k);
@@ -331,11 +384,17 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
             let i = format!("i{l}");
             let line: Vec<String> = match r.below(16) {
                 0 => vec![format!("acc += run(ops[{i} % 4], acc)")],
-                1 => vec![format!("acc += run(ops[{}], {i})", if wild > 0 && r.chance(1, 3) { "5".to_string() } else { format!("{i} % 4") })],
+                1 => vec![format!(
+                    "acc += run(ops[{}], {i})",
+                    if wild > 0 && r.chance(1, 3) { "5".to_string() } else { format!("{i} % 4") }
+                )],
                 2 => vec![format!("acc += o.inner.grow({i} * 7)")],
                 3 => vec![format!("o.inner.n += acc % 10")],
                 4 => vec![format!("o.xs.push(acc % 100)"), format!("acc += o.xs.len()")],
-                5 => vec![format!("acc += o.xs[{}]", if wild > 0 && r.chance(1, 2) { format!("{i} + 3") } else { format!("{i} % o.xs.len()") })],
+                5 => vec![format!(
+                    "acc += o.xs[{}]",
+                    if wild > 0 && r.chance(1, 2) { format!("{i} + 3") } else { format!("{i} % o.xs.len()") }
+                )],
                 6 => vec![format!("o.xs[{i} % o.xs.len()] = acc % 50")],
                 7 | 8 | 9 if nat => vec![format!("acc += {i} % 7")],
                 7 => vec![format!("f = if {i} % 2 == 0 then dbl else inc")],
@@ -343,12 +402,23 @@ fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n      
                 9 => vec![format!("acc += f({i})")],
                 10 => {
                     uid += 1;
-                    vec![format!("mut c{uid} := o"), format!("c{uid}.inner.grow({i})"), format!("acc += c{uid}.inner.n - o.inner.n")]
+                    vec![
+                        format!("mut c{uid} := o"),
+                        format!("c{uid}.inner.grow({i})"),
+                        format!("acc += c{uid}.inner.n - o.inner.n"),
+                    ]
                 }
                 11 if !pure => vec![format!("m[\"k{{{i} % 3}}\"] = acc % 100"), format!("acc += m.len()")],
-                12 if !pure => vec![if wild > 0 && r.chance(1, 2) { format!("acc += m[\"k{{{i}}}\"]") } else { format!("acc += m.get(\"k{{{i} % 3}}\") else 7") }],
+                12 if !pure => vec![if wild > 0 && r.chance(1, 2) {
+                    format!("acc += m[\"k{{{i}}}\"]")
+                } else {
+                    format!("acc += m.get(\"k{{{i} % 3}}\") else 7")
+                }],
                 13 if !pure => vec![format!("s = \"{{s}}{{acc % 10}}\""), format!("acc += s.len()")],
-                14 if !pure => vec![format!("acc += s.slice(0, {}).len()", if wild > 0 && r.chance(1, 2) { "100".to_string() } else { "s.len() / 2".to_string() })],
+                14 if !pure => vec![format!(
+                    "acc += s.slice(0, {}).len()",
+                    if wild > 0 && r.chance(1, 2) { "100".to_string() } else { "s.len() / 2".to_string() }
+                )],
                 15 if !pure => vec![format!("print(\"{{o.inner.tag}} {{acc}} {{o.inner.n}}\")")],
                 _ => vec![format!("acc += {i}")],
             };

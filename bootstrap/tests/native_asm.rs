@@ -82,11 +82,7 @@ fn parse_num(w: &str) -> Option<i128> {
     };
     let v = if let Some(hex) = digits.strip_prefix("0x") {
         let u = u64::from_str_radix(hex, 16).ok()?;
-        if u >= 1 << 63 {
-            u as i128 - (1i128 << 64)
-        } else {
-            u as i128
-        }
+        if u >= 1 << 63 { u as i128 - (1i128 << 64) } else { u as i128 }
     } else {
         digits.parse::<i128>().ok()?
     };

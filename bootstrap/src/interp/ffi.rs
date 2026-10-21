@@ -114,7 +114,8 @@ mod sys {
     }
 
     pub type IntFn = unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, f64, f64, f64, f64, f64, f64, f64, f64) -> i64;
-    pub type FloatFn = unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, f64, f64, f64, f64, f64, f64, f64, f64) -> f64;
+    pub type FloatFn =
+        unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, f64, f64, f64, f64, f64, f64, f64, f64) -> f64;
 
     /// Call `f` with these register images; `float_result` picks the
     /// register the result is read from.
@@ -192,7 +193,9 @@ fn resolve(lib: Option<&str>, name: &str) -> Result<usize, (&'static str, String
         return Ok(a);
     }
     let handle = match lib {
-        None => sys::open(None).map_err(|e| ("ffi.load.1", format!("can't open the running program's symbols: {e}")))?,
+        None => {
+            sys::open(None).map_err(|e| ("ffi.load.1", format!("can't open the running program's symbols: {e}")))?
+        }
         Some(l) => {
             let tried = candidates(l);
             let mut last = String::new();
@@ -209,8 +212,15 @@ fn resolve(lib: Option<&str>, name: &str) -> Result<usize, (&'static str, String
             found.ok_or(("ffi.load.1", format!("can't load the library `{l}` (tried {}): {last}", tried.join(", "))))?
         }
     };
-    let addr = sys::symbol(handle, name)
-        .map_err(|e| ("ffi.load.2", format!("the library {} has no symbol `{name}`: {e}", lib.map_or("(the program)".to_string(), |l| format!("`{l}`")))))?;
+    let addr = sys::symbol(handle, name).map_err(|e| {
+        (
+            "ffi.load.2",
+            format!(
+                "the library {} has no symbol `{name}`: {e}",
+                lib.map_or("(the program)".to_string(), |l| format!("`{l}`"))
+            ),
+        )
+    })?;
     cache().lock().unwrap().insert(key, addr);
     Ok(addr)
 }
@@ -275,7 +285,8 @@ struct Blocks {
 
 impl Blocks {
     fn add(&mut self, at: usize, len: usize) {
-        let gone: Vec<usize> = self.freed.range(..at + len.max(1)).filter(|(s, n)| **s + (**n).max(1) > at).map(|(s, _)| *s).collect();
+        let gone: Vec<usize> =
+            self.freed.range(..at + len.max(1)).filter(|(s, n)| **s + (**n).max(1) > at).map(|(s, _)| *s).collect();
         for s in gone {
             self.freed.remove(&s);
         }
@@ -428,7 +439,11 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
             "read" | "write" => {
                 #[cfg(not(unix))]
                 {
-                    return stop("ffi.load.3", pos, "raw pointers are not supported on Windows yet (ffi.load.3)".into());
+                    return stop(
+                        "ffi.load.3",
+                        pos,
+                        "raw pointers are not supported on Windows yet (ffi.load.3)".into(),
+                    );
                 }
                 #[cfg(unix)]
                 {
@@ -475,7 +490,11 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                     let (n, init) = (values[0].int(), &values[1]);
                     let e = elem_of(init);
                     let Some(bytes) = usize::try_from(n).ok().and_then(|n| n.checked_mul(size_of(e))) else {
-                        return stop("unsafe.mem.3", pos, format!("`alloc` of {n} elements of {} bytes is out of range", size_of(e)));
+                        return stop(
+                            "unsafe.mem.3",
+                            pos,
+                            format!("`alloc` of {n} elements of {} bytes is out of range", size_of(e)),
+                        );
                     };
                     let Some(p) = new_block(bytes) else {
                         return stop("unsafe.mem.1", pos, "out of memory".into());
@@ -514,7 +533,11 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                             match bytes.iter().position(|&c| c == 0) {
                                 Some(l) => l,
                                 None => {
-                                    return stop("unsafe.mem.1", pos, "`from_cstr` found no NUL before the end of the block".into());
+                                    return stop(
+                                        "unsafe.mem.1",
+                                        pos,
+                                        "`from_cstr` found no NUL before the end of the block".into(),
+                                    );
                                 }
                             }
                         }

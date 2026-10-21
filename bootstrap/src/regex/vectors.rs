@@ -83,13 +83,20 @@ fn vectors() {
             _ => {
                 let p = compile(f[0]).unwrap_or_else(|e| panic!("{line}: {}", e.message));
                 let t = chars(&unescape(f[1]));
-                let got = match p.exec(&t, 0, 2 * p.groups, false) {
-                    None => "-".to_string(),
-                    Some(m) => (0..p.groups)
-                        .map(|g| if m[2 * g] == UNSET { "_".to_string() } else { format!("{}-{}", m[2 * g], m[2 * g + 1]) })
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                };
+                let got =
+                    match p.exec(&t, 0, 2 * p.groups, false) {
+                        None => "-".to_string(),
+                        Some(m) => (0..p.groups)
+                            .map(|g| {
+                                if m[2 * g] == UNSET {
+                                    "_".to_string()
+                                } else {
+                                    format!("{}-{}", m[2 * g], m[2 * g + 1])
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    };
                 // is_match must agree with find.
                 assert_eq!(p.is_match(&t), got != "-", "{line}");
                 if got == f[2] { "ok".into() } else { got }

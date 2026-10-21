@@ -50,7 +50,9 @@ fn slot_names(text: &str) -> Vec<String> {
     while let Some(i) = rest.find("global(") {
         rest = &rest[i + "global(".len()..];
         let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
-        if rest[name.len()..].starts_with(')') && name.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_') {
+        if rest[name.len()..].starts_with(')')
+            && name.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        {
             out.push(name);
         }
     }
@@ -109,7 +111,10 @@ fn runtime_global_slots_are_distinct() {
         for (name, d) in constants(&root().join(generator)) {
             if let Some([rt]) = decls.get(&name).map(Vec::as_slice) {
                 if used.contains(&name) && rt.value != d.value {
-                    failures.push(format!("{}: `{name}` is {}, but the runtime's ({}) is {}", d.at, d.value, rt.at, rt.value));
+                    failures.push(format!(
+                        "{}: `{name}` is {}, but the runtime's ({}) is {}",
+                        d.at, d.value, rt.at, rt.value
+                    ));
                 }
             }
         }

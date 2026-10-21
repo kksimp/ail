@@ -12,7 +12,11 @@ fn case(name: &str) -> String {
 
 fn run(args: &[&str]) -> (Option<i32>, String, String) {
     let out = ail().args(args).output().unwrap();
-    (out.status.code(), String::from_utf8_lossy(&out.stdout).into_owned(), String::from_utf8_lossy(&out.stderr).into_owned())
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
 }
 
 #[test]
@@ -51,7 +55,11 @@ fn a_test_that_times_out_fails_and_the_next_still_runs() {
 
 #[test]
 fn limits_need_a_positive_number_and_run_or_test() {
-    for args in [vec!["run", "--timeout", "0", "x.ail"], vec!["run", "--max-steps", "x", "x.ail"], vec!["check", "--timeout", "5", "x.ail"]] {
+    for args in [
+        vec!["run", "--timeout", "0", "x.ail"],
+        vec!["run", "--max-steps", "x", "x.ail"],
+        vec!["check", "--timeout", "5", "x.ail"],
+    ] {
         let (code, _, err) = run(&args);
         assert_eq!(code, Some(2), "{err}");
         assert!(err.contains("run.limit.4"), "{err}");
@@ -72,7 +80,10 @@ fn coverage_json_lists_missed_ranges() {
     let (_, out, _) = run(&["test", "--json", "--coverage", &case("coverage_two_fns")]);
     let line = out.lines().last().unwrap();
     assert!(line.starts_with("{\"coverage\":true,\"file\":"), "{out}");
-    assert!(line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}"), "{out}");
+    assert!(
+        line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}"),
+        "{out}"
+    );
 }
 
 #[test]

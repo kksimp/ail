@@ -38,7 +38,22 @@ pub fn generate(kind: &str, seed: u64) -> Input {
 }
 
 fn int_edge(r: &mut Rng) -> i64 {
-    const E: [i64; 14] = [0, 1, -1, 255, 256, 65535, 1 << 31, -(1 << 31), (1 << 53) + 1, i64::MAX, i64::MIN, i64::MAX - 1, 86399, 253402300799];
+    const E: [i64; 14] = [
+        0,
+        1,
+        -1,
+        255,
+        256,
+        65535,
+        1 << 31,
+        -(1 << 31),
+        (1 << 53) + 1,
+        i64::MAX,
+        i64::MIN,
+        i64::MAX - 1,
+        86399,
+        253402300799,
+    ];
     if r.chance(1, 2) { *r.pick(&E) } else { (r.next() as i64) >> r.below(60) }
 }
 
@@ -54,7 +69,9 @@ pub fn literal(s: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             '\0' => out.push_str("\\0"),
-            c if (c as u32) < 0x20 || (c as u32) == 0x7f || (0xd800..0xe000).contains(&(c as u32)) => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c if (c as u32) < 0x20 || (c as u32) == 0x7f || (0xd800..0xe000).contains(&(c as u32)) => {
+                out.push_str(&format!("\\u{{{:x}}}", c as u32))
+            }
             c => out.push(c),
         }
     }
@@ -62,7 +79,26 @@ pub fn literal(s: &str) -> String {
     out
 }
 
-const PIECES: [&str; 18] = ["a", "b", "ab", "hello", " ", "  ", "\t", "\n", "\r\n", "é", "日本語", "😀", "e\u{301}", "\u{200b}", "{", "}", "\\", "\""];
+const PIECES: [&str; 18] = [
+    "a",
+    "b",
+    "ab",
+    "hello",
+    " ",
+    "  ",
+    "\t",
+    "\n",
+    "\r\n",
+    "é",
+    "日本語",
+    "😀",
+    "e\u{301}",
+    "\u{200b}",
+    "{",
+    "}",
+    "\\",
+    "\"",
+];
 
 fn plain(r: &mut Rng) -> String {
     let n = r.below(14);
@@ -108,7 +144,20 @@ fn json_value(r: &mut Rng, depth: usize, out: &mut String) {
     match if leaf { r.below(5) } else { 5 + r.below(2) } {
         0 => out.push_str("null"),
         1 => out.push_str(if r.chance(1, 2) { "true" } else { "false" }),
-        2 => out.push_str(r.pick(&["0", "-0", "1", "-17", "3.14159", "1e3", "2E-5", "1e999", "-1e999", "123456789012345678901234567890", "0.1e1", "9007199254740993"])),
+        2 => out.push_str(r.pick(&[
+            "0",
+            "-0",
+            "1",
+            "-17",
+            "3.14159",
+            "1e3",
+            "2E-5",
+            "1e999",
+            "-1e999",
+            "123456789012345678901234567890",
+            "0.1e1",
+            "9007199254740993",
+        ])),
         3 => json_string(r, out),
         4 => out.push_str(&r.below(1000).to_string()),
         5 => {
@@ -139,7 +188,22 @@ fn json_value(r: &mut Rng, depth: usize, out: &mut String) {
 fn json_string(r: &mut Rng, out: &mut String) {
     out.push('"');
     for _ in 0..r.below(6) {
-        out.push_str(r.pick(&["a", "key", "é", "日", "😀", "\\n", "\\\"", "\\\\", "\\/", "\\u0041", "\\ud83d\\ude00", "\\ud800", "\\u0000", " "]));
+        out.push_str(r.pick(&[
+            "a",
+            "key",
+            "é",
+            "日",
+            "😀",
+            "\\n",
+            "\\\"",
+            "\\\\",
+            "\\/",
+            "\\u0041",
+            "\\ud83d\\ude00",
+            "\\ud800",
+            "\\u0000",
+            " ",
+        ]));
     }
     out.push('"');
 }
@@ -174,7 +238,7 @@ fn bytes_hex(r: &mut Rng) -> String {
     let n = *r.pick(&[0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 255, 256, 1000]);
     let b = match r.below(4) {
         0 => random_bytes(r, n),
-        1 => vec![*r.pick(&[0u8, 0xff, 0x80, 0x7f, b'a'])  ; n],
+        1 => vec![*r.pick(&[0u8, 0xff, 0x80, 0x7f, b'a']); n],
         2 => (0..n).map(|i| (i % 251) as u8).collect(),
         _ => "text bytes é 日本\n".bytes().cycle().take(n).collect(),
     };
@@ -190,7 +254,13 @@ fn compress_hex(r: &mut Rng) -> String {
         _ => (0..n).map(|i| ((i * i) >> 3) as u8).collect(),
     };
     // Headers and magics make the decoders' own paths reachable; damage stresses them.
-    let magic: &[u8] = *r.pick(&[&[][..], &[0x1f, 0x8b, 0x08][..], &[0x78, 0x9c][..], &[0x50, 0x4b, 0x03, 0x04][..], &[0x50, 0x4b, 0x05, 0x06][..]]);
+    let magic: &[u8] = *r.pick(&[
+        &[][..],
+        &[0x1f, 0x8b, 0x08][..],
+        &[0x78, 0x9c][..],
+        &[0x50, 0x4b, 0x03, 0x04][..],
+        &[0x50, 0x4b, 0x05, 0x06][..],
+    ]);
     let mut all = magic.to_vec();
     all.append(&mut b);
     if !all.is_empty() && r.chance(1, 3) {
@@ -239,7 +309,15 @@ fn regex(r: &mut Rng, depth: usize) -> String {
 fn haystack(r: &mut Rng, pat: &str) -> String {
     let alphabet: Vec<char> = pat.chars().filter(|c| c.is_alphanumeric()).collect();
     let n = *r.pick(&[0, 1, 5, 30, 200, 3000]);
-    (0..n).map(|_| if alphabet.is_empty() || r.chance(1, 5) { *r.pick(&['a', 'b', ' ', 'é', '\n', '0']) } else { *r.pick(&alphabet) }).collect()
+    (0..n)
+        .map(|_| {
+            if alphabet.is_empty() || r.chance(1, 5) {
+                *r.pick(&['a', 'b', ' ', 'é', '\n', '0'])
+            } else {
+                *r.pick(&alphabet)
+            }
+        })
+        .collect()
 }
 
 // ---- dates ----
@@ -251,13 +329,29 @@ fn date_text(r: &mut Rng) -> String {
     let hour = *r.pick(&["00", "12", "23", "24", "25", "7"]);
     let min = *r.pick(&["00", "59", "60", "61"]);
     let sec = *r.pick(&["00", "59", "60", "61", "59.999999999", "00.5"]);
-    let zone = *r.pick(&["Z", "+00:00", "-05:00", "+14:00", "+99:99", "+0530", "z", "", "UTC", "America/New_York", "Europe/London", "Nowhere/Land", "+5"]);
+    let zone = *r.pick(&[
+        "Z",
+        "+00:00",
+        "-05:00",
+        "+14:00",
+        "+99:99",
+        "+0530",
+        "z",
+        "",
+        "UTC",
+        "America/New_York",
+        "Europe/London",
+        "Nowhere/Land",
+        "+5",
+    ]);
     let s = match r.below(6) {
         0 => format!("{year}-{month}-{day}"),
         1 => format!("{year}-{month}-{day}T{hour}:{min}:{sec}{zone}"),
         2 => format!("{year}{month}{day}T{hour}{min}{sec}{zone}"),
         3 => format!("{hour}:{min}:{sec}"),
-        4 => r.pick(&["P1Y2M3DT4H5M6S", "PT0S", "P-1D", "PT1.5S", "P", "PT", "P1W", "1h30m", "90m", "-5s", "1d2h"]).to_string(),
+        4 => r
+            .pick(&["P1Y2M3DT4H5M6S", "PT0S", "P-1D", "PT1.5S", "P", "PT", "P1W", "1h30m", "90m", "-5s", "1d2h"])
+            .to_string(),
         _ => format!("{day}/{month}/{year} {hour}:{min}"),
     };
     if r.chance(1, 4) { corrupt(r, &s, "0123456789-:TZ+ .") } else { s }
@@ -269,7 +363,22 @@ fn date_text(r: &mut Rng) -> String {
 /// line break, joined by commas and `\n`, `\r\n` or `\r`, sometimes cut short.
 fn csv_text(r: &mut Rng) -> String {
     const FIELDS: [&str; 16] = [
-        "a", "b c", "", "1", "-2.5", "\"q\"", "\"a,b\"", "\"two\nlines\"", "\"he said \"\"hi\"\"\"", "\"\"", "\" x\"", "x\"y", "é", "日本", "\"unterminated", "\"cr\r\nlf\"",
+        "a",
+        "b c",
+        "",
+        "1",
+        "-2.5",
+        "\"q\"",
+        "\"a,b\"",
+        "\"two\nlines\"",
+        "\"he said \"\"hi\"\"\"",
+        "\"\"",
+        "\" x\"",
+        "x\"y",
+        "é",
+        "日本",
+        "\"unterminated",
+        "\"cr\r\nlf\"",
     ];
     let mut s = String::new();
     for _ in 0..r.below(6) {
@@ -294,7 +403,28 @@ fn csv_text(r: &mut Rng) -> String {
 /// Command-line words, one per line: flags, options, `--`, `-`, `=` forms and junk.
 fn args_text(r: &mut Rng) -> String {
     const WORDS: [&str; 22] = [
-        "-v", "--verbose", "--out", "--out=x", "--out=", "-o", "x", "--", "-", "---", "--bogus", "-vo", "-ov", "file", "", "--verbose=1", "-o=x", "-h-", "--=", "é", "-9", "a b",
+        "-v",
+        "--verbose",
+        "--out",
+        "--out=x",
+        "--out=",
+        "-o",
+        "x",
+        "--",
+        "-",
+        "---",
+        "--bogus",
+        "-vo",
+        "-ov",
+        "file",
+        "",
+        "--verbose=1",
+        "-o=x",
+        "-h-",
+        "--=",
+        "é",
+        "-9",
+        "a b",
     ];
     let mut words = Vec::new();
     for _ in 0..r.below(8) {
@@ -307,14 +437,51 @@ fn args_text(r: &mut Rng) -> String {
 
 /// A `Set-Cookie` line: name, value, and attributes in good and bad forms.
 fn cookie_text(r: &mut Rng) -> String {
-    let mut s = String::from(*r.pick(&["a=b", "sid=1", "=x", "x", "", "a=b=c", "a = b", "__Host-id=1", "é=ü", "a=\"q\"", "a=;", "n=v\r\nX: y"]));
+    let mut s = String::from(*r.pick(&[
+        "a=b",
+        "sid=1",
+        "=x",
+        "x",
+        "",
+        "a=b=c",
+        "a = b",
+        "__Host-id=1",
+        "é=ü",
+        "a=\"q\"",
+        "a=;",
+        "n=v\r\nX: y",
+    ]));
     for _ in 0..r.below(5) {
         s.push_str("; ");
         s.push_str(r.pick(&[
-            "Path=/", "Path=/a/b", "Path=", "Path=a", "Domain=example.com", "Domain=.example.com", "Domain=com", "Domain=", "Domain=other.org",
-            "Max-Age=60", "Max-Age=0", "Max-Age=-1", "Max-Age=99999999999999999999", "Max-Age=x", "Expires=Wed, 21 Oct 2015 07:28:00 GMT",
-            "Expires=Wed, 21-Oct-15 07:28:00 GMT", "Expires=Wed Oct 21 07:28:00 2015", "Expires=garbage", "Expires=Fri, 31 Dec 9999 23:59:59 GMT",
-            "Secure", "HttpOnly", "SameSite=Lax", "SameSite=None", "SameSite=Strict", "SameSite=x", "secure=1", "Unknown=1", "",
+            "Path=/",
+            "Path=/a/b",
+            "Path=",
+            "Path=a",
+            "Domain=example.com",
+            "Domain=.example.com",
+            "Domain=com",
+            "Domain=",
+            "Domain=other.org",
+            "Max-Age=60",
+            "Max-Age=0",
+            "Max-Age=-1",
+            "Max-Age=99999999999999999999",
+            "Max-Age=x",
+            "Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+            "Expires=Wed, 21-Oct-15 07:28:00 GMT",
+            "Expires=Wed Oct 21 07:28:00 2015",
+            "Expires=garbage",
+            "Expires=Fri, 31 Dec 9999 23:59:59 GMT",
+            "Secure",
+            "HttpOnly",
+            "SameSite=Lax",
+            "SameSite=None",
+            "SameSite=Strict",
+            "SameSite=x",
+            "secure=1",
+            "Unknown=1",
+            "",
         ]));
     }
     s
@@ -322,15 +489,48 @@ fn cookie_text(r: &mut Rng) -> String {
 
 /// A raw HTTP/1.1 response a hostile server might send.
 fn response_text(r: &mut Rng) -> String {
-    let status = *r.pick(&["HTTP/1.1 200 OK", "HTTP/1.1 404 Not Found", "HTTP/1.0 200 OK", "HTTP/1.1 204 No Content", "HTTP/1.1 301 Moved", "HTTP/1.1 100 Continue", "HTTP/1.1 999 X", "HTTP/1.1 20 OK", "HTTP/2 200", "HTTP/1.1", "200 OK", "", "HTTP/1.1 200", "HTTP/1.1 abc OK"]);
+    let status = *r.pick(&[
+        "HTTP/1.1 200 OK",
+        "HTTP/1.1 404 Not Found",
+        "HTTP/1.0 200 OK",
+        "HTTP/1.1 204 No Content",
+        "HTTP/1.1 301 Moved",
+        "HTTP/1.1 100 Continue",
+        "HTTP/1.1 999 X",
+        "HTTP/1.1 20 OK",
+        "HTTP/2 200",
+        "HTTP/1.1",
+        "200 OK",
+        "",
+        "HTTP/1.1 200",
+        "HTTP/1.1 abc OK",
+    ]);
     let mut s = format!("{status}\r\n");
     let chunked = r.chance(2, 5);
     for _ in 0..r.below(6) {
         s.push_str(r.pick(&[
-            "Content-Type: text/plain", "Content-Length: 5", "Content-Length: 0", "Content-Length: -1", "Content-Length: 99999999999", "Content-Length: 5, 5",
-            "Set-Cookie: a=b; Path=/", "Set-Cookie: =", "Location: /x", "Location: http://127.0.0.1:1/", "Connection: close", "Connection: keep-alive",
-            "Content-Encoding: gzip", "Content-Encoding: deflate", "Content-Encoding: br", "Transfer-Encoding: chunked", "Transfer-Encoding: gzip",
-            "no-colon", " folded: x", "X: a\u{0}b", "Host:", "Trailer: x",
+            "Content-Type: text/plain",
+            "Content-Length: 5",
+            "Content-Length: 0",
+            "Content-Length: -1",
+            "Content-Length: 99999999999",
+            "Content-Length: 5, 5",
+            "Set-Cookie: a=b; Path=/",
+            "Set-Cookie: =",
+            "Location: /x",
+            "Location: http://127.0.0.1:1/",
+            "Connection: close",
+            "Connection: keep-alive",
+            "Content-Encoding: gzip",
+            "Content-Encoding: deflate",
+            "Content-Encoding: br",
+            "Transfer-Encoding: chunked",
+            "Transfer-Encoding: gzip",
+            "no-colon",
+            " folded: x",
+            "X: a\u{0}b",
+            "Host:",
+            "Trailer: x",
         ]));
         s.push_str(if r.chance(1, 10) { "\n" } else { "\r\n" });
     }
@@ -340,13 +540,32 @@ fn response_text(r: &mut Rng) -> String {
     s.push_str(if r.chance(1, 12) { "" } else { "\r\n" });
     if chunked {
         for _ in 0..r.below(4) {
-            s.push_str(r.pick(&["5\r\nhello\r\n", "0\r\n", "1\r\nxx\r\n", "g\r\nabc\r\n", "FFFFFFFFFFFFFFFFF\r\n", "-1\r\n", "3;ext=1\r\nabc\r\n", "3\nabc\n", "", "\r\n", "5\r\nhi"]));
+            s.push_str(r.pick(&[
+                "5\r\nhello\r\n",
+                "0\r\n",
+                "1\r\nxx\r\n",
+                "g\r\nabc\r\n",
+                "FFFFFFFFFFFFFFFFF\r\n",
+                "-1\r\n",
+                "3;ext=1\r\nabc\r\n",
+                "3\nabc\n",
+                "",
+                "\r\n",
+                "5\r\nhi",
+            ]));
         }
         if r.chance(2, 3) {
             s.push_str(r.pick(&["0\r\n\r\n", "0\r\nX-T: 1\r\n\r\n", "0\r\n"]));
         }
     } else {
-        s.push_str(r.pick(&["hello", "", "hello world, longer than five", "\u{1f600}", "\r\n\r\n", "\u{1f}\u{8b}\u{8}garbage"]));
+        s.push_str(r.pick(&[
+            "hello",
+            "",
+            "hello world, longer than five",
+            "\u{1f600}",
+            "\r\n\r\n",
+            "\u{1f}\u{8b}\u{8}garbage",
+        ]));
     }
     s
 }
@@ -354,7 +573,8 @@ fn response_text(r: &mut Rng) -> String {
 // ---- HTTP ----
 
 fn http_text(r: &mut Rng) -> String {
-    let method = *r.pick(&["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH", "get", "G E T", "", "TRACE", "CONNECT"]);
+    let method =
+        *r.pick(&["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH", "get", "G E T", "", "TRACE", "CONNECT"]);
     let path = *r.pick(&["/", "/a/b?x=1&y=%20", "/%zz", "/é", "*", "http://h/x", "", "/a b", "//", "/../etc/passwd"]);
     let version = *r.pick(&["HTTP/1.1", "HTTP/1.0", "HTTP/2", "HTTP/9.9", "HTTP/1.", "http/1.1", ""]);
     let mut s = format!("{method} {path} {version}\r\n");

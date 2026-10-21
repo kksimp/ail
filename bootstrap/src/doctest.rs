@@ -100,7 +100,9 @@ fn blocks(run: &[(usize, String)]) -> Vec<DocTest> {
                 if code.iter().any(|(_, c)| !c.trim().is_empty()) {
                     let expected: Vec<String> = code
                         .iter()
-                        .filter_map(|(_, c)| c.trim().strip_prefix("# =>").map(|t| t.strip_prefix(' ').unwrap_or(t).to_string()))
+                        .filter_map(|(_, c)| {
+                            c.trim().strip_prefix("# =>").map(|t| t.strip_prefix(' ').unwrap_or(t).to_string())
+                        })
                         .collect();
                     out.push(DocTest {
                         name: String::new(),

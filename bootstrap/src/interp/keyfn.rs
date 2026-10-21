@@ -53,8 +53,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             return Ok(best.map_or(Value::None, |i| items[i].clone()));
         }
-        let pairs: Vec<Value> =
-            keys.into_iter().zip(items).map(|(k, x)| Value::List(Rc::new(vec![k, x]))).collect();
+        let pairs: Vec<Value> = keys.into_iter().zip(items).map(|(k, x)| Value::List(Rc::new(vec![k, x]))).collect();
         let order = self.sorted_by_first(pairs, pos)?;
         let out: Vec<Value> = order
             .into_iter()

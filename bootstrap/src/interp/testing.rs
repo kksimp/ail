@@ -106,13 +106,23 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         it.snap = Some(Box::default());
         super::trace::capture_begin();
         if !f.params.is_empty() && const_failure.is_none() {
-            let (pos, failure, info) = it.run_property(f, cases, seed.unwrap_or_else(|| super::prop::default_seed(&f.name)));
+            let (pos, failure, info) =
+                it.run_property(f, cases, seed.unwrap_or_else(|| super::prop::default_seed(&f.name)));
             let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
             it.out.get_mut().clear();
             let errput = take_errs(&mut it.errs);
             super::trace::capture_end();
             super::replay::end_test(failure.is_some());
-            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, errput, prop: Some(info), snapshot: None, trace: Vec::new() });
+            outcomes.push(Outcome {
+                name: f.name.clone(),
+                pos,
+                failure,
+                output,
+                errput,
+                prop: Some(info),
+                snapshot: None,
+                trace: Vec::new(),
+            });
             continue;
         }
         let mut trapped = None;

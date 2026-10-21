@@ -123,7 +123,10 @@ pub fn start(cmd: &str, args: &[String], timeout_ms: Option<u64>) -> Result<Star
     reader(Box::new(child.stdout.take().expect("piped")), Arc::clone(&out));
     reader(Box::new(child.stderr.take().expect("piped")), Arc::clone(&err));
     let timed_out = Arc::new(AtomicBool::new(false));
-    children().as_mut().expect("set").insert(pid, Live { child, cmd: cmd.to_string(), timed_out: Arc::clone(&timed_out) });
+    children()
+        .as_mut()
+        .expect("set")
+        .insert(pid, Live { child, cmd: cmd.to_string(), timed_out: Arc::clone(&timed_out) });
     if let Some(ms) = timeout_ms {
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(ms));

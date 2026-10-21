@@ -1,6 +1,5 @@
 //! Syntax tree for the subset the bootstrap supports.
 
-
 use crate::diag::Pos;
 
 #[derive(Debug, Default)]
@@ -467,7 +466,11 @@ pub enum Stmt {
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } | Stmt::Unsafe { pos, .. } => *pos,
+            Stmt::Let { pos, .. }
+            | Stmt::While { pos, .. }
+            | Stmt::For { pos, .. }
+            | Stmt::With { pos, .. }
+            | Stmt::Unsafe { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
@@ -768,7 +771,12 @@ pub enum Pattern {
         pos: Pos,
     },
     /// `lo..hi` or `lo..=hi` over integer or character literals (expr.match.12).
-    Range { lo: Literal, hi: Literal, inclusive: bool, pos: Pos },
+    Range {
+        lo: Literal,
+        hi: Literal,
+        inclusive: bool,
+        pos: Pos,
+    },
 }
 
 /// The value of a literal pattern.

@@ -76,15 +76,37 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             // std.net.14: a server needs the narrower capability as well.
             return Some(&["net", "net.serve", "io"]);
         }
-        "net" => {
-            (&["get", "post", "request", "get_bytes", "post_bytes", "request_bytes", "options", "connect", "connect_tls"], &["net", "io"])
-        }
+        "net" => (
+            &[
+                "get",
+                "post",
+                "request",
+                "get_bytes",
+                "post_bytes",
+                "request_bytes",
+                "options",
+                "connect",
+                "connect_tls",
+            ],
+            &["net", "io"],
+        ),
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join", "stem"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         // std.regex.1: text in, text out, so no effects.
         "regex" => (
-            &["compile", "is_match", "find", "find_all", "group_all", "captures", "replace", "replace_first", "split", "escape"],
+            &[
+                "compile",
+                "is_match",
+                "find",
+                "find_all",
+                "group_all",
+                "captures",
+                "replace",
+                "replace_first",
+                "split",
+                "escape",
+            ],
             &[],
         ),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
@@ -296,7 +318,9 @@ pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     let named = prog
         .fns
         .iter()
-        .flat_map(|f| f.contracts.iter().map(move |c| (c, f.full_name(), if c.ensures { "ensures" } else { "requires" })))
+        .flat_map(|f| {
+            f.contracts.iter().map(move |c| (c, f.full_name(), if c.ensures { "ensures" } else { "requires" }))
+        })
         .chain(prog.structs.iter().flat_map(|s| s.invariants.iter().map(move |c| (c, s.name.clone(), "invariant"))));
     for (c, owner, word) in named {
         w.direct = BTreeMap::new();

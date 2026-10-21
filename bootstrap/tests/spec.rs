@@ -81,7 +81,8 @@ const BATCH_CHAPTERS: [&str; 7] = [
 ];
 
 fn blocks(dir: Option<&Path>, extra: &[&Path]) -> Result<Vec<Block>, String> {
-    let mut chapters: Vec<PathBuf> = dir.map_or(Vec::new(), |d| fs::read_dir(d).unwrap().map(|e| e.unwrap().path()).collect());
+    let mut chapters: Vec<PathBuf> =
+        dir.map_or(Vec::new(), |d| fs::read_dir(d).unwrap().map(|e| e.unwrap().path()).collect());
     chapters.sort();
     chapters.extend(extra.iter().map(|p| p.to_path_buf())); // the quick reference and the language card
     let mut out = Vec::new();

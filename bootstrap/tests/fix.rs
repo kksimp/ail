@@ -38,11 +38,19 @@ fn fixtures_are_fixed_and_check_clean() {
         assert_eq!(fs::read_to_string(&work).unwrap(), want, "{name}: fixed text differs\n{stdout}");
 
         let check = ail().arg("check").arg(&work).output().unwrap();
-        assert_eq!(check.status.code(), Some(0), "{name}: fixed file doesn't check\n{}", String::from_utf8_lossy(&check.stderr));
+        assert_eq!(
+            check.status.code(),
+            Some(0),
+            "{name}: fixed file doesn't check\n{}",
+            String::from_utf8_lossy(&check.stderr)
+        );
 
         let again = ail().args(["fix", "--json"]).arg(&work).output().unwrap();
         let again = String::from_utf8_lossy(&again.stdout);
-        assert!(again.contains("\"applied\":0,\"rounds\":0") && again.contains("\"clean\":true"), "{name}: not stable\n{again}");
+        assert!(
+            again.contains("\"applied\":0,\"rounds\":0") && again.contains("\"clean\":true"),
+            "{name}: not stable\n{again}"
+        );
         fs::remove_dir_all(&tmp).unwrap();
     }
     assert!(count >= 6, "expected the fix fixtures, found {count}");

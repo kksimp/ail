@@ -318,12 +318,7 @@ impl Packages {
             }
             prog.grants.extend(m.grants.into_iter().map(|g| Grant { pos: at(g.pos), ..g }));
             prog.unsafe_allowed.get_or_insert_with(Vec::new).extend(m.unsafe_ok);
-            prog.files.push(SourceFile {
-                path: m.path.display().to_string(),
-                src: m.src,
-                module: m.package,
-                base,
-            });
+            prog.files.push(SourceFile { path: m.path.display().to_string(), src: m.src, module: m.package, base });
         }
     }
 }
@@ -405,10 +400,10 @@ fn caps(list: &str, pos: Pos, diags: &mut Vec<Diagnostic>) -> Vec<&'static str> 
         } else if let Some(&cap) = CAPABILITIES.iter().find(|c| **c == name) {
             out.push(cap);
         } else {
-            diags.push(
-                Diagnostic::new("eff.cap.2", pos, format!("`{name}` is not a capability"))
-                    .help(format!("`caps` takes a comma-separated list of {}, or `all` or `none`", CAPABILITIES.join(", "))),
-            );
+            diags.push(Diagnostic::new("eff.cap.2", pos, format!("`{name}` is not a capability")).help(format!(
+                "`caps` takes a comma-separated list of {}, or `all` or `none`",
+                CAPABILITIES.join(", ")
+            )));
         }
     }
     out.sort_unstable();
@@ -510,15 +505,23 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
             (Some((p, _)), None) => {
                 for k in ["rev", "tag"] {
                     if let Some((_, kp)) = keys.get(k) {
-                        diags.push(Diagnostic::new("mod.pkg.6", *kp, format!("`{k}` pins a `git` dependency, not a `path` one")));
+                        diags.push(Diagnostic::new(
+                            "mod.pkg.6",
+                            *kp,
+                            format!("`{k}` pins a `git` dependency, not a `path` one"),
+                        ));
                     }
                 }
                 Some(p.to_string())
             }
             (None, Some((url, gpos))) => {
                 match (keys.get("rev"), keys.get("tag")) {
-                    (Some((pin, _)), None) => git = Some(git::Source { url: url.to_string(), kind: "rev", pin: pin.to_string() }),
-                    (None, Some((pin, _))) => git = Some(git::Source { url: url.to_string(), kind: "tag", pin: pin.to_string() }),
+                    (Some((pin, _)), None) => {
+                        git = Some(git::Source { url: url.to_string(), kind: "rev", pin: pin.to_string() })
+                    }
+                    (None, Some((pin, _))) => {
+                        git = Some(git::Source { url: url.to_string(), kind: "tag", pin: pin.to_string() })
+                    }
                     _ => diags.push(
                         Diagnostic::new("mod.pkg.6", *gpos, "a `git` dependency needs exactly one of `rev` and `tag`")
                             .help("pin it with `rev COMMIT` or `tag TAG`"),
@@ -563,11 +566,8 @@ pub fn check_grants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
         let head = module.split('.').next().unwrap_or("");
         if deps.contains(head) { head.to_string() } else { String::new() }
     };
-    let owner: Vec<Option<String>> = prog
-        .fns
-        .iter()
-        .map(|f| (!is_prelude(f.pos)).then(|| package_of(prog.module_at(f.pos))))
-        .collect();
+    let owner: Vec<Option<String>> =
+        prog.fns.iter().map(|f| (!is_prelude(f.pos)).then(|| package_of(prog.module_at(f.pos)))).collect();
     let mut diags = Vec::new();
     for g in &prog.grants {
         for &cap in CAPABILITIES.iter().filter(|c| !g.caps.contains(c)) {
@@ -588,15 +588,17 @@ pub fn check_grants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
             let help = if g.caps.is_empty() {
                 format!("add `caps {cap}` to {line} if the package should reach `{cap}`; otherwise remove the call")
             } else {
-                format!(
-                    "add `{cap}` to the `caps` of {line} if the package should reach it; otherwise remove the call"
-                )
+                format!("add `{cap}` to the `caps` of {line} if the package should reach it; otherwise remove the call")
             };
             let first = chain.split(" -> ").next().unwrap_or("");
             diags.push(
-                Diagnostic::new(rule, g.pos, format!("{who} reaches the capability `{cap}`, which {line} doesn't grant: {chain}"))
-                    .note(prog.fns[i].pos, format!("`{first}` reaches `{cap}`"))
-                    .help(help),
+                Diagnostic::new(
+                    rule,
+                    g.pos,
+                    format!("{who} reaches the capability `{cap}`, which {line} doesn't grant: {chain}"),
+                )
+                .note(prog.fns[i].pos, format!("`{first}` reaches `{cap}`"))
+                .help(help),
             );
         }
     }
@@ -614,10 +616,16 @@ pub fn update_command(names: &[&str], json: bool) -> std::process::ExitCode {
     let packages = Packages::read(&root);
     let mut diags = Vec::new();
     for n in &refresh {
-        if !packages.locked().iter().any(|e| e.name == *n) && packages.manifests.first().is_some_and(|m| m.package.is_empty()) {
+        if !packages.locked().iter().any(|e| e.name == *n)
+            && packages.manifests.first().is_some_and(|m| m.package.is_empty())
+        {
             diags.push(
-                Diagnostic::new("mod.pkg.9", Pos { line: 1, col: 1 }, format!("no `ail.pkg` of this program has a git dependency `{n}`"))
-                    .help("name a `dep NAME git ...` line of `ail.pkg` or of a dependency's"),
+                Diagnostic::new(
+                    "mod.pkg.9",
+                    Pos { line: 1, col: 1 },
+                    format!("no `ail.pkg` of this program has a git dependency `{n}`"),
+                )
+                .help("name a `dep NAME git ...` line of `ail.pkg` or of a dependency's"),
             );
         }
     }

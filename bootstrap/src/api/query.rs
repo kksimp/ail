@@ -152,14 +152,20 @@ pub fn run_pkg(q: Query, pkg: Option<&str>, path: &str, src: &str, line: usize, 
             Ok(head(vec![("locals", Json::Arr(vis.into_iter().map(local_json).collect()))]))
         }
         Query::Type => {
-            let tok = token_at(&lines, cursor).ok_or_else(|| Failure::Nothing(format!("no name or literal at {line}:{col}")))?;
+            let tok = token_at(&lines, cursor)
+                .ok_or_else(|| Failure::Nothing(format!("no name or literal at {line}:{col}")))?;
             let start = Pos { line: line + base, col: tok.start };
             let effects = check::effects::effects_of(&prog, &resolved);
             let api = Api::new(&prog, effects);
-            let refs = Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
+            let refs =
+                Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
             let symbol = refs.resolved_at(start, &tok.text);
             // Locals are tracked for the first file only.
-            let local = if base == 0 { visible_locals(&resolved, &lines, cursor).into_iter().find(|l| l.name == tok.text) } else { None };
+            let local = if base == 0 {
+                visible_locals(&resolved, &lines, cursor).into_iter().find(|l| l.name == tok.text)
+            } else {
+                None
+            };
             // The checker's type of the innermost expression starting here.
             let ty = resolved
                 .facts
@@ -183,9 +189,12 @@ pub fn run_pkg(q: Query, pkg: Option<&str>, path: &str, src: &str, line: usize, 
                 ("symbol", Json::opt(symbol.clone())),
             ];
             // api.type.2: a call also says what the callee promises.
-            let callee = symbol.as_deref().filter(|id| id.starts_with("fn:") || id.starts_with("method:")).and_then(|id| {
-                (0..prog.fns.len()).find(|&i| api.fn_ids[i] == id && !crate::ast::is_prelude(prog.fns[i].pos)).map(|i| api.fn_item(i).json())
-            });
+            let callee =
+                symbol.as_deref().filter(|id| id.starts_with("fn:") || id.starts_with("method:")).and_then(|id| {
+                    (0..prog.fns.len())
+                        .find(|&i| api.fn_ids[i] == id && !crate::ast::is_prelude(prog.fns[i].pos))
+                        .map(|i| api.fn_item(i).json())
+                });
             kvs.push(("callee", callee.unwrap_or(Json::Null)));
             Ok(head(kvs))
         }
@@ -272,7 +281,8 @@ fn refs_query(
     path: &str,
     head: impl Fn(Vec<(&'static str, Json)>) -> Json,
 ) -> Result<Json, Failure> {
-    let tok = token_at(lines, cursor).ok_or_else(|| Failure::Nothing(format!("no name at {}:{}", cursor.line, cursor.col)))?;
+    let tok = token_at(lines, cursor)
+        .ok_or_else(|| Failure::Nothing(format!("no name at {}:{}", cursor.line, cursor.col)))?;
     let start = Pos { line: cursor.line + base, col: tok.start };
     let effects = check::effects::effects_of(prog, resolved);
     let mut api = Api::new(prog, effects);
@@ -423,13 +433,20 @@ fn main()
     #[test]
     fn locals_include_self() {
         let out = ask(Query::Locals, 8, 9);
-        assert!(out.contains("{\"name\":\"self\",\"type\":\"Point\",\"mut\":true,\"kind\":\"self\",\"line\":null,\"col\":null}"), "{out}");
+        assert!(
+            out.contains(
+                "{\"name\":\"self\",\"type\":\"Point\",\"mut\":true,\"kind\":\"self\",\"line\":null,\"col\":null}"
+            ),
+            "{out}"
+        );
         assert!(out.contains("{\"name\":\"dx\",\"type\":\"int\""), "{out}");
     }
 
     #[test]
     fn type_of_a_name_a_call_and_a_method() {
-        assert!(ask(Query::Type, 20, 14).contains("\"text\":\"pts\",\"start_col\":14,\"end_col\":17,\"type\":\"List[Point]\",\"symbol\":null,\"callee\":null"));
+        assert!(ask(Query::Type, 20, 14).contains(
+            "\"text\":\"pts\",\"start_col\":14,\"end_col\":17,\"type\":\"List[Point]\",\"symbol\":null,\"callee\":null"
+        ));
         let call = ask(Query::Type, 22, 11);
         assert!(call.contains("\"type\":\"int\",\"symbol\":\"fn:total\",\"callee\":{\"kind\":\"fn\""), "{call}");
         assert!(call.contains("\"signature\":\"fn total(items List[Point]) int\""), "{call}");

@@ -138,7 +138,17 @@ struct Turned<T>(T);
 unsafe impl<T> Send for Turned<T> {}
 
 fn new_task(status: Status) -> TaskRec {
-    TaskRec { status, result: None, waiters: Vec::new(), consumed: false, deadlock: false, waiting: "", pooled: None, cancelled: false, children: Vec::new() }
+    TaskRec {
+        status,
+        result: None,
+        waiters: Vec::new(),
+        consumed: false,
+        deadlock: false,
+        waiting: "",
+        pooled: None,
+        cancelled: false,
+        children: Vec::new(),
+    }
 }
 
 impl Sched {
@@ -230,7 +240,12 @@ impl Sched {
     }
 
     /// Wait until it is `me`'s turn again.
-    fn await_turn<'s>(&'s self, mut st: MutexGuard<'s, State>, me: usize, pos: Pos) -> Result<MutexGuard<'s, State>, Trap> {
+    fn await_turn<'s>(
+        &'s self,
+        mut st: MutexGuard<'s, State>,
+        me: usize,
+        pos: Pos,
+    ) -> Result<MutexGuard<'s, State>, Trap> {
         while st.current != me {
             st = self.turn.wait(st).unwrap_or_else(|e| e.into_inner());
         }
@@ -637,7 +652,14 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// A method of a task, group, channel or mutex.
-    pub(super) fn handle_method(&mut self, h: Handle, name: &str, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+    pub(super) fn handle_method(
+        &mut self,
+        h: Handle,
+        name: &str,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
         let mut a = Vec::with_capacity(args.len());
         for arg in args {
             a.push(self.eval(&arg.value, env)?);
@@ -824,7 +846,11 @@ impl<'a, W: Write> Interp<'a, W> {
 
     /// A channel fed by a child's output stream, or feeding its input
     /// (std.proc.5); returns its handle.
-    pub(super) fn child_chan(&mut self, ext: Option<Arc<super::spawn::Ext>>, sink: Option<std::sync::mpsc::Sender<String>>) -> Value {
+    pub(super) fn child_chan(
+        &mut self,
+        ext: Option<Arc<super::spawn::Ext>>,
+        sink: Option<std::sync::mpsc::Sender<String>>,
+    ) -> Value {
         let ctx = self.ctx();
         let mut st = ctx.sched.lock();
         let mut ch = Chan::new(usize::MAX);
@@ -888,7 +914,14 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `with m as mut x` body (conc.share.6): take the lock, run the body
     /// with the value in `x`, then store `x` and release it, however the
     /// body ends. A trap releases it and keeps the value from before.
-    pub(super) fn with_block(&mut self, mutex: &'a Expr, var: &'a str, body: &'a Block, pos: Pos, env: &mut Env<'a>) -> Flow<()> {
+    pub(super) fn with_block(
+        &mut self,
+        mutex: &'a Expr,
+        var: &'a str,
+        body: &'a Block,
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<()> {
         let Value::Handle(h @ Handle::Mutex(m)) = self.eval(mutex, env)? else { unreachable!("checked: a mutex") };
         let v = self.handle_method(h, "lock", &[], pos, env)?;
         let depth = env.len();
@@ -1014,7 +1047,8 @@ mod tests {
         let sched = Sched { state: Mutex::new(state), turn: Condvar::new() };
         let st = sched.lock();
         let pos = Pos { line: 1, col: 1 };
-        let st = sched.block(st, 0, "a value from one of several channels", pos).unwrap_or_else(|t| panic!("{}", t.message));
+        let st =
+            sched.block(st, 0, "a value from one of several channels", pos).unwrap_or_else(|t| panic!("{}", t.message));
         assert_eq!(st.chans[0].items.len(), 1);
         assert_eq!(st.chans[1].items.len(), 1);
     }

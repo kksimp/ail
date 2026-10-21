@@ -15,8 +15,8 @@ use crate::diag::{self, Pos};
 use crate::docs;
 use crate::modules;
 
-pub mod card;
 pub mod apidiff;
+pub mod card;
 pub mod diff;
 pub mod errors;
 mod expanded;
@@ -224,7 +224,9 @@ fn package_outline(dir: &str, symbols: bool, form: Form) -> Result<String, Packa
         let mut out = String::new();
         let mut file = String::new();
         for i in &items {
-            let here = i.extra.iter().find_map(|(k, v)| if *k == "file" { if let Json::Str(s) = v { Some(s.as_str()) } else { None } } else { None });
+            let here = i.extra.iter().find_map(|(k, v)| {
+                if *k == "file" { if let Json::Str(s) = v { Some(s.as_str()) } else { None } } else { None }
+            });
             if here.is_some_and(|h| h != file) {
                 file = here.unwrap_or_default().to_string();
                 writeln!(out, "# {file}").unwrap();
@@ -239,7 +241,8 @@ fn package_outline(dir: &str, symbols: bool, form: Form) -> Result<String, Packa
         ("items", Json::Arr(items.into_iter().map(Item::json).collect())),
     ];
     if symbols {
-        let mut refs = Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
+        let mut refs =
+            Refs { prog: &prog, resolved: &resolved, found: Vec::new(), generics: Vec::new(), names: Vec::new() };
         refs.program();
         let mut found = refs.found;
         found.retain(|(p, _)| !crate::ast::is_prelude(*p));
@@ -401,7 +404,8 @@ impl Item {
         if self.signature.contains(") !")
             && let Some((_, Json::Arr(errs))) = self.extra.iter().find(|(k, _)| *k == "fails_with")
         {
-            let names: Vec<&str> = errs.iter().filter_map(|e| if let Json::Str(s) = e { Some(s.as_str()) } else { None }).collect();
+            let names: Vec<&str> =
+                errs.iter().filter_map(|e| if let Json::Str(s) = e { Some(s.as_str()) } else { None }).collect();
             writeln!(out, "       {indent}    fails with {}", names.join(" | ")).unwrap();
         }
         // ct.gen.4: `--expanded` shows generated code under its signature.
@@ -439,7 +443,10 @@ struct Api<'p> {
 }
 
 impl<'p> Api<'p> {
-    fn new(prog: &'p Program, effects: std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>) -> Self {
+    fn new(
+        prog: &'p Program,
+        effects: std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>,
+    ) -> Self {
         let mut fn_ids: Vec<String> = prog.fns.iter().map(|f| fn_id(prog, f, false)).collect();
         // api.id.2: an `impl` method whose plain id is taken also names its trait.
         let mut seen: HashMap<String, usize> = HashMap::new();
@@ -503,7 +510,10 @@ impl<'p> Api<'p> {
                     let mut extra = unique_extra(s.is_error, s.unique);
                     // contract.api.2: the invariants as written.
                     if !s.invariants.is_empty() {
-                        extra.push(("invariants", Json::Arr(s.invariants.iter().map(|c| Json::Str(c.text.clone())).collect())));
+                        extra.push((
+                            "invariants",
+                            Json::Arr(s.invariants.iter().map(|c| Json::Str(c.text.clone())).collect()),
+                        ));
                     }
                     extra
                 },
@@ -1103,7 +1113,14 @@ impl<'p> Refs<'p> {
 
     fn expr(&mut self, e: &Expr) {
         match e {
-            Expr::Str(..) | Expr::Bytes(..) | Expr::Int(..) | Expr::Float(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) | Expr::Hole(_) => {}
+            Expr::Str(..)
+            | Expr::Bytes(..)
+            | Expr::Int(..)
+            | Expr::Float(..)
+            | Expr::Char(..)
+            | Expr::Bool(..)
+            | Expr::None(_)
+            | Expr::Hole(_) => {}
             Expr::Interp(parts, _) => {
                 for p in parts {
                     if let InterpPart::Expr(e) | InterpPart::Fmt(e, _) = p {
@@ -1376,7 +1393,9 @@ fn main()
             assert!(refs.contains(want), "missing {want}\n{refs}");
         }
         // Undocumented declarations have `null`, not a stray doc.
-        assert!(out.contains("\"id\": \"field:Point.y\",\n          \"line\": 14,\n          \"col\": 5,\n          \"doc\": null"));
+        assert!(out.contains(
+            "\"id\": \"field:Point.y\",\n          \"line\": 14,\n          \"col\": 5,\n          \"doc\": null"
+        ));
     }
 
     #[test]

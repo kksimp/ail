@@ -57,7 +57,13 @@ impl<'p> Checker<'p> {
         // expr.key.2: the parameter is a new immutable name, like a loop variable.
         let mark = self.locals.len();
         if self.declare(var, *vpos) {
-            self.locals.push(Local { name: var.clone(), ty: elem.clone(), mutable: false, kind: Kind::LoopVar, decl: None });
+            self.locals.push(Local {
+                name: var.clone(),
+                ty: elem.clone(),
+                mutable: false,
+                kind: Kind::LoopVar,
+                decl: None,
+            });
         }
         let kt = self.expr(&a.value, None, true);
         self.end_scope(mark);

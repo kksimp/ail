@@ -113,7 +113,10 @@ impl Parser<'_> {
             Some(b'"') => self.string(out),
             Some(_) => {
                 let start = self.i;
-                while self.i < self.s.len() && !matches!(self.s[self.i], b',' | b'}' | b']') && !self.s[self.i].is_ascii_whitespace() {
+                while self.i < self.s.len()
+                    && !matches!(self.s[self.i], b',' | b'}' | b']')
+                    && !self.s[self.i].is_ascii_whitespace()
+                {
                     self.i += 1;
                 }
                 let word = std::str::from_utf8(&self.s[start..self.i]).map_err(|e| e.to_string())?;
@@ -135,7 +138,10 @@ mod tests {
 
     #[test]
     fn drops_positions_and_validates() {
-        assert_eq!(normalise(r#"{"a":1,"line":3,"b":[1, {"col":2,"x":"y"}]}"#).unwrap(), r#"{"a":1,"b":[1,{"x":"y"}]}"#);
+        assert_eq!(
+            normalise(r#"{"a":1,"line":3,"b":[1, {"col":2,"x":"y"}]}"#).unwrap(),
+            r#"{"a":1,"b":[1,{"x":"y"}]}"#
+        );
         assert!(normalise("{\"a\":").is_err());
         assert!(normalise("{} x").is_err());
     }

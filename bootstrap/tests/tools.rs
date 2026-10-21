@@ -49,11 +49,17 @@ fn garlic_checks_clean_and_renders_headless() {
     let text = run(&["--width", "60", "--print"]);
     assert!(text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n"), "--print:\n{text}");
     let json = run(&["--width", "60", "--height", "8", "--json"]);
-    assert!(json.starts_with("{\"api\":1,") && json.contains("\"role\":\"link\",\"name\":\"Second page\""), "--json:\n{json}");
+    assert!(
+        json.starts_with("{\"api\":1,") && json.contains("\"role\":\"link\",\"name\":\"Second page\""),
+        "--json:\n{json}"
+    );
     let second = run(&["--follow", "1", "--print"]);
     assert!(second.contains("# Second page"), "--follow 1:\n{second}");
     let viewport = run(&["--height", "4", "--viewport", "--do", "find:the end", "--json"]);
-    assert!(viewport.contains("\"message\":\"found `the end`") && !viewport.contains("\"Second page\""), "--viewport:\n{viewport}");
+    assert!(
+        viewport.contains("\"message\":\"found `the end`") && !viewport.contains("\"Second page\""),
+        "--viewport:\n{viewport}"
+    );
     // Scripts run (tools/garlic/jsdom): their changes and timers show, and
     // a script's navigation is followed; `--no-js` shows the page as sent.
     let page_of = |flags: &[&str], file: &str| {
@@ -99,15 +105,24 @@ fn editor_replaces_in_files() {
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     let preview = screen(&[]);
-    for want in ["replace `half` with `halve`: 4 of 4 lines, 2 files", " a.ail:12:10: x := half(4)? -> x := halve(4)?", " b.ail:2:11: print(half(2)) -> print(halve(2))"] {
+    for want in [
+        "replace `half` with `halve`: 4 of 4 lines, 2 files",
+        " a.ail:12:10: x := half(4)? -> x := halve(4)?",
+        " b.ail:2:11: print(half(2)) -> print(halve(2))",
+    ] {
         assert!(preview.contains(want), "preview lacks {want:?}:\n{preview}");
     }
     let skipped = screen(&["--key=down", "--key=space", "--key=ctrl+enter"]);
-    assert!(skipped.contains(" 12     x := half(4)?") && skipped.contains("  5 fn halve(n int)"), "skipped row:\n{skipped}");
+    assert!(
+        skipped.contains(" 12     x := half(4)?") && skipped.contains("  5 fn halve(n int)"),
+        "skipped row:\n{skipped}"
+    );
     let marked = screen(&["--key=down", "--key=space"]);
     assert!(marked.contains("3 of 4 lines, 2 files") && marked.contains("[ ] a.ail:12:10:"), "marked:\n{marked}");
     let applied = screen(&["--key=ctrl+enter"]);
-    for want in [" a.ail *   b.ail * ", "  5 fn halve(n int) int ! HalfError", "| replaced `half` in 2 files, not saved"] {
+    for want in
+        [" a.ail *   b.ail * ", "  5 fn halve(n int) int ! HalfError", "| replaced `half` in 2 files, not saved"]
+    {
         assert!(applied.contains(want), "applied lacks {want:?}:\n{applied}");
     }
     assert!(std::fs::read_to_string(dir.join("b.ail")).unwrap().contains("half(2)"), "nothing is saved");
@@ -145,7 +160,10 @@ fn editor_drives_the_real_semantic_api() {
     assert!(rename.contains("total := add(pt.x, pt.y)") && rename.contains("| renamed 3 `p`"), "F2:\n{rename}");
     // With the file broken `--refs` can't answer, so F2 falls back to words.
     let by_word = screen(&["--at=10:5", "--type=(", "--key=f2", "--type=t", "--key=enter"]);
-    assert!(by_word.contains("total := add(pt.x, pt.y)") && !by_word.contains("Ln 10, Col 5"), "F2 by word:\n{by_word}");
+    assert!(
+        by_word.contains("total := add(pt.x, pt.y)") && !by_word.contains("Ln 10, Col 5"),
+        "F2 by word:\n{by_word}"
+    );
     let squeeze = ["--at=7:6", "--key=delete", "--key=right", "--key=delete"];
     let squeezed = screen(&squeeze);
     assert!(squeezed.contains("  7     a+b\n"), "squeeze:\n{squeezed}");
@@ -162,7 +180,10 @@ fn editor_key_table_matches_the_readme() {
     assert!(out.status.success());
     let table = String::from_utf8_lossy(&out.stdout);
     let readme = std::fs::read_to_string(tool("tools/edit/README.md")).unwrap();
-    assert!(readme.contains(table.trim_end()), "tools/edit/README.md's key table differs from `--keys`; paste its output:\n{table}");
+    assert!(
+        readme.contains(table.trim_end()),
+        "tools/edit/README.md's key table differs from `--keys`; paste its output:\n{table}"
+    );
 }
 
 /// The agent panel against the real `ail` outputs (ADRs 0312–0313, 0331):
@@ -185,24 +206,57 @@ fn editor_agent_panel_reads_the_real_outputs() {
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     let info = screen(&["--at=12:10", "--key=ctrl+i"]);
-    for want in [" half: int ! HalfError\n", "     requires n >= 0\n", "     effects: fail\n", "     fails with HalfError\n", " ## Halves an even number.\n", " fn:half: 2 uses in this file"] {
+    for want in [
+        " half: int ! HalfError\n",
+        "     requires n >= 0\n",
+        "     effects: fail\n",
+        "     fails with HalfError\n",
+        " ## Halves an even number.\n",
+        " fn:half: 2 uses in this file",
+    ] {
         assert!(info.contains(want), "info lacks {want:?}:\n{info}");
     }
     let trace = screen(&["--key=shift+f5"]);
-    for want in ["   call half(n = 4)  12:10", " requires n >= 0 held  6:5", " trap[type.coll.4] index 2 is out of bounds", "   in main 15:12  locals: x = 2, v = [1, 2]", " > 2"] {
+    for want in [
+        "   call half(n = 4)  12:10",
+        " requires n >= 0 held  6:5",
+        " trap[type.coll.4] index 2 is out of bounds",
+        "   in main 15:12  locals: x = 2, v = [1, 2]",
+        " > 2",
+    ] {
         assert!(trace.contains(want), "trace lacks {want:?}:\n{trace}");
     }
     let jumped = screen(&["--key=shift+f5", "--key=down", "--key=enter"]);
     assert!(jumped.contains("Ln 12, Col 10"), "trace jump:\n{jumped}");
     let paths = screen(&["--key=ctrl+shift+e"]);
-    for want in [" fn half fails with HalfError", "   8:16 return: HalfError", "   12:17 propagate half(): HalfError", "   18:15 handle (default) half(): HalfError"] {
+    for want in [
+        " fn half fails with HalfError",
+        "   8:16 return: HalfError",
+        "   12:17 propagate half(): HalfError",
+        "   18:15 handle (default) half(): HalfError",
+    ] {
         assert!(paths.contains(want), "failure paths lack {want:?}:\n{paths}");
     }
     let card = screen(&["--key=ctrl+shift+i"]);
-    for want in [" program card ", " entry: main in agent.ail", " tests: halves", "   fn half(n int) int ! HalfError  [fail]", "       requires n >= 0", "       fails with HalfError"] {
+    for want in [
+        " program card ",
+        " entry: main in agent.ail",
+        " tests: halves",
+        "   fn half(n int) int ! HalfError  [fail]",
+        "       requires n >= 0",
+        "       fails with HalfError",
+    ] {
         assert!(card.contains(want), "program card lacks {want:?}:\n{card}");
     }
-    let card_jump = screen(&["--key=ctrl+shift+i", "--key=down", "--key=down", "--key=down", "--key=down", "--key=down", "--key=enter"]);
+    let card_jump = screen(&[
+        "--key=ctrl+shift+i",
+        "--key=down",
+        "--key=down",
+        "--key=down",
+        "--key=down",
+        "--key=down",
+        "--key=enter",
+    ]);
     assert!(card_jump.contains("Ln 5, Col 4"), "card jump:\n{card_jump}");
     let problems = screen(&["--at=13:5", "--type=x", "--key=ctrl+shift+m"]);
     for want in [" problems: 1 errors, 0 others", "agent.ail:13:5: error[expr.name.1] unknown name `xprint`"] {
@@ -213,12 +267,33 @@ fn editor_agent_panel_reads_the_real_outputs() {
     // ADR 0353: the shown list follows edits after an idle pause and keeps
     // the selection on the same diagnostic (`zprint`), so F4 goes on to the
     // new first row.
-    let live = screen(&["--at=13:5", "--type=x", "--at=15:5", "--type=z", "--key=ctrl+shift+m", "--key=down", "--at=9:5", "--type=q", "--idle", "--key=f4"]);
-    assert!(live.contains(" problems: 3 errors, 0 others") && live.contains("agent.ail:9:5: error[expr.name.1] unknown name `qn`") && live.contains("Ln 9, Col 5"), "live problems:\n{live}");
+    let live = screen(&[
+        "--at=13:5",
+        "--type=x",
+        "--at=15:5",
+        "--type=z",
+        "--key=ctrl+shift+m",
+        "--key=down",
+        "--at=9:5",
+        "--type=q",
+        "--idle",
+        "--key=f4",
+    ]);
+    assert!(
+        live.contains(" problems: 3 errors, 0 others")
+            && live.contains("agent.ail:9:5: error[expr.name.1] unknown name `qn`")
+            && live.contains("Ln 9, Col 5"),
+        "live problems:\n{live}"
+    );
     let tests_on = screen(&["--key=ctrl+shift+u"]);
     assert!(tests_on.contains("0 warnings, tests 1/1 pass"), "tests on save:\n{tests_on}");
     let covered = screen(&["--key=ctrl+shift+c"]);
-    assert!(covered.contains("\n  8!        return Odd(n)\n") && covered.contains("\n  9     n / 2\n") && covered.contains("| coverage: lines 2/7"), "coverage:\n{covered}");
+    assert!(
+        covered.contains("\n  8!        return Odd(n)\n")
+            && covered.contains("\n  9     n / 2\n")
+            && covered.contains("| coverage: lines 2/7"),
+        "coverage:\n{covered}"
+    );
     // Saving with tests on reruns them; this changes the file, so it's last.
     let failing = screen(&["--key=ctrl+shift+u", "--at=9:9", "--type=1", "--key=ctrl+s"]);
     assert!(failing.contains("tests 1 FAILED of 1"), "tests after save:\n{failing}");
@@ -240,29 +315,53 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
     let pdf = |args: &[&str]| {
         let out = ail().arg("run").arg(&path).args(args).output().unwrap();
-        (out.status.code(), String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string())
+        (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).to_string(),
+            String::from_utf8_lossy(&out.stderr).to_string(),
+        )
     };
-    for (pdf_name, txt) in [("simple", "simple"), ("xrefstream", "xrefstream"), ("report", "report"), ("damaged", "simple")] {
+    for (pdf_name, txt) in
+        [("simple", "simple"), ("xrefstream", "xrefstream"), ("report", "report"), ("damaged", "simple")]
+    {
         let (code, out, err) = pdf(&["text", &tool(&format!("tools/pdf/testdata/{pdf_name}.pdf"))]);
         let want = std::fs::read_to_string(tool(&format!("tools/pdf/testdata/{txt}.txt"))).unwrap();
         assert!(code == Some(0) && out == want, "pdf text {pdf_name}.pdf:\n{out}{err}");
     }
     let report = tool("tools/pdf/testdata/report.pdf");
     let (code, out, _) = pdf(&["grep", "LINE BREAK can be tested", &report]);
-    assert!(code == Some(0) && out.starts_with("1: enough to wrap onto more than one line"), "pdf grep across lines:\n{out}");
+    assert!(
+        code == Some(0) && out.starts_with("1: enough to wrap onto more than one line"),
+        "pdf grep across lines:\n{out}"
+    );
     let (code, out, _) = pdf(&["grep", "--json", "résumé", &report]);
     assert!(code == Some(0) && out.contains("\"boxes\":[{\"x0\":327.56,"), "pdf grep --json:\n{out}");
     let (code, _, _) = pdf(&["grep", "not in the file", &report]);
     assert_eq!(code, Some(1), "pdf grep with no hit exits 1");
     let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
-    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0,\"page\":2}"), "pdf json:\n{out}");
+    assert!(
+        out.contains("\"uri\":\"https://example.com/ledger\"")
+            && out.contains("{\"title\":\"Appendix\",\"depth\":0,\"page\":2}"),
+        "pdf json:\n{out}"
+    );
     let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
-    assert!(out.contains("image-only pages (scans, read by OCR when shown or searched): 1"), "pdf info on a scan:\n{out}");
+    assert!(
+        out.contains("image-only pages (scans, read by OCR when shown or searched): 1"),
+        "pdf info on a scan:\n{out}"
+    );
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
-    assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
+    assert!(
+        out.contains(" report.pdf  page 1/2")
+            && out.contains("Searching a PDF without OCR works")
+            && out.contains(" match 1 of 1"),
+        "pdf view --print:\n{out}"
+    );
     // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
     let (_, out, _) = pdf(&["view", &report, "--json", "--page", "2"]);
-    assert!(out.contains("\"pages_read\":1") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
+    assert!(
+        out.contains("\"pages_read\":1") && out.contains("\"visible\":[{\"text\":\"Appendix\""),
+        "pdf view --json:\n{out}"
+    );
     let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
     assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
     // ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.
@@ -294,10 +393,16 @@ fn garlic_js_parses_and_runs_its_suites() {
         let stdout = String::from_utf8_lossy(&test.stdout);
         assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {unit}:\n{stdout}");
     }
-    let tokens = ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
+    let tokens =
+        ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
     let expected = std::fs::read_to_string(tool("tools/garlic/js/testdata/tokens/sample.tokens")).unwrap();
     assert_eq!(String::from_utf8_lossy(&tokens.stdout), expected, "--tokens sample.js");
-    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser"), ("--test-run", "tools/garlic/js/testdata/run"), ("--test-page", "tools/garlic/js/testdata/page")] {
+    for (flag, data) in [
+        ("--test", "tools/garlic/js/testdata/syntax"),
+        ("--test262", "tools/garlic/js/testdata/test262-parser"),
+        ("--test-run", "tools/garlic/js/testdata/run"),
+        ("--test-page", "tools/garlic/js/testdata/page"),
+    ] {
         let out = ail().args(["run", &dir, flag, &tool(data)]).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
@@ -310,7 +415,11 @@ fn garlic_js_parses_and_runs_its_suites() {
 fn garlic_reads_a_page_from_serve_dir() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
-    let mut server = ail().args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()]).current_dir(&root).spawn().unwrap();
+    let mut server = ail()
+        .args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()])
+        .current_dir(&root)
+        .spawn()
+        .unwrap();
     let url = format!("http://{free}/index.html");
     let garlic = tool("tools/garlic/garlic.ail");
     // The server needs a moment to bind; Garlic reports a refused connection.

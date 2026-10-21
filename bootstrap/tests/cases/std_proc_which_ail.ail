@@ -1,0 +1,3 @@
+fn main()
+    p := proc.which("ail") else "none"
+    print(p.ends_with("/ail"))

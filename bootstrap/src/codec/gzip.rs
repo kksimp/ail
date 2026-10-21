@@ -3,13 +3,30 @@
 //! (std.compress.3). Reading accepts the optional header fields and
 //! several members in a row, and checks the CRC-32 and size of each.
 
+use super::CodecError;
 use super::crc32::crc32;
 use super::deflate::deflate;
 use super::inflate::inflate_prefix;
-use super::CodecError;
 
 pub fn gzip(data: &[u8], level: u32) -> Vec<u8> {
-    let mut out = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, if level >= 9 { 2 } else if level <= 1 { 4 } else { 0 }, 3];
+    let mut out = vec![
+        0x1f,
+        0x8b,
+        8,
+        0,
+        0,
+        0,
+        0,
+        0,
+        if level >= 9 {
+            2
+        } else if level <= 1 {
+            4
+        } else {
+            0
+        },
+        3,
+    ];
     out.extend(deflate(data, level));
     out.extend_from_slice(&crc32(data).to_le_bytes());
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
@@ -44,7 +61,10 @@ pub fn gunzip(data: &[u8], limit: usize) -> Result<Vec<u8>, CodecError> {
         }
         for bit in [8u8, 16] {
             if flags & bit != 0 {
-                let z = d.get(p..).and_then(|s| s.iter().position(|&b| b == 0)).ok_or_else(|| bad("truncated gzip header"))?;
+                let z = d
+                    .get(p..)
+                    .and_then(|s| s.iter().position(|&b| b == 0))
+                    .ok_or_else(|| bad("truncated gzip header"))?;
                 p += z + 1;
             }
         }

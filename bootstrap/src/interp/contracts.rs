@@ -35,7 +35,9 @@ pub(super) fn enabled() -> bool {
 /// Whether `f`'s contracts are checked on this call (contract.run.1-3).
 #[inline]
 pub(super) fn active(f: &FnDecl) -> bool {
-    (!f.contracts.is_empty() || f.inherits.is_some()) && ENABLED.load(AtomicOrdering::Relaxed) && !CHECKING.with(Cell::get)
+    (!f.contracts.is_empty() || f.inherits.is_some())
+        && ENABLED.load(AtomicOrdering::Relaxed)
+        && !CHECKING.with(Cell::get)
 }
 
 /// Where a condition comes from: the function's own line, or one inherited

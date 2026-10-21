@@ -31,7 +31,8 @@ impl<'p> Checker<'p> {
     /// `tensor.f(args)` (std.tensor.2).
     pub(super) fn tensor_call(&mut self, f: &str, args: &'p [Arg], pos: Pos, expect: Option<&Ty>) -> Ty {
         let shape = Ty::List(Box::new(Ty::Int));
-        let wanted = expect.and_then(|t| self.tensor_elem(t)).filter(|e| matches!(e, Ty::Int | Ty::Float | Ty::Num(Num::F32)));
+        let wanted =
+            expect.and_then(|t| self.tensor_elem(t)).filter(|e| matches!(e, Ty::Int | Ty::Float | Ty::Num(Num::F32)));
         match f {
             "zeros" => {
                 let elem = wanted.unwrap_or(Ty::Float);
@@ -164,7 +165,8 @@ impl<'p> Checker<'p> {
         }
         let t = rt.clone();
         // std.tensor.21: an `f32` tensor's bounds and list are `float`.
-        let (bound, list) = if elem == Ty::Num(Num::F32) { (Ty::Float, Ty::Float) } else { (elem.clone(), elem.clone()) };
+        let (bound, list) =
+            if elem == Ty::Num(Num::F32) { (Ty::Float, Ty::Float) } else { (elem.clone(), elem.clone()) };
         let (params, ret) = match m {
             "shape" => (vec![], Ty::List(Box::new(Ty::Int))),
             "len" => (vec![], Ty::Int),
@@ -195,7 +197,12 @@ impl<'p> Checker<'p> {
         let (from, to) = if m == "to_f32" { (Ty::Float, Ty::Num(Num::F32)) } else { (Ty::Num(Num::F32), Ty::Float) };
         if *elem != from {
             let msg = format!("`{m}` converts a {} tensor, but this one holds {}", self.show(&from), self.show(elem));
-            self.error_help("std.tensor.22", pos, msg, "`to_f32()` takes `float` tensors and `to_float()` takes `f32` ones");
+            self.error_help(
+                "std.tensor.22",
+                pos,
+                msg,
+                "`to_f32()` takes `float` tensors and `to_float()` takes `f32` ones",
+            );
             return Ty::Err;
         }
         self.tensor_ty(to)
@@ -216,12 +223,23 @@ impl<'p> Checker<'p> {
         };
         let Some((var, vpos)) = &a.param else {
             self.expr(&a.value, None, true);
-            self.error_help("std.tensor.8", a.value.pos(), "`map` takes a function of each element", "write `t.map(|x| x * 2.0)`");
+            self.error_help(
+                "std.tensor.8",
+                a.value.pos(),
+                "`map` takes a function of each element",
+                "write `t.map(|x| x * 2.0)`",
+            );
             return rt.clone();
         };
         let mark = self.locals.len();
         if self.declare(var, *vpos) {
-            self.locals.push(Local { name: var.clone(), ty: elem.clone(), mutable: false, kind: Kind::LoopVar, decl: None });
+            self.locals.push(Local {
+                name: var.clone(),
+                ty: elem.clone(),
+                mutable: false,
+                kind: Kind::LoopVar,
+                decl: None,
+            });
         }
         let out = self.expr(&a.value, Some(elem), true);
         self.end_scope(mark);
@@ -268,7 +286,8 @@ impl<'p> Checker<'p> {
             && matches!(a, Ty::Float | Ty::Num(Num::F32))
             && matches!(b, Ty::Float | Ty::Num(Num::F32))
         {
-            let msg = format!("`{sym}` needs tensors of one element type, but found {} and {}", self.show(lt), self.show(rt));
+            let msg =
+                format!("`{sym}` needs tensors of one element type, but found {} and {}", self.show(lt), self.show(rt));
             self.error_help("std.tensor.21", pos, msg, "convert one with `t.to_f32()` or `t.to_float()`");
             return Some(Ty::Err);
         }
@@ -292,11 +311,17 @@ impl<'p> Checker<'p> {
         if ok {
             return Some(if le.is_some() { lt.clone() } else { rt.clone() });
         }
-        let msg = format!("`{sym}` needs two tensors of one element type, or a tensor and a scalar of its element type, found {} and {}", self.show(lt), self.show(rt));
+        let msg = format!(
+            "`{sym}` needs two tensors of one element type, or a tensor and a scalar of its element type, found {} and {}",
+            self.show(lt),
+            self.show(rt)
+        );
         let other = if le.is_some() { rt } else { lt };
         let help = match (&le, &re) {
             (Some(_), Some(_)) => "convert one with `t.map(|x| x.to_float())`",
-            _ if matches!(other, Ty::Int | Ty::Float) => "convert the number to the element type: `x.to_float()` or `x.to_int()`",
+            _ if matches!(other, Ty::Int | Ty::Float) => {
+                "convert the number to the element type: `x.to_float()` or `x.to_int()`"
+            }
             _ => "a tensor combines with a tensor or a number of its element type",
         };
         self.error_help("std.tensor.10", pos, msg, help);

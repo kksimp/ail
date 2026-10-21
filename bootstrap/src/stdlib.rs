@@ -9,23 +9,69 @@ use crate::lexer::lex;
 
 /// Each standard module and its functions (std.use.1-2), sorted.
 pub const MODULES: &[(&str, &[&str])] = &[
-    ("compress", &["deflate", "gunzip", "gunzip_file", "gzip", "gzip_file", "inflate", "unzip", "unzlib", "zip_dir", "zlib"]),
+    (
+        "compress",
+        &["deflate", "gunzip", "gunzip_file", "gzip", "gzip_file", "inflate", "unzip", "unzlib", "zip_dir", "zlib"],
+    ),
     ("env", &["args", "cwd", "get", "home", "program", "vars"]),
     (
         "fs",
         &[
-            "append_bytes", "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_bytes",
-            "read_text", "remove", "rename", "walk", "write_bytes", "write_text",
+            "append_bytes",
+            "append_text",
+            "copy",
+            "exists",
+            "glob",
+            "list_dir",
+            "make_dir",
+            "metadata",
+            "read_bytes",
+            "read_text",
+            "remove",
+            "rename",
+            "walk",
+            "write_bytes",
+            "write_text",
         ],
     ),
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
     ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
-    ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "open", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
+    (
+        "net",
+        &[
+            "connect",
+            "connect_tls",
+            "get",
+            "get_bytes",
+            "listen",
+            "open",
+            "options",
+            "post",
+            "post_bytes",
+            "request",
+            "request_bytes",
+            "serve",
+        ],
+    ),
     ("path", &["base", "dir", "ext", "join", "stem"]),
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
-    ("regex", &["captures", "compile", "escape", "find", "find_all", "group_all", "is_match", "replace", "replace_first", "split"]),
+    (
+        "regex",
+        &[
+            "captures",
+            "compile",
+            "escape",
+            "find",
+            "find_all",
+            "group_all",
+            "is_match",
+            "replace",
+            "replace_first",
+            "split",
+        ],
+    ),
     ("tensor", &["from", "zeros"]),
     ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
@@ -82,11 +128,32 @@ pub const OUTPUT_METHODS: &[&str] = &["ok", "text"];
 
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
-pub const TENSOR_METHODS: &[&str] =
-    &[
-        "add", "argmax", "argmin", "clamp", "conv2d", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu",
-        "reshape", "round", "shape", "sigmoid", "sum", "tanh", "to_f32", "to_float", "to_list", "transpose",
-    ];
+pub const TENSOR_METHODS: &[&str] = &[
+    "add",
+    "argmax",
+    "argmin",
+    "clamp",
+    "conv2d",
+    "dot",
+    "item",
+    "len",
+    "map",
+    "matmul",
+    "max",
+    "mean",
+    "mul",
+    "relu",
+    "reshape",
+    "round",
+    "shape",
+    "sigmoid",
+    "sum",
+    "tanh",
+    "to_f32",
+    "to_float",
+    "to_list",
+    "transpose",
+];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
 /// position of the function's name.

@@ -161,7 +161,11 @@ impl P<'_> {
                 _ => return Ok(node),
             };
             if repeated {
-                return err(at, "bad_repeat", "a repetition operator can't follow another one; group it with `(?:...)`");
+                return err(
+                    at,
+                    "bad_repeat",
+                    "a repetition operator can't follow another one; group it with `(?:...)`",
+                );
             }
             let greedy = !self.eat('?');
             node = Node::Repeat { node: Box::new(node), min, max, greedy };
@@ -238,7 +242,11 @@ impl P<'_> {
                     }
                     if self.peek() == Some('P') {
                         if matches!(self.peek_at(1), Some('=' | '>')) {
-                            return err(at, "unsupported", "named backreferences aren't supported: the engine runs in linear time");
+                            return err(
+                                at,
+                                "unsupported",
+                                "named backreferences aren't supported: the engine runs in linear time",
+                            );
                         }
                         self.pos += 1;
                         if self.peek() != Some('<') {
@@ -262,7 +270,11 @@ impl P<'_> {
                         return err(name_at, "bad_group_name", "a group name must end with `>`");
                     }
                     if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) {
-                        return err(name_at, "bad_group_name", "a group name is not empty and doesn't start with a digit");
+                        return err(
+                            name_at,
+                            "bad_group_name",
+                            "a group name is not empty and doesn't start with a digit",
+                        );
                     }
                     if self.names.iter().any(|(n, _)| *n == name) {
                         return err(name_at, "bad_group_name", format!("two groups are named `{name}`"));
@@ -295,7 +307,11 @@ impl P<'_> {
                             }
                             ':' => break,
                             _ => {
-                                return err(self.pos - 1, "bad_flag", format!("`{c}` isn't a flag; the flags are i, s and m"));
+                                return err(
+                                    self.pos - 1,
+                                    "bad_flag",
+                                    format!("`{c}` isn't a flag; the flags are i, s and m"),
+                                );
                             }
                         }
                     }
@@ -328,7 +344,9 @@ impl P<'_> {
             }
             v
         } else {
-            let (Some(a), Some(b)) = (self.peek().and_then(|c| c.to_digit(16)), self.peek_at(1).and_then(|c| c.to_digit(16))) else {
+            let (Some(a), Some(b)) =
+                (self.peek().and_then(|c| c.to_digit(16)), self.peek_at(1).and_then(|c| c.to_digit(16)))
+            else {
                 return bad();
             };
             self.pos += 2;
@@ -372,7 +390,9 @@ impl P<'_> {
         };
         match Prop::unicode(&name) {
             Some(p) => Ok(Item::Prop(p, neg)),
-            None => err(at, "bad_class", format!("`{name}` isn't a supported Unicode class; supported: {UNICODE_NAMES}")),
+            None => {
+                err(at, "bad_class", format!("`{name}` isn't a supported Unicode class; supported: {UNICODE_NAMES}"))
+            }
         }
     }
 
@@ -434,7 +454,9 @@ impl P<'_> {
             first = false;
             let item_at = self.pos;
             if c == '[' && self.peek_at(1) == Some(':') {
-                if let Some(end) = (self.pos + 2..self.s.len().saturating_sub(1)).find(|&k| self.s[k] == ':' && self.s[k + 1] == ']') {
+                if let Some(end) =
+                    (self.pos + 2..self.s.len().saturating_sub(1)).find(|&k| self.s[k] == ':' && self.s[k + 1] == ']')
+                {
                     let name: String = self.s[self.pos + 2..end].iter().collect();
                     let (name, neg) = match name.strip_prefix('^') {
                         Some(r) => (r.to_string(), true),

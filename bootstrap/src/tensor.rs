@@ -29,7 +29,9 @@ impl Tensor {
     /// `to_f32()`: each `float` element rounded to `f32` once (std.tensor.22).
     pub fn to_f32(&self) -> Result<Tensor, Fault> {
         match &self.data {
-            Data::F(v) => Ok(Tensor { shape: self.shape.clone(), data: Data::F32(v.iter().map(|&x| x as f32).collect()) }),
+            Data::F(v) => {
+                Ok(Tensor { shape: self.shape.clone(), data: Data::F32(v.iter().map(|&x| x as f32).collect()) })
+            }
             Data::F32(_) => Ok(self.clone()),
             Data::I(_) => fault("std.tensor.22", "`to_f32` is on `float` tensors, not `int` ones".into()),
         }
@@ -38,7 +40,9 @@ impl Tensor {
     /// `to_float()`: each `f32` element as a `float`, exactly (std.tensor.22).
     pub fn to_float(&self) -> Result<Tensor, Fault> {
         match &self.data {
-            Data::F32(v) => Ok(Tensor { shape: self.shape.clone(), data: Data::F(v.iter().map(|&x| f64::from(x)).collect()) }),
+            Data::F32(v) => {
+                Ok(Tensor { shape: self.shape.clone(), data: Data::F(v.iter().map(|&x| f64::from(x)).collect()) })
+            }
             Data::F(_) => Ok(self.clone()),
             Data::I(_) => fault("std.tensor.22", "`to_float` is on `f32` tensors, not `int` ones".into()),
         }
@@ -106,7 +110,10 @@ impl Tensor {
         let mut count: usize = 1;
         for &d in shape {
             let Ok(d) = usize::try_from(d) else {
-                return fault("std.tensor.2", format!("a tensor's sizes can't be negative, and the shape is {shape:?}"));
+                return fault(
+                    "std.tensor.2",
+                    format!("a tensor's sizes can't be negative, and the shape is {shape:?}"),
+                );
             };
             count = match count.checked_mul(d) {
                 Some(c) if c <= 1 << 40 => c,
@@ -135,7 +142,10 @@ impl Tensor {
         if self.shape == other.shape {
             return Ok(());
         }
-        fault("std.tensor.4", format!("`{what}` needs equal shapes, but they are {:?} and {:?}", self.shape, other.shape))
+        fault(
+            "std.tensor.4",
+            format!("`{what}` needs equal shapes, but they are {:?} and {:?}", self.shape, other.shape),
+        )
     }
 
     /// std.tensor.3: the sum of the elements.
@@ -232,10 +242,7 @@ impl Tensor {
         let end = if inclusive { hi.checked_add(1) } else { Some(hi) };
         match (usize::try_from(lo), end.and_then(|e| usize::try_from(e).ok())) {
             (Ok(a), Some(b)) if a <= b && b <= n => self.rows_between(a, b),
-            _ => fault(
-                "std.tensor.15",
-                format!("rows {lo}..{hi} are out of bounds for a tensor of {n} rows"),
-            ),
+            _ => fault("std.tensor.15", format!("rows {lo}..{hi} are out of bounds for a tensor of {n} rows")),
         }
     }
 
@@ -381,7 +388,10 @@ impl Tensor {
     /// std.tensor.12: the transpose of a 2-D tensor.
     pub fn transpose(&self) -> Result<Tensor, Fault> {
         let &[m, n] = self.shape.as_slice() else {
-            return fault("std.tensor.12", format!("`transpose` needs a 2-D tensor, but the shape is {:?}", self.shape));
+            return fault(
+                "std.tensor.12",
+                format!("`transpose` needs a 2-D tensor, but the shape is {:?}", self.shape),
+            );
         };
         let data = match &self.data {
             Data::F(v) => Data::F(transpose(v, m, n)),
@@ -401,7 +411,11 @@ impl Tensor {
         let Some(a) = usize::try_from(axis).ok().filter(|&a| a < rank) else {
             return fault(
                 "std.tensor.11",
-                format!("`{what}({axis})` on a tensor of shape {:?}: the axis must be from 0 to {}", self.shape, rank as i64 - 1),
+                format!(
+                    "`{what}({axis})` on a tensor of shape {:?}: the axis must be from 0 to {}",
+                    self.shape,
+                    rank as i64 - 1
+                ),
             );
         };
         let before = self.shape[..a].iter().product();
@@ -683,7 +697,14 @@ fn combine<T: Float>(mut acc: [T; LANES]) -> T {
 /// either type, in the same order; the vector paths are lockstep twins
 /// (ADR 0008). The `f32` kernels are in `tensor32.rs`.
 pub trait Float:
-    Copy + Default + PartialOrd + Send + Sync + std::ops::Add<Output = Self> + std::ops::AddAssign + std::ops::Mul<Output = Self>
+    Copy
+    + Default
+    + PartialOrd
+    + Send
+    + Sync
+    + std::ops::Add<Output = Self>
+    + std::ops::AddAssign
+    + std::ops::Mul<Output = Self>
 {
     fn zero() -> Self;
     /// `n` as an element, for `mean`.
@@ -951,11 +972,7 @@ fn matmul_rows<T: Float>(a: &[T], b: &[T], k: usize, n: usize, rows: std::ops::R
 }
 
 fn threads_for(m: usize, k: usize, n: usize) -> usize {
-    if m.saturating_mul(k).saturating_mul(n) < PAR_WORK {
-        1
-    } else {
-        crate::interp::parallel::threads().min(m).max(1)
-    }
+    if m.saturating_mul(k).saturating_mul(n) < PAR_WORK { 1 } else { crate::interp::parallel::threads().min(m).max(1) }
 }
 
 fn matmul_t<T: Float>(a: &[T], b: &[T], m: usize, k: usize, n: usize) -> Vec<T> {

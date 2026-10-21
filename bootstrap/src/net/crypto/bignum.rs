@@ -344,7 +344,10 @@ mod tests {
         assert_eq!(m.modpow(&Big::from_u64(123456), &Big::from_u64(1_000_000_006)), Big::from_u64(1));
         let a = m.to_mont(&Big::from_u64(98765));
         assert_eq!(m.from_mont(&m.mul(&a, &m.inv_prime(&a))), Big::from_u64(1));
-        assert_eq!(m.from_mont(&m.sub(&m.to_mont(&Big::from_u64(3)), &m.to_mont(&Big::from_u64(5)))), Big::from_u64(1_000_000_005));
+        assert_eq!(
+            m.from_mont(&m.sub(&m.to_mont(&Big::from_u64(3)), &m.to_mont(&Big::from_u64(5)))),
+            Big::from_u64(1_000_000_005)
+        );
     }
 
     // A 521-bit Mersenne prime modulus spanning nine limbs: (2^521 - 2)^2

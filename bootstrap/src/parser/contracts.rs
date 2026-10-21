@@ -123,7 +123,8 @@ pub fn link(prog: &mut Program) {
     for (i, f) in prog.fns.iter().enumerate() {
         let Within::Impl(k) = f.within else { continue };
         let Some(t) = prog.traits.iter().find(|t| t.name == prog.impls[k].trait_name) else { continue };
-        let found = t.methods.iter().copied().find(|&m| prog.fns[m].name == f.name && !prog.fns[m].contracts.is_empty());
+        let found =
+            t.methods.iter().copied().find(|&m| prog.fns[m].name == f.name && !prog.fns[m].contracts.is_empty());
         if let Some(m) = found {
             links.push((i, m));
         }

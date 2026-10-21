@@ -237,7 +237,12 @@ mod tests {
         );
         // finished_key from the client handshake traffic secret.
         assert_eq!(
-            S.expand_label(&hex("2faac08f851d35fea3604fcb4de82dc62c9b164a70974d0462e27f1ab278700f"), "finished", b"", 32),
+            S.expand_label(
+                &hex("2faac08f851d35fea3604fcb4de82dc62c9b164a70974d0462e27f1ab278700f"),
+                "finished",
+                b"",
+                32
+            ),
             hex("5ace394c26980d581243f627d1150ae27e37fa52364e0a7f20ac686d09cd0e8e")
         );
         let shs = hex("b67b7d690cc16c4e75e54213cb2d37b4e9c912bcded9105d42befd59d391ad38");

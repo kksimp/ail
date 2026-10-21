@@ -160,7 +160,10 @@ fn ail_checker_agrees_with_the_bootstrap() {
         }
         if let Some(p) = line.strip_prefix("== ") {
             current = p.to_string();
-            sections.insert(current.clone(), Section { diags: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() });
+            sections.insert(
+                current.clone(),
+                Section { diags: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() },
+            );
         } else if let Some(r) = line.strip_prefix("rules ") {
             sections.get_mut(&current).unwrap().rules = r.split(' ').map(String::from).collect();
         } else if let Some(s) = line.strip_prefix("skip ") {
@@ -185,8 +188,12 @@ fn ail_checker_agrees_with_the_bootstrap() {
         let counted = |(rule, file, line, _): &Key| {
             sec.rules.contains(rule) && !sec.skips.iter().any(|(f, a, b)| f == file && (*a..=*b).contains(line))
         };
-        let want: Vec<Key> =
-            String::from_utf8_lossy(&out.stderr).lines().filter(|l| l.starts_with('{')).map(key).filter(counted).collect();
+        let want: Vec<Key> = String::from_utf8_lossy(&out.stderr)
+            .lines()
+            .filter(|l| l.starts_with('{'))
+            .map(key)
+            .filter(counted)
+            .collect();
         let got: Vec<Key> = sec.diags.iter().filter(|k| counted(k)).cloned().collect();
         if want == got {
             agree += 1;

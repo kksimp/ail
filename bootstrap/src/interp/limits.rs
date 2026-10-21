@@ -26,9 +26,7 @@ static HITS: Mutex<BTreeSet<usize>> = Mutex::new(BTreeSet::new());
 /// ct.eval.3: the most statements a constant may run (`AIL_CT_MAX_STEPS` lowers it, for tests).
 fn ct_max_steps() -> u64 {
     static MAX: OnceLock<u64> = OnceLock::new();
-    *MAX.get_or_init(|| {
-        std::env::var("AIL_CT_MAX_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000_000)
-    })
+    *MAX.get_or_init(|| std::env::var("AIL_CT_MAX_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000_000))
 }
 
 pub fn configure(c: Config) {
@@ -50,12 +48,16 @@ fn resident_mb() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
         let status = std::fs::read_to_string("/proc/self/status").ok()?;
-        let kb: u64 = status.lines().find_map(|l| l.strip_prefix("VmRSS:"))?.trim().trim_end_matches("kB").trim().parse().ok()?;
+        let kb: u64 =
+            status.lines().find_map(|l| l.strip_prefix("VmRSS:"))?.trim().trim_end_matches("kB").trim().parse().ok()?;
         Some(kb / 1024)
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let out = std::process::Command::new("ps").args(["-o", "rss=", "-p", &std::process::id().to_string()]).output().ok()?;
+        let out = std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .ok()?;
         let kb: u64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
         Some(kb / 1024)
     }
@@ -114,13 +116,19 @@ impl<'a, W: Write> Interp<'a, W> {
                 Trap {
                     rule: "run.limit.1",
                     pos,
-                    message: format!("run took longer than --timeout {} ms (raise it, or find the loop)", c.timeout_ms.unwrap_or(0)),
+                    message: format!(
+                        "run took longer than --timeout {} ms (raise it, or find the loop)",
+                        c.timeout_ms.unwrap_or(0)
+                    ),
                 }
             } else {
                 Trap {
                     rule: "run.limit.2",
                     pos,
-                    message: format!("run used more than --max-memory {} MB (raise it, or find what grows)", c.memory_mb.unwrap_or(0)),
+                    message: format!(
+                        "run used more than --max-memory {} MB (raise it, or find what grows)",
+                        c.memory_mb.unwrap_or(0)
+                    ),
                 }
             }
             .into());
@@ -197,7 +205,9 @@ pub fn report(prog: &Program, line_map: &[usize]) -> Vec<FileCover> {
     let hits = HITS.lock().unwrap().clone();
     let orig = |line: usize| -> Option<usize> {
         let rel = line.checked_sub(prog.file_at(Pos { line, col: 1 })?.base)?;
-        if line_map.is_empty() { return Some(rel) }
+        if line_map.is_empty() {
+            return Some(rel);
+        }
         line_map.get(rel.wrapping_sub(1)).copied().filter(|l| *l != 0)
     };
     let mut files: Vec<FileCover> = Vec::new();
@@ -210,7 +220,14 @@ pub fn report(prog: &Program, line_map: &[usize]) -> Vec<FileCover> {
         let at = match files.iter().position(|c| c.file == sf.path) {
             Some(i) => i,
             None => {
-                files.push(FileCover { file: sf.path.clone(), lines: 0, lines_hit: 0, fns: 0, fns_hit: 0, missed: Vec::new() });
+                files.push(FileCover {
+                    file: sf.path.clone(),
+                    lines: 0,
+                    lines_hit: 0,
+                    fns: 0,
+                    fns_hit: 0,
+                    missed: Vec::new(),
+                });
                 files.len() - 1
             }
         };

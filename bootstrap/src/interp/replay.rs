@@ -77,7 +77,9 @@ pub fn captured(module: &str, f: &str) -> bool {
 /// starts from: `seed` if given, else one from the clock.
 pub fn start_record(path: &str, program: &str, args: &[String], seed: Option<i64>) -> i64 {
     let seed = seed.unwrap_or_else(|| {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| (d.as_nanos() % (1 << 62)) as i64)
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| (d.as_nanos() % (1 << 62)) as i64)
     });
     *state() = Some(State {
         path: path.to_string(),
@@ -248,9 +250,19 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                 ),
                 Err(_) => return result,
                 Ok(v) => match self.encode(v) {
-                    Some(v) => format!("{{\"call\":{},\"line\":{},\"col\":{},\"result\":{v}}}", json_str(&call), pos.line, pos.col),
+                    Some(v) => format!(
+                        "{{\"call\":{},\"line\":{},\"col\":{},\"result\":{v}}}",
+                        json_str(&call),
+                        pos.line,
+                        pos.col
+                    ),
                     // replay.cap.2: a handle (a process, a socket, a window) can't be written down.
-                    None => format!("{{\"call\":{},\"line\":{},\"col\":{},\"uncaptured\":true}}", json_str(&call), pos.line, pos.col),
+                    None => format!(
+                        "{{\"call\":{},\"line\":{},\"col\":{},\"uncaptured\":true}}",
+                        json_str(&call),
+                        pos.line,
+                        pos.col
+                    ),
                 },
             };
             let mut st = state();
@@ -270,9 +282,14 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
         let Some(entry) = next else {
             let cut = state().as_ref().is_some_and(|s| s.truncated);
             let why = if cut {
-                format!("the recording was cut at its size limit ({} MB) before this `{call}` (replay.rec.4)", LIMIT >> 20)
+                format!(
+                    "the recording was cut at its size limit ({} MB) before this `{call}` (replay.rec.4)",
+                    LIMIT >> 20
+                )
             } else {
-                format!("the recording has no more effects, but the program calls `{call}` here: the program or its recording changed")
+                format!(
+                    "the recording has no more effects, but the program calls `{call}` here: the program or its recording changed"
+                )
             };
             return trap(pos, why);
         };
@@ -318,10 +335,16 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
             Value::Num(k, bits) => format!("{{\"num\":{},\"bits\":{bits}}}", NUMS.iter().position(|n| n == k)?),
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => json_str(s),
-            Value::Bytes(b) => format!("{{\"bytes\":\"{}\"}}", b.iter().map(|x| format!("{x:02x}")).collect::<String>()),
+            Value::Bytes(b) => {
+                format!("{{\"bytes\":\"{}\"}}", b.iter().map(|x| format!("{x:02x}")).collect::<String>())
+            }
             Value::Char(c) => format!("{{\"char\":{}}}", json_str(&c.to_string())),
             Value::Struct(s, fields) => {
-                format!("{{\"struct\":{},\"fields\":{}}}", json_str(&self.prog.structs[*s].name), list(&mut fields.iter())?)
+                format!(
+                    "{{\"struct\":{},\"fields\":{}}}",
+                    json_str(&self.prog.structs[*s].name),
+                    list(&mut fields.iter())?
+                )
             }
             Value::Enum(e, var, fields) => format!(
                 "{{\"enum\":{},\"variant\":{var},\"fields\":{}}}",

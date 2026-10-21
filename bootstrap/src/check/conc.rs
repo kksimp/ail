@@ -99,7 +99,12 @@ impl<'p> Checker<'p> {
             "Atomic" => Conc::Atomic,
             "Task" => {
                 self.args_only(args);
-                self.error_help("conc.task.1", pos, "a task is started with `spawn`, not built", "write `spawn f(args)`");
+                self.error_help(
+                    "conc.task.1",
+                    pos,
+                    "a task is started with `spawn`, not built",
+                    "write `spawn f(args)`",
+                );
                 return Some(Ty::Err);
             }
             _ => return None,
@@ -192,7 +197,9 @@ impl<'p> Checker<'p> {
                         "wait it with `t.wait()?` to use its result, or spawn a function that returns nothing",
                     ),
                     Ty::Conc(Conc::Task, _) | Ty::Err => {}
-                    _ => self.mismatch("expr.call.2", args[0].value.pos(), &Ty::Conc(Conc::Task, Box::new(Ty::Unit)), &t),
+                    _ => {
+                        self.mismatch("expr.call.2", args[0].value.pos(), &Ty::Conc(Conc::Task, Box::new(Ty::Unit)), &t)
+                    }
                 }
                 return Ty::Unit;
             }
@@ -258,7 +265,13 @@ impl<'p> Checker<'p> {
         }
         let mark = self.locals.len();
         if self.declare(var, var_pos) {
-            self.locals.push(super::Local { name: var.to_string(), ty: inner, mutable: true, kind: super::Kind::Binding, decl: None });
+            self.locals.push(super::Local {
+                name: var.to_string(),
+                ty: inner,
+                mutable: true,
+                kind: super::Kind::Binding,
+                decl: None,
+            });
         }
         self.block(body, None, false);
         self.end_scope(mark);
@@ -336,14 +349,16 @@ impl<'p> Checker<'p> {
             Ty::Ref(_) => true,
             Ty::List(e) | Ty::Set(e) | Ty::Opt(e) | Ty::Res(e, _) => self.holds_ref(e, depth + 1),
             Ty::Map(k, v) => self.holds_ref(k, depth + 1) || self.holds_ref(v, depth + 1),
-            Ty::Struct(..) | Ty::Enum(..) => {
-                self.field_types_of(t, match t {
-                    Ty::Struct(_, a) | Ty::Enum(_, a) => a,
-                    _ => &[],
-                })
+            Ty::Struct(..) | Ty::Enum(..) => self
+                .field_types_of(
+                    t,
+                    match t {
+                        Ty::Struct(_, a) | Ty::Enum(_, a) => a,
+                        _ => &[],
+                    },
+                )
                 .iter()
-                .any(|f| self.holds_ref(f, depth + 1))
-            }
+                .any(|f| self.holds_ref(f, depth + 1)),
             _ => false,
         }
     }
@@ -571,8 +586,12 @@ fn spawns(e: &Expr, diags: &mut Vec<Diagnostic>) {
     match e {
         Expr::Unary { op: UnOp::Spawn, operand, pos } => {
             diags.push(
-                Diagnostic::new("conc.task.5", *pos, "a task handle must be bound to a name, added to a group, or waited")
-                    .help("write `t := spawn f(x)` and later `t.wait()?`, or `g.add(spawn f(x))`"),
+                Diagnostic::new(
+                    "conc.task.5",
+                    *pos,
+                    "a task handle must be bound to a name, added to a group, or waited",
+                )
+                .help("write `t := spawn f(x)` and later `t.wait()?`, or `g.add(spawn f(x))`"),
             );
             spawns(operand, diags);
         }
@@ -614,7 +633,9 @@ fn consumed(name: &str, decl: Pos, rest: &[Stmt], diags: &mut Vec<Diagnostic>) {
             Diagnostic::new(
                 "conc.task.5",
                 *p,
-                format!("task `{name}` can only be waited or added to a group; a task handle can't be copied or passed"),
+                format!(
+                    "task `{name}` can only be waited or added to a group; a task handle can't be copied or passed"
+                ),
             )
             .help(TASK_HELP),
         );

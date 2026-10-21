@@ -11,19 +11,19 @@
 //! (default 1); `AIL_FUZZ_OUT` is where the minimised disagreements go
 //! (default `tools/fuzz/found/bytecode`). `tools/fuzz/bytecode-diff.sh N` runs it.
 
+#[path = "fuzz/bcprogs.rs"]
+mod bcprogs;
 #[path = "fuzz/progs.rs"]
 #[allow(dead_code)]
 mod progs;
-#[path = "fuzz/bcprogs.rs"]
-mod bcprogs;
 #[path = "fuzz/runner.rs"]
 mod runner;
 
-use runner::{exec_program_env, Out};
+use runner::{Out, exec_program_env};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 /// The most hand-offs a `pure` program makes: its prints and the call into `work`.
 const PURE_HANDOFFS: u64 = 40;
@@ -51,8 +51,17 @@ fn run(file: &Path, tier: bool) -> (Out, Option<u64>) {
         .lines()
         .filter(|l| {
             if let Some(rest) = l.strip_prefix("bytecode: ") {
-                handoffs = rest.split(" hand-offs").next().and_then(|h| h.rsplit(", ").next()).and_then(|n| n.trim().parse().ok());
-                if let Some(ins) = rest.split(" instructions").next().and_then(|h| h.rsplit("; ").next()).and_then(|n| n.trim().parse::<u64>().ok()) {
+                handoffs = rest
+                    .split(" hand-offs")
+                    .next()
+                    .and_then(|h| h.rsplit(", ").next())
+                    .and_then(|n| n.trim().parse().ok());
+                if let Some(ins) = rest
+                    .split(" instructions")
+                    .next()
+                    .and_then(|h| h.rsplit("; ").next())
+                    .and_then(|n| n.trim().parse::<u64>().ok())
+                {
                     INS.fetch_add(ins, Ordering::SeqCst);
                 }
                 HAND.fetch_add(handoffs.unwrap_or(0), Ordering::SeqCst);
@@ -138,7 +147,8 @@ fn fuzz_bytecode_differential() {
     let n: u64 = std::env::var("AIL_FUZZ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let first: u64 = std::env::var("AIL_FUZZ_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let out_dir = std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/bytecode"));
+    let out_dir =
+        std::env::var("AIL_FUZZ_OUT").map(PathBuf::from).unwrap_or_else(|_| root.join("tools/fuzz/found/bytecode"));
     let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-bytecode");
     let _ = fs::remove_dir_all(&scratch);
     let next = AtomicUsize::new(0);
@@ -159,15 +169,24 @@ fn fuzz_bytecode_differential() {
                     }
                     let seed = first + k;
                     let pure = seed % 3 == 0;
-                    let src = if (seed / 3) % 2 == 1 { bcprogs::wide(seed, pure) } else { bcprogs::program(seed, pure) };
+                    let src =
+                        if (seed / 3) % 2 == 1 { bcprogs::wide(seed, pure) } else { bcprogs::program(seed, pure) };
                     let p = dir.join("p.ail");
                     fs::write(&p, &src).unwrap();
                     // A program the checker rejects tests nothing.
-                    let chk = runner::exec_program_env(Path::new(env!("CARGO_BIN_EXE_ail")), &["check", p.to_str().unwrap()], &[], 30);
+                    let chk = runner::exec_program_env(
+                        Path::new(env!("CARGO_BIN_EXE_ail")),
+                        &["check", p.to_str().unwrap()],
+                        &[],
+                        30,
+                    );
                     if chk.code != Some(0) {
                         rejected.fetch_add(1, Ordering::SeqCst);
                         if std::env::var_os("AIL_FUZZ_SHOW_REJECTED").is_some() {
-                            eprintln!("rejected seed {seed}: {}", chk.stdout.lines().chain(chk.stderr.lines()).next().unwrap_or(""));
+                            eprintln!(
+                                "rejected seed {seed}: {}",
+                                chk.stdout.lines().chain(chk.stderr.lines()).next().unwrap_or("")
+                            );
                         }
                         continue;
                     }
@@ -199,7 +218,10 @@ fn fuzz_bytecode_differential() {
         *hist.entry(r.clone()).or_insert(0usize) += 1;
     }
     eprintln!("fuzz-bytecode: traps by rule: {hist:?}");
-    eprintln!("fuzz-bytecode: fuzz.bc.3: {} pure programs made more than {PURE_HANDOFFS} hand-offs (a missed fast path, not a failure)", MISSED.lock().unwrap().len());
+    eprintln!(
+        "fuzz-bytecode: fuzz.bc.3: {} pure programs made more than {PURE_HANDOFFS} hand-offs (a missed fast path, not a failure)",
+        MISSED.lock().unwrap().len()
+    );
     let found = found.into_inner().unwrap();
     assert!(found.is_empty(), "{} disagreement(s):\n{}", found.len(), found.join("\n\n"));
 }

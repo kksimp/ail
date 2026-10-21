@@ -11,8 +11,8 @@
 use crate::fasthash::FastSet as HashSet;
 
 use crate::ast::{
-    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
-    Extern, GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
+    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Extern, Field, FnDecl,
+    GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
     StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within, is_prelude,
 };
 use crate::diag::{Diagnostic, Edit, Pos};
@@ -26,9 +26,7 @@ mod mistakes;
 
 /// Keywords the spec defines that the bootstrap doesn't implement yet,
 /// with the spec rule each belongs to.
-const NOT_YET: &[(&str, &str)] = &[
-    ("as", "ffi.decl.1"),
-];
+const NOT_YET: &[(&str, &str)] = &[("as", "ffi.decl.1")];
 
 const ASSIGN_OPS: &[(&str, Option<BinOp>)] = &[
     ("=", None),
@@ -68,12 +66,14 @@ fn prelude_text(tokens: &[Token]) -> String {
     let (default, derive) = rest.split_once("## @module derive\n").expect("prelude has a derive module");
     let wants = |names: &[&str]| {
         let named = |t: &Token| matches!(&t.tok, Tok::Ident(n) if names.contains(&n.as_str()));
-        let declared = tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
+        let declared =
+            tokens.windows(2).any(|w| matches!(w[0].tok, Tok::Kw("fn" | "struct" | "enum" | "trait")) && named(&w[1]));
         tokens.iter().any(named) && !declared
     };
     let want_json_derive = wants(JSON_DERIVE_NAMES);
     let want_json = want_json_derive || wants(JSON_NAMES);
-    let at_derive = tokens.windows(2).any(|w| matches!((&w[0].tok, &w[1].tok), (Tok::Sym("@"), Tok::Ident(n)) if n == "derive"));
+    let at_derive =
+        tokens.windows(2).any(|w| matches!((&w[0].tok, &w[1].tok), (Tok::Sym("@"), Tok::Ident(n)) if n == "derive"));
     let mut text = core.to_string();
     if want_json {
         text.push_str(json);
@@ -131,7 +131,8 @@ pub fn parse_after_prelude(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
 /// these, `[` starts type arguments rather than an index (gen.infer.2).
 fn generic_names(tokens: &[Token]) -> HashSet<String> {
     // The built-in collections: `List[int]()` (type.coll.8).
-    let mut names: HashSet<String> = ["List", "Map", "Set", "Channel", "Mutex", "Atomic"].iter().map(|n| n.to_string()).collect();
+    let mut names: HashSet<String> =
+        ["List", "Map", "Set", "Channel", "Mutex", "Atomic"].iter().map(|n| n.to_string()).collect();
     for w in tokens.windows(3) {
         if let [
             Token { tok: Tok::Kw("fn" | "struct" | "enum"), .. },
@@ -264,7 +265,9 @@ pub fn parse(tokens: Vec<Token>) -> (Program, Vec<Diagnostic>) {
                 );
                 p.skip_statement();
             }
-            Tok::Ident(word) if ["const", "let", "var"].contains(&word.as_str()) && matches!(p.peek_at(1), Tok::Ident(_)) => {
+            Tok::Ident(word)
+                if ["const", "let", "var"].contains(&word.as_str()) && matches!(p.peek_at(1), Tok::Ident(_)) =>
+            {
                 let pos = p.pos();
                 let mut d = Diagnostic::new(
                     "mod.const.1",
@@ -608,7 +611,8 @@ impl Parser {
             attrs.push(Attr { name, pos, arg });
             // gram.attr.2: an attribute may sit on its own line above its function.
             while matches!(self.peek(), Tok::Newline)
-                && (matches!(self.peek_at(1), Tok::Sym("@")) || matches!(self.peek_at(1), Tok::Kw("fn" | "unsafe" | "extern")))
+                && (matches!(self.peek_at(1), Tok::Sym("@"))
+                    || matches!(self.peek_at(1), Tok::Kw("fn" | "unsafe" | "extern")))
             {
                 self.i += 1;
             }
@@ -652,7 +656,12 @@ impl Parser {
             let at = self.bump().pos;
             let lang = self.name("`c` after `extern`", "ffi.decl.2")?;
             if lang.0 != "c" {
-                self.error_help("ffi.decl.2", lang.1, format!("`extern {}` is not supported", lang.0), "write `extern c fn name(params) Result`");
+                self.error_help(
+                    "ffi.decl.2",
+                    lang.1,
+                    format!("`extern {}` is not supported", lang.0),
+                    "write `extern c fn name(params) Result`",
+                );
                 return None;
             }
             let lib = match self.peek().clone() {
@@ -663,7 +672,12 @@ impl Parser {
                 _ => None,
             };
             if within != Within::TopLevel {
-                self.error_help("ffi.decl.2", at, "an `extern c fn` is declared at the top level", "move it out of the `trait` or `impl` block");
+                self.error_help(
+                    "ffi.decl.2",
+                    at,
+                    "an `extern c fn` is declared at the top level",
+                    "move it out of the `trait` or `impl` block",
+                );
                 return None;
             }
             ext = Some(Extern { lib });
@@ -760,7 +774,11 @@ impl Parser {
         if self.at_sym("->") || (self.at_sym(":") && !matches!(self.peek_at(1), Tok::Newline)) {
             let pos = self.pos();
             let sym = if self.at_sym("->") { "->" } else { ":" };
-            let end = self.tokens.get(self.i + 1).filter(|t| t.pos.line == pos.line).map_or(Pos { col: pos.col + sym.len(), ..pos }, |t| t.pos);
+            let end = self
+                .tokens
+                .get(self.i + 1)
+                .filter(|t| t.pos.line == pos.line)
+                .map_or(Pos { col: pos.col + sym.len(), ..pos }, |t| t.pos);
             self.error_fix(
                 "gram.fn.2",
                 pos,
@@ -772,7 +790,9 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!" | "*") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!" | "*") | Tok::Kw("any" | "ref" | "fn") => {
+                Some(self.type_ref("a return type", "gram.fn.2")?)
+            }
             _ => None,
         };
         let full = match &owner {
@@ -1298,10 +1318,7 @@ impl Parser {
                     } else {
                         Edit::delete(pos, self.tokens[self.i + 1].pos)
                     };
-                    d = d.fix(
-                        "declare it with `:=`",
-                        vec![first, Edit::span(eq, Pos { col: eq.col + 1, ..eq }, ":=")],
-                    );
+                    d = d.fix("declare it with `:=`", vec![first, Edit::span(eq, Pos { col: eq.col + 1, ..eq }, ":=")]);
                 }
                 self.diags.push(d);
                 None
@@ -2011,10 +2028,15 @@ impl Parser {
                 // lex.str.2: `{{` isn't an escape; `\{` is.
                 Part::Code(tokens) if matches!(tokens.first().map(|t| &t.tok), Some(Tok::Sym("{"))) => {
                     let inner = tokens[0].pos;
-                    let mut edits = vec![Edit::span(Pos { col: inner.col - 1, ..inner }, Pos { col: inner.col + 1, ..inner }, "\\{")];
+                    let mut edits = vec![Edit::span(
+                        Pos { col: inner.col - 1, ..inner },
+                        Pos { col: inner.col + 1, ..inner },
+                        "\\{",
+                    )];
                     // `{{x}}`: the last token is the inner `}`, then the outer one.
                     if let Some(Token { tok: Tok::Sym("}"), pos: last }) = tokens.iter().rev().nth(1) {
-                        edits.push(Edit::delete(Pos { col: last.col + 1, ..*last }, Pos { col: last.col + 2, ..*last }));
+                        edits
+                            .push(Edit::delete(Pos { col: last.col + 1, ..*last }, Pos { col: last.col + 2, ..*last }));
                     }
                     self.diags.push(
                         Diagnostic::new("lex.str.2", inner, "`{{` in a string isn't an escaped brace")
@@ -2112,7 +2134,12 @@ impl Parser {
             return None;
         }
         let b = self.expression_plain()?;
-        Some(Expr::If { branches: vec![(cond, vec![Stmt::Expr(a)])], els: Some(vec![Stmt::Expr(b)]), else_err: None, pos })
+        Some(Expr::If {
+            branches: vec![(cond, vec![Stmt::Expr(a)])],
+            els: Some(vec![Stmt::Expr(b)]),
+            else_err: None,
+            pos,
+        })
     }
 
     /// A `bool` condition, or a binding `name := e` (expr.if.5).

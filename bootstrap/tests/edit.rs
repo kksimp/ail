@@ -63,7 +63,10 @@ fn all_or_nothing() {
     fs::write(&f, SRC).unwrap();
     let out = edit(&f, &[], r#"[{"op":"delete","id":"fn:old"},{"op":"delete","id":"fn:nope"}]"#);
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(text(&out.stderr), "error: edit 2 of 2: no declaration has the id `fn:nope` (edit.id.1); nothing was written\n");
+    assert_eq!(
+        text(&out.stderr),
+        "error: edit 2 of 2: no declaration has the id `fn:nope` (edit.id.1); nothing was written\n"
+    );
     assert_eq!(fs::read_to_string(&f).unwrap(), SRC);
     let bad = edit(&f, &[], "[{\"op\":");
     assert!(text(&bad.stderr).contains("(edit.in.1)"));
@@ -117,14 +120,22 @@ fn compact_hunks() {
     let out = edit(&f, &["--test"], "average\n+if xs.len() == 0\n+    return 0\n mut total := 0\n");
     assert_eq!(out.status.code(), Some(0), "{}{}", text(&out.stdout), text(&out.stderr));
     assert_eq!(text(&out.stdout), "edited 1 file; 0 errors\nok empty_is_zero\n1 passed, 0 failed\n");
-    assert!(fs::read_to_string(&f).unwrap().starts_with("fn average(xs List[int]) int\n    if xs.len() == 0\n        return 0\n    mut total"));
+    assert!(
+        fs::read_to_string(&f)
+            .unwrap()
+            .starts_with("fn average(xs List[int]) int\n    if xs.len() == 0\n        return 0\n    mut total")
+    );
     // One `-` and one `+` line that match no whole line replace a unique part of one.
     let out = edit(&f, &[], "fn:average\n-total / xs.len()\n+total / xs.len().max(1)\n");
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     assert!(fs::read_to_string(&f).unwrap().contains("    total / xs.len().max(1)\n"));
     let out = edit(&f, &[], "average\n-total\n+sum\n");
     assert_eq!(out.status.code(), Some(2));
-    assert!(text(&out.stderr).contains("`total` occurs 3 times; quote more of its line in `fn:average` (edit.op.7)"), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("`total` occurs 3 times; quote more of its line in `fn:average` (edit.op.7)"),
+        "{}",
+        text(&out.stderr)
+    );
     let out = edit(&f, &[], "average\n-nothing here\n+x\n");
     assert!(text(&out.stderr).contains("`nothing here` is not found"), "{}", text(&out.stderr));
 }

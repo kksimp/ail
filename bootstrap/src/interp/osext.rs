@@ -63,7 +63,9 @@ fn glob_in_platform(pattern: &str, windows: bool) -> Vec<String> {
 /// std.fs.9: the absolute root of a pattern and what follows it. The root
 /// keeps the pattern's own separator; a drive root is `C:` and its separator.
 fn glob_root(pattern: &str, windows: bool) -> (&str, &str) {
-    if windows && matches!(pattern.as_bytes(), [d, b':', s, ..] if d.is_ascii_alphabetic() && is_sep_in(*s as char, true)) {
+    if windows
+        && matches!(pattern.as_bytes(), [d, b':', s, ..] if d.is_ascii_alphabetic() && is_sep_in(*s as char, true))
+    {
         return (&pattern[..3], &pattern[3..]);
     }
     match pattern.chars().next() {
@@ -183,7 +185,11 @@ pub fn move_or_copy(from: &str, to: &str, copy: bool) -> Result<(), FsFail> {
     }
     let result = if copy { std::fs::copy(from, to).map(|_| ()) } else { std::fs::rename(from, to) };
     result.map_err(|e| {
-        let kind = if Path::new(to).is_dir() && !source.as_ref().is_ok_and(|m| m.is_dir()) { "is_dir" } else { error_kind(&e) };
+        let kind = if Path::new(to).is_dir() && !source.as_ref().is_ok_and(|m| m.is_dir()) {
+            "is_dir"
+        } else {
+            error_kind(&e)
+        };
         (to.to_string(), kind)
     })
 }
@@ -216,10 +222,8 @@ fn nearest_canonical(p: &Path) -> Option<std::path::PathBuf> {
 fn copy_dir(from: &Path, to: &Path) -> Result<(), FsFail> {
     let fail = |p: &Path, e: &std::io::Error| (p.display().to_string(), error_kind(e));
     std::fs::create_dir_all(to).map_err(|e| fail(to, &e))?;
-    let mut entries: Vec<_> = std::fs::read_dir(from)
-        .map_err(|e| fail(from, &e))?
-        .collect::<Result<_, _>>()
-        .map_err(|e| fail(from, &e))?;
+    let mut entries: Vec<_> =
+        std::fs::read_dir(from).map_err(|e| fail(from, &e))?.collect::<Result<_, _>>().map_err(|e| fail(from, &e))?;
     entries.sort_by_key(|e| e.file_name());
     for entry in entries {
         let (src, dst) = (entry.path(), to.join(entry.file_name()));

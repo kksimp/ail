@@ -59,7 +59,8 @@ pub fn check(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
         return Vec::new();
     }
     let moves: HashMap<Pos, &'static str> = resolved.moves.iter().map(|(p, r)| (*p, *r)).collect();
-    let mut w = Walker { moves: &moves, state: None, scope: Vec::new(), loops: Vec::new(), deferred: false, diags: Vec::new() };
+    let mut w =
+        Walker { moves: &moves, state: None, scope: Vec::new(), loops: Vec::new(), deferred: false, diags: Vec::new() };
     for f in &prog.fns {
         let Some(body) = &f.body else { continue };
         w.state = Some(HashMap::default());
@@ -197,8 +198,12 @@ impl<'p> Walker<'p> {
             again.sort_by_key(|(_, m)| (m.at.line, m.at.col));
             for (n, m) in again {
                 self.diags.push(
-                    Diagnostic::new("own.move.4", m.at, format!("`{n}` is moved inside a loop, so the next iteration would use it after the move"))
-                        .help(format!("give `{n}` a new value before the loop repeats, or `break` after the move")),
+                    Diagnostic::new(
+                        "own.move.4",
+                        m.at,
+                        format!("`{n}` is moved inside a loop, so the next iteration would use it after the move"),
+                    )
+                    .help(format!("give `{n}` a new value before the loop repeats, or `break` after the move")),
                 );
             }
         }
@@ -423,8 +428,12 @@ impl<'p> Walker<'p> {
         again.sort_by_key(|(_, m)| (m.at.line, m.at.col));
         for (n, m) in again {
             self.diags.push(
-                Diagnostic::new("own.move.4", m.at, format!("`{n}` is moved inside a comprehension, so the next element would use it after the move"))
-                    .help(format!("move `{n}` outside the comprehension")),
+                Diagnostic::new(
+                    "own.move.4",
+                    m.at,
+                    format!("`{n}` is moved inside a comprehension, so the next element would use it after the move"),
+                )
+                .help(format!("move `{n}` outside the comprehension")),
             );
         }
     }

@@ -14,8 +14,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 const RUN_LIMIT: Duration = Duration::from_secs(30);
@@ -70,11 +70,13 @@ pub fn command(paths: &[&str], json: bool) -> ExitCode {
     std::thread::scope(|s| {
         for w in 0..workers {
             let (files, next, results, scratch) = (&files, &next, &results, &scratch);
-            s.spawn(move || loop {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some(file) = files.get(i) else { break };
-                let out = run_file(file, &scratch.join(format!("w{w}")));
-                results.lock().unwrap().push((i, out));
+            s.spawn(move || {
+                loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(file) = files.get(i) else { break };
+                    let out = run_file(file, &scratch.join(format!("w{w}")));
+                    results.lock().unwrap().push((i, out));
+                }
             });
         }
     });
@@ -141,22 +143,11 @@ fn report(all: &[Outcome], json: bool) -> ExitCode {
             n("skipped")
         );
     }
-    if n("DIFF") > 0 {
-        ExitCode::from(1)
-    } else {
-        ExitCode::SUCCESS
-    }
+    if n("DIFF") > 0 { ExitCode::from(1) } else { ExitCode::SUCCESS }
 }
 
 fn outcome(file: &str, test: &str, interp: &'static str, native: &str, status: &'static str, reason: &str) -> Outcome {
-    Outcome {
-        file: file.into(),
-        test: test.into(),
-        interp,
-        native: native.into(),
-        status,
-        reason: reason.into(),
-    }
+    Outcome { file: file.into(), test: test.into(), interp, native: native.into(), status, reason: reason.into() }
 }
 
 /// The interpreter's verdict on each test of `file`: `ail test --json`.
@@ -192,17 +183,16 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
     let Ok(src) = std::fs::read_to_string(file) else { return Vec::new() };
     let lines: Vec<&str> = src.lines().collect();
     let (tests, skipped, left_out) = find_tests(&lines);
-    let mut out: Vec<Outcome> = skipped
-        .iter()
-        .map(|(n, why)| outcome(&name, n, "-", "-", "skipped", why))
-        .collect();
+    let mut out: Vec<Outcome> = skipped.iter().map(|(n, why)| outcome(&name, n, "-", "-", "skipped", why)).collect();
     if tests.is_empty() {
         return out;
     }
     let interp = match interpreter_results(file) {
         Ok(m) => m,
         Err(why) => {
-            out.extend(tests.iter().map(|t| outcome(&name, &t.name, "-", "-", "skipped", &format!("the interpreter rejects the file: {why}"))));
+            out.extend(tests.iter().map(|t| {
+                outcome(&name, &t.name, "-", "-", "skipped", &format!("the interpreter rejects the file: {why}"))
+            }));
             return out;
         }
     };
@@ -233,13 +223,7 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
             break;
         }
         let ail = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("ail"));
-        let res = Command::new(ail)
-            .arg("build")
-            .arg(target)
-            .arg("-o")
-            .arg(&exe_path)
-            .stdin(Stdio::null())
-            .output();
+        let res = Command::new(ail).arg("build").arg(target).arg("-o").arg(&exe_path).stdin(Stdio::null()).output();
         let Ok(res) = res else {
             blocked_all = Some("can't run `ail build`".into());
             break;
@@ -354,12 +338,8 @@ fn short(msg: &str) -> String {
 
 /// Run the built tests binary on test number `k` (an argument of `k` letters).
 fn run_one(exe: &Path, k: usize) -> (&'static str, String) {
-    let child = Command::new(exe)
-        .arg("x".repeat(k))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
+    let child =
+        Command::new(exe).arg("x".repeat(k)).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
     let Ok(mut child) = child else { return ("fail", "can't start the native binary".into()) };
     let start = Instant::now();
     loop {
@@ -584,7 +564,12 @@ fn call_args(text: &str, open: usize) -> Option<(Vec<String>, usize)> {
 /// native.test.2: the rewritten copy of the file, and for each of its lines the original
 /// line it came from (`None` for lines the runner added). Left-out tests and
 /// `main` become blank lines, so positions stay put.
-fn rewrite(lines: &[&str], tests: &[TestFn], left_out: &[(usize, usize)], dropped: &HashMap<usize, String>) -> (String, Vec<Option<usize>>) {
+fn rewrite(
+    lines: &[&str],
+    tests: &[TestFn],
+    left_out: &[(usize, usize)],
+    dropped: &HashMap<usize, String>,
+) -> (String, Vec<Option<usize>>) {
     let mut keep: Vec<Option<String>> = lines.iter().map(|l| Some((*l).to_string())).collect();
     for (i, t) in tests.iter().enumerate() {
         if dropped.contains_key(&i) {
@@ -620,12 +605,8 @@ fn rewrite(lines: &[&str], tests: &[TestFn], left_out: &[(usize, usize)], droppe
             origin.push(None);
         }
     }
-    let ends: HashMap<usize, ()> = tests
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !dropped.contains_key(i))
-        .map(|(_, t)| (t.last, ()))
-        .collect();
+    let ends: HashMap<usize, ()> =
+        tests.iter().enumerate().filter(|(i, _)| !dropped.contains_key(i)).map(|(_, t)| (t.last, ())).collect();
     for (j, l) in rewritten.iter().enumerate() {
         out.push((*l).to_string());
         origin.push(Some(j));

@@ -85,7 +85,9 @@ fn trap_text(name: &str) -> String {
 fn failed_ensures_with_old_shows_the_value_on_entry() {
     let stderr = trap_text("contract_old_trap");
     assert!(
-        stderr.contains("`Counter.add` ensures `n == old(n) + k`, but it returned at 4:5 with self = Counter(n: 4), k = 2"),
+        stderr.contains(
+            "`Counter.add` ensures `n == old(n) + k`, but it returned at 4:5 with self = Counter(n: 4), k = 2"
+        ),
         "{stderr}"
     );
     assert!(stderr.contains("values: self = Counter(n: 4), old(n) = 1, k = 2"), "{stderr}");
@@ -105,7 +107,10 @@ fn inherited_requires_names_the_trait_and_uses_the_implementations_parameters() 
 #[test]
 fn inherited_ensures_traps_in_the_implementation() {
     let stderr = trap_text("contract_trait_ensures_trap");
-    assert!(stderr.contains("`Odd.area` ensures `result >= 0` (inherited from `Shape.area`), but it returned -6"), "{stderr}");
+    assert!(
+        stderr.contains("`Odd.area` ensures `result >= 0` (inherited from `Shape.area`), but it returned -6"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -119,7 +124,9 @@ fn invariants_name_the_struct_the_method_and_the_value() {
     );
     let stderr = trap_text("contract_invariant_built_trap");
     assert!(
-        stderr.contains("`Range` invariant `lo <= hi` doesn't hold for Range(lo: 3, hi: 2), built at 9:16 (invariant at 5:5)"),
+        stderr.contains(
+            "`Range` invariant `lo <= hi` doesn't hold for Range(lo: 3, hi: 2), built at 9:16 (invariant at 5:5)"
+        ),
         "{stderr}"
     );
 }
@@ -129,7 +136,8 @@ fn api_shows_inherited_contracts_and_invariants() {
     let out = ail().args(["api", &case("contract_trait_inherit")]).output().unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains(r#""inherits":"Shape.scale","inherited_requires":["k > 0"],"inherited_ensures":["result >= 0"]"#),
+        stdout
+            .contains(r#""inherits":"Shape.scale","inherited_requires":["k > 0"],"inherited_ensures":["result >= 0"]"#),
         "{stdout}"
     );
     let out = ail().args(["api", &case("contract_invariant")]).output().unwrap();

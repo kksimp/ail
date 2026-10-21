@@ -204,7 +204,8 @@ fn serve_is_a_capability() {
     assert!(stderr.contains("eff.cap.1") && stderr.contains("`net.serve`"), "{stderr}");
     // Denying `net` denies serving too, and so does `--deterministic`.
     for flag in ["--deny=net", "--deterministic"] {
-        let args: Vec<&str> = if flag == "--deny=net" { vec!["check", "--deny", "net", program] } else { vec!["check", flag, program] };
+        let args: Vec<&str> =
+            if flag == "--deny=net" { vec!["check", "--deny", "net", program] } else { vec!["check", flag, program] };
         assert_eq!(ail(&args).status.code(), Some(2), "{flag}");
     }
     // A client-only program is not denied `net.serve`.
@@ -215,4 +216,3 @@ fn serve_is_a_capability() {
     assert!(text.contains("fn:main {fail, io, net, net.serve, spawn}"), "{text}");
     assert!(text.contains("fn:worker {fail, io, net}"), "{text}");
 }
-

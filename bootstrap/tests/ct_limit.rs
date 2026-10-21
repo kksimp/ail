@@ -11,11 +11,7 @@ fn run(limit: &str, program: &str) -> (i32, String, String) {
         .args(["run", program])
         .output()
         .unwrap();
-    (
-        out.status.code().unwrap_or(-1),
-        String::from_utf8(out.stdout).unwrap(),
-        String::from_utf8(out.stderr).unwrap(),
-    )
+    (out.status.code().unwrap_or(-1), String::from_utf8(out.stdout).unwrap(), String::from_utf8(out.stderr).unwrap())
 }
 
 #[test]

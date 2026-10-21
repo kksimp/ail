@@ -21,9 +21,7 @@ fn compiler_dir() -> Option<PathBuf> {
 
 /// The repository root, beside `compiler/` (or the current directory).
 pub fn repo_root() -> PathBuf {
-    compiler_dir()
-        .and_then(|d| d.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from("."))
+    compiler_dir().and_then(|d| d.parent().map(Path::to_path_buf)).unwrap_or_else(|| PathBuf::from("."))
 }
 
 /// Run `ail run compiler ARGS`; stdout on success. The compiler's own
@@ -93,14 +91,18 @@ pub fn command(args: &[&str]) -> ExitCode {
             ("--max-memory", Some(v)) if positive(v) => (memory, i) = (v.to_string(), i + 1),
             (f, _) if file.is_none() && !f.starts_with('-') => file = Some(f),
             _ => {
-                eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]");
+                eprintln!(
+                    "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]"
+                );
                 return ExitCode::from(2);
             }
         }
         i += 1;
     }
     let Some(file) = file else {
-        eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]");
+        eprintln!(
+            "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]"
+        );
         return ExitCode::from(2);
     };
     let Some(dir) = compiler_dir() else {
@@ -122,7 +124,11 @@ pub fn command(args: &[&str]) -> ExitCode {
         None => PathBuf::from(Path::new(file).file_stem().unwrap_or_default()),
     };
     // native.build.5: an unchanged program is copied from the cache.
-    let key = if no_cache || target.is_none() { None } else { build_cache::key(file, &dir, &format!("{} {timeout} {memory}", target.unwrap_or_default())) };
+    let key = if no_cache || target.is_none() {
+        None
+    } else {
+        build_cache::key(file, &dir, &format!("{} {timeout} {memory}", target.unwrap_or_default()))
+    };
     if let Some(bytes) = key.as_deref().and_then(build_cache::load) {
         return match write_executable(&out, &bytes) {
             Ok(()) => ExitCode::SUCCESS,
@@ -132,7 +138,15 @@ pub fn command(args: &[&str]) -> ExitCode {
             }
         };
     }
-    let hex = match run_compiler(&["build", file, &rt.to_string_lossy(), target.unwrap_or("x86_64-linux"), &timeout, &memory, &dir.join("../bootstrap/src/std").to_string_lossy()]) {
+    let hex = match run_compiler(&[
+        "build",
+        file,
+        &rt.to_string_lossy(),
+        target.unwrap_or("x86_64-linux"),
+        &timeout,
+        &memory,
+        &dir.join("../bootstrap/src/std").to_string_lossy(),
+    ]) {
         Ok(text) => text,
         Err(code) => return code,
     };
@@ -164,10 +178,7 @@ fn decode(hex: &str) -> Option<Vec<u8>> {
     if digits.len() % 2 != 0 {
         return None;
     }
-    digits
-        .chunks(2)
-        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
-        .collect()
+    digits.chunks(2).map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()).collect()
 }
 
 fn write_executable(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

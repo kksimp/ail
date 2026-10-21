@@ -13,8 +13,8 @@ use std::collections::{BTreeMap, HashMap};
 use super::Resolved;
 use super::effects::{CAPABILITIES, Effects, fn_id};
 use crate::ast::{
-    BinOp, Block, CompFor, Cond, Else, Expr, FnDecl, InterpPart, PathStep, Pattern, Program, Stmt, TypeKind, UnOp, is_prelude,
-    place_path,
+    BinOp, Block, CompFor, Cond, Else, Expr, FnDecl, InterpPart, PathStep, Pattern, Program, Stmt, TypeKind, UnOp,
+    is_prelude, place_path,
 };
 use crate::diag::{Diagnostic, Pos, json_str};
 
@@ -482,10 +482,8 @@ impl<'a> Scan<'a> {
             }
             Expr::Method { recv, name, name_pos, args } => {
                 let std_module = self.resolved.std_calls.contains_key(name_pos);
-                let task_module = matches!(
-                    self.resolved.std_calls.get(name_pos),
-                    Some(crate::stdlib::StdCall::Fn("task", _))
-                );
+                let task_module =
+                    matches!(self.resolved.std_calls.get(name_pos), Some(crate::stdlib::StdCall::Fn("task", _)));
                 if self.resolved.atomic_calls.contains(name_pos) {
                     self.atomic_problem(*name_pos, format!("calls `.{name}()` on an `Atomic`"));
                 } else if self.resolved.handle_calls.contains(name_pos) || task_module {
@@ -1026,7 +1024,9 @@ fn context<'a>(prog: &'a Program, resolved: &'a Resolved, fx: &'a Effects<'a>) -
                     fns: &HashMap::new(),
                 };
                 s.block(b);
-                s.problems.iter().fold(0, |acc, p| acc | if p.handle { SYNC } else { 0 } | if p.atomic { ATOMIC } else { 0 })
+                s.problems
+                    .iter()
+                    .fold(0, |acc, p| acc | if p.handle { SYNC } else { 0 } | if p.atomic { ATOMIC } else { 0 })
             })
         })
         .collect();
@@ -1275,7 +1275,11 @@ fn judge_comp(cx: &Context, f: &FnDecl, elem: &Expr, c: &CompFor) -> Verdict {
         effects.extend(fx.of_expr(resolved, cond));
     }
     if let Some((e, source)) = effects.into_iter().find(|(e, _)| ordering(e)) {
-        let help = if e == "io" { "compute the values with `par for`, then print them after" } else { "move the effect out of the comprehension" };
+        let help = if e == "io" {
+            "compute the values with `par for`, then print them after"
+        } else {
+            "move the effect out of the comprehension"
+        };
         scan.problem("conc.par.2", elem.pos(), true, format!("has effect `{e}` via {source}"), help);
     }
     let Scan { writes, reads, mut problems, .. } = scan;
@@ -1296,10 +1300,23 @@ fn judge_comp(cx: &Context, f: &FnDecl, elem: &Expr, c: &CompFor) -> Verdict {
     captures.dedup();
     let plan = Plan { captures: captures.into_iter().map(String::from).collect(), ..Plan::default() };
     let (outcome, rule, reason, at, help) = match problems.into_iter().next() {
-        Some(p) => (if p.provable { Outcome::Sequential } else { Outcome::Asserted }, p.rule, p.reason, p.at, Some(p.help)),
+        Some(p) => {
+            (if p.provable { Outcome::Sequential } else { Outcome::Asserted }, p.rule, p.reason, p.at, Some(p.help))
+        }
         None => (Outcome::Parallel, "conc.par.12", "computes each element independently".into(), c.var_pos, None),
     };
-    Verdict { pos: c.var_pos, func: fn_id(prog, f), var: c.var.clone(), par: true, outcome, rule, reason, at, help, plan: Some(plan) }
+    Verdict {
+        pos: c.var_pos,
+        func: fn_id(prog, f),
+        var: c.var.clone(),
+        par: true,
+        outcome,
+        rule,
+        reason,
+        at,
+        help,
+        plan: Some(plan),
+    }
 }
 
 /// The verdict on every `par for` comprehension, in source order (conc.par.12).

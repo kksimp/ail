@@ -351,7 +351,10 @@ impl Work {
             for d in decls(src) {
                 // edit.id.3: a bare name stands for `kind:name`.
                 let bare = |d_id: &str| !id.contains(':') && d_id.split_once(':').is_some_and(|(_, n)| n == id);
-                if d.id == id || bare(&d.id) || (!module.is_empty() && (qualified(&d.id, &module) == id || bare(&qualified(&d.id, &module)))) {
+                if d.id == id
+                    || bare(&d.id)
+                    || (!module.is_empty() && (qualified(&d.id, &module) == id || bare(&qualified(&d.id, &module))))
+                {
                     hits.push((f.clone(), d));
                 }
             }
@@ -375,7 +378,11 @@ impl Work {
     fn target(&self, op: &J) -> Result<PathBuf, String> {
         if let Some(f) = op.str("file") {
             let p = if self.package { self.root.join(f) } else { PathBuf::from(f) };
-            return self.files.contains_key(&p).then_some(p).ok_or(format!("`{f}` is not a file of the program (edit.op.3)"));
+            return self
+                .files
+                .contains_key(&p)
+                .then_some(p)
+                .ok_or(format!("`{f}` is not a file of the program (edit.op.3)"));
         }
         if !self.package {
             return Ok(self.root.clone());
@@ -400,7 +407,9 @@ fn reindent(text: &str, by: usize) -> Vec<String> {
         .unwrap_or(0);
     lines
         .iter()
-        .map(|l| if l.trim().is_empty() { String::new() } else { format!("{}{}", " ".repeat(by), &l[common.min(l.len())..]) })
+        .map(|l| {
+            if l.trim().is_empty() { String::new() } else { format!("{}{}", " ".repeat(by), &l[common.min(l.len())..]) }
+        })
         .collect()
 }
 
@@ -434,8 +443,11 @@ fn hunk(src: &str, from: usize, to: usize, lines: &[&str]) -> Result<String, Str
         && !scope.iter().any(|l| l.trim() == old[0])
     {
         let (part, new) = (text(m).trim().to_string(), text(p).trim().to_string());
-        let hits: Vec<(usize, usize)> =
-            scope.iter().enumerate().flat_map(|(i, l)| l.match_indices(part.as_str()).map(move |(at, _)| (i, at))).collect();
+        let hits: Vec<(usize, usize)> = scope
+            .iter()
+            .enumerate()
+            .flat_map(|(i, l)| l.match_indices(part.as_str()).map(move |(at, _)| (i, at)))
+            .collect();
         return match hits.as_slice() {
             [(i, at)] => {
                 let line = scope[*i];
@@ -536,9 +548,11 @@ fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
             let src = &work.files[&f];
             let lines: Vec<&str> = src.split('\n').collect();
             let mut keep = d.sig_end + 1;
-            let new_has = body.lines().any(|l| matches!(l.trim_start().split(' ').next(), Some("requires" | "ensures")));
+            let new_has =
+                body.lines().any(|l| matches!(l.trim_start().split(' ').next(), Some("requires" | "ensures")));
             if !new_has {
-                while keep < d.end && matches!(lines[keep].trim_start().split(' ').next(), Some("requires" | "ensures")) {
+                while keep < d.end && matches!(lines[keep].trim_start().split(' ').next(), Some("requires" | "ensures"))
+                {
                     keep += 1;
                 }
             }
@@ -626,7 +640,11 @@ fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
             let new = splice(src, at, at, &block);
             work.files.insert(f, new);
         }
-        other => return Err(format!("unknown op `{other}`; the ops are replace_body, replace, insert, delete, rename and import (edit.in.1)")),
+        other => {
+            return Err(format!(
+                "unknown op `{other}`; the ops are replace_body, replace, insert, delete, rename and import (edit.in.1)"
+            ));
+        }
     }
     Ok(())
 }
@@ -634,7 +652,10 @@ fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
 /// edit.op.5: rename the declaration `id` and every reference to it. The
 /// program as edited so far must check, since references come from the checker.
 fn rename(work: &mut Work, id: &str, to: &str, path: &str) -> Result<(), String> {
-    if to.is_empty() || !to.chars().all(|c| c.is_alphanumeric() || c == '_') || to.starts_with(|c: char| c.is_ascii_digit()) {
+    if to.is_empty()
+        || !to.chars().all(|c| c.is_alphanumeric() || c == '_')
+        || to.starts_with(|c: char| c.is_ascii_digit())
+    {
         return Err(format!("`{to}` is not a name (edit.op.5)"));
     }
     // edit.id.3: a bare name becomes the id it stands for.
@@ -700,7 +721,12 @@ fn rename(work: &mut Work, id: &str, to: &str, path: &str) -> Result<(), String>
             });
             match at {
                 Some(i) if l[i..].starts_with(&old) => l.replace_range(i..i + old.len(), to),
-                _ => return Err(format!("{}:{line}:{col} doesn't hold `{old}`; nothing was renamed (edit.op.5)", f.display())),
+                _ => {
+                    return Err(format!(
+                        "{}:{line}:{col} doesn't hold `{old}`; nothing was renamed (edit.op.5)",
+                        f.display()
+                    ));
+                }
             }
         }
         work.files.insert(f, lines.join("\n"));
@@ -886,14 +912,24 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
     if show_diff || dry {
         for f in &changed {
             let name = f.display().to_string();
-            out.push_str(&crate::fmt::diff(&name, &original[f], &work.files[f]).replacen(" (formatted)\n", " (edited)\n", 1));
+            out.push_str(&crate::fmt::diff(&name, &original[f], &work.files[f]).replacen(
+                " (formatted)\n",
+                " (edited)\n",
+                1,
+            ));
         }
     }
     print!("{out}");
     if !diags.is_empty() {
         crate::modules::report(&prog.files, diags, json);
     }
-    let verb = if kept { "edited" } else if dry { "would edit" } else { "not written (--if-clean)" };
+    let verb = if kept {
+        "edited"
+    } else if dry {
+        "would edit"
+    } else {
+        "not written (--if-clean)"
+    };
     let names: Vec<String> = changed.iter().map(|f| f.display().to_string()).collect();
     if json {
         let files: Vec<String> = names.iter().map(|n| json_str(n)).collect();
@@ -965,7 +1001,11 @@ mod tests {
     fn finds_declarations() {
         let src = "use std.fs\n\n## Doc.\n@test fn t()\n    x(\n        1,\n    )\n\n# loose\n\nfn P.m(self) int\n    1\nMAX := 3\nerror enum E\n    A\n";
         let ds = decls(src);
-        let got: Vec<(&str, usize, usize, usize)> = ds.iter().map(|d| (d.id.as_str(), d.start, d.sig_end, d.end)).collect();
-        assert_eq!(got, [("fn:t", 2, 3, 7), ("method:P.m", 10, 10, 12), ("const:MAX", 12, 12, 13), ("type:E", 13, 13, 15)]);
+        let got: Vec<(&str, usize, usize, usize)> =
+            ds.iter().map(|d| (d.id.as_str(), d.start, d.sig_end, d.end)).collect();
+        assert_eq!(
+            got,
+            [("fn:t", 2, 3, 7), ("method:P.m", 10, 10, 12), ("const:MAX", 12, 12, 13), ("type:E", 13, 13, 15)]
+        );
     }
 }

@@ -182,7 +182,7 @@ impl G {
         self.depth += 1;
         let (ints, muts, floats) = (self.ints.len(), self.muts.len(), self.floats.len());
         let n = 1 + self.r.below(2);
-                    self.stmts(n, d.saturating_sub(1), false);
+        self.stmts(n, d.saturating_sub(1), false);
         self.ints.truncate(ints);
         self.muts.truncate(muts);
         self.floats.truncate(floats);
@@ -192,7 +192,16 @@ impl G {
 }
 
 pub fn program(seed: u64) -> String {
-    let mut g = G { r: Rng::new(seed ^ 0xA7A7), ints: vec![], muts: vec![], floats: vec![], fns: 0, next: 0, out: String::new(), depth: 0 };
+    let mut g = G {
+        r: Rng::new(seed ^ 0xA7A7),
+        ints: vec![],
+        muts: vec![],
+        floats: vec![],
+        fns: 0,
+        next: 0,
+        out: String::new(),
+        depth: 0,
+    };
     for k in 0..g.r.below(3) {
         g.out.push_str(&format!("fn f{k}(a int, b int) int\n"));
         g.depth = 1;
@@ -227,7 +236,8 @@ struct S {
     out: String,
 }
 
-const LITS: [&str; 12] = ["", "a", "Hello", "  pad ", "x,y,,z", "é-ü", "ABC abc", "日本", "a\\tb", "{", "tail\\n", "0123456789"];
+const LITS: [&str; 12] =
+    ["", "a", "Hello", "  pad ", "x,y,,z", "é-ü", "ABC abc", "日本", "a\\tb", "{", "tail\\n", "0123456789"];
 
 impl S {
     fn lit(&mut self) -> String {
@@ -311,7 +321,9 @@ pub fn strings(seed: u64) -> String {
             }
             4 => {
                 let a = s.str_(2);
-                let m = s.r.pick(&["code", "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower"]).to_string();
+                let m =
+                    s.r.pick(&["code", "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower"])
+                        .to_string();
                 s.out.push_str(&format!("    for c in {a}.chars()\n        print(c.{m}())\n"));
             }
             _ => {
@@ -405,15 +417,25 @@ fn twice(xs List[int], i int) int ! Empty\n    v := first(xs)?\n    w := lookup(
             1 => format!("print(pick({n}) else -7)"),
             2 => format!("if v := pick({n})\n        print(v + 1)\n    else\n        print(\"none\")"),
             3 => format!("print(halve({n}.5) else 0.0)"),
-            4 => format!("w{u} := small({n} * 11) else err\n        print(\"failed: {{err}}\")\n        0\n    print(w{u})"),
+            4 => format!(
+                "w{u} := small({n} * 11) else err\n        print(\"failed: {{err}}\")\n        0\n    print(w{u})"
+            ),
             5 => format!("print(both({l}, {l2}) else -9)"),
             6 => format!("print(twice({l}, {n}) else -3)"),
             7 => format!("check({n} * 9) else err\n        print(\"check: {{err}}\")"),
-            8 => format!("mut o{u} := pick({n})\n    print(o{u} else 5)\n    o{u} = none\n    print(o{u} else 100)\n    o{u} = {n}\n    print(o{u} else 100)"),
+            8 => format!(
+                "mut o{u} := pick({n})\n    print(o{u} else 5)\n    o{u} = none\n    print(o{u} else 100)\n    o{u} = {n}\n    print(o{u} else 100)"
+            ),
             9 => format!("if pick({n}) == none\n        print(\"missing\")"),
             10 => format!("if pick({n}) != none\n        print(\"found\")"),
-            11 => format!("mut count{u} := 0\n    for i in 0..{}\n        v := small(i * {}) else continue\n        count{u} += v\n    print(count{u})", 3 + r.below(10), 1 + r.below(60)),
-            12 => format!("if p := find(xs, {n})\n        print(\"p {{p}}\")\n    elif q := lookup(xs, {n})\n        print(\"q {{q}}\")\n    else\n        print(\"neither\")"),
+            11 => format!(
+                "mut count{u} := 0\n    for i in 0..{}\n        v := small(i * {}) else continue\n        count{u} += v\n    print(count{u})",
+                3 + r.below(10),
+                1 + r.below(60)
+            ),
+            12 => format!(
+                "if p := find(xs, {n})\n        print(\"p {{p}}\")\n    elif q := lookup(xs, {n})\n        print(\"q {{q}}\")\n    else\n        print(\"neither\")"
+            ),
             _ => format!("m{u} := first({l}) else\n        print(\"fallback block\")\n        7\n    print(m{u})"),
         };
         o.push_str("    ");
@@ -469,9 +491,19 @@ fn pick(i int) Color\n    match i % 3\n        0 => Red\n        1 => Green\n   
             6 => format!("print({col} == {col2})"),
             7 => format!("print({s1} == {s2})"),
             8 => format!("print({s1} != {s2})"),
-            9 => format!("mut t{u} := Tree.Leaf\n    for i in 0..{}\n        t{u} = insert(t{u}, (i * {}) % {})\n    print(sum(t{u}))\n    print(depth(t{u}))", 1 + r.below(12), 1 + r.below(9), 3 + r.below(20)),
-            10 => format!("mut total{u} := 0\n    for i in 0..{}\n        total{u} += code(pick(i))\n    print(total{u})", 1 + r.below(9)),
-            _ => format!("shapes{u} := [{s1}, {s2}, Shape.Dot]\n    mut sum{u} := 0\n    for s in shapes{u}\n        sum{u} += area(s)\n    print(sum{u})\n    print(shapes{u}[0] == shapes{u}[1])"),
+            9 => format!(
+                "mut t{u} := Tree.Leaf\n    for i in 0..{}\n        t{u} = insert(t{u}, (i * {}) % {})\n    print(sum(t{u}))\n    print(depth(t{u}))",
+                1 + r.below(12),
+                1 + r.below(9),
+                3 + r.below(20)
+            ),
+            10 => format!(
+                "mut total{u} := 0\n    for i in 0..{}\n        total{u} += code(pick(i))\n    print(total{u})",
+                1 + r.below(9)
+            ),
+            _ => format!(
+                "shapes{u} := [{s1}, {s2}, Shape.Dot]\n    mut sum{u} := 0\n    for s in shapes{u}\n        sum{u} += area(s)\n    print(sum{u})\n    print(shapes{u}[0] == shapes{u}[1])"
+            ),
         };
         o.push_str("    ");
         o.push_str(&b);
@@ -499,7 +531,10 @@ pub fn funcs(seed: u64) -> String {
         o.push_str(&format!("fn f{i}(n int) int\n    {body}\n\n"));
     }
     o.push_str("fn apply(f fn(int) int, x int) int\n    f(x)\n\nfn twice(f fn(int) int, x int) int\n    f(f(x))\n\n");
-    o.push_str(&format!("fn pick(which int) fn(int) int\n    if which % 2 == 0\n        f0\n    else\n        f{}\n\n", nf - 1));
+    o.push_str(&format!(
+        "fn pick(which int) fn(int) int\n    if which % 2 == 0\n        f0\n    else\n        f{}\n\n",
+        nf - 1
+    ));
     o.push_str("fn each(f fn(int), n int)\n    for i in 0..n\n        f(i)\n\nfn show(n int)\n    print(\"show {n}\")\n\nfn mix(a int, b float, c int) float\n    a.to_float() * b + c.to_float()\n\nfn many(f fn(int, float, int) float, a int) float\n    f(a, 1.5, a + 1)\n\n");
     o.push_str("fn main()\n");
     let list = |r: &mut Rng, lo: i64| -> String {

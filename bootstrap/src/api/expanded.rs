@@ -28,7 +28,8 @@ impl<'p> Api<'p> {
             im.methods.iter().filter(|&&m| !self.in_generated(g, prog.fns[m].pos)).map(|&m| self.fn_item(m)).collect();
         let Some(g) = g.filter(|_| self.expanded) else { return items };
         let file = &prog.files[g.file];
-        let mut fns: Vec<usize> = (0..prog.fns.len()).filter(|&i| self.in_generated(Some(g), prog.fns[i].pos)).collect();
+        let mut fns: Vec<usize> =
+            (0..prog.fns.len()).filter(|&i| self.in_generated(Some(g), prog.fns[i].pos)).collect();
         fns.sort_by_key(|&i| prog.fns[i].pos.line);
         let lines: Vec<&str> = file.src.lines().collect();
         for (n, &i) in fns.iter().enumerate() {

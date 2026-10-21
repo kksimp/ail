@@ -107,7 +107,9 @@ fn middle_level_keeps_first_sentences_of_public_items() {
     fs::write(dir.join("ail.pkg"), "package middle\n").unwrap();
     let mut src = String::from("fn main()\n    print(1)\n");
     for i in 0..60 {
-        src.push_str(&format!("\n## Step {i} of the walk. It is long and says more.\npub fn step{i}(x int) int\n    x + {i}\n"));
+        src.push_str(&format!(
+            "\n## Step {i} of the walk. It is long and says more.\npub fn step{i}(x int) int\n    x + {i}\n"
+        ));
     }
     fs::write(dir.join("main.ail"), src).unwrap();
     let middle = (1..=8000)
@@ -170,7 +172,11 @@ fn committed_module_cards_are_fresh() {
         for line in index.lines().skip(1) {
             let module = line.split_whitespace().next().unwrap();
             let file = if module == "(root)" { "root" } else { module };
-            let out = ail().current_dir(repo()).args(["api", "--card", "--budget", "2000", "--module", module, target]).output().unwrap();
+            let out = ail()
+                .current_dir(repo())
+                .args(["api", "--card", "--budget", "2000", "--module", module, target])
+                .output()
+                .unwrap();
             assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
             check_card(&format!("{dir}/{file}.md"), &String::from_utf8(out.stdout).unwrap(), target);
         }
@@ -210,8 +216,13 @@ fn committed_cards_are_fresh() {
 fn module_card_is_one_module() {
     let dir = package("module_card_is_one_module");
     let geo = card_of(&dir, &["--module", "geo", "--budget", "4000"]);
-    assert!(geo.starts_with("# notes: geo
-"), "{geo}");
+    assert!(
+        geo.starts_with(
+            "# notes: geo
+"
+        ),
+        "{geo}"
+    );
     assert!(geo.contains("pub struct geo.P"), "{geo}");
     assert!(!geo.contains("show(p"), "{geo}");
     assert!(!geo.contains("entry:") && !geo.contains("ail.pkg") && !geo.contains("examples:"), "{geo}");
@@ -237,4 +248,3 @@ fn index_lists_modules() {
     assert!(json.contains("{\"module\":\"geo\",\"count\":7}"), "{json}");
     assert!(json.starts_with("{\"api\""), "{json}");
 }
-

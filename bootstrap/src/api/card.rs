@@ -162,7 +162,9 @@ pub fn module_card(path: &str, module: &str, budget: usize, json: bool) -> Resul
     let mut built = build(path)?;
     let name = if module == ROOT_TITLE { "" } else { module };
     if !built.modules.iter().any(|m| m.name == name) {
-        return Err(Failure::Message(format!("no module `{module}` in {path}; `ail api --card --index {path}` lists the modules")));
+        return Err(Failure::Message(format!(
+            "no module `{module}` in {path}; `ail api --card --index {path}` lists the modules"
+        )));
     }
     built.modules.retain(|m| m.name == name);
     built.name = format!("{}: {}", built.name, module_title_of(name));
@@ -186,9 +188,15 @@ pub fn index(path: &str, json: bool) -> Result<String, Failure> {
         let modules = built
             .modules
             .iter()
-            .map(|m| Json::Obj(vec![("module", Json::Str(m.name.clone())), ("count", Json::Int(m.entries.len() as i64))]))
+            .map(|m| {
+                Json::Obj(vec![("module", Json::Str(m.name.clone())), ("count", Json::Int(m.entries.len() as i64))])
+            })
             .collect();
-        let top = vec![("api", Json::Int(API_VERSION)), ("card", Json::Str(built.name.clone())), ("modules", Json::Arr(modules))];
+        let top = vec![
+            ("api", Json::Int(API_VERSION)),
+            ("card", Json::Str(built.name.clone())),
+            ("modules", Json::Arr(modules)),
+        ];
         let mut out = String::new();
         Json::Obj(top).write(&mut out, None);
         out.push('\n');
@@ -224,7 +232,11 @@ fn fit(built: Card, budget: usize, json: bool) -> Result<String, Failure> {
 
 fn build(path: &str) -> Result<Card, Failure> {
     let p = Path::new(path);
-    let root = if p.is_dir() { p.to_path_buf() } else { p.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf() };
+    let root = if p.is_dir() {
+        p.to_path_buf()
+    } else {
+        p.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf()
+    };
     let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string());
     let (mut prog, mut diags) = modules::load(path).map_err(Failure::Message)?;
     let mut resolved = Resolved::default();
@@ -250,7 +262,8 @@ fn build(path: &str) -> Result<Card, Failure> {
     api.errors = std::mem::take(&mut resolved.fn_errors);
     api.whole = true;
 
-    let tests: Vec<usize> = prog.fns.iter().enumerate().filter(|(_, f)| f.has_attr("test") && !is_prelude(f.pos)).map(|(i, _)| i).collect();
+    let tests: Vec<usize> =
+        prog.fns.iter().enumerate().filter(|(_, f)| f.has_attr("test") && !is_prelude(f.pos)).map(|(i, _)| i).collect();
     let test_lines: std::collections::HashSet<usize> = tests.iter().map(|&i| prog.fns[i].pos.line).collect();
     let mut modules: Vec<Module> = Vec::new();
     for item in api.outline_items() {
@@ -267,10 +280,14 @@ fn build(path: &str) -> Result<Card, Failure> {
     // Deterministic: the root module first, then by import path (api.card.1).
     modules.sort_by(|a, b| (!a.name.is_empty(), &a.name).cmp(&(!b.name.is_empty(), &b.name)));
 
-    let entry = prog.fns.iter().find(|f| f.name == "main" && f.owner.is_none() && prog.module_at(f.pos).is_empty() && !is_prelude(f.pos)).map(|f| {
-        let file = prog.file_at(f.pos).map(|sf| file_label(&root, &sf.path)).unwrap_or_default();
-        format!("main in {file}")
-    });
+    let entry = prog
+        .fns
+        .iter()
+        .find(|f| f.name == "main" && f.owner.is_none() && prog.module_at(f.pos).is_empty() && !is_prelude(f.pos))
+        .map(|f| {
+            let file = prog.file_at(f.pos).map(|sf| file_label(&root, &sf.path)).unwrap_or_default();
+            format!("main in {file}")
+        });
     let mut tests_named: Vec<(String, String)> = tests
         .iter()
         .map(|&i| {
@@ -303,7 +320,11 @@ fn examples(root: &Path) -> Vec<(String, String)> {
         .filter(|e| e.path().extension().is_some_and(|x| x == "ail"))
         .map(|e| {
             let src = std::fs::read_to_string(e.path()).unwrap_or_default();
-            let first = src.lines().find_map(|l| l.trim_start().strip_prefix("##")).map(|d| d.trim().to_string()).unwrap_or_default();
+            let first = src
+                .lines()
+                .find_map(|l| l.trim_start().strip_prefix("##"))
+                .map(|d| d.trim().to_string())
+                .unwrap_or_default();
             (e.file_name().to_string_lossy().into_owned(), first)
         })
         .collect();
@@ -314,7 +335,9 @@ fn examples(root: &Path) -> Vec<(String, String)> {
 fn entry_of(prog: &Program, item: Item) -> Entry {
     let strings = |key: &str| -> Vec<String> {
         match item.extra.iter().find(|(k, _)| *k == key) {
-            Some((_, Json::Arr(xs))) => xs.iter().filter_map(|x| if let Json::Str(s) = x { Some(s.clone()) } else { None }).collect(),
+            Some((_, Json::Arr(xs))) => {
+                xs.iter().filter_map(|x| if let Json::Str(s) = x { Some(s.clone()) } else { None }).collect()
+            }
             _ => Vec::new(),
         }
     };
@@ -322,7 +345,8 @@ fn entry_of(prog: &Program, item: Item) -> Entry {
         Some((_, Json::Arr(ps))) if !ps.is_empty() => Some(bare_signature(&item.signature, ps)),
         _ => None,
     };
-    let (requires, ensures, fails, effects) = (strings("requires"), strings("ensures"), strings("fails_with"), strings("effects"));
+    let (requires, ensures, fails, effects) =
+        (strings("requires"), strings("ensures"), strings("fails_with"), strings("effects"));
     let public = prog.is_pub(item.pos);
     let (file, at) = crate::modules::locate(&prog.files, item.pos);
     let file = file.to_string();
@@ -398,7 +422,11 @@ fn private(module: &Module, e: &Entry) -> bool {
 /// (and the budget), which `fit` leaves out when it ranks the levels.
 fn render(card: &Card, level: usize, json: bool, budget: usize, trailer: bool) -> String {
     let dropped: Vec<&str> = if trailer { DROPPED[..level].to_vec() } else { Vec::new() };
-    if json { render_json(card, level, &dropped, budget, trailer) } else { render_md(card, level, &dropped, budget, trailer) }
+    if json {
+        render_json(card, level, &dropped, budget, trailer)
+    } else {
+        render_md(card, level, &dropped, budget, trailer)
+    }
 }
 
 fn shown<'a>(module: &'a Module, level: usize) -> Vec<&'a Entry> {
@@ -476,7 +504,8 @@ fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize, trailer
     if !card.examples.is_empty() && level < 4 {
         writeln!(out, "examples:").unwrap();
         for (f, d) in &card.examples {
-            if d.is_empty() || level >= 2 { writeln!(out, "    {f}") } else { writeln!(out, "    {f}  ## {d}") }.unwrap();
+            if d.is_empty() || level >= 2 { writeln!(out, "    {f}") } else { writeln!(out, "    {f}  ## {d}") }
+                .unwrap();
         }
     }
     for m in &card.modules {
@@ -554,7 +583,8 @@ fn entry_json(e: &Entry, level: usize) -> Json {
                     kvs.push((k, Json::Arr(v.iter().cloned().map(Json::Str).collect())));
                 }
             }
-            let members: Vec<Json> = e.members.iter().filter(|m| level == 0 || !private_member(m)).map(|m| entry_json(m, level)).collect();
+            let members: Vec<Json> =
+                e.members.iter().filter(|m| level == 0 || !private_member(m)).map(|m| entry_json(m, level)).collect();
             if !members.is_empty() {
                 kvs.push(("members", Json::Arr(members)));
             }
@@ -569,7 +599,11 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize, trail
         .modules
         .iter()
         .map(|m| {
-            let items = if level >= 6 { Vec::new() } else { shown(m, level).into_iter().map(|e| entry_json(e, level)).collect() };
+            let items = if level >= 6 {
+                Vec::new()
+            } else {
+                shown(m, level).into_iter().map(|e| entry_json(e, level)).collect()
+            };
             Json::Obj(vec![
                 ("module", Json::Str(m.name.clone())),
                 ("count", Json::Int(m.entries.len() as i64)),
@@ -581,7 +615,12 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize, trail
         .examples
         .iter()
         .filter(|_| level < 4)
-        .map(|(f, d)| Json::Obj(vec![("file", Json::Str(f.clone())), ("doc", Json::Str(if level >= 2 { String::new() } else { d.clone() }))]))
+        .map(|(f, d)| {
+            Json::Obj(vec![
+                ("file", Json::Str(f.clone())),
+                ("doc", Json::Str(if level >= 2 { String::new() } else { d.clone() })),
+            ])
+        })
         .collect();
     let top = vec![
         ("api", Json::Int(API_VERSION)),
@@ -595,7 +634,10 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize, trail
     ];
     let top = if trailer {
         top.into_iter()
-            .chain([("budget", Json::Int(budget as i64)), ("dropped", Json::Arr(dropped.iter().map(|d| Json::Str(d.to_string())).collect()))])
+            .chain([
+                ("budget", Json::Int(budget as i64)),
+                ("dropped", Json::Arr(dropped.iter().map(|d| Json::Str(d.to_string())).collect())),
+            ])
             .collect()
     } else {
         top

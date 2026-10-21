@@ -86,9 +86,17 @@ fn a_changed_program_diverges() {
 fn handles_stop_and_traps_repeat() {
     let d = dir("handles");
     let exe = env!("CARGO_BIN_EXE_ail").replace('\\', "/");
-    fs::write(d.join("start.ail"), format!("fn main() !\n    print(\"a\")\n    p := proc.start(\"{exe}\", [\"version\"])?\n")).unwrap();
+    fs::write(
+        d.join("start.ail"),
+        format!("fn main() !\n    print(\"a\")\n    p := proc.start(\"{exe}\", [\"version\"])?\n"),
+    )
+    .unwrap();
     ail(&d, &["run", "--record", "s.json", "start.ail"], "");
-    assert!(fs::read_to_string(d.join("s.json")).unwrap().contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"uncaptured\":true"));
+    assert!(
+        fs::read_to_string(d.join("s.json"))
+            .unwrap()
+            .contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"uncaptured\":true")
+    );
     let out = ail(&d, &["run", "--replay", "s.json"], "");
     assert_eq!(text(&out.stdout), "a\n");
     assert!(text(&out.stderr).contains("trap[replay.cap.2]"), "{}", text(&out.stderr));

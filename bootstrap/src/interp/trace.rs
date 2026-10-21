@@ -106,12 +106,15 @@ pub fn take_options(args: &mut Vec<&str>, json: bool) -> Result<bool, String> {
             }
             "--trace-limit" => {
                 let n = args.get(i + 1).and_then(|s| s.parse::<u64>().ok());
-                limit = n.ok_or("`--trace-limit` needs a non-negative number of events, e.g. `--trace-limit 200` (trace.run.4)")?;
+                limit = n.ok_or(
+                    "`--trace-limit` needs a non-negative number of events, e.g. `--trace-limit 200` (trace.run.4)",
+                )?;
                 2
             }
             "--watch" => {
                 let name = args.get(i + 1).filter(|s| !s.starts_with('-'));
-                watch = name.ok_or("`--watch` needs a variable name, e.g. `--watch total` (trace.watch.1)")?.to_string();
+                watch =
+                    name.ok_or("`--watch` needs a variable name, e.g. `--watch total` (trace.watch.1)")?.to_string();
                 mode |= WATCH;
                 2
             }
@@ -279,9 +282,13 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
     };
     match v {
         Value::Unit => s.push_str("()"),
-        Value::Str(_) | Value::Bytes(_) | Value::Char(_) | Value::Int(_) | Value::Num(..) | Value::Bool(_) | Value::None => {
-            s.push_str(&key_text(v))
-        }
+        Value::Str(_)
+        | Value::Bytes(_)
+        | Value::Char(_)
+        | Value::Int(_)
+        | Value::Num(..)
+        | Value::Bool(_)
+        | Value::None => s.push_str(&key_text(v)),
         Value::Nested(_) => s.push_str(&key_text(v)),
         Value::Float(x) => s.push_str(&float_text(*x)),
         // A `ref` cell shows its current value (own.ref.1); the cell may be
@@ -414,7 +421,9 @@ pub(super) fn keep(prog: &Program, snap: Snap, trap: &Trap) {
         at = f.called_at;
     }
     let source = source_line(prog, trap.pos);
-    LAST.with(|l| *l.borrow_mut() = Some(Snapshot { frames, omitted: snap.omitted, condition: snap.condition, source }));
+    LAST.with(|l| {
+        *l.borrow_mut() = Some(Snapshot { frames, omitted: snap.omitted, condition: snap.condition, source })
+    });
 }
 
 /// The text of the line `pos` is on (trace.snap.1).
@@ -437,7 +446,8 @@ pub fn render_trap(prog: &Program, trap: &Trap, snap: Option<Snapshot>, json: bo
     let snap = snap.unwrap_or(Snapshot { frames: Vec::new(), omitted: 0, condition: Vec::new(), source: None });
     if json {
         let mut s = format!("{{\"api\":{},\"severity\":\"trap\"", crate::diag::API_VERSION);
-        let _ = write!(s, ",\"rule\":{},\"file\":{},\"line\":{line},\"col\":{col}", json_str(trap.rule), json_str(&file));
+        let _ =
+            write!(s, ",\"rule\":{},\"file\":{},\"line\":{line},\"col\":{col}", json_str(trap.rule), json_str(&file));
         let _ = write!(s, ",\"message\":{}", json_str(&trap.message));
         if let Some(src) = &snap.source {
             let _ = write!(s, ",\"source\":{}", json_str(src));
@@ -704,7 +714,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 let frame = frame.as_deref().map_or(String::new(), |f| format!(",\"frame\":{}", json_str(f)));
                 let via = if via && name != watched { format!(",\"via\":{}", json_str(name)) } else { String::new() };
                 let op = note.map_or(String::new(), |n| n.json());
-                format!("{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{}{frame}{via}{op},{}}}", json_str(watched), json_str(&value), at_json(prog, pos))
+                format!(
+                    "{{\"api\":1,\"trace\":\"watch\",\"name\":{},\"value\":{}{frame}{via}{op},{}}}",
+                    json_str(watched),
+                    json_str(&value),
+                    at_json(prog, pos)
+                )
             } else {
                 // The frame is named only below the first, so a plain run reads as before.
                 let in_frame = match &frame {
@@ -721,7 +736,9 @@ impl<'a, W: Write> Interp<'a, W> {
     pub(super) fn watch_before(&self, env: &Env<'_>, p: &Place, name: &str, args: &[Value]) -> Option<WatchBefore> {
         let (len, removed) = view(env, p, |v| match (v, name) {
             (Value::List(xs), "pop") => (xs.len(), xs.last().cloned()),
-            (Value::List(xs), "remove_at") => (xs.len(), usize::try_from(args[0].int()).ok().and_then(|i| xs.get(i).cloned())),
+            (Value::List(xs), "remove_at") => {
+                (xs.len(), usize::try_from(args[0].int()).ok().and_then(|i| xs.get(i).cloned()))
+            }
             (Value::List(xs), _) => (xs.len(), None),
             (Value::Map(t), "remove") => (t.len(), t.get(&args[0]).map(|i| t.val(i).clone())),
             (Value::Map(t) | Value::Set(t), _) => (t.len(), None),
@@ -747,9 +764,13 @@ impl<'a, W: Write> Interp<'a, W> {
         let key = |v: &Value| show(v, LONG);
         let note = match name {
             "push" => WatchNote::at("push", Some(key(&a[0])), "index", Some(before.len.to_string())),
-            "pop" if len < before.len => WatchNote::at("pop", before.removed.as_ref().map(key), "index", Some(len.to_string())),
+            "pop" if len < before.len => {
+                WatchNote::at("pop", before.removed.as_ref().map(key), "index", Some(len.to_string()))
+            }
             "insert" => WatchNote::at("insert", Some(key(&a[1])), "index", Some(key(&a[0]))),
-            "remove_at" if len < before.len => WatchNote::at("remove_at", before.removed.as_ref().map(key), "index", Some(key(&a[0]))),
+            "remove_at" if len < before.len => {
+                WatchNote::at("remove_at", before.removed.as_ref().map(key), "index", Some(key(&a[0])))
+            }
             "remove" if len < before.len && before.removed.is_some() => {
                 WatchNote::at("remove", before.removed.as_ref().map(key), "key", Some(key(&a[0])))
             }
@@ -804,7 +825,8 @@ impl<'a, W: Write> Interp<'a, W> {
             let mut p = p.borrow_mut();
             if p.last().is_some_and(|(k, _)| *k == key) { p.pop().map(|(_, a)| a) } else { None }
         });
-        FRAMES.with(|fr| fr.borrow_mut().push(WatchFrame { name: f.full_name(), aliases: aliases.unwrap_or_default() }));
+        FRAMES
+            .with(|fr| fr.borrow_mut().push(WatchFrame { name: f.full_name(), aliases: aliases.unwrap_or_default() }));
     }
 
     #[inline(never)]
@@ -898,10 +920,23 @@ pub(super) struct WatchNote {
 
 impl WatchNote {
     fn at(op: &str, element: Option<String>, at_label: &'static str, at: Option<String>) -> Self {
-        let op = ["push", "pop", "insert", "remove_at", "remove", "add", "swap", "extend", "clear", "reverse", "sort", "set"]
-            .into_iter()
-            .find(|o| *o == op)
-            .unwrap_or("set");
+        let op = [
+            "push",
+            "pop",
+            "insert",
+            "remove_at",
+            "remove",
+            "add",
+            "swap",
+            "extend",
+            "clear",
+            "reverse",
+            "sort",
+            "set",
+        ]
+        .into_iter()
+        .find(|o| *o == op)
+        .unwrap_or("set");
         WatchNote { op, element, at_label, at }
     }
 

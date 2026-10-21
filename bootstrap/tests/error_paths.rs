@@ -21,13 +21,23 @@ fn check_errors_lists_each_failure_path() {
     // `both` infers A | B; `?` on `a` carries the context.
     assert!(text.contains("\"id\":\"fn:both\",\"name\":\"both\",\"line\":17,\"fails_with\":[\"A\",\"B\"]"), "{text}");
     assert!(
-        text.contains("{\"line\":18,\"col\":14,\"kind\":\"propagate\",\"call\":\"a\",\"errors\":[\"A\"],\"context\":true}"),
+        text.contains(
+            "{\"line\":18,\"col\":14,\"kind\":\"propagate\",\"call\":\"a\",\"errors\":[\"A\"],\"context\":true}"
+        ),
         "{text}"
     );
-    assert!(text.contains("{\"line\":19,\"col\":14,\"kind\":\"propagate\",\"call\":\"b\",\"errors\":[\"B\"]}"), "{text}");
+    assert!(
+        text.contains("{\"line\":19,\"col\":14,\"kind\":\"propagate\",\"call\":\"b\",\"errors\":[\"B\"]}"),
+        "{text}"
+    );
     assert!(text.contains("\"id\":\"fn:a\",\"name\":\"a\",\"line\":7,\"fails_with\":[\"A\"]"), "{text}");
     // `main` handles the failure with `else`, so it doesn't fail itself.
-    assert!(text.contains("\"name\":\"main\",\"line\":22,\"paths\":[{\"line\":23,\"col\":11,\"kind\":\"handle\",\"how\":\"default\""), "{text}");
+    assert!(
+        text.contains(
+            "\"name\":\"main\",\"line\":22,\"paths\":[{\"line\":23,\"col\":11,\"kind\":\"handle\",\"how\":\"default\""
+        ),
+        "{text}"
+    );
 }
 
 #[test]

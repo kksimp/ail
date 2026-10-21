@@ -134,7 +134,8 @@ fn request_impl(method: &str, url: &str, opts: &Opts, stream: bool) -> Result<Re
                 }
                 let next = resolve(&url, &to);
                 if origin(&next) != origin(&url) {
-                    opts.headers.retain(|(k, _)| !k.eq_ignore_ascii_case("authorization") && !k.eq_ignore_ascii_case("cookie"));
+                    opts.headers
+                        .retain(|(k, _)| !k.eq_ignore_ascii_case("authorization") && !k.eq_ignore_ascii_case("cookie"));
                 }
                 url = next;
             }
@@ -160,10 +161,14 @@ fn decode_body(url: &str, r: &mut Response) -> Result<(), NetFail> {
     if r.body.is_empty() || !matches!(enc.as_str(), "gzip" | "x-gzip" | "deflate") {
         return Ok(());
     }
-    let bad = |e: crate::codec::CodecError| fail(url, "protocol", format!("a body that says it is {enc} is not: {}", e.message));
+    let bad = |e: crate::codec::CodecError| {
+        fail(url, "protocol", format!("a body that says it is {enc} is not: {}", e.message))
+    };
     r.body = if enc == "deflate" {
         // Servers send both the zlib form the standard names and raw deflate.
-        crate::codec::zlib::unzlib(&r.body, DECODED_LIMIT).or_else(|_| crate::codec::inflate::inflate(&r.body, DECODED_LIMIT)).map_err(bad)?
+        crate::codec::zlib::unzlib(&r.body, DECODED_LIMIT)
+            .or_else(|_| crate::codec::inflate::inflate(&r.body, DECODED_LIMIT))
+            .map_err(bad)?
     } else {
         crate::codec::gzip::gunzip(&r.body, DECODED_LIMIT).map_err(bad)?
     };
@@ -365,16 +370,24 @@ fn give_back(idle: Idle) {
     pool.push(idle);
 }
 
-fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>, stream: bool) -> Result<Reply, NetFail> {
+fn exchange_once(
+    method: &str,
+    url: &str,
+    opts: &Opts,
+    deadline: Option<Instant>,
+    stream: bool,
+) -> Result<Reply, NetFail> {
     let t = parse_url(url)?;
     let key = (t.tls, t.host.to_ascii_lowercase(), t.port);
     let given = |name: &str| opts.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(name));
     let default_port = if t.tls { 443 } else { 80 };
     let host_header = if t.port == default_port { t.host.clone() } else { format!("{}:{}", t.host, t.port) };
-    let chunked = opts.headers.iter().any(|(k, v)| {
-        k.eq_ignore_ascii_case("transfer-encoding") && v.to_ascii_lowercase().contains("chunked")
-    });
-    let closes = opts.headers.iter().any(|(k, v)| k.eq_ignore_ascii_case("connection") && v.eq_ignore_ascii_case("close"));
+    let chunked = opts
+        .headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("transfer-encoding") && v.to_ascii_lowercase().contains("chunked"));
+    let closes =
+        opts.headers.iter().any(|(k, v)| k.eq_ignore_ascii_case("connection") && v.eq_ignore_ascii_case("close"));
     let has_body = !opts.body.is_empty() || matches!(method, "POST" | "PUT" | "PATCH");
     let mut head = format!("{method} {} HTTP/1.1\r\n", t.path);
     if !given("host") {
@@ -422,9 +435,7 @@ fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>
     // A pooled connection can have been closed by the server in the instant
     // since the check: such a request is sent again on a fresh connection,
     // but only when repeating it is safe (RFC 9110 9.2.2).
-    if !closes
-        && let Some(idle) = take_idle(&key)
-    {
+    if !closes && let Some(idle) = take_idle(&key) {
         idle.limits.set(opts.timeout, deadline);
         match run(idle, &bytes, method, url, &key, !closes, stream) {
             Ok(r) => {
@@ -440,7 +451,13 @@ fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>
 }
 
 /// Opens a connection to `t` (std.net.5, std.net.19).
-fn connect(url: &str, t: &Target, key: (bool, String, u16), opts: &Opts, deadline: Option<Instant>) -> Result<Idle, NetFail> {
+fn connect(
+    url: &str,
+    t: &Target,
+    key: (bool, String, u16),
+    opts: &Opts,
+    deadline: Option<Instant>,
+) -> Result<Idle, NetFail> {
     let io = |kind: &'static str, e: std::io::Error| fail(url, kind, e.to_string());
     let host = t.host.trim_start_matches('[').trim_end_matches(']');
     let addrs: Vec<_> = (host, t.port)
@@ -495,7 +512,15 @@ fn connect(url: &str, t: &Target, key: (bool, String, u16), opts: &Opts, deadlin
 /// read here, or with `stream` left in the returned `Streaming`. A connection
 /// the server leaves open goes back to the pool when `pool` allows. The
 /// error's flag says the connection failed before any response byte arrived.
-fn run(mut idle: Idle, request: &[u8], method: &str, url: &str, key: &(bool, String, u16), pool: bool, stream: bool) -> Result<Reply, (NetFail, bool)> {
+fn run(
+    mut idle: Idle,
+    request: &[u8],
+    method: &str,
+    url: &str,
+    key: &(bool, String, u16),
+    pool: bool,
+    stream: bool,
+) -> Result<Reply, (NetFail, bool)> {
     if let Err(e) = idle.stream.write_all(request).and_then(|()| idle.stream.flush()) {
         return Err((fail(url, connect_kind(&e), e.to_string()), true));
     }
@@ -569,7 +594,12 @@ fn read_line(r: &mut impl BufRead) -> Result<String, Bad> {
 fn read_response(r: impl BufRead, method: &str) -> Result<Response, Bad> {
     let mut r = BufReader::new(r);
     let head = read_head(&mut r, method, &mut false)?;
-    let mut st = Streaming { r: Some(BufReader::new(Box::new(std::io::empty()) as Stream)), frame: Frame::None, reusable: false, idle: None };
+    let mut st = Streaming {
+        r: Some(BufReader::new(Box::new(std::io::empty()) as Stream)),
+        frame: Frame::None,
+        reusable: false,
+        idle: None,
+    };
     // Feed the body from the same reader.
     let body = read_frame_all(&mut r, head.frame)?;
     st.finish();
@@ -604,7 +634,11 @@ fn read_head(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Result<Head
     let mut status_line = read_line(r)?;
     *seen = !status_line.is_empty();
     loop {
-        let interim = status_line.split(' ').nth(1).and_then(|s| s.parse::<i64>().ok()).is_some_and(|s| (100..200).contains(&s) && s != 101);
+        let interim = status_line
+            .split(' ')
+            .nth(1)
+            .and_then(|s| s.parse::<i64>().ok())
+            .is_some_and(|s| (100..200).contains(&s) && s != 101);
         if !interim {
             break;
         }
@@ -685,7 +719,8 @@ fn read_step(r: &mut impl BufRead, frame: Frame, max: usize) -> Result<(Vec<u8>,
             if left == 0 {
                 let size_line = read_line(r)?;
                 let size_text = size_line.split(';').next().unwrap_or("").trim();
-                left = usize::from_str_radix(size_text, 16).map_err(|_| protocol(format!("bad chunk size `{size_line}`")))?;
+                left = usize::from_str_radix(size_text, 16)
+                    .map_err(|_| protocol(format!("bad chunk size `{size_line}`")))?;
                 if left == 0 {
                     // Trailers, up to the blank line.
                     while !read_line(r)?.is_empty() {}

@@ -408,7 +408,8 @@ pub(crate) mod openssl {
                     }
                 }
             };
-            let s = TcpStream::connect(("127.0.0.1", port)).unwrap_or_else(|e| panic!("connecting to openssl s_server on port {port}: {e}"));
+            let s = TcpStream::connect(("127.0.0.1", port))
+                .unwrap_or_else(|e| panic!("connecting to openssl s_server on port {port}: {e}"));
             s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
             s
         }

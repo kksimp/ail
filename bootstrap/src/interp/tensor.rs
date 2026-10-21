@@ -6,9 +6,9 @@ use std::io::Write;
 use std::rc::Rc;
 
 use super::{Env, Flow, Interp, Trap, Value, float_text, float_text32};
+use crate::ast::BinOp;
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
-use crate::ast::BinOp;
 use crate::fuse::{self, FOp, Input};
 use crate::num::Num;
 use crate::tensor::{Activation, Data, Fault, Op, Reduce, Scalar, Sum, Tensor};

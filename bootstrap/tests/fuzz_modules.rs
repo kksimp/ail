@@ -26,22 +26,22 @@
 //! under `$AIL_FUZZ_OUT`; `run.log` there records the seeds of every run.
 //! Each finding becomes a case in `bootstrap/tests/cases/` (fuzz.policy.1).
 
+#[path = "fuzz/inputs.rs"]
+mod inputs;
 #[path = "fuzz/progs.rs"]
 #[allow(dead_code)]
 mod progs;
-#[path = "fuzz/inputs.rs"]
-mod inputs;
-#[path = "fuzz/runner.rs"]
-mod runner;
 #[path = "fuzz/pure.rs"]
 mod pure;
+#[path = "fuzz/runner.rs"]
+mod runner;
 
-use inputs::{generate, literal, Input};
-use runner::{exec_program, Out, Runner};
+use inputs::{Input, generate, literal};
+use runner::{Out, Runner, exec_program};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct Template {
     name: String,
@@ -52,26 +52,54 @@ struct Template {
 
 fn templates(dir: &Path) -> Vec<Template> {
     let mut out = Vec::new();
-    let mut files: Vec<PathBuf> = fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|x| x == "ail")).collect();
+    let mut files: Vec<PathBuf> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        .collect();
     files.sort();
     for f in files {
         let body = fs::read_to_string(&f).unwrap();
-        let header = |key: &str| body.lines().find_map(|l| l.strip_prefix(&format!("# fuzz-{key}:"))).map(|v| v.trim().to_string());
+        let header = |key: &str| {
+            body.lines().find_map(|l| l.strip_prefix(&format!("# fuzz-{key}:"))).map(|v| v.trim().to_string())
+        };
         let kind = header("input").unwrap_or_else(|| panic!("{}: missing `# fuzz-input:`", f.display()));
         assert!(inputs::KINDS.contains(&kind.as_str()), "{}: unknown input kind {kind}", f.display());
-        out.push(Template { name: f.file_stem().unwrap().to_string_lossy().into_owned(), kind, needs: header("needs").unwrap_or_default(), body });
+        out.push(Template {
+            name: f.file_stem().unwrap().to_string_lossy().into_owned(),
+            kind,
+            needs: header("needs").unwrap_or_default(),
+            body,
+        });
     }
     out
 }
 
 fn fill(t: &Template, i: &Input) -> String {
     // `{{BYTES}}` is the hex secondary input as a list of ints.
-    let bytes = |h: &str| format!("[{}]", (0..h.len() / 2).map(|k| i64::from_str_radix(&h[2 * k..2 * k + 2], 16).unwrap_or(0).to_string()).collect::<Vec<_>>().join(", "));
-    let body = if t.body.contains("{{BYTES}}") { t.body.replace("{{BYTES}}", &bytes(&i.text2)) } else { t.body.clone() };
+    let bytes = |h: &str| {
+        format!(
+            "[{}]",
+            (0..h.len() / 2)
+                .map(|k| i64::from_str_radix(&h[2 * k..2 * k + 2], 16).unwrap_or(0).to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let body =
+        if t.body.contains("{{BYTES}}") { t.body.replace("{{BYTES}}", &bytes(&i.text2)) } else { t.body.clone() };
     // `{{BLIT}}` and `{{BLIT2}}` are the primary and secondary hex inputs as `b"\xHH..."` literals.
-    let blit = |h: &str| format!("b\"{}\"", (0..h.len() / 2).map(|k| format!("\\x{}", &h[2 * k..2 * k + 2])).collect::<String>());
-    let body = if body.contains("{{BLIT") { body.replace("{{BLIT2}}", &blit(&i.text2)).replace("{{BLIT}}", &blit(&i.text)) } else { body };
-    body.replace("{{TEXT2}}", &literal(&i.text2)).replace("{{TEXT}}", &literal(&i.text)).replace("{{INT}}", &i.int.to_string())
+    let blit = |h: &str| {
+        format!("b\"{}\"", (0..h.len() / 2).map(|k| format!("\\x{}", &h[2 * k..2 * k + 2])).collect::<String>())
+    };
+    let body = if body.contains("{{BLIT") {
+        body.replace("{{BLIT2}}", &blit(&i.text2)).replace("{{BLIT}}", &blit(&i.text))
+    } else {
+        body
+    };
+    body.replace("{{TEXT2}}", &literal(&i.text2))
+        .replace("{{TEXT}}", &literal(&i.text))
+        .replace("{{INT}}", &i.int.to_string())
 }
 
 /// Programs `ail build` accepted and whose output was compared (fuzz.mod.6); the rest are outside the pure subset.
@@ -122,12 +150,19 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
         return Some(format!("fuzz.mod.1 check: {m}"));
     }
     if c.code != Some(0) {
-        return Some(format!("fuzz.mod.0 template does not check: {}", c.stdout.lines().chain(c.stderr.lines()).next().unwrap_or("")));
+        return Some(format!(
+            "fuzz.mod.0 template does not check: {}",
+            c.stdout.lines().chain(c.stderr.lines()).next().unwrap_or("")
+        ));
     }
     // `# fuzz-net: yes` templates talk to a socket on this machine, which `--deterministic` and `--deny net`
     // refuse before the program starts: they run as they are and skip the tier and repeat checks.
     let net = src.contains("# fuzz-net: yes");
-    let walker = if net { r.exec(&["run", "--no-contracts"], &p, 20) } else { r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10) };
+    let walker = if net {
+        r.exec(&["run", "--no-contracts"], &p, 20)
+    } else {
+        r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10)
+    };
     if walker.code.is_none() {
         return Some("fuzz.mod.2 hang: no result in 10 s".into());
     }
@@ -156,7 +191,10 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
             NATIVE_COMPARED.fetch_add(1, Ordering::SeqCst);
             let n = exec_program(&exe, &[], 10);
             if n.code != walker.code || n.stdout != walker.stdout {
-                return Some(format!("fuzz.mod.6 native differs (exit {:?} against {:?})\n{}", n.code, walker.code, n.stdout));
+                return Some(format!(
+                    "fuzz.mod.6 native differs (exit {:?} against {:?})\n{}",
+                    n.code, walker.code, n.stdout
+                ));
             }
         }
     }
@@ -243,7 +281,8 @@ fn fuzz_module_inputs() {
     let per_module: Vec<AtomicUsize> = live.iter().map(|_| AtomicUsize::new(0)).collect();
     std::thread::scope(|s| {
         for w in 0..workers {
-            let (next, failures, tasks, live, per_module, root, out_dir) = (&next, &failures, &tasks, &live, &per_module, &root, &out_dir);
+            let (next, failures, tasks, live, per_module, root, out_dir) =
+                (&next, &failures, &tasks, &live, &per_module, &root, &out_dir);
             s.spawn(move || {
                 let dir = root.join(format!("w{w}"));
                 fs::create_dir_all(&dir).unwrap();
@@ -270,7 +309,12 @@ fn fuzz_module_inputs() {
         }
     });
     for (t, bad) in live.iter().zip(&per_module) {
-        log.push(format!("{}: {n} inputs from seed {first} ({}), {} failures", t.name, t.kind, bad.load(Ordering::SeqCst)));
+        log.push(format!(
+            "{}: {n} inputs from seed {first} ({}), {} failures",
+            t.name,
+            t.kind,
+            bad.load(Ordering::SeqCst)
+        ));
     }
     let mut failures = failures.into_inner().unwrap();
     failures.extend(template_errors);
@@ -278,7 +322,12 @@ fn fuzz_module_inputs() {
     let log = log.join("\n");
     eprintln!("{log}");
     let _ = fs::write(out_dir.join("run.log"), format!("{log}\n"));
-    assert!(failures.is_empty(), "{} module fuzz failures (fuzz.policy.1: each becomes a case)\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} module fuzz failures (fuzz.policy.1: each becomes a case)\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
 
 /// The ARM64 Linux user-mode emulator, when installed (`apt install qemu-user`).
@@ -286,7 +335,9 @@ fn qemu_aarch64() -> Option<&'static str> {
     if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         return None;
     }
-    ["qemu-aarch64-static", "qemu-aarch64"].into_iter().find(|q| std::process::Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()))
+    ["qemu-aarch64-static", "qemu-aarch64"]
+        .into_iter()
+        .find(|q| std::process::Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()))
 }
 
 /// fuzz.nat.1 (ADR 0462): generated pure-subset programs run on the walker, the bytecode tier
@@ -336,13 +387,15 @@ fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
     fs::create_dir_all(&out_dir).unwrap();
     let workers = std::thread::available_parallelism().map_or(2, |p| p.get()).clamp(1, 4);
     let next = AtomicUsize::new(0);
-    let (built, declined, unchecked, trapped) = (AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0));
+    let (built, declined, unchecked, trapped) =
+        (AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0));
     let failures: Mutex<Vec<String>> = Mutex::new(Vec::new());
     let qemu = qemu_aarch64();
     let first_line = |o: &Out| o.stderr.lines().next().unwrap_or("").to_string();
     std::thread::scope(|s| {
         for w in 0..workers {
-            let (next, built, declined, unchecked, trapped, failures, root, out_dir, qemu) = (&next, &built, &declined, &unchecked, &trapped, &failures, &root, &out_dir, &qemu);
+            let (next, built, declined, unchecked, trapped, failures, root, out_dir, qemu) =
+                (&next, &built, &declined, &unchecked, &trapped, &failures, &root, &out_dir, &qemu);
             s.spawn(move || {
                 let dir = root.join(format!("w{w}"));
                 fs::create_dir_all(&dir).unwrap();
@@ -396,10 +449,22 @@ fn native_differential(name: &str, make: fn(u64) -> String, need_half: bool) {
         }
     });
     let (built, declined, unchecked) = (built.into_inner(), declined.into_inner(), unchecked.into_inner());
-    eprintln!("fuzz-native {name}: {n} programs from seed {first}: {built} built and compared ({} trapped; aarch64 under qemu: {}), {declined} declined by the backend, {unchecked} rejected by the checker", trapped.into_inner(), if qemu.is_some() { "yes" } else { "no emulator" });
+    eprintln!(
+        "fuzz-native {name}: {n} programs from seed {first}: {built} built and compared ({} trapped; aarch64 under qemu: {}), {declined} declined by the backend, {unchecked} rejected by the checker",
+        trapped.into_inner(),
+        if qemu.is_some() { "yes" } else { "no emulator" }
+    );
     let failures = failures.into_inner().unwrap();
-    assert!(failures.is_empty(), "{} native differential failures (fuzz.policy.1)\n{}", failures.len(), failures.join("\n"));
-    assert!(!need_half || built * 2 >= n, "only {built} of {n} generated pure programs built natively ({declined} declined, {unchecked} rejected): the generator and the subset have drifted apart");
+    assert!(
+        failures.is_empty(),
+        "{} native differential failures (fuzz.policy.1)\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+    assert!(
+        !need_half || built * 2 >= n,
+        "only {built} of {n} generated pure programs built natively ({declined} declined, {unchecked} rejected): the generator and the subset have drifted apart"
+    );
 }
 
 /// `AIL_FUZZ_PURE=SEED cargo test --test fuzz_modules dump_pure -- --nocapture` prints a pure program.
@@ -416,6 +481,16 @@ fn dump_named() {
     if let Ok(v) = std::env::var("AIL_FUZZ_NAMED") {
         let (name, seed) = v.split_once(':').unwrap();
         let seed = seed.parse().unwrap();
-        print!("{}", match name { "strings" => pure::strings(seed), "maps" => pure::maps(seed), "options" => pure::options(seed), "funcs" => pure::funcs(seed), "enums" => pure::enums(seed), _ => pure::program(seed) });
+        print!(
+            "{}",
+            match name {
+                "strings" => pure::strings(seed),
+                "maps" => pure::maps(seed),
+                "options" => pure::options(seed),
+                "funcs" => pure::funcs(seed),
+                "enums" => pure::enums(seed),
+                _ => pure::program(seed),
+            }
+        );
     }
 }

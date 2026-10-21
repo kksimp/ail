@@ -164,9 +164,11 @@ mod tests {
         assert_eq!(tag(&k, &hex("02000000000000000000000000000000")), hex("03000000000000000000000000000000"));
         let mut k = hex("01000000000000000000000000000000");
         k.extend([0u8; 16]);
-        let m = hex("ffffffffffffffffffffffffffffffff f0ffffffffffffffffffffffffffffff 11000000000000000000000000000000");
+        let m =
+            hex("ffffffffffffffffffffffffffffffff f0ffffffffffffffffffffffffffffff 11000000000000000000000000000000");
         assert_eq!(tag(&k, &m), hex("05000000000000000000000000000000"));
-        let m = hex("ffffffffffffffffffffffffffffffff fbfefefefefefefefefefefefefefefe 01010101010101010101010101010101");
+        let m =
+            hex("ffffffffffffffffffffffffffffffff fbfefefefefefefefefefefefefefefe 01010101010101010101010101010101");
         assert_eq!(tag(&k, &m), [0; 16]);
         let mut k = hex("02000000000000000000000000000000");
         k.extend([0u8; 16]);

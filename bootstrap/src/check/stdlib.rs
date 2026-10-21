@@ -153,7 +153,9 @@ impl<'p> Checker<'p> {
                 _ => None,
             };
             if let Some(new) = renamed {
-                d = d.help(format!("write `{head}.{new}`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
+                d = d
+                    .help(format!("write `{head}.{new}`"))
+                    .fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
                 self.diags.push(d);
                 return Some(Ty::Err);
             }
@@ -258,10 +260,9 @@ impl<'p> Checker<'p> {
                 vec![Str, list(Str), opt(Int)],
                 Ty::Res(Box::new(std_ty("proc.Child")), Errs::Set(vec![std_ty("proc.ProcError")])),
             ),
-            ("proc", "wait") => (
-                vec![std_ty("proc.Child")],
-                Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])),
-            ),
+            ("proc", "wait") => {
+                (vec![std_ty("proc.Child")], Ty::Res(Box::new(Int), Errs::Set(vec![std_ty("proc.ProcError")])))
+            }
             ("proc", "kill") => (vec![std_ty("proc.Child")], Int),
             ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => (
                 match f {
@@ -292,10 +293,9 @@ impl<'p> Checker<'p> {
                 };
                 (params, Ty::Res(Box::new(std_ty(ok)), Errs::Set(vec![std_ty("net.NetError")])))
             }
-            ("regex", "compile") => (
-                vec![Str],
-                Ty::Res(Box::new(std_ty("regex.Regex")), Errs::Set(vec![std_ty("regex.RegexError")])),
-            ),
+            ("regex", "compile") => {
+                (vec![Str], Ty::Res(Box::new(std_ty("regex.Regex")), Errs::Set(vec![std_ty("regex.RegexError")])))
+            }
             ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
             ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
             ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
@@ -317,10 +317,9 @@ impl<'p> Checker<'p> {
             ("tz", "system") => (vec![], Str),
             ("ui", "clipboard_get") => (vec![], opt(Str)),
             ("ui", "clipboard_set") => (vec![Str], Unit),
-            ("ui", "open") => (
-                vec![Str, Int, Int],
-                Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
-            ),
+            ("ui", "open") => {
+                (vec![Str, Int, Int], Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])))
+            }
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
         }
     }

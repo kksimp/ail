@@ -345,7 +345,10 @@ impl Parser {
             let mut d = Diagnostic::new("expr.bind.1", self.tok_pos(start), format!("`{name}` is declared without a type annotation"))
                 .help(format!("write `{name} := value`; the type is inferred. An empty collection names its type in the value: `List[int]()`"));
             if eq.is_some() && empty {
-                d = d.fix("declare it with `:=` and the type as a constructor", vec![Edit::empty_decl(self.tok_pos(start))]);
+                d = d.fix(
+                    "declare it with `:=` and the type as a constructor",
+                    vec![Edit::empty_decl(self.tok_pos(start))],
+                );
             }
             if let (Some(e), false) = (eq, empty) {
                 d = d.fix(

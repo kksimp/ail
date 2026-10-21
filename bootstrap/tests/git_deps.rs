@@ -43,7 +43,8 @@ impl Setup {
         let url = format!("file://{}", dir.join("remote.git").display());
         let s = Setup { dir, app, work, url };
         s.commit("w * h", "v1");
-        fs::write(s.app.join("main.ail"), "use geo\n\nfn main()\n    print(geo.area(3, 4))\n    print(geo.cached())\n").unwrap();
+        fs::write(s.app.join("main.ail"), "use geo\n\nfn main()\n    print(geo.area(3, 4))\n    print(geo.cached())\n")
+            .unwrap();
         s.manifest("tag v1 caps fs");
         Some(s)
     }
@@ -145,7 +146,11 @@ fn fetch_lock_and_update() {
     s.manifest(&format!("rev {first} caps fs"));
     let out = s.ail(&["run", "--deterministic", "app"]);
     assert_eq!(out.status.code(), Some(2));
-    assert!(text(&out).1.contains("error[mod.pkg.8]") && text(&out).1.contains("ail pkg update geo"), "{}", text(&out).1);
+    assert!(
+        text(&out).1.contains("error[mod.pkg.8]") && text(&out).1.contains("ail pkg update geo"),
+        "{}",
+        text(&out).1
+    );
     assert!(s.lock().contains(&second), "a refused run leaves the lock alone");
     // Without `--deterministic` the run relocks.
     assert_eq!(text(&s.ail(&["run", "app"])).0, "12\nfalse\n");

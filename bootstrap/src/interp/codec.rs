@@ -9,7 +9,10 @@ use super::stdlib::fail;
 use super::{Interp, Value};
 use crate::codec::{self, CodecError, gzip, hash64, zip};
 use crate::diag::Pos;
-use crate::net::crypto::{hmac::Hmac, sha2::{Hash, Sha256, Sha384, Sha512}};
+use crate::net::crypto::{
+    hmac::Hmac,
+    sha2::{Hash, Sha256, Sha384, Sha512},
+};
 
 /// std.compress.4: output past this many bytes is refused, the size of the
 /// longest `str` (ADR 0271).
@@ -106,10 +109,8 @@ fn zip_dir(dir: &str, out: &str) -> Result<(), CodecError> {
     fn walk(root: &std::path::Path, rel: &str, into: &mut Vec<zip::Entry>) -> Result<(), CodecError> {
         let here = if rel.is_empty() { root.to_path_buf() } else { root.join(rel) };
         let mut any = false;
-        let mut names: Vec<_> = std::fs::read_dir(&here)
-            .map_err(|e| io(&here.to_string_lossy(), e))?
-            .filter_map(|e| e.ok())
-            .collect();
+        let mut names: Vec<_> =
+            std::fs::read_dir(&here).map_err(|e| io(&here.to_string_lossy(), e))?.filter_map(|e| e.ok()).collect();
         names.sort_by_key(|e| e.file_name());
         for e in names {
             let name = e.file_name().to_string_lossy().into_owned();
