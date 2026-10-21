@@ -597,3 +597,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0728](0728-native-limit-settings.md) | Where a native program gets its limits *(delegated)* | Accepted | 2026-10-21 |
 | [0738](0738-map-lookup-without-key-conversion.md) | Text and integer map keys are looked up without building a `Key` *(delegated)* | Accepted | 2026-10-21 |
 | [0737](0737-runtime-small-block-allocator.md) | `ail run` and `ail test` allocate small blocks from per-thread free lists *(delegated)* | Accepted | 2026-10-21 |
+| [0739](0739-json-parse-builds-text-once.md) | The native JSON parser builds each text value once *(delegated)* | Accepted | 2026-10-21 |
