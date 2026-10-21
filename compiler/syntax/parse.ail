@@ -1174,14 +1174,6 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
             return none
         unpack = more_binders(ast.Binder(name: v.name, pos: v.pos, mutable: false), "type.tuple.5")?
         var = hidden_name(unpack)
-        error_text(
-            "expr.loop.1",
-            here(),
-            "a `for` loop has one variable",
-            "for the index and the item, loop over the indexes: `for i in 0..xs.len()` then `xs[i]`; for a map, `for k in m.keys()` then `m[k]`",
-            "",
-        )
-        return none
     if not eat_kw("in")
         unexpected("`in` after the loop variable", "expr.loop.1")
         return none

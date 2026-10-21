@@ -23,7 +23,6 @@ bootstrap/tests/mistakes/enum_double_colon.ail
 bootstrap/tests/mistakes/field_colon.ail
 bootstrap/tests/mistakes/fn_value_arrow_type.ail
 bootstrap/tests/mistakes/fn_value_python_lambda.ail
-bootstrap/tests/mistakes/for_c_style.ail
 bootstrap/tests/mistakes/from_import.ail
 bootstrap/tests/mistakes/fstring.ail
 bootstrap/tests/mistakes/generic_angle.ail
