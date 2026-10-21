@@ -55,6 +55,8 @@ fn Lower.lower_list_edit(
 ) Val?
     size := konst(elem_bytes(e), Ty.Int)
     unit := Val(id: -1, ty: Ty.Unit)
+    if tuple_elems(e) != none and tuple_list_method(name)
+        return tuple_list_edit(r, e, name, npos, vs)
     if name == "extend" and vs.len() == 1
         if not same_ty(vs[0].ty, r.ty)
             return unsupported(npos, "`.extend()` of a `{vs[0].ty.name()}` onto a `{r.ty.name()}`")
