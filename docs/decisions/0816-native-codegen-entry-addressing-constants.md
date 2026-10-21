@@ -56,7 +56,9 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    (1 for `List[bool]`, else 8), allocates through `list_alloc` with that
    size (so the buffer has the kind `list_grow` gives it: no-scan for
    bytes, scanned for words), and both functions stop at 8 MiB of elements
-   (2^20 words, 2^23 bytes). sieve 3,000,000: 124.4M to 79.4M instructions.
+   (2^20 words, 2^23 bytes). sieve 3,000,000: 90.3M to 79.4M instructions
+   on the batch head (124.4M to 79.4M before chain E, which already
+   removed part of the collector's scan); fannkuch 9 is unchanged.
 
 ## Consequences
 
