@@ -26,7 +26,7 @@ example. Two causes, neither a missing example in the text:
 - `ail explain` falls back, when a rule's section has no example, to the first
   block whose `rules=` tag names the rule. A `tool=` block prints its command
   as `$ ail ...` (with `< FILE` for `stdin=`) and `# package NAME` for `pkg=`,
-  then at most four lines of code. The spec harness already checks every such
+  then at most three lines of code. The spec harness already checks every such
   block, so a fallback example cannot drift from the behaviour it shows.
 - New examples are written where the rule is explained: an `error=RULE` block
   followed by its repaired block, a `rules=RULE` block for a rule that is
@@ -35,7 +35,7 @@ example. Two causes, neither a missing example in the text:
   report its rule and an untagged block to check clean.
 - The mean `ail explain` entry is kept under 400 characters (the test in
   `explain_coverage.rs`). Examples are trimmed to the shortest program that
-  shows the rule.
+  shows the rule; the tagged-block fallback shows three lines.
 
 ## Rejected alternatives
 
@@ -53,6 +53,10 @@ example. Two causes, neither a missing example in the text:
 
 ## Consequences
 
+- The mean `ail explain` entry rises from 375.6 to 399.1 characters, under
+  the test's 400 limit (about 120 tokens) with about 1 character to spare.
+  Any later growth fails `explain_entries_stay_short`; the designer should
+  decide whether to raise the limit or shorten explanations.
 - `ail explain` shows an example for every rule whose text is covered by a
   tagged block. Before this ADR, 386 rules had none; after it, 102 remain
   (the list is in the PR body). Those are mostly the older chapters (09, 10,

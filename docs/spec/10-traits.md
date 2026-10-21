@@ -107,32 +107,20 @@ the trait's signature, with `Self` replaced by the implementing type.
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
-    fn grow(self) float
         1.0
-
-fn main()
-    print(Sq(s: 2.0).area())
+    fn grow(self) float
+        2.0
 ```
 
-```ail
+```ail fragment
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
-
-fn main()
-    print(Sq(s: 2.0).area())
+        1.0
 ```
 
 **trait.impl.6** — A type implements a trait at most once. *(ADR 0129)*
@@ -141,34 +129,22 @@ fn main()
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
+        1.0
 
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
-
-fn main()
-    print(Sq(s: 2.0).area())
+        2.0
 ```
 
-```ail
+```ail fragment
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
-
-fn main()
-    print(Sq(s: 2.0).area())
+        1.0
 ```
 
 ## Supertraits
@@ -259,34 +235,30 @@ trait Shape
 trait Area
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
         1.0
 
-impl Area for Sq
+impl Area for int
     fn area(self) float
         2.0
 
 fn main()
-    print(Sq(s: 2.0).area())
+    n := 1
+    print(n.area())
 ```
 
-```ail
+```ail fragment
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
         1.0
 
 fn main()
-    print(Sq(s: 2.0).area())
+    n := 1
+    print(n.area())
 ```
 
 **trait.res.2** — A built-in or inherent method takes precedence over a
@@ -329,18 +301,15 @@ type implementing `Trait` converts to it implicitly. *(ADR 0129)*
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
+        1.0
 
 fn total(x any Shape) float
     x.area()
 
 fn main()
-    print(total(Sq(s: 2.0)))
+    print(total(1))
 ```
 
 **trait.any.4** — A trait method can be called on an `any Trait` value only if
@@ -351,28 +320,22 @@ is a compile-time error at the call. *(ADR 0129)*
 trait Shape
     fn same(self, other Self) bool
 
-struct Sq
-    s float
-
-impl Shape for Sq
-    fn same(self, other Sq) bool
+impl Shape for int
+    fn same(self, other int) bool
         true
 
 fn show(x any Shape) bool
     x.same(x)
 
 fn main()
-    print(show(Sq(s: 2.0)))
+    print(show(1))
 ```
 
 ```ail
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
         1.0
 
@@ -380,7 +343,7 @@ fn show(x any Shape) float
     x.area()
 
 fn main()
-    print(show(Sq(s: 2.0)))
+    print(show(1))
 ```
 
 **trait.any.5** — `any Trait` satisfies a constraint `Trait` only when every
@@ -390,12 +353,9 @@ method of `Trait` can be called through it (`trait.any.4`). *(ADR 0129)*
 trait Shape
     fn area(self) float
 
-struct Sq
-    s float
-
-impl Shape for Sq
+impl Shape for int
     fn area(self) float
-        self.s * self.s
+        1.0
 
 fn total[T Shape](x T) float
     x.area()
@@ -404,7 +364,7 @@ fn show(x any Shape) float
     total(x)
 
 fn main()
-    print(show(Sq(s: 2.0)))
+    print(show(1))
 ```
 
 ## Standard traits

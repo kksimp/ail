@@ -226,8 +226,8 @@ fn tagged_example(rule: &str) -> Option<String> {
                 out.push('\n');
             }
             if !blank {
-                // Four lines at most: a tagged block is often a whole program (ail explain stays short).
-                out.push_str(&body.iter().take(4).copied().collect::<Vec<_>>().join("\n"));
+                // Three lines at most: a tagged block is often a whole program (ail explain stays short, ADR 0670).
+                out.push_str(&body.iter().take(3).copied().collect::<Vec<_>>().join("\n"));
             }
             return Some(out.trim_end().to_string());
         }
