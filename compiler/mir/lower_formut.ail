@@ -1,4 +1,4 @@
-## `for mut x in list` (own.mut.3). A struct element is a pointer to its
+## `for mut x in list` (own.excl.5). A struct element is a pointer to its
 ## fields, so a write through `x` changes the list's element in place and
 ## the loop lowers as a plain `for`. Other element types would need a
 ## write-back on every way out of the loop.
