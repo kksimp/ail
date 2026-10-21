@@ -496,3 +496,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind` *(delegated)* | Accepted | 2026-10-21 |
 | [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
+| [0693](0693-test-captures-stderr.md) | `ail test` captures a test's standard error, shown under a failing test's `FAIL` line marked `!` *(delegated)* | Accepted | 2026-10-21 |

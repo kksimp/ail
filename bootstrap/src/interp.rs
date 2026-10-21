@@ -429,6 +429,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         structs,
         enums,
         out: BufWriter::new(out),
+        errs: None,
         depth: 0,
         closed: false,
         consts: HashMap::default(),
@@ -557,6 +558,8 @@ struct Interp<'a, W: Write> {
     structs: HashMap<&'a str, usize>,
     enums: HashMap<&'a str, usize>,
     out: BufWriter<W>,
+    /// `Some` while `ail test` runs: what `io.eprint` wrote, captured instead of shown (test.run.2).
+    errs: Option<Vec<u8>>,
     depth: usize,
     /// Standard output was closed by the reader (e.g. `| head`); stop writing quietly.
     closed: bool,
