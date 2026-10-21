@@ -57,6 +57,9 @@ pub fn codegen.split_edges(f mir.Func) mir.Func  ## Split each branch edge that 
 pub fn codegen.block_order(f mir.Func) List[int]  ## The blocks in reverse postorder from the entry.
 pub fn codegen.f64_bits(x float) int  ## Float constants in a 64-bit pattern, computed with exact float scaling
 pub fn codegen.split_for_calls(f mir.Func) mir.Func  ## Values that cross calls are copied where the calls begin (ADR 0625). The
+pub fn codegen.split_for_calls(f0 mir.Func) mir.Func  ## Values that cross calls are copied where the calls begin (ADR 0625). The
+fn codegen.duplicate_returns(f mir.Func) mir.Func  ## Each edge into a block that only returns (a value it got as an argument,
+fn codegen.renamed(m Map[int, int], v int) int
 pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List[int]) int  ## The deepest block, other than the entry, that dominates every block in
 pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
