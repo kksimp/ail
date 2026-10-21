@@ -405,3 +405,14 @@ tensor an element, which changes std.tensor.15. Recommendation: (a), since
 the spec's shape rule stays true and an agent gets a diagnostic at the second
 index. The decision belongs to the designer, because it changes a spec rule
 (std.tensor.15). The corpus omits the program until then (ADR 0647).
+## OQ-123 — Compare `bytes` with `str` directly?
+Round 4 ([measurements](design/program-measurements-agent-r4.md)) found
+`gz_check` and `frames` comparing a file's bytes with its text through
+`to_bytes()`, `text()` and `len()`. Options: (a) keep `==` between `bytes`
+and `str` a type error, and write `b.text() == s` (status quo, an extra call
+per comparison); (b) allow `bytes == str` as the UTF-8 comparison, with
+`bytes == bytes` unchanged. Pros of (b): about 3 tokens per comparison on the
+round-4 programs. Cons: two kinds of equality, and a mixed `==` that a reader
+could take for a conversion. Recommendation: (a) until a larger corpus shows
+the cost; the saving is small and the rule is simpler. Decided by the
+integrator with a measurement, not by this lane.

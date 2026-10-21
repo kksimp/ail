@@ -139,3 +139,18 @@ By hand against the new modules (ADRs 0626, 0627):
 `std.csv`, `std.args`, `std.log` (ADRs 0626-0628); list `chunks`, `windows`,
 `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`,
 `count`, `rfind` (ADR 0629). Language card 7,019 → 7,044 tokens (budget 8,000).
+
+## Round 4 after (lane 204, ADR 0667)
+
+Library fixes only. `regex.group_all` replaces the `find_all` + `strip_prefix`
+pattern in `regex_codes`; `gz_check` uses the existing `str.byte_len()`.
+Tokbench mean, five tokenizers, ten programs:
+
+| Program | Before | After | Change |
+| `regex_codes.ail` | 127.0 | 106.2 | -20.8 |
+| `gz_check.ail` | 110.6 | 108.6 | -2.0 |
+| other eight `.ail` and all ten `.py` | as above | unchanged | 0 |
+
+`regex_codes` against its Python twin (94.2): +35% before, +13% after. The
+`task_sum` gap is a syntax question and stays open. The `frames` gap is
+mostly `wire[at].to_int()` and is not changed here.
