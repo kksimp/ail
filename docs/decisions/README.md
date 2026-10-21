@@ -573,3 +573,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |
 | [0734](0734-native-integer-text.md) | Native integer text: digits written from the end, one division by 10 each *(delegated)* | Accepted | 2026-10-21 |
 | [0725](0725-test-cases-audit.md) | Test-case audit: one audit script, a duplicate removed, one-theme cases split *(delegated)* | Accepted | 2026-10-21 |
+| [0748](0748-list-from-json-as-an-associated-call.md) | `List[T].from_json(j)`: associated calls on builtin generic types *(delegated)* | Accepted | 2026-10-21 |

@@ -548,3 +548,4 @@ fn main()
 A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
 `matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
 `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses.
+`ToJson`/`FromJson` derives read and write JSON; `List[U].from_json(j)?` reads an array. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
