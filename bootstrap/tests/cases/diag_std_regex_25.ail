@@ -1,0 +1,5 @@
+use std.regex
+
+fn main() !
+    re := regex.compile("a")?
+    print(re.is_matc("a"))

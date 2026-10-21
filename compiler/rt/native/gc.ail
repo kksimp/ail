@@ -45,6 +45,19 @@ fn gc_mark(w int)
                 store64(hs(H_MARKS) + 8 * top, bs)
                 hset(H_MARKN, top + 1)
 
+## Mark a list's element block and scan its first `len` words; the rest is
+## unused. A block already marked (another pointer reached it) was queued
+## whole, so there is nothing to do.
+fn gc_mark_list_data(w int, len int)
+    bs := gc_find(w)
+    if bs != 0
+        h := load64(bs)
+        kind := h.bit_and(255)
+        if kind != 0 and h.bit_and(256) == 0
+            store64(bs, h.bit_or(256))
+            if kind == KIND_LDATA
+                gc_scan_range(bs + 8, bs + 8 + 8 * len)
+
 fn gc_scan_range(from int, to int)
     mut p := from
     while p < to
@@ -61,8 +74,8 @@ fn gc_drain()
         h := load64(bs)
         n := h.shr(16)
         if h.bit_and(255) == KIND_LIST
-            # +0 len, +8 cap, +16 data
-            gc_mark(load64(bs + 24))
+            # +0 len, +8 cap, +16 data: only the first `len` elements are live
+            gc_mark_list_data(load64(bs + 24), load64(bs + 8))
         else
             gc_scan_range(bs + 8, bs + 8 + n / 8 * 8)
         top = hs(H_MARKN)
@@ -123,6 +136,7 @@ fn gc_sweep()
             pi += 1
     hset(H_LIVE, live)
     hset(H_HINT, 0)
+    hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
     hset(H_THRESH, if live > MIN_THRESH then live else MIN_THRESH)
 

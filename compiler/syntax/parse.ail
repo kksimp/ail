@@ -361,7 +361,7 @@ fn Parser.line_ends_at(self, k int) bool
 # ---- Diagnostics ----
 
 fn Parser.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false))
+    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
@@ -370,7 +370,7 @@ fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str)
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: "", fix: ""))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
     diag("lex.num.3", pos)
@@ -1300,7 +1300,7 @@ fn Parser.comparison_expr(mut self) ast.Expr?
         if op == ast.BinOp.Lt and upper_name(lhs) and at_sym(">")
             error_fix("gram.foreign.1", pos, "type arguments are written in `[]`, not `<>`")
             return none
-        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true))
+        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true, help: "", fix: ""))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
 
@@ -1628,7 +1628,14 @@ fn Parser.interpolation(mut self, parts List[Part], pos ast.Pos) ast.Expr?
                     and tok_tag(code[0].tok) == "sym"
                     and tok_text(code[0].tok) == "\{"
                     # lex.str.2: `{{` isn't an escape; `\{` is.
-                    diags.push(Diag(rule: "lex.str.2", pos: code[0].pos, msg: "", fixed: true))
+                    diags.push(Diag(
+                        rule: "lex.str.2",
+                        pos: code[0].pos,
+                        msg: "",
+                        fixed: true,
+                        help: "",
+                        fix: "",
+                    ))
                     ok = false
                 elif e := sub_expression(code)
                     out.push(ast.InterpPart.Hole(e))
@@ -1688,7 +1695,14 @@ fn Parser.if_expr(mut self) ast.Expr?
         elif at_kw("else")
             else_pos := bump().pos
             if at_kw("if")
-                diags.push(Diag(rule: "expr.if.1", pos: else_pos, msg: "", fixed: true))
+                diags.push(Diag(
+                    rule: "expr.if.1",
+                    pos: else_pos,
+                    msg: "",
+                    fixed: true,
+                    help: "",
+                    fix: "",
+                ))
                 return none
             # `else err` binds the error (expr.if.6).
             if n := ident()

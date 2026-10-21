@@ -43,7 +43,7 @@ tokens today):
    and suggests `self.f()` or renaming.
 4. Associated functions (no `self`) see no fields or methods by bare name.
 
-```ail
+```ail excerpt
 fn Parser.parse_value(mut self) !Json
     skip_whitespace()
     c := peek() else return unexpected()

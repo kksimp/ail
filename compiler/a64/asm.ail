@@ -338,6 +338,9 @@ pub fn Asm.bl(mut self, sym str)
     fixups.push(Fixup(at: code.len(), kind: "b26", label: -1, sym: sym))
     word(2483027968)
 
+pub fn Asm.blr(mut self, r int)
+    word(3594452992 + r * 32)
+
 pub fn Asm.ret(mut self)
     word(3596551104)
 

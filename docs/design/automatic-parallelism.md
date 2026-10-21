@@ -270,7 +270,7 @@ in CPython (Linux x86-64). Also done: `conv2d`, NumPy-style broadcasting,
 chains ([ADR 0524](../decisions/0524-tensor-operator-fusion.md)) runs one
 chunked pass: on 1,000,000 elements, 20 passes of a five-operator chain take
 0.29 s fused against 0.41–0.46 s unfused (a per-element version was slower,
-1.01 s). Still open: `f32`.
+1.01 s). `Tensor[f32]` is done ([ADR 0796](../decisions/0796-tensor-f32.md)): packed 4-byte elements with 8-wide AVX2 and 4-wide NEON kernels, in lockstep with scalar.
 
 1. **`std.tensor` on the CPU in the bootstrap** (about one lane-night):
    the type, the operations, lazy graph, exact CPU evaluation, tests. This
