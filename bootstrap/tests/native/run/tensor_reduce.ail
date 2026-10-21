@@ -1,0 +1,81 @@
+# std.tensor.3, std.tensor.5, std.tensor.11, std.tensor.12: sum, dot, max,
+# mean, reductions along an axis, and transpose.
+fn main()
+    a := tensor.from(
+        [
+            1.5,
+            -2.0,
+            3.25,
+            4.0,
+            5.5,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0,
+            11.0,
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+            16.0,
+            17.0,
+            18.0,
+            19.5,
+            20.0,
+        ],
+        [4, 5],
+    )
+    print(a.sum())
+    print(a.max())
+    print(a.mean())
+    print(a.sum(0))
+    print(a.sum(1))
+    print(a.max(0))
+    print(a.max(1))
+    print(a.mean(0))
+    print(a.mean(1))
+    print(a.dot(a))
+    print(a.transpose())
+    print(a.transpose().sum(0))
+    v := tensor.from([
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0,
+        1.1,
+        1.2,
+        1.3,
+        1.4,
+        1.5,
+        1.6,
+        1.7,
+        1.8,
+        1.9,
+        2.0,
+    ])
+    print(v.sum())
+    print(v.dot(v))
+    i := tensor.from([3, -4, 5, 6, 7, 8], [2, 3])
+    print(i.sum())
+    print(i.max())
+    print(i.dot(i))
+    print(i.sum(0))
+    print(i.sum(1))
+    print(i.max(0))
+    print(i.max(1))
+    print(i.transpose())
+    cube := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], [2, 2, 2])
+    print(cube.sum(0))
+    print(cube.sum(1))
+    print(cube.sum(2))
+    print(cube.max(1))
+    nan := (1.0 / 0.0) - (1.0 / 0.0)
+    n := tensor.from([1.0, nan, 3.0])
+    print(n.max())

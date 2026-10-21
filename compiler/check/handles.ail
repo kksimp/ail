@@ -70,6 +70,7 @@ fn stmt_spawns(s ast.Stmt, mut diags List[Diag])
             if e := v
                 spawns(e, mut diags)
         Eval(e) => spawns(e, mut diags)
+        LetTuple(_, value, _) => spawns(value, mut diags)
         Handle(value, o) =>
             spawns(value, mut diags)
             else_spawns(o, mut diags)
@@ -101,6 +102,7 @@ enum Node
                     Fmt(x, _) => out.push(Node.NExpr(x))
         ListLit(xs, _) => out = [Node.NExpr(x) for x in xs]
         SetLit(xs, _) => out = [Node.NExpr(x) for x in xs]
+        TupleLit(xs, _) => out = [Node.NExpr(x) for x in xs]
         MapLit(entries, _) =>
             for en in entries
                 out.push(Node.NExpr(en.key))
@@ -277,6 +279,7 @@ fn stmt_uses(n str, s ast.Stmt, cond bool, mut u Uses)
             if e := v
                 expr_uses(n, e, cond, mut u)
         Eval(e) => expr_uses(n, e, cond, mut u)
+        LetTuple(_, value, _) => expr_uses(n, value, cond, mut u)
         Handle(value, o) =>
             expr_uses(n, value, cond, mut u)
             else_uses(n, o, mut u)

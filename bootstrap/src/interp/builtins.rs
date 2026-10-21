@@ -26,6 +26,7 @@ pub(super) enum Key {
     None,
     Nested(u32),
     Seq(Vec<Key>),
+    Tuple(Vec<Key>),
     Struct(usize, Vec<Key>),
     Variant(usize, usize, Vec<Key>),
 }
@@ -42,6 +43,7 @@ impl Key {
             Value::None => Key::None,
             Value::Nested(n) => Key::Nested(*n),
             Value::List(xs) => Key::Seq(all(xs)),
+            Value::Tuple(xs) => Key::Tuple(all(xs)),
             Value::Struct(s, fields) => Key::Struct(*s, all(fields)),
             Value::Enum(e, i, fields) => Key::Variant(*e, *i, all(fields)),
             other => unreachable!("checked: {other:?} isn't `Hash`"),
@@ -425,6 +427,10 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     Value::List(Rc::new(items[..(n as usize).min(items.len())].to_vec()))
                 }
+                // type.tuple.9: each element with its index.
+                "enumerate" => Value::List(Rc::new(
+                    items.iter().enumerate().map(|(i, x)| Value::Tuple(Rc::new(vec![Value::Int(i as i64), x.clone()]))).collect(),
+                )),
                 // type.coll.17: `chunks(n)` pieces of `n` (the last may be shorter),
                 // `windows(n)` every run of `n` neighbours.
                 "chunks" | "windows" => {

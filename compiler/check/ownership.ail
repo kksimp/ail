@@ -221,6 +221,7 @@ fn Checker.defer_stmt(mut self, inner ast.Stmt, at ast.Pos)
         Break => what = "`break`"
         Continue => what = "`continue`"
         Let => what = "a binding"
+        LetTuple => what = "a binding"
         Defer => what = "another `defer`"
         While => what = "a loop"
         For => what = "a loop"

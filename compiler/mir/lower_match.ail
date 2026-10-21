@@ -75,6 +75,8 @@ fn Lower.lower_arm(mut self, body List[ast.Stmt], value bool, rty Ty) Val?
             dead_block()
         if i == body.len() - 1
             if e := final_expr(st)
+                if tail_error(e)
+                    continue
                 result = lower_expr(e, want) else Val(id: -2, ty: Ty.Unit)
                 continue
         lower_stmt(st)
@@ -120,6 +122,12 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
                 problem(vpos, "`{n}` has no variant `{name}`")
                 return false
             branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+        TuplePat(_, tpos) =>
+            problem(tpos, "tuples aren't in the native subset yet")
+            return false
+        BindName(_, bpos) =>
+            problem(bpos, "tuples aren't in the native subset yet")
+            return false
     true
 
 ## The `bool` that says whether `s` equals literal `lit` (expr.match.7).

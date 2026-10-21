@@ -1,0 +1,19 @@
+fn parse(s str) int?
+    s.to_int()
+
+fn digits(seg str) int?
+    if seg.len() == 0
+        return none
+    seg.to_int()
+
+fn main()
+    for s in ["42", "-7", "x", "", "9223372036854775808"]
+        n := parse(s)
+        if v := n
+            print("{s}: {v}")
+        else
+            print("{s}: none")
+    print(digits("12") != none)
+    print(digits("") == none)
+    v := parse("5") else 0
+    print(v + 1)

@@ -179,6 +179,14 @@ fn Checker.std_signature(self, module str, f str) StdSig
     text := Ty.Str
     u8_ptr := Ty.PtrOf(Ty.Num("u8"))
     re_ty := std_struct("regex.Regex")
+    # std.tensor.1-2 (ADR 0507): see the note on `from` in check/stdlib.rs.
+    if key == "tensor.from"
+        return StdSig(
+            params: [Ty.ListOf(Ty.Unknown), Ty.ListOf(Ty.Int)],
+            ret: self.tensor_ty(Ty.Unknown),
+        )
+    if key == "tensor.zeros"
+        return StdSig(params: [Ty.ListOf(Ty.Int)], ret: self.tensor_ty(Ty.Unknown))
     if key == "fs.read_text"
         return StdSig(params: [text], ret: fails_with("fs.IoError", text))
     if key == "fs.write_text" or key == "fs.append_text"
