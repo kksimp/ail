@@ -434,6 +434,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "bool" => Ty.Bool
                 "str" => Ty.Str
                 "char" => Ty.Char
+                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Ty.Sized(name)
                 "List" =>
                     if args.len() != 1
                         return none
@@ -1221,15 +1222,6 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         NewRef(_, pos) => unsupported(pos, "`ref`")
         TupleLit(_, pos) => unsupported(pos, "a tuple")
 
-## An integer literal, as a `float` where one is wanted.
-fn Lower.lower_int_lit(mut self, text str, pos ast.Pos, want Ty?) Val?
-    n := text.to_int() else
-        problem(pos, "integer literal `{text}` out of range")
-        return none
-    if wants_float(want)
-        return Val(id: fconst(n.to_float()), ty: Ty.Float)
-    Val(id: konst(n, Ty.Int), ty: Ty.Int)
-
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
 fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
     key := lookup(name) else
@@ -1496,7 +1488,7 @@ fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
 
 fn out_fn(t Ty) str
     match t
-        Int => "rt.out_int"
+        Int | Sized(_) => "rt.out_int"
         Float => "rt.out_float"
         Bool => "rt.out_bool"
         Str => "rt.out_str"
@@ -1596,7 +1588,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         text := text_of(r, npos)?
         return Val(id: text, ty: Ty.Str)
     match r.ty
-        Int => return int_method(r, name, npos, vs)
+        Int | Sized(_) => return int_method(r, name, npos, vs)
         Float => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
         Char => return lower_char_method(r, name, npos, vs)
