@@ -73,7 +73,6 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
 
 ## Layout
 
-- Blocks are indented by exactly 4 spaces. No tabs, braces or `;`.
 - A statement ends at its line's end, unless the line ends inside `(`, `[`
   or `{`, or after a binary operator or comma. `#` comments, `##` doc comments.
 - A line starting with `.name` continues the previous statement.
@@ -100,15 +99,9 @@ n = 5            # `=` changes an existing `mut` name
 n += 1           # also -= *= /= %=
 ```
 
-A name can't be declared twice in one function, even in an inner block
-(sibling blocks may reuse one), parameters and loop variables included. Locals
-can't reuse a function or type name. Update a `mut` in a loop with `=`, not `:=`.
-
 ## Types
 
-`int` (64-bit), `float` (64-bit IEEE), `bool` (`true`, `false`), `str`,
-`bytes`, `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
-`T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+`int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
 
 Constants are top-level `NAME := value`, computed at compile time. The
 value may call functions that do no I/O and use no capability
@@ -240,9 +233,6 @@ fn main() !                                 # main can fail; the error is report
 - `mut best := none` gets its type at the first assignment (`best = 3`);
   `x := if c then 4 else none` is an `int?`.
 - A local may shadow a function's name; calling that name inside its block is an error.
-- Several error types: `fn load() Config ! IoError | ParseError`.
-- No success value: `fn save() ! IoError` (or `!`); as a statement,
-  `save() else err` + block handles it, `save() else return` leaves.
 - `unreachable("why")` stops the program; it fits any type.
 
 ## Traits and generics
@@ -386,12 +376,6 @@ no `break` can end a function too.
 
 ## Operators and strings
 
-- `+ - * / %` on `int`. Overflow and division by zero stop the program (a
-  trap). `/` rounds toward zero.
-- `== != < <= > >=` (see above for which types). Comparisons can't be
-  chained: write `a < b and b < c`.
-- `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
-  `if n != 0`, not `if n`.
 - `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). No mixing
   with `int` (`n.to_float()`, `x.to_int()` truncates, traps on NaN); an int
   literal works where a float is expected. `round()` rounds halves away from
@@ -428,7 +412,6 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
   `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.center(width, ' ')`, `s.words()` (split on whitespace), `s.trim_start()`, `s.trim_end()`, `s.count(sub)`, `s.rfind(sub)`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - `xs.join(", ")` joins any list. `char`: `is_digit()`, `is_alpha()`,
   `is_space()`, `to_upper()`, `to_digit(16)` (`int?`), `code()`, `char.from_code(n)`.
-- No `+` on strings and no `{{` escape: use interpolation and `\{`.
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"` (ASCII, escapes `\xHH`),
   `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`, `for x in b`,
   `b.to_str()` (`str?`, strict UTF-8), `b.text()` (lossy `str`), `b.to_list()`,
@@ -464,9 +447,6 @@ Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
 counts := {"b": 2, "a": 2, "c": 5}
 top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
 ```
-
-`for x in xs` gives a copy of each element, and changing `xs` inside the loop
-doesn't affect it. To change the elements themselves, use `for mut`:
 
 ```ail skip=context
 for mut item in items      # `items` must be `mut`
@@ -868,9 +848,6 @@ Lines under the signature pure `bool`s. `result` is the returned value in
 `ensures`; `old(e)` is `e` on entry. A failed `requires` traps at the call
 (`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`). Trait
 contracts bind implementations (their `requires` weaken, their `ensures` add).
-`invariant COND` holds after construction and every `mut self` method
-(`contract.inv.2`, `contract.inv.3`). `ail run --no-contracts` skips checks.
-
 ```ail
 fn divide(a int, b int) int
     requires b != 0
