@@ -413,6 +413,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     Value::Int(super::net::TIMEOUT.as_millis() as i64),
                     Value::Int(super::net::MAX_REDIRECTS as i64),
                     super::bytes::bytes_value(Vec::new()),
+                    Value::Int(0),
+                    Value::Int(0),
                 ];
                 Value::Struct(s, Rc::new(fields))
             }
@@ -444,6 +446,14 @@ impl<'a, W: Write> Interp<'a, W> {
                                 format!("`timeout_ms` is at least 1 and `max_redirects` at least 0, not {timeout_ms} and {redirects}"),
                             );
                         }
+                        let (connect_ms, total_ms) = (o[6].int(), o[7].int());
+                        if connect_ms < 0 || total_ms < 0 {
+                            return stop(
+                                "std.net.19",
+                                pos,
+                                format!("`connect_ms` and `total_ms` are at least 0 (0 means no separate limit), not {connect_ms} and {total_ms}"),
+                            );
+                        }
                         let opts = super::net::Opts {
                             headers: super::netsock::options_pairs(&o[0]),
                             query: super::netsock::options_pairs(&o[1]),
@@ -452,6 +462,8 @@ impl<'a, W: Write> Interp<'a, W> {
                             content_type: None,
                             timeout: std::time::Duration::from_millis(timeout_ms as u64),
                             max_redirects: redirects as usize,
+                            connect: (connect_ms > 0).then(|| std::time::Duration::from_millis(connect_ms as u64)),
+                            total: (total_ms > 0).then(|| std::time::Duration::from_millis(total_ms as u64)),
                         };
                         super::net::request(&str_arg(0), &url, &opts)
                     }

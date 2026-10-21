@@ -159,6 +159,7 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 /// file name they are read under, and their source.
 const AIL_MODULES: &[(&str, &str, &str)] = &[
     ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),
+    ("std.net.jar", "<std>/net/jar.ail", include_str!("std/net/jar.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
     ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
 ];

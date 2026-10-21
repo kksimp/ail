@@ -488,19 +488,21 @@ fn main() !
 
 **std.net.6** — `request(method str, url str, opts Options) Response ! NetError`
 sends any method with options, where `struct Options { headers Map[str, str],
-query Map[str, str], body str, timeout_ms int, max_redirects int }`.
+query Map[str, str], body str, timeout_ms int, max_redirects int, data bytes,
+connect_ms int, total_ms int }`.
 `options()` returns the defaults: no headers, no query, an empty body, a
 30000 ms timeout and 5 redirects; write `mut o := net.options()` and set
 fields. The method is made uppercase and must be an HTTP token. `headers`
 are sent after the defaults `Host`, `User-Agent: ail` and `Accept: */*`, and
-replace a default of the same name (case-insensitively); `Connection`,
-`Content-Length` and `Transfer-Encoding` are the client's own and are
-ignored. A header name must be an HTTP token and a value must not contain
+replace a default of the same name (case-insensitively); `Content-Length`
+is the client's own and is ignored, and `Connection: close` and
+`Transfer-Encoding: chunked` are honoured (`std.net.19`). A header name must be an HTTP token and a value must not contain
 CR, LF or NUL: otherwise the request fails with kind `bad_request` before
 anything is sent. `query` is appended to the URL, percent-encoded, after any
 query the URL has. `body` is sent with a `Content-Length` (always for `POST`,
 `PUT` and `PATCH`). `timeout_ms` bounds connecting and each read and write,
-and must be at least 1; `max_redirects` must be at least 0 (otherwise the
+and must be at least 1; `connect_ms` and `total_ms` (default 0, no separate
+limit) bound connecting alone and the whole request (`std.net.19`); `max_redirects` must be at least 0 (otherwise the
 program traps). `get(url)` and `post(url, body, content_type)` are
 `request` with the defaults. *(ADR 0418)*
 
@@ -554,8 +556,9 @@ body as text, bytes that aren't UTF-8 as U+FFFD; `peer` is the client's
 address. *(ADR 0419)*
 
 **std.net.11** — `ex.respond(r Response) ! NetError` sends the response and
-closes the connection: the server sends `Connection: close` and does not
-keep connections alive. The status must be 100 to 599; header names must be
+answers it. The server keeps the connection open for the next request when
+the client allows it (`std.net.22`), and otherwise sends `Connection: close`
+and closes it. The status must be 100 to 599; header names must be
 tokens and values must not contain CR, LF or NUL; otherwise `respond` fails
 with kind `bad_request` and the exchange stays open to be answered again.
 `Content-Length`, `Connection` and `Transfer-Encoding` in `r.headers` are
@@ -634,6 +637,59 @@ program holds and returns when `srv.close()` has stopped it. Four tasks
 answer requests at once, each one at a time; a handler is a declared
 function (`conc.task.*`, function values), and a client that goes away
 before its answer is not a failure. *(ADR 0419)*
+
+**std.net.19** — Persistent connections and limits. The client keeps a
+connection that a response left open (HTTP/1.1, a body framed by length or
+chunks, no `Connection: close`, nothing buffered beyond the response) in a
+pool, up to 4 idle per scheme, host and port and 32 in all, for at most 30
+seconds (less if the server's `Keep-Alive: timeout=` says so). The next
+request to the same origin, redirects included, uses it; a pooled connection
+the server has closed is dropped when found, and a request that fails on one
+before any response byte arrived is sent again on a new connection if its
+method is `GET`, `HEAD`, `PUT`, `DELETE` or `OPTIONS`. The header
+`Connection: close` in `opts.headers` sends that header and keeps nothing.
+The header `Transfer-Encoding: chunked` sends the body of `POST`, `PUT` and
+`PATCH` as chunks of at most 8 KiB, with no `Content-Length`. Interim `1xx`
+responses (except `101`) are skipped. `connect_ms` (0: use `timeout_ms`)
+bounds the connection attempt and `total_ms` (0: no limit) bounds the whole
+request across redirects: past it a read or write fails with kind
+`timed_out`, and `timeout_ms` still bounds each wait. `connect_ms` or
+`total_ms` below 0 traps. *(ADR 0637)*
+
+**std.net.20** — `use std.net.jar` gives a cookie jar, `jar.new() Jar`
+(RFC 6265 basics). `j.set_cookie(url, line) bool` stores one `Set-Cookie`
+line received from `url`: the `Domain` must be the host or a parent of it
+(else the line is dropped and the result is `false`; there is no public
+suffix list), no `Domain` makes the cookie host-only, `Path` defaults to the
+request path's directory, `Max-Age` wins over `Expires`, a cookie whose time
+has passed (or `Max-Age` 0 or less) removes any cookie of the same name,
+domain and path, and a cookie of the same name, domain and path replaces the
+earlier one. `j.store(url, r)` stores every `set-cookie` value of a
+`Response`. `j.header(url) str` is the `Cookie` header for a request to
+`url`: cookies whose domain and path match, `Secure` ones only for `https`,
+unexpired, the longest path first and then the oldest; `j.matching(url)`
+gives them as `Cookie` values and `j.value(url, name) str?` one value.
+`j.for_script(url)` gives the ones a script may read (not `HttpOnly`) by
+name, and `j.set_from_script(url, line)` is `set_cookie` refusing `HttpOnly`.
+`j.len()`, `j.clear()` and `j.drop_expired()`. *(ADR 0638)*
+
+**std.net.21** — `j.request(method, url, opts) Response ! NetError` is
+`net.request` with the jar's cookies in the `Cookie` header (added to one the
+program set) and every response's cookies stored, following the redirects of
+`GET` and `HEAD` itself, up to `opts.max_redirects`, so each hop carries and
+stores its own cookies; a redirect leaving the origin takes the program's own
+`Cookie` header along only if the jar has none for it. `j.get(url)` is
+`j.request("GET", url, net.options())`. *(ADR 0638)*
+
+**std.net.22** — Server keep-alive. After answering a request that is
+HTTP/1.1 without `Connection: close`, with nothing sent beyond it, and a
+final (not `1xx`) response whose headers don't ask to close, the server
+sends `Connection: keep-alive` and waits for the next request on the same
+connection, up to 15 seconds; a connection that stays quiet is closed
+without a word. Each request on it is an `Exchange` as before, the 10 second
+limit of `std.net.10` applies per request, and `srv.close()` drops idle
+connections. Any other request is answered with `Connection: close`.
+*(ADR 0639)*
 
 ```ail rules=std.net.17,std.net.18
 use std.net

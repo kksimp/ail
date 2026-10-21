@@ -501,3 +501,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0637](0637-http-persistent-connections-and-timeouts.md) | HTTP/1.1 client: a connection pool (keep-alive), chunked request bodies, `connect_ms` and `total_ms` timeouts *(delegated)* | Accepted | 2026-10-21 |
+| [0638](0638-cookie-jar.md) | A cookie jar in the standard library, `std.net.jar`: RFC 6265 domain, path, expiry, `Secure`, `HttpOnly`; the one jar for Garlic *(delegated)* | Accepted | 2026-10-21 |
+| [0639](0639-http-server-keep-alive.md) | HTTP server keeps connections alive between requests *(delegated)* | Accepted | 2026-10-21 |

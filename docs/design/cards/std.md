@@ -49,6 +49,8 @@ struct Options  ## std.net.6: what a request can set beyond its method and URL.
     timeout_ms int
     max_redirects int
     data bytes
+    connect_ms int
+    total_ms int
 struct Request  ## std.net.9-11: a request the server received, and the server.
     method str
     path str
