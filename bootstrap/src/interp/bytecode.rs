@@ -4074,34 +4074,36 @@ match {
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
-                    // `len` of text, a map, a set or bytes: the walker's count, without its call.
-                    let other_len = if *push {
-                        None
-                    } else {
-                        match &env[at].1 {
-                            Value::Str(t) => Some(t.chars().count()),
-                            Value::Map(t) | Value::Set(t) => Some(t.len()),
-                            Value::Bytes(b) => Some(b.len()),
-                            _ => None,
-                        }
-                    };
-                    if let Some(n) = other_len {
-                        put_int(*dst, n as i64, env, base, regs);
-                        pc = *done as usize;
-                    } else if matches!(env[at].1, Value::List(_)) {
+                    if let Value::List(items) = &mut env[at].1 {
                         if *push {
                             let v = take!(*val);
                             let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
                             Rc::make_mut(items).push(v);
                             put(*dst, Value::Unit, env, base, regs);
                         } else {
-                            let Value::List(items) = &env[at].1 else { unreachable!("a list") };
                             let len = items.len() as i64;
                             put_int(*dst, len, env, base, regs);
                         }
                         pc = *done as usize;
                     } else {
-                        pc += 1;
+                        // `len` of text, a map, a set or bytes: the walker's count, without its call.
+                        let n = if *push {
+                            None
+                        } else {
+                            match &env[at].1 {
+                                Value::Str(t) => Some(t.chars().count()),
+                                Value::Map(t) | Value::Set(t) => Some(t.len()),
+                                Value::Bytes(b) => Some(b.len()),
+                                _ => None,
+                            }
+                        };
+                        match n {
+                            Some(n) => {
+                                put_int(*dst, n as i64, env, base, regs);
+                                pc = *done as usize;
+                            }
+                            None => pc += 1,
+                        }
                     }
                 }
                 Ins::IndexOff { dst, recv, i, op, k, pos, opos } => {
