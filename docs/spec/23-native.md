@@ -105,18 +105,12 @@ per request with `Connection: close`, `Content-Length`, chunked or until-close b
 fails with kind `tls`, and `Accept-Encoding` and connection pooling are not built), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
 other host fails with kind `not_found`, as there is no DNS client yet), no TLS, a wait does not let other tasks run, the
 `bytes` forms are not built, and a message's wording may differ from the interpreter's (the `kind` is the same); and the standard
-modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet). Any other construct is reported at its position under this rule, all of them
-at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0830)*
-readable yet, and on macOS the program traps at `proc.run`); and the standard
 modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log`; `std.app`
+`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet, and `std.app`
 waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0838)*
+at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
+0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830, 0838)*
 
 ```ail
 fn steps(n int) int
