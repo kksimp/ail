@@ -139,6 +139,29 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    70.4M to 60.8M, fannkuch 234.0M to 231.1M, binarytrees 318.8M to 315.6M,
    wordfreq 204.8M to 203.8M, the other six unchanged.
 
+9. **A sum used only as load and store addresses folds into each of
+   them.** `fold_prim_addresses` (addr.ail) folded `base + k` into a
+   `load64`/`store64` only when that sum had no other use, so the runtime's
+   `m + 8 * H_ALLOCD`, read and then written, kept a register for the sum.
+   It now folds when every use of the sum is the address of a load or store
+   primitive; the sum then dies. (Folding when other uses remain was tried: it
+   keeps both the sum and the base live and made `list_join_chars` spill.)
+   Instructions (x86-64): wordfreq 195.5M to 192.5M, fasta 44.3M to 43.9M.
+
+10. **A path that returns without calling holds no callee-saved
+    register.** `split_for_calls` (prep.ail, ADR 0625) moves the values that
+    cross calls into copies where the calls begin, so a path that returns
+    first saves nothing, but only when what the first calling block
+    dominates is closed. `make` in binarytrees ends in one block, `return
+    node`, shared by the leaf path and the calling path, which left the
+    region open and the five saves in the prologue of every call. When the
+    region is open, each edge into a block that only returns (two to four
+    of them) now gets a return of its own, and the function is split again;
+    if that doesn't close the region the function is left as it was. The
+    leaf path of `make` loses five saves, five restores and the frame's
+    stack adjustment. Instructions (x86-64): binarytrees 247.0M to 228.1M.
+    The same code runs for ARM64 (shared prep); its count needs the Mac.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
@@ -185,3 +208,9 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   of another type). Every store here forgets a whole class instead; the loads
   that survive in the measured programs are in loops, where nothing carries
   over anyway.
+- **Allocating `r10`/`r11` in functions that never use them as scratch.**
+  `rt.alloc_raw` keeps three callee-saved registers because it needs eight
+  values at once and the caller-saved pool has five. The scratch registers
+  are used unconditionally by division, `neg`, `not` and compare-to-bool
+  sequences and as operand reloads, so freeing one needs a per-function
+  audit of every use; left for a later pass over the code generator.

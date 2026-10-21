@@ -3,7 +3,7 @@
 a64  57 items
 ast  129 items
 check  304 items
-codegen  39 items
+codegen  40 items
 mir  271 items
 obj  53 items
 syntax  99 items
