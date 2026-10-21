@@ -330,6 +330,8 @@ pub fn x64.alu_digit(str) int
 pub fn x64.sd_opcode(str) int
 pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
+pub fn x64.is_kernel(str) bool
+pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3682); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3713); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
