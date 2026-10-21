@@ -48,6 +48,12 @@ fn os_lookup(mod str, name str) OsFn?
         "path.ext" => os_fn("rt.path_ext", [s], s, false)
         "path.stem" => os_fn("rt.path_stem", [s], s, false)
         "path.join" => os_fn("rt.path_join", [s, s], s, false)
+        "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
+        "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
+        "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
+        "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
+        "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
+        "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)
         "proc.run" =>
             OsFn(
                 rt: "rt.proc_run",
@@ -66,7 +72,7 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "compress"]
         if is_module(recv, m)
             return m
     ""
@@ -102,7 +108,11 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
         if a.label != none or a.mutable
             return unsupported(pos, "labelled arguments")
         v := lower_value(a.value, f.params[i])?
-        vs.push(convert(v, f.params[i], expr_pos(a.value)))
+        if v.ty == Ty.Bytes and f.params[i] == Ty.Str and f.rt.starts_with("rt.compress_")
+            # `bytes` and `str` have one layout; std.compress.1 takes either.
+            vs.push(v.id)
+        else
+            vs.push(convert(v, f.params[i], expr_pos(a.value)))
     for i in args.len()..f.params.len()
         vs.push(konst(0, f.params[i]))
     if f.fails

@@ -6,7 +6,20 @@ use ast
 
 ## The standard modules, which `use` doesn't load from the package
 ## (std.use.1); the lowering knows their functions by name.
-STD_MODULES := ["env", "fs", "io", "net", "path", "proc", "random", "regex", "tensor", "time", "ui"]
+STD_MODULES := [
+    "compress",
+    "env",
+    "fs",
+    "io",
+    "net",
+    "path",
+    "proc",
+    "random",
+    "regex",
+    "tensor",
+    "time",
+    "ui",
+]
 
 ## The standard modules written in AIL (std.ui.19), compiled like a user's
 ## own: their source is in `bootstrap/src/std`, and each is a module of the
