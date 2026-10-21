@@ -1,0 +1,23 @@
+# `?` inside the subject of an `else`, as an operand or an argument: an
+# absent value runs the `else` (err.prop.4).
+struct Label
+    name str
+
+struct Item
+    label Label?
+
+fn scale(n int, k int) int
+    n * k
+
+fn named(i Item, want str) bool
+    (i.label?.name == want else false)
+
+fn doubled(n int?) int
+    scale(n?, 2) else -1
+
+fn main()
+    print(named(Item(label: Label(name: "order")), "order"))
+    print(named(Item(label: Label(name: "x")), "order"))
+    print(named(Item(label: none), "order"))
+    print(doubled(4))
+    print(doubled(none))
