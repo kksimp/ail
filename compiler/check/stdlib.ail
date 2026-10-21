@@ -54,7 +54,7 @@ STD_FUNCTIONS := [
         "request_bytes",
         "serve",
     ],
-    ["path", "base", "dir", "ext", "join"],
+    ["path", "base", "dir", "ext", "join", "stem"],
     ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
     ["random", "float", "int", "seed", "shuffle"],
     [
@@ -218,7 +218,7 @@ fn Checker.std_signature(self, module str, f str) StdSig
         "compress.unzip",
     ].contains(key)
         return StdSig(params: [text, text], ret: fails_with("compress.CompressError", Ty.Unit))
-    if ["path.dir", "path.base", "path.ext"].contains(key)
+    if ["path.dir", "path.base", "path.ext", "path.stem"].contains(key)
         return StdSig(params: [text], ret: text)
     if key == "path.join"
         return StdSig(params: [text, text], ret: text)

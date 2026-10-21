@@ -328,7 +328,7 @@ impl<'p> Checker<'p> {
 
     /// Whether a value of type `t` can hold a `ref` cell (own.ref.2): a `ref`, or a
     /// collection, optional, result, struct or enum that holds one.
-    fn holds_ref(&self, t: &Ty, depth: usize) -> bool {
+    pub(super) fn holds_ref(&self, t: &Ty, depth: usize) -> bool {
         if depth > 6 {
             return false;
         }

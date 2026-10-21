@@ -260,9 +260,53 @@ fn Checker.const_type(mut self, i int) Ty
             "`{c.name}` would hold a result that may fail; a constant can't hold a failure",
             "supply a fallback with `else`: `NAME := parse(text) else 0`",
         )
+    # ct.const.4: a constant's type holds no `ref` and no `unique` type.
+    if holds_ref(t, 0) or is_unique(t)
+        what := if holds_ref(t, 0) then "a `ref` cell" else "a `unique` value"
+        ct_const_4(
+            expr_pos(c.value),
+            "`{c.name}` would hold {what}, and a constant is an immutable value copied into the program",
+        )
     out := const_types[i] else t
     const_types[i] = out
     out
+
+## ct.const.4, once per place.
+fn Checker.ct_const_4(mut self, at ast.Pos, message str)
+    for d in diags
+        if d.pos == at
+            return
+    err_help(
+        "ct.const.4",
+        at,
+        message,
+        "a constant is shared by the whole program; make the value inside a function",
+    )
+
+## Whether a value of type `t` can hold a `ref` cell: a `ref`, or a collection,
+## optional, result, struct or enum that holds one (own.ref.2, ct.const.4).
+@allow("expr.match.3") fn Checker.holds_ref(self, t Ty, depth int) bool
+    if depth > 6
+        return false
+    match t
+        RefOf(_) => true
+        ListOf(x) => holds_ref(x, depth + 1)
+        SetOf(x) => holds_ref(x, depth + 1)
+        Opt(x) => holds_ref(x, depth + 1)
+        Res(x, _) => holds_ref(x, depth + 1)
+        MapOf(k, v) => holds_ref(k, depth + 1) or holds_ref(v, depth + 1)
+        Struct(i, _) =>
+            for f in field_types[i]
+                if holds_ref(f, depth + 1)
+                    return true
+            false
+        Enum(i, _) =>
+            for vs in variant_types[i]
+                for f in vs
+                    if holds_ref(f, depth + 1)
+                        return true
+            false
+        _ => false
 
 ## The type of a variant of enum `e` that carries no data. Its type
 ## arguments are `explicit`, or come from the expected type (gen.infer.1).

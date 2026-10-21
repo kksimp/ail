@@ -168,7 +168,8 @@ bounds on the `impl`: `impl ToJson for Pair[A ToJson, B ToJson]`.
 `fn from_json(j Json) Self ! JsonError` (`trait.assoc.1`); its generator
 `derive_from_json` fills an empty `impl` with it, and `str`, `int`,
 `float`, `bool`, `Json` and `List[T FromJson]` implement it. It is called as
-`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`). A
+`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`); a
+list is read with `List[U].from_json(j)` (ADR 0748). A
 struct reads each field from the member of its name with `need` and the
 `need_*` of its type, so a missing or mistyped member fails with its
 message; a field of another type `U` calls `U.from_json`, which `U` derives

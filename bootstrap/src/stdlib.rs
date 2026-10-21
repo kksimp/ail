@@ -22,8 +22,6 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "open", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
-    ("path", &["base", "dir", "ext", "join"]),
-    ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
     ("path", &["base", "dir", "ext", "join", "stem"]),
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),

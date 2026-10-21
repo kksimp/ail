@@ -247,6 +247,12 @@ pub struct Resolved {
 /// Names available without import (mod.main.3, ADR 0084).
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
+/// Traits other languages use to define operators AIL has none of (trait.op.2).
+const OTHER_OPERATOR_TRAITS: [&str; 17] = [
+    "Pow", "Not", "BitAnd", "BitOr", "BitXor", "Shl", "Shr", "AddAssign", "SubAssign", "MulAssign", "DivAssign",
+    "RemAssign", "Deref", "DerefMut", "Call", "Assign", "Concat",
+];
+
 const BUILTIN_TYPES: &[&str] = &[
     "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "bytes", "char", "bool", "List",
     "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
@@ -680,7 +686,7 @@ impl<'p> Checker<'p> {
         bounds.iter().filter_map(|(n, p)| self.trait_named(n, *p, "gen.bound.1")).collect()
     }
 
-    /// The trait called `n`, reporting when there's none.
+    /// The trait called `n`, reporting when there's none (trait.op.2).
     fn trait_named(&mut self, n: &str, pos: Pos, rule: &'static str) -> Option<usize> {
         if let Some(&t) = self.traits.get(n) {
             return Some(t);
@@ -691,6 +697,16 @@ impl<'p> Checker<'p> {
                 pos,
                 format!("`{n}` is a type, not a trait"),
                 "a constraint or `impl` names a trait, e.g. `Ord`",
+            );
+            return None;
+        }
+        // trait.op.2: only the operators of trait.op.1 can be implemented.
+        if OTHER_OPERATOR_TRAITS.contains(&n) {
+            self.error_help(
+                "trait.op.2",
+                pos,
+                format!("`{n}` would define an operator, and no operator beyond those of `trait.op.1` can be defined"),
+                "write a named method instead, e.g. `fn pow(self, other Self) Self`, and call it as `a.pow(b)`",
             );
             return None;
         }
@@ -970,6 +986,14 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// ct.const.4, once per place.
+    pub(super) fn ct_const_4(&mut self, pos: Pos, msg: String) {
+        if self.diags.iter().any(|d| d.pos == pos) {
+            return;
+        }
+        self.error_help("ct.const.4", pos, msg, "a constant is shared by the whole program; make the value inside a function");
+    }
+
     /// The type of constant `i`, typing it first if needed (mod.const.3).
     fn const_type(&mut self, i: usize) -> Ty {
         if let Some(t) = &self.const_types[i] {
@@ -993,6 +1017,12 @@ impl<'p> Checker<'p> {
         self.const_busy[i] = false;
         if t == Ty::Unit {
             self.error("mod.const.2", c.value.pos(), format!("`{}` would be a constant with no value", c.name));
+        }
+        // ct.const.4: a constant's type holds no `ref` and no `unique` type.
+        if self.holds_ref(&t, 0) || self.is_unique(&t) {
+            let what = if self.holds_ref(&t, 0) { "a `ref` cell" } else { "a `unique` value" };
+            let msg = format!("`{}` would hold {what}, and a constant is an immutable value copied into the program", c.name);
+            self.ct_const_4(c.value.pos(), msg);
         }
         if matches!(t, Ty::Res(..)) {
             self.error_help(
@@ -1437,6 +1467,8 @@ impl<'p> Checker<'p> {
                     );
                 }
             }
+            // type.opt.8: a `T?` doesn't convert to a `T??`. The help below still names type.opt.7;
+            // see docs/design/rule-coverage.md.
             (Ty::Opt(w), Ty::Opt(_)) if matches!(**w, Ty::Opt(_)) => self.error_help(
                 rule,
                 pos,
@@ -4108,6 +4140,16 @@ impl<'p> Checker<'p> {
             }
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
+            }
+            // trait.assoc.4: `List[U].from_json(j)`, an associated function of a
+            // trait that a builtin generic type implements.
+            if tn == "List"
+                && let Some([elem]) = targs
+            {
+                let ty = Ty::List(Box::new(self.resolve_type(elem)));
+                if let Some(t) = self.builtin_assoc_call(ty, name, pos, args, expect) {
+                    return t;
+                }
             }
             // type.bytes.13: `bytes.from_list(xs)` and the like.
             if tn == "bytes" && targs.is_none() {

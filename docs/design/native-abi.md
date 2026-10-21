@@ -54,6 +54,7 @@ shortens a list must be added to the optimiser's decision first.
 | `char` | `i64`, a Unicode scalar value; `List[char]` has 8-byte slots (ADR 0566) |
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
+| `Map[K, V]`, `Set[T]` | pointer to a **table object** (kind 7, 8) |
 
 **String object** (immutable, 16-byte aligned):
 
@@ -121,6 +122,26 @@ order (a `float` as its bits, a `bool` as 0 or 1, a string, list or struct
 as a pointer). A struct is a value: reading one from a place to bind,
 store, push or return it copies it, deeply through the lists and structs
 it holds (a generated `copy.T` function); fields change in place.
+
+**Table object** (`Map` and `Set`, ADR 0568; `compiler/rt/native/map.ail`):
+
+```text
++0   u64  len     live entries
++8   u64  used    entry-array slots used, live or dead
++16  u64  ecap    entry-array capacity (a power of two)
++24  u64  mask    index size - 1
++32  u64  kind    key kind: 0 int, 1 str, 2 bool
++40  ptr  ents    ecap * 24 bytes: hash (-1 when dead), key, value
++48  ptr  index   (mask + 1) * 8 bytes: 0 empty, else entry number + 1
++56  u64  vmode   copy mode of values: 0 plain, 1 lists, 2 tables
++64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
++72  u64  lastkey the last key found or added
++80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
+```
+
+The entry array is in insertion order, which is iteration order
+(type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
+A set uses the same layout and ignores the value word.
 
 **Enum values** (ADR 0602, lane 179). An enum none of whose variants has
 fields is an `i64`, the variant's index in declaration order. Any other enum
