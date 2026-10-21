@@ -39,12 +39,12 @@ A rule is tested when its id appears in a case, example or Rust test; spec examp
 - **07-ownership.md** (9): `own.borrow.1` `own.borrow.2` `own.copy.1` `own.excl.1` `own.move.5` `own.place.1` `own.uniq.7` `own.val.1` `own.val.2`
 - **08-errors.md** (10): `err.ctx.1` `err.ctx.3` `err.fix.1` `err.model.1` `err.text.1` `err.trap.2` `err.trap.3` `err.type.3` `err.type.4` `err.type.6`
 - **09-generics.md** (3): `gen.anon.2` `gen.bound.4` `gen.impl.1`
-- **10-traits.md** (4): `trait.method.2` `trait.method.4` `trait.op.2` `trait.res.2`
+- **10-traits.md** (4): `trait.method.2` `trait.method.4` `trait.res.2`
 - **11-concurrency.md** (10): `conc.atomic.1` `conc.atomic.2` `conc.atomic.6` `conc.mm.1` `conc.par.6` `conc.par.7` `conc.race.1` `conc.task.2` `conc.task.3` `conc.task.9`
 - **12-modules.md** (2): `mod.pkg.1` `mod.vis.3`
 - **13-unsafe.md** (6): `unsafe.block.1` `unsafe.block.2` `unsafe.block.3` `unsafe.block.4` `unsafe.op.1` `unsafe.op.2`
 - **14-ffi.md** (5): `ffi.call.1` `ffi.decl.1` `ffi.decl.2` `ffi.decl.3` `ffi.link.1`
-- **15-compile-time.md** (4): `ct.const.4` `ct.eval.1` `ct.eval.3` `ct.eval.4`
+- **15-compile-time.md** (4): `ct.eval.1` `ct.eval.3` `ct.eval.4`
 - **16-reflection.md** (3): `refl.info.2` `refl.info.3` `refl.run.1`
 - **17-std.md** (5): `std.random.1` `std.ui.10` `std.ui.11` `std.ui.13` `std.ui.9`
 - **18-effects.md** (9): `eff.cap.3` `eff.det.1` `eff.det.2` `eff.det.3` `eff.infer.1` `eff.infer.2` `eff.infer.3` `eff.infer.4` `eff.infer.5`

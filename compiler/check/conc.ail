@@ -273,6 +273,24 @@ fn Checker.not_mutex(mut self, mutex ast.Expr, t Ty)
                 "a spawned call can't take a `mut` argument; the task works on its own copy",
                 "remove the `mut`, and send results back through the task's result or a `Channel`",
             )
+    # own.ref.2: a `ref` is reachable from one task only, so it isn't passed to another.
+    mut target := -1
+    match operand
+        Call(c, _, _) =>
+            match c
+                Name(n, _) => target = fns.get(n) else -1
+                TypeArgs(n, _, _) => target = fns.get(n) else -1
+                _ => target = -1
+        _ => target = targets.get(key) else -1
+    if target >= 0 and target < sigs.len()
+        for k in 0..args.len()
+            if k < sigs[target].params.len() and holds_ref(sigs[target].params[k].ty, 0)
+                err_help(
+                    "own.ref.2",
+                    expr_pos(args[k].value),
+                    "a `ref` can't be passed to a spawned task: only one task may reach it",
+                    "send the value through a `Channel`, or hold the shared state in a `Mutex`",
+                )
     Ty.Conc("Task", if t == Ty.Never then Ty.Unit else t)
 
 fn Checker.not_spawnable(mut self, at ast.Pos) Ty

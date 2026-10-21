@@ -83,6 +83,16 @@ fn main()
 **ct.const.4** — A constant's type MUST NOT contain `ref` or a `unique`
 type: a constant is an immutable value copied into the program. *(ADR 0225)*
 
+```ail error=ct.const.4 rules=ct.const.4
+unique struct Token
+    id int
+
+TOKEN := Token(id: 1)       # a `unique` value can't be copied into every use
+
+fn main()
+    print(1)
+```
+
 ## Evaluation
 
 **ct.eval.1** — Compile-time evaluation is deterministic: it depends only on
