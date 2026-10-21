@@ -391,7 +391,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
 | [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
-| [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
 | [0670](0670-explain-examples-from-tagged-blocks.md) | `ail explain` examples: worked examples count in the audit; a `rules=` block fills a rule with no example in its section *(delegated)* | Accepted | 2026-10-21 |
 | [0622](0622-loop-starts-steps-and-index-spans.md) | Versioned loops with computed starts and unchanging steps; index arithmetic bounded by a constant loop bound *(delegated)* | Accepted | 2026-10-21 |
 | [0623](0623-branch-and-codegen-peepholes.md) | Branch and codegen peepholes: flipped `not` branches, bit operations into the result register, direct spill moves *(delegated)* | Accepted | 2026-10-21 |
@@ -533,6 +532,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
 | [0655](0655-build-cache.md) | A content-addressed cache of finished `ail build` executables, and derive expansion with one effect inference *(delegated)* | Accepted | 2026-10-21 |
 | [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
+| [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
 | [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
 | [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
 | [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
