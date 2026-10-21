@@ -1,0 +1,41 @@
+# JSON in a native build (ADRs 0807, 0808): parse, print and the derived
+# `to_json`/`from_json` give what the interpreter gives, errors included.
+struct Item
+    name str
+    qty int
+    price float
+
+impl ToJson for Item
+impl FromJson for Item
+
+struct Order
+    id int
+    note str?
+    items List[Item]
+    paid bool
+
+impl ToJson for Order
+impl FromJson for Order
+
+fn show(text str)
+    if j := parse_json(text)
+        if o := Order.from_json(j)
+            print(o.to_json().to_text())
+        else err
+            print("shape error: {err}")
+    else err
+        print("parse error: {err}")
+
+fn main()
+    show("\{\"id\": 7, \"note\": \"hi\", \"items\": [\{\"name\": \"a\", \"qty\": 2, \"price\": 1.5}], \"paid\": true}")
+    show("\{\"id\": 8, \"items\": [], \"paid\": false}")
+    show("\{\"id\": \"x\", \"items\": [], \"paid\": false}")
+    show("\{\"id\": 1, \"items\": [\{\"name\": 3}], \"paid\": false}")
+    show("[1, 2")
+    show("\{\"id\": 1,}")
+    j := parse_json("\{\"a\": [1, 2.5, \"s\\n\", null, true]}") else return
+    print(j.to_text())
+    print(j.kind())
+    if a := j.get("a")
+        if b := a.at(1)
+            print(b.kind())
