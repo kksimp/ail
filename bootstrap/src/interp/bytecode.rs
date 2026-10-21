@@ -811,6 +811,32 @@ fn assign(slot: &mut Value, v: Value) {
     assign_drop(std::mem::replace(slot, v));
 }
 
+/// A value read out of a container: scalars as themselves, so they reach their slot from registers,
+/// not by way of a whole `Value` on the stack (whose copy stalls the loads after it).
+enum Got {
+    Int(i64),
+    Float(f64),
+    Other(Value),
+}
+
+#[inline(always)]
+fn got(v: &Value) -> Got {
+    match v {
+        Value::Int(x) => Got::Int(*x),
+        Value::Float(x) => Got::Float(*x),
+        other => Got::Other(other.clone()),
+    }
+}
+
+#[inline(always)]
+fn put_got(o: Opnd, g: Got, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
+    match g {
+        Got::Int(x) => put_int(o, x, env, base, regs),
+        Got::Float(x) => put_float(o, x, env, base, regs),
+        Got::Other(v) => put(o, v, env, base, regs),
+    }
+}
+
 /// `put` of an int, overwriting an int in place.
 #[inline(always)]
 fn put_int(o: Opnd, r: i64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
@@ -3770,8 +3796,20 @@ match {
                 Ins::Jump(t) => pc = *t as usize,
                 Ins::Move { dst, src } => {
                     pc += 1;
-                    let v = take!(*src);
-                    put(*dst, v, env, base, regs);
+                    match get!(*src) {
+                        Value::Int(x) => {
+                            let x = *x;
+                            put_int(*dst, x, env, base, regs);
+                        }
+                        Value::Float(x) => {
+                            let x = *x;
+                            put_float(*dst, x, env, base, regs);
+                        }
+                        _ => {
+                            let v = take!(*src);
+                            put(*dst, v, env, base, regs);
+                        }
+                    }
                 }
                 Ins::Push { name, src } => {
                     pc += 1;
@@ -3879,26 +3917,26 @@ match {
                     let v = match get!(*recv) {
                         Value::List(items) => {
                             let i = get!(*idx).int();
-                            elem(items, i, *pos)?.clone()
+                            got(elem(items, i, *pos)?)
                         }
                         Value::Map(t) => {
                             let k = get!(*idx);
-                            map_value(t, k, || key_text(k), *pos)?.clone()
+                            Got::Other(map_value(t, k, || key_text(k), *pos)?.clone())
                         }
                         Value::Bytes(b) => {
                             let i = get!(*idx).int();
-                            bytes::at(b, i, *pos)?
+                            Got::Other(bytes::at(b, i, *pos)?)
                         }
                         // std.tensor.15: `t[i]` drops axis 0.
-                        Value::Tensor(t) => match t.row(get!(*idx).int()) {
+                        Value::Tensor(t) => Got::Other(match t.row(get!(*idx).int()) {
                             Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
                             Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
-                        },
+                        }),
                         other => unreachable!("checked: list, map, bytes or tensor, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
-                    put(*dst, v, env, base, regs);
+                    put_got(*dst, v, env, base, regs);
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
@@ -3922,7 +3960,7 @@ match {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i)) {
                         (Value::List(items), Value::Int(x)) => match int_arith(*op, *x, *k) {
-                            Some(j) => Some(elem(items, j, *pos)?.clone()),
+                            Some(j) => Some(got(elem(items, j, *pos)?)),
                             None => None,
                         },
                         _ => None,
@@ -3932,12 +3970,12 @@ match {
                         None => {
                             let x = take!(*i);
                             let j = self.binop(*op, x, Value::Int(*k), *opos)?;
-                            index_value(get!(*recv), &j, *pos)?
+                            Got::Other(index_value(get!(*recv), &j, *pos)?)
                         }
                     };
                     done(*recv, regs);
                     done(*i, regs);
-                    put(*dst, v, env, base, regs);
+                    put_got(*dst, v, env, base, regs);
                 }
                 Ins::NumFast { recv, dst, what, done: done_at } => {
                     let v = match (what, get!(*recv)) {
@@ -3960,7 +3998,7 @@ match {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i), get!(*k)) {
                         (Value::List(rows), Value::Int(i), Value::Int(k)) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
-                            Some(Value::List(row)) => Some(elem(row, *k, *pos2)?.clone()),
+                            Some(Value::List(row)) => Some(got(elem(row, *k, *pos2)?)),
                             _ => None,
                         },
                         _ => None,
@@ -3969,13 +4007,13 @@ match {
                         Some(v) => v,
                         None => {
                             let mid = index_value(get!(*recv), get!(*i), *pos1)?;
-                            index_value(&mid, get!(*k), *pos2)?
+                            Got::Other(index_value(&mid, get!(*k), *pos2)?)
                         }
                     };
                     done(*recv, regs);
                     done(*i, regs);
                     done(*k, regs);
-                    put(*dst, v, env, base, regs);
+                    put_got(*dst, v, env, base, regs);
                 }
                 Ins::Field { dst, recv, name, cache, pos } => {
                     pc += 1;
