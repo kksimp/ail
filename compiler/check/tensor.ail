@@ -28,6 +28,7 @@ TENSOR_METHODS := [
     "to_f32",
     "to_float",
     "to_list",
+    "top2",
     "transpose",
 ]
 
@@ -132,6 +133,15 @@ fn Checker.tensor_method(
         return tensor_map(rt, elem, args, at)
     if n == "to_f32" or n == "to_float"
         return tensor_convert(n, elem, args, at)
+    if n == "top2" and elem == Ty.Int
+        args_only(args)
+        err_help(
+            "std.tensor.23",
+            at,
+            "`top2` is on `float` tensors, and this one holds `int`",
+            "use `argmax` for the best index of an `int` tensor",
+        )
+        return Ty.Unknown
     if n == "mean" and elem == Ty.Int
         args_only(args)
         err_help(
@@ -208,6 +218,10 @@ fn Checker.tensor_method(
         params = [rt]
     elif n == "reshape"
         params = [Ty.ListOf(Ty.Int)]
+    elif n == "top2"
+        # std.tensor.23: (best index, second index, margin) along an axis.
+        params = [Ty.Int]
+        ret = Ty.Tuple([tensor_ty(Ty.Int), tensor_ty(Ty.Int), rt])
     check_call("tensor.Tensor.{n}", plain_sig(false, params, ret), [], args, recv, at, expect)
 
 ## std.tensor.22: `to_f32()` on a `float` tensor and `to_float()` on an `f32`
