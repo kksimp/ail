@@ -493,3 +493,9 @@ overflow an `int` (std.tensor.6) returns 0, and `sum`/`dot` of `int` return a
 one-element tensor read with `rt.tensor_first_i`; the lowering traps with the
 constant message when it sees 0. A float `sum`, `dot` and axis sum follow
 std.tensor.5's 16 partial sums.
+
+Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
+(the plain triple loop of std.tensor.7, each product and sum rounded, no fused
+multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
+0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
+fdlibm's, which uses `rt.float_expm1`).
