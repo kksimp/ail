@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 16 — Testing
 - **Spec rules:** type.num.16, native.build.1, fuzz.mod.1-7
-- **Builds on:** [ADR 0461](0461-module-fuzzers.md), [ADR 0592](0592-native-math.md)
+- **Builds on:** [ADR 0461](0461-module-fuzzers.md), [ADR 0592](0592-std-math-float-methods.md)
 
 ## Decision
 
