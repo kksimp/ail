@@ -49,8 +49,101 @@ pub enum Node
     ## and `key` events with positions inside it.
     Canvas(id str, w float, h float, ops List[Op])
 
+## The JSON of `Op` and `Node` is written out, not derived: a derived impl
+## names the type `Node`, which a program's own `Node` would hide (std.app.7).
+fn member(name str, value Json) JsonMember
+    JsonMember(key: name, value: value)
+
+fn tagged(kind str, rest List[JsonMember]) Json
+    mut members := [member("kind", Json.Str(kind))]
+    members.extend(rest)
+    Json.Obj(members)
+
+fn num(n float) Json
+    Json.Num(n)
+
+fn txt(s str) Json
+    Json.Str(s)
+
 impl ToJson for Op
+    fn to_json(self) Json
+        match self
+            Str(x, y, s, font, size, fg, bold, italic, underline) =>
+                tagged("Str", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("text", txt(s)),
+                    member("font", txt(font)),
+                    member("size", num(size)),
+                    member("fg", Json.Num(fg.to_float())),
+                    member("bold", Json.Bool(bold)),
+                    member("italic", Json.Bool(italic)),
+                    member("underline", Json.Bool(underline)),
+                ])
+            Fill(x, y, w, h, color) =>
+                tagged("Fill", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("w", num(w)),
+                    member("h", num(h)),
+                    member("color", Json.Num(color.to_float())),
+                ])
+            Stroke(x1, y1, x2, y2, color, width) =>
+                tagged("Stroke", [
+                    member("x1", num(x1)),
+                    member("y1", num(y1)),
+                    member("x2", num(x2)),
+                    member("y2", num(y2)),
+                    member("color", Json.Num(color.to_float())),
+                    member("width", num(width)),
+                ])
+            Pic(x, y, w, h, src) =>
+                tagged("Pic", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("w", num(w)),
+                    member("h", num(h)),
+                    member("src", txt(src)),
+                ])
+            Clip(x, y, w, h) =>
+                tagged("Clip", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("w", num(w)),
+                    member("h", num(h)),
+                ])
+            Unclip => tagged("Unclip", [])
+
 impl ToJson for Node
+    fn to_json(self) Json
+        match self
+            Label(s) => tagged("Label", [member("text", txt(s))])
+            Button(id, caption) => tagged("Button", [
+                member("id", txt(id)),
+                member("caption", txt(caption)),
+            ])
+            Field(id, value, hint) => tagged("Field", [
+                member("id", txt(id)),
+                member("value", txt(value)),
+                member("hint", txt(hint)),
+            ])
+            Toggle(id, caption, on) => tagged("Toggle", [
+                member("id", txt(id)),
+                member("caption", txt(caption)),
+                member("on", Json.Bool(on)),
+            ])
+            Column(kids) => tagged("Column", [member("kids", Json.Arr([
+                k.to_json()
+                for k in kids
+            ]))])
+            Row(kids) => tagged("Row", [member("kids", Json.Arr([k.to_json() for k in kids]))])
+            Spacer => tagged("Spacer", [])
+            Canvas(id, w, h, ops) => tagged("Canvas", [
+                member("id", txt(id)),
+                member("w", num(w)),
+                member("h", num(h)),
+                member("ops", Json.Arr([o.to_json() for o in ops])),
+            ])
 
 ## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
 ## `click`, `scroll`, `key`, `resize` or `close` (std.app.5); the other
