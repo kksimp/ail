@@ -57,3 +57,28 @@ numbers per target in `net_sys_*` so a libSystem switch changes one place.
   module with builtin structs; the checker and the interpreter know its
   functions by name, and the lowering already maps standard modules to
   runtime calls.
+
+## Update: the HTTP client (slice 2)
+
+`compiler/rt/native/net_http.ail` adds `net.get` and `net.post` (std.net.2,
+std.net.3) over plain `http://`, on the same sockets. A request is one
+connection sent with `Connection: close`, so the response ends at its
+`Content-Length`, its last chunk or the end of the stream. A `GET` follows up to
+five redirects (301, 302, 303, 307 and 308 with a `Location`); a `POST` returns
+them. `1xx` interim responses are skipped, headers are lowercase with repeated
+values joined by `, ` (and each one in `all_headers`), and the body is text
+with U+FFFD for bytes that aren't UTF-8. The errors match the interpreter's
+kinds: `bad_url`, `not_found`, `refused`, `timed_out`, `closed` (the stream
+ended inside the body), `protocol` (a malformed response, too many redirects).
+
+Not built, and reported by the program as a failure rather than by the build:
+`https://` (kind `tls`, until the in-house TLS of ADR 0360 is native),
+`Accept-Encoding` and undoing `gzip` and `deflate` (std.net.26), `net.request`
+and its `Options`, keep-alive pooling (std.net.19) and streaming bodies
+(std.net.25). The request headers are `Host`, `User-Agent: ail`, `Accept: */*`,
+`Connection: close`, and `Content-Type` and `Content-Length` for a body.
+
+A client and a server cannot share one native program until native tasks
+exist, so the check is `tools/native-net/check.sh`: a scripted server
+(`server.py`) and `http_client.ail`, whose output `ail run`, the x86-64
+executable and the ARM64 executable under qemu must print identically.

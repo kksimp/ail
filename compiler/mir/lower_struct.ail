@@ -28,6 +28,7 @@ PROC_ERROR := "proc.ProcError"
 NET_ERROR := "net.NetError"
 NET_CONN := "net.Conn"
 NET_LISTENER := "net.Listener"
+NET_RESPONSE := "net.Response"
 
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
@@ -38,6 +39,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[NET_ERROR] = []
     structs[NET_CONN] = []
     structs[NET_LISTENER] = []
+    structs[NET_RESPONSE] = []
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
@@ -58,6 +60,12 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
     ]
     structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_RESPONSE] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "body", ty: Ty.Str),
+        Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+    ]
     structs[PROC_OUTPUT] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "out", ty: Ty.Str),

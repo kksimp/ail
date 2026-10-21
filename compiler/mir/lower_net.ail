@@ -24,6 +24,8 @@ fn net_module_lookup(name str) NetFn?
     match name
         "listen" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_LISTENER), true)
         "connect" => net_fn("rt.net_connect", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
+        "get" => net_fn("rt.net_get", [Ty.Str], Ty.Struct(NET_RESPONSE), true)
+        "post" => net_fn("rt.net_post", [Ty.Str, Ty.Str, Ty.Str], Ty.Struct(NET_RESPONSE), true)
         _ => none
 
 ## `T.NAME` for a method of `net.Conn` or `net.Listener`.

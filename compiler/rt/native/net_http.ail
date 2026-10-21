@@ -1,0 +1,522 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The HTTP/1.1 client of the native subset (std.net.2, std.net.3): `net.get`
+## and `net.post` over plain `http://`, on the sockets of `net.ail`. One
+## connection per request, sent with `Connection: close`; the body is framed by
+## `Content-Length`, chunked coding, or the end of the stream. Redirects
+## (301, 302, 303, 307, 308 with a `Location`) of a `GET` are followed, at most
+## five. Not built yet: `https` (it fails with kind `tls`), `Accept-Encoding`
+## and the undoing of `gzip` and `deflate` (std.net.26), `net.request` and its
+## options, keep-alive connection pooling (std.net.19), streaming bodies.
+##
+## A `net.Response` is a struct (kind 4) of four words: `status`, `headers`
+## (a `Map[str, str]`, names in lowercase, repeated values joined with `, `),
+## `body`, and `all_headers` (a `Map[str, List[str]]`).
+
+HTTP_MAX_REDIRECTS := 5
+HTTP_MAX_HEAD := 65536
+
+# ---- a growable byte buffer: three words (pointer, length, capacity) ----
+
+fn hb_new() int
+    b := obj_new(24, 4)
+    store64(b, alloc_raw(4096, KIND_BYTES))
+    store64(b + 8, 0)
+    store64(b + 16, 4096)
+    b
+
+fn hb_add(b int, p int, n int)
+    len := load64(b + 8)
+    cap := load64(b + 16)
+    if len + n > cap
+        mut ncap := cap * 2
+        while ncap < len + n
+            ncap = ncap * 2
+        nbuf := alloc_raw(ncap, KIND_BYTES)
+        copy_bytes(nbuf, load64(b), len)
+        store64(b, nbuf)
+        store64(b + 16, ncap)
+    copy_bytes(load64(b) + len, p, n)
+    store64(b + 8, len + n)
+
+# ---- URLs ----
+
+## The index of the first byte of `s` that is `c`, or -1.
+fn http_index(p int, from int, to int, c int) int
+    mut i := from
+    while i < to
+        if load8(p + 16 + i) == c
+            return i
+        i += 1
+    -1
+
+## The lowercase copy of the `n` bytes at `p`.
+fn http_lower(p int, n int) str
+    sb_reset()
+    for i in 0..n
+        c := load8(p + i)
+        sb_byte(if c >= 65 and c <= 90 then c + 32 else c)
+    sb_str()
+
+## The scheme, host, port and request target of `url`, as a `HttpUrl`
+## object of five words: scheme (str), host (str), port, target (str), and
+## the authority text (str). 0 after a `bad_url` failure.
+fn http_parse(url str, at str) int
+    p := str_addr(url)
+    n := load64(p)
+    mut i := 0
+    while i + 2 < n
+        and not (load8(p + 16 + i) == 58 and load8(p + 17 + i) == 47 and load8(p + 18 + i) == 47)
+        i += 1
+    if i + 2 >= n
+        return net_fail(url, "bad_url", "a URL starts with `http://` or `https://`", at)
+    scheme := http_lower(p + 16, i)
+    if scheme != "http" and scheme != "https"
+        return net_fail(
+            url,
+            "bad_url",
+            "`{scheme}` URLs aren't supported; use `http://` or `https://`",
+            at,
+        )
+    start := i + 3
+    mut e := start
+    while e < n and load8(p + 16 + e) != 47 and load8(p + 16 + e) != 63 and load8(p + 16 + e) != 35
+        e += 1
+    # The target: from `e` to the fragment; always begins with `/`.
+    mut fend := e
+    while fend < n and load8(p + 16 + fend) != 35
+        fend += 1
+    sb_reset()
+    if e >= n or load8(p + 16 + e) != 47
+        sb_byte(47)
+    sb_bytes(p + 16 + e, fend - e)
+    target := sb_str()
+    # The authority: after the last `@`.
+    mut a := start
+    mut k := start
+    while k < e
+        if load8(p + 16 + k) == 64
+            a = k + 1
+        k += 1
+    auth := str_sub(p, a, e)
+    ap := str_addr(auth)
+    an := load64(ap)
+    mut host := auth
+    mut port := if scheme == "https" then 443 else 80
+    c := http_index(ap, 0, an, 58)
+    mut last := -1
+    mut m := 0
+    while m < an
+        if load8(ap + 16 + m) == 58
+            last = m
+        m += 1
+    if last >= 0 and http_index(
+        ap,
+        last + 1,
+        an,
+        93,
+    ) < 0 and not (last > 0 and load8(ap + 16 + last - 1) == 58)
+        digits := str_sub(ap, last + 1, an)
+        dp := str_addr(digits)
+        dn := load64(dp)
+        mut v := 0
+        mut ok := dn > 0 and dn <= 5
+        for d in 0..dn
+            ch := load8(dp + 16 + d)
+            if ch < 48 or ch > 57
+                ok = false
+            else
+                v = v * 10 + ch - 48
+        if not ok or v > 65535
+            return net_fail(url, "bad_url", "`{digits}` is not a port", at)
+        port = v
+        host = str_sub(ap, 0, last)
+    if c < 0 and last < 0
+        host = auth
+    if load64(str_addr(host)) == 0
+        return net_fail(url, "bad_url", "the URL has no host", at)
+    u := obj_new(40, 4)
+    store64(u, str_addr(scheme))
+    store64(u + 8, str_addr(host))
+    store64(u + 16, port)
+    store64(u + 24, str_addr(target))
+    store64(u + 32, str_addr(auth))
+    u
+
+## A redirect's `Location` made absolute against the URL that gave it.
+fn http_resolve(base str, location str) str
+    if net_has(location, "://")
+        return location
+    bp := str_addr(base)
+    bn := load64(bp)
+    mut i := 0
+    while i + 2 < bn
+        and not (load8(bp + 16 + i) == 58 and load8(bp + 17 + i) == 47 and load8(bp + 18 + i) == 47)
+        i += 1
+    start := if i + 2 < bn then i + 3 else 0
+    mut e := start
+    while e < bn
+        and load8(bp + 16 + e) != 47
+        and load8(bp + 16 + e) != 63
+        and load8(bp + 16 + e) != 35
+        e += 1
+    head := str_sub(bp, 0, e)
+    if load8(str_addr(location) + 16) == 47
+        return str_cat(head, location)
+    # Relative to the directory of the base path.
+    mut pend := bn
+    mut q := e
+    while q < bn
+        if load8(bp + 16 + q) == 63 or load8(bp + 16 + q) == 35
+            pend = q
+            break
+        q += 1
+    mut slash := -1
+    mut r := e
+    while r < pend
+        if load8(bp + 16 + r) == 47
+            slash = r
+        r += 1
+    dir := if slash < 0 then "/" else str_sub(bp, e, slash + 1)
+    str_cat(str_cat(head, dir), location)
+
+## Whether `s` contains `sub`.
+fn net_has(s str, sub str) bool
+    p := str_addr(s)
+    q := str_addr(sub)
+    n := load64(p)
+    m := load64(q)
+    mut i := 0
+    while i + m <= n
+        mut same := true
+        for k in 0..m
+            if load8(p + 16 + i + k) != load8(q + 16 + k)
+                same = false
+        if same
+            return true
+        i += 1
+    false
+
+# ---- reading a response ----
+
+## `HTTP/1.x CODE ...`: the code, or -1.
+fn http_status(line str) int
+    p := str_addr(line)
+    n := load64(p)
+    if n < 12
+        or load8(p + 16) != 72
+        or load8(p + 17) != 84
+        or load8(p + 18) != 84
+        or load8(p + 19) != 80
+        or load8(p + 20) != 47
+        return -1
+    mut i := 5
+    while i < n and load8(p + 16 + i) != 32
+        i += 1
+    if i + 3 >= n
+        return -1
+    mut v := 0
+    for d in 1..4
+        c := load8(p + 16 + i + d)
+        if i + d >= n or c < 48 or c > 57
+            return -1
+        v = v * 10 + c - 48
+    if v < 100 or v > 599
+        return -1
+    v
+
+## Add the header `name: value` to the maps of a response.
+fn http_header(headers int, all int, name str, value str)
+    e := map_find(headers, str_addr(name))
+    if e == 0
+        map_set(headers, str_addr(name), str_addr(value))
+        xs := list_new(4)
+        list_push(xs, str_addr(value))
+        map_set(all, str_addr(name), list_addr(xs))
+    else
+        joined := str_cat(str_cat(str_at(load64(e + 16)), ", "), value)
+        map_set(headers, str_addr(name), str_addr(joined))
+        la := map_find(all, str_addr(name))
+        list_push(list_at(load64(la + 16)), str_addr(value))
+
+## The value of header `name` (lowercase) in a response's header map, or an
+## empty string.
+fn http_get_header(headers int, name str) str
+    e := map_find(headers, str_addr(name))
+    if e == 0
+        return ""
+    str_at(load64(e + 16))
+
+## A decimal number in `s` (digits only), or -1.
+fn http_number(s str, hex bool) int
+    p := str_addr(s)
+    n := load64(p)
+    if n == 0 or n > 15
+        return -1
+    mut v := 0
+    for i in 0..n
+        c := load8(p + 16 + i)
+        mut d := -1
+        if c >= 48 and c <= 57
+            d = c - 48
+        elif hex and c >= 97 and c <= 102
+            d = c - 87
+        elif hex and c >= 65 and c <= 70
+            d = c - 55
+        if d < 0
+            return -1
+        v = v * (if hex then 16 else 10) + d
+    v
+
+## Read `n` body bytes of the connection `o` into `b`; 0, or a negative
+## `errno`-style code (-110 timed out, -1000 the stream ended early).
+fn http_take(o int, b int, n int) int
+    mut left := n
+    while left > 0
+        if load64(o + NET_POS) == load64(o + NET_LEN)
+            if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+                return -1000
+            e := net_fill(o)
+            if e < 0
+                return e
+            if load64(o + NET_POS) == load64(o + NET_LEN)
+                and load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+                return -1000
+        avail := load64(o + NET_LEN) - load64(o + NET_POS)
+        k := if avail < left then avail else left
+        hb_add(b, load64(o + NET_BUF) + load64(o + NET_POS), k)
+        store64(o + NET_POS, load64(o + NET_POS) + k)
+        left -= k
+    0
+
+## Read the rest of the stream into `b`.
+fn http_take_all(o int, b int) int
+    while true
+        if load64(o + NET_POS) == load64(o + NET_LEN)
+            if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+                return 0
+            e := net_fill(o)
+            if e < 0
+                return e
+            continue
+        avail := load64(o + NET_LEN) - load64(o + NET_POS)
+        hb_add(b, load64(o + NET_BUF) + load64(o + NET_POS), avail)
+        store64(o + NET_POS, load64(o + NET_LEN))
+    0
+
+## A failure while reading `url`'s response: -1000 is a protocol error.
+fn http_read_fail(o int, e int, url str, at str) int
+    if e == -1000
+        return net_fail(
+            url,
+            "closed",
+            "the connection closed before the whole response arrived",
+            at,
+        )
+    if e == -110
+        return net_fail(
+            url,
+            "timed_out",
+            "the server made no progress for {load64(o + NET_TIMEOUT)} ms",
+            at,
+        )
+    net_fail(url, net_errno_kind(-e), "the connection failed", at)
+
+## One request on a new connection: the response object, or 0 after a failure.
+## `next` receives the redirect target (a string address, or 0).
+fn http_exchange(method str, url str, body str, ctype str, next int, at str) int
+    u := http_parse(url, at)
+    if u == 0
+        return 0
+    scheme := str_at(load64(u))
+    host := str_at(load64(u + 8))
+    port := load64(u + 16)
+    if scheme == "https"
+        return net_fail(
+            url,
+            "tls",
+            "https needs TLS 1.3, which the native runtime doesn't have yet",
+            at,
+        )
+    h := net_dial(host, port, url, at)
+    if h == 0
+        return 0
+    o := net_obj(h)
+    # The request.
+    sb_reset()
+    sb_text(method)
+    sb_byte(32)
+    sb_text(str_at(load64(u + 24)))
+    sb_text(" HTTP/1.1\r\nHost: ")
+    sb_text(host)
+    if port != 80
+        sb_byte(58)
+        put_int(port)
+    sb_text("\r\nUser-Agent: ail\r\nAccept: */*\r\nConnection: close\r\n")
+    has_body := load64(str_addr(body)) > 0
+        or method == "POST"
+        or method == "PUT"
+        or method == "PATCH"
+    if load64(str_addr(ctype)) > 0
+        sb_text("Content-Type: ")
+        sb_text(ctype)
+        sb_text("\r\n")
+    if has_body
+        sb_text("Content-Length: ")
+        put_int(load64(str_addr(body)))
+        sb_text("\r\n")
+    sb_text("\r\n")
+    sb_text(body)
+    req := sb_str()
+    net_write(h, req, at)
+    if failed()
+        net_close(h)
+        return 0
+    # The status line, skipping interim `1xx` responses.
+    headers := map_new(1, 0, 0)
+    all := map_new(1, 1, 8)
+    mut status := 0
+    while true
+        line := net_read_line(h, at)
+        if failed()
+            net_close(h)
+            return 0
+        if str_addr(line) == 0
+            net_close(h)
+            return net_fail(url, "protocol", "the connection closed before a response", at)
+        status = http_status(line)
+        if status < 0
+            net_close(h)
+            return net_fail(url, "protocol", "the response doesn't begin with a status line", at)
+        # The headers.
+        mut size := 0
+        while true
+            hl := net_read_line(h, at)
+            if failed()
+                net_close(h)
+                return 0
+            if str_addr(hl) == 0
+                net_close(h)
+                return net_fail(url, "protocol", "the headers end before a blank line", at)
+            hp := str_addr(hl)
+            hn := load64(hp)
+            if hn == 0
+                break
+            size += hn
+            if size > HTTP_MAX_HEAD
+                net_close(h)
+                return net_fail(url, "protocol", "the response headers are too long", at)
+            colon := http_index(hp, 0, hn, 58)
+            if colon <= 0
+                net_close(h)
+                return net_fail(url, "protocol", "a malformed header line", at)
+            name := http_lower(hp + 16, colon)
+            mut vs := colon + 1
+            while vs < hn and (load8(hp + 16 + vs) == 32 or load8(hp + 16 + vs) == 9)
+                vs += 1
+            mut ve := hn
+            while ve > vs and (load8(hp + 15 + ve) == 32 or load8(hp + 15 + ve) == 9)
+                ve -= 1
+            if status >= 200 or status == 101
+                http_header(headers, all, name, str_sub(hp, vs, ve))
+        if status >= 200 or status == 101
+            break
+    # The body.
+    b := hb_new()
+    mut err := 0
+    nobody := method == "HEAD" or status < 200 or status == 204 or status == 304
+    te := http_get_header(headers, "transfer-encoding")
+    cl := http_get_header(headers, "content-length")
+    if nobody
+        err = 0
+    elif net_has(http_lower(str_addr(te) + 16, load64(str_addr(te))), "chunked")
+        while true
+            sl := net_read_line(h, at)
+            if failed()
+                net_close(h)
+                return 0
+            if str_addr(sl) == 0
+                err = -1000
+                break
+            sp := str_addr(sl)
+            mut se := load64(sp)
+            semi := http_index(sp, 0, se, 59)
+            if semi >= 0
+                se = semi
+            szs := str_sub(sp, 0, se)
+            sz := http_number(http_lower(str_addr(szs) + 16, load64(str_addr(szs))), true)
+            if sz < 0
+                net_close(h)
+                return net_fail(url, "protocol", "a bad chunk size", at)
+            if sz == 0
+                # Trailers, then the blank line.
+                while true
+                    tl := net_read_line(h, at)
+                    if failed()
+                        net_close(h)
+                        return 0
+                    if str_addr(tl) == 0 or load64(str_addr(tl)) == 0
+                        break
+                break
+            err = http_take(o, b, sz)
+            if err < 0
+                break
+            net_read_line(h, at)
+            if failed()
+                net_close(h)
+                return 0
+    elif load64(str_addr(cl)) > 0
+        n := http_number(cl, false)
+        if n < 0
+            net_close(h)
+            return net_fail(url, "protocol", "a bad Content-Length", at)
+        err = http_take(o, b, n)
+    else
+        err = http_take_all(o, b)
+    if err < 0
+        net_close(h)
+        return http_read_fail(o, err, url, at)
+    net_close(h)
+    text := net_text(load64(b), load64(b + 8))
+    resp := obj_new(32, 4)
+    store64(resp, status)
+    store64(resp + 8, headers)
+    store64(resp + 16, str_addr(text))
+    store64(resp + 24, all)
+    # A redirect, for the caller to follow.
+    loc := http_get_header(headers, "location")
+    if (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
+        and load64(str_addr(loc)) > 0
+        store64(next, str_addr(http_resolve(url, loc)))
+    else
+        store64(next, 0)
+    resp
+
+## `net.request` for `GET` and `POST` without options: follows up to
+## `redirects` redirects of a `GET` or `HEAD`.
+fn http_request(method str, url str, body str, ctype str, redirects int, at str) int
+    follows := method == "GET" or method == "HEAD"
+    next := alloc_raw(8, KIND_BYTES)
+    mut cur := url
+    mut left := redirects
+    while true
+        r := http_exchange(method, cur, body, ctype, next, at)
+        if r == 0
+            return 0
+        t := load64(next)
+        if t == 0 or not follows or redirects == 0
+            return r
+        if left == 0
+            return net_fail(cur, "protocol", "more than {redirects} redirects", at)
+        left -= 1
+        cur = str_at(t)
+    0
+
+## `net.get(url)` (std.net.2).
+fn net_get(url str, at str) int
+    http_request("GET", url, "", "", HTTP_MAX_REDIRECTS, at)
+
+## `net.post(url, body, content_type)` (std.net.3): redirects are returned.
+fn net_post(url str, body str, ctype str, at str) int
+    http_request("POST", url, body, ctype, 0, at)
