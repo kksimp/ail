@@ -1,0 +1,8 @@
+## std.io.5: read_bytes returns the rest of standard input as bytes, undecoded.
+## Standard input is empty in the test harness, so the first read gets no bytes
+## and a second read gets none either.
+use std.io
+
+fn main()
+    print(io.read_bytes().len())
+    print(io.read_bytes().len())

@@ -1,0 +1,8 @@
+fn look(m Map[str, int], k str) int
+    m.get(k) else unreachable("missing key {k}")
+
+fn main()
+    mut m := Map[str, int]()
+    m["a"] = 3
+    print(look(m, "a"))
+    print(look(m, "b"))

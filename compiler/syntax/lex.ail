@@ -496,17 +496,59 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 push(Newline, pos)
             i += 1
         elif c == '/' and at(line, i + 1) == '/'
-            diag("gram.foreign.1", pos)
+            if blank_before(line, i)
+                diag_fix(
+                    "gram.foreign.1",
+                    pos,
+                    "`//` isn't a comment or an operator in AIL",
+                    "comments start with `#`",
+                    "write `#`",
+                )
+            else
+                diag_fix(
+                    "gram.foreign.1",
+                    pos,
+                    "`//` isn't a comment or an operator in AIL",
+                    "write `#` for a comment; `/` is integer division and rounds toward zero",
+                    "",
+                )
             break
         elif c == '/' and at(line, i + 1) == '*'
-            diag("gram.foreign.1", pos)
+            diag_fix(
+                "gram.foreign.1",
+                pos,
+                "`/*` doesn't start a comment in AIL",
+                "comments start with `#` and run to the end of the line",
+                "",
+            )
             break
         elif c == '\\' and rest_is_space(line, i + 1)
-            diag("gram.foreign.1", pos)
+            diag_fix(
+                "gram.foreign.1",
+                pos,
+                "AIL doesn't use `\\` to continue a line",
+                "end the line with an operator or a comma, or wrap the expression in parentheses",
+                "remove the `\\`",
+            )
             i += 1
         elif (c == '<' or c == '>') and at(line, i + 1) == c
             # expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
-            diag("gram.foreign.1", pos)
+            if c == '<'
+                diag_fix(
+                    "gram.foreign.1",
+                    pos,
+                    "AIL has no `<<`",
+                    "shifts are methods: `a.shl(k)`, `k` in `0..=63` (expr.bit.1)",
+                    "write `.shl`",
+                )
+            else
+                diag_fix(
+                    "gram.foreign.1",
+                    pos,
+                    "AIL has no `>>`",
+                    "shifts are methods: `a.shr(k)`, `k` in `0..=63` (expr.bit.1)",
+                    "write `.shr`",
+                )
             i += 2
         elif c == '&' and at(line, i + 1) != '&'
             diag_fix(
@@ -517,7 +559,16 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 "write `.bit_and`",
             )
             i += 1
-        elif c == '^' or c == '~'
+        elif c == '^'
+            diag_fix(
+                "gram.foreign.1",
+                pos,
+                "AIL has no `^`",
+                "bit operations are methods: `a.bit_xor(b)` (expr.bit.1)",
+                "write `.bit_xor`",
+            )
+            i += 1
+        elif c == '~'
             diag("gram.foreign.1", pos)
             i += 1
         elif c.is_digit()
@@ -543,6 +594,13 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
                 symbol(sym, pos)
                 i += sym.len()
     none
+
+## True when only blanks come before `at` on the line.
+fn blank_before(line List[char], stop int) bool
+    for k in 0..stop
+        if not line[k].is_space()
+            return false
+    true
 
 fn rest_is_space(line List[char], from int) bool
     for k in from..line.len()
@@ -887,6 +945,18 @@ fn hex_char(line List[char], from int, to int) char?
 ## Integer or floating-point literal (lex.num.1-3).
 fn Lexer.number(mut self, line List[char], start int, line_no int) int
     pos := ast.Pos(line: line_no, col: start + 1)
+    # type.tuple.3: after a single `.`, digits are an element index, so
+    # `t.0.1` is two accesses rather than `t` and the float `0.1`.
+    if start > 0 and line[start - 1] == '.' and (start < 2 or line[start - 2] != '.')
+        mut end := start
+        while end < line.len() and line[end].is_digit()
+            end += 1
+        match parse_int(line[start..end], 10)
+            IntOk(v) => push(Int(v), pos)
+            TooBig | Overflow | Invalid =>
+                diag("lex.num.3", pos)
+                placeholder(pos)
+        return end
     fe := float_end(line, start)
     if fe >= 0
         text := [c for c in line[start..fe] if c != '_'].join("")
