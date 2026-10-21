@@ -1,0 +1,93 @@
+## `Channel[str]` in the native subset (native.chan.1, conc.share.3-4, conc.share.7,
+## conc.select.1, ADR 0599): a channel is a pointer to a record the runtime
+## builds (compiler/rt/native/chan.ail). The operations that can trap
+## (`Channel(0)`, `send` or `close` on a closed channel) return the message,
+## or 0, and the lowering traps on a message with runtime message kind 15,
+## as the tensor operations do.
+use ast
+
+## `Channel[str]`.
+fn Lower.chan_type_of(mut self, args List[ast.TypeRef]) Ty?
+    if args.len() != 1
+        return none
+    e := type_of(args[0])?
+    if e == Ty.Str
+        return Ty.Chan(e)
+    none
+
+fn chan_elem(t Ty) Ty?
+    match t
+        Chan(e) => e
+        _ => none
+
+## `Channel[T](capacity)`.
+fn Lower.lower_chan_new(mut self, targs List[ast.TypeRef], args List[ast.Arg], pos ast.Pos) Val?
+    if targs.len() != 1 or args.len() != 1 or args[0].label != none
+        return unsupported(pos, "this `Channel`")
+    t := chan_type_of(targs) else return unsupported(pos, "a `Channel` of this type")
+    cap := lower_value(args[0].value, Ty.Int)?
+    if cap.ty != Ty.Int
+        return unsupported(pos, "a `Channel` capacity of `{cap.ty.name()}`")
+    msg := call("rt.chan_cap_fault", [cap.id], Ty.Int)
+    tensor_trap_if(msg, "conc.share.4", pos)
+    Val(id: call("rt.chan_new_cap", [cap.id], t), ty: t)
+
+## `send`, `recv` and `close` on a channel.
+fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    for a in args
+        if a.mutable or a.label != none
+            return unsupported(npos, "this method call")
+    if name == "send" and args.len() == 1
+        v := lower_value(args[0].value, Ty.Str)?
+        if v.ty != Ty.Str
+            return unsupported(npos, "`send` of `{v.ty.name()}` on `{ch.ty.name()}`")
+        msg := call("rt.chan_send", [ch.id, v.id], Ty.Int)
+        tensor_trap_if(msg, "conc.share.4", npos)
+        return Val(id: -1, ty: Ty.Unit)
+    if name == "recv" and args.len() == 0
+        t := Ty.Opt(Ty.Str)
+        return Val(id: call("rt.chan_recv", [ch.id], t), ty: t)
+    if name == "close" and args.len() == 0
+        msg := call("rt.chan_close", [ch.id], Ty.Int)
+        tensor_trap_if(msg, "conc.share.4", npos)
+        return Val(id: -1, ty: Ty.Unit)
+    unsupported(npos, "`.{name}()` on `{ch.ty.name()}`")
+
+## `for v in ch`: receive until the channel is closed and empty (conc.share.7).
+fn Lower.lower_chan_for(mut self, var str, ch Val, body List[ast.Stmt])
+    head := new_block()
+    jump(head, [])
+    cur = head
+    v := call("rt.chan_recv", [ch.id], Ty.Str)
+    inner := new_block()
+    exit := new_block()
+    branch(op("ne", [v, konst(0, Ty.Int)], Ty.Bool), inner, [], exit, [])
+    seal(inner)
+    cur = inner
+    declare(var, Ty.Str, v)
+    loops.push(Loop(cont: head, exit: exit))
+    lower_block(body, false)
+    loops.pop()
+    jump(head, [])
+    seal(head)
+    seal(exit)
+    cur = exit
+    scopes.pop()
+
+## `task.select([a, b, ...])` with the channels written out (conc.select.1).
+fn Lower.lower_chan_select(mut self, args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != 1 or args[0].label != none
+        return unsupported(pos, "this `task.select`")
+    items := match args[0].value
+        ListLit(xs, _) => xs
+        _ => return unsupported(pos, "`task.select` of a list that isn't written out")
+    n := items.len()
+    arr := call("rt.alloc", [konst(8 * (n + 1), Ty.Int), konst(13, Ty.Int)], Ty.Int)
+    for k in 0..n
+        c := lower_value(items[k], none)?
+        if chan_elem(c.ty) == none
+            return unsupported(expr_pos(items[k]), "`task.select` of `{c.ty.name()}`")
+        call("rt.chan_slot", [arr, konst(k, Ty.Int), c.id], Ty.Unit)
+    t := Ty.Opt(Ty.Int)
+    i := call("rt.chan_select", [arr, konst(n, Ty.Int)], t)
+    Val(id: i, ty: t)
