@@ -1,0 +1,6 @@
+## std.regex.24: a group the pattern does not have traps.
+use std.regex
+
+fn main()
+    codes := regex.compile(r"code=(\d+)") else return
+    print(regex.group_all(codes, "code=1", 2))

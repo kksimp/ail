@@ -100,3 +100,11 @@ Option B with the details above.
   pipes or a socket is future work.
 - Windows: nothing in the format or the hook is platform-specific
   (ADR 0004).
+
+## Rejected alternatives
+
+- Recording at the operating system with syscalls, as `rr` does (option A): rejected because it is per platform and large, it records the interpreter's own reads, and an agent cannot read or edit the recording.
+- Recording only the inputs (stdin, arguments, environment), as a fixture (option C): rejected because it misses files, the clock, the network and processes, the usual causes of an unreproducible failure.
+- One JSON document as the format: rejected because it cannot be appended or streamed, and a cut file is not valid.
+- A binary format: rejected because agents could not read it.
+- No size limit on a recording: rejected because one loop over a large directory fills a disk. A limit on calls was also rejected, since one call can be 1 GB.

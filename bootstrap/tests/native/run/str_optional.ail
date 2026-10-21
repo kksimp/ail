@@ -1,0 +1,35 @@
+# The `str` and `char` methods with an optional result (type.str.13-14,
+# type.char.3-4, type.opt.*).
+fn where(s str, sub str) int
+    i := s.find(sub) else -1
+    i
+
+fn main()
+    s := "héllo wörld"
+    print(where(s, "llo"))
+    print(where(s, "wör"))
+    print(where(s, "zz"))
+    print(where(s, ""))
+    if i := s.find("o")
+        print("first o at {i}")
+    if s.find("q") == none
+        print("no q")
+    c := s.char_at(1) else '?'
+    print(c)
+    print(s.char_at(99) else '?')
+    print(s.char_at(0 - 1) else '!')
+    if p := "key=value".strip_prefix("key=")
+        print(p)
+    print("key=value".strip_prefix("val") else "none")
+    print("a.txt".strip_suffix(".txt") else "none")
+    print("a.txt".strip_suffix(".png") else "none")
+    print("abc".strip_prefix("") else "none")
+    for ch in "09azAZ-é".chars()
+        print("{ch} {ch.to_digit(10) else -1} {ch.to_digit(16) else -1} {ch.to_digit(36) else -1} {ch.to_digit(2) else -1}")
+    print(char.from_code(65) else '?')
+    print(char.from_code(0xd800) else '?')
+    print(char.from_code(0x110000) else '?')
+    print(char.from_code(0 - 1) else '?')
+    print(char.from_code(0x1f600) else '?')
+    r := 40
+    print('a'.to_digit(r) else 0)

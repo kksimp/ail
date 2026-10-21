@@ -6,6 +6,7 @@
 - **Topic:** 23 — Compiler architecture
 - **Spec rules:** [native.subset.1](../spec/23-native.md), native.build.1, mod.unit.1-5, mod.use.1-2
 - **Builds on:** [ADR 0097](0097-directory-modules.md), [ADR 0099](0099-qualified-imports.md), [ADR 0153](0153-package-root-and-loading.md), [ADR 0392](0392-native-structs-and-methods.md)
+- **Amended by:** [ADR 0655](0655-build-cache.md) (a cache of finished builds; the precompiled runtime stays rejected)
 
 ## Context
 

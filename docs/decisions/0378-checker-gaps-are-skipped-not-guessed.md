@@ -62,7 +62,7 @@ remember.
 - Porting a construct is measured by the bodies count rising with agreement
   still total.
 - Slice 4's report counts gapped bodies as not yet agreeing. Slice 4
-  ported the last gaps, and ADR 0380 now gates on the comparison with
+  ported the last gaps, and ADR 0740 now gates on the comparison with
   nothing skipped.
 
 ## Rejected alternatives

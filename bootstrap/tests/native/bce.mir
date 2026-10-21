@@ -1,0 +1,85 @@
+# MIR (unstable) of bootstrap/tests/native/bce.ail
+
+fn total(v0:xs List[int], v1:n int) int
+  b0(v0:xs List[int], v1:n int):
+    v2:s int = const 0
+    jump b4()
+  b1(v4:i int, v6:s int):
+    v5 bool = lt v4:i, v1:n
+    branch v5, b2(), b3(v6:s)
+  b2:
+    v8 int = get v0:xs, v4:i !s0
+    v9 int = add v6:s, v8 !s1
+    v10 int = const 1
+    v11 int = add v4:i, v10
+    jump b1(v11, v9)
+  b3(v22:s int):
+    return v22:s
+  b4:
+    v12 int = len v0:xs
+    v13 bool = le v1:n, v12
+    branch v13, b5(), b1(v2:s, v2:s)
+  b5:
+    v14 int = data v0:xs
+    jump b6(v2:s, v2:s)
+  b6(v15:i int, v16:s int):
+    v17 bool = lt v15:i, v1:n
+    branch v17, b7(), b3(v16:s)
+  b7:
+    v18 int = ldx v14, v15:i *8
+    v19 int = add v16:s, v18 !s1
+    v20 int = const 1
+    v21 int = add v15:i, v20
+    jump b6(v21, v19)
+
+fn node(v0:left List[int]) int
+  b0(v0:left List[int]):
+    v1:n int = len v0:left
+    v3 int = const -1
+    call rt.list_push(v0:left, v3)
+    v4 int = const 7
+    set v0:left, v1:n, v4
+    return v1:n
+
+fn main() unit
+  b0:
+    v0 int = const 3
+    v1 int = const 1
+    v2 int = const 2
+    v4 List[int] = call rt.list_new(v0)
+    call rt.list_push(v4, v1)
+    call rt.list_push(v4, v2)
+    call rt.list_push(v4, v0)
+    v12:s int = const 0
+    jump b4()
+  b1(v14:i int, v16:s int):
+    v15 bool = lt v14:i, v0
+    branch v15, b2(), b3(v16:s)
+  b2:
+    v18 int = get v4, v14:i !s0
+    v19 int = add v16:s, v18 !s1
+    v21 int = add v14:i, v1
+    jump b1(v21, v19)
+  b3(v31:s int):
+    call rt.out_int(v31:s)
+    call rt.out_nl()
+    v8:l List[int] = call rt.list_new(v12:s)
+    v9 int = call node(v8:l)
+    call rt.out_int(v9)
+    call rt.out_nl()
+    return
+  b4:
+    v22 int = len v4
+    v23 bool = le v0, v22
+    branch v23, b5(), b1(v12:s, v12:s)
+  b5:
+    v24 int = data v4
+    jump b6(v12:s, v12:s)
+  b6(v25:i int, v26:s int):
+    v27 bool = lt v25:i, v0
+    branch v27, b7(), b3(v26:s)
+  b7:
+    v28 int = ldx v24, v25:i *8
+    v29 int = add v26:s, v28 !s1
+    v30 int = add v25:i, v1
+    jump b6(v30, v29)

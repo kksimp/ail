@@ -73,3 +73,9 @@ argument and AIL has no overloading by arity; a name such as `serve_with`
 would not say what it adds. A pool, not a task per request, because each
 task is an OS thread with a large stack. Closures as handlers wait on
 lane 130's closures.
+
+## Rejected alternatives
+
+- `serve(addr, handler)` only (option B): rejected because it is impossible without function values, and it hides the loop, so a program cannot stop, log or limit.
+- `serve` taking the name of a function as text (option C): rejected because it is untyped and unchecked, and would have to be removed once the handler form landed.
+- One OS thread per connection that runs the handler (option D): rejected because handlers would share nothing with the scheduler and values could not cross, and `Rc` values are sound only because one task runs at a time.

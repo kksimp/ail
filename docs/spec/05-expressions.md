@@ -114,6 +114,12 @@ fn main()
 **expr.block.1** — A block is an expression. Its value is the value of its
 last expression, or no value if it ends in a statement. *(ADR 0091)*
 
+```ail rules=expr.block.1
+fn main()
+    v := if true then 1 else 2
+    print(v)
+```
+
 **expr.block.2** — A function returns the value of its body block. `return e`
 exits the function early with value `e`. *(ADR 0091)*
 
@@ -125,6 +131,18 @@ statement diverges produces no value and is accepted wherever a value of any
 type is expected, including as a one-line arm (`expr.match.9`) and as an
 `else` part. So a function can end with `while true`. There is no nameable
 `Never` type. *(ADR 0117, ADR 0139)*
+
+```ail rules=expr.block.3
+fn find(n int) int
+    mut i := 0
+    while true
+        i += 1
+        if i > n
+            return i
+
+fn main()
+    print(find(3))
+```
 
 ## Conditionals and loops
 

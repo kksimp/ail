@@ -90,12 +90,12 @@ fn check_dump(path str, many bool) !
 ## The native runtime in directory `dir`, parsed as one program.
 fn runtime(dir str) !ast.Program
     mut texts := List[str]()
+    # Every `.ail` file of the directory, so lanes add runtime files
+    # without editing this list; `prim`, `core` and `math` come first.
     for name in ["prim.ail", "core.ail", "math.ail"]
         texts.push(fs.read_text("{dir}/{name}")?)
-    # Every `.ail` file of the directory, so lanes add runtime files
-    # without editing this list.
     for name in fs.list_dir(dir)?.sorted()
-        if name.ends_with(".ail")
+        if name.ends_with(".ail") and not ["prim.ail", "core.ail", "math.ail"].contains(name)
             texts.push(fs.read_text("{dir}/{name}")?)
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 

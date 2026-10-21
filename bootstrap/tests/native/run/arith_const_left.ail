@@ -1,0 +1,10 @@
+# A constant on the left of `+`, `*` (native.build.1): results, and the
+# trap's operands in source order, as `ail run`.
+fn f(n int) int
+    1 + n + 3 * n + 5 + n * 2
+
+fn main()
+    print(f(10))
+    print(f(-4))
+    print(1 + 9223372036854775806)
+    print(f(4000000000000000000))

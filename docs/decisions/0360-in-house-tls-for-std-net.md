@@ -5,7 +5,7 @@
 - **Decided by:** Designer
 - **Topic:** standard library; 27 — Dependencies and tooling
 - **Spec rules:** `std.net.1–4` (the `tls` failure kind stays until the implementation lands)
-- **Resolves:** the open point of [ADR 0283](0283-std-net-http-client-without-tls.md)
+- **Resolves:** the open point of [ADR 0283](0283-std-net-http-client.md)
 
 ## Context
 

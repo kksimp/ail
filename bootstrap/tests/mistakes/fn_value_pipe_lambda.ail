@@ -1,0 +1,5 @@
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn main()
+    print(apply(|x| x + 1, 3))

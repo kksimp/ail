@@ -1,0 +1,3 @@
+fn main()
+    x := random.float()
+    print(x)

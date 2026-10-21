@@ -39,3 +39,8 @@ function that names another as a value has that function's effects.
 - Surprise: `apply(log, 1)` inside a `@pure` function is rejected, but a
   `@pure fn apply(f fn(int) int, x int)` is accepted, since only its callers
   name the effect.
+
+## Rejected alternatives
+
+- Effect-annotated function types such as `fn(int) int io` (option B): rejected because it is a second type language and a cost in every signature.
+- Assuming the worst for any call through a value (option C): rejected because it makes `@pure` useless wherever a callback is used.

@@ -10,7 +10,7 @@
 |---|---|---|
 | `compiler/ast/` | The syntax tree, shared; its derived JSON is the shape of `ail api --ast` | [0376](../decisions/0376-syntax-tree-in-ail-and-its-json.md) |
 | `compiler/syntax/` | Lexer and parser (lane 113) | 0371–0375 |
-| `compiler/check/` | Checker (lane 114) | [0377](../decisions/0377-checker-in-ail-ported-pass-for-pass.md), [0378](../decisions/0378-checker-gaps-are-skipped-not-guessed.md), [0380](../decisions/0380-self-hosted-checker-parity-gate.md) |
+| `compiler/check/` | Checker (lane 114) | [0377](../decisions/0377-checker-in-ail-ported-pass-for-pass.md), [0378](../decisions/0378-checker-gaps-are-skipped-not-guessed.md), [0740](../decisions/0740-self-hosted-checker-parity-gate.md) |
 
 ## Front-end agreement
 
@@ -61,7 +61,7 @@ front end accepts: same rule, file, line and column, in order. Slices 1–3
 compared only the rules and lines the AIL checker covered
 (`compiler/check/coverage.ail`, ADR 0377). Since slice 4 the selftest
 `self_hosted_check` compares with nothing skipped, except the package
-manifest checks eff.cap.4–5 (ADR 0380).
+manifest checks eff.cap.4–5 (ADR 0740).
 
 | Slice | Scope | Agreement |
 |---|---|---|

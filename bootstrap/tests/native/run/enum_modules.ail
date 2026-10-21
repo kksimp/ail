@@ -1,0 +1,23 @@
+# Enums and computed constants across modules (ADRs 0393, 0602-0604):
+# qualified variants `m.E.V`, a method of another module's enum, `match`
+# with bare patterns on it, and another module's constant.
+use enum_mod as lex
+
+enum Tok
+    Plus
+    Minus
+
+fn describe(t lex.Tok) str
+    match t
+        Word(w) => w
+        Num(n) => if n > 9 then "big" else "small"
+        Eof => "eof"
+
+fn main()
+    toks := [lex.word("fn"), lex.Tok.Word("x"), lex.Tok.Num(12), lex.Tok.Eof]
+    for t in toks
+        print(describe(t))
+        print(t.kind() == lex.Kind.Keyword)
+    print(lex.KEYWORDS.len())
+    print(lex.EOF_TOKENS[1] == lex.Tok.Eof)
+    print(Tok.Minus == Minus)

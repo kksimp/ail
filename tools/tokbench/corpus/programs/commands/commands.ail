@@ -3,13 +3,16 @@ error enum CommandError
     UnknownVerb(verb str)
     MissingArgument(verb str)
     BadQuantity(text str)
+
 enum Command
     Add(item str, qty int)
     Remove(item str)
     Show
+
 struct Entry
     item str
     qty int
+
 fn parse(line str) Command ! CommandError
     words := line.split(" ")
     verb := words[0]
@@ -27,6 +30,7 @@ fn parse(line str) Command ! CommandError
         return MissingArgument(verb: verb)
     qty := words[2].to_int() else return BadQuantity(text: words[2])
     Add(item: words[1], qty: qty)
+
 fn apply(mut stock List[Entry], cmd Command)
     match cmd
         Add(item, qty) =>
@@ -43,6 +47,7 @@ fn apply(mut stock List[Entry], cmd Command)
             for entry in stock
                 if entry.qty > 0
                     print("  {entry.item}: {entry.qty}")
+
 fn total_added(lines List[str]) !int
     mut total := 0
     for line in lines
@@ -52,6 +57,7 @@ fn total_added(lines List[str]) !int
             Remove => 0
             Show => 0
     total
+
 fn main() !
     lines := [
         "add milk 2",

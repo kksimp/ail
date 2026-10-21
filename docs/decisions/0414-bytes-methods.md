@@ -49,3 +49,8 @@ Option A.
 - Hashing (lane 128) takes and returns `bytes` and can use `hex()`.
 - `str.to_bytes()` is the only `str` method added; `s.bytes()` (an iteration
   view) is not needed because `for x in s.to_bytes()` works.
+
+## Rejected alternatives
+
+- A `std.encode` module for the codecs (option B): rejected because each call would need a `use` line (about 5 tokens) and an `encode.` prefix, and hex and base64 are conversions of `bytes` and nothing else. More codecs can still land in a module later.
+- `to_str()` returning `str` with replacement characters, so that the fallible case is not separately named: rejected because `to_str` is the fallible conversion (`str?`) and `text()` is the lossy one, so each case has its own name.

@@ -1,0 +1,5 @@
+use std.time.date
+
+fn main()
+    d := date.Date(2026, 10, 20)
+    print(d.strftime("%Y"))

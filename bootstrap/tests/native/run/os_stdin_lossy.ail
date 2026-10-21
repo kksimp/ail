@@ -1,0 +1,5 @@
+# std.io.1: bytes that aren't UTF-8 become U+FFFD, one per maximal bad run.
+fn main()
+    while true
+        line := io.read_line() else break
+        print("[{line}] {line.len()}")

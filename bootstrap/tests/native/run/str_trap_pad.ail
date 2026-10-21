@@ -1,0 +1,5 @@
+# `pad_left` of a width over 2^30 bytes traps (type.str.15).
+fn main()
+    print("7".pad_left(3, '0'))
+    w := 2000000000
+    print("7".pad_left(w, '0'))

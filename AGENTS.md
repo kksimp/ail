@@ -34,7 +34,7 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   GitHub-hosted testing.
 - A change to the Rust checker (`bootstrap/src/check*`) ports to
   `compiler/check/` in the same branch: the selftest `self_hosted_check`
-  requires the two to agree ([ADR 0380](docs/decisions/0380-self-hosted-checker-parity-gate.md)).
+  requires the two to agree ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
 - The AI's environment can push branches but can't delete them on GitHub.
@@ -121,10 +121,12 @@ Style:
 AGENTS.md                 this file
 CLAUDE.md                 imports AGENTS.md for Claude Code
 README.md                 project overview for humans
+LICENSE, NOTICE           Apache 2.0 with a Runtime Library Exception (ADR 0510)
 docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
   quick-reference.md      AIL on one page for writing programs (keep it in step with the bootstrap)
+  language-card.md        the whole language within the token budget, for agents
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
   open-questions.md       unresolved design questions with pros and cons
@@ -133,15 +135,26 @@ docs/
   spec/                   normative language specification with rule IDs
   design/                 non-normative design notes, research, and constraints
 ail                       command-line entry point; sets up its private Rust toolchain (ADR 0087)
+ail.ps1                   the same entry point for Windows
 bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (ADR 0023)
+compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
 tools/
+  bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
+  check-doc-links.py      checks that relative links in the Markdown docs resolve
+  coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
+  fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
+  native-coverage/        which native subset constructs block the examples
+  pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
+  perfbench/              drag-race programs: AIL, C and Python twins
+  self-compile/           survey of the native subset over the compiler's own source
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)
   verify.sh               designer's one-command test of a pending branch (ADR 0085)
   prune-merged.sh         deletes remote branches already merged into main (ADR 0028)
+  self-host/              the three-stage self-host bootstrap and fixed-point check (ADR 0610)
   rules-audit.sh          audits spec rule IDs against the code and `ail explain` (ADR 0002, ADR 0483)
 ```
 

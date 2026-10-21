@@ -1,4 +1,4 @@
-# 0380. The self-hosted checker must match `ail check` with nothing skipped
+# 0740. The self-hosted checker must match `ail check` with nothing skipped
 
 - **Status:** Accepted
 - **Date:** 2026-10-20

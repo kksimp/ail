@@ -1,0 +1,5 @@
+{"test":"csv_round_trip_any_fields","status":"pass","line":7,"col":10,"message":"","cases":100,"seed":5844384498909265917}
+{"test":"csv_quote_round_trip","status":"pass","line":12,"col":10,"message":"","cases":100,"seed":5143098085588101771}
+{"test":"args_flag_order_does_not_matter","status":"pass","line":17,"col":10,"message":"","cases":100,"seed":4049976719615153882}
+{"test":"args_bad_words_are_errors_not_traps","status":"pass","line":33,"col":10,"message":"","cases":100,"seed":15549400725616491890}
+{"summary":true,"passed":4,"failed":0}
