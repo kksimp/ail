@@ -155,3 +155,10 @@ test; the report says so. A property test, which takes arguments, is skipped.
 or fail), `DIFF` (they disagree), `not-native` or `skipped`, and the command
 ends with the counts. The exit status is 1 if any test is `DIFF`, otherwise 0.
 `--json` writes one object per test and a final summary. *(ADR 0679)*
+
+**native.test.5** — A file inside a package (a directory under an `ail.pkg`) is
+built in a staging directory that holds the package's other module directories
+and the rewritten copy as the root module's only file, so its `use` lines
+resolve. A package that has a dependency (`dep NAME path DIR`) isn't staged
+yet: the dependency's own imports resolve against the wrong root, and its tests
+are reported as not in the native subset yet. *(ADR 0679)*

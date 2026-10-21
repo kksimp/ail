@@ -179,7 +179,10 @@ fn interpreter_results(file: &Path) -> Result<HashMap<String, &'static str>, Str
     }
     if map.is_empty() && !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
-        return Err(err.lines().next().unwrap_or("`ail test` failed").to_string());
+        let first = err.lines().next().unwrap_or("`ail test` failed");
+        // `ail test --json` reports a rejected file as a JSON diagnostic; keep its message.
+        let msg = first.split_once("\"message\":\"").and_then(|(_, r)| r.split_once('"')).map(|(m, _)| m);
+        return Err(msg.unwrap_or(first).to_string());
     }
     Ok(map)
 }
@@ -207,7 +210,14 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
     let _ = std::fs::create_dir_all(work);
     let dir = file.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("t");
-    let copy = dir.join(format!(".ail-native-test-{}-{stem}.ail", std::process::id()));
+    let copy_name = format!("ail-native-test-{}-{stem}.ail", std::process::id());
+    // native.test.5: a file of a package is built inside a staging directory.
+    let stage = stage_package(file, &work.join(format!("pkg-{stem}")), &copy_name);
+    let copy = match &stage {
+        Some(s) => s.join(&copy_name),
+        None => dir.join(format!(".{copy_name}")),
+    };
+    let target: &Path = stage.as_deref().unwrap_or(&copy);
     let exe_path = work.join(stem);
     let mut dropped: HashMap<usize, String> = HashMap::new();
     let mut blocked_all: Option<String> = None;
@@ -225,7 +235,7 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
         let ail = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("ail"));
         let res = Command::new(ail)
             .arg("build")
-            .arg(&copy)
+            .arg(target)
             .arg("-o")
             .arg(&exe_path)
             .stdin(Stdio::null())
@@ -241,6 +251,10 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
         let err = String::from_utf8_lossy(&res.stderr).into_owned();
         let mut progressed = false;
         let mut first_outside: Option<String> = None;
+        if err.contains("mod.use.4") && stage.is_some() {
+            blocked_all = Some("uses a dependency package, whose own imports the backend can't resolve yet".into());
+            break;
+        }
         if err.contains("fs.IoError") {
             blocked_all = Some("a module file of a package can't be built on its own yet".into());
             break;
@@ -250,8 +264,9 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
             let msg = l[pos + 2..].to_string();
             let head = &l[..pos];
             let mut parts = head.rsplitn(3, ':');
-            let (_col, line, _path) = (parts.next(), parts.next(), parts.next());
-            let Some(line) = line.and_then(|n| n.parse::<usize>().ok()) else {
+            let (_col, line, path) = (parts.next(), parts.next(), parts.next());
+            let in_copy = path.is_some_and(|p| p.ends_with(&copy_name));
+            let Some(line) = line.and_then(|n| n.parse::<usize>().ok()).filter(|_| in_copy) else {
                 first_outside.get_or_insert(msg);
                 continue;
             };
@@ -278,6 +293,9 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
     }
     if std::env::var_os("AIL_NATIVE_TEST_KEEP").is_none() {
         let _ = std::fs::remove_file(&copy);
+        if let Some(s) = &stage {
+            let _ = std::fs::remove_dir_all(s);
+        }
     }
     for (i, t) in tests.iter().enumerate() {
         let is = istatus(&t.name);
@@ -297,6 +315,33 @@ fn run_file(file: &Path, work: &Path) -> Vec<Outcome> {
     }
     let _ = std::fs::remove_file(&exe_path);
     out
+}
+
+/// native.test.5: for a file inside a package (a directory under an `ail.pkg`), a staging
+/// directory the backend can build: the package's other module directories, with the
+/// rewritten copy as the root module's only file.
+fn stage_package(file: &Path, stage: &Path, copy_name: &str) -> Option<PathBuf> {
+    #[cfg(not(unix))]
+    {
+        let _ = (file, stage, copy_name);
+        None
+    }
+    #[cfg(unix)]
+    {
+        let _ = copy_name;
+        let abs = std::fs::canonicalize(file).ok()?;
+        let dir = abs.parent()?;
+        let root = dir.ancestors().find(|d| d.join("ail.pkg").exists())?;
+        let _ = std::fs::remove_dir_all(stage);
+        std::fs::create_dir_all(stage).ok()?;
+        for e in std::fs::read_dir(root).ok()?.flatten() {
+            let p = e.path();
+            if p.is_dir() && p != dir && !e.file_name().to_string_lossy().starts_with('.') {
+                std::os::unix::fs::symlink(&p, stage.join(e.file_name())).ok()?;
+            }
+        }
+        Some(stage.to_path_buf())
+    }
 }
 
 /// native.test.3: a diagnostic without its `error[RULE]: ` prefix and any backticked detail noise.
