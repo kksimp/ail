@@ -1,0 +1,3 @@
+fn main()
+    total := none
+    print(total + 1)

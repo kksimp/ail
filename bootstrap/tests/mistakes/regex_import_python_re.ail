@@ -1,0 +1,4 @@
+use re
+
+fn main()
+    print(re.match("a+", "aaa"))
