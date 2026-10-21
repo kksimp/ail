@@ -6,5 +6,5 @@ check  294 items
 codegen  36 items
 mir  190 items
 obj  53 items
-syntax  94 items
+syntax  96 items
 x64  58 items

@@ -164,7 +164,7 @@ fn parse_source(module str, path str) !mir.Source
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     if diags.len() > 0
-        for d in diags
+        for d in syntax.one_per_line(diags)
             io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
         io.exit(1)
     mir.Source(module: module, path: path, text: text, prog: parsed.program)

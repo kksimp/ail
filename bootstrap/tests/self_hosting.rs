@@ -129,3 +129,22 @@ fn ail_lexer_matches_the_bootstrap() {
 fn ail_parser_matches_the_bootstrap() {
     compare_with_bootstrap("parse", "--ast");
 }
+
+/// gram.rec.1 (ADR 0263) at report time: a stray `&` gives one syntax
+/// diagnostic on its line, the lexer's gram.foreign.1 with its message, as
+/// the bootstrap's `ail check` gives it. The AIL front end reports through
+/// `parse_source` (`ail run compiler mir FILE`).
+#[test]
+fn ail_front_end_reports_one_diagnostic_per_line_for_a_stray_ampersand() {
+    let dir = scratch("amp");
+    let f = dir.join("amp.ail");
+    fs::write(&f, "fn f(p int) int\n    return load64(p) * 2 + (load64(p + 8) & 4294967295) * 1000\n\nfn main()\n    print(f(1))\n")
+        .unwrap();
+    let out = ail().arg("run").arg(root().join("compiler")).arg("mir").arg(&f).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    // The compiler's own warnings come first; the errors are the program's.
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    let errors: Vec<&str> = err.lines().filter(|l| l.contains(": error[")).collect();
+    let want = format!("{}:2:43: error[gram.foreign.1]: AIL has no `&`", f.display());
+    assert_eq!(errors, [want.as_str()]);
+}
