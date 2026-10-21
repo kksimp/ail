@@ -131,7 +131,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             G::List(inner) => {
                 let n = items(rng);
-                Value::List(Rc::new((0..n).map(|_| self.generate(inner, rng, size, depth + 1)).collect()))
+                Value::list((0..n).map(|_| self.generate(inner, rng, size, depth + 1)).collect())
             }
             G::Set(inner) => {
                 let n = items(rng);
@@ -184,7 +184,7 @@ impl<'a, W: Write> Interp<'a, W> {
             G::Char => Value::Char('a'),
             G::Str => Value::Str("".into()),
             G::Bytes => super::bytes::bytes_value(Vec::new()),
-            G::List(_) => Value::List(Rc::new(Vec::new())),
+            G::List(_) => Value::list(Vec::new()),
             G::Set(_) => Value::Set(Rc::new(Table::default())),
             G::Map(..) => Value::Map(Rc::new(Table::default())),
             G::Opt(_) => Value::None,
@@ -264,14 +264,14 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             (G::List(inner), Value::List(xs)) => {
-                for shorter in shorten(xs) {
-                    out.push(Value::List(Rc::new(shorter)));
+                for shorter in shorten(&xs.slice()) {
+                    out.push(Value::list(shorter));
                 }
                 for (i, x) in xs.iter().enumerate().take(8) {
-                    for s in self.shrinks(inner, x).into_iter().take(3) {
-                        let mut d = (**xs).clone();
+                    for s in self.shrinks(inner, &x).into_iter().take(3) {
+                        let mut d = xs.to_vec();
                         d[i] = s;
-                        out.push(Value::List(Rc::new(d)));
+                        out.push(Value::list(d));
                     }
                 }
             }

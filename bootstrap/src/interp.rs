@@ -13,6 +13,7 @@ use crate::fasthash::FastMap as HashMap;
 use std::fmt::{self, Write as _};
 use std::io::{self, BufWriter, Write};
 use std::cell::RefCell;
+use std::borrow::Cow;
 use std::rc::Rc;
 
 use std::cmp::Ordering;
@@ -26,6 +27,7 @@ mod bytes;
 mod ffi;
 mod json;
 mod keyfn;
+mod list;
 pub mod limits;
 mod contracts;
 pub mod parallel;
@@ -85,7 +87,7 @@ enum Value {
     Struct(usize, Rc<Vec<Value>>),
     /// An enum and variant, by index, and the variant's fields.
     Enum(usize, usize, Rc<Vec<Value>>),
-    List(Rc<Vec<Value>>),
+    List(Rc<list::List>),
     /// `Map[K, V]` and `Set[T]`, in insertion order (type.map.1).
     Map(Rc<Table>),
     Set(Rc<Table>),
@@ -154,6 +156,17 @@ struct Failure {
 }
 
 impl Value {
+    /// A boxed list (ADR 0760).
+    #[inline]
+    pub(crate) fn list(items: Vec<Value>) -> Value {
+        Value::List(Rc::new(list::List::boxed(items)))
+    }
+
+    /// A list that is packed when its elements are all `int`, all `float` or all `bool` (ADR 0760).
+    pub(crate) fn packed(items: Vec<Value>) -> Value {
+        Value::List(Rc::new(list::List::pack(items)))
+    }
+
     /// The optional that holds `v` (type.opt.7): `v` itself, unless `v` is
     /// an absent optional, which would read as the outer `none`.
     fn present(v: Value) -> Value {
@@ -692,7 +705,7 @@ fn float_shape(nan: bool, inf: bool, negative: bool, sci: String) -> String {
 }
 
 /// type.num.11: numbers in numeric order, with NaN after every number.
-fn float_order(x: f64, y: f64) -> Ordering {
+pub(crate) fn float_order(x: f64, y: f64) -> Ordering {
     match (x.is_nan(), y.is_nan()) {
         (true, true) => Ordering::Equal,
         (true, false) => Ordering::Greater,
@@ -813,6 +826,14 @@ fn type_head<'e>(e: &'e Expr, env: &Env<'_>, prog: &Program) -> Option<&'e str> 
     }
 }
 
+/// The element of a packed or boxed list at `i`, copied out (type.coll.4).
+fn list_element(items: &list::List, i: i64, pos: Pos) -> Result<Value, Trap> {
+    match usize::try_from(i).ok().and_then(|u| items.get(u)) {
+        Some(v) => Ok(v),
+        None => trap("type.coll.4", pos, format!("index {i} is out of bounds for a list of length {}", items.len())),
+    }
+}
+
 fn element(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
     match usize::try_from(i).ok().and_then(|u| items.get(u)) {
         Some(v) => Ok(v),
@@ -839,37 +860,62 @@ fn slot_in<'e>(root: &'e mut Value, path: &[Step], insert: bool) -> Result<&'e m
     let mut v = root;
     let last = path.len();
     for (n, step) in path.iter().enumerate() {
-        v = match (step, v) {
-            (Step::Key(k, pos), Value::Map(t)) => {
-                let t = Rc::make_mut(t);
-                match t.get(k) {
-                    Some(i) => t.val_mut(i),
-                    None if insert && n + 1 == last => {
-                        let i = t.insert(k.clone(), Some(Value::Unit));
-                        t.val_mut(i)
-                    }
-                    None => return trap("type.map.3", *pos, format!("the map has no key {}", key_text(k))),
-                }
-            }
-            (Step::Field(i), Value::Struct(_, fields) | Value::Tuple(fields)) => &mut Rc::make_mut(fields)[*i],
-            (Step::Index(i, pos), Value::List(items)) => {
-                let items = Rc::make_mut(items);
-                let len = items.len();
-                match usize::try_from(*i).ok().filter(|u| *u < len) {
-                    Some(u) => &mut items[u],
-                    None => {
-                        return trap(
-                            "type.coll.4",
-                            *pos,
-                            format!("index {i} is out of bounds for a list of length {len}"),
-                        );
-                    }
-                }
-            }
-            (_, other) => unreachable!("checked: place step {step:?} on {other:?}"),
-        };
+        v = step_in(v, step, insert && n + 1 == last)?;
     }
     Ok(v)
+}
+
+/// One step of `slot_in`; `insert` adds a missing map key.
+fn step_in<'e>(v: &'e mut Value, step: &Step, insert: bool) -> Result<&'e mut Value, Trap> {
+    Ok(match (step, v) {
+        (Step::Key(k, pos), Value::Map(t)) => {
+            let t = Rc::make_mut(t);
+            match t.get(k) {
+                Some(i) => t.val_mut(i),
+                None if insert => {
+                    let i = t.insert(k.clone(), Some(Value::Unit));
+                    t.val_mut(i)
+                }
+                None => return trap("type.map.3", *pos, format!("the map has no key {}", key_text(k))),
+            }
+        }
+        (Step::Field(i), Value::Struct(_, fields) | Value::Tuple(fields)) => &mut Rc::make_mut(fields)[*i],
+        (Step::Index(i, pos), Value::List(items)) => {
+            // A packed list gives no `&mut Value` to an element: it becomes a boxed one (ADR 0760).
+            // `with_in` is the way to change an element in place.
+            let items = Rc::make_mut(items).boxed_mut();
+            let len = items.len();
+            match usize::try_from(*i).ok().filter(|u| *u < len) {
+                Some(u) => &mut items[u],
+                None => {
+                    return trap("type.coll.4", *pos, format!("index {i} is out of bounds for a list of length {len}"));
+                }
+            }
+        }
+        (_, other) => unreachable!("checked: place step {step:?} on {other:?}"),
+    })
+}
+
+/// `f` on the storage at `path` inside `root`, as for `slot_in`. An element of a packed list is lent as a
+/// temporary and written back, so changing it does not unpack the list (ADR 0760).
+fn with_in<R>(root: &mut Value, path: &[Step], insert: bool, f: impl FnOnce(&mut Value) -> R) -> Result<R, Trap> {
+    let Some((step, parent)) = path.split_last() else { return Ok(f(root)) };
+    // Only the last step can reach a packed list's element: it holds scalars.
+    let container = slot_in(root, parent, false)?;
+    if let (Step::Index(i, pos), Value::List(items)) = (step, &mut *container)
+        && !matches!(**items, list::List::Boxed(_))
+    {
+        let items = Rc::make_mut(items);
+        let len = items.len();
+        let Some(u) = usize::try_from(*i).ok().filter(|u| *u < len) else {
+            return trap("type.coll.4", *pos, format!("index {i} is out of bounds for a list of length {len}"));
+        };
+        let mut element = items.at(u);
+        let r = f(&mut element);
+        items.set(u, element);
+        return Ok(r);
+    }
+    Ok(f(step_in(container, step, insert)?))
 }
 
 /// A call operand: a place, or the value of any other expression.
@@ -880,26 +926,30 @@ enum Operand {
 
 /// The value at a place, without copying it.
 #[inline]
-fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<&'e Value, Trap> {
+fn peek<'e>(env: &'e Env<'_>, p: &Place) -> Result<Cow<'e, Value>, Trap> {
     debug_assert!(p.slot != IN_CELL, "a place in a `ref` cell goes through `view`");
     peek_at(env, p.slot, &p.path)
 }
 
-fn peek_at<'e>(env: &'e Env<'_>, slot: usize, path: &[Step]) -> Result<&'e Value, Trap> {
+fn peek_at<'e>(env: &'e Env<'_>, slot: usize, path: &[Step]) -> Result<Cow<'e, Value>, Trap> {
     peek_in(&env[slot].1, path)
 }
 
-fn peek_in<'e>(root: &'e Value, path: &[Step]) -> Result<&'e Value, Trap> {
+fn peek_in<'e>(root: &'e Value, path: &[Step]) -> Result<Cow<'e, Value>, Trap> {
     let mut v = root;
     for step in path {
         v = match (step, v) {
             (Step::Field(i), Value::Struct(_, fields) | Value::Tuple(fields)) => &fields[*i],
-            (Step::Index(i, pos), Value::List(items)) => element(items, *i, *pos)?,
+            (Step::Index(i, pos), Value::List(items)) => match &**items {
+                list::List::Boxed(b) => element(b, *i, *pos)?,
+                // A packed list holds scalars: nothing is indexed below the element.
+                packed => return Ok(Cow::Owned(list_element(packed, *i, *pos)?)),
+            },
             (Step::Key(k, pos), Value::Map(t)) => map_value(t, k, || key_text(k), *pos)?,
             (_, other) => unreachable!("checked: place step {step:?} on {other:?}"),
         };
     }
-    Ok(v)
+    Ok(Cow::Borrowed(v))
 }
 
 /// A string or character as it appears inside another value (trait.auto.2):
@@ -1004,7 +1054,7 @@ fn key_text(k: &Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::None => "none".into(),
         Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
-        Value::List(items) => format!("[{}]", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
+        Value::List(items) => format!("[{}]", items.iter().map(|x| key_text(&x)).collect::<Vec<_>>().join(", ")),
         Value::Tuple(items) => format!("({})", items.iter().map(key_text).collect::<Vec<_>>().join(", ")),
         Value::Struct(s, values) => NAMES.with(|n| {
             let (name, names) = &n.borrow().structs[*s];
@@ -1033,7 +1083,7 @@ fn zero_like(rhs: &Value) -> Value {
 fn missing_key(env: &Env<'_>, p: &Place) -> Result<bool, Trap> {
     let Some((Step::Key(k, _), parent)) = p.path.split_last() else { return Ok(false) };
     let parent = Place { slot: p.slot, path: parent.to_vec() };
-    Ok(matches!(peek(env, &parent)?, Value::Map(t) if t.get(k).is_none()))
+    Ok(matches!(&*peek(env, &parent)?, Value::Map(t) if t.get(k).is_none()))
 }
 
 #[inline(always)]
@@ -1067,13 +1117,17 @@ fn place_pos(p: &Place) -> Pos {
 #[inline(always)]
 fn view<R>(env: &Env<'_>, p: &Place, f: impl FnOnce(&Value) -> R) -> Result<R, Trap> {
     match p.cell() {
-        None => Ok(f(peek(env, p)?)),
+        None => {
+            let v = peek(env, p)?;
+            Ok(f(&v))
+        }
         Some(c) => {
             let Ok(b) = c.try_borrow() else { return busy(place_pos(p)) };
             if matches!(*b, Value::Unit) {
                 return busy(place_pos(p));
             }
-            Ok(f(peek_in(&b, &p.path[1..])?))
+            let v = peek_in(&b, &p.path[1..])?;
+            Ok(f(&v))
         }
     }
 }
@@ -1082,13 +1136,13 @@ fn view<R>(env: &Env<'_>, p: &Place, f: impl FnOnce(&Value) -> R) -> Result<R, T
 #[inline(always)]
 fn with_slot<R>(env: &mut Env<'_>, p: &Place, insert: bool, f: impl FnOnce(&mut Value) -> R) -> Result<R, Trap> {
     match p.cell() {
-        None => Ok(f(slot_mut(env, p, insert)?)),
+        None => with_in(&mut env[p.slot].1, &p.path, insert, f),
         Some(c) => {
             let Ok(mut b) = c.try_borrow_mut() else { return busy(place_pos(p)) };
             if matches!(*b, Value::Unit) {
                 return busy(place_pos(p));
             }
-            Ok(f(slot_in(&mut b, &p.path[1..], insert)?))
+            with_in(&mut b, &p.path[1..], insert, f)
         }
     }
 }
@@ -1434,7 +1488,7 @@ impl<'a, W: Write> Interp<'a, W> {
         match v {
             Value::Struct(s, _) => self.prog.structs[*s].unique,
             Value::Enum(e, _, _) => self.prog.enums[*e].unique,
-            Value::List(items) => items.iter().find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
+            Value::List(items) => items.iter().find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(&x)),
             Value::Map(t) => t.entries().map(|(_, x)| x).find(|x| !matches!(x, Value::None)).is_some_and(|x| self.is_unique(x)),
             _ => false,
         }
@@ -1452,7 +1506,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Enum(e, _, _) => Con::Enum(e),
             // own.uniq.8: a list's elements, or a map's values, last first.
             Value::List(items) => {
-                for x in Rc::unwrap_or_clone(items).into_iter().rev() {
+                for x in Rc::unwrap_or_clone(items).into_vec().into_iter().rev() {
                     self.release(x, pos)?;
                 }
                 return Ok(());
@@ -1606,8 +1660,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn for_mut_in(&mut self, var: &'a str, list: &Place, pos: Pos, body: &'a Block, env: &mut Env<'a>) -> Flow<()> {
-        let Value::List(items) = peek(env, list)? else { unreachable!("checked: list") };
-        for i in 0..items.len() {
+        let Value::List(items) = &*peek(env, list)? else { unreachable!("checked: list") };
+        let len = items.len();
+        for i in 0..len {
             let mut at = list.clone();
             at.path.push(Step::Index(i as i64, pos));
             let v = std::mem::replace(slot_mut(env, &at, false)?, Value::Unit);
@@ -1640,11 +1695,11 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
-            Value::Set(t) => Rc::new(t.key_list()),
+            Value::Set(t) => Rc::new(list::List::boxed(t.key_list())),
             // type.tuple.5: `for k, v in m`, each entry as a pair.
-            Value::Map(t) => Rc::new(entry_pairs(&t)),
+            Value::Map(t) => Rc::new(list::List::boxed(entry_pairs(&t))),
             // type.bytes.5: each byte, as a `u8`.
-            Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
+            Value::Bytes(b) => Rc::new(list::List::boxed(b.iter().map(|x| bytes::byte(*x)).collect())),
             // conc.share.7: each value received, until the channel is closed and empty.
             Value::Handle(Handle::Channel(c)) => {
                 while let Some(v) = self.chan_next(c, iter.pos())? {
@@ -1656,8 +1711,8 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             other => unreachable!("checked: iterable, found {other:?}"),
         };
-        for item in items.iter() {
-            if !self.loop_body(var, item.clone(), body, env)? {
+        for i in 0..items.len() {
+            if !self.loop_body(var, items.at(i), body, env)? {
                 break;
             }
         }
@@ -1690,24 +1745,24 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             return Ok(true);
         };
-        let items: Rc<Vec<Value>> = match &c.iter {
+        let items: Rc<list::List> = match &c.iter {
             Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } => {
                 let (lo, hi) = (self.eval(lo, env)?.int(), self.eval(hi, env)?.int());
                 let hi = if *inclusive { hi } else { hi.saturating_sub(1) };
-                Rc::new(if lo > hi { Vec::new() } else { (lo..=hi).map(Value::Int).collect() })
+                Rc::new(list::List::Int(if lo > hi { Vec::new() } else { (lo..=hi).collect() }))
             }
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
-                Value::Set(t) => Rc::new(t.key_list()),
-                Value::Map(t) => Rc::new(entry_pairs(&t)),
-                Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
+                Value::Set(t) => Rc::new(list::List::boxed(t.key_list())),
+                Value::Bytes(b) => Rc::new(list::List::boxed(b.iter().map(|x| bytes::byte(*x)).collect())),
+                Value::Map(t) => Rc::new(list::List::boxed(entry_pairs(&t))),
                 Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
         };
-        for item in items.iter() {
+        for i in 0..items.len() {
             let mark = env.len();
-            push_clause(env, c, item.clone());
+            push_clause(env, c, items.at(i));
             let r = match &c.cond {
                 Some(cond) => match self.eval(cond, env) {
                     Ok(Value::Bool(true)) => self.comp(rest, elem, value, set, env, acc),
@@ -1868,12 +1923,12 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.binop(op, zero_like(&rhs), rhs, pos)?
                 }
                 Some(op) => {
-                    let old = peek_at(env, slot, &steps)?.clone();
+                    let old = peek_at(env, slot, &steps)?.into_owned();
                     let rhs = self.eval(value, env)?;
                     self.binop(op, old, rhs, pos)?
                 }
             };
-            *slot_mut_at(env, slot, &steps, op.is_none() || missing)? = v;
+            with_in(&mut env[slot].1, &steps, op.is_none() || missing, |s| *s = v)?;
             return Ok(());
         }
         let p = self.place(target, env)?;
@@ -2085,7 +2140,7 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(i) = self.int_val(index, env)
             && let Some(Value::List(items)) = self.borrowed(recv, env)
         {
-            return Ok(element(items, i, pos)?.clone());
+            return Ok(list_element(items, i, pos)?);
         }
         let items = match self.eval(recv, env)? {
             Value::List(items) => items,
@@ -2125,7 +2180,7 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(Value::List(Rc::new(self.slice(&items, lo, hi, inclusive, *range_pos)?)));
         }
         let i = self.eval(index, env)?.int();
-        Ok(element(&items, i, pos)?.clone())
+        Ok(list_element(&items, i, pos)?)
     }
 
     /// An arithmetic or comparison operator (expr.arith.1-3). Its own frame keeps
@@ -2309,7 +2364,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 for x in elems {
                     items.push(self.eval(x, env)?);
                 }
-                Value::List(Rc::new(items))
+                Value::packed(items)
             }
             Expr::Tuple(elems, _) => {
                 let mut items = Vec::with_capacity(elems.len());
@@ -2382,7 +2437,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let mut acc = (Vec::new(), Table::default());
                 self.comp(clauses, elem, value.as_deref(), *kind == CompKind::Set, env, &mut acc)?;
                 match kind {
-                    CompKind::List => Value::List(Rc::new(acc.0)),
+                    CompKind::List => Value::packed(acc.0),
                     CompKind::Set => Value::Set(Rc::new(acc.1)),
                     CompKind::Map => Value::Map(Rc::new(acc.1)),
                 }
@@ -2484,11 +2539,11 @@ impl<'a, W: Write> Interp<'a, W> {
         }
     }
 
-    fn slice(&self, items: &[Value], lo: i64, hi: i64, inclusive: bool, pos: Pos) -> Result<Vec<Value>, Trap> {
+    fn slice(&self, items: &list::List, lo: i64, hi: i64, inclusive: bool, pos: Pos) -> Result<list::List, Trap> {
         let end = if inclusive { hi.checked_add(1) } else { Some(hi) };
         let dots = if inclusive { "..=" } else { ".." };
         match (usize::try_from(lo), end.and_then(|e| usize::try_from(e).ok())) {
-            (Ok(a), Some(b)) if a <= b && b <= items.len() => Ok(items[a..b].to_vec()),
+            (Ok(a), Some(b)) if a <= b && b <= items.len() => Ok(items.range(a, b)),
             _ => trap(
                 "type.coll.4",
                 pos,
@@ -2629,9 +2684,12 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::None, _) | (_, Value::None) => false,
             (Value::Nested(m), Value::Nested(n)) => m == n,
             (Value::Nested(_), _) | (_, Value::Nested(_)) => false,
-            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) | (Value::Tuple(x), Value::Tuple(y)) => {
-                self.all_equal(x, y, pos)?
-            }
+            (Value::List(x), Value::List(y)) => match (&**x, &**y) {
+                (list::List::Int(p), list::List::Int(q)) => p == q,
+                (list::List::Bool(p), list::List::Bool(q)) => p == q,
+                (x, y) => self.all_equal(&x.slice(), &y.slice(), pos)?,
+            },
+            (Value::Struct(_, x), Value::Struct(_, y)) | (Value::Tuple(x), Value::Tuple(y)) => self.all_equal(x, y, pos)?,
             (Value::Enum(e, v, x), Value::Enum(f, w, y)) => e == f && v == w && self.all_equal(x, y, pos)?,
             // type.map.4: the same keys with equal values, in any order.
             (Value::Map(x), Value::Map(y)) => {
@@ -2688,9 +2746,12 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
             (Value::Bytes(x), Value::Bytes(y)) => x.cmp(y),
-            (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) | (Value::Tuple(x), Value::Tuple(y)) => {
-                self.lexicographic(x, y, pos)?
-            }
+            (Value::List(x), Value::List(y)) => match (&**x, &**y) {
+                (list::List::Int(p), list::List::Int(q)) => p.cmp(q),
+                (list::List::Bool(p), list::List::Bool(q)) => p.cmp(q),
+                (x, y) => self.lexicographic(&x.slice(), &y.slice(), pos)?,
+            },
+            (Value::Struct(_, x), Value::Struct(_, y)) | (Value::Tuple(x), Value::Tuple(y)) => self.lexicographic(x, y, pos)?,
             (Value::Enum(_, v, x), Value::Enum(_, w, y)) => match v.cmp(w) {
                 Ordering::Equal => self.lexicographic(x, y, pos)?,
                 o => o,
@@ -2761,11 +2822,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 unreachable!("checked: two lists")
             };
             let pairs = a.iter().zip(b.iter()).map(|(x, y)| Value::Tuple(Rc::new(vec![x.clone(), y.clone()])));
-            return Ok(Value::List(Rc::new(pairs.collect())));
+            return Ok(Value::list(pairs.collect()));
         }
         if matches!(callee, Expr::TypeArgs { .. }) {
             match n.as_str() {
-                "List" => return Ok(Value::List(Rc::new(Vec::new()))),
+                "List" => return Ok(Value::list(Vec::new())),
                 "Map" => return Ok(Value::Map(Rc::new(Table::default()))),
                 "Set" => return Ok(Value::Set(Rc::new(Table::default()))),
                 _ => {}
@@ -2923,7 +2984,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
                 for x in items.iter() {
-                    parts.push(self.describe(x, pos)?);
+                    parts.push(self.describe(&x, pos)?);
                 }
                 format!("[{}]", parts.join(", "))
             }
