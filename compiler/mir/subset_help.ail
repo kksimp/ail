@@ -12,12 +12,12 @@ pub fn subset_help(message str) str
         or message.contains("calling `Mutex`")
         or message.contains("`spawn`")
         return "tasks and channels aren't native yet (owner: #194); `ail run` runs them"
-    if message.contains("maps")
-        or message.contains("Map[")
-        or message.contains("map comprehensions")
-        return "maps aren't native yet (owner: #180); keep a `List` of pairs or a struct list, or use `ail run`"
-    if message.contains("sets") or message.contains("set comprehensions")
-        return "sets aren't native yet (owner: #180); use a `List` with a loop, or `ail run`"
+    if message.contains("comprehension whose type isn't known")
+        return "a set or map comprehension is native where its type is known (a function result or a typed argument); otherwise build it with a loop"
+    if message.contains("maps") or message.contains("Map[") or message.contains("a map of")
+        return "maps are native with `int`, `bool`, `char` or `str` keys (ADR 0568); `get` and `remove` need `else`; other keys, or `ail run`"
+    if message.contains("sets") or message.contains("Set[")
+        return "sets are native over `int`, `bool`, `char` and `str` (ADR 0568); other element types, or `ail run`"
     if message.contains("`==` on `str`") or message.contains("`!=` on `str`")
         return "string equality isn't native yet (owner: #184); compare the parts you need, or use `ail run`"
     if message.contains(".lines()")

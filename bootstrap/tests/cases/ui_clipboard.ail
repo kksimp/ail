@@ -1,0 +1,12 @@
+## std.ui.12: under `ail test` the clipboard is the program's own, so this test
+## never reads or changes the user's clipboard. Text set is text got back.
+use std.ui
+
+@test fn clipboard_round_trip()
+    ui.clipboard_set("copied")
+    assert_eq(ui.clipboard_get() else "", "copied")
+
+@test fn clipboard_set_replaces()
+    ui.clipboard_set("first")
+    ui.clipboard_set("second")
+    assert_eq(ui.clipboard_get() else "", "second")
