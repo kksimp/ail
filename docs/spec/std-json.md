@@ -182,11 +182,12 @@ impl ToJson for U
 impl FromJson for U
 
 fn main() !
-    fs.write_text("json_load_spec.tmp", "[\{\"name\": \"al\", \"age\": 30}]")?
-    users := load_json[List[U]]("json_load_spec.tmp")?
+    path := "json_load_spec.tmp"
+    fs.write_text(path, "[\{\"name\": \"al\", \"age\": 30}]")?
+    users := load_json[List[U]](path)?
     print_json(users)                     # [{"name":"al","age":30}]
-    fs.remove("json_load_spec.tmp")?
-    gone := load_json[U]("json_load_spec.tmp") else err
+    fs.remove(path)?
+    gone := load_json[U](path) else err
         print(err.message)                # json_load_spec.tmp: not_found
         users[0]
     print_json(gone)
