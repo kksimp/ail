@@ -27,6 +27,7 @@ pub fn zlib(data: &[u8], level: u32) -> Vec<u8> {
 }
 
 pub fn unzlib(data: &[u8], limit: usize) -> Result<Vec<u8>, CodecError> {
+    // std.compress.10: the zlib corrupt, checksum and unsupported messages.
     let bad = |m: &str| CodecError::new("corrupt", m);
     if data.len() < 6 {
         return Err(bad("not zlib data"));
