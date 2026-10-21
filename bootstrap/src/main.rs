@@ -542,6 +542,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     named_args::reorder(&mut program, &resolved);
+    interp::install_native_json(&mut program);
 
     // std.ui: this thread hosts any window the program opens (ADR 0178).
     let result = ui::run_hosted(STACK_BYTES, move || {
@@ -620,6 +621,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         return ExitCode::from(2);
     }
     named_args::reorder(&mut program, &resolved);
+    interp::install_native_json(&mut program);
     let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
