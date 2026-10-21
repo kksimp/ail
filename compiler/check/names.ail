@@ -70,11 +70,10 @@ pub AIL_STD_MODULES := [
     "std.csv",
     "std.log",
     "std.net.http",
+    "std.net.jar",
     "std.time.date",
     "std.ui.widgets",
 ]
-
-pub AIL_STD_MODULES := ["std.net.http", "std.net.jar", "std.time.date", "std.ui.widgets"]
 
 ## Positions from here on are the prelude's.
 pub PRELUDE_LINE := 1073741824

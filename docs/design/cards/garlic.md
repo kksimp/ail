@@ -1,6 +1,6 @@
 # garlic
 entry: main in garlic.ail
-tests: 57 (`ail test` lists them)
+tests: 56 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -22,7 +22,7 @@ enum Prompt
 struct Browser
 fn options() net.Options [io net]
 fn fetch(str, str, str) str [clock fs io net]
-fn fetch_with(str, str, str, mut jsdom.Jar) str [clock fs io mutates net]
+fn fetch_with(str, str, str, mut std.net.jar.Jar) str [clock fs io mutates net]
 WINDOWS_1252 := ...
 fn body_text(net.RawResponse) str
 fn decode(bytes, str) str
@@ -35,7 +35,7 @@ MAX_SHEETS := 8
 fn linked_sheets(html.Doc, str) css.Sheet [fs io net]
 fn fetch_text(str) str [fs io net]
 struct Loaded
-fn load_doc(str, str, str, mut jsdom.Jar) Loaded [clock env fs io mutates net]
+fn load_doc(str, str, str, mut std.net.jar.Jar) Loaded [clock env fs io mutates net]
 fn script_url(str) str
 fn local_url(str) str
 fn edit_text(str, str) str?
@@ -262,11 +262,6 @@ pub fn html.collapse(str) str
 
 ## jsdom
 ```
-pub struct jsdom.Cookie
-pub struct jsdom.Jar
-pub fn jsdom.new_jar() jsdom.Jar
-pub fn jsdom.host_of(str) str
-pub fn jsdom.split_set_cookie(str) List[str]
 pub struct jsdom.Outcome
 pub fn jsdom.run(mut html.Doc, str, Map[str, str], Map[str, str], float, float, int) jsdom.Outcome [io mutates]
 ```
@@ -287,4 +282,11 @@ pub fn page.resolve(str, str) str
 pub fn page.remove_dots(str) str
 ```
 
-trimmed to fit 4000 tokens (~3790); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+## std.net.jar
+```
+pub struct std.net.jar.Cookie
+pub struct std.net.jar.Jar
+pub fn std.net.jar.new() std.net.jar.Jar
+```
+
+trimmed to fit 4000 tokens (~3803); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

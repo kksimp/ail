@@ -162,6 +162,9 @@ pub fn codegen.add_trap_texts(mut codegen.Image, mir.Module, int, str) [mutates]
 pub fn codegen.split_edges(mir.Func) mir.Func
 pub fn codegen.block_order(mir.Func) List[int]
 pub fn codegen.f64_bits(float) int
+pub fn codegen.split_for_calls(mir.Func) mir.Func
+pub fn codegen.wrap_block(mir.Func, List[int], List[List[bool]], List[int]) int
+pub fn codegen.div_magic(int) List[int]
 ```
 
 ## mir
@@ -290,4 +293,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3121); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3185); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
