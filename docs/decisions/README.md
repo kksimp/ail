@@ -593,6 +593,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
 | [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
 | [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
+| [0764](0764-comprehension-if-and-text-len.md) | `if` elements in comprehensions and `len` of text, maps, sets and bytes compile in the tier: -43% on a micro-benchmark *(delegated)* | Accepted | 2026-10-21 |
 | [0776](0776-fieldinfo-doc.md) | `FieldInfo.doc` carries a field's `##` comment (integrator choice) | Accepted | 2026-10-21 |
 | [0782](0782-fix-text-plus-chains.md) | `ail fix` joins text with interpolation across a `+` chain and around calls with strings *(delegated)* | Accepted | 2026-10-21 |
 | [0768](0768-native-string-scans-by-words.md) | Native strings: character counts and separator search a word at a time, interpolation joined in one allocation; `lines_split` -27% instructions *(delegated)* | Accepted | 2026-10-21 |
@@ -602,4 +603,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0805](0805-native-error-message-method.md) | The message of an error type is a method *(delegated)* | Accepted | 2026-10-21 |
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
 | [0815](0815-native-tensors.md) | Native tensors: a runtime object and kernels written in AIL *(delegated)* | Accepted | 2026-10-21 |
-| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
+| [0783](0783-std-error-families.md) | Std error families: a closed kind list per module, as spec rules | Accepted | 2026-10-21 |
+| [0774](0774-load-json-and-print-json.md) | `load_json[T](path)` and `print_json(v)` *(delegated)* | Accepted | 2026-10-21 |
+| [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
+| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
