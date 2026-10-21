@@ -26,7 +26,7 @@ through other functions, MUST be *compile-time-safe*: its effect set
 of calls to each forbidden effect. A function is compile-time-safe exactly
 when `@pure` (`eff.pure.1`) would accept it. *(ADR 0225, ADR 0164)*
 
-```ail
+```ail rules=ct.const.1
 SQUARES := squares(5)
 WORDS := "fn if else".split(" ")
 ORIGIN := Point(x: 0, y: 0).moved(3, 4)
@@ -91,6 +91,11 @@ TOKEN := Token(id: 1)       # a `unique` value can't be copied into every use
 
 fn main()
     print(1)
+```ail error=mod.const.2 rules=ct.const.4
+struct Box2
+    v int
+BOX := ref Box2(v: 1)
+    print(BOX.v)
 ```
 
 ## Evaluation
@@ -139,11 +144,28 @@ BIG := spin(1000000000)     # over 100,000,000 steps: computing `BIG` stops with
 
 fn main()
     print(BIG)
+LIMIT := sum_to(1000)
+fn sum_to(n int) int
+    mut total := 0
+    for i in 0..n
+        total = total + i
+    total
+    print(LIMIT)
 ```
 
 **ct.eval.4** — An implementation MAY reuse a result computed by an earlier
 compilation only when the constant's or derive's code and every function the
 evaluation entered are unchanged. *(ADR 0226, ADR 0224)*
+
+```ail norun rules=ct.eval.4
+SQUARE := square(4)
+
+fn square(n int) int
+    n * n
+
+fn main()
+    print(SQUARE)
+```
 
 ## Derives
 
@@ -156,7 +178,7 @@ the trait (`trait.derive.1`). If the trait has a derive generator, the
 generator is called at compile time with the `TypeInfo` of `T`, and the text
 it returns is the body of the `impl` (`ct.gen.1`). *(ADR 0227)*
 
-```ail
+```ail rules=ct.derive.1,ct.derive.2
 @derive(derive_describe) trait Describe
     fn describe(self) str
 
@@ -233,16 +255,51 @@ laid out canonically, and checked by every rule that applies to a
 hand-written `impl` of the trait and to a hand-written associated function.
 *(ADR 0228, ADR 0307)*
 
+```ail error=ct.gen.1
+@derive(derive_bad) trait Bad
+    fn bad(self) str
+
+fn derive_bad(t TypeInfo) str ! DeriveError
+    "struct Extra\n    a int\n"
+
+struct Pal
+    a int
+
+impl Bad for Pal
+
+fn main()
+    print(Pal(a: 1).bad())
+```
+
 **ct.gen.2** — Generated code resolves names in the scope of the deriving
 `impl`: its module, that module's imports, and the private members the
 module may use (`mod.vis.3`). The trait's module is also reachable by its
 qualified name. *(ADR 0228)*
 
+```ail rules=ct.gen.2
+@derive(derive_hello) trait Hello
+    fn hello(self) str
+
+fn greeting() str
+    "hi"
+
+fn derive_hello(t TypeInfo) str ! DeriveError
+    "fn hello(self) str\n    \"{greeting()} {t.name}\"\n"
+
+struct Pal
+    a int
+
+impl Hello for Pal
+
+fn main()
+    print(Pal(a: 1).hello())
+```
+
 **ct.gen.3** — A diagnostic inside generated code is reported at the
 deriving `impl`, with a note at the position in the generated text, written
 `gen:impl:TYPE.TRAIT:LINE:COL`. *(ADR 0228)*
 
-```ail error=type.struct.6
+```ail error=type.struct.6 rules=ct.gen.3
 @derive(derive_first) trait First
     fn first(self) str
 
