@@ -87,3 +87,15 @@ Run it after `run.sh` has set up once:
 tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
 ```
 
+
+## Corpus change log
+
+Day-over-day totals move when a corpus program changes, not only when the language does. Each entry
+says which program changed and why, with its five-tokenizer mean before and after.
+
+- **2026-10-21, idiomatic rewrites** (four programs; output checked byte-identical to the Python twin):
+  - `programs/report_dates`: `date.utc(ms).format(...)` (std.time.date) replaces the hand-written civil-date function, with `use std.time.date`. 409.2 → 217.6.
+  - `programs/hexdump`: reads bytes with `fs.read_bytes` and formats rows in-process, instead of shelling out to `od`. 147.0 → 124.2.
+  - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
+  - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
+  Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
