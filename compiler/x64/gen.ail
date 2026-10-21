@@ -746,6 +746,22 @@ fn Gen.arith(mut self, i mir.Inst)
             stubs[stubs.len() - 1].undo = if i.op == "add" then 1 else 2
             a.jcc(CC_O, l)
         return
+    # An unchecked sum is one `lea`, whatever the result's register (it
+    # reads both operands before it writes).
+    if i.op == "add" and i.site < 0 and is_reg(loc[x])
+        if k := ky
+            a.lea(d, at(loc[x], k))
+            put_gpr(i.dst, d)
+            return
+        if is_reg(loc[y])
+            a.lea(d, at_index(loc[x], loc[y], 1, 0))
+            put_gpr(i.dst, d)
+            return
+    if i.op == "sub" and i.site < 0 and is_reg(loc[x])
+        if k := ky
+            a.lea(d, at(loc[x], 0 - k))
+            put_gpr(i.dst, d)
+            return
     # Into the result's register when that leaves `x` and `y` intact.
     mut r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
     # An unchecked `n * k` writes its result over `n`: `imul d, n, k` allows it.

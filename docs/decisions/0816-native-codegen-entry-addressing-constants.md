@@ -76,6 +76,21 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    old code. sieve 3,000,000: 79.4M to 70.4M; fannkuch 9: 251.5M to
    244.6M; matmul 116.60M to 116.37M.
 
+5. **Unchecked `add` and `sub` into any register are one `lea` on
+   x86-64.** `Gen.arith` copied `x` into the result's register and added
+   `y`, and when the result register was `y`'s it went through a scratch
+   register and a third move (the `mov r11, base; add r11, idx; mov idx,
+   r11` before every `base + i * 24` load in `rt.map_find_h`). An add with
+   no overflow check (site -1: range guards, address arithmetic, loop
+   counters) with `x` in a register is now `lea d, [x + y]` or
+   `lea d, [x + k]`, and an unchecked `sub` of a constant `lea d, [x - k]`;
+   `lea` reads both operands before it writes, so the result register can be
+   either. Checked adds keep the old form because the overflow stub recovers
+   operands from the flags. ARM64's three-operand `add` never needed it.
+   Instructions (x86-64): wordfreq 214.4M to 209.1M, binarytrees 335.1M to
+   323.8M, fannkuch 244.6M to 235.3M, fasta 70.2M to 66.9M, sieve and matmul
+   unchanged.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
