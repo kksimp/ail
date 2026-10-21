@@ -152,5 +152,8 @@ Tokbench mean, five tokenizers, ten programs:
 | other eight `.ail` and all ten `.py` | as above | unchanged | 0 |
 
 `regex_codes` against its Python twin (94.2): +35% before, +13% after. The
+|---|---|---|---|
+| `regex_codes.ail` | 127.0 | 115.2 | -11.8 |
+`regex_codes` against its Python twin (94.2): +35% before, +22% after. The
 `task_sum` gap is a syntax question and stays open. The `frames` gap is
 mostly `wire[at].to_int()` and is not changed here.
