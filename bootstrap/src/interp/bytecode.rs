@@ -833,6 +833,13 @@ fn has_try(e: &Expr) -> bool {
             InterpPart::Lit(_) => false,
             InterpPart::Expr(x) | InterpPart::Fmt(x, _) => has_try(x),
         }),
+        Expr::Else { value, otherwise, .. } => {
+            has_try(value)
+                || match &**otherwise {
+                    Else::Value(d) => has_try(d),
+                    _ => true,
+                }
+        }
         Expr::Int(..)
         | Expr::Float(..)
         | Expr::Str(..)
