@@ -51,10 +51,13 @@ fn Gen.libsys_call(mut self, i mir.Inst)
 ## no runtime start-up or exit (`rt.init`, `rt.exit`), which use Linux system calls.
 pub fn generate_windows(m mir.Module) codegen.Image
     mut img := codegen.new_image()
+    img.globals = m.globals_used()
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
     rt := has_fn(m, "rt.init")
+    # No frame above `main`: the trap stack's walk ends here (trace.frame.1).
+    a.alu_rr("xor", RBP, RBP)
     a.alu_ri("sub", RSP, 40)
     if rt
         a.mov_ri(RDI, 0)
@@ -72,7 +75,11 @@ pub fn generate_windows(m mir.Module) codegen.Image
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
     for f in m.funcs
-        gen_func(mut img, m, f, true)
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f, true)
+    codegen.add_call_table(mut img, m)
     img
 
 fn has_fn(m mir.Module, name str) bool
