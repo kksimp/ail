@@ -84,7 +84,7 @@ fn inline_call(f Func, b int, at int, callee Func, mut sites List[Site]) Func
         g.names.push(callee.names[k])
     call := g.blocks[b].insts[at]
     mut frame := -1
-    if call.imm != 0 and call.site < 0
+    if call.imm != 0
         frame = sites.len()
         sites.push(Site(
             rule: "",

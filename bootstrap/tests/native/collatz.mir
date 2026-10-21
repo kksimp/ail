@@ -60,13 +60,13 @@ fn main() unit
     v8 bool = eq v3:i, v2
     branch v8, b3(v7), b4()
   b8(v18 int):
-    v32 int = add v30:k, v1 !s7
+    v32 int = add v30:k, v1 !s8
     jump b5(v18, v32)
   b9:
     v24 int = div v15:x, v19
     jump b8(v24)
   b10:
     v25 int = const 3
-    v26 int = mul v25, v15:x !s8
-    v28 int = add v26, v1 !s9
+    v26 int = mul v25, v15:x !s9
+    v28 int = add v26, v1 !s10
     jump b8(v28)
