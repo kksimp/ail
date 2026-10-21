@@ -121,7 +121,8 @@ fn str_sub(p int, from int, to int) str
 ## the message: 0 slice (`a`, `b` bounds, `n` length), 1 empty separator,
 ## 2 empty text to replace, 3 negative repeat count `a`, 5 bad radix `a`,
 ## 4 text over 2^30
-## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right).
+## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right, 3 center),
+## 6 empty text to count.
 fn str_trap(kind int, a int, b int, n int, head str, tail str)
     flush()
     out_str(head)
@@ -142,12 +143,16 @@ fn str_trap(kind int, a int, b int, n int, head str, tail str)
     elif kind == 5
         out_str("`to_digit` needs a radix from 2 to 36, not ")
         out_int(a)
+    elif kind == 6
+        out_str("`count` needs a non-empty text to find")
     else
         out_byte(96)
         if a == 0
             out_str("repeat")
         elif a == 1
             out_str("pad_left")
+        elif a == 3
+            out_str("center")
         else
             out_str("pad_right")
         out_str("` would build a text over 1073741824 bytes")
@@ -298,13 +303,13 @@ fn str_char(c int) str
     u8_put(r + 16, c)
     str_at(r)
 
-## `s.pad_left(width, fill)` (align 1) and `s.pad_right` (align 0)
-## (type.str.9, type.str.15).
+## `s.pad_left(width, fill)` (align 1), `s.pad_right` (align 0) and
+## `s.center` (align 2) (type.str.9, type.str.16, type.str.15).
 fn str_pad_checked(s str, width int, fill int, align int, head str, tail str) str
     if width <= 0
         return s
     if width > 1073741824 or width * u8_size(fill) > 1073741824
-        str_trap(4, if align == 1 then 1 else 2, 0, 0, head, tail)
+        str_trap(4, if align == 1 then 1 else if align == 2 then 3 else 2, 0, 0, head, tail)
     fmt_pad(s, width, str_char(fill), align)
 
 # ---- slicing and searching (type.str.13-14) ----
@@ -725,13 +730,17 @@ fn str_to_upper(s str) str
 fn str_to_lower(s str) str
     str_map_case(s, false)
 
-## `s.trim()`: without the White_Space characters at both ends.
-fn str_trim(s str) str
-    p := str_addr(s)
+## The byte offset of the first character of `s` that is not White_Space.
+fn str_trim_from(p int, n int) int
     mut a := 0
-    mut b := load64(p)
-    while a < b and char_is_space(u8_get(p + 16 + a))
+    while a < n and char_is_space(u8_get(p + 16 + a))
         a += u8_width(load8(p + 16 + a))
+    a
+
+## The byte offset just after the last character at or after `a` that is not
+## White_Space.
+fn str_trim_to(p int, a int, n int) int
+    mut b := n
     while b > a
         mut j := b - 1
         while load8(p + 16 + j).bit_and(192) == 128
@@ -739,9 +748,84 @@ fn str_trim(s str) str
         if not char_is_space(u8_get(p + 16 + j))
             break
         b = j
-    if a == 0 and b == load64(p)
+    b
+
+## `s.trim()`: without the White_Space characters at both ends.
+fn str_trim(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    a := str_trim_from(p, n)
+    b := str_trim_to(p, a, n)
+    if a == 0 and b == n
         return s
     str_sub(p, a, b)
+
+## `s.trim_start()` (type.str.17).
+fn str_trim_start(s str) str
+    p := str_addr(s)
+    a := str_trim_from(p, load64(p))
+    if a == 0
+        return s
+    str_sub(p, a, load64(p))
+
+## `s.trim_end()` (type.str.17).
+fn str_trim_end(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    b := str_trim_to(p, 0, n)
+    if b == n
+        return s
+    str_sub(p, 0, b)
+
+## `s.words()`: the pieces between runs of White_Space, none empty (type.str.17).
+fn str_words(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    out := list_new(4)
+    mut start := -1
+    mut i := 0
+    while i < n
+        w := u8_width(load8(p + 16 + i))
+        if char_is_space(u8_get(p + 16 + i))
+            if start >= 0
+                list_push(out, str_to_obj(str_sub(p, start, i)))
+                start = -1
+        elif start < 0
+            start = i
+        i += w
+    if start >= 0
+        list_push(out, str_to_obj(str_sub(p, start, n)))
+    out
+
+## `s.count(sub)`: the non-overlapping occurrences (type.str.18).
+fn str_count(s str, sub str, head str, tail str) int
+    p := str_addr(s)
+    q := str_addr(sub)
+    m := load64(q)
+    if m == 0
+        str_trap(6, 0, 0, 0, head, tail)
+    mut hits := 0
+    mut at := bytes_find(p, q, 0)
+    while at >= 0
+        hits += 1
+        at = bytes_find(p, q, at + m)
+    hits
+
+## `s.rfind(sub)`: the boxed character index of the last occurrence, or 0
+## (type.str.18). The last occurrence may overlap the one before it.
+fn str_rfind_opt(s str, sub str) int
+    p := str_addr(s)
+    q := str_addr(sub)
+    if load64(q) == 0
+        return box(load64(p + 8))
+    mut last := -1
+    mut at := bytes_find(p, q, 0)
+    while at >= 0
+        last = at
+        at = bytes_find(p, q, at + 1)
+    if last < 0
+        return 0
+    box(u8_count(p, 0, last))
 
 # ---- printing (type.char.1, trait.auto.2) ----
 
