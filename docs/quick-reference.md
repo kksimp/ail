@@ -537,7 +537,9 @@ the iterations are independent but the checker can't see it (writes to
 `out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
 (it prints, or breaks out) is an error. A parallel map is a comprehension
 with `par for`: `lens := [steps(x) par for x in xs]` (one clause, a list;
-the element must not print, use a handle or write outside itself):
+the element must not print, use a handle or write outside itself). To split
+work into parts, map over the part starts:
+`[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()`:
 
 ```ail
 fn main()

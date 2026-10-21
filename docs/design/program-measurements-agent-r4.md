@@ -88,6 +88,20 @@ Ranked by how much more AIL spends than Python, on this round and the study:
 These are proposals for the integrator. They are not in `docs/open-questions.md`:
 each needs an option list and a measurement before it becomes an open question.
 
+## Syntax candidates, measured (lane 208)
+
+[ADR 0675](../decisions/0675-round-4-syntax-candidates.md) measured the syntax
+proposals on the 40 twinned programs. Proposal 3 (`task_sum`) needs no new
+syntax: `[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()` is
+111.2 tokens against 157.2 for four `spawn` handles, so `task_sum` is −31%
+against Python (162.2), and the round-4 total is 1,024.0 against 1,246.8
+(−17.9%). `examples/task_sum.ail` now uses it. A two-variable `for` saves 0.2%
+on the corpus and is rejected; pairs (`zip`, `enumerate`, `items`) go to
+[OQ-124](../open-questions.md). `regex_codes` loses 17.4 tokens (127.0 to
+109.6) by dropping the per-line loop and calling `regex.find_all` on the whole
+text, with `strip_prefix("code=")?` in place of `else "0"`; lane 204 owns that
+program and its library additions.
+
 ## Caveats
 
 - Ten programs, one author, one run. The twins are idiomatic Python, not the
