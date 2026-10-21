@@ -152,6 +152,10 @@ def main():
     if a.c and not cols_c:
         print("perfbench: --c needs clang or gcc; neither is installed", file=sys.stderr)
     cols += cols_c
+    # "gcc-alloc": the NAME_alloc.c twin, which allocates the way the AIL program does.
+    alloc = a.c and shutil.which("gcc") is not None
+    if alloc:
+        cols.append("gcc-alloc")
     py = sys.executable if a.python else None
     if py: cols.append("python")
 
@@ -178,6 +182,10 @@ def main():
                 src = twin(p, ".c")
                 exe = build_c(src, tmp, cc) if src else None
                 res[cc] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
+            if alloc:
+                src = twin(p, "_alloc.c")
+                exe = build_c(src, tmp, "gcc") if src else None
+                res["gcc-alloc"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
             if py:
                 src = twin(p, ".py")
                 res["python"] = measure([py, "-I", src] + extra, runs, a.timeout) if src else {"err": "no twin"}
@@ -193,7 +201,7 @@ def main():
     for c in cols:
         head += [c + " min", c + " med"]
     ratio_cols = []
-    for ref in ("clang", "gcc", "python"):
+    for ref in ("clang", "gcc", "gcc-alloc", "python"):
         if ref in cols:
             for c in cols:
                 if c != ref and c in ("ail", "native"):
@@ -257,6 +265,7 @@ def write_md(path, table, cols, runs, cols_c, py):
               "- Each program gets the size in its `NAME.args` in every language; C is built with `-std=c11 -O2 -ffp-contract=off -lm`.",
               "- `native` is `ail build FILE -o OUT`; a program outside the native subset reads `build` (native.subset.1). The `-` in a ratio means one side has no number.",
               "- `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.",
+              "- `gcc` and `clang` are the best-effort C twins (NAME.c). `gcc-alloc` is NAME_alloc.c, which allocates the way the AIL program does (fresh arrays per tree, per permutation and per line, growing by doubling); only binarytrees, fannkuch and fasta have one. matmul's C twin is one flat array and the AIL program is `List[List[int]]`: a layout difference, not an algorithm one.",
               "- Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.", ""]
     with open(path, "w") as f:
         f.write("\n".join(lines))
