@@ -49,6 +49,7 @@ proposal, not a decision.
    and the first native code for the hot loops the interpreter shows
    (`tools/perfbench/run.sh`); meanwhile a bytecode tier in the bootstrap
    (ADR 0359; slices 1–4 are ADRs 0361–0364).
+   Native runtime and ABI (lane 122, ADRs 0404–0409): [native-abi.md](design/native-abi.md); `compiler/rt/rt.ail` has number text, strings, lists and traps on a machine model; syscalls and entry wait for the encoders.
 3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
    in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); follow-ups:
    hardware AES-GCM and proxy support.

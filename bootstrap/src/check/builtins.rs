@@ -50,11 +50,21 @@ pub(super) const STR_METHODS: &[&str] = &[
     "lines",
     "len",
     "byte_len",
+    "to_bytes",
 ];
+/// type.bytes.7-12
+pub(super) const BYTES_METHODS: &[&str] =
+    &["len", "to_str", "text", "to_list", "concat", "find", "starts_with", "ends_with", "contains", "hex", "base64"];
 pub(super) const CHAR_METHODS: &[&str] = &[
     "is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower", "to_upper", "to_lower", "code", "to_digit",
 ];
 pub(super) const INT_METHODS: &[&str] = &[
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "bit_not",
+    "shl",
+    "shr",
     "checked_add",
     "checked_sub",
     "checked_mul",
@@ -124,6 +134,18 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "pad_left" | "pad_right" => read(vec![Int, Char], Str),
             "lines" => read(vec![], list(Str)),
             "len" | "byte_len" => read(vec![], Int),
+            "to_bytes" => read(vec![], Ty::Bytes),
+            _ => None,
+        },
+        // type.bytes.7-12: `bytes` is immutable, so no method changes it.
+        Ty::Bytes => match name {
+            "len" => read(vec![], Int),
+            "to_str" => read(vec![], opt(Str)),
+            "text" | "hex" | "base64" => read(vec![], Str),
+            "to_list" => read(vec![], list(Ty::Num(Num::U8))),
+            "concat" => read(vec![Ty::Bytes], Ty::Bytes),
+            "find" => read(vec![Ty::Bytes], opt(Int)),
+            "starts_with" | "ends_with" | "contains" => read(vec![Ty::Bytes], Bool),
             _ => None,
         },
         Ty::Char => match name {
@@ -140,6 +162,10 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub"
             | "saturating_mul" => read(vec![Int], Int),
             "abs" => read(vec![], Int),
+            // expr.bit.1-2: bitwise operations on the 64-bit two's complement value.
+            "bit_and" | "bit_or" | "bit_xor" => read(vec![Int], Int),
+            "bit_not" => read(vec![], Int),
+            "shl" | "shr" => read(vec![Int], Int),
             "to_float" => read(vec![], Float),
             "to_hex" => read(vec![], Str),
             _ => convert(name).map(|k| Builtin { mutates: false, params: vec![], ret: Ty::Num(k), need: Need::Nothing }),
@@ -245,6 +271,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
 pub(super) fn builtin_names(t: &Ty) -> &'static [&'static str] {
     match t {
         Ty::Str => STR_METHODS,
+        Ty::Bytes => BYTES_METHODS,
         Ty::Char => CHAR_METHODS,
         Ty::Int => INT_METHODS,
         Ty::Float => FLOAT_METHODS,

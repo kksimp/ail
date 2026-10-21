@@ -1,0 +1,477 @@
+## The x86-64 instruction encoder (ADR 0385): the instructions the code
+## generator uses, encoded to bytes with AIL's own tables (ADR 0010: no
+## external assembler). Registers are numbered as the hardware numbers them:
+## rax 0, rcx 1, rdx 2, rbx 3, rsp 4, rbp 5, rsi 6, rdi 7, r8-r15 8-15;
+## vector registers xmm0-xmm15 are 0-15 in instructions that take them.
+## Floats use the VEX (AVX) forms, part of the x86-64-v3 baseline (ADR 0005).
+
+pub RAX := 0
+pub RCX := 1
+pub RDX := 2
+pub RBX := 3
+pub RSP := 4
+pub RBP := 5
+pub RSI := 6
+pub RDI := 7
+pub R8 := 8
+pub R9 := 9
+pub R10 := 10
+pub R11 := 11
+
+## Condition codes (the low nibble of `jcc`/`setcc`).
+pub CC_O := 0
+pub CC_B := 2
+pub CC_AE := 3
+pub CC_E := 4
+pub CC_NE := 5
+pub CC_BE := 6
+pub CC_A := 7
+pub CC_P := 10
+pub CC_NP := 11
+pub CC_L := 12
+pub CC_GE := 13
+pub CC_LE := 14
+pub CC_G := 15
+
+## A memory operand: `[base + index * scale + disp]`, or with `base` -1,
+## `[rip + disp]` to symbol `sym`.
+pub struct Mem
+    pub base int
+    pub index int
+    pub scale int
+    pub disp int
+    pub sym str
+
+pub fn at(base int, disp int) Mem
+    Mem(base: base, index: -1, scale: 1, disp: disp, sym: "")
+
+pub fn at_index(base int, index int, scale int, disp int) Mem
+    Mem(base: base, index: index, scale: scale, disp: disp, sym: "")
+
+## `[rip + sym + disp]`: an address in the image, fixed when it is laid out.
+pub fn at_sym(sym str, disp int) Mem
+    Mem(base: -1, index: -1, scale: 1, disp: disp, sym: sym)
+
+## A 32-bit field to patch once its target is placed: a local label, or a
+## symbol of the image. The field is PC-relative to the end of the
+## instruction, `tail` bytes after the field.
+pub struct Fixup
+    pub at int
+    pub label int
+    pub sym str
+    pub tail int
+
+pub struct Asm
+    pub code List[int]
+    pub labels List[int]
+    pub fixups List[Fixup]
+
+pub fn new_asm() Asm
+    Asm(code: [], labels: [], fixups: [])
+
+fn Asm.byte(mut self, b int)
+    code.push(b.bit_and(255))
+
+fn Asm.u32(mut self, v int)
+    for i in 0..4
+        code.push(v.shr(8 * i).bit_and(255))
+
+fn Asm.u64(mut self, v int)
+    for i in 0..8
+        code.push(v.shr(8 * i).bit_and(255))
+
+fn fits8(v int) bool
+    v >= -128 and v <= 127
+
+pub fn fits32(v int) bool
+    v >= -2147483648 and v <= 2147483647
+
+## A new label, not yet placed.
+fn Asm.label(mut self) int
+    labels.push(-1)
+    labels.len() - 1
+
+fn Asm.bind(mut self, l int)
+    labels[l] = code.len()
+
+fn ext(r int) int
+    if r >= 8 then 1 else 0
+
+fn low(r int) int
+    r.bit_and(7)
+
+## REX prefix: `w` 64-bit operand, `r` the ModRM reg field, `x` the SIB
+## index, `b` the ModRM rm or SIB base; `force` for byte registers 4-7.
+fn Asm.rex(mut self, w int, r int, x int, b int, force bool)
+    v := 64 + w * 8 + ext(r) * 4 + ext(x) * 2 + ext(b)
+    if v != 64 or force
+        byte(v)
+
+fn Asm.modrm_reg(mut self, reg int, rm int)
+    byte(192 + low(reg) * 8 + low(rm))
+
+## ModRM, SIB and displacement for a memory operand; `tail` is the number of
+## immediate bytes that follow in this instruction (for RIP-relative fields).
+fn Asm.modrm_mem(mut self, reg int, m Mem, tail int)
+    r := low(reg) * 8
+    if m.base < 0
+        byte(r + 5)
+        fixups.push(Fixup(at: code.len(), label: -1, sym: m.sym, tail: tail))
+        u32(m.disp)
+        return
+    need_sib := m.index >= 0 or low(m.base) == 4
+    rm := if need_sib then 4 else low(m.base)
+    mut md := 2
+    if m.disp == 0 and low(m.base) != 5
+        md = 0
+    elif fits8(m.disp)
+        md = 1
+    byte(md * 64 + r + rm)
+    if need_sib
+        idx := if m.index >= 0 then low(m.index) else 4
+        ss := match m.scale
+            2 => 1
+            4 => 2
+            8 => 3
+            _ => 0
+        byte(ss * 64 + idx * 8 + low(m.base))
+    if md == 1
+        byte(m.disp)
+    elif md == 2
+        u32(m.disp)
+
+fn index_of(m Mem) int
+    if m.index >= 0 then m.index else 0
+
+fn base_of(m Mem) int
+    if m.base >= 0 then m.base else 0
+
+## `op reg, r/m` with a one-byte opcode (or `0F op` when `two`), 64-bit.
+fn Asm.op_rr(mut self, two bool, op int, reg int, rm int)
+    rex(1, reg, 0, rm, false)
+    if two
+        byte(15)
+    byte(op)
+    modrm_reg(reg, rm)
+
+fn Asm.op_rm(mut self, two bool, op int, reg int, m Mem)
+    rex(1, reg, index_of(m), base_of(m), false)
+    if two
+        byte(15)
+    byte(op)
+    modrm_mem(reg, m, 0)
+
+# ---- moves ----
+
+pub fn Asm.mov_rr(mut self, dst int, src int)
+    if dst != src
+        op_rr(false, 139, dst, src)
+
+## `mov dst, imm`: the shortest of `xor`, `mov r32`, sign-extended `mov
+## r/m64, imm32`, and `movabs`.
+pub fn Asm.mov_ri(mut self, dst int, v int)
+    if v == 0
+        rex(0, dst, 0, dst, false)
+        byte(49)
+        modrm_reg(dst, dst)
+    elif v > 0 and v <= 4294967295
+        rex(0, 0, 0, dst, false)
+        byte(184 + low(dst))
+        u32(v)
+    elif fits32(v)
+        rex(1, 0, 0, dst, false)
+        byte(199)
+        modrm_reg(0, dst)
+        u32(v)
+    else
+        rex(1, 0, 0, dst, false)
+        byte(184 + low(dst))
+        u64(v)
+
+pub fn Asm.mov_rm(mut self, dst int, m Mem)
+    op_rm(false, 139, dst, m)
+
+pub fn Asm.mov_mr(mut self, m Mem, src int)
+    op_rm(false, 137, src, m)
+
+## `mov qword [m], imm32` (sign-extended).
+pub fn Asm.mov_mi(mut self, m Mem, v int)
+    rex(1, 0, index_of(m), base_of(m), false)
+    byte(199)
+    modrm_mem(0, m, 4)
+    u32(v)
+
+pub fn Asm.movzx8_rm(mut self, dst int, m Mem)
+    rex(0, dst, index_of(m), base_of(m), false)
+    byte(15)
+    byte(182)
+    modrm_mem(dst, m, 0)
+
+pub fn Asm.mov8_mr(mut self, m Mem, src int)
+    rex(0, src, index_of(m), base_of(m), src >= 4)
+    byte(136)
+    modrm_mem(src, m, 0)
+
+pub fn Asm.lea(mut self, dst int, m Mem)
+    op_rm(false, 141, dst, m)
+
+# ---- integer arithmetic ----
+
+## The ALU operations' `/digit` (for immediates); the `reg, r/m` opcode is
+## `digit * 8 + 3`.
+pub fn alu_digit(op str) int
+    match op
+        "add" => 0
+        "or" => 1
+        "and" => 4
+        "sub" => 5
+        "xor" => 6
+        "cmp" => 7
+        _ => unreachable("not an ALU operation: {op}")
+
+pub fn Asm.alu_rr(mut self, op str, dst int, src int)
+    op_rr(false, alu_digit(op) * 8 + 3, dst, src)
+
+pub fn Asm.alu_rm(mut self, op str, dst int, m Mem)
+    op_rm(false, alu_digit(op) * 8 + 3, dst, m)
+
+pub fn Asm.alu_ri(mut self, op str, dst int, v int)
+    rex(1, 0, 0, dst, false)
+    if fits8(v)
+        byte(131)
+        modrm_reg(alu_digit(op), dst)
+        byte(v)
+    else
+        byte(129)
+        modrm_reg(alu_digit(op), dst)
+        u32(v)
+
+## `op qword [m], imm` (for `cmp [m], imm`).
+pub fn Asm.alu_mi(mut self, op str, m Mem, v int)
+    rex(1, 0, index_of(m), base_of(m), false)
+    if fits8(v)
+        byte(131)
+        modrm_mem(alu_digit(op), m, 1)
+        byte(v)
+    else
+        byte(129)
+        modrm_mem(alu_digit(op), m, 4)
+        u32(v)
+
+pub fn Asm.imul_rr(mut self, dst int, src int)
+    op_rr(true, 175, dst, src)
+
+pub fn Asm.imul_rm(mut self, dst int, m Mem)
+    op_rm(true, 175, dst, m)
+
+## `imul dst, src, imm32`
+pub fn Asm.imul_rri(mut self, dst int, src int, v int)
+    rex(1, dst, 0, src, false)
+    if fits8(v)
+        byte(107)
+        modrm_reg(dst, src)
+        byte(v)
+    else
+        byte(105)
+        modrm_reg(dst, src)
+        u32(v)
+
+pub fn Asm.test_rr(mut self, a int, b int)
+    op_rr(false, 133, b, a)
+
+pub fn Asm.neg(mut self, r int)
+    rex(1, 0, 0, r, false)
+    byte(247)
+    modrm_reg(3, r)
+
+pub fn Asm.not_reg(mut self, r int)
+    rex(1, 0, 0, r, false)
+    byte(247)
+    modrm_reg(2, r)
+
+pub fn Asm.cqo(mut self)
+    byte(72)
+    byte(153)
+
+pub fn Asm.idiv(mut self, r int)
+    rex(1, 0, 0, r, false)
+    byte(247)
+    modrm_reg(7, r)
+
+## `shl`, `shr` (logical) or `sar` by an immediate.
+pub fn Asm.shift_ri(mut self, op str, r int, n int)
+    rex(1, 0, 0, r, false)
+    byte(193)
+    modrm_reg(shift_digit(op), r)
+    byte(n)
+
+## The same shifts by `cl`.
+pub fn Asm.shift_cl(mut self, op str, r int)
+    rex(1, 0, 0, r, false)
+    byte(211)
+    modrm_reg(shift_digit(op), r)
+
+fn shift_digit(op str) int
+    match op
+        "shl" => 4
+        "shr" => 5
+        _ => 7
+
+## `setcc r8` then `movzx r64, r8`: a `bool` from the flags.
+pub fn Asm.setcc(mut self, cc int, r int)
+    rex(0, 0, 0, r, r >= 4)
+    byte(15)
+    byte(144 + cc)
+    modrm_reg(0, r)
+
+pub fn Asm.movzx8_rr(mut self, dst int, src int)
+    rex(0, dst, 0, src, src >= 4)
+    byte(15)
+    byte(182)
+    modrm_reg(dst, src)
+
+# ---- control ----
+
+## A 32-bit PC-relative field to label `l`.
+fn Asm.rel_label(mut self, l int)
+    fixups.push(Fixup(at: code.len(), label: l, sym: "", tail: 0))
+    u32(0)
+
+pub fn Asm.jmp(mut self, l int)
+    byte(233)
+    rel_label(l)
+
+pub fn Asm.jcc(mut self, cc int, l int)
+    byte(15)
+    byte(128 + cc)
+    rel_label(l)
+
+pub fn Asm.call_sym(mut self, sym str)
+    byte(232)
+    fixups.push(Fixup(at: code.len(), label: -1, sym: sym, tail: 0))
+    u32(0)
+
+pub fn Asm.ret(mut self)
+    byte(195)
+
+pub fn Asm.push(mut self, r int)
+    rex(0, 0, 0, r, false)
+    byte(80 + low(r))
+
+pub fn Asm.pop(mut self, r int)
+    rex(0, 0, 0, r, false)
+    byte(88 + low(r))
+
+pub fn Asm.syscall(mut self)
+    byte(15)
+    byte(5)
+
+pub fn Asm.ud2(mut self)
+    byte(15)
+    byte(11)
+
+## Patch every jump to a local label; symbol fixups stay for the linker.
+pub fn Asm.resolve_labels(mut self)
+    mut rest := List[Fixup]()
+    for f in fixups
+        if f.label < 0
+            rest.push(f)
+            continue
+        to := labels[f.label]
+        if to < 0
+            unreachable("label {f.label} was never placed")
+        rel := to - (f.at + 4)
+        for i in 0..4
+            code[f.at + i] = rel.shr(8 * i).bit_and(255)
+    fixups = rest
+
+# ---- vector (VEX) ----
+
+## A VEX-encoded instruction: `pp` (0 none, 1 66, 2 F3, 3 F2), `map` (1 0F,
+## 2 0F38, 3 0F3A), `w`, the opcode, the ModRM reg field, the extra source
+## `vvvv` (0 when unused), and a register `rm`.
+fn Asm.vex_rr(mut self, pp int, map int, w int, op int, reg int, vvvv int, rm int)
+    vex_prefix(pp, map, w, reg, 0, rm, vvvv)
+    byte(op)
+    modrm_reg(reg, rm)
+
+fn Asm.vex_rm(mut self, pp int, map int, w int, op int, reg int, vvvv int, m Mem, tail int)
+    vex_prefix(pp, map, w, reg, index_of(m), base_of(m), vvvv)
+    byte(op)
+    modrm_mem(reg, m, tail)
+
+fn Asm.vex_prefix(mut self, pp int, map int, w int, r int, x int, b int, vvvv int)
+    nr := 1 - ext(r)
+    nx := 1 - ext(x)
+    nb := 1 - ext(b)
+    tail := (15 - vvvv) * 8 + pp
+    if map == 1 and w == 0 and nx == 1 and nb == 1
+        byte(197)
+        byte(nr * 128 + tail)
+    else
+        byte(196)
+        byte(nr * 128 + nx * 64 + nb * 32 + map)
+        byte(w * 128 + tail)
+
+## `shlx dst, src, count` and `sarx dst, src, count` (BMI2, x86-64-v3): any
+## register holds the count, and the flags are untouched.
+pub fn Asm.shlx(mut self, dst int, src int, count int)
+    vex_rr(1, 2, 1, 247, dst, count, src)
+
+pub fn Asm.sarx(mut self, dst int, src int, count int)
+    vex_rr(2, 2, 1, 247, dst, count, src)
+
+## `vmovsd xmm, [m]` and `vmovsd [m], xmm`
+pub fn Asm.vmovsd_rm(mut self, dst int, m Mem)
+    vex_rm(3, 1, 0, 16, dst, 0, m, 0)
+
+pub fn Asm.vmovsd_mr(mut self, m Mem, src int)
+    vex_rm(3, 1, 0, 17, src, 0, m, 0)
+
+## `vmovapd dst, src` (a register copy)
+pub fn Asm.vmov_rr(mut self, dst int, src int)
+    if dst != src
+        vex_rr(1, 1, 0, 40, dst, 0, src)
+
+## `vaddsd`, `vsubsd`, `vmulsd`, `vdivsd`, `vsqrtsd`: `dst = a op b`.
+pub fn sd_opcode(op str) int
+    match op
+        "fadd" => 88
+        "fmul" => 89
+        "fsub" => 92
+        "fdiv" => 94
+        "sqrt" => 81
+        _ => unreachable("not a float operation: {op}")
+
+pub fn Asm.vsd_rrr(mut self, op str, dst int, a int, b int)
+    vex_rr(3, 1, 0, sd_opcode(op), dst, a, b)
+
+pub fn Asm.vsd_rrm(mut self, op str, dst int, a int, m Mem)
+    vex_rm(3, 1, 0, sd_opcode(op), dst, a, m, 0)
+
+## `vxorpd` (87) and `vandpd` (84): `dst = a op b`, all registers.
+pub fn Asm.vpd_rrr(mut self, op int, dst int, a int, b int)
+    vex_rr(1, 1, 0, op, dst, a, b)
+
+## `vroundsd dst, a, b, mode` (mode 9: floor, 10: ceil).
+pub fn Asm.vroundsd(mut self, dst int, a int, b int, mode int)
+    vex_rr(1, 3, 0, 11, dst, a, b)
+    byte(mode)
+
+## `vucomisd a, b`: the flags of comparing `a` with `b`.
+pub fn Asm.vucomisd(mut self, a int, b int)
+    vex_rr(1, 1, 0, 46, a, 0, b)
+
+## `vcvtsi2sd dst, dst, r64` and `vcvttsd2si r64, xmm`.
+pub fn Asm.vcvtsi2sd(mut self, dst int, src int)
+    vex_rr(3, 1, 1, 42, dst, dst, src)
+
+pub fn Asm.vcvttsd2si(mut self, dst int, src int)
+    vex_rr(3, 1, 1, 44, dst, 0, src)
+
+## `vmovq xmm, r64` and `vmovq r64, xmm`.
+pub fn Asm.vmovq_xr(mut self, dst int, src int)
+    vex_rr(1, 1, 1, 110, dst, 0, src)
+
+pub fn Asm.vmovq_rx(mut self, dst int, src int)
+    vex_rr(1, 1, 1, 126, src, 0, dst)

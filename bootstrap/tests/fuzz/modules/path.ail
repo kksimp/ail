@@ -1,0 +1,17 @@
+# fuzz-input: text
+# fuzz-needs:
+# std.path on adversarial text: no crash, and the pieces fit the whole.
+
+fn main()
+    p := {{TEXT}}
+    q := {{TEXT2}}
+    d := path.dir(p)
+    b := path.base(p)
+    e := path.ext(p)
+    if not p.ends_with(b)
+        print("FAIL base is not a suffix of the path")
+    if e != "" and not b.ends_with(e)
+        print("FAIL ext is not a suffix of base")
+    joined := path.join(p, q)
+    print(joined.len() >= 0)
+    print(d.len() <= p.len())

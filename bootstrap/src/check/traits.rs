@@ -47,6 +47,7 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
         Ty::Res(x, Errs::Set(set)) => Ty::Res(Box::new(map_params(x, f)), Errs::Set(all(set))),
         Ty::Res(x, errs) => Ty::Res(Box::new(map_params(x, f)), errs.clone()),
         Ty::Union(m) => Ty::Union(all(m)),
+        Ty::Fn(ps, r) => Ty::Fn(all(ps), Box::new(map_params(r, f))),
         t => t.clone(),
     }
 }
@@ -75,6 +76,12 @@ pub(crate) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(u
                 bind(x, y, vars, binds);
             }
         }
+        (Ty::Fn(xs, r), Ty::Fn(ys, s)) if xs.len() == ys.len() => {
+            for (x, y) in xs.iter().zip(ys) {
+                bind(x, y, vars, binds);
+            }
+            bind(r, s, vars, binds);
+        }
         (Ty::Res(x, _), Ty::Res(y, _)) => bind(x, y, vars, binds),
         (Ty::Res(x, _), y) => bind(x, y, vars, binds),
         _ => {}
@@ -95,6 +102,7 @@ fn mentions(t: &Ty, p: usize) -> bool {
         Ty::Map(k, v) => mentions(k, p) || mentions(v, p),
         Ty::Res(x, Errs::Set(set)) => mentions(x, p) || set.iter().any(|e| mentions(e, p)),
         Ty::Res(x, _) => mentions(x, p),
+        Ty::Fn(ps, r) => ps.iter().any(|x| mentions(x, p)) || mentions(r, p),
         _ => false,
     }
 }
@@ -105,6 +113,7 @@ pub(crate) fn con_of(t: &Ty) -> Option<Con> {
         Ty::Int => Con::Int,
         Ty::Float => Con::Float,
         Ty::Str => Con::Str,
+        Ty::Bytes => Con::Bytes,
         Ty::Char => Con::Char,
         Ty::Bool => Con::Bool,
         Ty::List(_) => Con::List,
@@ -201,6 +210,7 @@ impl<'p> Checker<'p> {
                 "int" | "i64" => (Some(Con::Int), Vec::new()),
                 "float" | "f64" => (Some(Con::Float), Vec::new()),
                 "str" => (Some(Con::Str), Vec::new()),
+                "bytes" => (Some(Con::Bytes), Vec::new()),
                 "char" => (Some(Con::Char), Vec::new()),
                 "bool" => (Some(Con::Bool), Vec::new()),
                 "List" => (Some(Con::List), vec![self.list_param]),
@@ -228,6 +238,7 @@ impl<'p> Checker<'p> {
                 Some(Con::Int) => Ty::Int,
                 Some(Con::Float) => Ty::Float,
                 Some(Con::Str) => Ty::Str,
+                Some(Con::Bytes) => Ty::Bytes,
                 Some(Con::Char) => Ty::Char,
                 Some(Con::Bool) => Ty::Bool,
                 Some(Con::List) => Ty::List(Box::new(args[0].clone())),
@@ -306,7 +317,7 @@ impl<'p> Checker<'p> {
                 .any(|&b| self.provides(b, tr) || (tr == eq && (b == self.std.ord || b == self.std.hash))),
             Ty::Any(a) => *a == tr && self.whole_trait_through_any(tr),
             // own.ref.6: references compare by identity, and aren't keys or ordered.
-            Ty::Ref(_) => tr == eq,
+            Ty::Ref(_) | Ty::Ptr(_) => tr == eq,
             // type.num.14: sized numbers are `Eq` and `Ord`; every one but `f32` is `Hash`.
             Ty::Num(k) => tr == eq || tr == self.std.ord || (tr == self.std.hash && !k.is_float()),
             Ty::Union(_) => tr == eq || tr == self.std.hash,
@@ -329,7 +340,7 @@ impl<'p> Checker<'p> {
                 }
                 if tr == self.std.ord {
                     return match t {
-                        Ty::Int | Ty::Float | Ty::Str | Ty::Char => true,
+                        Ty::Int | Ty::Float | Ty::Str | Ty::Bytes | Ty::Char => true,
                         Ty::List(e) => self.implements_in(e, tr, seen),
                         _ => false,
                     };
@@ -401,7 +412,7 @@ impl<'p> Checker<'p> {
     fn auto_hash(&self, t: &Ty, con: Con, seen: &mut Vec<(Con, usize)>) -> bool {
         let hash = self.std.hash;
         match t {
-            Ty::Int | Ty::Bool | Ty::Str | Ty::Char => true,
+            Ty::Int | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Char => true,
             Ty::List(e) => self.implements_in(e, hash, seen),
             Ty::Struct(_, args) | Ty::Enum(_, args) => {
                 if seen.contains(&(con, hash)) {
@@ -420,7 +431,7 @@ impl<'p> Checker<'p> {
     fn auto_eq(&self, t: &Ty, con: Con, seen: &mut Vec<(Con, usize)>) -> bool {
         let eq = self.std.eq;
         match t {
-            Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::Char => true,
+            Ty::Int | Ty::Float | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Char => true,
             Ty::List(e) => self.implements_in(e, eq, seen),
             Ty::Struct(_, args) | Ty::Enum(_, args) => {
                 if seen.contains(&(con, eq)) {

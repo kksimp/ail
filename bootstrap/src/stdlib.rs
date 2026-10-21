@@ -9,22 +9,27 @@ use crate::lexer::lex;
 
 /// Each standard module and its functions (std.use.1-2), sorted.
 pub const MODULES: &[(&str, &[&str])] = &[
+    ("compress", &["deflate", "gunzip", "gunzip_file", "gzip", "gzip_file", "inflate", "unzip", "unzlib", "zip_dir", "zlib"]),
     ("env", &["args", "cwd", "get", "home", "program", "vars"]),
     (
         "fs",
         &[
-            "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_text", "remove", "rename",
-            "walk", "write_text",
+            "append_bytes", "append_text", "copy", "exists", "glob", "list_dir", "make_dir", "metadata", "read_bytes",
+            "read_text", "remove", "rename", "walk", "write_bytes", "write_text",
         ],
     ),
-    ("io", &["eprint", "exit", "read_all", "read_line"]),
-    ("net", &["get", "post"]),
+    ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
+    ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
+    ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
+    ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
     ("path", &["base", "dir", "ext", "join"]),
-    ("proc", &["run", "which"]),
+    ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
+    ("regex", &["captures", "compile", "escape", "find", "find_all", "is_match", "replace", "replace_first", "split"]),
     ("tensor", &["from", "zeros"]),
-    ("task", &["cancelled", "check"]),
+    ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
+    ("tz", &["offset", "system"]),
     ("ui", &["clipboard_get", "clipboard_set", "open"]),
 ];
 
@@ -47,10 +52,34 @@ pub const WINDOW_METHODS: &[(&str, bool)] = &[
     ("size", false),
 ];
 
+/// The methods of the `std.net` handle types (std.net.9-12): the type, the
+/// method, and the name `StdCall::Method` carries to the interpreter.
+pub const NET_METHODS: &[(&str, &str, &str)] = &[
+    ("Server", "accept", "net.Server.accept"),
+    ("Server", "addr", "net.Server.addr"),
+    ("Server", "close", "net.Server.close"),
+    ("Exchange", "respond", "net.Exchange.respond"),
+    ("Exchange", "respond_bytes", "net.Exchange.respond_bytes"),
+    ("Listener", "accept", "net.Listener.accept"),
+    ("Listener", "addr", "net.Listener.addr"),
+    ("Listener", "close", "net.Listener.close"),
+    ("Conn", "close", "net.Conn.close"),
+    ("Conn", "peer", "net.Conn.peer"),
+    ("Conn", "read", "net.Conn.read"),
+    ("Conn", "read_bytes", "net.Conn.read_bytes"),
+    ("Conn", "read_line", "net.Conn.read_line"),
+    ("Conn", "set_timeout", "net.Conn.set_timeout"),
+    ("Conn", "write", "net.Conn.write"),
+    ("Conn", "write_bytes", "net.Conn.write_bytes"),
+];
+
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
-    &["add", "dot", "len", "map", "matmul", "max", "mean", "mul", "reshape", "shape", "sum", "to_list", "transpose"];
+    &[
+        "add", "argmax", "argmin", "clamp", "conv2d", "dot", "item", "len", "map", "matmul", "max", "mean", "mul", "relu",
+        "reshape", "round", "shape", "sigmoid", "sum", "tanh", "to_list", "transpose",
+    ];
 
 /// A call the checker resolved to a standard module (std.use.2), by the
 /// position of the function's name.
@@ -66,16 +95,44 @@ pub enum StdCall {
     Tensor(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
+    /// `p.m(...)` on a raw pointer (unsafe.ptr.3-5): the method's name and
+    /// the type the pointer points to.
+    Ptr(&'static str, PtrElem),
+}
+
+/// What a raw pointer points to (unsafe.ptr.1), as memory holds it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PtrElem {
+    /// `int`: 8 bytes.
+    Int,
+    /// `float`: 8 bytes.
+    Float,
+    /// `bool`: 1 byte.
+    Bool,
+    /// A sized number: its width.
+    Num(crate::num::Num),
+    /// Another pointer: 8 bytes.
+    Ptr,
 }
 
 /// Each type of a standard module, declared in `std/types.ail`: its name
 /// there, and its module.
 const TYPES: &[(&str, &str)] = &[
+    ("CompressError", "compress"),
     ("IoError", "fs"),
     ("Metadata", "fs"),
     ("Response", "net"),
+    ("RawResponse", "net"),
+    ("RawOutput", "proc"),
     ("NetError", "net"),
+    ("Options", "net"),
+    ("Request", "net"),
+    ("Server", "net"),
+    ("Exchange", "net"),
+    ("Listener", "net"),
+    ("Conn", "net"),
     ("Output", "proc"),
+    ("Child", "proc"),
     ("ProcError", "proc"),
     ("Window", "ui"),
     ("Size", "ui"),
@@ -85,6 +142,10 @@ const TYPES: &[(&str, &str)] = &[
     ("Cursor", "ui"),
     ("UiError", "ui"),
     ("Tensor", "tensor"),
+    ("Regex", "regex"),
+    ("RegexError", "regex"),
+    ("Match", "regex"),
+    ("Captures", "regex"),
 ];
 
 /// The declarations of the standard modules' types, read with the prelude.
@@ -96,8 +157,11 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
-const AIL_MODULES: &[(&str, &str, &str)] =
-    &[("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail"))];
+const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),
+    ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
+    ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
+];
 
 /// The file name of the standard module in AIL at `dotted`, if there is one.
 pub fn ail_module_path(dotted: &str) -> Option<&'static str> {
@@ -173,26 +237,45 @@ pub fn error_kind(e: &std::io::Error) -> &'static str {
     }
 }
 
-/// std.path.2: a separator is `/`, and also `\\` on Windows.
-fn is_sep(c: char) -> bool {
-    c == '/' || (cfg!(windows) && c == '\\')
+/// std.path.2: a separator is `/`, and also `\` on Windows. The platform is
+/// the caller's choice, so tests check both rules on any host.
+pub fn is_sep_in(c: char, windows: bool) -> bool {
+    c == '/' || (windows && c == '\\')
+}
+
+/// std.path.2, std.path.4: a Windows drive and its colon at the start of `p`
+/// (`C:`), which on Windows is absolute only when a separator follows it.
+fn drive_absolute_in(p: &str, windows: bool) -> bool {
+    windows && matches!(p.as_bytes(), [d, b':', s, ..] if d.is_ascii_alphabetic() && is_sep_in(*s as char, true))
 }
 
 /// std.path.2: the text before and after the last separator; the part
 /// before is `None` when there is no separator.
 pub fn path_split(p: &str) -> (Option<&str>, &str) {
-    match p.rfind(is_sep) {
+    path_split_in(p, cfg!(windows))
+}
+
+fn path_split_in(p: &str, windows: bool) -> (Option<&str>, &str) {
+    match p.rfind(|c| is_sep_in(c, windows)) {
         Some(i) => (Some(&p[..i]), &p[i + 1..]),
         None => (None, p),
     }
 }
 
 /// std.path.2: the directory part: `.` with no separator, the separator
-/// itself for a file in the root.
+/// itself for a file in the root, and a drive's root with its separator
+/// (`dir("C:\x")` is `C:\`).
 pub fn path_dir(p: &str) -> String {
-    match path_split(p) {
+    path_dir_in(p, cfg!(windows))
+}
+
+fn path_dir_in(p: &str, windows: bool) -> String {
+    match path_split_in(p, windows) {
         (None, _) => ".".into(),
         (Some(""), _) => p[..1].into(),
+        (Some(d), _) if windows && d.len() == 2 && d.as_bytes()[1] == b':' && d.as_bytes()[0].is_ascii_alphabetic() => {
+            p[..3].into()
+        }
         (Some(d), _) => d.into(),
     }
 }
@@ -208,13 +291,45 @@ pub fn path_ext(p: &str) -> String {
 }
 
 /// std.path.4: `b` under `a` with one separator between; `b` alone when it
-/// is absolute or `a` is empty.
+/// is absolute (a drive path counts on Windows) or `a` is empty.
 pub fn path_join(a: &str, b: &str) -> String {
-    if a.is_empty() || b.starts_with(is_sep) {
+    path_join_in(a, b, cfg!(windows))
+}
+
+fn path_join_in(a: &str, b: &str, windows: bool) -> String {
+    if a.is_empty() || b.starts_with(|c| is_sep_in(c, windows)) || drive_absolute_in(b, windows) {
         b.into()
-    } else if a.ends_with(is_sep) {
+    } else if a.ends_with(|c| is_sep_in(c, windows)) {
         format!("{a}{b}")
     } else {
         format!("{a}/{b}")
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    #[test]
+    fn windows_drives_and_separators() {
+        assert_eq!(path_dir_in("C:\\x\\y.ail", true), "C:\\x");
+        assert_eq!(path_dir_in("C:\\x", true), "C:\\");
+        assert_eq!(path_dir_in("C:\\", true), "C:\\");
+        assert_eq!(path_dir_in("\\x", true), "\\");
+        assert_eq!(path_dir_in("C:x", true), ".");
+        assert_eq!(path_split_in("a\\b/c", true), (Some("a\\b"), "c"));
+        assert_eq!(path_join_in("C:\\a", "C:\\b", true), "C:\\b");
+        assert_eq!(path_join_in("C:\\a", "b", true), "C:\\a/b");
+        assert_eq!(path_join_in("C:\\a", "\\b", true), "\\b");
+        assert_eq!(path_join_in("C:\\a", "D:x", true), "C:\\a/D:x");
+    }
+
+    #[test]
+    fn posix_is_unchanged() {
+        assert_eq!(path_dir_in("C:\\x", false), ".");
+        assert_eq!(path_split_in("a\\b", false), (None, "a\\b"));
+        assert_eq!(path_join_in("a", "C:\\b", false), "a/C:\\b");
+        assert_eq!(path_join_in("a/", "b", false), "a/b");
+        assert_eq!(path_join_in("a", "/b", false), "/b");
     }
 }

@@ -1,0 +1,17 @@
+# Checker errors for `bytes`.
+fn take(s str)
+    print(s)
+
+fn main()
+    b := b"abc"
+    b[0] = 1
+    x := b["a"]
+    take(b)
+    take(b[0])
+    z := b.push(1)
+    w := b + "x"
+    v := bytes.nope([1])
+    u := bytes.from_list(["a"])
+    q := b.concat("x")
+    if b
+        print(1)

@@ -1,0 +1,22 @@
+fn load(url str) !str
+    r := net.get(url) else err
+        print("offline ({err.kind}), using the local copy")
+        return fs.read_text("{path.dir(env.program())}/agent-data/status.json")?
+    if r.status != 200
+        return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
+    r.body
+
+fn main() !
+    url := env.args().first() else "http://127.0.0.1:1/status.json"
+    doc := parse_json(load(url)?)?
+    mut down := 0
+    for svc in doc.arr("services") else []
+        name := svc.str("name") else "?"
+        ms := svc.num("ms") else 0.0
+        up := svc.bool("up") else false
+        if up
+            print("{name:<8}up    {ms}ms")
+        else
+            down += 1
+            print("{name:<8}DOWN")
+    print("{down} down")

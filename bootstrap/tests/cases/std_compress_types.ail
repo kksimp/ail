@@ -1,0 +1,6 @@
+## std.compress.1: `inflate` takes `bytes`, not text, and its failure must be handled.
+use std.compress
+
+fn main()
+    print(compress.inflate("text"))
+    n := compress.gunzip(b"ab")

@@ -659,7 +659,13 @@ impl Cx<'_> {
                 *name = self.type_name(name, t.pos);
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
-            TypeKind::Optional(inner) | TypeKind::Ref(inner) => self.type_ref(inner),
+            TypeKind::Optional(inner) | TypeKind::Ref(inner) | TypeKind::Ptr(inner) => self.type_ref(inner),
+            TypeKind::Fn { params, ret } => {
+                params.iter_mut().for_each(|p| self.type_ref(p));
+                if let Some(r) = ret {
+                    self.type_ref(r);
+                }
+            }
             TypeKind::Fallible { ok, errors } => {
                 if let Some(ok) = ok {
                     self.type_ref(ok);
@@ -721,6 +727,7 @@ impl Cx<'_> {
                 self.local(var, *var_pos);
                 self.block(body);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
@@ -755,7 +762,7 @@ impl Cx<'_> {
                 }
             }
             Pattern::Or(alts, _) => alts.iter_mut().for_each(|a| self.pattern(a)),
-            Pattern::Wildcard(_) | Pattern::Literal(..) => {}
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
 
@@ -872,6 +879,9 @@ impl Cx<'_> {
                 self.expr(scrutinee);
                 for arm in arms.iter_mut() {
                     self.pattern(&mut arm.pat);
+                    if let Some(g) = &mut arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&mut arm.body);
                 }
             }
@@ -886,6 +896,7 @@ impl Cx<'_> {
                 }
             }
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)

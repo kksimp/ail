@@ -1,0 +1,11 @@
+# The guard fails (the list is shorter than the loop's bound), so the loop
+# with checks runs and traps on the same iteration as `ail run` (type.coll.4).
+fn total(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[i]
+    s
+
+fn main()
+    print(total([1, 2, 3], 3))
+    print(total([1, 2, 3], 5))

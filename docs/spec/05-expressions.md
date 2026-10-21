@@ -34,7 +34,10 @@ fn total(items List[Item]) i64
 ```
 
 **expr.bind.5** — Declaring a local name equal to a visible module-level
-item, imported name, or prelude name is a compile-time error. *(ADR 0084)*
+type, constant, imported name, or prelude type is a compile-time error. A
+local may have the name of a function, module-level or prelude: it shadows
+the function for the rest of its block, and a call of that name there is
+`expr.call.1`. *(ADR 0084; ADR 0469)*
 
 **expr.bind.6** — `p = e` and `p op= e` require `p` to be a mutable place
 (`own.place.1`), and `e` MUST have the type of `p`. *(ADR 0117)*
@@ -86,6 +89,25 @@ called function, in order. *(ADR 0108)*
 type, or satisfy its constraint for a generic parameter. No implicit conversion
 applies, except optional wrapping (`type.opt.5`) and conversion to `any Trait`
 (`trait.any.3`). *(ADR 0108, ADR 0129)*
+
+**expr.call.3** — An argument of a call to a user-declared function or
+method may be named, `name: value`, where `name` is a parameter. Positional
+arguments come first and fill the leading parameters; the named ones follow
+and fill the rest in any order. Every parameter MUST be given exactly once, so
+a missing one is `expr.call.1`, and an unknown name, a repeated name, a name
+for a parameter already given by position, or a positional argument after a
+named one is an error. Arguments are evaluated in parameter order, not source
+order. `mut` and `move` go before the value (`f(mut v: xs)`). Built-in
+functions and methods don't take named arguments. There are no default
+values, so a named argument never leaves a parameter out. *(ADR 0454)*
+
+```ail rules=expr.call.3
+fn show(tag str, n int, scale int) str
+    "{tag}:{n * scale}"
+
+fn main()
+    print(show("a", scale: 3, n: 4))
+```
 
 ## Blocks
 
@@ -187,7 +209,10 @@ value is `a` when `c` holds, else `b`. `c` may be a binding (`expr.if.5`).
 name. The `else` belongs to the `if`, not to `a` (`err.else.6`). `if c then a`
 without `else` is a compile-time error. *(ADR 0280)*
 
-```ail
+An `if` used as an operand is written in parentheses: `col + (if raw then 4 else 3)`.
+Without them, the one-line form as an operand is `expr.if.8`. *(ADR 0470)*
+
+```ail rules=expr.if.8
 fn sign(n int) str
     if n < 0 then "negative" else "non-negative"
 
@@ -320,7 +345,7 @@ qualified, matches that variant whatever its fields hold and binds no names.
 `Circle | Rect => 0` is the same as `Circle(_) | Rect(_, _) => 0`.
 *(ADR 0183)*
 
-```ail
+```ail rules=expr.match.10
 enum Shape
     Circle(r int)
     Rect(w int, h int)
@@ -335,11 +360,41 @@ fn main()
     print(has_area(Shape.Circle(r: 1)))
 ```
 
-> **Note:** not yet designed: range patterns (`'0'..='9'`), guards
-> (`x if x > 0`), or-patterns that bind names, patterns nested inside a
-> variant's fields (`expr.match.6`), and warning-suppression syntax. The
-> diagnostics for range patterns and guards suggest an `if` chain.
-> *(ADR 0138)*
+**expr.match.11** — An arm may carry a guard, `pattern if cond => result`.
+`cond` is a `bool` expression checked after the pattern matches, with the
+pattern's bindings in scope. When it is `false`, matching goes on with the
+next arm. A guarded arm covers no values for exhaustiveness (`expr.match.2`)
+or redundancy (`expr.match.5`), so a `match` whose arms are all guarded needs
+an unguarded one. A guard on an or-pattern applies to every alternative.
+*(ADR 0452)*
+
+**expr.match.12** — A range pattern is `lo..hi` or `lo..=hi`, where `lo` and
+`hi` are both `int` literals (with an optional `-`) or both `char` literals.
+It matches the values from `lo` up to but not including `hi` (`..`), or up to
+and including it (`..=`), as `for` ranges do (`expr.loop.3`). The range MUST
+be non-empty, and its type MUST be the scrutinee's. A range covers some
+values, never all, so a `match` that uses ranges needs a `_` arm, and an
+arm after `_` is still unreachable (`expr.match.5`). A range may be an
+alternative of an or-pattern. *(ADR 0453)*
+
+```ail
+fn grade(score int) str
+    match score
+        90..=100 => "A"
+        _ if score >= 60 => "pass"
+        0..60 => "fail"
+        _ => "?"
+
+fn main()
+    print(grade(95))
+    print(grade(70))
+    print(grade(30))
+```
+
+> **Note:** not yet designed: or-patterns that bind names, patterns nested
+> inside a variant's fields (`expr.match.6`), a binding pattern for a whole
+> scrutinee (`n if n > 0`), open-ended ranges (`10..`), and warning-
+> suppression syntax. *(ADR 0138, ADR 0452, ADR 0453)*
 
 ## Comprehensions
 
@@ -370,7 +425,7 @@ collection of a known element type, it MUST fit that type. *(ADR 0182)*
 skips the current element and `break` ends the comprehension, which then
 holds the elements added so far. *(ADR 0182)*
 
-```ail
+```ail rules=expr.comp.1,expr.comp.2,expr.comp.3,expr.comp.4
 fn main()
     xs := [3, 1, 4, 1, 5]
     print([x * x for x in xs if x > 1])          # [9, 16, 25]
@@ -401,7 +456,7 @@ keys and are stable; `min(by:)` and `max(by:)` return the first element with
 the least (greatest) key as a `T?`, or `none` if the list is empty.
 *(ADR 0250)*
 
-```ail
+```ail rules=expr.key.1,expr.key.2,expr.key.3,expr.key.4
 struct Person
     name str
     age int
@@ -435,6 +490,21 @@ performance report. *(ADR 0035)*
 sign of `a`, so that `a == (a / b) * b + a % b`. `a % -1` is `0` for every
 `a`, since that result is representable. *(ADR 0115)*
 
+**expr.bit.1** — An `int` has the methods `bit_and(b)`, `bit_or(b)` and
+`bit_xor(b)`, which combine the two 64-bit two's complement values bit by bit,
+and `bit_not()`, which flips every bit. `shl(n)` shifts left and discards the
+bits that leave the top; `shr(n)` shifts right and copies the sign bit into the
+vacated positions, so `(-8).shr(1)` is `-4`. *(ADR 0465)*
+
+**expr.bit.2** — A shift count must be in `0..=63`. A count outside that range
+MUST trap. *(ADR 0465)*
+
+```ail fragment
+flags := 5.bit_or(8)        # 13
+low := flags.bit_and(4)     # 4
+hi := (-8).shr(1)           # -4
+```
+
 > **Note:** "trap" is defined in the [glossary](../glossary.md). What a trap
 > does (whether it stops the task or the program, and how it is reported) is
 > decided in the error-handling chapter.
@@ -448,7 +518,7 @@ use of the value is accepted. Each hole MUST be reported as a warning, not an
 error, whose message states the expected type (or that none is known) and lists
 the local names in scope with their types, sorted by name. *(ADR 0147)*
 
-```ail
+```ail rules=expr.hole.1
 fn area(w int, h int) int
     todo
 
@@ -464,3 +534,468 @@ program still runs: `area` is never called.
 > **Note:** a hole lets a program be written top-down: the checker says what
 > each gap needs, and the program runs until it reaches one. The bootstrap
 > doesn't infer an unknown hole type from later uses; a later lane may.
+
+## Examples
+
+Conformance examples (ADR 0002) for the rules above. Each `rules=` list names
+what its program demonstrates; `error=` blocks must be rejected with that
+rule, and `norun` blocks are checked but not run because they trap on purpose.
+
+```ail rules=expr.bind.1,expr.bind.2,expr.bind.3
+fn main()
+    x := 1                    # immutable: never reassigned
+    mut y := 2                # mutable
+    y = y + x                 # `=` assigns to an existing mut binding
+    print(y)                  # 3
+```
+
+```ail error=expr.bind.3
+fn main()
+    x := 1
+    x = 2                     # error: x is immutable
+    print(x)
+```
+
+```ail rules=expr.bind.4
+fn main()
+    x := 1
+    if x > 0
+        y := x + 1            # a new name in an inner scope is fine when unused outside
+        print(y)
+    z := 2                    # sibling blocks may reuse names; this is a new name
+    print(z)
+```
+
+```ail error=expr.bind.5
+struct Point
+    x int
+
+fn main()
+    Point := 3                # error: a local may not take a type's name
+    print(Point)
+```
+
+```ail rules=expr.bind.5
+fn helper() int
+    4
+
+fn main()
+    helper := 3               # a local may shadow a function for its block
+    print(helper)
+```
+
+```ail rules=expr.bind.6
+fn main()
+    mut total := 0
+    total = total + 2
+    total += 3                # p op= e: p is a mutable place of type int
+    print(total)              # 5
+```
+
+```ail error=expr.bind.6
+fn main()
+    mut total := 0
+    total = "two"             # error: the value must have the type of total
+    print(total)
+```
+
+```ail error=expr.name.1
+fn main()
+    total := 1
+    print(totl)               # error: no visible name `totl`
+```
+
+```ail error=expr.name.1 rules=expr.name.2
+fn main()
+    xs := [1, 2]
+    print(len(xs))            # error: the help names xs.len()
+```
+
+```ail rules=expr.call.1,expr.call.2
+fn scale(n int, by int) int
+    n * by
+
+fn main()
+    print(scale(4, 3))        # 12: one argument per parameter, each of its type
+```
+
+```ail error=expr.call.1
+fn scale(n int, by int) int
+    n * by
+
+fn main()
+    print(scale(4))           # error: one argument per parameter
+```
+
+```ail error=expr.call.2
+fn scale(n int, by int) int
+    n * by
+
+fn main()
+    print(scale(4, "3"))      # error: the argument is str, not int
+```
+
+```ail rules=expr.block.1,expr.block.2,expr.block.3
+fn sign(n int) int
+    if n < 0
+        return -1             # return leaves the function early
+    1                         # the body's last expression is the result
+
+fn tail(start int) int
+    mut n := start
+    while true                # diverges: the function ends here
+        if n > 0
+            return n
+        n = n + 1
+
+fn main()
+    y := sign(-5)
+    print(y)                  # -1
+    print(tail(3))            # 3
+```
+
+```ail rules=expr.if.1,expr.if.2,expr.if.3,expr.if.4
+fn grade(n int) str
+    kind := if n >= 90
+        "A"
+    elif n >= 50
+        "C"
+    else
+        "F"
+    kind
+
+fn main()
+    print(grade(95))          # A
+    print(grade(10))          # F
+```
+
+```ail error=expr.if.2
+fn main()
+    n := 3
+    if n                      # error: the condition must be bool
+        print(n)
+```
+
+```ail error=expr.if.4
+fn main()
+    n := 3
+    kind := if n > 2          # error: a value-producing if needs an else
+        "big"
+    print(kind)
+```
+
+```ail rules=expr.if.5,expr.if.6
+fn find(id int) int?
+    if id > 0
+        return id * 10
+    none
+
+error enum ParseError
+    BadNumber(text str) "bad number {text}"
+
+fn parse(s str) int ! ParseError
+    n := s.to_int() else return BadNumber(text: s)
+    n
+
+fn main()
+    if v := find(2)
+        print(v)              # 20
+    else
+        print("missing")
+    if w := parse("x")
+        print(w)
+    else err
+        print(err)            # bad: x
+```
+
+```ail rules=expr.loop.1,expr.loop.2,expr.loop.3,expr.loop.4
+fn main()
+    mut sum := 0
+    for x in [1, 2, 3, 4, 5]
+        if x == 2
+            continue          # next iteration
+        if x == 5
+            break             # leaves the innermost loop
+        sum += x
+    print(sum)                # 1 + 3 + 4 = 8
+    for i in 0..3
+        print(i)              # 0 1 2
+    for i in 0..=2
+        print(i)              # 0 1 2
+    mut n := 0
+    while n < 3
+        n += 1
+    print(n)                  # 3
+    for s in {"a", "b"}
+        print(s)              # a b: insertion order
+```
+
+```ail error=type.map.5
+fn main()
+    m := {"a": 1}
+    for k in m               # error: iterate m.keys()
+        print(k)
+```
+
+```ail error=expr.loop.5
+fn main()
+    break                     # error: no enclosing loop
+```
+
+```ail rules=expr.loop.6
+fn bump(mut xs List[int])
+    for mut x in xs
+        x += 1                # each element is a mutable place
+    print(xs)
+
+fn main()
+    mut nums := [1, 2, 3]
+    for mut x in nums
+        x = x * 10
+    print(nums)               # [10, 20, 30]
+    bump(mut nums)
+```
+
+```ail error=expr.loop.6
+fn main()
+    for mut x in [1, 2, 3]    # error: a list literal is not a mutable place
+        x += 1
+```
+
+```ail rules=expr.loop.7
+fn find_first(xs List[int], target int) int
+    mut i := 0
+    while true
+        if xs[i] == target
+            break
+        i += 1
+    i
+
+fn main()
+    print(find_first([4, 5, 6], 6))   # 2
+```
+
+```ail rules=expr.prec.1,expr.op.1,expr.op.2,expr.op.3
+fn main()
+    print(2 + 3 * 4)                  # 14
+    print(-2 * 3)                     # -6: unary minus binds tighter
+    print(not false and true)         # true
+    print(false or true and false)    # false: and binds tighter than or
+    mut k := 1
+    k += 4
+    print(k.abs())                    # 5: a method call always has ()
+```
+
+```ail error=expr.prec.2
+fn main()
+    print(1 < 2 < 3)                  # error: two comparisons in sequence
+```
+
+```ail error=expr.op.3
+fn main()
+    xs := [1, 2]
+    print(xs.len)                     # error: the method call needs ()
+```
+
+```ail rules=expr.cmp.1
+enum Dir
+    North
+    East
+
+fn main()
+    d := Dir.East
+    print(d == East)                  # true: the expected type qualifies East
+    print(2.0 < 3.0)
+    print("a" <= "b")
+```
+
+```ail error=expr.cmp.3
+fn main()
+    xs := [4, 5]
+    i := xs.index_of(9)
+    if i == -1                        # error: index_of gives none when absent
+        print("absent")
+```
+
+```ail rules=expr.match.1,expr.match.2,expr.match.4,expr.match.6
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Empty
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w       # `_` ignores a field
+        Empty => 0
+
+fn main()
+    print(area(Shape.Circle(r: 2)))   # 12
+    print(area(Empty))                # 0
+```
+
+```ail error=expr.match.2
+enum Dir
+    North
+    East
+    South
+
+fn name(d Dir) str
+    match d                      # error: South is not covered
+        North => "n"
+        East => "e"
+```
+
+```ail rules=expr.match.3
+enum Dir
+    North
+    East
+    South
+
+fn name(d Dir) str
+    match d
+        North => "n"
+        _ => "other"              # warns: the catch-all covers East and South
+
+fn main()
+    print(name(Dir.South))
+```
+
+```ail error=expr.match.5
+fn main()
+    n := 65
+    match n
+        65 => print("A")
+        65 => print("again")     # error: already covered by the arm above
+        _ => print("other")
+```
+
+```ail error=expr.match.6
+enum Shape
+    Rect(w int, h int)
+
+fn main()
+    s := Shape.Rect(w: 1, h: 2)
+    match s
+        Rect(w) => print(w)       # error: one pattern per field
+```
+
+```ail rules=expr.match.7,expr.match.8,expr.match.9
+fn kind(c char) int
+    match c
+        '0' | '1' => 1
+        'a' | 'b' | 'c' => 2
+        '\n' => return 0
+        _ => 3
+
+fn main()
+    print(kind('1'))          # 1
+    print(kind('b'))          # 2
+    print(kind('\n'))         # 0
+    print(kind('z'))          # 3
+```
+
+```ail error=expr.match.7
+fn main()
+    x := 1.5
+    match x                   # error: a float literal pattern
+        1.5 => print("x")
+        _ => print("other")
+```
+
+```ail rules=expr.match.10
+enum Token
+    Number(v int)
+    Plus
+    Label(s str)
+
+fn kind(t Token) str
+    match t
+        Number | Label => "atom"   # bare: any fields, binds nothing
+        Plus => "op"
+
+fn main()
+    print(kind(Token.Number(v: 4)))   # atom
+    print(kind(Plus))                 # op
+```
+
+```ail rules=expr.comp.2,expr.comp.3
+fn main()
+    pairs := [[1, 2], [3, 4]]
+    flat := [x for row in pairs for x in row if x % 2 == 0]
+    print(flat)                       # [2, 4]
+```
+
+```ail error=expr.if.2 rules=expr.comp.2
+fn main()
+    xs := [1, 2]
+    ys := [x * 2 for x in xs if x]    # error: the condition must be bool
+    print(ys)
+```
+
+```ail rules=expr.arith.1,expr.arith.2,expr.arith.3,expr.arith.4
+fn main()
+    big := 9223372036854775807
+    print(big.checked_add(1))         # none: the checked form reports overflow
+    print(big.wrapping_add(1))        # explicit wrapping
+    print(big.saturating_add(1))      # explicit saturation
+    print(3 + 4)                      # the proven-safe add needs no check at run time
+```
+
+```ail norun rules=expr.arith.1
+fn main()
+    big := 9223372036854775807
+    print(big + 1)                    # traps: the result doesn't fit in int
+```
+
+```ail norun rules=expr.arith.3
+fn main()
+    zero := 0
+    print(10 / zero)                  # traps: division by zero
+```
+
+```ail rules=expr.arith.5
+fn main()
+    print(-7 / 2)                     # -3: rounds toward zero
+    print(-7 % 2)                     # -1: the sign of a
+    print(7 % -1)                     # 0 for every a
+    a := -7
+    b := 2
+    print(a == (a / b) * b + a % b)   # true
+```
+
+```ail rules=expr.hole.1
+fn area(w int, h int) int
+    todo
+
+fn main()
+    print("started")
+```
+
+```ail norun rules=expr.hole.2
+fn area(w int, h int) int
+    todo
+
+fn main()
+    print(area(2, 3))                 # traps: evaluating the hole
+```
+
+```ail rules=expr.match.11,expr.match.12
+fn sign(n int) str
+    match n
+        _ if n < 0 => "negative"
+        0 => "zero"
+        _ => "positive"
+
+fn grade(c char) str
+    match c
+        'a'..='f' => "low"
+        'g'..'z' => "high"
+        _ => "other"
+
+fn main()
+    print(sign(-3))                   # negative
+    print(sign(0))                    # zero
+    print(grade('c'))                 # low
+    print(grade('x'))                 # high
+```

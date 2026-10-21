@@ -384,6 +384,35 @@ fn main() !
     p.wait()?
 ```
 
+**conc.select.1** — `task.select(chans List[Channel[T]]) int?` waits until
+one of the channels has a value waiting and returns its index in `chans`;
+when several do, the lowest index. It takes no value: `chans[i].recv()` then
+returns the value at once. It returns `none` when every channel is closed
+and empty, and in a cancelled task (`conc.cancel.2`). The channels may be
+a child's `out`, `err` (`std.proc.5`) and ordinary channels of one element
+type. Other tasks run while it waits; when none can, it is a deadlock
+(`conc.task.7`) unless a child's stream could still wake it. *(ADR 0427)*
+
+```ail norun
+# norun: the order of the two streams depends on how the child's writes race, so
+# the output differs between runs; the example is checked, not compared.
+use std.proc
+use std.task
+
+fn main() !
+    c := proc.start("sh", ["-c", "echo a; echo b >&2"])?
+    mut open := true
+    while open
+        i := task.select([c.out, c.err])
+        if i == none
+            open = false
+        elif i == 0
+            print("out {c.out.recv()}")
+        else
+            print("err {c.err.recv()}")
+    proc.wait(move c)?
+```
+
 ## Parallel execution
 
 **conc.par.1** — An implementation MAY run the iterations of an independent

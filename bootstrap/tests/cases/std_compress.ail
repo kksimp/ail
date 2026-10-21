@@ -1,0 +1,43 @@
+## std.compress.1-4, 7: DEFLATE, gzip and zlib round trips over bytes, known
+## streams, and the failure of corrupt data.
+use std.compress
+
+fn main() !
+    text := "abc abc abc abc abc abc abc abc"
+    packed := compress.deflate(text)
+    print(packed.len() < text.len())
+    print(compress.inflate(packed)?.to_str() else "bad")
+    print(compress.inflate(compress.deflate(text.to_bytes()))? == text.to_bytes())
+    print(compress.inflate(b"\xcb\x48\xcd\xc9\xc9\x07\x00")?)
+    z := compress.gzip(text)
+    print("{z[0]} {z[1]} {z[2]}")
+    print(compress.gunzip(z)? == text.to_bytes())
+    print(compress.inflate(compress.deflate(""))?.len())
+    bad := compress.gunzip(b"\x01\x02\x03\x04") else err
+        print(err.kind)
+        b""
+    print(bad.len())
+    flipped := compress.gunzip(z[..z.len() - 6] + bytes.from_list([z[z.len() - 6] + 1]) + z[z.len() - 5..]) else err
+        print(err.kind)
+        b""
+    print(flipped.len())
+    print(compress.unzlib(b"\x78\x9c\xcb\x48\xcd\xc9\xc9\x07\x00\x06\x2c\x02\x15")?)
+    print(compress.unzlib(compress.zlib(text))? == text.to_bytes())
+    torn := compress.unzlib(b"\x78\x9c\xcb\x48\xcd\xc9\xc9\x07\x00\x06\x2c\x02\x16") else err
+        print(err.kind)
+        b""
+    print(torn.len())
+    binary := bytes.from_list([0, 255, 128, 0, 255, 128, 0, 255, 128])
+    print(compress.unzlib(compress.zlib(binary))? == binary)
+
+@test fn deflate_round_trips(s str)
+    assert_eq(compress.inflate(compress.deflate(s)) else b"lost", s.to_bytes())
+
+@test fn gzip_round_trips(s str)
+    assert_eq(compress.gunzip(compress.gzip(s)) else b"lost", s.to_bytes())
+
+@test fn zlib_round_trips(s str)
+    assert_eq(compress.unzlib(compress.zlib(s)) else b"lost", s.to_bytes())
+
+@test fn binary_round_trips(b bytes)
+    assert_eq(compress.inflate(compress.deflate(b)) else b"lost", b)

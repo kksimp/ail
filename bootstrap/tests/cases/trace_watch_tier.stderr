@@ -1,0 +1,10 @@
+watch: total = 0 at 21:9
+watch: total = 0 at 25:9
+watch: total = 1 at 12:5 in bump (as `n`)
+watch: total = 2 at 25:9
+watch: total = 3 at 12:5 in bump (as `n`)
+watch: total = 5 at 25:9
+watch: total = 6 at 12:5 in bump (as `n`)
+watch: total = 9 at 25:9
+watch: total = 10 at 12:5 in bump (as `n`)
+trace: summary: 9 events shown, 0 dropped (watch 9)

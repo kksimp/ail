@@ -21,6 +21,7 @@ pub(super) enum Key {
     Int(i64),
     Bool(bool),
     Str(Rc<str>),
+    Bytes(Rc<Vec<u8>>),
     Char(char),
     None,
     Nested(u32),
@@ -36,6 +37,7 @@ impl Key {
             Value::Int(n) | Value::Num(_, n) => Key::Int(*n),
             Value::Bool(b) => Key::Bool(*b),
             Value::Str(s) => Key::Str(s.clone()),
+            Value::Bytes(b) => Key::Bytes(b.clone()),
             Value::Char(c) => Key::Char(*c),
             Value::None => Key::None,
             Value::Nested(n) => Key::Nested(*n),
@@ -378,6 +380,7 @@ impl<'a, W: Write> Interp<'a, W> {
     fn read_only(&mut self, v: Value, name: &str, a: &mut Vec<Value>, pos: Pos) -> Result<Value, Trap> {
         Ok(match v {
             Value::Str(text) => self.str_method(&text, name, a, pos)?,
+            Value::Bytes(b) => super::bytes::method(&b, name, a),
             Value::Char(c) => char_method(c, name, a, pos)?,
             Value::Int(n) => int_method(n, name, a, pos)?,
             Value::Num(k, bits) if k.is_float() => f32_method(bits, name, pos)?,
@@ -526,6 +529,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
             "len" => Value::Int(text.chars().count() as i64),
             "byte_len" => Value::Int(text.len() as i64),
+            "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
             "to_lower" => s(text.to_lowercase()),
@@ -666,6 +670,20 @@ fn int_method(n: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> 
             Some(v) => Value::Int(v),
             None => return trap("expr.arith.1", pos, format!("`({n}).abs()` overflows `int`")),
         },
+        // expr.bit.1: `&`, `|`, `^` and `!` on the two's complement bits.
+        "bit_and" => Value::Int(n & m()),
+        "bit_or" => Value::Int(n | m()),
+        "bit_xor" => Value::Int(n ^ m()),
+        "bit_not" => Value::Int(!n),
+        // expr.bit.1: bits shifted past the top are discarded; `shr` keeps the sign.
+        // expr.bit.2: the count must be in 0..=63.
+        "shl" | "shr" => {
+            let k = m();
+            if !(0..=63).contains(&k) {
+                return trap("expr.bit.2", pos, format!("shift count `{k}` is outside `0..=63`"));
+            }
+            if name == "shl" { Value::Int(n.wrapping_shl(k as u32)) } else { Value::Int(n >> k) }
+        }
         "to_float" => Value::Float(n as f64),
         "to_hex" => s(if n < 0 { format!("-{:x}", n.unsigned_abs()) } else { format!("{n:x}") }),
         _ => convert_int(i128::from(n), name, pos)?,

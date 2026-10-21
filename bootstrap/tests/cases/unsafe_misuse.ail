@@ -1,0 +1,16 @@
+# unsafe.block.2: an `unsafe fn` is called only inside an `unsafe` block, and
+# eff.pure.1: a `@pure` function has no `unsafe` block.
+unsafe fn twice(x int) int
+    x * 2
+
+unsafe fn quad(x int) int
+    unsafe
+        twice(twice(x))
+
+@pure fn wrapped(x int) int
+    unsafe
+        twice(x)
+
+fn main()
+    print(twice(3))
+    print(quad(2) + wrapped(1))

@@ -1,0 +1,9 @@
+# unsafe.ptr.5: a read past the end of a block of the program's own traps.
+# bytecode.skip: the trap snapshot shows a pointer's address, which differs per run.
+use std.mem
+
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0)
+        print(xs.offset(3).read())
+        print(xs.offset(4).read())

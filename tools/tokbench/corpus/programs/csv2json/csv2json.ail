@@ -1,0 +1,18 @@
+fn row_json(header List[str], cells List[str]) Json
+    mut members := []
+    for i in 0..header.len()
+        value := if header[i] == "units" or header[i] == "price"
+            Json.Num(cells[i].to_float() else 0.0)
+        else
+            Json.Str(cells[i])
+        members.push(JsonMember(key: header[i], value: value))
+    Json.Obj(members)
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/data/sales.csv")? "reading sales"
+    lines := text.lines()
+    header := lines[0].split(",")
+    mut rows := []
+    for line in lines[1..]
+        rows.push(row_json(header, line.split(",")))
+    print(Json.Arr(rows).to_text())

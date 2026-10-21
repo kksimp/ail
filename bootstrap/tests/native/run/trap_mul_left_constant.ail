@@ -1,0 +1,6 @@
+# `3 * n` overflows: the trap shows the operands in source order (expr.arith.1).
+fn main()
+    mut n := 1
+    for _ in 0..40
+        n = 3 * n + 1
+    print(n)

@@ -22,13 +22,21 @@ mod assoc;
 mod atomic;
 mod builtins;
 mod bytecode;
+mod bytes;
+mod ffi;
 mod keyfn;
 pub mod limits;
 mod contracts;
 pub mod parallel;
 mod net;
+mod netsock;
 mod osext;
+mod spawn;
+mod codec;
 mod random;
+mod tz;
+mod regex;
+pub mod replay;
 mod stdlib;
 mod tasks;
 mod tensor;
@@ -68,6 +76,8 @@ enum Value {
     Num(Num, i64),
     Bool(bool),
     Str(Rc<str>),
+    /// `bytes` (type.bytes.1): copies share the storage.
+    Bytes(Rc<Vec<u8>>),
     Char(char),
     /// A struct (by index in the program) and its fields.
     Struct(usize, Rc<Vec<Value>>),
@@ -94,6 +104,8 @@ enum Value {
     Tensor(Rc<crate::tensor::Tensor>),
     /// An `Atomic[int]` or `Atomic[bool]` (conc.atomic.3): copies share it.
     Atomic(std::sync::Arc<atomic::Cell>),
+    /// A declared function used as a value (type.fn.2), by index in the program.
+    Fn(usize),
 }
 
 impl Clone for Value {
@@ -111,6 +123,7 @@ impl Clone for Value {
             Value::None => Value::None,
             Value::Nested(n) => Value::Nested(*n),
             Value::Str(s) => Value::Str(Rc::clone(s)),
+            Value::Bytes(b) => Value::Bytes(Rc::clone(b)),
             Value::Struct(i, f) => Value::Struct(*i, Rc::clone(f)),
             Value::Enum(e, v, f) => Value::Enum(*e, *v, Rc::clone(f)),
             Value::List(l) => Value::List(Rc::clone(l)),
@@ -121,6 +134,7 @@ impl Clone for Value {
             Value::Handle(h) => Value::Handle(*h),
             Value::Tensor(t) => Value::Tensor(Rc::clone(t)),
             Value::Atomic(c) => Value::Atomic(std::sync::Arc::clone(c)),
+            Value::Fn(f) => Value::Fn(*f),
         }
     }
 }
@@ -403,7 +417,9 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
     let mut mutating: crate::fasthash::FastSet<&str> =
         ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
-    let has_unique = prog.structs.iter().any(|s| s.unique) || prog.enums.iter().any(|e| e.unique);
+    // A standard module's unique type (`proc.Child`) has no cleanup to run, so
+    // it doesn't slow programs that don't declare one (std.proc.7).
+    let has_unique = prog.structs.iter().any(|s| s.unique && !s.name.contains('.')) || prog.enums.iter().any(|e| e.unique);
     let has_defer = prog.fns.iter().filter_map(|f| f.body.as_ref()).any(|b| has_defer(b));
     Interp {
         prog,
@@ -442,7 +458,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         hook: limits::active(),
         steps: 0,
         cov_last: 0,
-        tier: bytecode::usable(prog, trace::mode(), has_unique, has_defer),
+        tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
         reg_pool: Vec::new(),
         stats: bytecode::Stats {
@@ -476,7 +492,9 @@ fn has_defer(b: &Block) -> bool {
     }
     b.iter().any(|s| match s {
         Stmt::Defer(..) => true,
-        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } => has_defer(body),
+        Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::With { body, .. } | Stmt::Unsafe { body, .. } => {
+            has_defer(body)
+        }
         Stmt::Let { value, otherwise, .. } => {
             in_expr(value) || matches!(otherwise, Some(Else::Block { body, .. }) if has_defer(body))
         }
@@ -905,6 +923,7 @@ fn key_text(k: &Value) -> String {
     };
     match k {
         Value::Str(s) => quoted(s, '"'),
+        Value::Bytes(b) => bytes::bytes_text(b),
         Value::Char(c) => quoted(&c.to_string(), '\''),
         Value::Int(n) => n.to_string(),
         Value::Num(k, bits) if k.is_float() => float_text32(Num::f32_of(*bits)),
@@ -1163,6 +1182,9 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn run_body_inner(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if f.ext.is_some() {
+            return self.call_extern(f, env, pos);
+        }
         self.depth += 1;
         if self.depth > MAX_DEPTH {
             return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
@@ -1419,6 +1441,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.for_loop(var, iter, body, env)?;
                 }
             }
+            Stmt::Unsafe { body, .. } => return self.block(body, env),
             Stmt::With { mutex, var, body, pos, .. } => self.with_block(mutex, var, body, *pos, env)?,
             Stmt::Break(_) => return Err(Exit::Break),
             Stmt::Continue(_) => return Err(Exit::Continue),
@@ -1525,6 +1548,8 @@ impl<'a, W: Write> Interp<'a, W> {
         let items = match self.eval(iter, env)? {
             Value::List(items) => items,
             Value::Set(t) => Rc::new(t.key_list()),
+            // type.bytes.5: each byte, as a `u8`.
+            Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
             // conc.share.7: each value received, until the channel is closed and empty.
             Value::Handle(Handle::Channel(c)) => {
                 while let Some(v) = self.chan_next(c, iter.pos())? {
@@ -1579,6 +1604,7 @@ impl<'a, W: Write> Interp<'a, W> {
             iter => match self.eval(iter, env)? {
                 Value::List(items) => items,
                 Value::Set(t) => Rc::new(t.key_list()),
+                Value::Bytes(b) => Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()),
                 Value::Handle(Handle::Channel(ch)) => return self.comp_channel(ch, c, rest, elem, value, set, env, acc),
                 other => unreachable!("checked: iterable, found {other:?}"),
             },
@@ -1827,6 +1853,14 @@ impl<'a, W: Write> Interp<'a, W> {
     /// operators (ADR 0175). Every other form, and every fallback, is
     /// `eval_general`'s, so the two stay in step by construction.
     fn eval(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        // std.tensor.20: a chain of elementwise tensor operations, run fused.
+        if !self.resolved.fused.is_empty()
+            && matches!(e, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Method { .. })
+            && self.resolved.fused.contains(&e.pos())
+            && crate::fuse::plan(e).is_some()
+        {
+            return self.fused(e, env);
+        }
         match e {
             Expr::Binary { op, lhs, rhs, pos } if !matches!(op, BinOp::And | BinOp::Or) => {
                 self.eval_binary(*op, lhs, rhs, *pos, env)
@@ -1942,6 +1976,23 @@ impl<'a, W: Write> Interp<'a, W> {
                 let k = self.eval(index, env)?;
                 return Ok(map_value(&t, &k, || key_text(&k), pos)?.clone());
             }
+            // type.bytes.3-4: an element is a `u8`; a range slices.
+            Value::Bytes(b) => {
+                if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
+                    let lo = match lo {
+                        Some(e) => self.eval(e, env)?.int(),
+                        None => 0,
+                    };
+                    let (hi, inclusive) = match hi {
+                        Some(e) => (self.eval(e, env)?.int(), *inclusive),
+                        None => (b.len() as i64, false),
+                    };
+                    return Ok(bytes::slice(&b, lo, hi, inclusive, *range_pos)?);
+                }
+                let i = self.eval(index, env)?.int();
+                return Ok(bytes::at(&b, i, pos)?);
+            }
+            Value::Tensor(t) => return self.tensor_index(&t, index, pos, env),
             other => unreachable!("checked: list or map, found {other:?}"),
         };
         if let Expr::Range { lo, hi, inclusive, pos: range_pos } = index {
@@ -2053,6 +2104,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Str(s, _) => {
                 Value::Str(Rc::clone(self.str_lits.entry(s.as_ptr() as usize).or_insert_with(|| Rc::from(s.as_str()))))
             }
+            Expr::Bytes(b, _) => bytes::bytes_value(b.clone()),
             // type.num.13: a literal typed by context as a sized number.
             Expr::Int(v, pos) if self.lit_maybe(pos) && self.resolved.sized_literals.contains_key(pos) => {
                 sized_literal(self.resolved.sized_literals[pos], *v as f64, *v)
@@ -2126,6 +2178,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Expr::Name(n, pos) => match lookup(env, n) {
                 Some(v) => v.clone(),
                 None if self.prog.consts.iter().any(|c| c.name == *n) => self.constant(n, *pos)?,
+                None if self.resolved.fn_values.contains_key(pos) => Value::Fn(self.resolved.fn_values[pos]),
                 None => {
                     let Some(&(e, v)) = self.resolved.variants.get(pos) else {
                         unreachable!("checked: `{n}` at {}:{} is a variant", pos.line, pos.col)
@@ -2149,6 +2202,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 let v = match self.eval(operand, env)? {
                     Value::Float(x) => return Ok(Value::Float(-x)),
                     Value::Num(k, bits) => return negate(k, bits, *pos),
+                    Value::Tensor(t) => {
+                        return match t.neg() {
+                            Ok(r) => Ok(Value::Tensor(Rc::new(r))),
+                            Err(f) => Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
+                        };
+                    }
                     v => v.int(),
                 };
                 match v.checked_neg() {
@@ -2228,6 +2287,13 @@ impl<'a, W: Write> Interp<'a, W> {
                             }
                         }
                     }
+                    // expr.match.11: a false guard falls through to the next arm.
+                    if let Some(g) = &arm.guard
+                        && !matches!(self.eval(g, env)?, Value::Bool(true))
+                    {
+                        env.truncate(mark);
+                        continue;
+                    }
                     let r = self.block(&arm.body, env);
                     env.truncate(mark);
                     return r;
@@ -2268,6 +2334,21 @@ impl<'a, W: Write> Interp<'a, W> {
                 (Literal::Bool(a), Value::Bool(b)) => a == b,
                 _ => false,
             },
+            // expr.match.12
+            (Pattern::Range { lo, hi, inclusive, .. }, v) => {
+                let at = match (lo, v) {
+                    (Literal::Int(_), Value::Int(x)) => i128::from(*x),
+                    (Literal::Int(_), Value::Num(k, x)) => k.decode(*x),
+                    (Literal::Char(_), Value::Char(c)) => i128::from(*c as u32),
+                    _ => return false,
+                };
+                let end = |l: &Literal| match l {
+                    Literal::Int(n) => i128::from(*n),
+                    Literal::Char(c) => i128::from(*c as u32),
+                    _ => 0,
+                };
+                end(lo) <= at && (at < end(hi) || (*inclusive && at == end(hi)))
+            }
             _ => false,
         }
     }
@@ -2324,6 +2405,13 @@ impl<'a, W: Write> Interp<'a, W> {
                 _ => unreachable!("checked: `{sym}` on floats"),
             },
             (Value::Num(k, a), Value::Num(_, b)) => num_binop(op, k, a, b, pos)?,
+            // type.bytes.6: `a + b` joins two `bytes`.
+            (Value::Bytes(a), Value::Bytes(b)) if op == BinOp::Add => {
+                let mut v = Vec::with_capacity(a.len() + b.len());
+                v.extend_from_slice(&a);
+                v.extend_from_slice(&b);
+                bytes::bytes_value(v)
+            }
             // Characters and booleans compare without the trait-aware generic path.
             (Value::Char(a), Value::Char(b)) if !self.user_std[0] && !self.user_std[1] => Value::Bool(match op {
                 BinOp::Eq => a == b,
@@ -2371,6 +2459,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Int(_) => Some(Con::Int),
             Value::Float(_) => Some(Con::Float),
             Value::Str(_) => Some(Con::Str),
+            Value::Bytes(_) => Some(Con::Bytes),
             Value::Char(_) => Some(Con::Char),
             Value::Bool(_) => Some(Con::Bool),
             Value::List(_) => Some(Con::List),
@@ -2404,6 +2493,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Char(x), Value::Char(y)) => x == y,
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::Bytes(x), Value::Bytes(y)) => x == y,
             (Value::None, Value::None) => true,
             (Value::None, _) | (_, Value::None) => false,
             (Value::Nested(m), Value::Nested(n)) => m == n,
@@ -2466,6 +2556,7 @@ impl<'a, W: Write> Interp<'a, W> {
             (Value::Float(x), Value::Float(y)) => float_order(*x, *y),
             (Value::Char(x), Value::Char(y)) => x.cmp(y),
             (Value::Str(x), Value::Str(y)) => x.as_bytes().cmp(y.as_bytes()),
+            (Value::Bytes(x), Value::Bytes(y)) => x.cmp(y),
             (Value::List(x), Value::List(y)) | (Value::Struct(_, x), Value::Struct(_, y)) => {
                 self.lexicographic(x, y, pos)?
             }
@@ -2497,6 +2588,26 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn call_expr(&mut self, callee: &'a Expr, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        // type.fn.3: a call through a value of function type.
+        if !self.resolved.fn_values.is_empty() {
+            let target = match callee {
+                Expr::Name(n, _) => match lookup(env, n) {
+                    Some(Value::Fn(f)) => Some(*f),
+                    _ => None,
+                },
+                Expr::TypeArgs { .. } => None,
+                other => match self.eval(other, env)? {
+                    Value::Fn(f) => Some(f),
+                    _ => unreachable!("checked: a function value"),
+                },
+            };
+            if let Some(f) = target {
+                let decl = &self.prog.fns[f];
+                return self.invoke(decl, None, args, callee.pos(), env);
+            }
+        } else if !matches!(callee, Expr::Name(..) | Expr::TypeArgs { .. }) {
+            unreachable!("checked: named callee");
+        }
         let n = match callee {
             Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } => n,
             _ => unreachable!("checked: named callee"),
@@ -2665,9 +2776,11 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Num(k, bits) => k.decode(*bits).to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => quoted(s, '"'),
+            Value::Bytes(b) => bytes::bytes_text(b),
             Value::Char(c) => quoted(&c.to_string(), '\''),
             Value::None => "none".into(),
             Value::Nested(n) => format!("{}none{}", "some(".repeat(*n as usize), ")".repeat(*n as usize)),
+            Value::Fn(f) => format!("fn {}", prog.fns[*f].name),
             Value::List(items) => {
                 let mut parts = Vec::with_capacity(items.len());
                 for x in items.iter() {
@@ -2763,6 +2876,9 @@ impl<'a, W: Write> Interp<'a, W> {
             if let Some(&c) = self.resolved.std_calls.get(&pos) {
                 return self.std_call(c, args, pos, env);
             }
+            if tn == "bytes" {
+                return self.bytes_assoc(name, args, pos, env);
+            }
             if tn == "char" {
                 let n = self.eval(&args[0].value, env)?.int();
                 let c = u32::try_from(n).ok().and_then(char::from_u32);
@@ -2783,6 +2899,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Ptr(m, elem)) = site.std {
+            return self.ptr_method(m, elem, recv, args, pos, env);
+        }
         let recv = if site.mutating { self.operand(recv, env)? } else { Operand::Value(self.eval(recv, env)?) };
         self.method_on(key, site, recv, name, args, pos, env)
     }
@@ -2797,7 +2916,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_))) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),
@@ -3105,9 +3224,7 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     fn flush(&mut self, pos: Pos) -> Result<(), Trap> {
-        if self.conc.is_some() {
-            self.task_print("");
-        }
+        self.task_flush();
         match self.out.flush() {
             Err(e) if e.kind() != io::ErrorKind::BrokenPipe => {
                 trap("mod.main.3", pos, format!("writing to standard output failed: {e}"))

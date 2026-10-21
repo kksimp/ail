@@ -6,7 +6,7 @@
 ##
 ## Grammar rules: gram.fn.1-2, gram.list.1, gram.generic.1, gram.syntax.1,
 ## gram.attr.1-3, gram.foreign.1, gram.rec.1, lex.stmt.1, lex.kw.1,
-## type.struct.1-3, type.enum.1-2, expr.bind.1-3, expr.if.1-8,
+## type.struct.1-3, type.enum.1-2, expr.bind.1-3, expr.if.1-6, expr.if.8,
 ## expr.loop.1-6, expr.match.1-9, expr.prec.1-2, expr.op.1, expr.comp.1-2,
 ## expr.key.1, gen.decl.1, gen.bound.1, gen.method.1-3, gen.infer.2,
 ## trait.decl.1-2, trait.impl.1, trait.any.1, trait.super.1, err.else.1-6,
@@ -68,6 +68,7 @@ fn tok_tag(t Tok) str
         Kw(_) => "kw"
         Sym(_) => "sym"
         Str(_) => "str"
+        Bytes(_) => "bytes"
         Interp(_) => "interp"
         Char(_) => "char"
         Int(_) => "int"
@@ -84,11 +85,11 @@ fn tok_text(t Tok) str
         Ident(n) => n
         Kw(w) => w
         Sym(s) => s
-        Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
+        Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 ## Keywords the spec defines that the bootstrap doesn't implement yet.
 fn not_yet(k str) bool
-    k == "unsafe" or k == "extern" or k == "as"
+    k == "as"
 
 fn assign_op(s str) ast.BinOp?
     match s
@@ -176,6 +177,10 @@ fn Parser.top_level(mut self)
             diag("lex.block.1", here())
             skip_block()
         elif tag == "kw" and text == "fn"
+            if f := function(ast.Within.TopLevel)
+                fns.push(f)
+        elif tag == "kw"
+            and (text == "unsafe" and kw_at(1) == "fn" or text == "extern" and at_extern_fn())
             if f := function(ast.Within.TopLevel)
                 fns.push(f)
         elif tag == "kw" and text == "use"
@@ -492,15 +497,16 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
                             depth += 1
                         elif s == ")"
                             depth -= 1
-                    Ident(_) | Kw(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+                    Ident(_) | Kw(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
                 i += 1
                 if depth == 0
                     break
         attrs.push(ast.Attr(name: a.name, pos: a.pos, arg: arg))
         # gram.attr.2: an attribute may sit on its own line above its function.
-        while at_newline() and (sym_at(1) == "@" or kw_at(1) == "fn")
+        while at_newline()
+            and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe" or kw_at(1) == "extern")
             i += 1
-    if not at_kw("fn")
+    if not at_kw("fn") and not (at_kw("unsafe") and kw_at(1) == "fn") and not at_extern_fn()
         diag("gram.attr.2", here())
         skip_statement()
         return none
@@ -508,23 +514,49 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
     f.attrs = attrs
     f
 
+## At `extern c ["lib"] fn`.
+fn Parser.at_extern_fn(self) bool
+    if not at_kw("extern") or tag_at(1) != "id"
+        return false
+    kw_at(2) == "fn" or tag_at(2) == "str" and kw_at(3) == "fn"
+
 fn in_trait(w ast.Within) bool
     match w
         InTrait(_) => true
         TopLevel | InImpl(_) => false
 
 fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
+    mut unsafe_fn := false
+    mut ext := absent[ast.Extern]()
+    if eat_kw("unsafe")
+        unsafe_fn = true
+    elif at_kw("extern")
+        kw_pos := bump().pos
+        lang := take_name("`c` after `extern`", "ffi.decl.2")?
+        if lang.name != "c"
+            diag("ffi.decl.2", lang.pos)
+            return none
+        mut lib := absent[str]()
+        match peek()
+            Str(text) =>
+                i += 1
+                lib = text
+            Ident(_) | Kw(_) | Sym(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
+        if within != ast.Within.TopLevel
+            diag("ffi.decl.2", kw_pos)
+            return none
+        ext = ast.Extern(lib: lib)
     bump()
     first := take_name("a function name after `fn`", "gram.fn.1")?
     # `fn f[T](...)`, `fn Type.m(...)`, `fn Type[T Bound].m(...)` (gen.method.1-2).
     mut generics := List[ast.GenericParam]()
     if at_sym("[")
         generics = generic_params()?
-    mut owner := absent[ast.Owner]()
+    mut owner := none
     mut name := first.name
     mut pos := first.pos
     if eat_sym(".")
-        mut params := absent[List[ast.GenericParam]]()
+        mut params := none
         if generics.len() > 0
             params = generics
         generics = []
@@ -578,13 +610,26 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         sym := if at_sym("->") then "->" else ":"
         error_fix("gram.fn.2", here(), "there is no `{sym}`; the return type follows `)` directly")
         i += 1
-    mut ret := absent[ast.TypeRef]()
-    if tag_at(0) == "id" or at_sym("!") or at_kw("any") or at_kw("ref")
+    mut ret := none
+    if tag_at(0) == "id"
+        or at_sym("!")
+        or at_sym("*")
+        or at_kw("any")
+        or at_kw("ref")
+        or at_kw("fn")
         ret = type_ref("a return type", "gram.fn.2")?
     full := if o := owner then "`{o.name}.{name}`" else "`{name}`"
     # A trait method without a default ends with its signature (trait.decl.2).
     mut fb := FnBody(body: none, contracts: [])
-    if in_trait(within) and tag_at(1) != "indent"
+    if ext != none and (owner != none or receiver != none or generics.len() > 0)
+        diag("ffi.decl.2", pos)
+        return none
+    if ext != none
+        # ffi.decl.2: a C function has a signature and no body.
+        if not eat_newline()
+            unexpected("end of line after the signature of an `extern c fn`", "ffi.decl.2")
+            return none
+    elif in_trait(within) and tag_at(1) != "indent"
         if not eat_newline()
             unexpected("end of line after the signature", "trait.decl.1")
             return none
@@ -604,6 +649,8 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         within: within,
         contracts: fb.contracts,
         inherits: none,
+        unsafe_fn: unsafe_fn,
+        ext: ext,
     )
 
 ## `[T, U Bound + Bound]` (gen.decl.1, gen.bound.1).
@@ -681,7 +728,7 @@ fn Parser.impl_decl(mut self)
     target := dotted_name("the implementing type after `for`", "trait.impl.1") else
         skip_statement()
         return
-    mut params := absent[List[ast.GenericParam]]()
+    mut params := none
     if at_sym("[")
         ps := generic_params() else
             skip_statement()
@@ -730,7 +777,7 @@ fn Parser.fn_block(mut self, within ast.Within, what str) List[int]
 fn Parser.type_ref(mut self, expected str, rule str) ast.TypeRef?
     pos := here()
     if eat_sym("!")
-        mut ok := absent[ast.TypeRef]()
+        mut ok := none
         if tag_at(0) == "id"
             ok = optional_type(expected, rule)?
         elif at_kw("any")
@@ -771,6 +818,24 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         pos := bump().pos
         inner := named_type("a type after `ref`", "own.ref.1")?
         return ast.TypeRef(shape: ast.TypeShape.RefTo(inner), pos: pos)
+    if at_sym("*")
+        pos := bump().pos
+        inner := named_type("a type after `*`", "unsafe.ptr.1")?
+        return ast.TypeRef(shape: ast.TypeShape.PtrTo(inner), pos: pos)
+    # `fn(A, B) R`: a function value's type (type.fn.1).
+    if at_kw("fn")
+        pos := bump().pos
+        expect_sym("(", "`(` after `fn` in a type", "type.fn.1")?
+        mut params := List[ast.TypeRef]()
+        while not at_sym(")")
+            params.push(type_ref("a parameter type", "type.fn.1")?)
+            if not eat_sym(",")
+                break
+        expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?
+        mut ret := absent[ast.TypeRef]()
+        if tag_at(0) == "id" or at_kw("any") or at_kw("ref")
+            ret = optional_type("the result type", "type.fn.1")?
+        return ast.TypeRef(shape: ast.TypeShape.FnType(params: params, ret: ret), pos: pos)
     n := dotted_name(expected, rule)?
     mut args := List[ast.TypeRef]()
     if at_sym("<")
@@ -983,6 +1048,11 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         return for_loop(false, pos)
     if tag == "kw" and text == "with"
         return with_stmt(pos)
+    if tag == "kw" and text == "unsafe" and kw_at(1) != "fn"
+        # unsafe.block.1: `unsafe` and an indented block.
+        bump()
+        body := block("`unsafe`", "unsafe.block.1")?
+        return ast.Stmt.Unsafe(body: body, pos: pos)
     if tag == "kw" and text == "par"
         # conc.par.5: `par for` asserts that the iterations are independent.
         bump()
@@ -1116,7 +1186,7 @@ fn Parser.comp_clauses(mut self) List[ast.CompFor]?
             unexpected("`in` after the comprehension's variable", "expr.comp.2")
             return none
         iter := range()?
-        mut cond := absent[ast.Expr]()
+        mut cond := none
         if eat_kw("if")
             cond = expression()?
         clauses.push(ast.CompFor(
@@ -1168,14 +1238,14 @@ fn Parser.else_block_follows(self) bool
 ## `a..b` and `a..=b` (expr.loop.3): the loosest operators. A bound may be
 ## left out before `]`, for a slice (type.coll.10).
 fn Parser.range(mut self) ast.Expr?
-    mut lo := absent[ast.Expr]()
+    mut lo := none
     if not at_sym("..") and not at_sym("..=")
         lo = or_expr()?
     inclusive := at_sym("..=")
     if not at_sym("..") and not inclusive
         return lo
     pos := bump().pos
-    mut hi := absent[ast.Expr]()
+    mut hi := none
     if not at_sym("]")
         hi = or_expr()?
     ast.Expr.Range(lo: lo, hi: hi, inclusive: inclusive, pos: pos)
@@ -1234,7 +1304,7 @@ fn Parser.comparison_expr(mut self) ast.Expr?
 fn upper_name(e ast.Expr) bool
     match e
         Name(n, _) => n.chars().len() > 0 and n.chars()[0].is_upper()
-        Str(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
             _,
             _,
             _,
@@ -1301,7 +1371,7 @@ fn Parser.unary(mut self) ast.Expr?
 fn name_of(e ast.Expr) str?
     match e
         Name(n, _) => n
-        Str(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(
             _,
             _,
             _,
@@ -1312,7 +1382,7 @@ fn name_of(e ast.Expr) str?
 fn name_pos(e ast.Expr) ast.Pos
     match e
         Name(_, p) => p
-        Str(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) => ast.Pos(
+        Str(_, _) | Bytes(_, _) | Interp(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) | TypeArgs(_, _, _) | ListLit(_, _) | Call(_, _, _) | Method(_, _, _, _) | Member(_, _, _) | Index(_, _, _) | Unary(_, _, _) | Binary(_, _, _, _) | Range(_, _, _, _) | MapLit(_, _) | SetLit(_, _) | If(_, _, _, _) | Match(_, _, _) | Try(_, _, _) | Comp(_, _, _, _, _) | OrElse(_, _, _) | NewRef(_, _) => ast.Pos(
             line: 0,
             col: 0,
         )
@@ -1369,7 +1439,7 @@ fn Parser.postfix(mut self) ast.Expr?
         elif at_sym("?")
             # `e?` propagates; `e? "message"` also adds context (err.prop.1, err.ctx.2).
             pos := bump().pos
-            mut context := absent[ast.Expr]()
+            mut context := none
             if tag_at(0) == "str" or tag_at(0) == "interp"
                 context = primary()?
             e = ast.Expr.Try(expr: e, context: context, pos: pos)
@@ -1381,18 +1451,22 @@ fn Parser.postfix(mut self) ast.Expr?
 fn Parser.call_args(mut self) List[ast.Arg]?
     mut args := List[ast.Arg]()
     while not at_sym(")")
-        mut label := absent[ast.Ident]()
+        mut label := none
         if tag_at(0) == "id" and sym_at(1) == ":"
             label = take_name("a field name", "type.struct.3")?
             i += 1
         mutable := eat_kw("mut")
         moved := not mutable and eat_kw("move")
         # expr.key.1: `by: |x| e`, a key function.
-        mut param := absent[ast.Ident]()
+        mut param := none
         if eat_sym("|")
             param = take_name("a parameter name after `|`", "expr.key.1")?
             expect_sym("|", "`|` after the key function's parameter", "expr.key.1")?
         value := expression()?
+        # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
+        if at_sym("|")
+            diag("gram.foreign.1", here())
+            return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
             break
@@ -1406,6 +1480,9 @@ fn Parser.primary(mut self) ast.Expr?
         Str(s) =>
             i += 1
             return ast.Expr.Str(value: s, pos: pos)
+        Bytes(hex) =>
+            i += 1
+            return ast.Expr.Bytes(hex: hex, pos: pos)
         Interp(parts) =>
             i += 1
             return interpolation(parts, pos)
@@ -1438,13 +1515,17 @@ fn Parser.primary(mut self) ast.Expr?
             if k == "self"
                 i += 1
                 return ast.Expr.Name(name: "self", pos: pos)
-            if k == "if" or k == "match"
+            if k == "if"
+                diag("expr.if.8", pos)
+                return none
+            if k == "match"
                 diag("gram.syntax.1", pos)
                 return none
         Sym(s) =>
             if s == "("
                 i += 1
-                inner := range()?
+                # expr.if.8: a parenthesised one-line `if` is an operand.
+                inner := if at_kw("if") then if_expr()? else range()?
                 inner2 := else_expr(inner)?
                 expect_sym(")", "`)`", "gram.syntax.1")?
                 return inner2
@@ -1559,19 +1640,15 @@ fn Parser.sub_expression(mut self, code List[Token]) ast.Expr?
     diags.extend(sub.diags)
     if clean then e else none
 
-## The none of any optional type, where nothing else names the type.
+## The none of any optional type, where nothing else names the type (a local
+## that is read before its first assignment, type.opt.9).
 fn absent[T]() T?
-    none
-
-fn char_text(c char?) str?
-    if v := c
-        return "{v}"
     none
 
 fn ast_spec(f FormatSpec) ast.FormatSpec
     ast.FormatSpec(
-        fill: char_text(f.fill),
-        align: char_text(f.align),
+        fill: if v := f.fill then "{v}" else none,
+        align: if v := f.align then "{v}" else none,
         width: f.width,
         precision: f.precision,
         hex: f.hex,
@@ -1586,8 +1663,8 @@ fn Parser.if_expr(mut self) ast.Expr?
             return if_then(cond, pos)
     body := block("the `if` condition", "expr.if.1")?
     mut branches := [ast.Branch(cond: cond, body: body)]
-    mut els := absent[List[ast.Stmt]]()
-    mut else_err := absent[ast.Ident]()
+    mut els := none
+    mut else_err := none
     while true
         if eat_kw("elif")
             c := condition()?
@@ -1657,6 +1734,10 @@ fn Parser.match_expr(mut self) ast.Expr?
 
 fn Parser.arm(mut self) ast.Arm?
     pat := pattern()?
+    # expr.match.11: `pattern if cond =>`.
+    mut guard := absent[ast.Expr]()
+    if eat_kw("if")
+        guard = expression_plain()?
     if not eat_sym("=>")
         if at_sym(":") or at_sym("->")
             error_fix("expr.match.1", here(), "arms are written `pattern => result`")
@@ -1666,13 +1747,13 @@ fn Parser.arm(mut self) ast.Arm?
             return none
     if at_newline()
         body := block("`=>`", "expr.match.1")?
-        return ast.Arm(pat: pat, body: body)
+        return ast.Arm(pat: pat, guard: guard, body: body)
     # expr.match.9: one statement on the arm's line.
     s := statement_inner()?
     if not after_block() and not eat_newline()
         unexpected("end of line after the arm", "expr.match.1")
         return none
-    ast.Arm(pat: pat, body: [s])
+    ast.Arm(pat: pat, guard: guard, body: [s])
 
 ## A pattern, or several joined by `|` (expr.match.8).
 fn Parser.pattern(mut self) ast.Pattern?
@@ -1685,8 +1766,40 @@ fn Parser.pattern(mut self) ast.Pattern?
         alts.push(single_pattern()?)
     ast.Pattern.Alt(alts: alts, pos: pos)
 
-## `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+## One alternative: a literal or a `lo..hi` / `lo..=hi` range of integer or
+## character literals (expr.match.12), or see `plain_pattern`.
 fn Parser.single_pattern(mut self) ast.Pattern?
+    pos := here()
+    lo := plain_pattern()?
+    inclusive := at_sym("..=")
+    if not inclusive and not at_sym("..")
+        return lo
+    mut lo_lit := ast.Literal.BoolLit(false)
+    match lo
+        Literal(value, _) =>
+            match value
+                IntLit(_) | CharLit(_) => lo_lit = value
+                StrLit(_) | BoolLit(_) =>
+                    diag("expr.match.12", pos)
+                    return none
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) =>
+            diag("expr.match.12", pos)
+            return none
+    i += 1
+    hpos := here()
+    hi := plain_pattern()?
+    match hi
+        Literal(value, _) =>
+            match value
+                IntLit(_) | CharLit(_) =>
+                    return ast.Pattern.Range(lo: lo_lit, hi: value, inclusive: inclusive, pos: pos)
+                StrLit(_) | BoolLit(_) => i += 0
+        Wildcard(_) | Alt(_, _) | Variant(_, _, _, _) | Range(_, _, _, _) => i += 0
+    diag("expr.match.12", hpos)
+    none
+
+## `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
+fn Parser.plain_pattern(mut self) ast.Pattern?
     pos := here()
     match peek()
         Ident(n) =>
@@ -1698,11 +1811,11 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             while eat_sym(".")
                 path.push(take_name("a variant name after `.`", "expr.match.4")?.name)
             name := path[path.len() - 1]
-            mut qualifier := absent[str]()
+            mut qualifier := none
             if path.len() > 1
                 qualifier = path[0..path.len() - 1].join(".")
             # `Variant(a, _)`: one binding per field (expr.match.6).
-            mut bindings := absent[List[ast.Ident]]()
+            mut bindings := none
             if eat_sym("(")
                 mut names := List[ast.Ident]()
                 while not at_sym(")")
@@ -1726,7 +1839,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
                 i += 1
                 v := match bump().tok
                     Int(n) => "{-n}"
-                    Ident(_) | Kw(_) | Sym(_) | Str(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => "-9223372036854775808"
+                    Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => "-9223372036854775808"
                 return ast.Pattern.Literal(value: ast.Literal.IntLit(v), pos: pos)
         IntMin =>
             i += 1
@@ -1745,6 +1858,6 @@ fn Parser.single_pattern(mut self) ast.Pattern?
         Interp(_) | Float(_) =>
             diag("expr.match.7", pos)
             return none
-        Newline | Indent | Dedent | Eof => i += 0
+        Bytes(_) | Newline | Indent | Dedent | Eof => i += 0
     unexpected("a pattern (a variant name or `_`)", "expr.match.4")
     none

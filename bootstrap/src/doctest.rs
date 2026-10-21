@@ -1,6 +1,6 @@
 //! Doc examples as tests: each ```` ```ail ```` block in a `##` doc comment is
 //! compiled by `ail test` as a test of its own, in the scope of the file
-//! (test.doc.1-4).
+//! (test.doc.1-3).
 //!
 //! The blocks become `@test` functions appended to the source, so the
 //! checker and interpreter treat them like any other test. Their positions
@@ -157,6 +157,11 @@ pub fn check_output(t: &DocTest, output: &str) -> Option<String> {
 }
 
 impl DocTest {
+    /// The lines of its `# =>` expectations (snap.update.4).
+    pub fn expected_lines(&self) -> Vec<usize> {
+        self.code.iter().filter(|(_, c)| c.trim().starts_with("# =>")).map(|(l, _)| *l).collect()
+    }
+
     /// Where a failing example is reported: its opening fence.
     pub fn line(&self) -> usize {
         self.fence

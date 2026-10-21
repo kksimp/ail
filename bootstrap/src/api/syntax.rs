@@ -91,6 +91,9 @@ fn token_line(t: &Token, out: &mut String) {
         Tok::Str(s) => {
             let _ = writeln!(out, "str {}", json_text(s));
         }
+        Tok::Bytes(b) => {
+            let _ = writeln!(out, "bytes {}", json_text(&hex_of(b)));
+        }
         Tok::Char(c) => {
             let _ = writeln!(out, "char {}", json_text(&c.to_string()));
         }
@@ -127,7 +130,7 @@ fn token_line(t: &Token, out: &mut String) {
     }
 }
 
-// ---- The syntax tree (api.ast.1-6) ----
+// ---- The syntax tree (api.ast.1-3) ----
 
 /// A JSON value, written as the derived `ToJson` of `compiler/ast/ast.ail`
 /// writes it (ADR 0376): a number as AIL prints a `float`, a variant with
@@ -418,6 +421,8 @@ fn function(f: &FnDecl) -> J {
         }),
         ("contracts", arr(&f.contracts, contract)),
         ("inherits", opt(&f.inherits, |i| n(*i))),
+        ("unsafe_fn", J::Bool(f.unsafe_fn)),
+        ("ext", opt(&f.ext, |e| J::Obj(vec![("lib", opt(&e.lib, |l| s(l)))]))),
     ])
 }
 
@@ -432,6 +437,10 @@ fn ty(t: &TypeRef) -> J {
         ),
         TypeKind::Any(name) => variant("AnyTrait", vec![("trait_name", s(name))]),
         TypeKind::Ref(inner) => variant("RefTo", vec![("inner", ty(inner))]),
+        TypeKind::Ptr(inner) => variant("PtrTo", vec![("inner", ty(inner))]),
+        TypeKind::Fn { params, ret } => {
+            variant("FnType", vec![("params", arr(params, ty)), ("ret", opt(ret, |r| ty(r)))])
+        }
     };
     J::Obj(vec![("shape", shape), ("pos", pos(t.pos))])
 }
@@ -498,6 +507,7 @@ fn stmt(st: &Stmt) -> J {
             variant("Handle", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise))])
         }
         Stmt::Defer(inner, p) => variant("Defer", vec![("stmt", stmt(inner)), ("pos", pos(*p))]),
+        Stmt::Unsafe { body, pos: p } => variant("Unsafe", vec![("body", block(body)), ("pos", pos(*p))]),
         Stmt::With { mutex, var, var_pos, body, pos: p } => variant(
             "With",
             vec![
@@ -535,6 +545,7 @@ fn arg(a: &Arg) -> J {
 fn expr(e: &Expr) -> J {
     match e {
         Expr::Str(v, p) => variant("Str", vec![("value", s(v)), ("pos", pos(*p))]),
+        Expr::Bytes(v, p) => variant("Bytes", vec![("hex", s(&hex_of(v))), ("pos", pos(*p))]),
         Expr::Interp(parts, p) => variant(
             "Interp",
             vec![
@@ -616,7 +627,7 @@ fn expr(e: &Expr) -> J {
             "Match",
             vec![
                 ("scrutinee", expr(scrutinee)),
-                ("arms", arr(arms, |a| J::Obj(vec![("pat", pattern(&a.pat)), ("body", block(&a.body))]))),
+                ("arms", arr(arms, |a| J::Obj(vec![("pat", pattern(&a.pat)), ("guard", opt(&a.guard, expr)), ("body", block(&a.body))]))),
                 ("pos", pos(*p)),
             ],
         ),
@@ -667,15 +678,11 @@ fn cond(c: &Cond) -> J {
 fn pattern(p: &Pattern) -> J {
     match p {
         Pattern::Wildcard(at) => variant("Wildcard", vec![("pos", pos(*at))]),
-        Pattern::Literal(lit, at) => {
-            let value = match lit {
-                Literal::Int(v) => variant("IntLit", vec![("value", s(&v.to_string()))]),
-                Literal::Char(c) => variant("CharLit", vec![("value", s(&c.to_string()))]),
-                Literal::Str(t) => variant("StrLit", vec![("value", s(t))]),
-                Literal::Bool(b) => variant("BoolLit", vec![("value", J::Bool(*b))]),
-            };
-            variant("Literal", vec![("value", value), ("pos", pos(*at))])
-        }
+        Pattern::Literal(lit, at) => variant("Literal", vec![("value", literal(lit)), ("pos", pos(*at))]),
+        Pattern::Range { lo, hi, inclusive, pos: at } => variant(
+            "Range",
+            vec![("lo", literal(lo)), ("hi", literal(hi)), ("inclusive", J::Bool(*inclusive)), ("pos", pos(*at))],
+        ),
         Pattern::Or(alts, at) => variant("Alt", vec![("alts", arr(alts, pattern)), ("pos", pos(*at))]),
         Pattern::Variant { qualifier, name, bindings, pos: at } => variant(
             "Variant",
@@ -689,8 +696,22 @@ fn pattern(p: &Pattern) -> J {
     }
 }
 
+fn literal(lit: &Literal) -> J {
+    match lit {
+        Literal::Int(v) => variant("IntLit", vec![("value", s(&v.to_string()))]),
+        Literal::Char(c) => variant("CharLit", vec![("value", s(&c.to_string()))]),
+        Literal::Str(t) => variant("StrLit", vec![("value", s(t))]),
+        Literal::Bool(b) => variant("BoolLit", vec![("value", J::Bool(*b))]),
+    }
+}
+
 fn json_text(v: &str) -> String {
     let mut out = String::new();
     quote(v, &mut out);
     out
+}
+
+/// A byte string as lowercase hex, the form the syntax API shows `bytes` literals in.
+fn hex_of(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }

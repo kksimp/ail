@@ -25,6 +25,37 @@ fn editor_checks_clean_and_passes_its_tests() {
     assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
 }
 
+/// `tools/garlic/garlic.ail`, the text-mode browser
+/// (docs/design/garlic-browser.md), checks clean, passes its `@test`s, and
+/// prints a page and its page model headless.
+#[test]
+fn garlic_checks_clean_and_renders_headless() {
+    let path = tool("tools/garlic/garlic.ail");
+    let check = ail().args(["check", &path]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert!(check.status.success() && stderr.is_empty(), "ail check {path}:\n{stderr}");
+    let test = ail().args(["test", &path]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&test.stdout);
+    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
+    let page = tool("tools/garlic/testdata/index.html");
+    let run = |flags: &[&str]| {
+        let mut args = vec!["run".to_string(), path.clone()];
+        args.extend(flags.iter().map(|f| f.to_string()));
+        args.push(page.clone());
+        let out = ail().args(&args).output().unwrap();
+        assert!(out.status.success(), "{flags:?}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let text = run(&["--width", "60", "--print"]);
+    assert!(text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n"), "--print:\n{text}");
+    let json = run(&["--width", "60", "--height", "8", "--json"]);
+    assert!(json.starts_with("{\"api\":1,") && json.contains("\"role\":\"link\",\"name\":\"Second page\""), "--json:\n{json}");
+    let second = run(&["--follow", "1", "--print"]);
+    assert!(second.contains("# Second page"), "--follow 1:\n{second}");
+    let viewport = run(&["--height", "4", "--viewport", "--do", "find:the end", "--json"]);
+    assert!(viewport.contains("\"message\":\"found `the end`") && !viewport.contains("\"Second page\""), "--viewport:\n{viewport}");
+}
+
 /// Ctrl-Shift-H previews a replace across the directory's `.ail` files,
 /// then Ctrl-Enter applies it to the buffers without saving (ADR 0339).
 #[test]
@@ -168,4 +199,83 @@ fn editor_agent_panel_reads_the_real_outputs() {
     let failing = screen(&["--key=ctrl+shift+u", "--at=9:9", "--type=1", "--key=ctrl+s"]);
     assert!(failing.contains("tests 1 FAILED of 1"), "tests after save:\n{failing}");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `tools/pdf` (ADR 0520) checks without diagnostics, passes its `@test`s,
+/// and reads its fixtures' text layers: a classic table, a cross-reference
+/// stream with an object stream, a LibreOffice PDF with subset fonts, and
+/// a damaged table it must rebuild.
+#[test]
+fn pdf_reader_checks_clean_and_reads_its_fixtures() {
+    let path = tool("tools/pdf/pdf.ail");
+    let check = ail().args(["check", &path]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert!(check.status.success() && stderr.is_empty(), "ail check {path}:\n{stderr}");
+    let test = ail().args(["test", &path]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&test.stdout);
+    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {path}:\n{stdout}");
+    let pdf = |args: &[&str]| {
+        let out = ail().arg("run").arg(&path).args(args).output().unwrap();
+        (out.status.code(), String::from_utf8_lossy(&out.stdout).to_string(), String::from_utf8_lossy(&out.stderr).to_string())
+    };
+    for (pdf_name, txt) in [("simple", "simple"), ("xrefstream", "xrefstream"), ("report", "report"), ("damaged", "simple")] {
+        let (code, out, err) = pdf(&["text", &tool(&format!("tools/pdf/testdata/{pdf_name}.pdf"))]);
+        let want = std::fs::read_to_string(tool(&format!("tools/pdf/testdata/{txt}.txt"))).unwrap();
+        assert!(code == Some(0) && out == want, "pdf text {pdf_name}.pdf:\n{out}{err}");
+    }
+    let report = tool("tools/pdf/testdata/report.pdf");
+    let (code, out, _) = pdf(&["grep", "LINE BREAK can be tested", &report]);
+    assert!(code == Some(0) && out.starts_with("1: enough to wrap onto more than one line"), "pdf grep across lines:\n{out}");
+    let (code, out, _) = pdf(&["grep", "--json", "résumé", &report]);
+    assert!(code == Some(0) && out.contains("\"boxes\":[{\"x0\":327.56,"), "pdf grep --json:\n{out}");
+    let (code, _, _) = pdf(&["grep", "not in the file", &report]);
+    assert_eq!(code, Some(1), "pdf grep with no hit exits 1");
+    let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
+    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0.0,\"page\":2.0}"), "pdf json:\n{out}");
+    let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
+    assert!(out.contains("image-only pages (scans, read by OCR when shown or searched): 1"), "pdf info on a scan:\n{out}");
+    let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
+    assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
+    // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
+    let (_, out, _) = pdf(&["view", &report, "--json", "--page", "2"]);
+    assert!(out.contains("\"pages_read\":1.0") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
+    let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
+    assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
+    // ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.
+    let scan = tool("tools/pdf/testdata/scan-ocr.pdf");
+    let (code, out, err) = pdf(&["text", &scan]);
+    let want = std::fs::read_to_string(tool("tools/pdf/testdata/scan-ocr.txt")).unwrap();
+    assert!(code == Some(0) && out == want, "pdf text scan-ocr.pdf (OCR):\n{out}{err}");
+    let (code, out, _) = pdf(&["grep", "western library cooperative", &scan]);
+    assert!(code == Some(0) && out.starts_with("1: the growth came"), "pdf grep on a scan:\n{out}");
+    let (code, _, _) = pdf(&["grep", "--no-ocr", "western", &scan]);
+    assert_eq!(code, Some(1), "pdf grep --no-ocr finds nothing on a scan");
+    let (_, out, _) = pdf(&["json", &scan]);
+    assert!(out.contains("\"image_only\":true,\"ocr\":true,\"confidence\":"), "pdf json on a scan:\n{out}");
+}
+
+/// Garlic's JavaScript engine (`tools/garlic/js`, docs/design/garlic-js.md)
+/// checks clean, passes its `@test`s, its lexer prints the expected tokens,
+/// its parser matches every hand-written tree and error, the packed test262
+/// parser tests hold (their exceptions listed in `known.txt`), and its
+/// programs and pages print what Node and Chromium printed.
+#[test]
+fn garlic_js_parses_and_runs_its_suites() {
+    let dir = tool("tools/garlic/js");
+    let check = ail().args(["check", &dir]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert!(check.status.success() && stderr.is_empty(), "ail check {dir}:\n{stderr}");
+    for unit in ["tools/garlic/js/syntax/text.ail", "tools/garlic/js/vm/jsmath.ail"] {
+        let test = ail().args(["test", &tool(unit)]).output().unwrap();
+        let stdout = String::from_utf8_lossy(&test.stdout);
+        assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {unit}:\n{stdout}");
+    }
+    let tokens = ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
+    let expected = std::fs::read_to_string(tool("tools/garlic/js/testdata/tokens/sample.tokens")).unwrap();
+    assert_eq!(String::from_utf8_lossy(&tokens.stdout), expected, "--tokens sample.js");
+    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser"), ("--test-run", "tools/garlic/js/testdata/run"), ("--test-page", "tools/garlic/js/testdata/page")] {
+        let out = ail().args(["run", &dir, flag, &tool(data)]).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
+    }
 }

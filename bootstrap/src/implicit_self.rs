@@ -164,6 +164,7 @@ impl Cx<'_> {
                 self.declare(&var, pos);
                 self.block(body);
             }
+            Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
@@ -195,7 +196,7 @@ impl Cx<'_> {
                 }
             }
             Pattern::Or(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
-            Pattern::Wildcard(_) | Pattern::Literal(..) => {}
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
 
@@ -303,6 +304,9 @@ impl Cx<'_> {
                 self.expr(scrutinee);
                 for arm in arms.iter_mut() {
                     self.pattern(&arm.pat);
+                    if let Some(g) = &mut arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&mut arm.body);
                 }
             }
@@ -317,6 +321,7 @@ impl Cx<'_> {
                 }
             }
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)

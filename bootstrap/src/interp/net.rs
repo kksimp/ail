@@ -1,23 +1,54 @@
 //! `std.net` (spec 17-std, ADR 0283): a minimal HTTP/1.1 client on the
 //! standard library's TCP, with `https` over the in-house TLS 1.3 client
-//! (std.net.5, ADRs 0360, 0369).
+//! (std.net.5, ADRs 0360, 0369). Request options and the cooperative
+//! transport are std.net.6-8 (ADRs 0418-0420).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-/// How long connecting, and each read or write, may take (std.net.2).
-const TIMEOUT: Duration = Duration::from_secs(30);
+use super::netsock::Coop;
 
-/// How many redirects `get` follows (std.net.2).
-const MAX_REDIRECTS: usize = 5;
+/// How long connecting, and each read or write, may take unless the request
+/// says otherwise (std.net.2, std.net.6).
+pub const TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How many redirects a request follows unless it says otherwise (std.net.2, std.net.6).
+pub const MAX_REDIRECTS: usize = 5;
+
+/// What a request can set beyond its method and URL (std.net.6).
+#[derive(Clone)]
+pub struct Opts {
+    pub headers: Vec<(String, String)>,
+    pub query: Vec<(String, String)>,
+    pub body: Vec<u8>,
+    pub content_type: Option<String>,
+    pub timeout: Duration,
+    pub max_redirects: usize,
+}
+
+impl Default for Opts {
+    fn default() -> Opts {
+        Opts {
+            headers: Vec::new(),
+            query: Vec::new(),
+            body: Vec::new(),
+            content_type: None,
+            timeout: TIMEOUT,
+            max_redirects: MAX_REDIRECTS,
+        }
+    }
+}
 
 /// A response: status, headers (names in lowercase, in arrival order, a
-/// repeated header's values joined with `, `), and the body as text.
+/// repeated header's values joined with `, `), and the body as bytes.
 pub struct Response {
     pub status: i64,
     pub headers: Vec<(String, String)>,
-    pub body: String,
+    /// Each header's values one by one, in arrival order (std.net.17).
+    pub all: Vec<(String, Vec<String>)>,
+    /// The body's bytes, undecoded (type.bytes.1).
+    pub body: Vec<u8>,
 }
 
 /// A failure (std.net.4): the URL, its kind and a sentence for people.
@@ -33,22 +64,104 @@ fn fail(url: &str, kind: &'static str, message: impl Into<String>) -> NetFail {
 
 /// std.net.2: `GET url`, following up to five redirects.
 pub fn get(url: &str) -> Result<Response, NetFail> {
-    let mut url = url.to_string();
-    for _ in 0..=MAX_REDIRECTS {
-        let r = request("GET", &url, None)?;
-        let location = r.headers.iter().find(|(k, _)| k == "location").map(|(_, v)| v.clone());
-        match (r.status, location) {
-            (301 | 302 | 303 | 307 | 308, Some(to)) => url = resolve(&url, &to),
-            _ => return Ok(r),
-        }
-    }
-    Err(fail(&url, "protocol", format!("more than {MAX_REDIRECTS} redirects")))
+    request("GET", url, &Opts::default())
 }
 
 /// std.net.3: `POST url` with `body` of type `content_type`. Redirects are
 /// returned, not followed.
-pub fn post(url: &str, body: &str, content_type: &str) -> Result<Response, NetFail> {
-    request("POST", url, Some((body, content_type)))
+pub fn post(url: &str, body: &[u8], content_type: &str) -> Result<Response, NetFail> {
+    let opts = Opts { body: body.to_vec(), content_type: Some(content_type.to_string()), ..Opts::default() };
+    request("POST", url, &opts)
+}
+
+/// std.net.6: a request with a method, headers, a query and limits. A
+/// redirect of a `GET` or `HEAD` is followed up to `max_redirects` times (0
+/// returns the redirect itself); the
+/// credentials in `authorization` and `cookie` go only to the host they were
+/// set for. Any other method gets its redirect back as the response.
+pub fn request(method: &str, url: &str, opts: &Opts) -> Result<Response, NetFail> {
+    let method = method.to_ascii_uppercase();
+    if method.is_empty() || !method.bytes().all(is_token_byte) {
+        return Err(fail(url, "bad_request", format!("`{method}` is not an HTTP method")));
+    }
+    for (name, value) in &opts.headers {
+        check_header(url, name, value)?;
+    }
+    let mut url = with_query(url, &opts.query);
+    let mut opts = opts.clone();
+    let follows = method == "GET" || method == "HEAD";
+    for _ in 0..=opts.max_redirects {
+        let r = exchange_once(&method, &url, &opts)?;
+        let location = r.headers.iter().find(|(k, _)| k == "location").map(|(_, v)| v.clone());
+        match (r.status, location) {
+            (301 | 302 | 303 | 307 | 308, Some(to)) if follows && opts.max_redirects > 0 => {
+                let next = resolve(&url, &to);
+                if origin(&next) != origin(&url) {
+                    opts.headers.retain(|(k, _)| !k.eq_ignore_ascii_case("authorization") && !k.eq_ignore_ascii_case("cookie"));
+                }
+                url = next;
+            }
+            _ => return Ok(r),
+        }
+    }
+    Err(fail(&url, "protocol", format!("more than {} redirects", opts.max_redirects)))
+}
+
+/// The scheme and authority of a URL, lowercase, for comparing hosts.
+fn origin(url: &str) -> String {
+    let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    format!("{}://{}", scheme.to_ascii_lowercase(), authority.rsplit('@').next().unwrap_or("").to_ascii_lowercase())
+}
+
+/// RFC 9110 `tchar`: what a method or header name may contain.
+pub fn is_token_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b)
+}
+
+/// A header name must be a token and a value must not break the line
+/// (std.net.6): the guard against header injection.
+fn check_header(url: &str, name: &str, value: &str) -> Result<(), NetFail> {
+    if name.is_empty() || !name.bytes().all(is_token_byte) {
+        return Err(fail(url, "bad_request", format!("`{name}` is not a header name")));
+    }
+    if value.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0) {
+        return Err(fail(url, "bad_request", format!("the value of header `{name}` has a line break")));
+    }
+    Ok(())
+}
+
+/// Percent-encodes `s` for a query string (RFC 3986 unreserved bytes stay).
+pub fn encode_component(s: &str) -> String {
+    let mut out = String::new();
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// `url` with `query` appended, before any fragment.
+fn with_query(url: &str, query: &[(String, String)]) -> String {
+    if query.is_empty() {
+        return url.to_string();
+    }
+    let (base, fragment) = match url.split_once('#') {
+        Some((b, f)) => (b, Some(f)),
+        None => (url, None),
+    };
+    let pairs: Vec<String> =
+        query.iter().map(|(k, v)| format!("{}={}", encode_component(k), encode_component(v))).collect();
+    let sep = if base.contains('?') { '&' } else { '?' };
+    let mut out = format!("{base}{sep}{}", pairs.join("&"));
+    if let Some(f) = fragment {
+        out.push('#');
+        out.push_str(f);
+    }
+    out
 }
 
 /// A URL's host, port, request target, and whether it's `https`.
@@ -108,7 +221,7 @@ fn resolve(base: &str, location: &str) -> String {
     }
 }
 
-fn request(method: &str, url: &str, body: Option<(&str, &str)>) -> Result<Response, NetFail> {
+fn exchange_once(method: &str, url: &str, opts: &Opts) -> Result<Response, NetFail> {
     let t = parse_url(url)?;
     let io = |kind: &'static str, e: std::io::Error| fail(url, kind, e.to_string());
     let host = t.host.trim_start_matches('[').trim_end_matches(']');
@@ -119,7 +232,7 @@ fn request(method: &str, url: &str, body: Option<(&str, &str)>) -> Result<Respon
     let mut last = None;
     let mut stream = None;
     for a in &addrs {
-        match TcpStream::connect_timeout(a, TIMEOUT) {
+        match TcpStream::connect_timeout(a, opts.timeout) {
             Ok(s) => {
                 stream = Some(s);
                 break;
@@ -133,22 +246,40 @@ fn request(method: &str, url: &str, body: Option<(&str, &str)>) -> Result<Respon
             None => fail(url, "not_found", format!("host `{}` has no address", t.host)),
         });
     };
-    stream.set_read_timeout(Some(TIMEOUT)).map_err(|e| io("other", e))?;
-    stream.set_write_timeout(Some(TIMEOUT)).map_err(|e| io("other", e))?;
     let default_port = if t.tls { 443 } else { 80 };
     let host_header = if t.port == default_port { t.host.clone() } else { format!("{}:{}", t.host, t.port) };
-    let mut head = format!(
-        "{method} {} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: ail\r\nAccept: */*\r\nConnection: close\r\n",
-        t.path
-    );
-    if let Some((text, content_type)) = body {
-        head.push_str(&format!("Content-Type: {content_type}\r\nContent-Length: {}\r\n", text.len()));
+    let given = |name: &str| opts.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(name));
+    let mut head = format!("{method} {} HTTP/1.1\r\n", t.path);
+    if !given("host") {
+        head.push_str(&format!("Host: {host_header}\r\n"));
+    }
+    if !given("user-agent") {
+        head.push_str("User-Agent: ail\r\n");
+    }
+    if !given("accept") {
+        head.push_str("Accept: */*\r\n");
+    }
+    head.push_str("Connection: close\r\n");
+    for (name, value) in &opts.headers {
+        let owned = ["connection", "content-length", "transfer-encoding"];
+        if !owned.iter().any(|o| name.eq_ignore_ascii_case(o)) {
+            head.push_str(&format!("{name}: {value}\r\n"));
+        }
+    }
+    if let Some(ct) = &opts.content_type
+        && !given("content-type")
+    {
+        head.push_str(&format!("Content-Type: {ct}\r\n"));
+    }
+    if !opts.body.is_empty() || matches!(method, "POST" | "PUT" | "PATCH") {
+        head.push_str(&format!("Content-Length: {}\r\n", opts.body.len()));
     }
     head.push_str("\r\n");
     let mut bytes = head.into_bytes();
-    if let Some((text, _)) = body {
-        bytes.extend_from_slice(text.as_bytes());
-    }
+    bytes.extend_from_slice(&opts.body);
+    // The stream waits cooperatively when tasks are running, so a client and
+    // a server in one program both make progress (std.net.8).
+    let stream = Coop::for_client(stream, opts.timeout).map_err(|e| io("other", e))?;
     if !t.tls {
         return exchange(stream, &bytes, method, url);
     }
@@ -215,6 +346,7 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| protocol(format!("no status code in `{status_line}`")))?;
     let mut headers: Vec<(String, String)> = Vec::new();
+    let mut all: Vec<(String, Vec<String>)> = Vec::new();
     loop {
         let line = read_line(&mut r)?;
         if line.is_empty() {
@@ -224,6 +356,10 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
             return Err(protocol(format!("bad header line `{line}`")));
         };
         let (name, value) = (name.trim().to_ascii_lowercase(), value.trim().to_string());
+        match all.iter_mut().find(|(k, _)| *k == name) {
+            Some((_, vs)) => vs.push(value.clone()),
+            None => all.push((name.clone(), vec![value.clone()])),
+        }
         match headers.iter_mut().find(|(k, _)| *k == name) {
             Some((_, v)) => {
                 v.push_str(", ");
@@ -260,7 +396,7 @@ fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
     } else {
         r.read_to_end(&mut body).map_err(|e| (connect_kind(&e), e.to_string()))?;
     }
-    Ok(Response { status, headers, body: String::from_utf8_lossy(&body).into_owned() })
+    Ok(Response { status, headers, all, body })
 }
 
 #[cfg(test)]
@@ -287,7 +423,7 @@ mod tests {
         let raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-A: 1\r\nx-a: 2\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n";
         let r = read_response(raw.as_bytes(), "GET").ok().unwrap();
         assert_eq!(r.status, 200);
-        assert_eq!(r.body, "Wikipedia");
+        assert_eq!(r.body, b"Wikipedia");
         assert_eq!(r.headers[1], ("x-a".to_string(), "1, 2".to_string()));
     }
 }

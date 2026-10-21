@@ -1,6 +1,6 @@
 # edit
 entry: main in edit.ail
-tests: 55 (`ail test` lists them)
+tests: 59 (`ail test` lists them)
 
 ## (root)
 ```
@@ -74,6 +74,9 @@ fn diag_bg(List[Diag], int, int, int) int
 enum Command
 fn drop_last(str) str
 fn find_in(List[char], List[char], int) int?
+fn match_from(List[char], List[char], int, bool) int?
+fn find_label(bool) str
+fn on_off(bool) str
 fn go_or_select(Dir, bool) Command
 fn key_command(str, bool, bool, bool) Command?
 fn ail_command() str [env fs io]
@@ -138,6 +141,7 @@ struct Source
 fn declared_at(List[Source], str) Loc?
 fn card_hits(Json, List[Source]) List[Hit]
 fn card_item(mut List[Hit], Json, List[Source], int, Loc) [mutates]
+fn refs_hits(str, Json) List[Hit]
 fn problem_hits(str, str, mut Set[str]) List[Hit] [mutates]
 fn problems_title(List[Hit]) str
 fn problem_key(Hit) str
@@ -176,4 +180,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3441); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3491); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names

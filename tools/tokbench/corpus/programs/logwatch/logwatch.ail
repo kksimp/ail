@@ -1,0 +1,24 @@
+fn field(line str, key str) str?
+    for part in line.split(" ")
+        if value := part.strip_prefix("{key}=")
+            return value
+    none
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/agent-data/app.log")? "reading the app log"
+    mut codes := {}
+    mut users := {}
+    mut errors := 0
+    for line in text.lines()
+        if not line.contains(" ERROR ")
+            continue
+        errors += 1
+        code := field(line, "code") else "none"
+        user := field(line, "user") else "anon"
+        codes[code] += 1
+        users[user] += 1
+    print("{errors} errors")
+    for c in codes.keys().sorted()
+        print("code {c}: {codes[c]}")
+    for u in users.keys().sorted(by: |u| -users[u])
+        print("user {u}: {users[u]}")

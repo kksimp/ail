@@ -1,0 +1,3 @@
+gzip is smaller: true
+round trip equal: true
+corrupt input rejected: true

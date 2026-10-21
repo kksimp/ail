@@ -108,7 +108,7 @@ fn ends_operand(t Tok) bool
     match t
         Kw(k) => k == "self" or k == "true" or k == "false" or k == "none" or k == "todo"
         Sym(s) => s == ")" or s == "]" or s == "}" or s == "?"
-        Ident(_) | Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => true
+        Ident(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => true
 
 fn sym_of(t Tok) str
     if tok_tag(t) == "sym" then tok_text(t) else ""
@@ -136,6 +136,7 @@ fn render_word(t Tok) str
         Kw(s) => s
         Sym(s) => s
         Str(s) => "\"{escape(s)}\""
+        Bytes(hex) => "b\"{bytes_source(hex)}\""
         Interp(parts) =>
             mut out := List[str]()
             for part in parts
@@ -282,8 +283,8 @@ fn names_in(tok Tok) List[str]
                     match t.tok
                         Ident(n) => names.push(n)
                         Interp(_) => names.extend(names_in(t.tok))
-                        Kw(_) | Sym(_) | Str(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => continue
-        Ident(_) | Kw(_) | Sym(_) | Str(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return names
+                        Kw(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => continue
+        Ident(_) | Kw(_) | Sym(_) | Str(_) | Bytes(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => return names
     names
 
 # ---- Modules (mod.use.1-2, mod.vis.1-2) ----
@@ -309,7 +310,7 @@ fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
             path.push(take_name("a module name after `.`", "mod.use.1")?)
         else
             break
-    mut alias := absent[ast.Ident]()
+    mut alias := none
     if eat_kw("as")
         alias = take_name("a name after `as`", "mod.use.1")?
     if not eat_newline() and peek() != Tok.Eof
@@ -528,4 +529,20 @@ fn Parser.stray_after_statement(mut self, start int) bool
 fn upper_ident(t Tok) bool
     match t
         Ident(n) => n.chars().len() > 0 and n.chars()[0].is_upper()
-        Kw(_) | Sym(_) | Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false
+        Kw(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false
+
+## The source form of the bytes `hex` holds, between the quotes of `b"..."`.
+fn bytes_source(hex str) str
+    cs := hex.chars()
+    mut out := List[str]()
+    mut k := 0
+    while k + 1 < cs.len()
+        n := (cs[k].to_digit(16) else 0) * 16 + (cs[k + 1].to_digit(16) else 0)
+        if n == 34 or n == 92
+            out.push("\\{char.from_code(n) else ' '}")
+        elif n >= 32 and n <= 126
+            out.push("{char.from_code(n) else ' '}")
+        else
+            out.push("\\x{cs[k]}{cs[k + 1]}")
+        k += 2
+    out.join("")

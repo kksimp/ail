@@ -1,0 +1,20 @@
+# The edges of the subset's newer pieces: `else` on a binding only after
+# `s.to_int()`, `s.to_float()` and the OS calls, format specifications only
+# on numbers, `bool` and `str` (native.subset.1), at most 8 float
+# parameters. A computed constant is fine (ADR 0604).
+LIMIT := 2 * 8
+SCALE := LIMIT.abs()
+
+fn pick(s str) int
+    n := s.find("x") else 0
+    n
+
+fn nine(a float, b float, c float, d float, e float, f float, g float, h float, i float) float
+    a + i
+
+fn main()
+    x := 2.5
+    print("{x:.2} {x:>8} {[1, 2]:>8}")
+    print(LIMIT)
+    print(pick("1.5"))
+    print(nine(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0))

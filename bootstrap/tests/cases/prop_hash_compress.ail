@@ -1,0 +1,31 @@
+## Vectors and round-trip properties for std.hash and std.compress (lane 150).
+## Complements std_hash.ail and std_compress.ail. Run with `ail test`.
+use std.hash
+use std.compress
+
+@test fn sha256_abc_vector()
+    assert_eq(
+        hash.sha256("abc"),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    )
+
+@test fn crc32_check_value()
+    assert_eq(hash.crc32("123456789"), 3421780262)
+
+@test fn digests_are_stable(s str)
+    assert_eq(hash.sha512(s), hash.sha512(s))
+    assert_eq(hash.sha384(s).len(), 96)
+
+@test fn deflate_round_trips(s str)
+    assert_eq(compress.inflate(compress.deflate(s))?, s.to_bytes())
+
+@test fn gzip_round_trips(s str)
+    assert_eq(compress.gunzip(compress.gzip(s))?, s.to_bytes())
+
+@test fn zlib_round_trips(s str)
+    assert_eq(compress.unzlib(compress.zlib(s))?, s.to_bytes())
+
+@test fn gzip_header_is_magic(s str)
+    z := compress.gzip(s)
+    assert_eq(z[0], 31)
+    assert_eq(z[1], 139)

@@ -1,0 +1,25 @@
+## std.regex.11-22: a pattern that doesn't compile fails with a value that
+## names the problem, where it is, and the rule that explains it.
+use std.regex
+
+fn show(pat str)
+    r := regex.compile(pat) else e
+        print("{e.kind} at {e.at} ({e.rule}): {e.message}")
+        return
+    print("ok {r.pat}")
+
+fn main()
+    show("a(")
+    show("a)")
+    show("[a-")
+    show(r"a\q")
+    show("a**")
+    show("*")
+    show("[z-a]")
+    show(r"\p{Nope}")
+    show("(?P<n>a)(?P<n>b)")
+    show("(?z)")
+    show(r"(a)\1")
+    show("(?=a)")
+    show(r"(a{1000}){1000}")
+    show("fine")

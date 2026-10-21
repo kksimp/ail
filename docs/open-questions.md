@@ -308,37 +308,47 @@ tree; the value is dropped and `send` returns).
 **Resolved** by [ADR 0382](decisions/0382-no-matrix-product-operator.md) (keep `a.matmul(b)`).
 
 ## OQ-114 — A mutable local that starts as `none`
-Found writing the parser in AIL (lane 113): `mut owner := none` has no type,
-so 20 locals in `compiler/syntax/` start as `absent[ast.Owner]()`, from a
-generic helper that returns `none`. Options: (a) type an untyped `none` by
-the local's first assignment, as empty literals are typed by first use (ADR
-0143) (recommended: no new syntax, and the type is still found in one
-function); (b) a typed literal such as `none[T]` (explicit, but a new form
-for one case); (c) keep the helper (no language change; costs a helper and
-a type in every such local). *Owner: AI under ADR 0076.*
+
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
+(option a: a `mut` local that starts as `none` takes its type from its first
+assignment, type.opt.9).
 
 ## OQ-115 — `if c then x else none` where `x` is a plain `T`
-The branches have types `T` and an untyped `none`, and the checker reports
-`type.opt.4` instead of giving `T?`. Options: (a) when one branch is
-`none`, the `if` has type `T?` and the other branch converts by
-`type.opt.5` (recommended: what a reader expects, and it removes helper
-functions such as `char_text` in `compiler/syntax/parse.ail`); (b) keep it
-(one rule fewer, at the cost of a helper or an `if` statement per use).
-*Owner: AI under ADR 0076.*
+
+**Resolved** by [ADR 0468](decisions/0468-optional-none-locals-and-if-branches.md)
+(option a: the `if` has type `T?`, type.opt.10).
 
 ## OQ-116 — Locals named like an item of their module
-`expr.bind.5` forbids a local with the name of any item of the module. A
-module is a directory, so a private helper `word` in one file forbids a
-local `word` in every other file; the parser hit it for `at`, `word`,
-`operand` and `float`. Options: (a) let a local shadow a function (never a
-type) for the rest of its block, and report a call of the shadowed name
-there (recommended: locals stay free to name, and the one confusing use is
-still an error); (b) limit the rule to items declared in the same file
-(local reasoning, but moving a function between files changes which locals
-are legal); (c) keep it (no ambiguity, at the cost of renaming). *Owner:
-AI under ADR 0076.*
+
+**Resolved** by [ADR 0469](decisions/0469-locals-may-shadow-functions.md)
+(option a: a local may shadow a function; a call of it in the local's block is
+expr.call.1).
 
 ## OQ-117 — `if` as an operand
+
+**Resolved** by [ADR 0470](decisions/0470-parenthesised-if-operand.md)
+(option a: an `if` operand is written in parentheses, expr.if.8).
+
+## OQ-118 — Which transcendental functions the language and the native backend need
+
+The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
+or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
+(`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
+`exp` and `tanh`, through the platform's libm, so they already differ in the
+last bit between operating systems. A bit-exact match of libm across hosts
+isn't possible, so any new function needs a stated tolerance.
+
+Options:
+- **a.** Add nothing now. The native compiler doesn't need these functions.
+  `sigmoid` and `tanh` stay interpreter-only until native tensors exist.
+- **b.** Add `exp` and `tanh` natively, within 1 ulp of the platform libm
+  (a new rule in `std.tensor.13`), so native tensors can run the activations.
+  Defer `sin`, `cos`, `atan2`, `pow` and the rest until a program needs them.
+- **c.** Add a full `std.math` (`sin` to `cbrt`) now, within 1 ulp, with an
+  algorithm from an Apache-2.0-compatible source and a NOTICE credit.
+
+Recommendation: **b.** It gives native tensors their activations without
+committing the language to a whole math library that no program yet calls.
 `col + if raw then 4 else 3` and `col + (if raw then 4 else 3)` are both
 syntax errors, so the one-line `if` (expr.if.8) only appears as a whole
 expression. Options: (a) allow it in parentheses (recommended: the bounds
@@ -346,14 +356,10 @@ are plain, and the formatter can keep them); (b) allow it anywhere an
 operand is (shortest, but `a + if c then b else d + e` hides where the
 `else` branch ends); (c) keep it (no change; the lexer writes two whole
 branches). *Owner: AI under ADR 0076.*
-
 ## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
-
 The designer asked (2026-10-20) whether a `pail` module could let developers
 write Python in the AIL editor while the code is really AIL, to help adoption.
 Not before the core language and the native toolchain are complete.
-
-Options:
 - **a.** A Python-syntax front end that compiles directly: Python source in,
   AIL semantics out. Every tool (`ail check`, `ail api`, diagnostics, the
   card) would need a second syntax, and the parts of Python the semantics
@@ -368,21 +374,16 @@ Options:
   (each kept one language and offered a bridge).
 - **c.** Neither: AI agents already write AIL directly, and the editor's
   cards and diagnostics are the on-ramp.
-
 Recommendation: **b.** One language in the tooling (the AI-first goal), a
 real on-ramp for Python developers, and no second syntax to keep in step
 with every rule. Decide after milestone 8; see the roadmap.
-
 ## OQ-120 — Must a unique value be consumed, or does scope-end cleanup suffice?
-
 Lane 125 (streaming processes) kills a child process left running when the
 program ends (`std.proc.7`). A general rule that a unique value MUST be
 consumed (waited, closed, or moved) before its scope ends would replace that
 exit-time kill, but it changes `own.uniq.3` (ADR 0066, designer's decision):
 today a unique value's cleanup runs at scope end by any path, and nothing
 needs to be consumed. Task handles already must be waited (ADR 0096).
-
-Options:
 - **a.** Keep scope-end cleanup (ADR 0066). A stray child is killed by its
   `Drop`, as `std.proc.7` says. Nothing changes.
 - **b.** Require consumption for every unique value: a unique local that is
@@ -391,13 +392,10 @@ Options:
   stops being automatic.
 - **c.** Require it only for handles declared with a marker (for example
   `unique(consume)`), keeping ADR 0066 for the rest.
-
 Recommendation: **a.** The model stays affine, not linear, which is simpler
 for agents; the exit-time kill is the `Drop` of the child and needs no new
 rule. Reopen only if stray handles cause real bugs.
-
 ## OQ-121 — Closures as `std.net.http` handlers
-
 `std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
 because AIL has no anonymous functions or captured variables (`type.fn.3`,
 ADR 0456). A handler that needs state (a counter, a store) has to reach it

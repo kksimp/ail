@@ -1,5 +1,5 @@
 //! The sized numeric types other than `int` (`i64`) and `float` (`f64`)
-//! (type.num.1, type.num.13-16).
+//! (type.num.1, type.num.13-15).
 //!
 //! A sized value is stored as an `i64` bit pattern: integers hold their value
 //! (a `u64` above `i64::MAX` is its two's-complement reinterpretation), and an

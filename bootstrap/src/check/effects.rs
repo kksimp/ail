@@ -11,13 +11,12 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). The bootstrap doesn't parse `unsafe` yet, so
-/// nothing gives it; `spawn` gives `spawn`.
+/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `spawn` gives `spawn`.
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `std.net` gives `net` (std.net.1).
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "ui"];
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
 
 /// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -47,6 +46,9 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
                 "read_text",
                 "write_text",
                 "append_text",
+                "read_bytes",
+                "write_bytes",
+                "append_bytes",
                 "exists",
                 "list_dir",
                 "remove",
@@ -59,19 +61,39 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             ],
             &["fs", "io"],
         ),
+        // std.hash.1: values only. std.compress.1: the byte functions are
+        // values only; the file and directory ones read and write files.
+        "hash" => (&["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"], &[]),
+        "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
+            (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
+        }
+        "compress" => (&["deflate", "gunzip", "gzip", "inflate", "unzlib", "zlib"], &[]),
         "env" => (&["args", "get", "cwd", "home", "program", "vars"], &["env"]),
-        "io" => (&["read_line", "read_all", "eprint", "exit"], &["io"]),
-        "proc" => (&["run", "which"], &["proc", "io"]),
+        "proc" => (&["run", "run_bytes", "which", "start", "wait", "kill"], &["proc", "io"]),
+        "io" => (&["read_line", "read_all", "read_bytes", "eprint", "exit"], &["io"]),
         // std.net.1: every request reaches the network.
-        "net" => (&["get", "post"], &["net", "io"]),
+        "net" if matches!(name, "serve" | "listen") => {
+            // std.net.14: a server needs the narrower capability as well.
+            return Some(&["net", "net.serve", "io"]);
+        }
+        "net" => {
+            (&["get", "post", "request", "get_bytes", "post_bytes", "request_bytes", "options", "connect", "connect_tls"], &["net", "io"])
+        }
         // std.path.1: text only, so no effects.
         "path" => (&["base", "dir", "ext", "join"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
+        // std.regex.1: text in, text out, so no effects.
+        "regex" => (
+            &["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+            &[],
+        ),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
+        // std.tz.1-2: reads the tz database files, and `TZ`.
+        "tz" => (&["offset", "system"], &["fs", "env"]),
         // std.tensor.1: values only, so no effects.
         "tensor" => (&["from", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
-        "task" => (&["cancelled", "check"], &[]),
+        "task" => (&["cancelled", "check", "select"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.
         "ui" => (&["open", "clipboard_get", "clipboard_set", "Window"], &["ui", "io"]),
         _ => return None,
@@ -555,6 +577,11 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.otherwise(otherwise);
             }
             Stmt::Defer(s, _) => self.stmt(s),
+            // unsafe.block.5, eff.infer.4: an `unsafe` block gives `unsafe`.
+            Stmt::Unsafe { body, .. } => {
+                self.direct.entry("unsafe").or_insert_with(|| "an `unsafe` block".to_string());
+                self.block(body);
+            }
         }
     }
 
@@ -577,14 +604,21 @@ impl<'p, 'r> Walker<'p, 'r> {
     fn expr(&mut self, e: &Expr) {
         match e {
             Expr::Str(..)
+            | Expr::Bytes(..)
             | Expr::Int(..)
             | Expr::Float(..)
             | Expr::Char(..)
             | Expr::Bool(..)
             | Expr::None(_)
             | Expr::Hole(_)
-            | Expr::Name(..)
             | Expr::TypeArgs { .. } => {}
+            // type.fn.2: naming a function as a value counts as calling it,
+            // since the value can be called wherever it ends up.
+            Expr::Name(_, pos) => {
+                if let Some(&i) = self.resolved.fn_values.get(pos) {
+                    self.call(i);
+                }
+            }
             Expr::Interp(parts, _) => {
                 self.std_traits();
                 for p in parts {
@@ -656,6 +690,13 @@ impl<'p, 'r> Walker<'p, 'r> {
                         self.add(e, format!("{m}.{name}"));
                     }
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && m.starts_with("net.")
+                {
+                    // std.net.14: the methods of the handles `net.serve`, `net.listen` and `net.connect` make.
+                    for e in ["net", "io"] {
+                        self.add(e, (*m).to_string());
+                    }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && let Some(effects) = std_effects("ui", "Window")
                 {
                     for &e in effects {
@@ -714,6 +755,9 @@ impl<'p, 'r> Walker<'p, 'r> {
             Expr::Match { scrutinee, arms, .. } => {
                 self.expr(scrutinee);
                 for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.expr(g);
+                    }
                     self.block(&arm.body);
                 }
             }
@@ -806,6 +850,13 @@ mod tests {
     }
 
     #[test]
+    fn tz_reads_files_and_env() {
+        let src = "use std.tz\nfn main()\n    print(tz.offset(\"UTC\", 0))\n    print(tz.system())\n";
+        let (prog, resolved) = front(src);
+        assert_eq!(set(&prog, &resolved, "fn:main"), ["env", "fs", "io"]);
+    }
+
+    #[test]
     fn deny_names_the_chain() {
         let (prog, resolved) = front(SAVE);
         let d = check_denied(&prog, &resolved, &["fs", "proc"]);
@@ -838,7 +889,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "proc", "random", "ui"]);
+        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }

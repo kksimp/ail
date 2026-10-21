@@ -110,6 +110,8 @@ pub enum Tok
     Kw(word str)
     Sym(text str)
     Str(value str)
+    ## `b"..."`, its bytes as lowercase hex (lex.bytes.1).
+    Bytes(hex str)
     ## A string literal containing `{expression}` parts (lex.str.2).
     Interp(parts List[Part])
     ## `'a'` (lex.str.4)
@@ -361,7 +363,7 @@ fn lex_scaled(src str, scale int) Scaled
                 continues = match lx.tokens[lx.tokens.len() - 1].tok
                     Sym(s) => s == "," or BINARY_SYMBOLS.contains(s)
                     Kw(k) => k == "and" or k == "or"
-                    Ident(_) | Str(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false
+                    Ident(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => false
             if produced and continues
                 continuing = true
             else
@@ -489,6 +491,9 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             if starts_triple(line, i + 1) and in_interp == 0
                 return Opening(col: i, raw: true)
             i = raw_string(line, i, line_no)
+        elif c == 'b' and at(line, i + 1) == '"'
+            # lex.bytes.1: `b"..."` is a `bytes` literal.
+            i = bytes_literal(line, i, line_no)
         elif c == '\''
             i = char_literal(line, i, line_no)
         elif c == ';'
@@ -507,6 +512,9 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             diag("gram.foreign.1", pos)
             i += 1
         elif c == '&' and at(line, i + 1) != '&'
+            diag("gram.foreign.1", pos)
+            i += 1
+        elif c == '^' or c == '~'
             diag("gram.foreign.1", pos)
             i += 1
         elif c.is_digit()
@@ -572,6 +580,54 @@ fn Lexer.string(mut self, line List[char], start int, line_no int) int
     diag("lex.str.1", pos)
     forget_brackets(line_no)
     line.len()
+
+## `b"..."`: ASCII text with the escapes `\n \t \r \0 \\ \" \xHH` and no
+## interpolation (lex.bytes.1). `line[start]` is the `b`. The token keeps the
+## bytes as hex.
+fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
+    pos := ast.Pos(line: line_no, col: start + 1)
+    mut hex := List[str]()
+    mut i := start + 2
+    while i < line.len()
+        here := ast.Pos(line: line_no, col: i + 1)
+        c := line[i]
+        if c == '"'
+            push(Bytes(hex.join("")), pos)
+            return i + 1
+        elif c == '\\'
+            simple := match at(line, i + 1)
+                'n' => 10
+                't' => 9
+                'r' => 13
+                '0' => 0
+                '\\' => 92
+                '"' => 34
+                _ => -1
+            hi := at(line, i + 2).to_digit(16)
+            lo := at(line, i + 3).to_digit(16)
+            if simple >= 0 and i + 1 < line.len()
+                hex.push(hex_byte(simple))
+                i += 2
+            elif at(line, i + 1) == 'x' and hi != none and lo != none
+                hex.push(hex_byte((hi else 0) * 16 + (lo else 0)))
+                i += 4
+            else
+                diag("lex.bytes.1", here)
+                i += 2
+        elif c.code() < 128
+            hex.push(hex_byte(c.code()))
+            i += 1
+        else
+            diag("lex.bytes.1", here)
+            i += 1
+    diag("lex.bytes.1", pos)
+    forget_brackets(line_no)
+    line.len()
+
+## `n`, a byte, as two lowercase hex digits.
+fn hex_byte(n int) str
+    digits := "0123456789abcdef"
+    "{digits.char_at(n / 16) else '0'}{digits.char_at(n % 16) else '0'}"
 
 ## After a string error, the brackets opened on its line don't continue
 ## the statement, so the error isn't followed by others about them.

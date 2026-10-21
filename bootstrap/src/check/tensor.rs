@@ -18,7 +18,7 @@ impl<'p> Checker<'p> {
     }
 
     /// The element type of `t` when it is a `tensor.Tensor[T]`.
-    fn tensor_elem(&self, t: &Ty) -> Option<Ty> {
+    pub(super) fn tensor_elem(&self, t: &Ty) -> Option<Ty> {
         match t {
             Ty::Struct(s, args) if self.prog.structs[*s].name == "tensor.Tensor" => {
                 Some(args.first().cloned().unwrap_or(Ty::Err))
@@ -111,17 +111,59 @@ impl<'p> Checker<'p> {
             );
             return Some(Ty::Err);
         }
+        if m == "round" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.19",
+                pos,
+                "`round` is on `float` tensors, and this one holds `int`",
+                "a tensor of `int` already has whole numbers",
+            );
+            return Some(Ty::Err);
+        }
+        if m == "clamp" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.18",
+                pos,
+                "`clamp` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).clamp(lo, hi)`",
+            );
+            return Some(Ty::Err);
+        }
+        if m == "conv2d" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.16",
+                pos,
+                "`conv2d` is on `float` tensors, and this one holds `int`",
+                "convert first: `t.map(|x| x.to_float()).conv2d(k)`",
+            );
+            return Some(Ty::Err);
+        }
+        if matches!(m, "relu" | "sigmoid" | "tanh") && elem == Ty::Int {
+            self.args_only(args);
+            let msg = format!("`{m}` is on `float` tensors, and this one holds `int`");
+            self.error_help("std.tensor.13", pos, msg, format!("convert first: `t.map(|x| x.to_float()).{m}()`"));
+            return Some(Ty::Err);
+        }
         let t = rt.clone();
         let (params, ret) = match m {
             "shape" => (vec![], Ty::List(Box::new(Ty::Int))),
             "len" => (vec![], Ty::Int),
             "to_list" => (vec![], Ty::List(Box::new(elem))),
+            "item" => (vec![], elem),
             // std.tensor.11: over every element, or over one axis.
             "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
             "sum" | "max" | "mean" => (vec![Ty::Int], t),
             "transpose" => (vec![], t),
+            "round" => (vec![], self.tensor_ty(Ty::Int)),
+            "argmax" | "argmin" if args.is_empty() => (vec![], Ty::Int),
+            "argmax" | "argmin" => (vec![Ty::Int], self.tensor_ty(Ty::Int)),
+            "clamp" => (vec![elem.clone(), elem.clone()], t),
             "dot" => (vec![t], elem),
-            "add" | "mul" | "matmul" => (vec![t.clone()], t),
+            "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
+            "relu" | "sigmoid" | "tanh" => (vec![], t),
             "reshape" => (vec![Ty::List(Box::new(Ty::Int))], t),
             _ => unreachable!("TENSOR_METHODS lists `{m}`"),
         };
@@ -178,13 +220,14 @@ impl<'p> Checker<'p> {
         if le.is_none() && re.is_none() {
             return None;
         }
-        if !arith || !matches!(sym, "+" | "-" | "*") {
+        if !arith || !matches!(sym, "+" | "-" | "*" | "/") {
             if arith {
-                let help = match sym {
-                    "/" => "divide each element with `t.map(|x| x / d)`",
-                    _ => "use `t.map(|x| ...)`",
-                };
-                self.error_help("std.tensor.10", pos, format!("`{sym}` is not defined for tensors"), help);
+                self.error_help(
+                    "std.tensor.10",
+                    pos,
+                    format!("`{sym}` is not defined for tensors"),
+                    "use `t.map(|x| ...)`",
+                );
                 return Some(Ty::Err);
             }
             return None;
@@ -195,6 +238,15 @@ impl<'p> Checker<'p> {
             (None, Some(e)) => e == lt,
             (None, None) => false,
         };
+        if ok && sym == "/" && le.as_ref().or(re.as_ref()) == Some(&Ty::Int) {
+            self.error_help(
+                "std.tensor.10",
+                pos,
+                "`/` is not defined for `int` tensors",
+                "convert first: `t.map(|x| x.to_float())`",
+            );
+            return Some(Ty::Err);
+        }
         if ok {
             return Some(if le.is_some() { lt.clone() } else { rt.clone() });
         }

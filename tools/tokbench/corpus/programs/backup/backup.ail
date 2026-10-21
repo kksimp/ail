@@ -1,0 +1,17 @@
+fn main() !
+    src := "{path.dir(env.program())}/configs"
+    tmp := env.get("TMPDIR") else "/tmp"
+    out := path.join(tmp, "ail-backup-check.tar.gz")
+    made := proc.run("tar", ["-czf", out, "-C", src, "."])? "starting tar"
+    if made.status != 0
+        print("tar failed ({made.status}): {made.err.trim()}")
+        return
+    listed := proc.run("tar", ["-tzf", out])?
+    mut count := 0
+    for name in listed.out.lines().sorted()
+        if name == "./"
+            continue
+        count += 1
+        print("  {name}")
+    fs.remove(out)?
+    print("archived {count} files")

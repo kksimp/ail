@@ -1,0 +1,9 @@
+alpha alpha alpha alpha
+
+["std_compress_case.tmp/out/a.txt", "std_compress_case.tmp/out/sub/b.txt"]
+true
+beta
+
+not_found
+corrupt
+false

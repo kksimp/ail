@@ -1,0 +1,17 @@
+## Regular expressions (std.regex, ADRs 0438-0441): compile a pattern once,
+## then search, capture, replace and split. The matcher runs in linear time,
+## so no pattern can make it backtrack. Patterns are raw strings r"...".
+##   ./ail run examples/regex.ail
+
+use std.regex
+
+fn main() ! regex.RegexError
+    digits := regex.compile(r"\d+")?
+    log := "order 66 shipped to 10.2 and 7 more"
+    print("has digits: {regex.is_match(digits, log)}")
+    for m in regex.find_all(digits, log)
+        print("number {m.text} at character {m.start}")
+    date := regex.compile(r"(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})")?
+    print(regex.replace(date, r"due 2026-10-20", r"${d}/${m}/${y}"))
+    comma := regex.compile(r"\s*,\s*")?
+    print(regex.split(comma, "a , b,c"))

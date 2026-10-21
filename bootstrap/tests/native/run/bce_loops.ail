@@ -1,0 +1,87 @@
+# Loops whose list accesses lose their bounds checks when the lists are long
+# enough (native.bce.1): the sums must not change.
+fn sum_to(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[i]
+    s
+
+fn shifted(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[i + 1] * 2 + xs[i]
+    s
+
+fn fixed(xs List[int], k int, n int) int
+    mut s := 0
+    for i in 0..n
+        s += xs[k] + i
+    s
+
+fn grid(a List[List[int]], b List[List[int]], n int) int
+    mut total := 0
+    for i in 0..n
+        for j in 0..n
+            mut s := 0
+            for k in 0..n
+                s += a[i][k] * b[k][j]
+            total += s
+    total
+
+fn fill(xs List[int], n int)
+    mut j := 0
+    while j < n
+        j += 1
+
+fn copy_in_place(xs List[int], n int) int
+    mut ys := []
+    for i in 0..n
+        ys.push(xs[i])
+    for i in 0..n
+        ys[i] = ys[i] + xs[i]
+    mut s := 0
+    for i in 0..ys.len()
+        s += ys[i]
+    s
+
+fn with_break(xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        if xs[i] > 5
+            break
+        s += xs[i]
+    s
+
+fn both_ends(xs List[int], n int) int
+    mut s := 0
+    mut last := -1
+    for i in 0..n
+        last = i
+        s += xs[i]
+    s + last
+
+fn main()
+    xs := [3, 1, 4, 1, 5, 9, 2, 6]
+    print(sum_to(xs, 8))
+    print(sum_to(xs, 0))
+    print(shifted(xs, 7))
+    print(fixed(xs, 3, 5))
+    print(fixed(xs, 99, 0))
+    mut a := List[List[int]]()
+    mut b := List[List[int]]()
+    for i in 0..5
+        mut ra := []
+        mut rb := []
+        for j in 0..5
+            ra.push(i + j)
+            rb.push(i * j + 1)
+        a.push(ra)
+        b.push(rb)
+    print(grid(a, b, 5))
+    print(grid(a, b, 0))
+    print(copy_in_place(xs, 8))
+    print(with_break(xs, 8))
+    print(both_ends(xs, 8))
+    mut zs := List[int]()
+    fill(zs, 3)
+    print(zs.len())

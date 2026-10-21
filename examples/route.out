@@ -1,0 +1,16 @@
+HTTP/1.1 200 OK
+Content-Length: 10
+
+ok /health
+--
+HTTP/1.1 405 Method Not Allowed
+Content-Length: 7
+
+use GET
+--
+HTTP/1.1 404 Not Found
+Content-Length: 13
+
+no such route
+--
+400 bad request: junk
