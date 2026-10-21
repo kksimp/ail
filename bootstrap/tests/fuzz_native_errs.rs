@@ -29,6 +29,12 @@ static ARM: AtomicUsize = AtomicUsize::new(0);
 static BUILT: AtomicUsize = AtomicUsize::new(0);
 static DECLINED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
+/// The ARM64 emulator is optional (`apt install qemu-user`); without it the sample is skipped.
+fn qemu_installed() -> bool {
+    static HAVE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *HAVE.get_or_init(|| std::process::Command::new("qemu-aarch64-static").arg("--version").output().is_ok_and(|o| o.status.success()))
+}
+
 /// What differs between the walker and the native build of `src`, if anything.
 /// `None` also for a program the backend declines (counted in `DECLINED`).
 fn disagreement(dir: &Path, src: &str, _pure: bool) -> Option<String> {
@@ -53,7 +59,7 @@ fn disagreement(dir: &Path, src: &str, _pure: bool) -> Option<String> {
     }
     let first = |o: &Out| o.stderr.lines().next().unwrap_or("").to_string();
     // A sample under qemu: every tenth program also builds for aarch64-linux.
-    if BUILT.load(Ordering::SeqCst) % 10 == 0 {
+    if BUILT.load(Ordering::SeqCst) % 10 == 0 && qemu_installed() {
         let arm = dir.join("native-arm");
         let _ = fs::remove_file(&arm);
         let b = exec_program_env(ail, &["build", p.to_str().unwrap(), "-o", arm.to_str().unwrap(), "--target", "aarch64-linux"], &[], 120);
