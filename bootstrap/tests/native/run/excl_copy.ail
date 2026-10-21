@@ -1,0 +1,37 @@
+struct Box
+    n int
+    tag str
+
+fn bump(a Box, mut b Box) int
+    b.n += 10
+    a.n
+
+fn first_after(xs List[int], mut ys List[int]) int
+    ys[0] = 99
+    xs[0]
+
+fn disjoint(a Box, mut b Box) int
+    b.n += 1
+    a.n
+
+fn pair[T](a T, mut b T) T
+    a
+
+struct Two
+    left Box
+    right Box
+
+fn main()
+    mut x := Box(n: 1, tag: "x")
+    print(bump(x, mut x))
+    print(x.n)
+    mut xs := [1, 2]
+    print(first_after(xs, mut xs))
+    print(xs[0])
+    mut t := Two(left: Box(n: 5, tag: "l"), right: Box(n: 6, tag: "r"))
+    print(disjoint(t.left, mut t.right))
+    print(t.right.n)
+    print(disjoint(t.left, mut t.left))
+    print(t.left.n)
+    mut y := Box(n: 2, tag: "y")
+    print(pair(y, mut y).n)

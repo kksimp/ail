@@ -1,0 +1,48 @@
+## Exclusive arguments (own.excl.4, native.subset.3, ADR 0119): a read-only argument that
+## may overlap a `mut` argument of the same call is passed as a copy made
+## before the call. A struct or list is a pointer, so without the copy the
+## callee would see its own changes through the read-only parameter.
+
+use ast
+
+## The path of a place: its root variable, then a field name per `.f` and
+## `[]` per index. `none` for anything that isn't a place.
+fn place_path(e ast.Expr) List[str]?
+    match e
+        Name(n, _) => [n]
+        Member(r, f, _) =>
+            mut p := place_path(r)?
+            p.push(f)
+            p
+        Index(r, _, _) =>
+            mut p := place_path(r)?
+            p.push("[]")
+            p
+        _ => none
+
+## Whether two places can overlap: the same root, and fields that agree as
+## far as both go. An index may equal any other index, so `[]` matches.
+fn paths_overlap(a List[str], b List[str]) bool
+    for k in 0..a.len().min(b.len())
+        if a[k] != b[k] and a[k] != "[]" and b[k] != "[]"
+            return false
+    true
+
+## Whether argument `i` is read-only and may overlap a `mut` argument.
+fn overlaps_mut(args List[ast.Arg], i int) bool
+    if args[i].mutable
+        return false
+    mine := place_path(args[i].value) else return false
+    for j in 0..args.len()
+        if j != i and args[j].mutable
+            if theirs := place_path(args[j].value)
+                if paths_overlap(mine, theirs)
+                    return true
+    false
+
+## The argument's value, copied first when it may overlap a `mut` argument.
+fn Lower.shield_arg(mut self, args List[ast.Arg], i int, v Val) int
+    if needs_copy(v.ty) or v.ty.is_coll()
+        if overlaps_mut(args, i)
+            return copy_value(v)
+    v.id

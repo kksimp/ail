@@ -1,4 +1,4 @@
-## `any Trait` in the native subset (ADR 0616). An `impl` block's methods
+## `any Trait` in the native subset (native.subset.2, ADR 0616). An `impl` block's methods
 ## and inherited defaults are already methods of the type (`program_fns`,
 ## ADR 0536); here `T`'s implementations get tags and dispatchers.
 
