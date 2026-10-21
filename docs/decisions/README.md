@@ -582,3 +582,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0767](0767-map-first-probe.md) | The native map lookup tries one probe without saved registers, then falls back to the full probe *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
+| [0814](0814-selftest-speed.md) | Selftest speed: native builds on four threads, then parallel test binaries, then one compiler load for many builds (AI, delegated ADR 0076, integrator-approved) | Accepted | 2026-10-21 |
