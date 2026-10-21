@@ -242,6 +242,9 @@ impl<'p> Checker<'p> {
             // gives the shape of the call and `Err` marks the element type.
             ("tensor", "from") => (vec![list(Ty::Err), list(Int)], self.tensor_ty(Ty::Err)),
             ("tensor", "zeros") => (vec![list(Int)], self.tensor_ty(Ty::Err)),
+            // std.tensor.25 (ADR 0831): `from_fn(shape, |i| e)`; `shape` is an `int` or a
+            // `List[int]`, and `tensor_call` checks the function.
+            ("tensor", "from_fn") => (vec![list(Int), Ty::Err], self.tensor_ty(Ty::Err)),
             ("path", "dir" | "base" | "ext" | "stem") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),

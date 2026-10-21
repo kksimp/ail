@@ -91,7 +91,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.tz.1-2: reads the tz database files, and `TZ`.
         "tz" => (&["offset", "system"], &["fs", "env"]),
         // std.tensor.1: values only, so no effects.
-        "tensor" => (&["from", "zeros"], &[]),
+        "tensor" => (&["from", "from_fn", "zeros"], &[]),
         // conc.cancel.2: reads the running task's flag; no capability.
         "task" => (&["cancelled", "check", "select"], &[]),
         // std.ui.9: opening a window and every `ui.Window` method.

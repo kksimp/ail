@@ -1993,6 +1993,21 @@ fn main()
     print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
 ```
 
+**std.tensor.25** — `tensor.from_fn(shape, |i| e)` builds a tensor whose element
+at flat (row-major) index `i` is `e`, computed in index order. `shape` is an
+`int` (a 1-D tensor of that length) or a `List[int]` as in `tensor.zeros`; a
+negative size or too many elements traps with std.tensor.2. The function takes
+the `int` index and gives an `int`, a `float` or an `f32`, and that is the
+element type. A call with another argument count, a function that is not
+written `|i| e`, a shape of another type, or a function that gives another type
+is a compile-time error. *(ADR 0831)*
+
+```ail rules=std.tensor.25
+fn main()
+    print(tensor.from_fn(4, |i| i.to_float() * 0.5))   # tensor.from([0.0, 0.5, 1.0, 1.5])
+    print(tensor.from_fn([2, 3], |i| i * i))           # tensor.from([0, 1, 4, 9, 16, 25], [2, 3])
+```
+
 **std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
 the methods and operators of `Tensor[float]`, and each result is rounded to
 `f32` once: the operations are single-precision IEEE operations, and `sum`,
