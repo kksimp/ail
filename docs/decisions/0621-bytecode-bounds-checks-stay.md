@@ -22,9 +22,15 @@ Keep the per-operand bounds checks. The loader validates every register and
 constant index, but the compiler cannot see that proof across the loader:
 `regs[i]` and `consts[i]` stay checked unless the access is `unsafe`
 (`get_unchecked`), which the designer has not approved (decision card open).
-Safe forms are not expected to help (reasoned, not built): fixed-length slices and one up-front assert don't let
-the optimiser drop checks on indices that come from instruction fields at run
-time, and replacing `mem::replace` with an enum swap moves the same stores.
+Safe forms were measured on a prototype (not kept): registers as a fixed
+`[Value; 64]` per frame (functions needing more stay on the walker) with every
+register index masked to 63, so the compiler drops the register checks.
+Callgrind instruction counts, before to after: binarytrees (depth 10)
+368.5 M to 359.8 M (-2.4%), sieve (300,000) 319.4 M to 313.6 M (-1.8%), matmul
+(60) 133.6 M to 128.3 M (-4.0%). Local and constant accesses stay checked, and
+the 64-register cap and 8 KB frames are costs, so it is below the 3% bar on
+two of three programs and not worth landing. Replacing `mem::replace` with an
+enum swap moves the same stores and was not built.
 
 The measured ceiling for unchecked access is about 12% fewer instructions
 (lane 190, step 1). Beyond that the remaining cost is the design: operands are

@@ -26,6 +26,13 @@ nested inside a receiver such as `(s.strip_prefix(p) else "0").to_int() else 0`.
 - Field `op=` on `self` compiles when the value cannot write locals.
 - `has_try` looks through a nested `else`, so it no longer forces a hand-off.
 
+- A `mut self` call on a field path of a local (`o.inner.grow(i)`) runs on the
+  tier: the field moves out of the struct (copy on write, as the walker's place
+  path does) into the call and back. Register receivers still can't take `mut self`.
+- A call through a local holding a function value (`f(i)`, type.fn.3) is
+  `FnGuard` + `FnCall`: the guard checks the value and its arity before the
+  arguments run, else the walker's call.
+
 ## Results (callgrind-stable counts; wall time on Linux x86-64, min of 3)
 
 | Program | Before | After |
@@ -33,6 +40,7 @@ nested inside a receiver such as `(s.strip_prefix(p) else "0").to_int() else 0`.
 | struct loop (`ps[i].step`, 800k calls) | 0.178 s (base), 0.132 s (0619) | 0.096 s (CPython 0.075 s) |
 | hand-offs in that loop | 600,000 | 0 |
 | nested `else` loop | 1 hand-off per use | 0 |
+| `f(i)` and `o.inner.grow(i)` loop (1,000 turns) | 2,001 hand-offs | 1 |
 
 ## Rejected alternatives
 
