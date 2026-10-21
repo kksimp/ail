@@ -113,6 +113,12 @@ fn request_impl(method: &str, url: &str, opts: &Opts, stream: bool) -> Result<Re
     }
     let mut url = with_query(url, &opts.query);
     let mut opts = opts.clone();
+    // std.net.26: unless the program asks for an encoding itself, the client
+    // asks for gzip or deflate and undoes it.
+    let auto = !stream && !opts.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("accept-encoding"));
+    if auto {
+        opts.headers.push(("Accept-Encoding".to_string(), "gzip, deflate".to_string()));
+    }
     let follows = method == "GET" || method == "HEAD";
     let deadline = opts.total.map(|t| Instant::now() + t);
     for _ in 0..=opts.max_redirects {
@@ -131,10 +137,40 @@ fn request_impl(method: &str, url: &str, opts: &Opts, stream: bool) -> Result<Re
                 }
                 url = next;
             }
-            _ => return Ok(reply),
+            _ => {
+                if auto {
+                    decode_body(&url, &mut reply.resp)?;
+                }
+                return Ok(reply);
+            }
         }
     }
     Err(fail(&url, "protocol", format!("more than {} redirects", opts.max_redirects)))
+}
+
+/// Largest body a `Content-Encoding` is undone to (std.net.26).
+const DECODED_LIMIT: usize = 256 * 1024 * 1024;
+
+/// std.net.26: undoes `Content-Encoding: gzip` or `deflate`, then drops that
+/// header and `Content-Length`, which described the encoded bytes.
+fn decode_body(url: &str, r: &mut Response) -> Result<(), NetFail> {
+    let enc = r.headers.iter().find(|(k, _)| k == "content-encoding").map(|(_, v)| v.trim().to_ascii_lowercase());
+    let Some(enc) = enc else { return Ok(()) };
+    if r.body.is_empty() || !matches!(enc.as_str(), "gzip" | "x-gzip" | "deflate") {
+        return Ok(());
+    }
+    let bad = |e: crate::codec::CodecError| fail(url, "protocol", format!("a body that says it is {enc} is not: {}", e.message));
+    r.body = if enc == "deflate" {
+        // Servers send both the zlib form the standard names and raw deflate.
+        crate::codec::zlib::unzlib(&r.body, DECODED_LIMIT).or_else(|_| crate::codec::inflate::inflate(&r.body, DECODED_LIMIT)).map_err(bad)?
+    } else {
+        crate::codec::gzip::gunzip(&r.body, DECODED_LIMIT).map_err(bad)?
+    };
+    for gone in ["content-encoding", "content-length"] {
+        r.headers.retain(|(k, _)| k != gone);
+        r.all.retain(|(k, _)| k != gone);
+    }
+    Ok(())
 }
 
 /// The scheme and authority of a URL, lowercase, for comparing hosts.

@@ -718,6 +718,31 @@ returns its connection to the pool (`std.net.19`). Reading after `close`
 fails with kind `closed`. `timeout_ms` bounds each wait for the next piece
 and `total_ms` the whole request including the reading. *(ADR 0716)*
 
+**std.net.26** — Content encodings. `get`, `post` and `request` (and the
+`_bytes` forms) send `Accept-Encoding: gzip, deflate` unless the program sets
+an `Accept-Encoding` header, and undo a `Content-Encoding` of `gzip`,
+`x-gzip` or `deflate` (zlib or raw) on the final response, up to 256 MiB,
+dropping `Content-Encoding` and `Content-Length` from its headers. A body
+that does not decode fails with kind `protocol`. A program that sets
+`Accept-Encoding` gets the body as sent, with its headers, and decodes it
+itself with `std.compress`. `net.open` sends no `Accept-Encoding` of its own
+and decodes nothing. *(ADR 0717)*
+
+```ail rules=std.net.26
+use std.net
+use std.compress
+
+fn once(srv net.Server) !
+    ex := srv.accept()?
+    ex.respond_bytes(200, {"content-encoding": "gzip"}, compress.gzip("zipped".to_bytes()))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn once(srv)
+    print(net.get("http://{srv.addr()}/")?.body)
+    t.wait()?
+```
+
 ```ail rules=std.net.23,std.net.24,std.net.25
 use std.net
 use std.net.http
