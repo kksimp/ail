@@ -42,9 +42,29 @@ memory in small programs and thrashes in large ones.
 The pause is proportional to the heap in pages plus live objects; programs with
 very large live data see long pauses until a generational design (a later ADR).
 
-## Follow-ups (lane 191's measurements)
+## Allocator speed-up (amendment, 2026-10-21)
 
-`alloc` costs about 25 instructions per call, three callee-saved push/pop pairs
-included. Ideas for a later PR: a frameless fast path (free-list pop or bump
-within the class's page, falling to the current code on a miss), and a
-`list_new_for` that allocates a header and its first block in one call.
+Lane 191 measured `binarytrees` at 7.8x gcc and suspected the allocator's
+call cost. A profile (callgrind, `binarytrees 14`) showed `rt.alloc` at 3% of
+instructions and the page search in `heap_pages` at 25%: the arena lists of
+`binarytrees` grow to many pages, and each growth scanned the page table from
+the start and zeroed pages that `list_grow` then overwrote. Changes:
+
+- `heap_pages` steps over whole large spans by their page count, keeps the
+  hint at the lowest free page, and remembers the smallest run length known
+  not to fit until the next sweep.
+- `alloc_raw(n, kind)` skips zeroing for blocks the caller fills before
+  reading (list element blocks, string objects, the string builder, the sort
+  buffer). The collector scans a list's element block only up to the list's
+  length, so stale words past it keep nothing alive.
+- `alloc` keeps a straight-line fast path for small objects (free-list pop or
+  bump), calling `alloc_slow` otherwise. It is cheap but was not the
+  bottleneck.
+
+Results (Linux x86-64, min of 5): `binarytrees 17` 0.357 to 0.320 s with 16%
+fewer instructions at depth 14; `binarytrees 20` 7.0 to 3.8 s and 85 to 61 MiB;
+the 10 GB test 9.8 to 3.3 s; `fannkuch`, `sieve`, `mandelbrot` 3-10% faster;
+others unchanged. A bump-pointer fast path in the generated code itself, and a
+`list_new_for` that allocates header and first block together, are left until
+the code generator folds constant offsets into addressing: today the fast path
+spends most of its instructions on `add` and `imul` for addresses.
