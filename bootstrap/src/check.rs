@@ -202,6 +202,9 @@ pub struct Resolved {
     /// `tensor.from` and `tensor.zeros` calls typed `Tensor[int]`, by the
     /// position of the name (std.tensor.2).
     pub int_tensors: std::collections::HashSet<Pos>,
+    /// `tensor.from` and `tensor.zeros` calls typed `Tensor[f32]`, by the
+    /// position of the name (std.tensor.21).
+    pub f32_tensors: std::collections::HashSet<Pos>,
     /// Chains of elementwise tensor operations that run fused (std.tensor.20),
     /// by the chain's position.
     pub fused: std::collections::HashSet<Pos>,
