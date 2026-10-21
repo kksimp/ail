@@ -10,28 +10,55 @@ use ast
 fn Lower.lower_char(mut self, text str) Val
     Val(id: konst(text.chars()[0].code(), Ty.Char), ty: Ty.Char)
 
-## `"a{x}b"` as a value (lex.str.5): the pieces' text, joined. Up to six
-## pieces become one `rt.str_catN` call (one allocation); more are joined
-## five at a time onto what is built so far (ADR 0768).
+## `"a{x}b"` as a value (lex.str.5): the pieces' text, joined. With only
+## string pieces, up to six become one `rt.str_catN` call (one allocation);
+## more are joined five at a time onto what is built so far (ADR 0768). With
+## a number, `char` or `bool` hole, every hole is evaluated first (a hole may
+## itself interpolate), then the pieces are written into the runtime's
+## builder and the result is allocated once, with no string made for the
+## number (ADR 0768 addendum).
 fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) Val?
     mut pieces := List[int]()
+    # How each piece is written: 0 a string, 1 an `int`, 2 a `char`, 3 a `bool`.
+    mut kinds := List[int]()
+    mut scalars := 0
     for p in parts
         mut piece := -1
+        mut kind := 0
         match p
             Lit(text) =>
                 if text != ""
                     piece = str_value(text)
             Hole(x) =>
                 v := lower_value(x, none)?
-                piece = text_of(v, expr_pos(x))?
+                match v.ty
+                    Int =>
+                        piece = v.id
+                        kind = 1
+                    Char =>
+                        piece = v.id
+                        kind = 2
+                    Bool =>
+                        piece = v.id
+                        kind = 3
+                    _ => piece = text_of(v, expr_pos(x))?
             Fmt(x, spec) =>
                 v := lower_value(x, none)?
                 f := fmt_text(v, spec, expr_pos(x))?
                 piece = f.id
         if piece >= 0
             pieces.push(piece)
+            kinds.push(kind)
+            if kind != 0
+                scalars += 1
     if pieces.len() == 0
         return Val(id: str_value(""), ty: Ty.Str)
+    if scalars > 0
+        call("rt.sb_begin", [], Ty.Unit)
+        for k in 0..pieces.len()
+            name := if kinds[k] == 0 then "rt.sb_text" else if kinds[k] == 1 then "rt.put_int" else if kinds[k] == 2 then "rt.sb_add_char" else "rt.put_bool"
+            call(name, [pieces[k]], Ty.Unit)
+        return Val(id: call("rt.sb_str", [], Ty.Str), ty: Ty.Str)
     mut acc := pieces[0]
     mut at := 1
     while at < pieces.len()

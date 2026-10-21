@@ -70,3 +70,11 @@ copy call) and `rt.str_sub` (151 M, one allocation per field).
   separators of 1-4 bytes and interpolations of 1-13 pieces.
 - `compiler/mir/lower_str.ail` changes only the joining; `lower.ail` is not
   touched, so this is not in the lower.ail queue.
+
+## Addendum 2026-10-21: number, char and bool holes use the builder
+
+The rejected builder is the right choice for one case. In `"key{n}"` the number's text was a string of its own (`rt.fmt_int`: builder, character count, allocation, copy) that `rt.str_cat3` then copied again: two allocations and two copies for six bytes, 567 instructions per use. Now an interpolation with at least one `int`, `char` or `bool` hole evaluates all its holes first (a hole may itself interpolate, and the builder is global), then `rt.sb_begin`, one `rt.sb_text` / `rt.put_int` / `rt.sb_add_char` / `rt.put_bool` per piece, and `rt.sb_str`, which allocates once. Interpolations of strings only keep `rt.str_catN`: their lengths are known and nothing is written twice.
+
+Builder costs fixed on the way: `sb_bytes` copies with `copy_bytes` and one room check instead of a call per byte, and `sb_str` counts characters eight bytes at a time (`utf8_chars`) instead of one.
+
+Measured (callgrind, native x86-64, same base): `"key{n}"` in a loop 113.5 M to 85.5 M (-25%, with the `alloc_raw` fast-path split); `map_ops` 224.4 M to 182.0 M (-19%); `lines_split` 1540 M to 1377 M (-11%); `fasta` -0.9%; `wordfreq` and `print_many` unchanged. Output is identical to `ail run` on mixed-width text. `lower.ail` is not touched.
