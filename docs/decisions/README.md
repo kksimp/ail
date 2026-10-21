@@ -513,3 +513,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
+| [0701](0701-native-error-context.md) | Native `?` with a context message: contexts ride at the head of the trace list *(delegated)* | Accepted | 2026-10-21 |

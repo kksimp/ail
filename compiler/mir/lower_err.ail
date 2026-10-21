@@ -160,7 +160,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
     true
 
 ## After a call of a function that can fail: leave with the failure.
-fn Lower.propagate_result(mut self, v Val, pos ast.Pos) Val
+fn Lower.propagate_result(mut self, v Val, context ast.Expr?, pos ast.Pos) Val
     failure := call("rt.failed", [], Ty.Bool)
     leave := new_block()
     good := new_block()
@@ -170,18 +170,23 @@ fn Lower.propagate_result(mut self, v Val, pos ast.Pos) Val
     cur = leave
     if not fails
         problem(pos, "`?` in a function that can't fail")
+    add_context(context)
     call("rt.err_trace", [trace_line(pos)], Ty.Unit)
     finish(return_of(zero_of(ret)))
     cur = good
     v
 
+## `e? "msg"`: evaluated only on the failing path (err.ctx.2).
+fn Lower.add_context(mut self, context ast.Expr?)
+    c := context else return
+    m := lower_value(c, none) else return
+    call("rt.err_context", [m.id], Ty.Unit)
+
 ## `e?` (err.prop.1, err.prop.2, err.prop.5).
 fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
-    if context != none
-        return unsupported(pos, "`?` with a context message")
     if fallible_call(e)
         v := lower_expr(e, none)?
-        return propagate_result(v, pos)
+        return propagate_result(v, context, pos)
     o := lower_value(e, none)?
     if o.ty.opt_inner() == none
         return unsupported(pos, "`?` on a `{o.ty.name()}`")
@@ -196,6 +201,7 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
         finish(return_of(konst(0, ret)))
     elif fails
         call("rt.err_set", [str_value("a value is absent"), trace_line(pos)], Ty.Unit)
+        add_context(context)
         finish(return_of(zero_of(ret)))
     else
         problem(
