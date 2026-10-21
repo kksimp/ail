@@ -1,0 +1,29 @@
+# Large lists (page spans), growth by push, and spans reused after a
+# collection (ADR 0562).
+
+fn make(n int, v int) List[int]
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(v + i)
+    xs
+
+fn main()
+    mut live := List[List[int]]()
+    mut sum := 0
+    for round in 0..400
+        xs := make(6000, round)
+        sum += xs[5999]
+        if round % 100 == 7
+            live.push(xs)
+    print(sum)
+    big := make(300000, 5)
+    mut t := 0
+    for round in 0..300
+        ys := make(2000, round)
+        t += ys[1999]
+    print(t)
+    print(big[0])
+    print(big[299999])
+    for xs in live
+        print(xs[0])
+        print(xs[5999])

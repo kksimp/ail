@@ -165,7 +165,7 @@ fn os_fail_errno(r int)
 fn os_scratch(off int) int
     mut a := load64(global(OS_AREA))
     if a == 0
-        a = alloc(OS_AREA_SIZE)
+        a = alloc(OS_AREA_SIZE, KIND_BYTES)
         store64(global(OS_AREA), a)
     a + off
 
@@ -635,7 +635,7 @@ fn os_in_fill() bool
     flush()
     mut b := load64(global(IN_BUF))
     if b == 0
-        b = alloc(OS_IN_SIZE)
+        b = alloc(OS_IN_SIZE, KIND_BYTES)
         store64(global(IN_BUF), b)
     while true
         r := os_read(0, b, OS_IN_SIZE)
