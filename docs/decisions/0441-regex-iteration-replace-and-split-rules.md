@@ -37,3 +37,7 @@ giving an empty string, because a typo there is a bug, not data.
 - The vectors in `bootstrap/tests/regex/vectors.txt` fix these rules, and
   property tests (`std_regex_props`) check non-overlap and the identity
   `replace(re, t, "$0") == t`.
+
+## Rejected alternatives
+
+- Python's rule for empty matches (option B): rejected because `replace(a*, "-")` on `baaac` gives `-b--c-`, with doubled boundaries.

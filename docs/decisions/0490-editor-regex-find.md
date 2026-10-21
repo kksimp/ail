@@ -49,3 +49,8 @@ programs by pattern text (std.regex.2), so the cost is small.
 - Headless tests: `regex_find_matches_patterns` and
   `regex_find_reports_no_match` in `tools/edit/edit.ail`.
 - Replace with regex is a follow-up, not in this change.
+
+## Rejected alternatives
+
+- A separate regex find command (option B): rejected because it means a second bar to learn and a second prompt state.
+- Regex as the only mode (option C): rejected because plain text with `.` or `(` would need escaping every time.
