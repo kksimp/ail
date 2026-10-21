@@ -18,7 +18,9 @@ pub fn inline_module(m Module) Module
         if inlinable(f)
             leaves.add(f.name)
     mut out := m
-    reserve := by_name.contains("rt.list_reserve") and by_name.contains("rt.list_rows_min") and by_name.contains("rt.list_new_for")
+    reserve := by_name.contains("rt.list_reserve")
+        and by_name.contains("rt.list_rows_min")
+        and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(m)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
