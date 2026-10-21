@@ -1,4 +1,4 @@
-## std.app (spec std.app.1-12, ADR PENDING): an app is a struct that
+## std.app (spec std.app.1-12, ADR 0838): an app is a struct that
 ## implements `App`. `view` returns a tree of `Node`s, `update` receives an
 ## `Event`. A host program draws the tree with native controls and sends events
 ## back over standard input and output as JSON lines (std.app.8-10). Without a

@@ -44,6 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // A window restored from another display's position can open off screen.
+        DispatchQueue.main.async {
+            for w in NSApp.windows where !(NSScreen.screens.contains { $0.visibleFrame.intersects(w.frame) }) {
+                w.center()
+            }
+        }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
     func applicationWillTerminate(_ n: Notification) {
