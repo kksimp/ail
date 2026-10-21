@@ -69,6 +69,26 @@ documents with fences:
 A block that cannot run because it uses names outside its own snippet keeps
 `skip=context`; that tag is the mark.
 
+## Spec examples by chapter (lane 223, ADR 0498)
+
+`spec.rs` counts a rule as covered when a spec fence cites it (`rules=`,
+`error=`, or `skip=bootstrap rules=`). Before lane 223, chapters 01, 02 and 03
+had 8, 21 and 14 rules with no such example. Now they have none uncovered:
+
+| chapter | rules | uncovered before | uncovered now | notes |
+|---|---:|---:|---:|---|
+| 01-platforms.md | 8 | 8 | 0 | `norun` for target and layout rules; `plat.ptr.2` runs |
+| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
+| 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
+
+Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow the same way:
+`own.*` and `err.*` rules are cited by checked blocks, with `norun` for trapping and tool
+output and `skip=bootstrap` for `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`
+and `own.excl.3`, `own.ref.2`, `own.ref.7` (features the gate can't check yet).
+
+Uncovered rules outside the batch chapters: 382 before lane 223, 275 now (chapters 04-06 are
+the batch's and 09-16, 19-21 remain).
+
 ## Spec rules no code cites (lane 207, 2026-10-21)
 
 `tools/rules-audit.sh` check 2 found 87 rules at the batch head. Three rounds have sorted them:
