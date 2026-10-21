@@ -166,6 +166,12 @@ impl Cx<'_> {
             }
             Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::LetTuple { names, value, .. } => {
+                self.expr(value);
+                for b in names.clone() {
+                    self.declare(&b.name, b.pos);
+                }
+            }
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -195,7 +201,8 @@ impl Cx<'_> {
                     self.declare(name, *pos);
                 }
             }
-            Pattern::Or(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
+            Pattern::Or(alts, _) | Pattern::Tuple(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
+            Pattern::Bind(name, pos) => self.declare(name, *pos),
             Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
@@ -234,12 +241,15 @@ impl Cx<'_> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
             Expr::Comp { elem, value, clauses, .. } => {
                 for c in clauses {
                     self.expr(&mut c.iter);
                     let (var, pos) = (c.var.clone(), c.var_pos);
                     self.declare(&var, pos);
+                    for b in c.unpack.clone() {
+                        self.declare(&b.name, b.pos);
+                    }
                     if let Some(cond) = &mut c.cond {
                         self.expr(cond);
                     }

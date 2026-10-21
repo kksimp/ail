@@ -1,0 +1,34 @@
+# Lists sized where they are made get the element size of their type
+# (native.bce.3): a `List[bool]` is a byte buffer the collector doesn't
+# scan and holds a loop of more than 2^20 pushes in one allocation; a
+# `List[str]` keeps its strings alive while the loop allocates more.
+fn flags(n int) List[bool]
+    mut out := []
+    for i in 0..n
+        out.push(i % 7 == 0)
+    out
+
+fn words(n int) List[str]
+    mut out := []
+    for i in 0..n
+        out.push("w{i}-{i * 31}")
+    out
+
+fn main()
+    f := flags(1500000)
+    mut hits := 0
+    for k in 0..f.len()
+        if f[k]
+            hits += 1
+    print(f.len())
+    print(hits)
+    w := words(60000)
+    mut total := 0
+    for s in w
+        total += s.len()
+    print(w.len())
+    print(w[0])
+    print(w[59999])
+    print(total)
+    more := words(20)
+    print(more[19])

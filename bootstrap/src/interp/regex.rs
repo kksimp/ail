@@ -67,6 +67,7 @@ impl<W: Write> Interp<'_, W> {
                 }
             });
         }
+        // std.regex.26: the escaped pattern matches its text as plain text.
         if f == "escape" {
             return Ok(text(regex::escape(&str_arg(0))));
         }

@@ -73,6 +73,7 @@ use ast
                 _ => return t
             t
         SetLit(items, at) => set_literal(items, at, expect)
+        TupleLit(items, _) => tuple_lit(items, expect)
         Comp(form, elem, value, clauses, _) => comprehension(form, elem, value, clauses, expect)
         Range(lo, hi, _, at) =>
             range_bounds(lo, hi)
@@ -989,6 +990,8 @@ fn pattern_pos(p ast.Pattern) ast.Pos
         Alt(_, at) => at
         Variant(_, _, _, at) => at
         Range(_, _, _, at) => at
+        TuplePat(_, at) => at
+        BindName(_, at) => at
 
 @allow("expr.match.3")
 fn Checker.match_expr(
@@ -1015,6 +1018,7 @@ fn Checker.match_expr(
         Num(k) => literal = k != "f32"
         Unknown => literal = false
         Res => reject_unhandled(st, expr_pos(scrutinee))
+        Tuple => literal = false
         Union => unsupported(
             expr_pos(scrutinee),
             "matching on a set of error types is not designed yet (OQ-029); match on one error type",
@@ -1044,15 +1048,22 @@ fn Checker.match_expr(
         mut bindings := List[Binding]()
         if enum_index >= 0
             bindings = pattern(enum_index, enum_args, arm.pat, mut cov)
+        elif xs := tuple_elems(st)
+            bindings = tuple_arm(xs, arm.pat, mut cov)
         elif literal
             literal_pattern(st, arm.pat, mut cov)
+            # type.tuple.6: a misplaced tuple pattern still binds its names.
+            match arm.pat
+                TuplePat => bindings = tuple_pattern_names(arm.pat)
+                Wildcard | Literal | Alt | Variant | Range | BindName => bindings = []
         else
             # The scrutinee was already reported: bind names quietly.
             match arm.pat
                 Variant(_, _, names, _) =>
                     for nm in names else []
                         bindings.push(Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown))
-                Wildcard | Literal | Alt | Range => bindings = []
+                TuplePat => bindings = tuple_pattern_names(arm.pat)
+                Wildcard | Literal | Alt | Range | BindName => bindings = []
         if arm.guard != none
             cov = kept
             # `_ if c` hides nothing, so the `_` warning doesn't apply.
@@ -1083,6 +1094,14 @@ fn Checker.match_expr(
                 "this `match` doesn't cover {list_names(missing)}",
                 "add an arm for each, or a `_` arm",
             )
+    # type.tuple.6: a tuple match needs an arm that takes any tuple.
+    if tuple_elems(st) != none and not cov.wildcard
+        err_help(
+            "expr.match.2",
+            at,
+            "this `match` on {show(st)} doesn't cover every value",
+            "add a `_` arm, or an arm of names and `_` such as `(a, _)`",
+        )
     if literal and not cov.wildcard
         both_bools := st == Ty.Bool
             and cov.literals.contains(ast.Literal.BoolLit(true))
@@ -1118,7 +1137,11 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Variant | Range => literal_pattern(t, a, mut cov)
+                    Literal | Alt | Variant | Range | TuplePat | BindName => literal_pattern(
+                        t,
+                        a,
+                        mut cov,
+                    )
         Literal(lit, at) =>
             mut lt := Ty.Int
             match lit
@@ -1161,6 +1184,16 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
         # expr.match.12: a range covers some values, never all, so it marks
         # nothing as seen.
         Range(lo, hi, inclusive, at) => range_pattern(t, lo, hi, inclusive, at, cov.wildcard)
+        TuplePat(_, at) => err(
+            "type.tuple.6",
+            at,
+            "a tuple pattern, but the value matched is {show(t)}",
+        )
+        BindName(_, at) => err(
+            "type.tuple.6",
+            at,
+            "a tuple pattern, but the value matched is {show(t)}",
+        )
 
 fn binds_names(names List[ast.Ident]?) bool
     for nm in names else []
@@ -1192,8 +1225,22 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                         p,
                         "`_` can't be one of several alternatives; it already matches everything",
                     )
-                    Literal | Alt | Range => pattern(e, args, a, mut cov)
+                    Literal | Alt | Range | TuplePat | BindName => pattern(e, args, a, mut cov)
             []
+        TuplePat(_, at) =>
+            err(
+                "type.tuple.6",
+                at,
+                "a tuple pattern, but `{decl.name}` is an enum; match it with its variants",
+            )
+            tuple_pattern_names(pat)
+        BindName(_, at) =>
+            err(
+                "type.tuple.6",
+                at,
+                "a tuple pattern, but `{decl.name}` is an enum; match it with its variants",
+            )
+            tuple_pattern_names(pat)
         Literal(_, at) =>
             err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
             []

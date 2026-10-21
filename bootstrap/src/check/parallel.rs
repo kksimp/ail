@@ -257,6 +257,10 @@ impl<'a> Scan<'a> {
                 }
                 self.bind(name);
             }
+            Stmt::LetTuple { names, value, .. } => {
+                self.expr(value);
+                names.iter().for_each(|b| self.bind(&b.name));
+            }
             Stmt::Assign { target, op, value, .. } => {
                 self.write(target, *op, target.pos());
                 self.expr(value);
@@ -462,7 +466,7 @@ impl<'a> Scan<'a> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().for_each(|x| self.expr(x)),
             Expr::Map(pairs, _) => {
                 for (k, v) in pairs {
                     self.expr(k);
@@ -575,6 +579,7 @@ impl<'a> Scan<'a> {
                     self.expr(&c.iter);
                     self.channel_loop(&c.iter);
                     self.bind(&c.var);
+                    c.unpack.iter().for_each(|b| self.bind(&b.name));
                     if let Some(cond) = &c.cond {
                         self.expr(cond);
                     }
@@ -593,6 +598,8 @@ impl<'a> Scan<'a> {
 fn pattern_names(p: &Pattern) -> Vec<&str> {
     match p {
         Pattern::Variant { bindings: Some(b), .. } => b.iter().map(|(n, _)| n.as_str()).filter(|n| *n != "_").collect(),
+        Pattern::Bind(n, _) => vec![n.as_str()],
+        Pattern::Tuple(ps, _) => ps.iter().flat_map(pattern_names).collect(),
         _ => Vec::new(),
     }
 }
@@ -679,7 +686,7 @@ pub(crate) fn each_block<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Block)) {
             f(body);
         }
         Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
-        Stmt::Return(Some(e), _) | Stmt::Expr(e) => expr_blocks(e, f),
+        Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => expr_blocks(e, f),
         Stmt::Handle { value, otherwise } => {
             expr_blocks(value, f);
             other(otherwise, f);
@@ -741,7 +748,7 @@ fn expr_blocks<'a>(e: &'a Expr, f: &mut dyn FnMut(&'a Block)) {
             expr_blocks(elem, f);
             value.iter().for_each(|x| expr_blocks(x, f));
         }
-        Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| expr_blocks(x, f)),
+        Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().for_each(|x| expr_blocks(x, f)),
         Expr::Map(pairs, _) => pairs.iter().for_each(|(k, v)| {
             expr_blocks(k, f);
             expr_blocks(v, f);
@@ -1164,7 +1171,7 @@ fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
                     walk(x, f);
                 }
             }),
-            Expr::List(xs, _) | Expr::Set(xs, _) => xs.iter().for_each(|x| walk(x, f)),
+            Expr::List(xs, _) | Expr::Set(xs, _) | Expr::Tuple(xs, _) => xs.iter().for_each(|x| walk(x, f)),
             Expr::Map(kvs, _) => kvs.iter().for_each(|(k, v)| {
                 walk(k, f);
                 walk(v, f);
@@ -1231,7 +1238,7 @@ fn par_comps<'a>(b: &'a Block, f: &mut dyn FnMut(&'a Expr, &'a CompFor)) {
                 walk(e, f);
                 block(body, f);
             }
-            Stmt::Return(Some(e), _) | Stmt::Expr(e) => walk(e, f),
+            Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => walk(e, f),
             Stmt::Handle { value, otherwise } => {
                 walk(value, f);
                 other(otherwise, f);

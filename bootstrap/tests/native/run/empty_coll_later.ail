@@ -1,0 +1,37 @@
+# `[]` and `{}` declared with no expected type, typed by a later use (type.coll.13).
+fn pick(n int) List[int]
+    mut out := []
+    if n > 0
+        out = if n > 5 then [n, n] else [n]
+    out
+
+fn main()
+    print("{pick(0).len()} {pick(3).len()} {pick(9).len()}")
+    mut counts := {}
+    for w in ["b", "a", "b", "c", "b"]
+        counts[w] += 1
+    for k in counts.keys().sorted()
+        print("{k} {counts[k]}")
+    mut totals := {}
+    totals[3] = 1.5
+    totals[3] += 2.0
+    totals[7] = 0.25
+    print(totals)
+    mut seen := {}
+    for x in [4, 2, 4, 9, 2]
+        if seen.add(x)
+            print("new {x}")
+    print(seen.len())
+    mut rows := {}
+    rows["x"] = [1, 2]
+    rows["y"] = [3]
+    print(rows["x"].len() + rows["y"].len())
+    mut names := []
+    for line in ["a, b", "", "c"]
+        if line.len() > 0
+            names = line.split(", ")
+        print(names.join("|"))
+    mut later := {}
+    if names.len() > 0
+        later = {"k": names.len()}
+    print(later)

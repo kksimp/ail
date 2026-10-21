@@ -52,7 +52,7 @@ impl Cx<'_> {
                 self.block(body);
             }
             Stmt::Unsafe { body, .. } => self.block(body),
-            Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -104,7 +104,7 @@ impl Cx<'_> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
             Expr::Comp { elem, value, clauses, .. } => {
                 for c in clauses {
                     self.expr(&mut c.iter);

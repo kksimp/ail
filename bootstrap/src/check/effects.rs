@@ -571,7 +571,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.block(body);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
-            Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -627,7 +627,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().for_each(|x| self.expr(x)),
             Expr::Comp { elem, value, clauses, .. } => {
                 for c in clauses {
                     self.expr(&c.iter);
