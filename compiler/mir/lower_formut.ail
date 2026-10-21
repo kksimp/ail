@@ -9,5 +9,5 @@ fn Lower.for_mut_ok(mut self, e Ty, pos ast.Pos) bool
     match e
         Struct(_) => true
         _ =>
-            problem(pos, "not in the native subset yet: `for mut` over a list of `{e.name()}`")
+            problem(pos, "`for mut` isn't in the native subset yet")
             false
