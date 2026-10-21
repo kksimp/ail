@@ -304,21 +304,12 @@ fn json_quote(s str) str
     out.push("\"")
     out.join("")
 
-## A number as text (json.print.3): `null` when infinite or NaN, an integer
-## when whole and below 1e15, else as the `float` prints.
-fn json_number(n float) str
-    if n - n != 0.0
-        return "null"
-    if n.floor() == n and n.abs() < 1000000000000000.0
-        return "{n.to_int()}"
-    "{n}"
-
 ## Compact text: no spaces, object members in document order (json.print.1).
 fn Json.to_text(self) str
     match self
         Null => "null"
         Bool(b) => "{b}"
-        Num(n) => json_number(n)
+        Num(n) => if n - n != 0.0 then "null" else "{n}"
         Str(s) => json_quote(s)
         Arr(items) =>
             mut parts := []

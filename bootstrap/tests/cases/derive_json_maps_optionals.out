@@ -1,4 +1,4 @@
-{"id":"a","tags":["x"],"scores":{"k":2,"j":5},"owner":{"name":"ann"},"nums":[1,null],"grid":[[1],[2,3]],"extra":null,"by_owner":{"ops":[{"name":"bo"}]}}
+{"id":"a","tags":["x"],"scores":{"k":2.0,"j":5.0},"owner":{"name":"ann"},"nums":[1.0,null],"grid":[[1.0],[2.0,3.0]],"extra":null,"by_owner":{"ops":[{"name":"bo"}]}}
 true
 none
 [none, 4]

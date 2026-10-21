@@ -322,7 +322,7 @@ $ ail api --tokens examples/hello.ail
 
 `--ast` prints one line of JSON, the derived `ToJson` of `ast.Program`
 ([ADR 0376](../decisions/0376-syntax-tree-in-ail-and-its-json.md)): numbers
-print as a whole JSON number (json.print.3) (`{"line":2,"col":5}`), a variant with
+print as AIL prints a `float` (`{"line":2.0,"col":5.0}`), a variant with
 fields is `{"kind":"Call",...}`, one without is its name, and `none` is
 `null`. Diagnostics follow, one `LINE:COL diag RULE` line each.
 `--ast --program` prints the assembled program instead: prelude, imports,
