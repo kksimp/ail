@@ -7,7 +7,7 @@ entry: main in main.ail
 
 ## ast (129 items)
 
-## check (304 items)
+## check (305 items)
 
 ## codegen (45 items)
 

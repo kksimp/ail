@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | Bytes | List | Struct | Enum | Tuple => Ty.Opt(t)
+        Int | Float | Bool | Char | Str | Bytes | List | Map | Set | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -521,14 +521,23 @@ fn Lower.else_part(
 fn Lower.chain_try(self, e ast.Expr) bool
     match e
         Member(r, _, _) => receiver_try(r)
-        Method(r, _, _, _) => receiver_try(r)
-        Index(r, _, _) => receiver_try(r)
+        Method(r, _, _, args) => receiver_try(r) or args_try(args)
+        Index(r, i, _) => receiver_try(r) or receiver_try(i)
+        Call(_, args, _) => args_try(args)
+        Binary(_, l, r, _) => receiver_try(l) or receiver_try(r)
+        Unary(_, x, _) => receiver_try(x)
         _ => false
 
 fn Lower.receiver_try(self, e ast.Expr) bool
     match e
         Try(x, _, _) => not fallible_call(x) or receiver_try(x)
         _ => chain_try(e)
+
+fn Lower.args_try(self, args List[ast.Arg]) bool
+    for a in args
+        if receiver_try(a.value)
+            return true
+    false
 
 ## `e else ...` where a `?` inside `e` meets an absent value: that `?`
 ## jumps to the `else` part, and `e` has type `T?` if it isn't optional
