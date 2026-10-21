@@ -75,6 +75,8 @@ fn Lower.lower_arm(mut self, body List[ast.Stmt], value bool, rty Ty) Val?
             dead_block()
         if i == body.len() - 1
             if e := final_expr(st)
+                if tail_error(e)
+                    continue
                 result = lower_expr(e, want) else Val(id: -2, ty: Ty.Unit)
                 continue
         lower_stmt(st)

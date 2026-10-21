@@ -244,6 +244,12 @@ impl<'p> Checker<'p> {
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
             ("compress", "inflate" | "gunzip" | "unzlib") => (vec![Ty::Bytes], compress(Ty::Bytes)),
             ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
+            // std.tensor.1-2 (ADR 0507): `from(xs)` or `from(xs, shape)`, where
+            // `xs` is a `List[int]` or `List[float]` and the element type comes
+            // from the context. `tensor_call` checks the calls, so the table
+            // gives the shape of the call and `Err` marks the element type.
+            ("tensor", "from") => (vec![list(Ty::Err), list(Int)], self.tensor_ty(Ty::Err)),
+            ("tensor", "zeros") => (vec![list(Int)], self.tensor_ty(Ty::Err)),
             ("path", "dir" | "base" | "ext" | "stem") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),

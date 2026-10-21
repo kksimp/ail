@@ -1,0 +1,27 @@
+## std.ui.22-24: the widget methods that the other cases don't call. A list
+## keeps its selection in view, a pane's `to_end` goes to the last line, and a
+## tree reports which nodes have children and which are visible.
+use std.ui.widgets
+
+fn main()
+    mut l := widgets.ListView.new(["a", "b", "c", "d", "e"])
+    l.selected = 4
+    l.scroll_to(2)
+    print("{l.selected} {l.top}")
+    l.selected = 1
+    l.scroll_to(2)
+    print("{l.selected} {l.top}")
+    mut p := widgets.Pane.new(["one", "two", "three", "four", "five"])
+    p.to_end(2)
+    print("{p.cursor} {p.top}")
+    p.to_end(10)
+    print("{p.cursor} {p.top}")
+    tr := widgets.Tree.new([
+        widgets.Node(label: "a", depth: 0, open: true),
+        widgets.Node(label: "b", depth: 1, open: false),
+        widgets.Node(label: "bc", depth: 2, open: false),
+        widgets.Node(label: "c", depth: 0, open: false),
+        widgets.Node(label: "d", depth: 1, open: false),
+    ])
+    print("{tr.has_children(0)} {tr.has_children(1)} {tr.has_children(3)}")
+    print(tr.visible())
