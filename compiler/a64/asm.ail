@@ -344,6 +344,38 @@ pub fn Asm.vcvtn(mut self, d int, n int)
 pub fn Asm.vcvtl(mut self, d int, n int)
     word(241268736 + n * 32 + d)
 
+## `ldr qt, [xn, #off]` and `str qt, [xn, #off]`; `off` a multiple of 16 up to 65520.
+pub fn Asm.ldr_q(mut self, t int, n int, off int)
+    word(1035993088 + off / 16 * 1024 + n * 32 + t)
+
+pub fn Asm.str_q(mut self, t int, n int, off int)
+    word(1031798784 + off / 16 * 1024 + n * 32 + t)
+
+## `movi vd.2d, #0`.
+pub fn Asm.vzero(mut self, d int)
+    word(1862329344 + d)
+
+## `fadd` and `fmul` on `v.4s` (four singles).
+pub fn Asm.vop4(mut self, op str, d int, n int, m int)
+    base := if op == "fadd" then 1310774272 else 1847647232
+    word(rrr(base, d, n, m))
+
+## `fcvtn2 vd.4s, vn.2d` and `fcvtl2 vd.2d, vn.4s`: the upper halves.
+pub fn Asm.vcvtn2(mut self, d int, n int)
+    word(1315006464 + n * 32 + d)
+
+pub fn Asm.vcvtl2(mut self, d int, n int)
+    word(1315010560 + n * 32 + d)
+
+## `dup vd.4s, vn.s[0]`.
+pub fn Asm.vdup4(mut self, d int, n int)
+    word(1308886016 + n * 32 + d)
+
+## `fadd` and `fmul` on singles (`s` registers).
+pub fn Asm.fop_s(mut self, op str, d int, n int, m int)
+    base := if op == "fadd" then 505423872 else 505415680
+    word(rrr(base, d, n, m))
+
 ## `fmov xd, dn` and `fmov dd, xn`: the bits, unchanged.
 pub fn Asm.fmov_xd(mut self, d int, n int)
     word(2657484800 + n * 32 + d)

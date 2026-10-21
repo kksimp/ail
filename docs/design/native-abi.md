@@ -533,6 +533,13 @@ an `rt.vec_*` function. On ARM64 `compiler/a64/kernels.ail` assembles NEON
 loops in the same place (two doubles at a time, `fcvtn`/`fcvtl` for the `f32`
 rounding, x0-x9 and v0-v5 only), with the same results bit for bit.
 
+Step 5b (ARM64 `matmul`): `rt.vec_mm(c, a, b, n, k, r)` computes one row of
+the product, `compiler/a64/kernels.ail` assembles it with eight columns' sums
+held in registers across the whole `p` loop (`f32` as four singles per register,
+which rounds like the `float` operation rounded to `f32`; doubles otherwise),
+and the remaining columns one at a time. The order of the sums is the same as
+`k` calls of `rt.vec_axpy` on a zeroed row, which is the body on other targets.
+
 Step 6 (`softmax`, std.tensor.24): `rt.tensor_softmax_fault(a)` returns the
 fault message (no axis, empty last axis) or 0, and the lowering traps with
 imm 15 like the other tensor faults. `rt.tensor_softmax(a)` writes `exp(x - top)`
