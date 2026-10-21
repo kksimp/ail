@@ -591,3 +591,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
 | [0776](0776-fieldinfo-doc.md) | `FieldInfo.doc` carries a field's `##` comment (integrator choice) | Accepted | 2026-10-21 |
 | [0782](0782-fix-text-plus-chains.md) | `ail fix` joins text with interpolation across a `+` chain and around calls with strings *(delegated)* | Accepted | 2026-10-21 |
+| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
