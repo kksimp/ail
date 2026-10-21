@@ -1,15 +1,14 @@
 ## Agent-style log summary with a regex: find every `code=NNN` in the app log,
-## count them and add up their values. `find_all` gives each match's text.
+## count them and add up their values. `group_all` gives each match's digits.
 ##   ./ail run examples/regex_codes.ail
 
 fn main() !
     text := fs.read_text("{path.dir(env.program())}/agent-data/app.log")? "reading the app log"
-    codes := regex.compile(r"code=\d+")?
+    codes := regex.compile(r"code=(\d+)")?
     mut count := 0
     mut total := 0
     for line in text.lines()
-        for m in regex.find_all(codes, line)
+        for digits in regex.group_all(codes, line, 1)
             count += 1
-            digits := m.text.strip_prefix("code=") else "0"
             total += digits.to_int() else 0
     print("{count} codes, sum {total}")

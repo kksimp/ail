@@ -14,7 +14,7 @@ and lookaround are not in it, and say so with their own rule
 ## The module
 
 **std.regex.1** — `use std.regex` provides `compile`, `is_match`, `find`,
-`find_all`, `captures`, `replace`, `replace_first`, `split` and `escape`, and
+`find_all`, `group_all`, `captures`, `replace`, `replace_first`, `split` and `escape`, and
 the types `Regex`, `Match`, `Captures` and `RegexError`. Every function is
 pure (`eff.infer.1`): it has no effects and needs no capability. The
 functions take the `Regex` first: `regex.find(re, text)`. *(ADR 0440)*
@@ -159,3 +159,11 @@ Match the shape with groups and test the result in AIL instead. *(ADR 0438)*
 **std.regex.23** — A `RegexError` has `pattern`, `at` (the 0-based character
 offset in the pattern), `kind` (the short names of `std.regex.11`–`22`),
 `rule` (the rule that explains the kind) and `message`. *(ADR 0440)*
+
+**std.regex.24** — `group_all(re, text, group int) List[str]` is the text of
+group `group` in each match of `find_all` (`std.regex.6`), in the same order,
+with `group` counted as in `std.regex.9` (`0` is the whole match). A group
+that took no part in a match gives the empty string. `group` must name a group
+the pattern has: a `group` below 0, or above the last group, traps. The
+pattern `code=(\d+)` gives the digits of each `code=NNN`, with no prefix to
+strip. *(ADR 0667)*
