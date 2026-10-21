@@ -40,7 +40,9 @@ struct Val
     ty Ty
 
 struct Lower
+    ## The source file being lowered (for error traces) and every file's.
     path str
+    file_paths List[str]
     ## Zero-field `error struct`s to their messages (lower_err.ail).
     err_msgs Map[str, str]
     err_fns Set[str]
@@ -156,7 +158,8 @@ pub struct Source
 pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     mut l := Lower(
         path: srcs[0].path,
-        err_msgs: {},
+        file_paths: [src.path for src in srcs],
+        err_msgs: {"fs.IoError": "", "IoError": ""},
         err_fns: Set[str](),
         fails: false,
         sigs: {},
@@ -213,6 +216,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         l.declare_errors(src.prog)
     for k in 0..srcs.len()
         l.enter_file(k)
+        l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
     for k in 0..srcs.len()
@@ -752,8 +756,6 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
     if recv == none
-        if lower_os_let_else(name, pos, value, other)
-            return
         lower_bind_else(name, pos, value, other)
         return
     s := lower_value(recv?, Ty.Str) else
@@ -825,7 +827,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             lower_expr(e, Ty.Unit)
-        Handle(value, other) => lower_os_handle(value, other)
+        Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
         Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
@@ -1177,7 +1179,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
         Try(x, context, pos) => lower_try(x, context, pos)
         Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
-        OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
+        OrElse(x, other, pos) => lower_else(x, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
@@ -1621,6 +1623,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: call("rt.str_chars", [r.id], t), ty: t)
             if name == "len" and vs.len() == 0
                 return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "to_float" and vs.len() == 0
+                return lower_to_float(r)
         List(e) =>
             if name == "len" and vs.len() == 0
                 return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
