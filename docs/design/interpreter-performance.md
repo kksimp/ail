@@ -410,3 +410,6 @@ that moves the element into the call and back; field `op=` on `self` and an
 `else` nested in a receiver no longer hand off. The struct benchmark went from
 0.132 s to 0.096 s (CPython 0.075 s) with 0 hand-offs. Calls through deeper
 places (`a.b[i].m()`) and `ref` cells still run on the walker.
+
+Step 3b (ADR 0620): `mut self` calls on a field path of a local and calls through a
+function-value local run on the tier too (0 hand-offs in a loop doing both).
