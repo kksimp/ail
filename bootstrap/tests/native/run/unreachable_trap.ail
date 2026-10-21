@@ -1,0 +1,8 @@
+fn pick(n int) int
+    if n > 0
+        return n * 2
+    unreachable("pick of a non-positive number")
+
+fn main()
+    print(pick(4))
+    print(pick(0))

@@ -1,0 +1,8 @@
+struct Pt
+    x int
+
+fn Pt.area(self) int
+    self.x
+
+fn main()
+    print(Pt.area())
