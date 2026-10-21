@@ -1,0 +1,7 @@
+fn main()
+    print("start")
+    mut s := ""
+    mut n := 0
+    while true
+        s = "{n}"
+        n += 1

@@ -348,3 +348,18 @@ fn describe(s str) int
 fn main()
     print(describe("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"))
 ```
+**run.limit.5** — A native executable (`ail build`) reads the environment at
+start: `AIL_TIMEOUT_MS` and `AIL_MAX_MEMORY_MB`, each a positive whole number.
+`ail build --timeout MS --max-memory MB` bakes in defaults that the
+environment overrides. An invalid value ends the program with exit code 2
+before `main` runs. With neither set, the program is not checked. Windows
+executables have no native build yet. *(ADR 0728)*
+**run.limit.6** — A native program that goes past a limit prints its
+output so far, then `trap[run.limit.1]` or `trap[run.limit.2]` with the same
+message as `ail run`, and exits with status 1. The line has no `FILE:LINE:COL`
+prefix and no snapshot, because the native program has no statement to point at.
+The memory limit is checked when the heap takes a new chunk and counts the
+heap bytes in use. The time limit is checked every 256 allocations and when
+the heap takes a chunk, so a loop that never allocates is not stopped, and the
+limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
+`gettimeofday`. *(ADR 0726, ADR 0727)*

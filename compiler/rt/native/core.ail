@@ -56,18 +56,24 @@ fn init(argc int, argv int)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
     store64(global(CHUNK), 1048576)
+    limits_init()
 
 ## `n` zeroed bytes, 16-byte aligned, never freed.
 fn alloc(n int) int
     size := (n + 15) / 16 * 16
+    tick := load64(global(LIM_TICK))
+    if tick != 0
+        limits_tick(tick)
     mut p := load64(global(HEAP_NEXT))
     if p == 0 or p + size > load64(global(HEAP_END))
         mut chunk := load64(global(CHUNK))
         if chunk < size
             chunk = size
+        limits_chunk(size)
         p = sys_mmap(chunk)
         if p < 0
             fail(1, 0, 0)
+        store64(global(LIM_START), p)
         store64(global(HEAP_END), p + chunk)
         store64(global(CHUNK), chunk * 2)
     store64(global(HEAP_NEXT), p + size)

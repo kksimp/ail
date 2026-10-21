@@ -24,7 +24,7 @@ own 39 2
 plat 8 0
 refl 4 0
 replay 10 0
-run 4 0
+run 6 0
 snap 6 0
 std 191 1
 std 187 1
@@ -36,3 +36,4 @@ unsafe 16 0
 all 886 48
 all 870 48
 all 868 48
+all 869 48

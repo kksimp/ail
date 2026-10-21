@@ -591,3 +591,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0751](0751-fs-copy-copies-a-directory-tree.md) | `fs.copy` copies a directory tree *(delegated)* | Accepted | 2026-10-21 |
 | [0749](0749-regex-methods.md) | Methods on `regex.Regex` *(delegated)* | Accepted | 2026-10-21 |
 | [0753](0753-checker-differential-fuzz.md) | Differential fuzzing of the self-hosted checker against `ail check`: generator, driver, 19,800 programs compared, 0 disagreements *(delegated)* | Accepted | 2026-10-21 |
+| [0726](0726-native-memory-limit.md) | A memory cap for native programs, checked when the heap takes a chunk *(delegated)* | Accepted | 2026-10-21 |
+| [0727](0727-native-timeout.md) | A time limit for native programs, polled at the allocator *(delegated)* | Accepted | 2026-10-21 |
+| [0728](0728-native-limit-settings.md) | Where a native program gets its limits *(delegated)* | Accepted | 2026-10-21 |

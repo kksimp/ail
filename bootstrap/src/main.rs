@@ -320,6 +320,8 @@ fn take_limit_options(rest: &mut Vec<&str>) -> Result<Option<bool>, String> {
                 .ok_or_else(|| format!("`{name}` needs a positive number of {unit}, e.g. `{name} 100` (run.limit.4)"))
         };
         match name {
+            // run.limit.5: `ail build` bakes the first two into the executable.
+            "--timeout" | "--max-memory" if cmd == "build" => i += 2,
             "--timeout" | "--max-memory" | "--max-steps" => {
                 if cmd != "run" && cmd != "test" {
                     return Err(format!("`{name}` works with `ail run` and `ail test` (run.limit.4)"));
