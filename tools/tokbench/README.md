@@ -87,3 +87,7 @@ Run it after `run.sh` has set up once:
 tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
 ```
 
+
+## Known print difference: csv2json (lane 252)
+
+`corpus/programs/csv2json` prints the same JSON in both twins except for number text. AIL prints a whole float without a fraction (`12`, json.print.1 under ADR 0631), and Python's `json` prints `12.0`. The difference is inherent to the two languages' printing rules, so the twin is kept as it is, and the difference is not a bug. Its output is therefore not byte-identical to AIL's, and the token rows for this pair are unchanged by it.
