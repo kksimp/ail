@@ -50,9 +50,12 @@ operation. This needs no scalar `f32` type, no packed layout and no new
 arithmetic instructions, and gives the interpreter's values exactly (for
 `+ - * /` the double-precision result rounded once is the correctly rounded
 single-precision one). Measured on the NumPy-comparison programs, the scalar
-native kernels are *slower* than the interpreter's AVX2 and threaded ones
-(`f32_matmul` 0.23 s against 0.084 s, `f32_chain` 0.46 s against 0.33 s), so
-the SIMD step is what makes the native column worth having.
+native kernels were *slower* than the interpreter's AVX2 and threaded ones
+(`f32_matmul` 0.23 s against 0.084 s, `f32_chain` 0.46 s against 0.33 s). The
+AVX kernels of `compiler/x64/kernels.ail` (`matmul`'s inner loop and the
+elementwise operators, general loops that any tensor program uses) bring them to
+0.05 s and 0.26-0.30 s on x86-64, against 0.05 s and 0.34-0.42 s for `ail run`
+and 0.10-0.15 s and 0.24-0.37 s for NumPy. NEON kernels are the ARM64 half.
 
 ## Rejected alternatives
 

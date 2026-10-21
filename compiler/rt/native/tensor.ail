@@ -157,6 +157,44 @@ fn tensor_text(t int) str
 fn out_tensor(t int)
     out_str(tensor_text(t))
 
+# ---- vector kernels ----
+#
+# The backend replaces these three with assembled vector loops on targets that
+# have them (compiler/x64/kernels.ail); the bodies are the scalar definitions
+# and the reference. `r` non-zero rounds every result to `f32`.
+
+## `c[i] = c[i] + x * b[i]` for `i < n`; the product and the sum each rounded.
+fn vec_axpy(c int, b int, n int, r int, x float)
+    for i in 0..n
+        mut q := x * loadf(b + 8 * i)
+        if r != 0
+            q = f32_round(q)
+        mut s := loadf(c + 8 * i) + q
+        if r != 0
+            s = f32_round(s)
+        storef(c + 8 * i, s)
+
+## `out[i] = a[i] op b[i]` for `i < n` (`op` 0 `+`, 1 `-`, 2 `*`, 3 `/`).
+fn vec_zip(op int, out int, a int, b int, n int, r int)
+    for i in 0..n
+        mut y := float_op(op, loadf(a + 8 * i), loadf(b + 8 * i))
+        if r != 0
+            y = f32_round(y)
+        storef(out + 8 * i, y)
+
+## `out[i] = a[i] op s`, or `s op a[i]` when `left` is 1.
+fn vec_scal(op int, out int, a int, n int, r int, left int, s float)
+    for i in 0..n
+        x := loadf(a + 8 * i)
+        mut y := 0.0
+        if left == 1
+            y = float_op(op, s, x)
+        else
+            y = float_op(op, x, s)
+        if r != 0
+            y = f32_round(y)
+        storef(out + 8 * i, y)
+
 # ---- step 2: elementwise operators, reductions, transpose ----
 
 # Operators (std.tensor.4): 0 `+` (add), 1 `-`, 2 `*` (mul), 3 `/`.
@@ -330,8 +368,7 @@ fn tensor_zip(a int, b int, op int) int
     tensor_copy_words(t + 32, dims, rank)
     out := tensor_data(t)
     if kind >= 1
-        for i in 0..n
-            storef(out + 8 * i, elem_round(kind, float_op(op, loadf(da + 8 * i), loadf(db + 8 * i))))
+        vec_zip(op, out, da, db, n, if kind == 2 then 1 else 0)
         return t
     for i in 0..n
         if not int_op(op, load64(da + 8 * i), load64(db + 8 * i), out + 8 * i)
@@ -347,11 +384,7 @@ fn tensor_scalar_f(a int, s float, op int, left bool) int
     tensor_copy_words(t + 32, a + 32, rank)
     da := tensor_data(a)
     out := tensor_data(t)
-    c := elem_round(kind, s)
-    for i in 0..n
-        x := loadf(da + 8 * i)
-        r := if left then float_op(op, c, x) else float_op(op, x, c)
-        storef(out + 8 * i, elem_round(kind, r))
+    vec_scal(op, out, da, n, if kind == 2 then 1 else 0, if left then 1 else 0, elem_round(kind, s))
     t
 
 ## The same for an `int` scalar; 0 on overflow.
@@ -520,13 +553,10 @@ fn tensor_matmul(a int, b int) int
     db := tensor_data(b)
     out := tensor_data(t)
     if kind >= 1
+        r := if kind == 2 then 1 else 0
         for i in 0..m
             for p in 0..k
-                x := loadf(da + 8 * (i * k + p))
-                for j in 0..n
-                    c := out + 8 * (i * n + j)
-                    q := elem_round(kind, x * loadf(db + 8 * (p * n + j)))
-                    storef(c, elem_round(kind, loadf(c) + q))
+                vec_axpy(out + 8 * i * n, db + 8 * p * n, n, r, loadf(da + 8 * (i * k + p)))
         return t
     box := alloc(8, KIND_ATOMIC)
     for i in 0..m

@@ -493,3 +493,13 @@ precision), so the values are the interpreter's `f32` kernels'.
 `Ty.Tensor(Ty.F32)`; there is no scalar `f32` yet, so `sum`, `dot`, `max`,
 `mean`, `item`, printing and the text form of a `Tensor[f32]` are
 `native.subset.1` problems, and `to_list` gives a `List[float]`.
+
+Step 5 (vector kernels, x86-64): `rt.vec_axpy` (matmul's inner loop), `rt.vec_zip`
+and `rt.vec_scal` (elementwise operators) are declared in `tensor.ail` with
+scalar bodies, and `compiler/x64/kernels.ail` assembles AVX loops in their
+place (four doubles at a time, then element by element; a multiply and an add,
+never a fused one, so every result is the scalar one bit for bit; a non-zero
+`r` rounds each result to `f32` through `vcvtpd2ps`/`vcvtps2pd`). They are
+leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
+an `rt.vec_*` function. ARM64 still runs the scalar bodies until its NEON
+kernels land.

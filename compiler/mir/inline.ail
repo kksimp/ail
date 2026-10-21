@@ -45,6 +45,9 @@ pub fn inline_module(m Module) Module
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
+    # `rt.vec_*` are replaced by assembled kernels where the target has them.
+    if f.name.starts_with("rt.vec_")
+        return false
     mut n := 0
     for blk in f.blocks
         n += blk.insts.len()

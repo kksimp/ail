@@ -95,7 +95,10 @@ pub fn generate(m mir.Module) codegen.Image
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
     for f in m.funcs
-        gen_func(mut img, m, f)
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f)
     img
 
 fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
