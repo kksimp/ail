@@ -458,6 +458,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         pure: None,
         hook: limits::active(),
         steps: 0,
+        ct_eval: None,
         cov_last: 0,
         tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
@@ -615,6 +616,9 @@ struct Interp<'a, W: Write> {
     /// A run limit or coverage is on (run.limit.1-3, test.cover.1); off costs one branch per statement.
     hook: bool,
     steps: u64,
+    /// Statements run so far by the constant being computed, and its name (ct.eval.3);
+    /// `None` outside constant evaluation.
+    ct_eval: Option<(&'a str, u64)>,
     cov_last: usize,
     /// The bytecode tier runs this program's functions (ADR 0361).
     tier: bool,
@@ -2327,7 +2331,19 @@ impl<'a, W: Write> Interp<'a, W> {
         let prog = self.prog;
         let c = prog.consts.iter().find(|c| c.name == name).expect("checked: a constant");
         let mut env = Vec::new();
-        let v = self.eval(&c.value, &mut env)?;
+        // ct.eval.3: count the statements a constant runs, outermost constant only.
+        let outer = self.ct_eval.is_none();
+        let hook = self.hook;
+        if outer {
+            self.ct_eval = Some((&c.name, 0));
+            self.hook = true;
+        }
+        let v = self.eval(&c.value, &mut env);
+        if outer {
+            self.ct_eval = None;
+            self.hook = hook;
+        }
+        let v = v?;
         let _ = pos;
         self.consts.insert(&c.name, v.clone());
         Ok(v)
