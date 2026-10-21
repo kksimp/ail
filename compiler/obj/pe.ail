@@ -1,4 +1,4 @@
-## Windows x86-64 executables (ADR 0597): PE32+ images with a kernel32
+## Windows x86-64 executables (native.build.4, ADR 0597): PE32+ images with a kernel32
 ## import table (ADR 0598). The image has a fixed base and no relocations,
 ## so the loader maps it at its preferred address. Sections: `.text` (code),
 ## `.rdata` (read-only data), `.idata` (the import directory and the address

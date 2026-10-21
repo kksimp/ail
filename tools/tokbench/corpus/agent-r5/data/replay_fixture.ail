@@ -1,0 +1,7 @@
+## A small program with effects to record: a file read and a subprocess.
+fn main() !
+    here := path.dir(env.program())
+    text := fs.read_text("{here}/ok.ail")? "reading ok.ail"
+    print("lines: {text.lines().len()}")
+    r := proc.run("echo", ["hello from echo"])? "running echo"
+    print("echo: {r.out.trim()}")

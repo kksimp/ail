@@ -567,6 +567,7 @@ impl<'a, W: Write> Interp<'a, W> {
             }
             "to_float" => opt(parse_float(text).map(Value::Float)),
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
+            // type.str.12: `len` counts characters; `byte_len` counts bytes.
             "len" => Value::Int(text.chars().count() as i64),
             "byte_len" => Value::Int(text.len() as i64),
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
@@ -714,6 +715,7 @@ fn char_method(c: char, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap
     })
 }
 
+/// The `int` methods. `checked_*` give `none` on overflow or a zero divisor (type.num.12).
 fn int_method(n: i64, name: &str, a: &[Value], pos: Pos) -> Result<Value, Trap> {
     let m = || a[0].int();
     let checked = |r: Option<i64>| opt(r.map(Value::Int));

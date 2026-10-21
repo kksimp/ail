@@ -1,0 +1,17 @@
+fn square(n int) int
+    n * n
+
+fn shout(s str)
+    print(s.to_upper())
+
+fn count_lines(path str) int ! fs.IoError
+    text := fs.read_text(path)?
+    text.lines().len()
+
+fn run_tool(name str) int ! proc.ProcError
+    r := proc.run("echo", [name])?
+    r.status
+
+fn main()
+    shout("hi")
+    print(square(3))

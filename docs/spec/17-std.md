@@ -147,22 +147,66 @@ fn main() !
 words after the program's file, so `ail run tool.ail a b` gives
 `["a", "b"]`. *(ADR 0159)*
 
+```ail rules=std.env.1
+use std.env
+
+fn main()
+    print(env.args().len())
+```
+
 **std.env.2** — `get(name str) str?` returns an environment variable, or
 `none` when it isn't set or isn't UTF-8. *(ADR 0157)*
+
+```ail rules=std.env.2
+use std.env
+
+fn main()
+    home := env.get("AIL_NO_SUCH_VAR_X") else "unset"
+    print(home)
+```
 
 **std.env.3** — `cwd() str` returns the working directory. If it can't be
 read, the program traps. *(ADR 0157)*
 
+```ail rules=std.env.3
+use std.env
+
+fn main()
+    print(env.cwd().len() > 0)
+```
+
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
+
+```ail rules=std.env.4
+use std.env
+
+fn main()
+    print(env.program().len() > 0)
+```
 
 **std.env.5** — `vars() Map[str, str]` returns the environment variables
 whose names and values are UTF-8, in order of their names' bytes.
 *(ADR 0282)*
 
+```ail rules=std.env.5
+use std.env
+
+fn main()
+    print(env.vars().len() > 0)
+```
+
 **std.env.6** — `home() str?` returns the user's home directory: `HOME`,
 else `USERPROFILE` (Windows), or `none` when neither is set or one is
 empty. *(ADR 0296)*
+
+```ail rules=std.env.6
+use std.env
+
+fn main()
+    h := env.home() else "none"
+    print(h.len() > 0)
+```
 
 ## Paths: `std.path`
 
@@ -281,20 +325,58 @@ fn main() !
 without its line ending (`\n` or `\r\n`), or returns `none` at the end of
 input. Bytes that aren't UTF-8 become U+FFFD. *(ADR 0157)*
 
+```ail rules=std.io.1
+use std.io
+
+fn main()
+    line := io.read_line() else "eof"
+    print(line)
+```
+
 **std.io.2** — `read_all() str` reads the rest of standard input.
 *(ADR 0157)*
+
+```ail rules=std.io.2
+use std.io
+
+fn main()
+    print(io.read_all().len())
+```
 
 **std.io.3** — `eprint(value)` writes the value's text form and a newline to
 standard error, as `print` does to standard output (`mod.main.3`). Output
 already printed reaches standard output first. *(ADR 0157)*
+
+```ail rules=std.io.3
+use std.io
+
+fn main()
+    io.eprint("note")
+    print("done")
+```
 
 **std.io.4** — `exit(code int)` ends the program with exit status `code`,
 after writing any pending standard output. It never returns, so the code
 after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 *(ADR 0157)*
 
+```ail norun rules=std.io.4
+use std.io
+
+fn main()
+    print("bye")
+    io.exit(3)
+```
+
 **std.io.5** — `read_bytes() bytes` reads the rest of standard input as
 `bytes`, without decoding it. *(ADR 0415)*
+
+```ail rules=std.io.5
+use std.io
+
+fn main()
+    print(io.read_bytes().len())
+```
 
 ## Processes: `std.proc`
 
@@ -488,19 +570,21 @@ fn main() !
 
 **std.net.6** — `request(method str, url str, opts Options) Response ! NetError`
 sends any method with options, where `struct Options { headers Map[str, str],
-query Map[str, str], body str, timeout_ms int, max_redirects int }`.
+query Map[str, str], body str, timeout_ms int, max_redirects int, data bytes,
+connect_ms int, total_ms int }`.
 `options()` returns the defaults: no headers, no query, an empty body, a
 30000 ms timeout and 5 redirects; write `mut o := net.options()` and set
 fields. The method is made uppercase and must be an HTTP token. `headers`
 are sent after the defaults `Host`, `User-Agent: ail` and `Accept: */*`, and
-replace a default of the same name (case-insensitively); `Connection`,
-`Content-Length` and `Transfer-Encoding` are the client's own and are
-ignored. A header name must be an HTTP token and a value must not contain
+replace a default of the same name (case-insensitively); `Content-Length`
+is the client's own and is ignored, and `Connection: close` and
+`Transfer-Encoding: chunked` are honoured (`std.net.19`). A header name must be an HTTP token and a value must not contain
 CR, LF or NUL: otherwise the request fails with kind `bad_request` before
 anything is sent. `query` is appended to the URL, percent-encoded, after any
 query the URL has. `body` is sent with a `Content-Length` (always for `POST`,
 `PUT` and `PATCH`). `timeout_ms` bounds connecting and each read and write,
-and must be at least 1; `max_redirects` must be at least 0 (otherwise the
+and must be at least 1; `connect_ms` and `total_ms` (default 0, no separate
+limit) bound connecting alone and the whole request (`std.net.19`); `max_redirects` must be at least 0 (otherwise the
 program traps). `get(url)` and `post(url, body, content_type)` are
 `request` with the defaults. *(ADR 0418)*
 
@@ -554,8 +638,9 @@ body as text, bytes that aren't UTF-8 as U+FFFD; `peer` is the client's
 address. *(ADR 0419)*
 
 **std.net.11** — `ex.respond(r Response) ! NetError` sends the response and
-closes the connection: the server sends `Connection: close` and does not
-keep connections alive. The status must be 100 to 599; header names must be
+answers it. The server keeps the connection open for the next request when
+the client allows it (`std.net.22`), and otherwise sends `Connection: close`
+and closes it. The status must be 100 to 599; header names must be
 tokens and values must not contain CR, LF or NUL; otherwise `respond` fails
 with kind `bad_request` and the exchange stays open to be answered again.
 `Content-Length`, `Connection` and `Transfer-Encoding` in `r.headers` are
@@ -635,6 +720,162 @@ answer requests at once, each one at a time; a handler is a declared
 function (`conc.task.*`, function values), and a client that goes away
 before its answer is not a failure. *(ADR 0419)*
 
+**std.net.19** — Persistent connections and limits. The client keeps a
+connection that a response left open (HTTP/1.1, a body framed by length or
+chunks, no `Connection: close`, nothing buffered beyond the response) in a
+pool, up to 4 idle per scheme, host and port and 32 in all, for at most 30
+seconds (less if the server's `Keep-Alive: timeout=` says so). The next
+request to the same origin, redirects included, uses it; a pooled connection
+the server has closed is dropped when found, and a request that fails on one
+before any response byte arrived is sent again on a new connection if its
+method is `GET`, `HEAD`, `PUT`, `DELETE` or `OPTIONS`. The header
+`Connection: close` in `opts.headers` sends that header and keeps nothing.
+The header `Transfer-Encoding: chunked` sends the body of `POST`, `PUT` and
+`PATCH` as chunks of at most 8 KiB, with no `Content-Length`. Interim `1xx`
+responses (except `101`) are skipped. `connect_ms` (0: use `timeout_ms`)
+bounds the connection attempt and `total_ms` (0: no limit) bounds the whole
+request across redirects: past it a read or write fails with kind
+`timed_out`, and `timeout_ms` still bounds each wait. `connect_ms` or
+`total_ms` below 0 traps. *(ADR 0637)*
+
+**std.net.20** — `use std.net.jar` gives a cookie jar, `jar.new() Jar`
+(RFC 6265 basics). `j.set_cookie(url, line) bool` stores one `Set-Cookie`
+line received from `url`: the `Domain` must be the host or a parent of it
+(else the line is dropped and the result is `false`; there is no public
+suffix list), no `Domain` makes the cookie host-only, `Path` defaults to the
+request path's directory, `Max-Age` wins over `Expires`, a cookie whose time
+has passed (or `Max-Age` 0 or less) removes any cookie of the same name,
+domain and path, and a cookie of the same name, domain and path replaces the
+earlier one. `j.store(url, r)` stores every `set-cookie` value of a
+`Response`. `j.header(url) str` is the `Cookie` header for a request to
+`url`: cookies whose domain and path match, `Secure` ones only for `https`,
+unexpired, the longest path first and then the oldest; `j.matching(url)`
+gives them as `Cookie` values and `j.value(url, name) str?` one value.
+`j.for_script(url)` gives the ones a script may read (not `HttpOnly`) by
+name, and `j.set_from_script(url, line)` is `set_cookie` refusing `HttpOnly`.
+`j.len()`, `j.clear()` and `j.drop_expired()`. *(ADR 0638)*
+
+**std.net.21** — `j.request(method, url, opts) Response ! NetError` is
+`net.request` with the jar's cookies in the `Cookie` header (added to one the
+program set) and every response's cookies stored, following the redirects of
+`GET` and `HEAD` itself, up to `opts.max_redirects`, so each hop carries and
+stores its own cookies; a redirect leaving the origin takes the program's own
+`Cookie` header along only if the jar has none for it. `j.get(url)` is
+`j.request("GET", url, net.options())`. *(ADR 0638)*
+
+**std.net.22** — Server keep-alive. After answering a request that is
+HTTP/1.1 without `Connection: close`, with nothing sent beyond it, and a
+final (not `1xx`) response whose headers don't ask to close, the server
+sends `Connection: keep-alive` and waits for the next request on the same
+connection, up to 15 seconds; a connection that stays quiet is closed
+without a word. Each request on it is an `Exchange` as before, the 10 second
+limit of `std.net.10` applies per request, and `srv.close()` drops idle
+connections. Any other request is answered with `Connection: close`.
+*(ADR 0639)*
+
+**std.net.23** — SameSite. A cookie has `same_site`: `lax` (the default, and
+any unknown value), `strict` or `none`; `none` without `Secure` drops the
+line (`set_cookie` gives `false`). `j.header_from(url, from, navigation)` and
+`j.matching_from(...)` give the cookies for a request to `url` made from the
+page `from` (`""` for one the user typed) with `navigation` true for a
+top-level `GET`: within one site every cookie goes; across sites `none` ones
+go, `lax` ones only on a navigation, `strict` ones never. A site is a host's
+last two labels, since there is no public suffix list. `header` and
+`matching` are the same-site case. *(ADR 0640)*
+
+**std.net.24** — `srv.shutdown()` stops a `Server` listening and closes its
+idle connections. A request that has already started to arrive is still
+accepted and answered, with `Connection: close`; when none is left `accept`
+fails with kind `closed`, as after `close`. *(ADR 0640)*
+
+**std.net.25** — Streaming bodies. `net.open(method, url, opts) Body !
+NetError` sends the request like `net.request` (redirects of `GET` and `HEAD`
+included, their bodies read out) and returns after the response head, as
+`struct Body { status int, headers Map[str, str], all_headers Map[str,
+List[str]], handle int }`. `b.read_bytes(max) bytes ! NetError` gives the
+next 1 to `max` bytes of the body, and no bytes once it has all been read;
+whatever the framing (length, chunks, or up to the end of the connection).
+`b.close()` ends it early and closes the connection; a body read to its end
+returns its connection to the pool (`std.net.19`). Reading after `close`
+fails with kind `closed`. `timeout_ms` bounds each wait for the next piece
+and `total_ms` the whole request including the reading. *(ADR 0716)*
+
+**std.net.26** — Content encodings. `get`, `post` and `request` (and the
+`_bytes` forms) send `Accept-Encoding: gzip, deflate` unless the program sets
+an `Accept-Encoding` header, and undo a `Content-Encoding` of `gzip`,
+`x-gzip` or `deflate` (zlib or raw) on the final response, up to 256 MiB,
+dropping `Content-Encoding` and `Content-Length` from its headers. A body
+that does not decode fails with kind `protocol`. A program that sets
+`Accept-Encoding` gets the body as sent, with its headers, and decodes it
+itself with `std.compress`. `net.open` sends no `Accept-Encoding` of its own
+and decodes nothing. *(ADR 0717)*
+
+```ail rules=std.net.26
+use std.net
+use std.compress
+
+fn once(srv net.Server) !
+    ex := srv.accept()?
+    ex.respond_bytes(200, {"content-encoding": "gzip"}, compress.gzip("zipped".to_bytes()))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn once(srv)
+    print(net.get("http://{srv.addr()}/")?.body)
+    t.wait()?
+```
+
+```ail rules=std.net.23,std.net.24,std.net.25
+use std.net
+use std.net.http
+use std.net.jar
+
+fn hi(r net.Request) net.Response
+    net.Response(status: 200, headers: {}, body: "hi")
+
+fn main() !
+    mut j := jar.new()
+    j.set_cookie("https://shop.test/", "l=1; SameSite=Lax")
+    j.set_cookie("https://shop.test/", "s=2; SameSite=Strict")
+    print(j.header_from("https://shop.test/", "https://other.test/", true))
+    print(j.header_from("https://shop.test/", "https://other.test/", false) == "")
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, hi)
+    print(net.get("http://{srv.addr()}/")?.body)
+    b := net.open("GET", "http://{srv.addr()}/", net.options())?
+    print(b.read_bytes(100)?.len())
+    b.close()
+    srv.shutdown()
+    t.wait()?
+```
+
+```ail rules=std.net.19,std.net.20,std.net.21,std.net.22
+use std.net
+use std.net.http
+use std.net.jar
+
+fn site(r net.Request) net.Response
+    if r.path == "/login"
+        return net.Response(status: 302, headers: {"location": "/home"}, body: "", all_headers: {"set-cookie": ["sid=abc; Path=/"]})
+    net.Response(status: 200, headers: {}, body: "{r.peer} {r.headers.get("cookie") else "-"}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, site)
+    base := "http://{srv.addr()}"
+    mut j := jar.new()
+    a := j.get("{base}/login")?.body.split(" ")
+    b := j.get("{base}/again")?.body.split(" ")
+    print("{a[1]} {a[0] == b[0]}")
+    mut o := net.options()
+    o.total_ms = 5000
+    o.headers["Transfer-Encoding"] = "chunked"
+    o.body = "data"
+    print(net.request("POST", "{base}/x", o)?.status)
+    srv.close()
+    t.wait()?
+```
+
 ```ail rules=std.net.17,std.net.18
 use std.net
 use std.net.http
@@ -688,8 +929,23 @@ fn main() !
 **std.time.1** — `now_ms() int` returns the time in milliseconds since
 1970-01-01T00:00:00Z. *(ADR 0157)*
 
+```ail rules=std.time.1
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)
+```
+
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+```ail rules=std.time.2
+use std.time
+
+fn main()
+    time.sleep_ms(1)
+    print("woke")
+```
 
 ## Calendar: `std.time.date`
 
@@ -780,12 +1036,35 @@ from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
 POSIX rule for instants after its last transition. It has the effects `fs` and
 `env`. *(ADR 0448)*
 
+```ail rules=std.tz.1
+use std.tz
+
+fn main()
+    off := tz.offset("Europe/Paris", 0) else 0
+    print(off)
+```
+
 **std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
 else the zone `/etc/localtime` links to, else `"UTC"`.
+
+```ail rules=std.tz.2
+use std.tz
+
+fn main()
+    print(tz.system().len() > 0)
+```
 
 **std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
 every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
 lands; UTC and fixed offsets work everywhere.
+
+```ail rules=std.tz.3
+use std.tz
+
+fn main()
+    off := tz.offset("UTC", 0) else 0
+    print(off)
+```
 
 ## Randomness: `std.random`
 

@@ -59,6 +59,9 @@ struct Lower
     consts Map[str, ast.Expr]
     strs List[str]
     str_index Map[str, int]
+    ## The source path and lines, for the trap texts of `lower_str.ail`.
+    src_paths List[str]
+    src_lines List[List[str]]
     sites List[Site]
     problems List[Problem]
     funcs List[Func]
@@ -175,6 +178,8 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         consts: {},
         strs: [],
         str_index: {},
+        src_paths: [src.path for src in srcs],
+        src_lines: [src.text.lines() for src in srcs],
         sites: [],
         problems: [],
         funcs: [],
@@ -421,6 +426,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "float" => Ty.Float
                 "bool" => Ty.Bool
                 "str" => Ty.Str
+                "char" => Ty.Char
                 "List" =>
                     if args.len() != 1
                         return none
@@ -457,7 +463,7 @@ fn is_const_expr(e ast.Expr) bool
 
 fn is_number(t Ty) bool
     match t
-        Int | Float | Bool => true
+        Int | Float | Bool | Char => true
         _ => false
 
 # ---- building blocks and values ----
@@ -1171,8 +1177,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
         ListLit(items, pos) => lower_list(items, pos, want)
         If(branches, els, _, pos) => lower_if(branches, els, pos, want)
-        Interp(_, pos) => unsupported(pos, "string interpolation outside `print`")
-        Char(_, pos) => unsupported(pos, "`char`")
+        Interp(parts, pos) => lower_interp_value(parts, pos)
+        Char(text, _) => lower_char(text)
         NoneLit(pos) => lower_none(want, pos)
         Hole(pos) => unsupported(pos, "`todo`")
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
@@ -1314,6 +1320,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
                 return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
             problem(pos, "`{op_symbol(o)}` on `bool` isn't in the native subset yet")
             a
+        Str => str_binary(o, a, b, pos) else a
+        Char => char_binary(o, a, b, pos) else a
         _ =>
             problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
             a
@@ -1535,6 +1543,7 @@ fn out_fn(t Ty) str
         Float => "rt.out_float"
         Bool => "rt.out_bool"
         Str => "rt.out_str"
+        Char => "rt.out_char"
         List(e) =>
             match e
                 Int => "rt.out_list_int"
@@ -1556,8 +1565,9 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             Float => 1
             Bool => 2
             Str => 3
+            Char => 4
             _ => -1
-        if k >= 0 and (depth > 0 or k == 3)
+        if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
@@ -1574,6 +1584,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
+    if name == "from_code" and is_module(recv, "char")
+        return lower_char_from_code(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1606,6 +1618,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if name == "join"
                 arg_want = Ty.Str
         vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
+    if name == "to_str" and vs.len() == 0
+        # type.str.3
+        text := text_of(r, npos)?
+        return Val(id: text, ty: Ty.Str)
     match r.ty
         Int =>
             if name == "to_float" and vs.len() == 0
@@ -1638,14 +1654,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if MATH2.contains(name) and vs.len() == 1
                 return Val(id: call("rt.float_{name}", [r.id, vs[0].id], Ty.Float), ty: Ty.Float)
         Str =>
-            # type.str.3, type.str.5
-            if name == "chars" and vs.len() == 0
-                t := Ty.List(Ty.Str)
-                return Val(id: call("rt.str_chars", [r.id], t), ty: t)
-            if name == "len" and vs.len() == 0
-                return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
             if name == "to_float" and vs.len() == 0
                 return lower_to_float(r)
+            return lower_str_method(r, name, npos, vs)
+        Char => return lower_char_method(r, name, npos, vs)
         List(e) =>
             if name == "len" and vs.len() == 0
                 return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)

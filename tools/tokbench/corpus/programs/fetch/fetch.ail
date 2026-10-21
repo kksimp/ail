@@ -1,0 +1,13 @@
+fn main() !
+    url := env.args().first() else "https://example.com/tasks.json"
+    body := fetch(url) else err
+        io.eprint("{err.kind}: {err.message}")
+        fs.read_text(path.join(path.dir(env.program()), "data/{path.base(url)}"))?
+    lines := body.lines()
+    print("{path.base(url)}: {lines.len()} lines, {body.len()} characters")
+    print(lines[0])
+fn fetch(url str) str ! net.NetError
+    r := net.get(url)?
+    if r.status != 200
+        return net.NetError(url: url, kind: "other", message: "HTTP {r.status}")
+    r.body

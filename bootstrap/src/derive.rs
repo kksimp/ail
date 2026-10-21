@@ -67,6 +67,13 @@ pub fn expand(
     let mut inserts: Vec<(usize, Vec<Token>)> = Vec::new();
     let mut gen_files = Vec::new();
     let mut generated = Vec::new();
+    // Where each `impl` keyword is, found once instead of by a scan per job.
+    let mut impl_at: std::collections::HashMap<Pos, usize> = std::collections::HashMap::new();
+    for (i, t) in tokens.iter().enumerate() {
+        if t.tok == Tok::Kw("impl") {
+            impl_at.entry(t.pos).or_insert(i);
+        }
+    }
     for (job, text) in jobs.iter().zip(texts) {
         let Some(text) = text else { continue };
         let imp = &prog.impls[job.imp];
@@ -81,7 +88,7 @@ pub fn expand(
         }
         shift(&mut toks, base);
         let Some(split) = split(toks, job, imp.pos, &mut errors) else { continue };
-        let Some(header) = tokens.iter().position(|t| t.tok == Tok::Kw("impl") && t.pos == imp.pos) else { continue };
+        let Some(&header) = impl_at.get(&imp.pos) else { continue };
         let Some(newline) = tokens[header..].iter().position(|t| t.tok == Tok::Newline) else { continue };
         let mut spliced = Vec::new();
         if let (Some(first), Some(last)) = (split.0.first(), split.0.last()) {
@@ -308,6 +315,8 @@ fn generate(
     // generator is reported when the whole program is checked.
     let mut texts = vec![None; jobs.len()];
     let mut runnable = Vec::new();
+    // One effect inference serves every generator (a full walk of the program).
+    let mut effects = None;
     for (k, job) in jobs.iter().enumerate() {
         let at = prog.impls[job.imp].pos;
         let start = (wrappers + k) * FILE_LINES;
@@ -327,7 +336,8 @@ fn generate(
         };
         // ct.derive.3: a generator is compile-time-safe.
         let wrapper = format!("{} -> ", names[k]);
-        let impure: Vec<String> = crate::check::effects::impure_chains(&gen_prog, &resolved, f)
+        let fx = effects.get_or_insert_with(|| crate::check::effects::Effects::infer(&gen_prog, &resolved));
+        let impure: Vec<String> = crate::check::effects::impure_chains(fx, f)
             .into_iter()
             .map(|c| c.replace(&wrapper, ""))
             .collect();
