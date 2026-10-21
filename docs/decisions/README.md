@@ -647,3 +647,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0829](0829-native-tuples.md) | Native tuples: a kind-4 struct object with one slot per element; `eq.T`, `lt.T` and `copy.T` generated; table keys stay out | Accepted | 2026-10-21 |
 | [0838](0838-std-app-native-windows.md) | `std.app`: native windows from a view tree, drawn by a generic host (SwiftUI on macOS) over JSON lines; capability `app` | Accepted | 2026-10-21 |
 | [0825](0825-native-ascii-join-chars.md) | Native: an ASCII path for joining characters *(delegated)* | Accepted | 2026-10-21 |
+| [0845](0845-vectorization-order-and-idioms.md) | Vectorization order: idioms first, a runtime fill and copy on both ISAs, `break` loops under a bit-identical rule *(delegated)* | Accepted | 2026-10-21 |
