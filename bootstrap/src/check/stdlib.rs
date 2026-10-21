@@ -143,6 +143,19 @@ impl<'p> Checker<'p> {
             self.args_only(args);
             let fns = stdlib::functions(module);
             let mut d = Diagnostic::new("std.use.2", pos, format!("module `{head}` has no function `{name}`"));
+            // Another library's name for the same function, with the same arguments.
+            let renamed = match (module, name) {
+                ("regex", "matches") => Some("is_match"),
+                ("regex", "findall") => Some("find_all"),
+                ("random", "randint") => Some("int"),
+                ("random", "random") => Some("float"),
+                _ => None,
+            };
+            if let Some(new) = renamed {
+                d = d.help(format!("write `{head}.{new}`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
+                self.diags.push(d);
+                return Some(Ty::Err);
+            }
             d = match suggest(name, fns) {
                 Some(s) => d.help(format!("did you mean `{head}.{s}`?")),
                 None => d.help(format!("`std.{module}` provides {}", list_names(fns))),

@@ -217,3 +217,22 @@ the call anchor reads the dotted callee as written (`date.Date`).
 Qualified constructors (lane 147): `type.struct.7` on `date.Date(2026, 10, 20)` now
 has the named-field fix; the call anchor reads the dotted callee as written. Corpus:
 154 programs, 96 fixed (62%).
+
+## Round two (ADRs 0646-0648, lane 197)
+
+Corpus: 250 programs (154 + 96 new), `ail fix` resolves 150 (60.0%; the
+96 new ones: 54, 56%). Rules with a fix: 48 (was 41). Fix rules and the
+decisions behind them are in [ADR 0648](../decisions/0648-round-two-fix-rules-and-the-corpus-target.md).
+
+Diagnostic output on the 96 new programs, batch head vs this change
+(`ail check --json`, error lines only): 33,997 bytes before, 36,143 after
+(+6%, about 500 tokens at 4 bytes a token). Help lines: 257 before, 264 after.
+The growth is the help texts that were empty or generic before (ADR 0647),
+plus the new fix edits. Rule changes: `<<`/`>>` and tuples from `gram.syntax.1`
+to `gram.foreign.1`; `case` arms and open or three-dot ranges moved to
+`expr.match.1` and `expr.match.12`; `@` in a call to `gram.foreign.1`.
+
+Still open: a silent `t[0][1]` on a one-dimensional tensor (OQ-122); the
+program is left out of the corpus. A `(a, b)` tuple has no fix (needs the
+closing parenthesis extent). `regex.sub` has no fix (argument order differs
+from Python).

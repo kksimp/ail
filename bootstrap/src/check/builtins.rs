@@ -428,6 +428,9 @@ pub(super) fn method_rename(t: &Ty, name: &str) -> Option<&'static str> {
     Some(match (t, name) {
         (Ty::Str | Ty::List(_) | Ty::Map(..) | Ty::Set(_), "length" | "size" | "count") => "len",
         (Ty::Str, "strip" | "lstrip" | "rstrip" | "trim_start" | "trim_end") => "trim",
+        (Ty::Str, "encode") => "to_bytes",
+        (Ty::Bytes, "startswith" | "startsWith") => "starts_with",
+        (Ty::Bytes, "endswith" | "endsWith") => "ends_with",
         (Ty::Str, "startswith" | "startsWith") => "starts_with",
         (Ty::Str, "endswith" | "endsWith") => "ends_with",
         (Ty::Str, "splitlines") => "lines",

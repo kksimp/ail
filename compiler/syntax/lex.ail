@@ -511,6 +511,10 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
         elif c == '\\' and rest_is_space(line, i + 1)
             diag("gram.foreign.1", pos)
             i += 1
+        elif (c == '<' or c == '>') and at(line, i + 1) == c
+            # expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
+            diag("gram.foreign.1", pos)
+            i += 2
         elif c == '&' and at(line, i + 1) != '&'
             diag("gram.foreign.1", pos)
             i += 1

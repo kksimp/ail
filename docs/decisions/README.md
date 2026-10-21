@@ -401,6 +401,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
+| [0646](0646-mistakes-corpus-round-two.md) | Mistakes corpus, round two: 96 programs on the batch's new features; `ail fix` resolves 60% *(delegated)* | Accepted | 2026-10-21 |
+| [0647](0647-round-two-diagnostics-help-and-anchors.md) | Diagnostics for round-two mistakes: help texts, fix anchors, and rules for `<<`, tuples, `case` and open ranges *(delegated)* | Accepted | 2026-10-21 |
+| [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |

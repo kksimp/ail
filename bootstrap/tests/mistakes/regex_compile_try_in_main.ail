@@ -1,0 +1,5 @@
+use std.regex
+
+fn main()
+    re := regex.compile("hello", "i")?
+    print(regex.is_match(re, "HELLO"))

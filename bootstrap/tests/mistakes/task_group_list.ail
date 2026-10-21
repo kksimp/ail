@@ -1,0 +1,6 @@
+fn work(n int) int
+    n * n
+
+fn main()
+    tasks := [spawn work(1), spawn work(2)]
+    print(tasks.len())
